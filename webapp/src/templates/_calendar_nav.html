@@ -1,0 +1,86 @@
+<div class="toolbar">
+    <div class="segmented calendar-subnav">
+        <a class="seg-btn {% if calendar_view == 'month' %}active{% endif %}" href="/calendar">Month</a>
+        <a class="seg-btn {% if calendar_view == 'week' %}active{% endif %}" href="/calendar/week">Week</a>
+        <a class="seg-btn {% if calendar_view == 'day' %}active{% endif %}" href="/calendar/day/{{ today_iso }}">Day</a>
+        <a class="seg-btn {% if calendar_view == 'agenda' %}active{% endif %}" href="/calendar/agenda">Agenda</a>
+    </div>
+    <div class="spacer"></div>
+
+    <!-- Schedule -- 2026-08-01: a button that opens as a modal
+         (data-modal), not a view mode of Calendar. It was briefly a fifth
+         segmented option here (Phase B light integration) reading
+         "active" for its own page, but a recurring weekly schedule isn't
+         actually a *view* of the same calendar data the way Month/Week/
+         Day/Agenda are -- it's a genuinely separate screen (its own
+         table/grid, its own local-only tables, see db.py's
+         schedule_classes comment) that just happens to be
+         calendar-adjacent. A button that pops it into a modal keeps it
+         one click away without implying it's another way to look at the
+         same events. -->
+    <a class="btn ghost" href="/schedule" data-modal data-modal-size="wide">{{ icon('repeat', 'icon-sm') }} Schedule</a>
+
+    <!-- Calendar visibility -- a genuine multi-select (more than one
+         calendar can be shown at once), so this is a dropdown of
+         checkboxes instead of the single-choice <select> Tasks/Contacts
+         use for their filters (tasks_list.html etc.) -- see app.js's
+         multiselect script for the open/close behavior. Each checkbox is
+         still its own real POST to /calendars/{uid}/toggle-visibility
+         (routers/calendars.py), same as when this was a row of always-
+         visible chips; only the container changed. -->
+    <div class="multiselect">
+        <button type="button" class="btn ghost multiselect-trigger">
+            {{ icon('calendar', 'icon-sm') }} Calendars
+            <span class="multiselect-count">{{ calendars|length - hidden|length }}/{{ calendars|length }}</span>
+            {{ icon('chevron-down', 'icon-sm') }}
+        </button>
+        <div class="multiselect-panel">
+            {% for c in calendars %}
+            <form method="post" action="/calendars/{{ c.uid }}/toggle-visibility" class="multiselect-option-form">
+                <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                <label class="multiselect-option">
+                    <input type="checkbox" onchange="this.form.requestSubmit()" {% if c.uid not in hidden %}checked{% endif %}>
+                    <span class="color-dot cal-{{ c.color }}"></span> {{ c.name }}
+                </label>
+            </form>
+            {% endfor %}
+            <div class="multiselect-divider"></div>
+            <a class="multiselect-manage" href="/calendars" data-modal>{{ icon('edit', 'icon-sm') }} Manage calendars</a>
+        </div>
+    </div>
+
+    <!-- Project / space filter (§7 of the plan) -- additive on top of
+         calendar-visibility (the cookie-based system above stays as-is).
+         Submits the current calendar path so the active view is preserved
+         when the filter changes. project_groups/projects/active_project_uid/
+         active_group_uid come from each calendar view function's context.
+         Only rendered when there are spaces or projects to filter on. -->
+    {% set _pg = project_groups | default([]) %}
+    {% set _pr = projects | default([]) %}
+    {% set _aguid = active_group_uid | default('') %}
+    {% set _apuid = active_project_uid | default('') %}
+    {% if _pg or _pr %}
+    <form method="get" action="{{ request.url.path }}" class="filter-bar" style="margin:0">
+        {% if request.query_params.get('date_') %}<input type="hidden" name="date_" value="{{ request.query_params.get('date_') }}">{% endif %}
+        {% if _pg %}
+        <select name="group_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by space">
+            <option value="">All spaces</option>
+            {% for g in _pg %}
+            <option value="{{ g.uid }}" {% if _aguid == g.uid %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        {% if _pr %}
+        <select name="project_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by project">
+            <option value="">All projects</option>
+            {% for p in _pr %}
+            <option value="{{ p.uid }}" {% if _apuid == p.uid %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </form>
+    {% endif %}
+
+    <a class="icon-btn" href="/tags" data-modal title="Manage tags">{{ icon('tag') }}</a>
+    <a class="btn primary" href="/events/new" data-modal data-fab>{{ icon('plus') }} New event</a>
+</div>

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Tasks &middot; Timeline{% endblock %}
+{% block content %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">Tasks</h1>
+    <div class="spacer"></div>
+    <a class="icon-btn" href="/task-lists" data-modal title="Manage lists">{{ icon('list') }}</a>
+    <div class="segmented">
+        <a class="seg-btn" href="/tasks">Table</a>
+        <a class="seg-btn active" href="/tasks/timeline">Timeline</a>
+        <a class="seg-btn" href="/tasks/board">Board</a>
+    </div>
+    <a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
+</div>
+<p class="tag-usage-count" style="padding:0 0 8px">
+    Drag a bar to reschedule, drag its edges to resize, drag it vertically to pick a row within its list.
+    Click-and-drag empty grid space to create a task there. Double-click a bar to open it, double-click a
+    row label to rename it. Drag the gutter/grid boundary to resize the label column.
+</p>
+
+{% if bars or rows %}
+<div class="card timeline-scroll">
+<div class="timeline-canvas" id="timeline-canvas" data-start="{{ start }}" style="--gutter-w:92px; width:calc(92px + {{ grid_width_px }}px); height:{{ header_height + grid_height_px }}px;">
+
+    <!-- gutter/grid separator + resize hot zone -->
+    <div class="timeline-gutter-sep" id="timeline-gutter-sep" style="left:var(--gutter-w); height:{{ header_height + grid_height_px }}px"></div>
+
+    {% for row in rows %}
+    <div class="timeline-gutter-row {% if row.is_header %}is-header{% endif %}"
+         style="top:{{ row.top_px }}px; height:{{ row_height }}px; width:var(--gutter-w)"
+         data-list-uid="{{ row.list_uid }}" data-local-idx="{{ row.local_idx }}" data-default-label="{{ row.default_label }}"
+         title="Double-click to rename">{{ row.label }}</div>
+    {% endfor %}
+
+    {% for w in week_headers %}
+    <div class="timeline-week-label" style="left:calc(var(--gutter-w) + {{ w.x_px }}px); width:{{ w.width_px }}px">{{ w.label }}</div>
+    {% endfor %}
+    {% for d in day_headers %}
+    <div class="timeline-day-label" style="left:calc(var(--gutter-w) + {{ d.x_px }}px); width:{{ day_width }}px">{{ d.day_number }}</div>
+    <div class="timeline-gridline" style="left:calc(var(--gutter-w) + {{ d.x_px }}px); top:{{ header_height }}px; height:{{ grid_height_px }}px"></div>
+    {% endfor %}
+    {% for row in rows %}
+    <div class="timeline-rowline" style="top:{{ row.top_px }}px; width:calc(var(--gutter-w) + {{ grid_width_px }}px)"></div>
+    <div class="timeline-row-target" data-list-path="{{ row.list_uid }}" data-local-idx="{{ row.local_idx }}"
+         style="left:var(--gutter-w); top:{{ row.top_px }}px; height:{{ row_height }}px; width:{{ grid_width_px }}px"></div>
+    {% endfor %}
+
+    {% for b in bars %}
+    <a class="timeline-bar" href="/tasks/{{ b.task.uid }}" data-modal
+       data-uid="{{ b.task.uid }}" data-start="{{ b.task.start_at or b.task.due_at }}" data-due="{{ b.task.due_at }}"
+       data-local-idx="{{ b.local_idx }}" data-group-lanes="{{ b.group_lanes }}"
+       style="left:calc(var(--gutter-w) + {{ b.left_px }}px); top:{{ b.top_px }}px; width:{{ b.width_px }}px; height:{{ b.height_px }}px; background:{{ b.color }}">
+        {% if b.task.progress %}<span class="timeline-bar-progress" style="width:{{ (b.task.progress*100)|round|int }}%"></span>{% endif %}
+        <span class="timeline-bar-title">{{ b.task.title }}</span>
+        <span class="timeline-bar-handle timeline-bar-handle-left"></span>
+        <span class="timeline-bar-handle timeline-bar-handle-right"></span>
+    </a>
+    {% endfor %}
+
+    <div class="timeline-create-ghost" id="timeline-create-ghost" style="display:none"></div>
+</div>
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('check-square') }}</div>
+    <div class="empty-state-title">No tasks with a due date yet</div>
+    <div class="empty-state-text">Add one from the Table or Board view, or click-and-drag on the grid above once you have a list.</div>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('timeline.js') }}"></script>{% endblock %}

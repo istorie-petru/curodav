@@ -1,0 +1,1756 @@
+/* Design system ported from the user's "Uni Schedule -> ICS" app
+   (uploaded index.html) -- same tokens/components, adapted for a
+   multi-page server-rendered app instead of a single-file SPA.
+   Tabbar, buttons, segmented control, cards, tables, field grids, tag
+   pills, warnings strip carry over close to verbatim so
+   Calendar/Tasks/Contacts/Schedule all look like one app. Modal styling
+   (below, see "Modal") was added back once the create flows moved from
+   full-page navigation to an in-place dialog -- see static/modal.js.
+
+   File organization, reworked 2026-07-31 into one deliberate general-to-
+   specific progression -- read top to bottom:
+     1. Tokens (:root, [data-theme="dark"])
+     2. Base reset (html/body/headings/links)
+     3. Form controls -- ONE generic base for every input type (text-like
+        inputs, select, textarea, checkbox, radio, file, range), so
+        anything not otherwise specialized still gets themed correctly in
+        both light and dark instead of falling back to unstyled browser
+        defaults. Component-specific rules further down only ever add
+        *deltas* on top of this (a width, a tighter padding, a transparent-
+        until-hover border) -- never re-declare background/border/color
+        that the base already provides. That repetition (the same
+        background/border/padding/focus-ring block copy-pasted into half a
+        dozen page-specific selectors) was the main source of drift this
+        pass cleaned up.
+     4. Buttons & icon buttons
+     5. Layout primitives (tabbar, toolbar, segmented control)
+     6. Cards & tables
+     7. Tags/pills (status/priority/category/credit labels)
+     8. Everything else, one component section per page/feature, in
+        roughly the order those features appear in the app's own nav
+        (Dashboard-adjacent bits, Tasks, Contacts, Calendar/Schedule
+        grids, Modal, Manage-calendars, Export form), each still scoped to
+        its own template(s) as noted in its comment. */
+
+/* --------------------------------------------------------------------- */
+/* 1. Tokens                                                              */
+/* --------------------------------------------------------------------- */
+
+:root{
+  color-scheme:light;
+
+  --accent:#007aff;--accent-hover:#0071e3;--accent-active:#0062cc;--accent-subtle:rgba(0,122,255,.12);--accent-subtle-strong:rgba(0,122,255,.2);
+  --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
+  --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#8e8e93;--fg-on-accent:#ffffff;
+  --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
+  --control-bg:#ffffff;--control-bg-hover:#f5f5f7;--control-border:rgba(0,0,0,.14);
+  --overlay-scrim:rgba(0,0,0,.35);--shadow-window:0 16px 44px rgba(0,0,0,.18);
+
+  /* Status/priority/category/credit pill colors (.tag-*, .pill-*,
+     .credit-pill.*) -- light-mode values are pastel-on-white; see the
+     [data-theme="dark"] block below for the dark-mode pairs. Every
+     consumer of these only ever reads the variable, never the hex value
+     directly, so that's the only place theme-specific pill colors need to
+     be redefined. */
+  --tag-gray-fg:#6e6e73;   --tag-gray-bg:#f1f1ef;
+  --tag-brown-fg:#976d57;  --tag-brown-bg:#f4eeee;
+  --tag-orange-fg:#c2760f; --tag-orange-bg:#fdf1e2;
+  --tag-yellow-fg:#a98600; --tag-yellow-bg:#fbf3db;
+  --tag-green-fg:#2a8a52;  --tag-green-bg:#e7f6ec;
+  --tag-blue-fg:#0071e3;   --tag-blue-bg:#e8f2fd;
+  --tag-purple-fg:#8a5cb0; --tag-purple-bg:#f6f3f9;
+  --tag-pink-fg:#c14c8a;   --tag-pink-bg:#faf1f5;
+  --tag-red-fg:#d44c47;    --tag-red-bg:#fdebec;
+
+  --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --text-caption:11px;--text-footnote:12px;--text-body:13px;--text-callout:13.5px;
+  --text-headline:15px;--text-title3:16px;--text-title2:19px;
+
+  --radius-control:12px;--radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-pill:999px;
+
+  --shadow-control:0 1px 1px rgba(0,0,0,.05);
+  --shadow-card:0 1px 2px rgba(0,0,0,.05),0 1px 6px rgba(0,0,0,.04);
+  --shadow-popover:0 4px 16px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.08);
+
+  --ease-standard:cubic-bezier(.25,.1,.25,1);
+  --dur-fast:100ms;
+  --dur-normal:160ms;
+
+  /* Spacing scale -- a real 4pt grid. Before this, margin/padding/gap
+     across the file were one-off pixel values chosen per-component (3,5,
+     7,9,11,13,15,18,22,30...) that happened to look fine individually but
+     never added up to a system. Applied below to the reusable primitives
+     (buttons, inputs, .card, .toolbar, .field, .modal, tables, list rows)
+     since those cascade everywhere and are what actually reads as
+     "rhythm." Deliberately NOT applied to geometry that's a real
+     measurement, not a spacing choice -- the time-grid's 52px gutter,
+     timeline row/day pixel constants mirroring desktop's own layout,
+     heatmap cell size, avatar diameters, month-table row height. Forcing
+     those onto a spacing token would be cosmetic conformity for its own
+     sake, not an actual improvement. */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
+  --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px;
+
+  /* Material Design elevation system (§6 of the plan) */
+  --elevation-0:none;
+  --elevation-1:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+  --elevation-2:0 3px 6px rgba(0,0,0,.12),0 2px 4px rgba(0,0,0,.08);
+  --elevation-3:0 10px 20px rgba(0,0,0,.12),0 3px 6px rgba(0,0,0,.08);
+  --elevation-4:0 14px 28px rgba(0,0,0,.16),0 5px 10px rgba(0,0,0,.08);
+
+  /* Tonal surfaces -- slightly tinted backgrounds at each elevation */
+  --surface-0:var(--bg-base);
+  --surface-1:var(--bg-elevated);
+  --surface-2:var(--bg-secondary);
+  --surface-3:var(--bg-tertiary);
+  --surface-container:var(--bg-secondary);
+  --surface-container-high:var(--bg-elevated);
+  --surface-container-highest:var(--bg-tertiary);
+
+  /* Card border-radius bumped to 12px (MD3 style) */
+  --radius-card:16px;
+}
+[data-theme="dark"]{
+  color-scheme:dark;
+
+  --accent:#0a84ff;--accent-hover:#3396ff;--accent-active:#0a6fd6;--accent-subtle:rgba(10,132,255,.22);--accent-subtle-strong:rgba(10,132,255,.32);
+  --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
+  --bg-base:#1a1a1c;--bg-elevated:#2c2c2e;--bg-secondary:#2a2a2c;--bg-tertiary:#1c1c1e;--bg-sidebar:#222224;
+  --fg-primary:#f5f5f7;--fg-secondary:#a1a1a6;--fg-tertiary:#8e8e93;
+  --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
+  --control-bg:#333335;--control-bg-hover:#3a3a3c;--control-border:rgba(255,255,255,.16);
+  --overlay-scrim:rgba(0,0,0,.55);--shadow-window:0 16px 44px rgba(0,0,0,.5);
+
+  /* Previously *not* overridden at all -- every pill in the app (status,
+     priority, category, credit) kept its light-mode pastel-on-white
+     background even in dark mode, which read as a bright, out-of-place
+     rectangle against a dark page instead of a themed label. Same idea
+     --accent-subtle already used (translucent color over the dark
+     surface) rather than a literal dark-mode hex swap, so these stay
+     visually related to their light-mode counterparts, just recomputed
+     for a dark background instead of a white one. */
+  --tag-gray-fg:#c7c7cc;   --tag-gray-bg:rgba(255,255,255,.08);
+  --tag-brown-fg:#d9b699;  --tag-brown-bg:rgba(151,109,87,.28);
+  --tag-orange-fg:#ffb454; --tag-orange-bg:rgba(255,149,0,.2);
+  --tag-yellow-fg:#f5d76e; --tag-yellow-bg:rgba(255,204,0,.18);
+  --tag-green-fg:#6fdb8a;  --tag-green-bg:rgba(48,209,88,.2);
+  --tag-blue-fg:#6cb2ff;   --tag-blue-bg:rgba(10,132,255,.24);
+  --tag-purple-fg:#d19bf0; --tag-purple-bg:rgba(191,90,242,.22);
+  --tag-pink-fg:#ff9bb3;   --tag-pink-bg:rgba(255,55,95,.2);
+  --tag-red-fg:#ff8a80;    --tag-red-bg:rgba(255,69,58,.2);
+
+  /* Elevation shadows are lighter in dark mode (less contrast needed against a dark bg) */
+  --elevation-1:0 1px 3px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.22);
+  --elevation-2:0 3px 6px rgba(0,0,0,.3),0 2px 4px rgba(0,0,0,.22);
+  --elevation-3:0 10px 20px rgba(0,0,0,.3),0 3px 6px rgba(0,0,0,.22);
+  --elevation-4:0 14px 28px rgba(0,0,0,.36),0 5px 10px rgba(0,0,0,.22);
+}
+
+/* --------------------------------------------------------------------- */
+/* 2. Base reset                                                          */
+/* --------------------------------------------------------------------- */
+
+*{box-sizing:border-box;}
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:0.001ms !important; animation-duration:0.001ms !important; scroll-behavior:auto !important;}
+}
+html, body{height:100%;}
+html{background:var(--bg-base);}
+body{
+  margin:0; font-family:var(--font-system); color:var(--fg-primary); background:var(--bg-base);
+  font-size:var(--text-body); -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+h1{font-size:var(--text-title2); margin:0 0 14px;}
+h2{font-size:var(--text-headline); margin:20px 0 8px;}
+
+/* Keyboard-focus ring, global. Nothing in this file styled :focus-visible
+   before -- buttons, tab/segmented links, icon buttons all fell back to
+   each browser's own default outline, which is inconsistent (a thin
+   native rectangle that clips against these rounded/pill shapes) and in
+   Safari's default is quiet enough to be effectively invisible. This is
+   `:focus-visible`, not `:focus`, specifically so it only appears for
+   keyboard/switch-control navigation, not on every mouse click --
+   text inputs keep their own `:focus` ring below (section 3) since a
+   ring on click *into* a field is expected there, unlike on a button. */
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+.tab-btn:focus-visible, .seg-btn:focus-visible, .icon-btn:focus-visible,
+button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
+  outline-offset:-2px; border-radius:var(--radius-sm);
+}
+
+/* --------------------------------------------------------------------- */
+/* 3. Form controls -- the one shared base every input/select/textarea in */
+/*    the app inherits from (see the file header comment above).         */
+/* --------------------------------------------------------------------- */
+
+button, input, select, textarea{font-family:inherit;}
+
+input, select, textarea{
+  font-size:var(--text-callout); color:var(--fg-primary); background:var(--control-bg);
+  border:1.5px solid var(--control-border); border-radius:var(--radius-control); padding:10px 14px;
+}
+input::placeholder, textarea::placeholder{color:var(--fg-tertiary); opacity:1;}
+input:focus, select:focus, textarea:focus{
+  outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle);
+}
+input:disabled, select:disabled, textarea:disabled{opacity:.5; cursor:not-allowed;}
+input:read-only{cursor:default;}
+
+/* Inline-editable text (2026-08-02 -- "rework the text input to only
+   look special on input, but normal when not, just like any other
+   text"). A project/Space/list name is a label most of the time; it only
+   needs to look like a form control right when you're about to type in
+   it, not permanently boxed like the rest of a real form. Padding is
+   left alone (only border/background change) so nothing shifts position
+   when the box appears on hover/focus. Focus itself still gets the same
+   accent border + ring every other input has -- that's the un-overridden
+   `input:focus` rule above, which wins on specificity (a pseudo-class
+   attached to the base element type still out-ranks this plain class
+   selector) the moment the field is actually focused. */
+.inline-edit-input{border-color:transparent; background:transparent;}
+.inline-edit-input:hover{border-color:var(--control-border);}
+.inline-edit-input:focus{background:var(--control-bg);}
+textarea{resize:vertical; min-height:60px; line-height:1.4;}
+
+/* Every <select> in the app gets the same custom chevron (appearance:none
+   + an inline SVG background image) instead of the browser's native
+   dropdown arrow, which otherwise looks visually unrelated to everything
+   else here -- this used to be hand-duplicated inside .filter-select and
+   .pill-select separately (identical data-URI, copy-pasted); it's the
+   base now, and those two only add their own sizing deltas. */
+select{
+  appearance:none; -webkit-appearance:none; cursor:pointer; padding-right:30px;
+  background-repeat:no-repeat; background-position:right 10px center; background-size:9px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238e8e93'/%3E%3C/svg%3E");
+}
+
+/* Deliberately does NOT reset background/border here (only sizing/spacing)
+   -- a blanket `background:none` on every radio/checkbox in the app was
+   overreach: it doesn't help a normal native-rendered checkbox (which
+   only needs `accent-color` for theming), and it fought the *actual*
+   fully-custom-rendered ones (.color-swatch/.color-swatch-current below,
+   see the "Manage-calendars modal" section) that rely on their own
+   `cal-<color>` class for a real background-color -- an equal-specificity
+   tie between this rule and `.cal-blue` etc. depends on which comes later
+   in the file, which is exactly the kind of fragile ordering dependency
+   this file's whole reorganization was meant to avoid. Those elements
+   already set their own `border` explicitly, so they don't need it from
+   here either. */
+input[type="checkbox"], input[type="radio"]{
+  width:16px; height:16px; margin:0; padding:0; accent-color:var(--accent); cursor:pointer;
+}
+input[type="range"]{
+  padding:0; background:none; border:none; accent-color:var(--accent); cursor:pointer;
+}
+input[type="color"]{padding:2px; height:32px; cursor:pointer;}
+input[type="file"]{
+  background:var(--bg-secondary); border:1px dashed var(--control-border);
+  font-size:var(--text-footnote); color:var(--fg-secondary); cursor:pointer;
+}
+/* Native date/time picker indicator glyphs are drawn by the browser, not
+   this stylesheet -- `color-scheme` (set per-theme above) is what makes
+   Chrome/Firefox render the picker popup itself in the right theme, but
+   WebKit in particular has been inconsistent about also recoloring the
+   small calendar-icon *glyph* to match, so it can still show up as a
+   barely-visible dark-on-dark icon. This filter is a defensive nudge for
+   that specific gap, not a replacement for color-scheme. */
+[data-theme="dark"] input::-webkit-calendar-picker-indicator{filter:invert(.85);}
+
+/* --------------------------------------------------------------------- */
+/* 4. Buttons & icon buttons                                              */
+/* --------------------------------------------------------------------- */
+
+button.btn, a.btn{
+  background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
+  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
+  display:inline-block; text-decoration:none;
+  transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
+             transform var(--dur-fast) var(--ease-standard);
+}
+button.btn:hover, a.btn:hover{background:var(--control-bg-hover); text-decoration:none;}
+/* Pressed feedback -- previously hover was the only state a click gave
+   any visual response to, so on a touchscreen (no hover at all) tapping a
+   button gave zero feedback until whatever it triggered finished loading.
+   A brief scale-down on :active is the same tactile cue iOS/macOS give
+   native buttons, and costs nothing extra since the transition above
+   already exists for hover. */
+button.btn:active, a.btn:active{transform:scale(.96);}
+/* Primary/danger were previously the same rectangle as a neutral button
+   with just the fill color swapped -- easy to miss next to a row of
+   otherwise-identical buttons, and a "Delete" action read as no more
+   serious than "Cancel" next to it. Adwaita's suggested-action/
+   destructive-action classes solve this the same way: a filled, slightly
+   heavier-weight button with its own soft color-matched shadow, so the
+   one button that matters on a form reads as such at a glance instead of
+   needing color alone to carry the distinction. */
+button.btn.primary, a.btn.primary{
+  background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:600;
+  box-shadow:var(--elevation-1), 0 2px 8px var(--accent-subtle);
+}
+button.btn.primary:hover, a.btn.primary:hover{background:var(--accent-hover);}
+button.btn.primary:active, a.btn.primary:active{background:var(--accent-active);}
+button.btn.ghost, a.btn.ghost{background:transparent; border-color:transparent; box-shadow:none;}
+button.btn.ghost:hover, a.btn.ghost:hover{background:var(--bg-secondary);}
+/* .danger used to be a quiet red-on-transparent button (fine for a small
+   icon-adjacent action, but every real usage in this app -- Delete task/
+   event/habit/project/contact/database -- is the one committing,
+   irreversible action on its form). Filled to match .primary's weight so
+   it's unmistakable as "the serious button here," not a lesser sibling. */
+button.btn.danger, a.btn.danger{
+  background:var(--danger); color:#fff; border-color:var(--danger); font-weight:600;
+  box-shadow:0 1px 2px rgba(0,0,0,.06), 0 2px 8px var(--tag-red-bg);
+}
+button.btn.danger:hover, a.btn.danger:hover{background:#d92c22;}
+[data-theme="dark"] button.btn.danger:hover, [data-theme="dark"] a.btn.danger:hover{background:#ff6259;}
+button.btn.danger:active, a.btn.danger:active{background:#c2261d;}
+/* A lighter-weight danger for contexts where red-filled would be too loud
+   next to a primary action in the same row (e.g. a small inline "remove"
+   next to Save) -- opt-in via an extra class rather than the default, so
+   existing .btn.danger call sites (all real delete-this-record buttons)
+   keep the filled treatment without every template needing an update. */
+button.btn.danger.subtle, a.btn.danger.subtle{
+  background:transparent; color:var(--danger); border-color:var(--tag-red-bg); box-shadow:none; font-weight:500;
+}
+button.btn.danger.subtle:hover, a.btn.danger.subtle:hover{background:var(--tag-red-bg);}
+/* MD3 tonal button -- accent-tinted fill without the full-weight primary look. */
+button.btn.tonal, a.btn.tonal{background:var(--accent-subtle); color:var(--accent); border-color:transparent;}
+button.btn.tonal:hover, a.btn.tonal:hover{background:var(--accent-subtle-strong);}
+/* Disabled -- input/select/textarea already had this (section 3); .btn
+   never did, so a disabled submit button looked identical to an enabled
+   one and only failed silently on click. */
+button.btn:disabled, a.btn[aria-disabled="true"]{
+  opacity:.5; cursor:not-allowed; transform:none; pointer-events:none;
+}
+
+.icon-btn{
+  width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:var(--radius-control); cursor:pointer;
+  color:var(--fg-secondary); padding:0; font-size:15px;
+  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+             transform var(--dur-fast) var(--ease-standard);
+}
+.icon-btn:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.icon-btn:active{transform:scale(.92); background:var(--bg-secondary);}
+.icon-btn:disabled{opacity:.4; cursor:not-allowed; pointer-events:none;}
+/* The topbar's Settings gear is an icon-btn, not a .tab-btn, but still
+   needs an active/current-section indicator -- reuses .tab-btn.active's
+   accent treatment rather than inventing a second "this is where I am"
+   visual language. */
+.icon-btn.active{color:var(--accent); background:var(--accent-subtle);}
+
+/* Loading feedback -- a generic `.is-loading` utility for any trigger
+   (button, link, whole clickable row) mid-fetch: modal.js applies it to
+   whatever was clicked while the modal fragment is being fetched, and to
+   a form's submit button while it's saving. Previously there was zero
+   visual acknowledgment between tap and result -- on a slow connection
+   (this is a *remote* client) that reads as a dead tap, not "working."
+   A small spinning ring overlaid via ::after rather than swapping content
+   so it works uniformly on an icon-btn, a text button, or a whole
+   .contact-row without each needing its own markup change. */
+.is-loading{position:relative; pointer-events:none; opacity:.65;}
+.is-loading::after{
+  content:""; position:absolute; top:50%; left:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
+  border-radius:50%; border:2px solid rgba(127,127,127,.35); border-top-color:var(--fg-primary);
+  animation:cc-spin .6s linear infinite;
+}
+@keyframes cc-spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion: reduce){
+  .is-loading::after{animation-duration:1.4s;}
+}
+/* On a filled accent/danger button, the default dark-ring-on-light-track
+   spinner would be nearly invisible against the solid color -- swap to a
+   white ring/track so it still reads against either fill. */
+.btn.primary.is-loading::after, .btn.danger.is-loading::after{
+  border-color:rgba(255,255,255,.35); border-top-color:#fff;
+}
+
+/* Icon library (templates/_icons_sprite.html, deps.py's `icon()` global) --
+   every glyph that used to be an emoji or HTML-entity symbol (checkboxes,
+   theme toggle, mail/phone, trash, chevrons, etc.) is now one of these:
+   an inline <svg><use> against the local sprite, sized/colored here so it
+   always matches the surrounding text (`currentColor`) rather than
+   carrying its own fixed color the way an emoji glyph would. */
+.icon{
+  width:15px; height:15px; flex:none; vertical-align:-2px;
+  fill:none; stroke:currentColor; display:inline-block;
+}
+.icon-sm{width:12px; height:12px; vertical-align:-1px;}
+.icon-lg{width:20px; height:20px; vertical-align:-4px;}
+button.btn .icon, a.btn .icon{margin-right:2px;}
+.icon-btn .icon{width:16px; height:16px;}
+.checklist-check .icon{width:16px; height:16px;}
+.th-sort .icon{margin-left:2px;}
+
+/* --------------------------------------------------------------------- */
+/* 5. Layout primitives                                                   */
+/* --------------------------------------------------------------------- */
+
+/* -- App shell: navigation rail (desktop) / bottom bar (mobile) --
+   MD3 Navigation Rail: fixed left column, 80px wide, icons above labels,
+   active indicator pill. Content in <main> flows beside it. On mobile
+   (<=720px) the same <nav> becomes a bottom bar instead. */
+.app-window{min-height:100vh; display:flex; flex-direction:row;}
+
+.tabbar{
+  /* Desktop: fixed vertical rail on the left edge */
+  position:fixed; top:0; left:0; bottom:0; z-index:20;
+  width:80px;
+  display:flex; flex-direction:column; align-items:center;
+  gap:4px; padding:var(--space-4) 0;
+  background:var(--bg-elevated);
+  border-right:1px solid var(--separator);
+  overflow-y:auto; overflow-x:hidden;
+  scrollbar-width:none;
+}
+.tabbar::-webkit-scrollbar{display:none;}
+.tabbar .spacer{flex:1; min-height:var(--space-4);}
+.tab-btn{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; flex:none;
+  width:64px; min-height:48px;
+  background:none; border:none; padding:6px 4px 4px; cursor:pointer;
+  font-size:11px; font-weight:500; line-height:1.1;
+  color:var(--fg-secondary); text-decoration:none; white-space:nowrap;
+  border-radius:0; position:relative;
+  transition:color var(--dur-fast) var(--ease-standard);
+}
+.tab-btn .icon{width:20px; height:20px;}
+.tab-btn span{display:block; margin-top:1px;}
+.tab-btn:hover{color:var(--fg-primary); text-decoration:none;}
+.tab-btn:active{opacity:.7;}
+/* MD3 active indicator pill: a rounded rectangle behind the icon */
+.tab-btn.active{color:var(--accent); font-weight:600;}
+.tab-btn.active::before{
+  content:''; position:absolute;
+  top:2px; left:50%; transform:translateX(-50%);
+  width:52px; height:28px; border-radius:14px;
+  background:var(--accent-subtle-strong); z-index:-1;
+  transition:background var(--dur-fast) var(--ease-standard);
+}
+
+/* Main content area: offset by rail width on desktop */
+main{
+  flex:1; width:100%;
+  max-width:1120px; margin:0 auto;
+  padding:var(--space-5) var(--space-5) var(--space-6);
+  margin-left:80px;
+}
+
+.toolbar{display:flex; gap:var(--space-2); margin-bottom:var(--space-3); flex-wrap:wrap; align-items:center;}
+/* Top app bar variant -- an elevated card-like surface for page-level
+   toolbars on Calendar/Tasks/Settings/Databases pages. */
+.top-app-bar{
+  padding:var(--space-3) var(--space-4); background:var(--bg-elevated);
+  border-radius:16px; box-shadow:var(--elevation-1); margin-bottom:var(--space-5);
+}
+.toolbar .spacer{flex:1;}
+/* Generic fallback so `.spacer` also works inside any other flex row
+   (2026-08-02, projects_manage.html's archived-project row) without
+   needing a container-specific rule every time -- identical flex:1
+   value to .toolbar/.tabbar's own scoped versions above/below, so this
+   changes nothing for either of those, just extends the same behavior
+   to new callers. */
+.spacer{flex:1;}
+
+.segmented{
+  position:relative; display:inline-flex; background:var(--bg-secondary); border-radius:20px;
+  padding:3px; gap:1px;
+}
+.seg-btn{
+  position:relative; z-index:1; border:none; background:transparent; padding:8px 16px; font-size:var(--text-footnote);
+  font-weight:500; border-radius:18px; cursor:pointer; color:var(--fg-secondary); text-decoration:none; display:inline-block;
+}
+.seg-btn.active{color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
+.seg-btn:hover{text-decoration:none;}
+.seg-btn:active{opacity:.7;}
+
+/* --------------------------------------------------------------------- */
+/* 6. Cards & tables                                                      */
+/* --------------------------------------------------------------------- */
+
+.card{
+  background:var(--bg-elevated); border:none; border-radius:var(--radius-card);
+  box-shadow:var(--elevation-1); padding:var(--space-4); margin-bottom:var(--space-4);
+  transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+}
+.card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* Horizontal-scroll affordance, 2026-08-02 -- a wide table (Schedule,
+   database detail) inside `.table-scroll` used to just get clipped at the
+   container edge with zero visual signal that there's more to the right,
+   which reads as a rendering bug ("the Submitted/Credits column is cut
+   off") rather than "scroll for more." A `background-attachment:local`
+   fade on both edges is the standard trick: two gradients scroll WITH the
+   content (so they only show while there's actually unseen content in
+   that direction) and two more stay fixed to the viewport edges (so the
+   fade is always visible on top of whatever's scrolled underneath).
+   Works with zero JS and degrades harmlessly on the (now rare) browser
+   without `background-attachment:local` support -- you just lose the
+   fade, the scroll itself still works. */
+.table-scroll{
+  overflow-x:auto;
+  background:
+    linear-gradient(to right, var(--bg-elevated) 30%, transparent) left,
+    linear-gradient(to left, var(--bg-elevated) 30%, transparent) right,
+    linear-gradient(to right, rgba(0,0,0,.08), transparent 8px) left,
+    linear-gradient(to left, rgba(0,0,0,.08), transparent 8px) right;
+  background-repeat:no-repeat;
+  background-color:var(--bg-elevated);
+  background-size:20px 100%, 20px 100%, 20px 100%, 20px 100%;
+  background-attachment:local, local, scroll, scroll;
+}
+table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
+thead th{
+  text-align:left; font-weight:600; color:var(--fg-secondary); font-size:12px;
+  text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
+  white-space:nowrap;
+}
+tbody tr{border-bottom:1px solid var(--separator);}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--row-alt);}
+tbody td{padding:10px 8px; vertical-align:middle;}
+
+/* --------------------------------------------------------------------- */
+/* 7. Tags / pills (status, priority, category, credit labels)           */
+/* --------------------------------------------------------------------- */
+
+.cell-tag{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:var(--radius-sm);
+  font-size:var(--text-caption); font-weight:600; white-space:nowrap;
+}
+/* Wherever multiple tags sit back-to-back in the same cell (Tasks table's
+   Tags column, task/contact detail's Tags row) -- a CSS rule instead of
+   relying on incidental whitespace between the template's `{% for %}`
+   iterations, which was inconsistent (present in some loops, not others)
+   and produced tags rendered flush against each other with zero gap. */
+.cell-tag + .cell-tag{margin-left:5px;}
+.tag-gray{background:var(--tag-gray-bg); color:var(--tag-gray-fg);}
+.tag-orange{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.tag-green{background:var(--tag-green-bg); color:var(--tag-green-fg);}
+.tag-blue{background:var(--tag-blue-bg); color:var(--tag-blue-fg);}
+.tag-red{background:var(--tag-red-bg); color:var(--tag-red-fg);}
+.tag-purple{background:var(--tag-purple-bg); color:var(--tag-purple-fg);}
+.tag-yellow{background:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
+.tag-brown{background:var(--tag-brown-bg); color:var(--tag-brown-fg);}
+.tag-pink{background:var(--tag-pink-bg); color:var(--tag-pink-fg);}
+
+.warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
+.credit-pill{
+  display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:var(--radius-pill);
+  font-size:var(--text-caption); font-weight:600;
+}
+.credit-pill.ok{background:var(--tag-green-bg); color:var(--tag-green-fg);}
+.credit-pill.warn{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.credit-pill.danger{background:var(--tag-red-bg); color:var(--tag-red-fg);}
+
+/* Settings sub-nav (templates/_settings_nav.html) -- the segmented row
+   handles the four "real" settings sections; the four dual-purpose
+   manage pages (Tags/Calendars/Task lists/Address books, see that
+   partial's own comment for why they're not segmented tabs) get a
+   plainer inline link row underneath instead, visually secondary to the
+   segmented control but still one click away. */
+.settings-subnav-links{
+  display:flex; flex-wrap:wrap; gap:var(--space-4); margin:0 0 var(--space-4); padding:0 var(--space-1);
+}
+.settings-subnav-links a{
+  display:inline-flex; align-items:center; gap:5px; font-size:var(--text-footnote); color:var(--fg-secondary);
+}
+.settings-subnav-links a:hover{color:var(--accent); text-decoration:none;}
+
+/* --------------------------------------------------------------------- */
+/* Tasks/Contacts filter row (tasks_list.html/tasks_board.html/          */
+/* contacts_list.html) -- deltas on top of the base input/select above.  */
+/* --------------------------------------------------------------------- */
+
+.filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.filter-bar input[type="search"]{width:180px; font-size:var(--text-footnote); padding:6px 10px;}
+.filter-select{max-width:150px; font-size:var(--text-footnote); padding:6px 26px 6px 10px;}
+
+/* Multi-select dropdown (app.js's generic .multiselect script) -- Calendar's
+   "which calendars are visible" toggle (_calendar_nav.html) is the one
+   place in this app where more than one option can be selected at once,
+   so it gets a checkbox-panel dropdown instead of the single-choice
+   <select> everywhere else (.filter-select above). */
+.multiselect{position:relative;}
+.multiselect-trigger{display:inline-flex; align-items:center; gap:6px;}
+.multiselect-count{
+  background:var(--bg-secondary); color:var(--fg-secondary); border-radius:var(--radius-pill);
+  padding:1px 7px; font-size:var(--text-caption); font-weight:600;
+}
+.multiselect-panel{
+  display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:40; min-width:200px;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-3); padding:6px;
+}
+.multiselect-panel.is-open{display:block;}
+.multiselect-option-form{display:block;}
+.multiselect-option{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
+  font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
+}
+.multiselect-option:hover{background:var(--bg-secondary);}
+.multiselect-divider{height:1px; background:var(--separator); margin:6px 2px;}
+.multiselect-manage{
+  display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:var(--radius-sm);
+  font-size:var(--text-footnote); color:var(--fg-secondary); text-decoration:none;
+}
+.multiselect-manage:hover{background:var(--bg-secondary); text-decoration:none; color:var(--fg-primary);}
+
+/* Task table view (tasks_list.html/tasks_table.js) -- status/priority
+   render as a native <select> disguised as a colored pill: the base
+   `select` rule above already gives every dropdown appearance:none + the
+   chevron; this only adds the tighter pill padding/font and removes the
+   border, and its background/text color are set per-row by JS via the
+   pill-<color> class (data-color attributes on each <option>, read in
+   tasks_table.js) rather than a fixed value here. */
+.task-table td{white-space:nowrap;}
+/* Compact density (schedule_classes.html's Schedule table, static/
+   schedule_table.js), 2026-08-01 -- shrinks row height/font so more
+   blocks fit on screen at once without scrolling, once a full course
+   load's worth are all listed under their day headers. Only touches
+   cell padding/font-size, not the interactive controls inside (pill
+   selects, time inputs) -- those already read fine at their normal
+   compact size, shrinking them further would make them fiddly to click
+   for no real space savings. */
+.task-table.is-compact td{padding:2px 6px; font-size:11px;}
+.task-table.is-compact .task-section-divider td{padding:4px 6px 2px;}
+/* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
+tr.is-selected{background:var(--accent-subtle);}
+.quick-add-form input[type="text"]{width:100%;}
+.bulk-actions-bar{
+  display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+  background:var(--accent-subtle); border:1px solid var(--accent); border-radius:var(--radius-control);
+  padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
+}
+.bulk-count{font-weight:600; font-size:var(--text-footnote);}
+/* Completed tasks stay in the table (Today/All/This-week views) but read
+   as visually distinct and de-emphasized -- dimmed + strikethrough title,
+   plus the divider row above (tasks_list.html) that separates them from
+   open work rather than interleaving by date/priority. */
+.task-row-completed{opacity:.55;}
+.task-row-completed td:nth-child(2) a{text-decoration:line-through;}
+.task-section-divider td{
+  padding:8px 10px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
+}
+.pill-select{
+  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
+  font-weight:600; background-position:right 6px center; background-size:9px;
+}
+.pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
+.pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.pill-green{background-color:var(--tag-green-bg); color:var(--tag-green-fg);}
+.pill-blue{background-color:var(--tag-blue-bg); color:var(--tag-blue-fg);}
+.pill-red{background-color:var(--tag-red-bg); color:var(--tag-red-fg);}
+.pill-purple{background-color:var(--tag-purple-bg); color:var(--tag-purple-fg);}
+.pill-yellow{background-color:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
+.inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:128px;}
+.inline-date:hover{border-color:var(--control-border);}
+.th-sort{color:inherit; text-decoration:none;}
+.th-sort:hover{color:var(--fg-primary); text-decoration:none;}
+
+/* Kanban board (tasks_board.html/tasks_board.js) */
+.kanban-board{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:var(--space-1); align-items:flex-start;}
+.kanban-column{
+  flex:0 0 260px; background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2);
+  display:flex; flex-direction:column; gap:var(--space-2); min-height:80px;
+}
+.kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
+.kanban-count{font-size:var(--text-caption); color:var(--fg-tertiary); font-weight:600;}
+.kanban-cards{display:flex; flex-direction:column; gap:var(--space-2); min-height:40px; border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);}
+.kanban-cards.drop-hover{background:var(--accent-subtle);}
+.kanban-card{
+  background:var(--bg-elevated); border:none; border-radius:var(--radius-control);
+  padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); cursor:grab; display:flex; flex-direction:column; gap:var(--space-1);
+}
+.kanban-card.dragging{opacity:.4;}
+.kanban-card-title{color:var(--fg-primary); font-size:var(--text-callout); font-weight:600; text-decoration:none;}
+.kanban-card-title:hover{text-decoration:underline;}
+.kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
+.kanban-empty{color:var(--fg-tertiary); font-size:var(--text-caption); text-align:center; padding:14px 0;}
+
+/* Checklist (task_detail.html) */
+.checklist-progress{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-left:6px;}
+.checklist{display:flex; flex-direction:column; margin-bottom:8px;}
+.checklist-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
+.checklist-row:last-child{border-bottom:none;}
+.checklist-row.is-done .checklist-text{color:var(--fg-tertiary); text-decoration:line-through;}
+.checklist-check{background:none; border:none; cursor:pointer; font-size:15px; padding:0; width:20px; color:var(--fg-secondary);}
+.checklist-check.is-done{color:var(--success);}
+.checklist-text{flex:1;}
+.checklist-delete{margin-left:auto;}
+.checklist-add-form{display:flex; gap:8px; margin-top:8px;}
+.checklist-add-form input[type="text"]{flex:1;}
+
+/* Contacts list (contacts_list.html) */
+.contact-list{display:flex; flex-direction:column;}
+.contact-row{
+  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); border-bottom:1px solid var(--separator);
+  text-decoration:none; color:inherit;
+}
+.contact-row:last-child{border-bottom:none;}
+.contact-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-row-main{display:flex; flex-direction:column; flex:1; min-width:0;}
+.contact-row-name{font-weight:600; color:var(--fg-primary);}
+.contact-row-sub{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.avatar-circle{
+  flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-subtle); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;
+}
+.avatar-large{width:52px; height:52px; font-size:20px;}
+img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
+.contact-detail-org{color:var(--fg-tertiary); font-size:var(--text-footnote);}
+.contact-quick-actions{display:flex; gap:8px; margin-bottom:14px;}
+
+/* Photo upload field (contact_form.html) -- avatar preview (real photo or
+   initials fallback, see deps.py's `avatar()` global) beside the file
+   input + optional remove checkbox. */
+.photo-field-row{display:flex; align-items:center; gap:14px;}
+.photo-field-controls{display:flex; flex-direction:column; gap:6px;}
+.photo-field-controls input[type="file"]{font-size:var(--text-footnote);}
+
+/* --------------------------------------------------------------------- */
+/* Form layout (field/grid wrappers -- deltas on top of the base input   */
+/* rule; every field's own background/border/color/focus comes from      */
+/* section 3 above, this is purely block layout).                       */
+/* --------------------------------------------------------------------- */
+
+.field{display:flex; flex-direction:column; gap:var(--space-1); margin-bottom:var(--space-3);}
+.field label{font-size:var(--text-caption); font-weight:600; color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+/* Text-like fields (and select/textarea) fill the field's width -- but
+   checkbox/radio/file are fixed-size controls, not text fields, and
+   should never stretch. Without this exclusion, `width:100%` on a
+   checkbox doesn't visibly stretch its glyph (browsers keep that a fixed
+   size) but does inflate its *layout* box to the field's full width,
+   which -- inside `.field-toggle`'s row layout -- shoved the label all
+   the way to the far right with a large empty gap in between instead of
+   sitting right next to the checkbox. */
+.field input:not([type="checkbox"], [type="radio"], [type="file"]), .field select, .field textarea{width:100%;}
+.field-toggle{flex-direction:row; align-items:center; gap:8px;}
+.field-toggle label{text-transform:none; font-weight:500; font-size:var(--text-body);}
+.field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
+.field-grid .field-wide{grid-column:span 2;}
+.settings-grid{display:grid; grid-template-columns:repeat(3,minmax(150px,220px)); gap:0 var(--space-6);}
+.form-inline{display:inline;}
+
+.empty-state{padding:var(--space-8) var(--space-5); text-align:center; color:var(--fg-tertiary);}
+/* Richer empty-state variant (icon + title + helper text + optional CTA)
+   -- opt-in via `.empty-state-rich` alongside the base class, so every
+   existing plain-text `.empty-state` (there are ~25 across this app: 404-
+   style "not found" pages, table colspan placeholders, small in-context
+   ones that already have their own inline link) keeps working exactly as
+   before with zero markup changes. Only applied where a screen's *only*
+   content is "this list is empty" -- Tasks/Habits/Contacts/Databases/
+   Projects lists, the dashboard's no-widgets state, etc. -- since a
+   colspan="5" table cell or a one-line "no subtasks yet" under a form
+   has no room for a 48px icon and would just look broken. */
+.empty-state-rich{padding:var(--space-10) var(--space-5);}
+.empty-state-icon{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:48px; height:48px; border-radius:50%; background:var(--bg-secondary);
+  color:var(--fg-tertiary); margin-bottom:var(--space-3);
+}
+.empty-state-icon .icon{width:22px; height:22px;}
+.empty-state-title{font-size:var(--text-headline); font-weight:600; color:var(--fg-primary); margin-bottom:4px;}
+.empty-state-text{font-size:var(--text-callout); color:var(--fg-tertiary); max-width:380px; margin:0 auto; line-height:1.5;}
+.empty-state-rich .btn{margin-top:16px;}
+
+/* Weekly schedule grid */
+.week-grid{padding:8px 4px 10px;}
+.week-head{display:grid; grid-template-columns:52px repeat(7,1fr); padding-left:2px;}
+.week-head .wd{text-align:center; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
+.week-body{display:grid; grid-template-columns:52px repeat(7,1fr); position:relative;}
+.week-gutter{position:relative;}
+.week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:10px; color:var(--fg-tertiary);}
+.week-col{
+  position:relative; border-left:1px solid var(--separator); min-height:1px;
+  background-image:repeating-linear-gradient(to bottom, var(--separator) 0, var(--separator) 1px, transparent 1px, transparent var(--hr-h));
+}
+.week-event{
+  position:absolute; left:2px; right:2px; border-radius:6px; padding:4px 6px; overflow:hidden;
+  font-size:10.5px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
+}
+.week-event .we-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.week-event .we-room{opacity:.8; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.week-event.conflict{box-shadow:0 0 0 1px var(--warning) inset, 0 1px 2px rgba(0,0,0,.08);}
+
+/* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
+.calendar-subnav{margin-bottom:14px;}
+.time-grid-wrap{overflow-x:auto;}
+.time-grid-head{display:grid; padding-left:52px;}
+.time-grid-head.week{grid-template-columns:repeat(7,1fr);}
+.time-grid-head.day{grid-template-columns:1fr;}
+.time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-footnote); font-weight:600; border-bottom:1px solid var(--separator);}
+.time-grid-head .thd.is-today{color:var(--accent);}
+.time-grid-body{display:grid; grid-template-columns:52px 1fr; position:relative;}
+.time-gutter{position:relative;}
+.time-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:10px; color:var(--fg-tertiary); white-space:nowrap;}
+.time-cols{display:grid;}
+.time-cols.week{grid-template-columns:repeat(7,1fr);}
+.time-cols.day{grid-template-columns:1fr;}
+.time-col{
+  position:relative; border-left:1px solid var(--separator); cursor:copy;
+  background-image:repeating-linear-gradient(to bottom, var(--separator) 0, var(--separator) 1px, transparent 1px, transparent var(--hr-h));
+  transition:background-color var(--dur-fast) var(--ease-standard);
+}
+/* Drop-hover: the destination column lights up while dragging an event
+   over it, so a cross-column move has a clear "it will land here" cue
+   instead of just the block silently jumping between columns. */
+.time-col.drop-hover{background-color:var(--accent-subtle);}
+/* Hover/drag-create preview ghost (Schedule grid, static/schedule_grid.js)
+   -- a faint outline showing where a click (or click-drag, for a custom
+   length) would create a new class, same idea as the reference app's
+   week-hover-ghost. */
+.schedule-ghost{
+  position:absolute; left:3px; right:3px; border-radius:6px; pointer-events:none;
+  background:var(--accent-subtle); border:1.5px dashed var(--accent); z-index:2;
+}
+.time-event{
+  position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
+  font-size:10.5px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
+  cursor:grab; touch-action:none; z-index:3;
+}
+.time-event:hover{text-decoration:none; filter:brightness(1.08);}
+/* While actively dragging, the block should look locked to the grid it's
+   snapped into (a solid outline + slight lift), not like it's floating
+   disconnected above the table -- the outline is the "snap" cue; the
+   block's top/left are already snapped to the grid on every pointermove
+   (see calendar.js/schedule_grid.js), this is purely the visual match for
+   that already-snapped position. */
+.time-event.dragging{
+  opacity:.95; box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent), 0 6px 14px rgba(0,0,0,.22);
+  z-index:30; cursor:grabbing;
+}
+.time-event .te-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:9.5px;}
+.time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
+.all-day-strip{display:flex; flex-wrap:wrap; gap:4px; padding:6px 0 10px 52px; border-bottom:1px solid var(--separator); margin-bottom:6px;}
+.all-day-chip{
+  display:inline-block; padding:2px 8px; border-radius:var(--radius-sm); font-size:var(--text-caption);
+  font-weight:600; color:#fff; text-decoration:none;
+}
+.all-day-chip:hover{text-decoration:none; filter:brightness(1.08);}
+
+/* Calendar colors -- shared by month chips, week/day time-grid blocks,
+   all-day chips, and the calendar-visibility multiselect. Deliberately
+   fixed, theme-independent hues (not tokens) -- a calendar's color is a
+   user choice that should look the same regardless of light/dark mode,
+   the same way a colored folder label wouldn't repaint itself. */
+.cal-blue{background:#007aff;}
+.cal-green{background:#34c759;}
+.cal-orange{background:#ff9500;}
+.cal-red{background:#ff3b30;}
+.cal-purple{background:#af52de;}
+.cal-pink{background:#ff2d55;}
+.cal-gray{background:#8e8e93;}
+.cal-yellow{background:#ffcc00; color:#1d1d1f !important;}
+
+/* A plain round color dot -- e.g. an event's calendar color in Month/Agenda
+   view (calendar_month.html/calendar_agenda.html), or a calendar's swatch
+   in the visibility multiselect (_calendar_nav.html). Previously the
+   Month/Agenda dots reused `.cell-tag` (padding around an nbsp) to fake a
+   dot, which rendered as a small rounded *rectangle* since `.cell-tag`'s
+   size comes from its padding/content, not a fixed circle -- this is an
+   actual fixed-size circle instead, no content needed. */
+.color-dot{width:9px; height:9px; border-radius:50%; flex:none; display:inline-block;}
+
+/* `.cal-*` on its own (a bare swatch dot, or `.time-event`/`.all-day-chip`,
+   which already set their own white text) never needed a text color. But
+   `.cell-tag.cal-*` -- the calendar/task-list/address-book multiselect and
+   filter chips -- uses this combination for a colored, labeled pill, which
+   inherited `.cell-tag`'s unset color (so: body text color) against these
+   solid, saturated backgrounds, illegible in both light and dark mode
+   (dark-on-blue, off-white-on-yellow, etc). `.cal-yellow` already
+   special-cased a dark color for exactly this reason; this generalizes the
+   same fix to every other swatch color. */
+.cell-tag.cal-blue, .cell-tag.cal-green, .cell-tag.cal-orange, .cell-tag.cal-red,
+.cell-tag.cal-purple, .cell-tag.cal-pink, .cell-tag.cal-gray{
+  color:#fff;
+}
+
+/* Calendar month grid (routers/calendar.py) */
+.month-table{table-layout:fixed;}
+.month-table td{vertical-align:top; height:90px; padding:6px; font-size:var(--text-footnote);}
+.month-table td.not-in-month{opacity:.35;}
+.month-table td.is-today{box-shadow:inset 0 0 0 2px var(--accent);}
+.month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); margin-bottom:2px; display:block;}
+.month-item{display:block; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:1px 0;}
+/* Month-view click-and-hold drag-to-create range (static/calendar_month.js)
+   -- highlights every day cell between the press-down day and whatever
+   day the cursor is currently over, inclusive, regardless of drag
+   direction. */
+.month-day-cell{cursor:pointer;}
+/* A solid theme-aware highlight (not opacity on the cell itself, which
+   would also fade the day number and event chips inside it, not just
+   show a tinted background) plus an accent ring so the selected range
+   reads clearly against both light and dark themes. */
+.month-day-cell.is-selecting{background:var(--row-alt); box-shadow:inset 0 0 0 1px var(--accent);}
+
+/* Timeline (Gantt) view -- templates/tasks_timeline.html,
+   static/timeline.js. Everything absolutely positioned within one
+   scrollable canvas, matching desktop's architecture verbatim (a single
+   QScrollArea around one painted canvas, header/gutter included in the
+   same scrolled surface, nothing sticky -- see the 2026-07-20 "zoom
+   toolbar" fix this port intentionally does NOT need since there's no
+   toolbar left to protect once Day/Month zoom were removed). Row/day
+   pixel geometry (36px rows, 24px days, 40px header) mirrors desktop's
+   own constants (ROW_HEIGHT/day_width/HEADER_HEIGHT in timeline_view.py)
+   for visual fidelity, not because the numbers are load-bearing. Gutter
+   width is a CSS custom property (--gutter-w) rather than baked into
+   each element's inline `left`, so static/timeline.js's gutter-resize
+   drag can reflow the whole grid with one property set instead of
+   recomputing every element's position. */
+.timeline-scroll{overflow:auto; max-height:75vh; padding:0;}
+.timeline-canvas{position:relative; font-family:var(--font-mono, monospace); font-size:11px;}
+
+.timeline-gutter-sep{
+  position:absolute; top:0; width:2px; background:var(--separator); cursor:col-resize; z-index:4;
+  margin-left:-1px; touch-action:none;
+}
+.timeline-gutter-sep:hover, .timeline-gutter-sep.is-resizing{background:var(--accent); width:3px; margin-left:-1.5px;}
+
+.timeline-gutter-row{
+  position:absolute; left:0; display:flex; align-items:center; padding:0 6px; box-sizing:border-box;
+  color:var(--fg-tertiary); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:default;
+  background:var(--bg-primary); z-index:2;
+}
+.timeline-gutter-row.is-header{font-weight:700; color:var(--fg-primary);}
+
+.timeline-week-label{
+  position:absolute; top:0; height:18px; display:flex; align-items:center; padding-left:3px;
+  color:var(--fg-tertiary); font-weight:600; overflow:hidden; white-space:nowrap; box-sizing:border-box;
+}
+.timeline-day-label{
+  position:absolute; top:20px; height:18px; padding-left:2px; color:var(--fg-tertiary); box-sizing:border-box;
+}
+.timeline-gridline{position:absolute; width:1px; background:var(--separator); opacity:.6;}
+.timeline-rowline{position:absolute; left:0; height:1px; background:var(--separator); opacity:.5;}
+.timeline-row-target{position:absolute; cursor:crosshair; touch-action:none;}
+
+.timeline-bar{
+  position:absolute; border-radius:3px; display:flex; align-items:center; overflow:hidden;
+  text-decoration:none; cursor:grab; box-shadow:0 0 0 0 transparent; user-select:none; touch-action:none;
+}
+.timeline-bar.is-dragging{cursor:grabbing; box-shadow:0 0 0 2px #fff;}
+.timeline-bar-progress{position:absolute; left:0; top:0; bottom:0; background:rgba(255,255,255,.3);}
+.timeline-bar-title{
+  position:relative; padding:0 6px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  pointer-events:none; font-size:10.5px;
+}
+.timeline-bar-handle{position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize;}
+.timeline-bar-handle-left{left:0;}
+.timeline-bar-handle-right{right:0;}
+
+.timeline-create-ghost{
+  position:absolute; background:rgba(124,58,237,.28); border:2px solid #c4b5fd; box-sizing:border-box; z-index:3;
+  pointer-events:none;
+}
+
+/* Toast/snackbar (static/toast.js) -- replaces native alert()/confirm()
+   app-wide. .toast-stack holds however many are visible (each one
+   independently timed/dismissible); .toast itself starts translated down
+   + transparent and animates in via .is-in, same enter pattern as the
+   modal. Bottom-center on mobile (thumb-reachable, doesn't collide with a
+   FAB which lives bottom-*right*), bottom-right on desktop where a corner
+   toast is the established convention and there's no FAB to avoid. */
+/* Mobile FAB (static/app.js clones whatever [data-fab] link/button exists
+   in the page's own toolbar -- each page keeps exactly one source of
+   truth for its primary create action's href/data-modal target, this
+   just gives it a second, thumb-reachable presentation on small screens
+   instead of a duplicate hardcoded URL living here or in JS). Hidden by
+   default -- only shown below the mobile breakpoint, where the toolbar's
+   own button scrolls out of reach the moment a list is longer than one
+   screen. */
+.fab{
+  display:none; position:fixed; right:var(--space-4); z-index:90;
+  bottom:calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  width:56px; height:56px; border-radius:16px; background:var(--accent); color:var(--fg-on-accent);
+  align-items:center; justify-content:center; box-shadow:var(--elevation-3);
+  border:none; cursor:pointer; text-decoration:none;
+  transition:background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.fab .icon{width:22px; height:22px;}
+.fab:hover{background:var(--accent-hover); text-decoration:none;}
+.fab:active{transform:scale(.94); background:var(--accent-active); box-shadow:var(--elevation-1);}
+@media (max-width:720px){
+  .fab{display:flex; bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
+}
+
+/* Mobile: rail becomes a bottom bar (§6 Material Design) */
+@media (max-width:720px){
+  .app-window{flex-direction:column;}
+  .tabbar{
+    position:fixed; top:auto; left:0; right:0; bottom:0;
+    width:100%; height:64px;
+    flex-direction:row; justify-content:center;
+    border-right:none; border-top:1px solid var(--separator);
+    box-shadow:0 -2px 8px rgba(0,0,0,.08);
+    padding:0 4px;
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+    gap:0; overflow:visible;
+    z-index:100;
+  }
+  .tabbar .spacer{display:none;}
+  .tab-btn{
+    width:auto; min-height:auto; flex:1;
+    padding:8px 4px 6px;
+  }
+  .tab-btn .icon{width:18px; height:18px;}
+  .tab-btn.active::before{top:4px; width:48px; height:26px; border-radius:13px;}
+  /* Content shifts: no rail, but reserve bottom bar space */
+  main{margin-left:0; padding-bottom:80px;}
+}
+
+.toast-stack{
+  position:fixed; left:0; right:0; bottom:var(--space-5); z-index:200;
+  display:flex; flex-direction:column; align-items:center; gap:var(--space-2); pointer-events:none;
+  padding:0 var(--space-4);
+}
+.toast{
+  pointer-events:auto; display:flex; align-items:center; gap:var(--space-3);
+  background:var(--fg-primary); color:var(--bg-base); padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius:var(--radius-control); font-size:var(--text-footnote); box-shadow:var(--shadow-popover);
+  max-width:420px; opacity:0; transform:translateY(8px) scale(.98);
+  transition:opacity var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+}
+.toast.is-in{opacity:1; transform:translateY(0) scale(1);}
+.toast-message{flex:1;}
+.toast-action{
+  flex:none; background:none; border:none; color:var(--accent-hover); font-weight:600; font-size:var(--text-footnote);
+  cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
+}
+[data-theme="dark"] .toast-action{color:#7bb8ff;}
+.toast-action:hover{background:rgba(255,255,255,.1);}
+.toast-close{
+  flex:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+  background:none; border:none; color:var(--bg-base); opacity:.6; cursor:pointer; border-radius:50%; padding:0;
+}
+.toast-close:hover{opacity:1; background:rgba(255,255,255,.12);}
+.toast-error{background:var(--danger);}
+.toast-error .toast-close{color:#fff;}
+@media (min-width:721px){
+  .toast-stack{left:auto; align-items:flex-end;}
+}
+@media (max-width:720px){
+  /* Toast above the bottom nav on mobile */
+  .toast-stack{bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
+}
+
+/* Confirm sheet (static/toast.js's ccConfirmSheet) -- the in-app
+   replacement for native confirm() on genuinely destructive, non-undoable
+   actions (cascading deletes: a database's columns/rows, a habit's whole
+   history, a tag everywhere it's used). Anchored under the button that
+   opened it on desktop; becomes a full-width bottom sheet on mobile
+   (same breakpoint/treatment as .modal below) since a small floating
+   popover is easy to miss-tap around on a touchscreen. */
+.confirm-sheet{
+  position:absolute; z-index:160; width:260px; background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--elevation-3); padding:var(--space-3);
+  opacity:0; transform:translateY(-4px) scale(.97);
+  transition:opacity var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+}
+.confirm-sheet.is-open{opacity:1; transform:translateY(0) scale(1);}
+.confirm-sheet-text{margin:0 0 var(--space-3); font-size:var(--text-callout); color:var(--fg-primary); line-height:1.4;}
+.confirm-sheet-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
+@media (max-width:720px){
+  .confirm-sheet{
+    position:fixed; left:0; right:0; bottom:0; top:auto; width:100%; max-width:100%;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0; padding:var(--space-5) var(--space-4);
+    transform:translateY(100%);
+    padding-bottom:calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  }
+  .confirm-sheet.is-open{transform:translateY(0);}
+  .confirm-sheet-actions{justify-content:stretch;}
+  .confirm-sheet-actions .btn{flex:1;}
+}
+
+/* Footer removed (2026-08-03) -- it sat as a third flex child inside
+   .app-window (rail | main | footer) which broke the two-column layout.
+   No user-facing content worth keeping. */
+
+/* Modal (static/modal.js) -- the create-event/create-class dialog. Content
+   is injected server-rendered HTML (the same event_form.html/
+   schedule_class_form.html fragment a full-page nav would show), so this
+   is purely the dialog chrome, not a duplicate of the form styling. */
+.modal-overlay{
+  position:fixed; inset:0; background:var(--overlay-scrim); display:flex;
+  align-items:center; justify-content:center; opacity:0; visibility:hidden; z-index:100; padding:var(--space-5);
+  transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
+}
+.modal-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
+.modal{
+  width:560px; max-width:100%; background:var(--bg-elevated); border-radius:28px;
+  box-shadow:var(--elevation-3); transform:translateY(10px) scale(.97);
+  transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);
+  border:none;
+  max-height:88vh; display:flex; flex-direction:column; overflow:hidden;
+}
+.modal-overlay.is-open .modal{transform:translateY(0) scale(1);}
+/* Size variant (static/modal.js's data-modal-size="wide") -- most modals
+   are a field-grid form and 560px is plenty; a few (Schedule's Blocks
+   table -- day/time/course/type/owner/room/credits/week columns -- and
+   its week grid) genuinely need more room or they force a horizontal
+   scrollbar inside a dialog that's already narrower than the content
+   wants. Still capped by max-width:100% (inherited) and the mobile
+   breakpoint below, which ignores this entirely -- a bottom sheet is
+   already full-width regardless of variant. */
+.modal.is-wide{width:1040px;}
+.modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto;}
+.modal-body h1{margin-top:0;}
+/* Inside the modal, the fetched fragment's own card/button chrome would be
+   redundant with the dialog's -- these neutralize it without touching the
+   full-page version's markup. */
+.modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
+.modal-body .card:hover{box-shadow:none;}
+.modal-close{
+  position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
+  justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
+  cursor:pointer; color:var(--fg-secondary); font-size:16px; z-index:2;
+}
+.modal-close:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.modal-handle{display:none;}
+
+/* Below the mobile breakpoint, the centered/margined dialog becomes a
+   full-width sheet anchored to the bottom edge instead -- a 560px dialog
+   shrunk to fit a phone with padding on all sides reads as "desktop
+   dialog, resized," not native to the platform. Both iOS and Material
+   solve this the same way: full width, rounded top corners only, slides
+   up from off-screen, dismissible by dragging down or tapping the
+   backdrop (static/modal.js's dragHandle logic below the CSS). */
+@media (max-width:720px){
+  .modal-overlay{align-items:flex-end; padding:0;}
+  .modal{
+    width:100%; max-width:100%; border-radius:28px 28px 0 0;
+    max-height:90vh; transform:translateY(100%);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  .modal-overlay.is-open .modal{transform:translateY(0);}
+  .modal-handle{
+    display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
+    margin:var(--space-2) auto 0; flex:none; touch-action:none;
+  }
+  .modal-close{top:var(--space-2);}
+}
+
+/* Manage-calendars/task-lists/addressbooks modal (routers/calendars.py,
+   calendars_list.html, task_lists_manage.html, addressbooks_manage.html)
+   -- deliberately plain: a flat row list instead of a bordered table, and
+   a fixed-palette color picker collapsed to one circle (the current
+   color) that opens a small dropdown of the full palette on click, rather
+   than either a <select> or a permanently-visible row of 8 swatches. */
+.calendar-row{
+  display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);
+}
+.calendar-row:last-child{border-bottom:none;}
+/* Both forms in a row used to share the same selector and both got
+   flex:1, splitting the row's width evenly between "everything editable"
+   and "one small delete button" -- fine on the full page (plenty of
+   width either way) but inside the narrower modal it strangled the name
+   input down to ~16px, rendering it as an apparently-empty sliver.
+   Confirmed via computed layout, not just visually. */
+.calendar-row-edit-form{display:flex; align-items:center; gap:8px; flex:1; min-width:0;}
+.calendar-row-delete-form{flex:none;}
+.calendar-row input[type="text"]{flex:1; min-width:0; padding:5px 7px;}
+/* An earlier version made the swatch grid expand in normal document flow
+   right under the circle (a plain <details>/<summary>) to dodge clipping
+   -- but a picker that pushes the rest of the row/form down every time
+   it opens doesn't read as a dropdown or menu, it reads as the layout
+   rearranging itself. A real dropdown/context-menu floats *above*
+   everything else without disturbing it. Since .modal-body
+   (overflow-y:auto) and .modal (overflow:hidden) both clip any
+   descendant that visually extends past their box regardless of its own
+   position value, floating it *inside* the modal was never going to
+   work either way -- the swatch grid now portals out to #color-popover
+   (base.html), a fixed-position element that is a *sibling* of
+   #modal-overlay rather than a descendant of it, so it isn't clipped by
+   anything the modal has. See modal.js's wireSwatchPickers/openPopover/
+   closeOpenPopover for the move-on-open/move-back-on-close logic, and
+   the `form="..."` attribute on each radio in calendars_list.html /
+   schedule_export.html (moving a form control out of its <form>
+   ancestor in the DOM otherwise silently drops it from that form). */
+.color-picker{flex:none;}
+.color-swatch-current{
+  display:block; width:20px; height:20px; border-radius:50%; box-shadow:0 0 0 1px var(--border) inset;
+  border:none; padding:0; cursor:pointer; -webkit-appearance:none; appearance:none;
+}
+.color-swatch-current.is-active{box-shadow:0 0 0 2px var(--accent);}
+/* Only visible while actually inside the floating popover -- at its
+   "home" location (right next to the trigger, in the un-opened markup)
+   it stays display:none so it never occupies layout space there. */
+.color-picker .color-dropdown{display:none;}
+.color-popover{
+  position:fixed; display:none; z-index:150; width:104px;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  padding:8px; box-shadow:var(--elevation-3);
+}
+.color-popover.is-open{display:block;}
+.color-popover .color-dropdown{display:flex; gap:5px; flex-wrap:wrap;}
+.color-swatch{
+  appearance:none; -webkit-appearance:none; width:18px; height:18px; border-radius:50%; padding:0;
+  cursor:pointer; border:2px solid transparent; box-shadow:0 0 0 1px var(--border) inset;
+}
+.color-swatch:checked{border-color:var(--fg-primary);}
+
+/* Icon picker -- same shared-popover mechanism as .color-picker above
+   (2026-08-02, Projects manage page; revised same day to draw from the
+   app's own icon library -- templates/_icons_sprite.html, same set
+   {{ icon(name) }} renders everywhere else -- instead of a one-off emoji
+   set, "the same logic as the color picker one"). The trigger shows the
+   actual chosen icon (a real `<svg><use></svg>` referencing the shared
+   sprite, rebuilt by modal.js's wireIconPickers on pick), a plain folder
+   icon when none is set -- consistent with how an unset project icon
+   already renders elsewhere (project_merge.html, _widget_project_
+   preview.html). */
+.icon-picker{flex:none;}
+.icon-picker-current{
+  display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-elevated);
+  cursor:pointer; padding:0; color:var(--fg-primary);
+}
+.icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent); border-color:transparent;}
+.icon-picker .icon-dropdown{display:none;}
+.icon-popover{
+  position:fixed; display:none; z-index:150; width:224px; max-height:260px; overflow-y:auto;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  padding:8px; box-shadow:var(--elevation-3);
+}
+.icon-popover.is-open{display:block;}
+.icon-popover .icon-dropdown{display:flex; gap:4px; flex-wrap:wrap;}
+/* Each option is a <label><input type="radio" class="icon-swatch"><span>
+   {{ icon(name) }}</span></label> -- the radio itself is invisible (an
+   arbitrary SVG icon can't be drawn as a styled appearance:none input
+   the way a plain color circle can), the visible glyph is the real
+   `{{ icon() }}`-rendered <svg> inside the <span> next to it, and
+   :has() picks up the checked state on the label that wraps both for
+   the selected/hover styling. */
+.icon-swatch-label{
+  display:flex; align-items:center; justify-content:center; width:28px; height:28px;
+  border-radius:var(--radius-sm); cursor:pointer; border:2px solid transparent; color:var(--fg-primary);
+}
+.icon-swatch-label:hover{background:var(--row-alt);}
+.icon-swatch-label:has(.icon-swatch:checked){border-color:var(--accent); background:var(--tag-blue-bg);}
+.icon-swatch{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
+.icon-swatch-label.icon-swatch-none-label{color:var(--fg-tertiary);}
+
+/* Merge picker modal (project_merge.html, 2026-08-02) -- a selectable
+   list of candidate destination projects, each showing its own badge +
+   task count so the choice is informed before committing, replacing the
+   old bare inline "Merge into..." dropdown. */
+.merge-candidate-list{display:flex; flex-direction:column; gap:5px; max-height:320px; overflow-y:auto;}
+.merge-candidate-row{
+  display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm);
+  border:1px solid var(--border); cursor:pointer;
+}
+.merge-candidate-row:has(input:checked){border-color:var(--accent); background:var(--tag-blue-bg);}
+.merge-candidate-row input[type="radio"]{flex:none;}
+.calendar-list{margin-bottom:12px;}
+.calendar-new-form{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.calendar-new-form input[type="text"]{min-width:160px;}
+
+/* tags_manage.html -- reuses .calendar-row/.calendar-list/.calendar-new-form
+   above (same manage-list pattern as calendars/task-lists/addressbooks),
+   plus a few tag-specific additions: a small section heading for the
+   Groups/Tags split, the row growing a third form (merge, between edit and
+   delete) instead of just two, and a usage-count badge. */
+.section-label{
+  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  margin:0 0 6px;
+}
+.group-sublabel{
+  font-size:11px; font-weight:600; color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
+}
+.tag-manage-row .calendar-row-edit-form select{padding:5px 7px; min-width:0;}
+.tag-manage-row .calendar-row-edit-form input[type="text"]{max-width:140px;}
+/* Project rows reuse .tag-manage-row's compact layout (tags/calendars/
+   lists/projects all share this manage-list pattern) but the blanket
+   140px cap above was sized for short tag names, not project names like
+   "CS 301 -- Algorithms & Data Structures" or "Student Government --
+   Treasurer" -- those were rendering as unreadable ~4-character slivers.
+   2026-08-02: let the row wrap onto a second line on narrow viewports
+   instead of compressing every field, and give the name field real room
+   to breathe while keeping the color/icon/Space controls compact. Color
+   and icon are now the small popover-trigger buttons (.color-picker/
+   .icon-picker further up this file), not a badge, so there's no
+   full-width element to order to the top the way an earlier version of
+   this page needed. */
+.project-manage-row{flex-wrap:wrap; row-gap:8px;}
+.project-manage-row .calendar-row-edit-form{flex-wrap:wrap; row-gap:6px;}
+.project-manage-row .calendar-row-edit-form input[name="name"]{max-width:none; flex:1 1 220px;}
+.tag-usage-count{
+  flex:none; font-size:11px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
+}
+.btn-sm{padding:4px 10px; font-size:12px;}
+
+/* Row hover feedback -- .calendar-row had none before (unlike the plain
+   <table> rows elsewhere, which already highlight via `tbody tr:hover`).
+   Purely a hover cue, doesn't affect layout. */
+.calendar-row:hover{background:var(--row-alt);}
+/* Groups a row's secondary actions (Open, Merge, Archive/Delete) so they
+   collapse to a single flex item instead of each competing for row space
+   on its own (2026-08-02 manage-page cleanup). */
+.project-manage-row-actions{display:flex; align-items:center; gap:4px; flex:none;}
+/* One-line orientation text above the page's lists (2026-08-02) -- this
+   page's rows save on change with no visible "Save" button, which isn't
+   obvious without a hint the first time. */
+.settings-hint{font-size:12px; color:var(--fg-tertiary); margin:0 0 8px;}
+/* Row symmetry (2026-08-02 -- "make the layout more neat ... more
+   symmetrical"). Every icon-btn is already a fixed 28x28 square, but two
+   things on the Projects page weren't: the "Lists"/"Lists (N)" button
+   (its own text length varies per project) and the Space <select>
+   (.filter-select's own width is a max-width, sized to whichever option
+   text happens to be selected) -- both live inside a flex row where
+   everything after them shifts to fill whatever they don't use, so a
+   couple of characters' difference between two rows was enough to throw
+   every icon after them out of alignment. Fixed widths here mean every
+   row's actions cluster is the same total width regardless of content,
+   so the icons at the end of the row land in the same place on every
+   project. Scoped classes, not a change to `.filter-select` itself,
+   since that class is shared by filter bars elsewhere that *want*
+   content-based sizing. */
+.lists-btn{min-width:78px; text-align:center;}
+.project-space-select{width:150px; max-width:150px;}
+
+/* Space -> Projects, nested (2026-08-02: "the projects grouped by spaces
+   ... actually together and subordinated") -- each Space block is its
+   own header row followed immediately by an indented list of that
+   Space's own projects, a visual parent/child relationship via the left
+   border rather than two separate flat sections a reader has to
+   cross-reference by matching a "group" label. */
+.space-group-block{margin-bottom:18px;}
+.space-group-header{font-weight:600;}
+.space-group-header .calendar-row-edit-form{flex:1;}
+.space-group-projects{
+  margin:2px 0 0 13px; padding-left:14px; border-left:2px solid var(--separator);
+}
+.space-group-empty-hint{font-size:12px; color:var(--fg-tertiary); padding:8px 0 8px 2px;}
+
+.project-row-block{margin-bottom:4px;}
+/* Project -> linked WebDAV collections (2026-08-02, reworked twice same
+   day -- "looks bad and maximalist", then "more neat ... just buttons,
+   not a lot of buttons or dropdown menus"). Plain stacked sections, no
+   boxes/borders/uppercase labels -- a small bold label, then one flowing
+   row of pills: linked items (solid, click to unlink) and unclaimed ones
+   (outlined, click to link) side by side, no <select> anywhere. Same
+   "click a candidate directly" pattern project_merge.html already uses
+   for picking a merge destination. */
+.project-sublists{display:flex; flex-direction:column; gap:18px;}
+.project-sublist-label{font-weight:600; font-size:13px; margin-bottom:6px;}
+.project-sublist-pills{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;}
+/* Both pill kinds are real <button>s (their own one-item <form>, since
+   each posts a different uid) so clicking one acts immediately -- no
+   separate "x"/"link" target to aim for beyond the pill itself. */
+.pill-removable, .pill-linkable{
+  border:none; cursor:pointer; display:inline-flex; align-items:center; gap:4px;
+  font-family:inherit; transition:filter var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.pill-removable:hover{filter:brightness(.92);}
+/* Linkable pills are visually the "not yet part of this project" state --
+   outlined/muted rather than solidly colored, so a glance at the row
+   already tells linked and unclaimed apart before reading either label. */
+.pill-linkable{background:transparent; color:var(--fg-secondary); box-shadow:0 0 0 1px var(--border) inset;}
+.pill-linkable:hover{background:var(--row-alt); color:var(--fg-primary);}
+.quick-add-list-form{display:flex; align-items:center; gap:6px;}
+.quick-add-list-form input[type="text"]{width:170px;}
+
+/* tag_input.js's recommend-as-you-type dropdown -- positioned relative to
+   the wrap div it inserts around the plain text input, so it floats right
+   below the field without needing the #color-popover portal trick (this
+   isn't inside a scroll-clipped ancestor the way the color picker is). */
+.tag-input-wrap{position:relative;}
+.tag-input-menu{
+  display:none; position:absolute; top:100%; left:0; right:0; z-index:60; margin-top:2px;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-3); max-height:180px; overflow-y:auto;
+}
+.tag-input-menu.is-open{display:block;}
+.tag-input-option{
+  display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none;
+  cursor:pointer; font-size:13px; color:var(--fg-primary);
+}
+.tag-input-option:hover, .tag-input-option:focus{background:var(--bg-secondary);}
+
+/* projects_manage.html/project_detail.html */
+.project-icon-input{max-width:64px; flex:none; text-align:center;}
+.project-open-link{flex:none; font-size:12px; color:var(--fg-tertiary); white-space:nowrap;}
+.project-open-link:hover{color:var(--accent);}
+.project-cover{
+  width:100%; max-height:180px; object-fit:cover; border-radius:var(--radius-md);
+  margin-bottom:12px; display:block;
+}
+.project-progress-bar{
+  height:6px; border-radius:3px; background:var(--bg-secondary); overflow:hidden; margin:6px 0 2px;
+}
+.project-progress-fill{height:100%; background:var(--accent);}
+.project-scope-section{margin-top:16px;}
+.project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+
+/* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.
+   GitHub-contribution-graph layout: a row of month labels above a row of
+   week-columns, each column a flex-stack of 7 day cells. No per-habit
+   color -- every habit's heatmap uses the same accent-at-increasing-
+   opacity scale (level-1..4), keeping habits visually comparable at a
+   glance and avoiding needing 8 colors x 5 levels of CSS. */
+.heatmap{overflow-x:auto; padding-bottom:4px;}
+.heatmap-months{display:flex; gap:3px; margin-left:1px; margin-bottom:2px;}
+.heatmap-month-label{width:11px; flex:none; font-size:9px; color:var(--fg-tertiary); overflow:visible; white-space:nowrap;}
+.heatmap-grid{display:flex; gap:3px;}
+.heatmap-week{display:flex; flex-direction:column; gap:3px;}
+.heatmap-cell-form{display:block; margin:0; padding:0;}
+.heatmap-cell{
+  width:11px; height:11px; border-radius:2px; border:none; padding:0; cursor:pointer;
+  display:block; background:var(--bg-secondary);
+}
+.heatmap-cell.level-0{background:var(--bg-secondary);}
+.heatmap-cell.level-1{background:var(--accent); opacity:.3;}
+.heatmap-cell.level-2{background:var(--accent); opacity:.55;}
+.heatmap-cell.level-3{background:var(--accent); opacity:.78;}
+.heatmap-cell.level-4{background:var(--accent); opacity:1;}
+.heatmap-cell.level-future{background:transparent; cursor:default; visibility:hidden;}
+.heatmap-cell:hover:not(.level-future){box-shadow:0 0 0 1px var(--fg-primary) inset;}
+
+.habit-card{margin-bottom:16px;}
+.habit-card-header{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+.habit-streaks{display:flex; gap:14px; font-size:12px; color:var(--fg-tertiary); margin-top:6px;}
+.habit-streaks strong{color:var(--fg-primary);}
+.habit-entries-list{margin-top:8px;}
+.habit-entry-row{display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--separator);}
+.habit-entry-row:last-child{border-bottom:none;}
+
+/* database_detail.html: the spreadsheet grid + column-management panel. */
+.db-cell-number{max-width:90px;}
+.db-formula-input{min-width:170px;}
+.db-column-edit-form select{padding:5px 7px;}
+#database-table tfoot td{border-top:2px solid var(--border); padding-top:8px;}
+#database-table code{font-size:11px; background:var(--bg-secondary); padding:1px 4px; border-radius:3px;}
+
+/* dashboard.html: widget cards, per-widget filter panel, the weekly
+   overview's 7-column day grid. */
+/* 6-column widget grid (2026-08-01 Dashboard redesign, replacing an
+   earlier fixed 2-column half/full split) -- each widget carries its own
+   `grid-column:span N` inline (dashboard.html, from routers/
+   dashboard.py's WIDGET_WIDTHS: third=2, half=3, two_thirds=4, full=6),
+   picked per widget INSTANCE in its Filters panel rather than fixed by
+   its type. 6 columns is the smallest common denominator that lets
+   thirds and halves both land on whole-column boundaries. Below the
+   mobile breakpoint every widget goes full-width regardless of its
+   chosen span -- three columns of a 6-col grid squeezed onto a phone
+   screen would be unreadable, same reasoning every other multi-column
+   layout in this app collapses at this width. */
+/* Masonry (2026-08-02, static/app.js's layoutDashboardGrid) -- was a
+   plain `display:grid` 6-column grid, which sizes every *row* to its
+   tallest occupant, so a short widget next to a tall one left a dead
+   gap under itself rather than letting the next widget start right
+   where it actually ends ("they should sit directly under, not a
+   simple table grid"). JS now computes each card's left/top/width from
+   its own measured height and `data-span` (still third=2/half=3/
+   two_thirds=4/full=6 out of 6 virtual columns, unchanged), so the
+   container has to be a plain positioned box for that absolute
+   placement to anchor to, not a grid -- the grid-column CSS property
+   has no effect on an absolutely positioned child anyway. `min-height`
+   is a floor, not a fixed size -- JS always sets the real height once
+   layout runs; this just avoids a 0-height flash before that first run.
+   The 720px breakpoint (single virtual column, previously CSS-only) is
+   now decided by the same layout function reading window width, so
+   there's no longer a separate mobile ruleset to keep in sync with it. */
+.dashboard-grid{position:relative; min-height:200px;}
+.widget-card{margin-bottom:0; position:absolute; box-sizing:border-box;
+  transition:left var(--dur-normal) var(--ease-standard), top var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);}
+/* Widget drag-to-reorder (static/app.js), edit-mode only */
+.widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
+.widget-drag-handle:active{cursor:grabbing;}
+.widget-card.is-dragging{opacity:.5; box-shadow:var(--shadow-popover); transition:none; z-index:20;}
+/* Reordering *within* a stack (2026-08-02) -- same look as the top-level
+   handle, separate class since it drives a separate, simpler
+   vertical-only drag (static/app.js). .widget-stack-item needs its own
+   position:relative for the same is-dragging feedback to make sense on
+   it, and to give the intra-stack drag a stable positioning context of
+   its own instead of the whole stack card's. */
+.widget-stack-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
+.widget-stack-drag-handle:active{cursor:grabbing;}
+.widget-stack-item{position:relative;}
+.widget-stack-item.is-dragging{opacity:.5;}
+/* Drag-to-resize handle (dashboard.html, edit mode only, static/app.js) --
+   a thin strip on the card's right edge rather than a small square grip
+   in a corner, so there's a generous hit target the full height of the
+   card instead of one fiddly corner pixel to aim for. */
+.widget-resize-handle{
+  position:absolute; top:0; right:-6px; bottom:0; width:12px; cursor:col-resize; touch-action:none; z-index:2;
+}
+.widget-resize-handle::after{
+  content:""; position:absolute; top:50%; right:5px; transform:translateY(-50%);
+  width:3px; height:28px; border-radius:var(--radius-pill); background:var(--border-strong);
+  transition:background var(--dur-fast) var(--ease-standard);
+}
+.widget-resize-handle:hover::after, .widget-card.is-resizing .widget-resize-handle::after{background:var(--accent);}
+.widget-card.is-resizing{transition:none;}
+/* Widget content height (2026-08-02 -- "a way to resize them vertically
+   ... a specific values for their width and height, not any height").
+   Applied to just this data area (_widget_workspace.html's widget_inner
+   macro), not the whole card, so the header above and the Filters panel
+   below always keep their own natural size regardless of how the
+   content itself is set. `position:relative` gives the vertical resize
+   handle below a stable per-widget anchor -- one per widget, including
+   one per stack member, not one shared per card/stack the way the
+   width handle is (see routers/dashboard.py's _dissolve_stack docstring
+   for why height isn't stack-shared). overflow-y:auto is what makes
+   "shorter than its content" mean "scrolls" instead of "gets clipped." */
+.widget-content{position:relative; overflow-y:auto; overflow-x:hidden;}
+.widget-resize-handle-vertical{
+  position:absolute; left:0; right:0; bottom:-6px; height:12px; cursor:row-resize; touch-action:none; z-index:2;
+}
+.widget-resize-handle-vertical::after{
+  content:""; position:absolute; left:50%; bottom:5px; transform:translateX(-50%);
+  width:28px; height:3px; border-radius:var(--radius-pill); background:var(--border-strong);
+  transition:background var(--dur-fast) var(--ease-standard);
+}
+.widget-resize-handle-vertical:hover::after, .widget-content.is-resizing .widget-resize-handle-vertical::after{background:var(--accent);}
+.widget-content.is-resizing{transition:none;}
+/* Stacking (2026-08-02) -- dropping one widget onto another's middle
+   (not its narrow top/bottom or left/right reorder edges, see
+   static/app.js's dashboard drag handler) merges them into one grid
+   slot, one shared width, in the order they were dropped.
+   .is-stack-target is the live drop-zone highlight shown on the card
+   currently under the pointer while in that zone, before the drop
+   actually happens -- the "Drop to stack" label makes the zone's
+   boundary and what it actually does obvious while dragging, rather
+   than relying on a subtle border alone to communicate a gesture
+   there's no other way to discover. */
+.widget-card.is-stack-target{box-shadow:0 0 0 2px var(--accent); background:var(--accent-subtle);}
+.widget-card.is-stack-target::before{
+  content:"Drop to stack"; position:absolute; inset:0; z-index:5; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.9em; font-weight:600; color:var(--accent);
+  background:var(--accent-subtle); border-radius:var(--radius-md);
+}
+.widget-stack{display:flex; flex-direction:column;}
+.widget-stack-header{margin-bottom:var(--space-2);}
+.widget-stack-item + .widget-stack-item{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
+/* "See more" (dashboard.html) -- desktop already has these destinations
+   one click away (topbar tab or Settings gear), so this only needs to
+   exist below the same mobile breakpoint everything else collapses at. */
+.dashboard-see-more{display:none;}
+@media (max-width:720px){
+  .dashboard-see-more{display:block;}
+}
+
+/* Mini Calendar widget (_widget_mini_month_calendar.html) -- a compact
+   7-col grid, day numbers only, a small dot for "something's on this
+   day" rather than actual event chips (no room for those at this size,
+   and that's what clicking through to the real Day view is for).
+
+   `.mini-cal-day` previously made the WHOLE grid cell circular
+   (aspect-ratio:1 on a ~90px-wide column, since a "half"-width dashboard
+   widget is much wider than a 7-day row needs) -- border-radius:50% on
+   something that big doesn't read as a neat "today" badge, it reads as
+   an oversized blob that visually swallows the date next to it. Fixed
+   now to a small, constant-size circle (28px, independent of the
+   column's actual width) centered inside its cell instead -- the cell
+   itself stays a plain rectangle, only the badge is round. */
+.mini-cal-label-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-2);}
+.mini-cal-label{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
+.mini-cal-nav{width:24px; height:24px;}
+.mini-cal-weekdays, .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr);}
+.mini-cal-weekdays span{
+  text-align:center; font-size:10px; font-weight:600; color:var(--fg-tertiary);
+  text-transform:uppercase; padding-bottom:3px;
+}
+.mini-cal-day{
+  position:relative; display:flex; align-items:center; justify-content:center; padding:3px 0;
+  font-size:var(--text-caption); color:var(--fg-primary); text-decoration:none;
+}
+.mini-cal-day-num{
+  position:relative; display:flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:50%; line-height:1;
+}
+.mini-cal-day:hover .mini-cal-day-num{background:var(--row-alt);}
+.mini-cal-day:hover{text-decoration:none;}
+.mini-cal-day.is-out{color:var(--fg-tertiary); opacity:.5;}
+.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent); color:var(--fg-on-accent); font-weight:700;}
+.mini-cal-day.has-activity .mini-cal-day-num::after{
+  content:""; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%);
+  width:4px; height:4px; border-radius:50%; background:var(--accent);
+}
+.mini-cal-day.is-today.has-activity .mini-cal-day-num::after{background:var(--fg-on-accent);}
+.mini-cal-day.is-today.has-activity::after{background:var(--fg-on-accent);}
+
+/* Calendar + Agenda widget (_widget_calendar_agenda.html) -- a mini month
+   calendar on top + a compact 7-day agenda below it, designed to sit at
+   third width (30%) next to Today's Agenda. The divider gives a clear
+   visual break between the two sections without taking too much vertical
+   space. The agenda days only render if they have content (the template
+   skips empty days), so the list stays compact. */
+.cal-agenda-divider{height:1px; background:var(--separator); margin:var(--space-3) 0;}
+.cal-agenda-days{display:flex; flex-direction:column; gap:var(--space-1);}
+.cal-agenda-day{display:flex; flex-direction:column; gap:2px;}
+.cal-agenda-day.is-today .cal-agenda-day-label{color:var(--accent); font-weight:700;}
+.cal-agenda-day-label{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:1px;}
+.cal-agenda-item{
+  display:flex; align-items:center; gap:4px; font-size:var(--text-caption);
+  color:var(--fg-primary); text-decoration:none; padding:1px 0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cal-agenda-item:hover{text-decoration:none; color:var(--accent);}
+.cal-agenda-time{color:var(--fg-tertiary); font-variant-numeric:tabular-nums; min-width:30px;}
+
+/* Contact List widget (_widget_contact_list.html) -- compact contact
+   rows for the Space widget grid, filtered by tags. */
+.contact-list-widget{display:flex; flex-direction:column; gap:2px;}
+.contact-list-row{
+  display:flex; flex-direction:column; gap:1px; padding:var(--space-2) var(--space-1);
+  border-radius:var(--radius-sm); text-decoration:none; color:inherit;
+}
+.contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-list-name{font-size:var(--text-body); font-weight:500; color:var(--fg-primary);}
+.contact-list-org{font-size:var(--text-footnote); color:var(--fg-secondary);}
+.contact-list-detail{font-size:var(--text-footnote); color:var(--fg-tertiary);}
+
+/* Project Preview widget (_widget_project_preview.html) -- reuses
+   .project-progress-bar/-fill (already defined for project_detail.html)
+   at a smaller scale, one row per project. */
+.project-preview-list{display:flex; flex-direction:column; gap:var(--space-2);}
+.project-preview-row{
+  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-1) 0;
+  text-decoration:none; color:inherit;
+}
+.project-preview-row:hover{text-decoration:none;}
+.project-preview-row:hover .cell-tag{box-shadow:0 0 0 1px var(--border-strong) inset;}
+
+/* Habit Check-in widget (_widget_habit_checkin.html) */
+.habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
+.habit-checkin-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0;}
+.widget-header{display:flex; align-items:center; gap:4px; margin-bottom:10px;}
+.widget-section-label{
+  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  margin:10px 0 4px;
+}
+.widget-section-label:first-child{margin-top:0;}
+.widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
+.widget-config summary{cursor:pointer; font-size:12px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
+.widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
+.widget-checkbox-row .field-toggle{flex-direction:row-reverse; justify-content:flex-end; gap:5px; margin-bottom:0;}
+/* "Narrow down (optional)" group (dashboard.html's Add-widget + per-widget
+   Filters forms), 2026-08-02 -- visually secondary to the widget-type/
+   title/width choices above it: smaller label, muted background, tighter
+   spacing, so it reads as "further narrow the data down if you want to,"
+   not a decision of the same weight as picking the widget itself. */
+.widget-filter-group{
+  background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-3);
+  margin-top:var(--space-2);
+}
+.widget-filter-group-label{
+  font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-weight:600; margin-bottom:var(--space-2);
+}
+.widget-filter-group .field label{font-size:10px; color:var(--fg-tertiary);}
+.widget-filter-group .field{margin-bottom:var(--space-2);}
+
+/* Live preview (dashboard.html's Add-widget form, static/
+   dashboard_widget_preview.js), 2026-08-02 -- a real rendered widget
+   below the form, refreshed on every change. Boxed in a dashed border
+   rather than a solid card so it visually reads as "a preview of
+   something not saved yet," not an actual widget already on the page. */
+.widget-preview-pane{margin-top:var(--space-4); padding-top:var(--space-3); border-top:1px solid var(--separator);}
+.widget-preview-content{
+  border:1.5px dashed var(--border-strong); border-radius:var(--radius-md); padding:var(--space-3);
+  background:var(--bg-base);
+}
+.widget-preview-content .widget-preview-card{box-shadow:none; border:none; padding:0; margin:0;}
+/* Range is visible by default (a real, usable field with no JS at all --
+   picking one for a View that doesn't use it, e.g. Mini Calendar, is
+   harmless: the server-side resolver (_resolve_selection) just ignores
+   it for any View that doesn't have has_range). static/
+   dashboard_widget_preview.js *hides* it once JS confirms the current
+   View doesn't use a range, decluttering the form -- progressive
+   enhancement on top of an already-working base, not a requirement for
+   the field to be reachable at all. */
+.widget-range-field.is-hidden{display:none;}
+
+/* Habits & Recurring section on tasks_list.html (§3 of the plan).
+   A <details> collapsible so it doesn't push tasks off-screen when there
+   are many, but open by default so daily habits are visible immediately. */
+.habits-recurring-section{margin-top:20px;}
+.habits-recurring-summary{
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  font-size:14px; font-weight:600; color:var(--fg-secondary);
+  padding:6px 2px; user-select:none; list-style:none;
+}
+.habits-recurring-summary::-webkit-details-marker{display:none;}
+.habits-recurring-summary .icon{width:16px; height:16px; color:var(--fg-tertiary);}
+.habits-recurring-count{
+  font-size:11px; font-weight:500; color:var(--fg-tertiary);
+  background:var(--bg-secondary); border-radius:var(--radius-sm);
+  padding:2px 7px; margin-left:2px;
+}
+.habits-recurring-table td:first-child{font-weight:500;}
+/* Quick-toggle button for today's habit completion. Styled like an icon-btn
+   but with a filled green when done to signal "logged today." */
+.habit-toggle-btn{
+  background:transparent; border:none; cursor:pointer; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  color:var(--fg-tertiary); border-radius:50%;
+  width:28px; height:28px;
+  transition:color var(--dur-fast) var(--ease-standard),
+             background var(--dur-fast) var(--ease-standard);
+}
+.habit-toggle-btn:hover{color:var(--accent); background:var(--accent-subtle);}
+.habit-toggle-btn.habit-toggle-done{color:var(--tag-green-fg);}
+.habit-toggle-btn.habit-toggle-done .icon{width:18px; height:18px;}
+.habit-toggle-btn .icon{width:18px; height:18px;}
+.widget-limit-field.is-hidden{display:none;}
+.widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2);}
+.widget-save-filters-btn.is-hidden{display:none;}
+.widget-save-status{font-size:.85em; color:var(--fg-secondary); opacity:0; transition:opacity .2s ease;}
+.widget-save-status.is-visible{opacity:1;}
+.widget-save-status.is-error{color:var(--danger);}
+
+.week-overview-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}
+.week-overview-day{
+  border:1px solid var(--separator); border-radius:var(--radius-md); padding:6px; min-height:70px;
+}
+.week-overview-day.is-today{border-color:var(--accent);}
+.week-overview-day-label{font-size:11px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px;}
+.week-overview-day.is-today .week-overview-day-label{color:var(--accent);}
+.week-overview-item{
+  display:flex; align-items:center; gap:4px; font-size:12px; padding:2px 0;
+  text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.week-overview-empty{font-size:11px; color:var(--fg-tertiary);}
+@media (max-width:700px){
+  .week-overview-grid{grid-template-columns:repeat(2,1fr);}
+}
+
+/* Schedule > Export modal (routers/schedule.py, schedule_export.html):
+   two mode radios, each followed by the fields for that mode. Uses
+   :has() on the form ancestor to show only the checked mode's fields --
+   lets each radio live normally inside its own <label> (so clicking the
+   text also toggles it) instead of needing the input to be a flat
+   sibling of .mode-fields for a `~` selector to reach it. */
+.export-mode-option{display:flex; align-items:center; gap:8px; font-size:var(--text-callout); cursor:pointer; padding:4px 0;}
+.export-form .mode-fields{display:none; margin:2px 0 16px 24px;}
+.export-form:has(#mode-existing:checked) .mode-existing-fields{display:block;}
+.export-form:has(#mode-new:checked) .mode-new-fields{display:flex; align-items:flex-start; gap:10px;}
+.export-form select{min-width:200px;}
+.export-form .mode-new-fields input[type="text"]{min-width:160px; margin-top:2px;}
+.export-form .mode-new-fields .color-picker{margin-top:2px;}
+
+/* Schedule class form (schedule_class_form.html): Professor field --
+   same :has() show-a-field-only-when-relevant trick as .export-form
+   above, just with a <select>'s chosen <option> instead of a radio.
+   `.professor-row` holds the select and (when shown) the new-name input
+   side by side, each taking half the row, rather than stacked. */
+.professor-row{display:flex; gap:8px;}
+.professor-row select{flex:1; min-width:0;}
+.professor-new-input{display:none; flex:1; min-width:0;}
+.professor-field:has(#professor-select option[value="__new__"]:checked) .professor-new-input{display:block;}
+
+@media (max-width:720px){
+  .settings-grid{grid-template-columns:1fr 1fr;}
+  .field-grid{grid-template-columns:1fr;}
+  .field-grid .field-wide{grid-column:span 1;}
+  /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
+  main{padding-top:14px; padding-left:12px; padding-right:12px;}
+}

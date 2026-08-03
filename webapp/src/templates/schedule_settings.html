@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Settings - Schedule{% endblock %}
+{% block content %}
+<!-- 2026-08-01: moved from _schedule_nav.html's own Settings tab (now
+     gone -- Schedule's day-to-day Blocks/Holidays view is a modal now,
+     and semester dates aren't something you'd edit from inside that
+     modal) into the app's real Settings section, alongside Projects/
+     Habits/Contacts. -->
+{% include "_settings_nav.html" %}
+<h1>Schedule settings</h1>
+
+<div class="card">
+<form method="post" action="/schedule/settings">
+    <div class="settings-grid">
+        <div class="field">
+            <label>Semester start</label>
+            <input type="date" name="semester_start" value="{{ settings.semester_start or '' }}">
+        </div>
+        <div class="field">
+            <label>Semester end</label>
+            <input type="date" name="semester_end" value="{{ settings.semester_end or '' }}">
+        </div>
+        <div class="field">
+            <label>Credits needed</label>
+            <input type="number" name="credits_needed" min="0" step="1" value="{{ settings.credits_needed or '' }}">
+        </div>
+        <div class="field">
+            <label>Reminder</label>
+            <select name="reminder_minutes">
+                <option value="0" {% if settings.reminder_minutes == 0 %}selected{% endif %}>No reminder</option>
+                <option value="5" {% if settings.reminder_minutes == 5 %}selected{% endif %}>5 minutes before</option>
+                <option value="10" {% if settings.reminder_minutes == 10 %}selected{% endif %}>10 minutes before</option>
+                <option value="15" {% if settings.reminder_minutes == 15 %}selected{% endif %}>15 minutes before</option>
+                <option value="30" {% if settings.reminder_minutes == 30 %}selected{% endif %}>30 minutes before</option>
+                <option value="60" {% if settings.reminder_minutes == 60 %}selected{% endif %}>1 hour before</option>
+            </select>
+        </div>
+    </div>
+    <p style="color:var(--fg-tertiary); font-size:var(--text-footnote)">
+        Blocks only generate calendar occurrences once both semester dates are set.
+        Saving here regenerates every block's calendar entries.
+    </p>
+    <button type="submit" class="btn primary">Save</button>
+</form>
+</div>
+{% endblock %}

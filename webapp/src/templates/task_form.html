@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+<h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
+
+<div class="card">
+<form method="post" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}">
+    {% if parent_uid %}<input type="hidden" name="parent_uid" value="{{ parent_uid }}">{% endif %}
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            <input type="text" name="title" required value="{{ task.title if task else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
+        </div>
+        <div class="field">
+            <label>Due date</label>
+            <input type="date" name="due_at" value="{{ task.due_at[:10] if task and task.due_at else '' }}">
+        </div>
+        {% if task %}
+        <!-- Start date is only editable once a task already exists (e.g.
+             pushing it out later) -- a brand-new task's start date is
+             always today and isn't a choice on this form at all, see
+             routers/tasks.py::create_task. -->
+        <div class="field">
+            <label>Start date</label>
+            <input type="date" name="start_at" value="{{ task.start_at[:10] if task.start_at else '' }}">
+        </div>
+        {% endif %}
+        <div class="field">
+            <label>Priority</label>
+            <select name="priority">
+                <option value="">(none)</option>
+                <option value="1" {% if task and task.priority == 1 %}selected{% endif %}>1 - Urgent</option>
+                <option value="2" {% if task and task.priority == 2 %}selected{% endif %}>2 - High</option>
+                <option value="3" {% if task and task.priority == 3 %}selected{% endif %}>3 - Medium</option>
+                <option value="4" {% if task and task.priority == 4 %}selected{% endif %}>4 - Low</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Status</label>
+            <select name="status">
+                {% for s in statuses %}
+                <option value="{{ s }}" {% if task and task.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>List</label>
+            <select name="list_path">
+                {% for l in task_lists %}
+                <option value="{{ l.uid }}" {% if selected_list == l.uid %}selected{% endif %}>{{ l.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ task.tags|join(', ') if task else '' }}">
+            <datalist id="tag-names-datalist">
+                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+            </datalist>
+        </div>
+        <div class="field field-wide">
+            <label>Recurrence (RRULE, e.g. FREQ=WEEKLY;BYDAY=MO,WE)</label>
+            <input type="text" name="recurrence" value="{{ task.recurrence if task else '' }}">
+        </div>
+    </div>
+    <button type="submit" class="btn primary">Save</button>
+    <a href="/tasks" class="btn ghost" data-modal-cancel>Cancel</a>
+</form>
+</div>
+
+{% if task %}
+{% if subtask_count %}
+<form method="post" action="/tasks/{{ task.uid }}/delete" data-confirm-sheet="Delete &quot;{{ task.title }}&quot; and its {{ subtask_count }} subtask{{ 's' if subtask_count != 1 }}? This cannot be undone.">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task (and its subtasks)</button>
+</form>
+{% else %}
+<form method="post" action="/tasks/{{ task.uid }}/delete" data-delete-undo="{{ task.title }}" data-delete-undo-redirect="/tasks">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task</button>
+</form>
+{% endif %}
+{% endif %}
+</div>
+{% endblock %}

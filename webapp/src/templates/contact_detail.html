@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
+{% block content %}
+<!-- see event_form.html/task_detail.html for why this is wrapped -- opens
+     as a modal from contacts_list.html (data-modal) but still renders as a
+     normal standalone page on a direct visit. -->
+<div id="modal-target">
+<p style="margin:0 0 10px"><a href="/contacts{% if is_archived %}?view=archived{% endif %}" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Contacts</a></p>
+{% if contact %}
+<div class="toolbar">
+    {{ avatar(contact, 'avatar-large') }}
+    <div>
+        <h1 style="margin:0">{{ contact.full_name }}</h1>
+        {% if contact.org %}<div class="contact-detail-org">{{ contact.org }}</div>{% endif %}
+    </div>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="/contacts/{{ contact.uid }}/edit" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+</div>
+
+{% if contact.phone or contact.email %}
+<div class="contact-quick-actions">
+    {% if contact.phone %}<a class="btn" href="tel:{{ contact.phone }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
+    {% if contact.email %}<a class="btn" href="mailto:{{ contact.email }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+<table>
+    {% if addressbook %}<tr><td style="width:120px; color:var(--fg-tertiary)">Address book</td><td><span class="cell-tag cal-{{ addressbook.color }}">{{ addressbook.name }}</span></td></tr>{% endif %}
+    {% if contact.phone %}<tr><td style="color:var(--fg-tertiary)">Phone</td><td><a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></td></tr>{% endif %}
+    {% if contact.email %}<tr><td style="color:var(--fg-tertiary)">Email</td><td><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></td></tr>{% endif %}
+    {% if contact.address %}<tr><td style="color:var(--fg-tertiary)">Address</td><td>{{ contact.address }}</td></tr>{% endif %}
+    {% if contact.category %}<tr><td style="color:var(--fg-tertiary)">Category</td><td><span class="cell-tag tag-gray">{{ contact.category }}</span></td></tr>{% endif %}
+    {% if contact.tags %}<tr><td style="color:var(--fg-tertiary)">Tags</td><td>{% for tag in contact.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</td></tr>{% endif %}
+    {% if contact.notes %}<tr><td style="color:var(--fg-tertiary); vertical-align:top">Notes</td><td style="white-space:pre-wrap">{{ contact.notes }}</td></tr>{% endif %}
+</table>
+{% if not (contact.phone or contact.email or contact.address or contact.category or contact.tags or contact.notes) %}
+<div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
+{% endif %}
+</div>
+
+<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap">
+    {% if is_archived %}
+    <form method="post" action="/contacts/{{ contact.uid }}/unarchive">
+        <button type="submit" class="btn ghost">{{ icon('inbox', 'icon-sm') }} Unarchive</button>
+    </form>
+    {% else %}
+    <form method="post" action="/contacts/{{ contact.uid }}/archive">
+        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/contacts/{{ contact.uid }}/delete">
+        <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
+    </form>
+</div>
+{% else %}
+<div class="empty-state">Contact not found.</div>
+{% endif %}
+</div>
+{% endblock %}

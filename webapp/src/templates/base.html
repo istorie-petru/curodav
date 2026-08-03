@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Command Center{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <!-- Theme must be applied before first paint, not after DOMContentLoaded
+         (app.js used to do this at the bottom of <body>, which painted the
+         light theme first and then flashed to dark once the script ran).
+         Inline + synchronous + in <head> is the only way to beat first
+         paint. Falls back to the OS-level preference via
+         prefers-color-scheme when the user has never toggled the switch
+         here (localStorage empty), instead of always defaulting to light. -->
+    <script>
+      (function () {
+        var KEY = "commandCenterWeb.theme";
+        var stored = localStorage.getItem(KEY);
+        var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+      })();
+    </script>
+</head>
+<body data-px-per-hour="{{ px_per_hour|default(48) }}">
+{% include "_icons_sprite.html" %}
+<div class="app-window">
+    <!-- Icons + a scrollable, snap-aligned row (see .tabbar in style.css)
+         instead of the old plain-text flex row: on a phone-width viewport
+         8 text labels either wrapped onto a second row (stealing height
+         from a `position:sticky` bar) or got crushed, since there was no
+         mobile treatment at all before. Kept as one scrollable list of
+         real links rather than splitting into a duplicated "primary tabs
+         here, rest behind a More menu" markup -- this app already avoids
+         that kind of duplication (see README's tag/project precedent
+         notes), and a single link per destination is one less place for
+         active-state/URL logic to drift. `data-tab` marks the active
+         link so app.js can scroll it into view on load without hardcoding
+         per-tab knowledge in JS. -->
+    <!-- 2026-08-01 Phase B nav rework: Projects/Habits/Contacts pulled off
+         this bar entirely -- none of the three are touched often enough to
+         earn permanent top-level real estate (a project/habit/contact is
+         set up once, then rarely revisited as its own destination; the
+         *content* -- previews, check-ins -- now lives on the Dashboard
+         instead, see dashboard.html). Management for all three moved to
+         the new /settings section, reached via the gear icon below rather
+         than a tab, matching Databases/Calendar/Tasks staying as the
+         primary, frequently-visited tabs.
+
+         Schedule: its Blocks/Holidays view is a modal opened from
+         Calendar's own nav (a button, not a tab -- see _calendar_nav.html),
+         so those pages keep active_tab="schedule" and highlight the
+         Calendar tab below. Its Settings page is different -- reached only
+         via the gear now (routers/schedule.py's settings_view sets
+         active_tab="schedule_settings" specifically so it does NOT also
+         highlight Calendar), same as Projects/Habits/Contacts. -->
+    <nav class="tabbar" role="navigation" aria-label="Main">
+        <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
+        <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'schedule') %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
+        <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
+        <a href="/databases" data-tab="databases" class="tab-btn {% if active_tab == 'databases' %}active{% endif %}">{{ icon('database') }}<span>Data</span></a>
+        <div class="spacer"></div>
+        <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab in ('projects', 'habits', 'contacts', 'schedule_settings') %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
+        <button class="tab-btn" id="btnTheme" aria-label="Toggle theme" title="Toggle theme">{{ icon('moon') }}<span>Theme</span></button>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<!-- Generic modal shell (static/modal.js) -- any link/button with
+     data-modal="/some/url" opens that URL's #modal-target fragment here
+     instead of navigating, and its form submits via fetch instead of a
+     full page load. Empty until JS populates it. -->
+<div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal-dialog" role="dialog" aria-modal="true">
+        <!-- Grab handle -- only visible/interactive below the mobile
+             breakpoint (see .modal-handle in style.css), where .modal
+             becomes a bottom sheet instead of a centered dialog. Gives
+             the drag-to-dismiss gesture (static/modal.js) something to
+             visually anchor to, the same way iOS/Android sheets show a
+             small bar at the top as the "this is draggable" affordance. -->
+        <div class="modal-handle" id="modal-handle" aria-hidden="true"></div>
+        <button type="button" class="modal-close" id="modal-close" aria-label="Close">{{ icon('x') }}</button>
+        <div class="modal-body" id="modal-body"></div>
+    </div>
+</div>
+
+<!-- Color picker popover (static/modal.js): a single shared floating menu,
+     a sibling of #modal-overlay rather than a descendant of it. .modal has
+     overflow:hidden and .modal-body has overflow-y:auto, both of which
+     clip *any* descendant that visually extends past their box regardless
+     of its own position value -- the only way for a popover to render
+     outside the modal's bounds is to not be a DOM descendant of it at
+     all. modal.js moves each color swatch grid in here on open (it stays
+     associated with its original <form> via the `form="..."` attribute on
+     each radio, since reparenting outside a <form> element would
+     otherwise silently drop it from that form's submission) and moves it
+     back on close. -->
+<div class="color-popover" id="color-popover"></div>
+
+<!-- Icon (emoji) picker popover (2026-08-02, Projects manage page) --
+     same portal trick as #color-popover above, same reason (a floating
+     panel has to live outside anything with overflow:hidden/auto to
+     avoid being clipped), just a grid of emoji radios instead of color
+     swatches. See static/modal.js's wireSwatchPicker. -->
+<div class="icon-popover" id="icon-popover"></div>
+
+<script src="{{ static_url('toast.js') }}"></script>
+<script src="{{ static_url('app.js') }}"></script>
+<script src="{{ static_url('modal.js') }}"></script>
+<script src="{{ static_url('tag_input.js') }}"></script>
+<!-- Loaded on every page (not just schedule_classes.html's own
+     extra_scripts, as before 2026-08-01) so modal.js's wireContent() can
+     call CCScheduleTable.init()/CCScheduleGrid.init() when Schedule is
+     opened as a modal from somewhere else (_calendar_nav.html) -- see
+     modal.js's wireContent() comment. Both no-op immediately if their
+     target elements aren't on the page, so this is harmless everywhere
+     Schedule isn't involved. -->
+<script src="{{ static_url('schedule_table.js') }}"></script>
+<script src="{{ static_url('schedule_grid.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

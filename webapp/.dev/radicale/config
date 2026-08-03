@@ -1,0 +1,21 @@
+; Dev/test-only Radicale config. NOT for real deployment -- plain-text
+; htpasswd auth and a hardcoded dev password are fine for a throwaway local
+; instance the webapp talks to during development, never for anything
+; reachable off localhost. A real deployment needs bcrypt auth (or better,
+; sits behind Tailscale + its own hardened config) -- revisit before this
+; goes anywhere near the actual self-hosted setup discussed in
+; plans/systems/architecture.md.
+
+[server]
+hosts = 127.0.0.1:5232
+
+[auth]
+type = htpasswd
+htpasswd_filename = /home/peter/Claude/Projects/Dashboard/webapp/.dev/radicale/users
+htpasswd_encryption = plain
+
+[storage]
+filesystem_folder = /home/peter/Claude/Projects/Dashboard/webapp/.dev/radicale/collections
+
+[rights]
+type = owner_only

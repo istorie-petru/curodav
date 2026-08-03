@@ -1,0 +1,52 @@
+<!-- One collection-type section within a project's Lists modal (Task
+     lists / Calendars / Address books), reworked 2026-08-02 (twice same
+     day -- "the lists modal needs to be also more neat ... more
+     minimalist, just buttons, not a lot of buttons or dropdown menus"):
+     linked items are compact removable pills (click one to unlink,
+     click "New" for a name-only quick-add), and an unclaimed item is
+     linked with one click on its own plain outlined pill -- no <select>
+     dropdown at all now, matching the same "click a candidate directly"
+     pattern project_merge.html already uses for picking a merge
+     destination. `unclaimed_items` is the *same* list shared across
+     every project's call to this macro (computed once in
+     routers/projects.py's _list_collections_by_project) -- once a list
+     is linked here, it's gone from that shared list, so it can't also be
+     offered to a different project ("existing lists can not be reused in
+     another project"). Every form is marked data-modal-keep-open so
+     adding/linking/unlinking multiple things in a row doesn't close the
+     modal between each one. All three post to the collection's own
+     router (task_lists.py/calendars.py/addressbooks.py) with
+     return_to=/projects for the no-JS fallback. -->
+{% macro linked_list_section(label, icon_name, linked_items, unclaimed_items, base_path, project_uid, allow_create=True) %}
+<div class="project-sublist-group">
+    <div class="project-sublist-label">{{ label }}</div>
+    {% if linked_items or unclaimed_items %}
+    <div class="project-sublist-pills">
+        {% for item in linked_items %}
+        <form method="post" action="{{ base_path }}/link" class="form-inline" data-modal-keep-open>
+            <input type="hidden" name="uid" value="{{ item.uid }}">
+            <input type="hidden" name="project_uid" value="">
+            <input type="hidden" name="return_to" value="/projects">
+            <button type="submit" class="cell-tag cal-{{ item.color }} pill-removable" title="Unlink &ldquo;{{ item.name }}&rdquo;">{{ item.name }} {{ icon('x', 'icon-sm') }}</button>
+        </form>
+        {% endfor %}
+        {% for item in unclaimed_items %}
+        <form method="post" action="{{ base_path }}/link" class="form-inline" data-modal-keep-open>
+            <input type="hidden" name="uid" value="{{ item.uid }}">
+            <input type="hidden" name="project_uid" value="{{ project_uid }}">
+            <input type="hidden" name="return_to" value="/projects">
+            <button type="submit" class="cell-tag pill-linkable" title="Link &ldquo;{{ item.name }}&rdquo; to this project">{{ icon('plus', 'icon-sm') }} {{ item.name }}</button>
+        </form>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if allow_create %}
+    <form method="post" action="{{ base_path }}" class="quick-add-list-form" data-modal-keep-open>
+        <input type="hidden" name="project_uid" value="{{ project_uid }}">
+        <input type="hidden" name="return_to" value="/projects">
+        <input type="text" name="name" placeholder="New {{ label.lower() }}">
+        <button type="submit" class="icon-btn" title="Create">{{ icon('plus', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+</div>
+{% endmacro %}

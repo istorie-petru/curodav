@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{% if event %}Edit event{% else %}New event{% endif %}{% endblock %}
+{% block content %}
+<!-- #modal-target: static/modal.js fetches this page and injects just this
+     div's contents into the create-event modal instead of navigating here.
+     Loading the page directly (no JS, or a bookmark) still renders the
+     full page normally -- this div is invisible as a wrapper either way. -->
+<div id="modal-target">
+<h1>{% if event %}Edit event{% else %}New event{% endif %}</h1>
+
+<div class="card">
+<form method="post" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            <input type="text" name="title" required value="{{ event.title if event else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ event.description if event else '' }}</textarea>
+        </div>
+        <div class="field field-wide">
+            <label>Calendar</label>
+            <select name="calendar_uid">
+                {% for c in calendars %}
+                <option value="{{ c.uid }}" {% if (event and event.calendar_path == c.uid) or (not event and c.uid == 'calendar') %}selected{% endif %}>
+                    {{ c.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Start</label>
+            <input type="datetime-local" name="start_at"
+                   value="{{ event.start_at if event else (prefill_start or '') }}" required>
+        </div>
+        <div class="field">
+            <label>End</label>
+            <input type="datetime-local" name="end_at" value="{{ event.end_at if event else (prefill_end or '') }}">
+        </div>
+        <div class="field field-toggle field-wide">
+            <input type="checkbox" id="all_day" name="all_day" value="1" {% if (event and event.all_day) or (not event and prefill_all_day) %}checked{% endif %}>
+            <label for="all_day">All day</label>
+        </div>
+        <div class="field">
+            <label>Location</label>
+            <input type="text" name="location" value="{{ event.location if event else '' }}">
+        </div>
+        <div class="field">
+            <label>Meeting URL</label>
+            <input type="text" name="meeting_url" value="{{ event.meeting_url if event else '' }}">
+        </div>
+        <div class="field">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ event.tags|join(', ') if event else '' }}">
+            <datalist id="tag-names-datalist">
+                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+            </datalist>
+        </div>
+        <div class="field">
+            <label>Reminders, minutes before (comma-separated)</label>
+            <input type="text" name="reminders" value="{{ event.reminders|join(', ') if event else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Recurrence (RRULE, e.g. FREQ=WEEKLY;BYDAY=MO,WE)</label>
+            <input type="text" name="recurrence" value="{{ event.recurrence if event else '' }}">
+        </div>
+    </div>
+    <button type="submit" class="btn primary">Save</button>
+    <a href="/calendar" class="btn ghost" data-modal-cancel>Cancel</a>
+</form>
+</div>
+
+{% if event %}
+<!-- Consistent delete confirmation, 2026-08-01 -- an event has no
+     cascade concerns at all (unlike a task with subtasks), so it's
+     always the undo path, no confirm sheet needed. -->
+<form method="post" action="/events/{{ event.uid }}/delete" data-delete-undo="{{ event.title }}" data-delete-undo-redirect="/calendar">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this event</button>
+</form>
+{% endif %}
+</div>
+{% endblock %}

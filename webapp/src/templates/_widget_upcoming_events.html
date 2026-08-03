@@ -1,0 +1,13 @@
+<!-- Data: {events} -- see routers/dashboard.py::_render_upcoming_events -->
+{% if data.events %}
+<table>
+    {% for e in data.events %}
+    <tr>
+        <td style="width:110px; color:var(--fg-tertiary)">{{ e.start_at[:10] }}{% if not e.all_day %} {{ e.start_at[11:16] }}{% endif %}</td>
+        <td><a href="/events/{{ e.uid }}/edit" data-modal>{{ e.title }}</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">No upcoming events.</div>
+{% endif %}

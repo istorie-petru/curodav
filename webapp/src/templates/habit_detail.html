@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_habit_heatmap.html" import heatmap %}
+{% block title %}{{ habit.name if habit else "Habit" }}{% endblock %}
+{% block content %}
+<p style="margin:0 0 10px"><a href="/habits">{{ icon('chevron-left', 'icon-sm') }} Habits</a></p>
+{% if habit %}
+
+<div class="toolbar">
+    <h1 style="margin:0">{% if habit.icon %}{{ habit.icon }} {% endif %}{{ habit.name }}</h1>
+    <span class="cell-tag tag-{{ habit.color }}">{{ habit.color }}</span>
+    {% if habit.archived_at %}<span class="cell-tag tag-gray">Archived</span>{% endif %}
+    <div class="spacer"></div>
+    <a class="btn ghost" href="/habits/{{ habit.uid }}/edit">{{ icon('edit', 'icon-sm') }} Edit</a>
+</div>
+
+{% if habit.description %}<p>{{ habit.description }}</p>{% endif %}
+{% if project %}<p><span class="cell-tag cal-{{ project.color }}">{{ icon(project.icon or 'folder') }} {{ project.name }}</span></p>{% endif %}
+{% if habit.tags %}<p>{% for tag in habit.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</p>{% endif %}
+
+<div class="habit-streaks" style="margin-bottom:12px">
+    <span>{{ icon('repeat', 'icon-sm') }} Current streak: <strong>{{ current_streak }}</strong> day{{ 's' if current_streak != 1 }}</span>
+    <span>Longest streak: <strong>{{ longest_streak }}</strong></span>
+    <span>Total days logged: <strong>{{ total_logged }}</strong></span>
+</div>
+
+<div class="card">
+{{ heatmap(habit.uid, weeks) }}
+</div>
+
+<div class="card" style="margin-top:16px">
+<h2 style="margin-top:0">Log past data</h2>
+<!-- The explicit "add past data" path, distinct from clicking a heatmap
+     cell (which only ever toggles 0/1) -- lets you enter an exact value
+     for any date, e.g. backfilling "drank 6 glasses last Tuesday" or
+     correcting today's entry without deleting and re-toggling. -->
+<form method="post" action="/habits/{{ habit.uid }}/entries" class="field-grid">
+    <div class="field">
+        <label>Date</label>
+        <input type="date" name="entry_date" value="{{ today }}" max="{{ today }}" required>
+    </div>
+    <div class="field">
+        <label>Value{% if habit.target_per_day %} (target: {{ habit.target_per_day }}){% endif %}</label>
+        <input type="number" name="value" min="0" step="0.5" value="1">
+    </div>
+    <div class="field field-wide">
+        <label>Note (optional)</label>
+        <input type="text" name="note" placeholder="e.g. what you did">
+    </div>
+    <div class="field" style="align-self:flex-end">
+        <button type="submit" class="btn primary">Log entry</button>
+    </div>
+</form>
+</div>
+
+<div style="margin-top:20px">
+{% if habit.archived_at %}
+<form method="post" action="/habits/{{ habit.uid }}/unarchive" class="form-inline">
+    <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Unarchive</button>
+</form>
+{% else %}
+<!-- No confirm() -- reversible via the Unarchive button above, one load away. -->
+<form method="post" action="/habits/{{ habit.uid }}/archive" class="form-inline">
+    <button type="submit" class="btn ghost">{{ icon('folder', 'icon-sm') }} Archive</button>
+</form>
+{% endif %}
+</div>
+
+{% else %}
+<div class="empty-state">Habit not found.</div>
+{% endif %}
+{% endblock %}

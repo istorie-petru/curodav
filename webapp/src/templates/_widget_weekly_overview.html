@@ -1,0 +1,19 @@
+<!-- Data: {days: [{date, label, is_today, tasks, events}, ...]} -- see
+     routers/dashboard.py::_render_weekly_overview -->
+<div class="week-overview-grid">
+{% for day in data.days %}
+<div class="week-overview-day {% if day.is_today %}is-today{% endif %}">
+    <div class="week-overview-day-label">{{ day.label }}</div>
+    {% if day.tasks or day.events %}
+    {% for t in day.tasks %}
+    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
+    {% endfor %}
+    {% for e in day.events %}
+    <a class="week-overview-item" href="/events/{{ e.uid }}/edit" data-modal>{{ icon('calendar', 'icon-sm') }} {{ e.title }}</a>
+    {% endfor %}
+    {% else %}
+    <div class="week-overview-empty">&mdash;</div>
+    {% endif %}
+</div>
+{% endfor %}
+</div>

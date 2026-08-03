@@ -1,0 +1,93 @@
+{% if classes %}
+<!-- §5 University module: class-specific info rendered on a project's
+     detail page when one or more schedule classes are linked to it.
+     Shown only when the project actually has linked classes -- a plain
+     work project with no classes never sees this block.
+
+     Contains three sub-sections:
+       1. Course info (schedule + professor + mailto link for each class)
+       2. Homework tasks (tasks tagged "Homework", filtered from the full
+          task list that _project_scope already gathered -- no extra query)
+       3. Linked databases (e.g. the auto-provisioned Grades database)
+
+     Professor mailto links use `professor_contacts` (uid -> contact dict,
+     built by project_detail) rather than a per-class DB lookup in the
+     template -- routers compute, templates render. -->
+
+<div class="project-scope-section">
+<h2>{{ icon('book-open', 'icon-sm') }} Course info</h2>
+<div class="card">
+{% for cl in classes %}
+<div class="calendar-row" style="align-items:flex-start; padding:10px 0; gap:10px">
+    <div style="flex:1; min-width:0">
+        <div style="font-weight:600">
+            {{ cl.name }}{% if cl.acronym %} <span class="cell-tag tag-gray">{{ cl.acronym }}</span>{% endif %}
+            {% if cl.class_type %}<span class="cell-tag tag-gray">{{ cl.class_type }}</span>{% endif %}
+        </div>
+        <div style="font-size:var(--text-caption); color:var(--fg-secondary); margin-top:2px">
+            {{ cl.day }}
+            {% if cl.parity != 'all' %}<span class="cell-tag tag-{% if cl.parity == 'odd' %}orange{% else %}green{% endif %}">{{ cl.parity|capitalize }} weeks</span>{% endif %}
+            &nbsp;{{ cl.start_time }}&ndash;{{ cl.end_time }}
+            {% if cl.room %}&nbsp;&middot;&nbsp;{{ cl.room }}{% endif %}
+            {% if cl.credits %}&nbsp;&middot;&nbsp;{{ cl.credits|int if cl.credits == cl.credits|int else cl.credits }} cr{% endif %}
+        </div>
+        {% if cl.professor %}
+        <div style="font-size:var(--text-caption); color:var(--fg-secondary); margin-top:2px">
+            {{ icon('user', 'icon-sm') }}
+            {% set contact = professor_contacts.get(cl.professor_contact_uid) if cl.professor_contact_uid else None %}
+            {% if contact and contact.email %}
+            <a href="mailto:{{ contact.email }}">{{ cl.professor }}</a>
+            {% elif contact %}
+            <a href="/contacts/{{ contact.uid }}" data-modal>{{ cl.professor }}</a>
+            {% else %}
+            {{ cl.professor }}
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    <div style="flex-shrink:0; text-align:right">
+        <a class="btn ghost btn-sm" href="/schedule/classes/{{ cl.uid }}/edit" data-modal>{{ icon('edit-3', 'icon-sm') }}</a>
+    </div>
+</div>
+{% if not loop.last %}<hr style="margin:0; border-color:var(--border)">{% endif %}
+{% endfor %}
+</div>
+</div>
+
+{% if homework_tasks %}
+<div class="project-scope-section">
+<h2>{{ icon('clipboard', 'icon-sm') }} Homework <span class="tag-usage-count">{{ homework_tasks|length }}</span></h2>
+<div class="card table-scroll">
+<table class="task-table">
+    <thead><tr><th></th><th>Title</th><th>Status</th><th>Due</th></tr></thead>
+    <tbody>
+    {% for t in homework_tasks %}
+    <tr>
+        <td>{% if t.status not in ('done','archived') %}{{ icon('square') }}{% else %}{{ icon('check-square') }}{% endif %}</td>
+        <td><a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></td>
+        <td><span class="cell-tag tag-{{ status_colors[t.status] }}">{{ status_labels[t.status] }}</span></td>
+        <td>{{ t.due_at[:10] if t.due_at else '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+</div>
+{% endif %}
+
+{% if project_databases %}
+<div class="project-scope-section">
+<h2>{{ icon('database', 'icon-sm') }} Databases <span class="tag-usage-count">{{ project_databases|length }}</span></h2>
+<div class="card">
+{% for db_row in project_databases %}
+<div class="calendar-row">
+    <a href="/databases/{{ db_row.uid }}">{{ icon(db_row.icon or 'database', 'icon-sm') }} {{ db_row.name }}</a>
+    <span class="spacer"></span>
+    <span class="tag-usage-count">{{ db_row.color }}</span>
+</div>
+{% endfor %}
+</div>
+</div>
+{% endif %}
+
+{% endif %}

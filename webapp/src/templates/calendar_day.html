@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ day }} - Calendar{% endblock %}
+{% block content %}
+{% include "_calendar_nav.html" %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">{{ day }}</h1>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="/calendar/day/{{ prev_day }}">{{ icon('chevron-left', 'icon-sm') }} Prev</a>
+    <a class="btn ghost" href="/calendar/day/{{ next_day }}">Next {{ icon('chevron-right', 'icon-sm') }}</a>
+    <a class="btn primary" href="/events/new?date={{ day }}" data-modal data-fab>{{ icon('plus') }} New event on this day</a>
+</div>
+<p style="color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0 0 8px">
+    Hover to preview a slot, click for a 1-hour event, click-and-drag to pick a length. Drag an existing event to move or resize it.
+</p>
+
+<div class="card">
+<div class="all-day-strip">
+    {% for e in all_day %}
+    <a class="all-day-chip cal-{{ e.calendar_color }}" href="/events/{{ e.uid }}/edit" data-modal>{{ e.title }}</a>
+    {% endfor %}
+    {% for t in tasks %}
+    <a class="all-day-chip cal-gray" href="/tasks/{{ t.uid }}/edit" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
+    {% endfor %}
+    {% if not all_day and not tasks %}<span style="color:var(--fg-tertiary); font-size:var(--text-footnote)">Nothing all-day / due today</span>{% endif %}
+</div>
+<div class="time-grid-wrap">
+<div class="time-grid-body" style="height:{{ 24 * px_per_hour }}px">
+    <div class="time-gutter">
+        {% for h in hours %}
+        <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ "%02d:00"|format(h) }}</div>
+        {% endfor %}
+    </div>
+    <div class="time-cols day">
+        <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
+            {% for e in timed %}
+            <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+               href="/events/{{ e.uid }}/edit" data-modal
+               style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
+                <span class="te-name">{{ e.title }}</span>
+                <span class="te-time">{{ e.start_at[11:16] }}{% if e.end_at %}&ndash;{{ e.end_at[11:16] }}{% endif %}</span>
+                {% if e.location %}<span class="te-time">{{ e.location }}</span>{% endif %}
+                <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('calendar.js') }}"></script>
+{% endblock %}

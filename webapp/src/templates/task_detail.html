@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title if task else "Task" }}{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js. Task
+     rows/cards (tasks_list.html, tasks_board.html) now open this as a
+     modal via data-modal instead of navigating away; this route still
+     renders as a normal standalone page too (direct link, bookmark,
+     no-JS), same "modal is progressive enhancement over a real page"
+     pattern every other modal-opened view in this app already follows. -->
+<div id="modal-target">
+{% if task %}
+<p style="margin:0 0 10px">
+    <a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Tasks</a>
+    {% if parent %}&nbsp;/&nbsp;<a href="/tasks/{{ parent.uid }}" data-modal>{{ parent.title }}</a>{% endif %}
+</p>
+
+<div class="toolbar">
+    <h1 style="margin:0">{{ task.title }}</h1>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="/tasks/{{ task.uid }}/edit" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+</div>
+
+<div class="card">
+    <table>
+        <tr>
+            <td style="width:120px; color:var(--fg-tertiary)">Status</td>
+            <td><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></td>
+        </tr>
+        {% if task_list %}
+        <tr>
+            <td style="color:var(--fg-tertiary)">List</td>
+            <td><span class="cell-tag cal-{{ task_list.color }}">{{ task_list.name }}</span></td>
+        </tr>
+        {% endif %}
+        {% if task.priority %}
+        <tr>
+            <td style="color:var(--fg-tertiary)">Priority</td>
+            <td><span class="cell-tag tag-{{ priority_colors[task.priority] }}">{{ priority_labels[task.priority] }}</span></td>
+        </tr>
+        {% endif %}
+        {% if task.due_at %}<tr><td style="color:var(--fg-tertiary)">Due</td><td>{{ task.due_at[:10] }}</td></tr>{% endif %}
+        {% if task.start_at %}<tr><td style="color:var(--fg-tertiary)">Start</td><td>{{ task.start_at[:10] }}</td></tr>{% endif %}
+        {% if task.tags %}<tr><td style="color:var(--fg-tertiary)">Tags</td><td>{% for tag in task.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</td></tr>{% endif %}
+        {% if task.recurrence %}<tr><td style="color:var(--fg-tertiary)">Recurrence</td><td>{{ task.recurrence }}</td></tr>{% endif %}
+        {% if task.description %}<tr><td style="color:var(--fg-tertiary); vertical-align:top">Description</td><td style="white-space:pre-wrap">{{ task.description }}</td></tr>{% endif %}
+    </table>
+</div>
+
+<!-- Checklist -- local-only, see db.py's task_checklist_items note. Every
+     form here is data-modal-keep-open: adding/toggling/removing an item
+     is an incremental edit, not a "finish and leave" action, so the modal
+     stays open and just re-renders with the updated checklist (see
+     modal.js's refreshModalContent). -->
+<div class="card">
+    <h2 style="margin-top:0">
+        Checklist
+        {% if checklist %}<span class="checklist-progress">{{ checklist|selectattr('done')|list|length }}/{{ checklist|length }}</span>{% endif %}
+    </h2>
+    {% if checklist %}
+    <div class="checklist">
+        {% for item in checklist %}
+        <div class="checklist-row {% if item.done %}is-done{% endif %}">
+            <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/checklist/{{ item.uid }}/toggle" data-modal-keep-open>
+                <button type="submit" class="checklist-check" title="Toggle done">{{ icon('check-square') if item.done else icon('square') }}</button>
+            </form>
+            <span class="checklist-text">{{ item.text }}</span>
+            <form class="form-inline checklist-delete" method="post" action="/tasks/{{ task.uid }}/checklist/{{ item.uid }}/delete" data-modal-keep-open>
+                <button type="submit" class="icon-btn" title="Remove">{{ icon('x', 'icon-sm') }}</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:10px 0">No checklist items yet.</div>
+    {% endif %}
+    <form method="post" action="/tasks/{{ task.uid }}/checklist" class="checklist-add-form" data-modal-keep-open>
+        <input type="text" name="text" placeholder="Add a checklist item and press Enter" required>
+        <button type="submit" class="btn">Add</button>
+    </form>
+</div>
+
+<!-- Subtasks -- tasks.parent_uid, a real RELATED-TO;RELTYPE=PARENT VTODO
+     relationship (ical_rows.py), not a local-only construct. Opening one
+     (data-modal) swaps the modal's own content to that subtask's detail,
+     same as clicking the parent breadcrumb above -- the modal system
+     supports this kind of in-place forward navigation already (it's just
+     another data-modal click, handled by the same document-level
+     listener), it's not special-cased here. -->
+<div class="card">
+    <h2 style="margin-top:0">Subtasks {% if subtasks %}<span class="checklist-progress">{{ subtasks|selectattr('status', 'in', ['done','archived'])|list|length }}/{{ subtasks|length }}</span>{% endif %}</h2>
+    {% if subtasks %}
+    <table>
+        {% for st in subtasks %}
+        <tr>
+            <td style="width:26px">
+                {% if st.status not in ('done', 'archived') %}
+                <form class="form-inline" method="post" action="/tasks/{{ st.uid }}/complete" data-modal-keep-open>
+                    <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
+                </form>
+                {% else %}
+                <span class="icon-btn" style="cursor:default">{{ icon('check-square') }}</span>
+                {% endif %}
+            </td>
+            <td><a href="/tasks/{{ st.uid }}" data-modal>{{ st.title }}</a></td>
+            <td style="text-align:right"><span class="cell-tag tag-{{ status_colors[st.status] }}">{{ status_labels[st.status] }}</span></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="empty-state" style="padding:10px 0">No subtasks yet.</div>
+    {% endif %}
+    <form method="post" action="/tasks" class="checklist-add-form" data-modal-keep-open>
+        <input type="hidden" name="parent_uid" value="{{ task.uid }}">
+        <input type="hidden" name="status" value="active">
+        <input type="hidden" name="list_path" value="{{ task.list_path }}">
+        <input type="text" name="title" placeholder="Add a subtask and press Enter" required>
+        <button type="submit" class="btn">Add</button>
+    </form>
+</div>
+
+<!-- Consistent delete confirmation, 2026-08-01 -- see tasks_list.html's
+     identical split for the reasoning (undo for a plain task, an actual
+     confirm sheet -- not just a button label -- when it cascades). -->
+{% if subtasks %}
+<form method="post" action="/tasks/{{ task.uid }}/delete" data-confirm-sheet="Delete &quot;{{ task.title }}&quot; and its {{ subtasks|length }} subtask{{ 's' if subtasks|length != 1 }}? This cannot be undone.">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task (and its subtasks)</button>
+</form>
+{% else %}
+<form method="post" action="/tasks/{{ task.uid }}/delete" data-delete-undo="{{ task.title }}" data-delete-undo-redirect="/tasks">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task</button>
+</form>
+{% endif %}
+{% else %}
+<div class="empty-state">Task not found.</div>
+<p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
+{% endif %}
+</div>
+{% endblock %}

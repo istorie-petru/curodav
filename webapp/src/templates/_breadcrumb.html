@@ -1,0 +1,10 @@
+<!-- Home > Space > Project trail (spaces-home-pipeline, 2026-08-02). Each
+     segment a real link; `space`/`project` are simply absent (Jinja
+     undefined, falsy) on whichever page doesn't have one -- space_detail.html
+     only ever sets `space`, project_detail.html sets both when the project
+     has a group_uid. -->
+<p class="breadcrumb" style="margin:0 0 10px">
+    <a href="/">Home</a>
+    {% if space %} &rsaquo; <a href="/projects/groups/{{ space.uid }}">{{ space.name }}</a>{% endif %}
+    {% if project %} &rsaquo; <a href="/projects/{{ project.uid }}">{{ project.name }}</a>{% endif %}
+</p>

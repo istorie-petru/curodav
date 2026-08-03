@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Import complete{% endblock %}
+{% block content %}
+<!-- Plain full page, not a modal fragment -- see calendars_import.html's
+     note on why (modal.js discards a form's response body on success and
+     just reloads the underlying page, which would throw this result away
+     before it was ever shown). Shared by all three import flows
+     (routers/calendars.py, task_lists.py, addressbooks.py). -->
+<h1>Import complete</h1>
+
+<div class="card">
+    <p style="margin-top:0">
+        <span class="cell-tag tag-green">{{ imported }} imported</span>
+        {% if skipped %}<span class="cell-tag tag-orange" style="margin-left:6px">{{ skipped }} skipped</span>{% endif %}
+        into <strong>{{ target_name }}</strong>.
+    </p>
+    {% if skipped %}
+    <p style="color:var(--fg-tertiary); font-size:var(--text-footnote)">
+        Skipped entries were either malformed or missing the fields this app requires (e.g. a VEVENT with no start
+        time) -- everything else in the file still imported normally.
+    </p>
+    {% endif %}
+    {% if imported == 0 and skipped == 0 %}
+    <p style="color:var(--fg-tertiary); font-size:var(--text-footnote)">
+        Nothing importable was found in that file -- double-check it's the right format and isn't empty.
+    </p>
+    {% endif %}
+</div>
+
+<a href="{{ back_url }}" class="btn primary">Done</a>
+{% endblock %}

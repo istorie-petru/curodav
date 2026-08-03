@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <h1 style="margin:0">Dashboard</h1>
+    <div class="spacer"></div>
+    <!-- Move/reorder/delete controls on each widget below are hidden
+         unless this is on -- plain ?edit=1 query param (not JS/
+         localStorage) so it works with no JS, same pattern as every
+         other stateful toggle already server-rendered in this app
+         (sort direction, filter selects). Doesn't persist across visits
+         by design -- same "you turn it on, do your rearranging, turn it
+         back off" session-scoped flow as most dashboard edit modes. -->
+    {% if edit_mode %}
+    <a href="/" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
+    {% else %}
+    <a href="/?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit layout</a>
+    {% endif %}
+</div>
+
+<!-- Quick Capture (spaces-home-pipeline, 2026-08-02) -- identical markup
+     to tasks_list.html's own #quick-add-form (same title-only POST /tasks,
+     no-JS-required, static/tasks_table.js adds the stay-on-page fetch
+     behavior on top). No `list_path` hidden field, unlike that page's
+     version when a list filter is active -- landing in the default list
+     is exactly what makes a Home capture an Inbox item unless that
+     default list already has a project_uid (see routers/tasks.py's
+     /tasks/inbox). -->
+<form method="post" action="/tasks" class="quick-add-form" id="quick-add-form" style="margin-bottom:16px">
+    <input type="text" name="title" placeholder="Quick-add a task and press Enter..." required>
+</form>
+
+<!-- Space cards (spaces-home-pipeline, 2026-08-02) -- the only way to
+     reach a Space page (routers/projects.py's space_detail); deliberately
+     not a tabbar entry, see the plan doc's scope guardrails. Reuses
+     .cell-tag/card styling already in style.css, no new component. -->
+{% if project_groups %}
+<div class="card" style="margin-bottom:16px">
+    <div class="section-label">Spaces</div>
+    <div class="calendar-list">
+    {% for g in project_groups %}
+    <a class="calendar-row" href="/projects/groups/{{ g.uid }}" style="text-decoration:none; color:inherit">
+        <span class="cell-tag cal-{{ g.color }}">{{ icon('folder') }} {{ g.name }}</span>
+    </a>
+    {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
+     with every Space page (routers/projects.py's space_detail) via
+     routers/dashboard.py's widget_page_context. See _widget_workspace.html. -->
+{% include "_widget_workspace.html" %}
+
+<!-- "See more" -- mobile-only (see .dashboard-see-more's media query in
+     style.css). Desktop already has Databases as a topbar tab and the
+     Settings gear right next to the theme toggle, both always visible --
+     this exists specifically because neither of those has anywhere to go
+     on a narrow phone-width topbar beyond what's already there. Plain
+     links, not another modal/sheet -- these are infrequent destinations
+     (Databases aside), a static list is simpler than building yet
+     another overlay for a handful of rarely-tapped rows. -->
+<div class="card dashboard-see-more">
+    <div class="section-label">See more</div>
+    <div class="settings-subnav-links">
+        <a href="/databases">{{ icon('database', 'icon-sm') }} Databases</a>
+        <a href="/projects">{{ icon('folder', 'icon-sm') }} Projects</a>
+        <a href="/habits">{{ icon('activity', 'icon-sm') }} Habits</a>
+        <a href="/contacts">{{ icon('address-book', 'icon-sm') }} Contacts</a>
+        <a href="/settings">{{ icon('settings', 'icon-sm') }} Settings</a>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('habit_checkin.js') }}"></script>
+<script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
+{% endblock %}

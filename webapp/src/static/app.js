@@ -1,0 +1,887 @@
+// Minimal progressive enhancement -- every CRUD action works as a plain
+// HTML form submit with no JS at all. This file adds: dark/light theme
+// toggle and a delete confirmation.
+//
+// The theme itself is now applied by a blocking inline script in
+// base.html's <head>, before first paint -- doing it here (bottom of
+// <body>, after DOMContentLoaded) used to cause a flash of the wrong
+// theme on every load for anyone whose stored/OS preference was dark.
+// This block only has to stay in sync with whatever the head script
+// already applied: read `data-theme` off <html> (already correct) to set
+// the button's initial icon, and handle click-to-toggle.
+
+(function () {
+  const THEME_KEY = "commandCenterWeb.theme";
+  const btnTheme = document.getElementById("btnTheme");
+  // Same sprite reference base.html's {{ icon(...) }} global renders --
+  // see templates/_icons_sprite.html. Swapping which symbol id a plain
+  // <use> points at is cheaper than swapping DOM nodes and keeps this in
+  // lockstep with the icon library instead of a one-off emoji string.
+  const ICON_SUN = '<svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg>';
+  const ICON_MOON = '<svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>';
+
+  function applyTheme(t) {
+    if (t === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+      if (btnTheme) btnTheme.innerHTML = ICON_SUN;
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      if (btnTheme) btnTheme.innerHTML = ICON_MOON;
+    }
+  }
+
+  let theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  applyTheme(theme);
+
+  if (btnTheme) {
+    btnTheme.addEventListener("click", () => {
+      theme = theme === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+    });
+  }
+})();
+
+// Tabbar now scrolls horizontally on narrow viewports (style.css) -- if
+// the active tab (e.g. Contacts, last in the list) starts scrolled out of
+// view, the user would land on a page with no visible indication of
+// where they are. `block` stays "nearest" (vertical no-op, .tabbar
+// doesn't scroll vertically) and `inline: "center"` centers the active
+// tab horizontally instead of just nudging it to the edge.
+document.addEventListener("DOMContentLoaded", () => {
+  const activeTab = document.querySelector(".tabbar .tab-btn.active");
+  if (activeTab) activeTab.scrollIntoView({ block: "nearest", inline: "center" });
+});
+
+// Delete/archive handling -- replaces the old blanket
+// `confirm("Delete this item?")` on every form posting to a "/delete" URL
+// (and each template's own more specific `onsubmit="return confirm(...)"`,
+// now removed from those templates) with three tiers, chosen per form via
+// a data attribute:
+//
+//   data-archive-undo="Label" + data-unarchive-url="/x/{uid}/unarchive"
+//     Archiving is already fully reversible server-side (every archived
+//     type has a real unarchive endpoint) -- submit for real right away,
+//     no confirmation needed, then offer a true Undo that calls the real
+//     unarchive endpoint. No client-side trickery, no data ever at risk.
+//
+//   data-delete-undo="Label"
+//     Cheap, non-cascading deletes (a dashboard widget, one checklist
+//     item) where losing it costs the user nothing to redo by hand.
+//     Optimistically hides the row and *delays* the actual network
+//     request behind the toast's timer -- clicking Undo just cancels the
+//     pending request and un-hides the row, so nothing is sent at all if
+//     the user changes their mind. Deliberate tradeoff: if the tab closes
+//     or the user navigates away inside that window, the delete never
+//     happens either -- a safe failure mode (nothing destructive occurs
+//     without the user having seen it through), not a bug.
+//
+//   (no data attribute, but action still matches "/delete")
+//     Falls back to a generic confirm-sheet -- covers every delete form
+//     that doesn't opt into one of the above, so nothing loses its safety
+//     net just for not being explicitly wired up.
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+
+  if (form.hasAttribute("data-archive-undo")) {
+    event.preventDefault();
+    const label = form.getAttribute("data-archive-undo") || "Item";
+    const unarchiveUrl = form.getAttribute("data-unarchive-url");
+    const row = form.closest("[data-undo-row]") || form.closest("tr, .kanban-card, .card, .calendar-row, .contact-row");
+    fetch(form.action, { method: "POST", body: new FormData(form) })
+      .then((r) => {
+        if (!r.ok) throw new Error("archive failed");
+        if (row) row.style.display = "none";
+        window.ccToast({
+          message: `Archived "${label}"`,
+          actionLabel: unarchiveUrl ? "Undo" : undefined,
+          onAction: unarchiveUrl
+            ? () => {
+                fetch(unarchiveUrl, { method: "POST" }).then(() => {
+                  if (row) row.style.display = "";
+                  else window.location.reload();
+                });
+              }
+            : undefined,
+        });
+      })
+      .catch(() => window.ccToast({ message: `Could not archive "${label}". Try again.`, variant: "error" }));
+    return;
+  }
+
+  if (form.hasAttribute("data-delete-undo")) {
+    event.preventDefault();
+    const label = form.getAttribute("data-delete-undo") || "Item";
+    const row = form.closest("[data-undo-row]") || form.closest("tr, .kanban-card, .card, .calendar-row, .contact-row, .checklist-row, .widget-card");
+    if (row) row.style.display = "none";
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      fetch(form.action, { method: "POST", body: new FormData(form) }).catch(() => {
+        // Best-effort: the row is already hidden client-side; a failed
+        // background delete just means it'll reappear on next reload
+        // rather than silently vanishing forever.
+      });
+    }, 4500);
+    window.ccToast({
+      message: `Deleted "${label}"`,
+      actionLabel: "Undo",
+      onAction: () => {
+        cancelled = true;
+        clearTimeout(timer);
+        if (row) row.style.display = "";
+      },
+      duration: 4500,
+    });
+    // Detail-page delete (task_detail.html, event forms opened as a
+    // standalone page/modal, not a list row) -- there's no `row` to hide
+    // in place, so leaving the user sitting on the page for an object
+    // that's about to disappear would be worse than a list row silently
+    // fading out. `data-delete-undo-redirect` closes the modal (if the
+    // form is inside one) or navigates the whole page otherwise; the
+    // toast/undo/background-delete timer above keeps running either way,
+    // so Undo still works even after leaving -- it just won't visibly
+    // restore anything in a place the user isn't currently looking at.
+    const redirect = form.getAttribute("data-delete-undo-redirect");
+    if (redirect) {
+      if (window.CCModal && document.getElementById("modal-overlay").classList.contains("is-open")) {
+        window.CCModal.close();
+      } else {
+        window.location.href = redirect;
+      }
+    }
+    return;
+  }
+
+  if (form.action.includes("/delete") && !form.hasAttribute("data-confirm-sheet") && !form.dataset.confirmed) {
+    event.preventDefault();
+    const submitter = event.submitter || form.querySelector('button[type="submit"], button:not([type])');
+    window.ccConfirmSheet({
+      anchor: submitter || form,
+      message: "Delete this item? This cannot be undone.",
+      onConfirm: () => {
+        form.dataset.confirmed = "1";
+        form.requestSubmit ? form.requestSubmit(submitter) : form.submit();
+      },
+    });
+  }
+});
+
+// Mobile FAB -- clones whatever [data-fab] element exists in the page's
+// own toolbar (each page's real "+New X" button already carries the
+// right href/data-modal, so this reads from it instead of hardcoding a
+// second copy of every page's create URL here). CSS hides the result on
+// anything wider than the mobile breakpoint, so this always runs, not
+// just below some JS-side width check -- one fewer thing to keep in sync
+// with the CSS breakpoint.
+document.addEventListener("DOMContentLoaded", () => {
+  const source = document.querySelector("[data-fab]");
+  if (!source) return;
+  const fab = document.createElement("a");
+  fab.className = "fab";
+  fab.href = source.getAttribute("href") || "#";
+  const modalTarget = source.getAttribute("data-modal");
+  if (modalTarget !== null) fab.setAttribute("data-modal", modalTarget || fab.href);
+  fab.setAttribute("aria-label", (source.textContent || "New").trim());
+  fab.title = (source.textContent || "New").trim();
+  fab.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>';
+  document.body.appendChild(fab);
+});
+
+// data-confirm-sheet="message" -- the explicit version of the fallback
+// above, for forms that need a more specific message than the generic
+// one (cascading deletes: a database's columns/rows, a habit's whole
+// logged history, a tag everywhere it's used). Handled as a capturing
+// click on the submit button rather than a submit-event branch above,
+// so the confirm sheet can read its own message text via the attribute
+// before anything about the form's action matters.
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  const message = form.getAttribute("data-confirm-sheet");
+  if (!message || form.dataset.confirmed) return;
+  event.preventDefault();
+  const submitter = event.submitter || form.querySelector('button[type="submit"], button:not([type])');
+  window.ccConfirmSheet({
+    anchor: submitter || form,
+    message,
+    onConfirm: () => {
+      form.dataset.confirmed = "1";
+      form.requestSubmit ? form.requestSubmit(submitter) : form.submit();
+    },
+  });
+});
+
+// Generic multi-select dropdown -- e.g. Calendar's "which calendars are
+// visible" toggle (_calendar_nav.html), where more than one option can be
+// active at once, so a single <select> (which only ever picks one) isn't
+// the right control -- unlike the Tasks/Contacts list/status filters
+// (tasks_list.html etc.), which really are "pick exactly one" and use a
+// plain <select> instead of this.
+//
+// Markup contract: `.multiselect` wraps a `.multiselect-trigger` button
+// and a `.multiselect-panel`. Clicking the trigger toggles the panel;
+// clicking anywhere outside, or pressing Escape, closes it. Each option
+// inside the panel is free to be whatever it needs to be (here: a
+// same-origin `<form>` per checkbox that submits itself on change, since
+// visibility-toggling is already a real server-side POST, not client
+// state) -- this script only owns open/close, not what's inside.
+//
+// Simpler than modal.js's color-picker popover: that one has to portal
+// out of the modal's clipped/scrolling box to render outside it. A
+// `.multiselect` here always lives directly in the page (never inside
+// `.modal-body`), so plain `position:absolute` positioned against its own
+// trigger is enough -- no clipping context to escape, no portal needed.
+(function () {
+  let openPanel = null;
+
+  function closeOpenPanel() {
+    if (!openPanel) return;
+    openPanel.classList.remove("is-open");
+    openPanel = null;
+  }
+
+  document.addEventListener("click", (e) => {
+    const trigger = e.target.closest(".multiselect-trigger");
+    if (trigger) {
+      const panel = trigger.parentElement.querySelector(".multiselect-panel");
+      if (!panel) return;
+      if (panel === openPanel) {
+        closeOpenPanel();
+      } else {
+        closeOpenPanel();
+        panel.classList.add("is-open");
+        openPanel = panel;
+      }
+      return;
+    }
+    if (openPanel && !openPanel.contains(e.target)) {
+      closeOpenPanel();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeOpenPanel();
+  });
+})();
+
+// Dashboard masonry layout (dashboard.html's #dashboard-grid, both edit
+// and view mode -- 2026-08-02) -- a plain `display:grid` 6-column grid
+// sizes every *row* to its tallest occupant, so a short widget next to a
+// tall one always left dead space under itself instead of letting
+// whatever comes next start right where it actually ends. This computes
+// real positions instead: each card still claims a `data-span` out of 6
+// virtual columns (third=2/half=3/two_thirds=4/full=6, unchanged from
+// before), but its top is wherever those columns are *actually* free,
+// tracked per-column as cards are placed in DOM order -- the standard
+// "skyline" packing masonry libraries use, just handwritten here since
+// the dependency isn't worth it for one grid on one page.
+//
+// Runs unconditionally (not gated behind edit mode -- unlike every other
+// dashboard grid script below) because the gaps this fixes are exactly
+// as visible just looking at the dashboard as they are while rearranging
+// it. A MutationObserver on the grid re-runs it automatically after
+// anything that changes a card's size or order (drag reorder's
+// insertBefore, resize's data-span writes, a delete-undo hide/unhide) --
+// deliberately not threaded as an explicit call through every one of
+// those scripts individually, since that list would only grow and be
+// easy to miss one of. rAF-coalesced so a burst of mutations in one
+// frame (e.g. every pointermove during a drag) still only computes
+// layout once per frame.
+(function () {
+  const grid = document.getElementById("dashboard-grid");
+  if (!grid) return;
+
+  const MOBILE_BREAKPOINT = 720; // matches every other collapsing layout in this app
+  const GAP = 16; // var(--space-4) -- see style.css's design tokens
+
+  function cardIsVisible(card) {
+    // data-delete-undo (app.js's generic delete handler, used on every
+    // widget delete form) hides a row by setting display:none directly,
+    // no page reload -- an already-hidden card shouldn't still claim
+    // column space it no longer occupies on screen.
+    return card.style.display !== "none";
+  }
+
+  function layout() {
+    const cards = Array.from(grid.children).filter((el) => el.classList.contains("widget-card") && cardIsVisible(el));
+    if (!cards.length) {
+      grid.style.height = "";
+      return;
+    }
+    const containerWidth = grid.clientWidth;
+    const cols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 6;
+    const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
+    const colHeights = new Array(cols).fill(0);
+    let maxBottom = 0;
+
+    cards.forEach((card) => {
+      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      // Skyline packing: among every valid starting column for this
+      // card's width, pick whichever leaves the least wasted space --
+      // the one where the tallest column it would span is shortest.
+      let bestStart = 0;
+      let bestTop = Infinity;
+      for (let start = 0; start <= cols - span; start++) {
+        const top = Math.max(...colHeights.slice(start, start + span));
+        if (top < bestTop) {
+          bestTop = top;
+          bestStart = start;
+        }
+      }
+      const left = bestStart * (colWidth + GAP);
+      const width = span * colWidth + (span - 1) * GAP;
+      card.style.left = `${left}px`;
+      card.style.top = `${bestTop}px`;
+      card.style.width = `${width}px`;
+      // Reading offsetHeight here forces the browser to actually apply
+      // the width change above before measuring -- necessary since a
+      // narrower/wider card reflows its own text and can change height,
+      // and the next card's placement depends on that real height, not
+      // whatever height it had at its old width.
+      const bottom = bestTop + card.offsetHeight;
+      maxBottom = Math.max(maxBottom, bottom);
+      // GAP is added here, not to `bottom` itself -- `bottom` (the real
+      // edge of this card) is what maxBottom/grid.style.height below
+      // needs, but the *next* card stacked under this one in the same
+      // column has to start GAP further down than that, or they touch
+      // with zero space between them (this was missing entirely at
+      // first: horizontal neighbors got GAP from the `left` formula
+      // below, but two cards landing in the same column stacked
+      // vertically had nothing enforcing space between them at all).
+      for (let i = bestStart; i < bestStart + span; i++) colHeights[i] = bottom + GAP;
+    });
+
+    grid.style.height = `${maxBottom}px`;
+  }
+
+  let rafId = null;
+  function scheduleLayout() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      layout();
+    });
+  }
+
+  new MutationObserver(scheduleLayout).observe(grid, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["style", "class", "data-span"],
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(layout, 150);
+  });
+
+  layout();
+})();
+
+// Dashboard widget drag-to-reorder (dashboard.html, edit mode only) --
+// replaces the old move-up/move-down buttons, which cost one full page
+// reload per single-step move. Pointer Events (mouse + touch in one
+// listener), same optimistic-drag-then-background-POST shape as Kanban's
+// drag-and-drop (tasks_board.js) -- the widget grid is 2D (spans of 1-6
+// out of 6 columns, more than one widget per row), so instead of Kanban's
+// simpler "which column" hit-test, this finds whichever widget card is
+// actually under the pointer and inserts before/after it depending on
+// which half of that card's box the pointer is in.
+(function () {
+  const grid = document.getElementById("dashboard-grid");
+  if (!grid || !grid.classList.contains("is-editing")) return;
+
+  const DRAG_THRESHOLD = 6;
+  // Stacking's drop zone (2026-08-02) -- the outer EDGE_ZONE fraction of
+  // whichever single axis reorder already uses (x when the target's in
+  // your row, y otherwise -- see reorderPreview) reorders before/after;
+  // everything else, the middle 1 - 2*EDGE_ZONE, stacks. This used to
+  // require BOTH x *and* y to land in a 40%-wide center band at once --
+  // a small box in the exact middle of the card, awkward to actually hit
+  // while dragging from a handle that sits up in the corner. Checking
+  // only the one axis that already matters for that drop makes "stack"
+  // the easy, generous default (the whole middle of the card) and
+  // "reorder" the deliberate, narrower gesture (near an edge) instead.
+  const EDGE_ZONE = 0.2;
+  let dragCard = null;
+  let dragPointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let dragging = false;
+  let stackTargetEl = null;
+
+  function cardAtPoint(x, y) {
+    dragCard.style.visibility = "hidden";
+    const el = document.elementFromPoint(x, y);
+    dragCard.style.visibility = "";
+    return el ? el.closest(".widget-card") : null;
+  }
+
+  function setStackTarget(el) {
+    if (stackTargetEl === el) return;
+    if (stackTargetEl) stackTargetEl.classList.remove("is-stack-target");
+    stackTargetEl = el;
+    if (stackTargetEl) stackTargetEl.classList.add("is-stack-target");
+  }
+
+  function reorderPreview(x, y) {
+    const target = cardAtPoint(x, y);
+    if (!target || target === dragCard) {
+      setStackTarget(null);
+      return;
+    }
+    const r = target.getBoundingClientRect();
+    // The grid has more than one card per row (widths vary: third/half/
+    // two_thirds/full), so this can't just compare y against the
+    // target's vertical midpoint -- that only ever answers "above or
+    // below", which is why dragging rightward within the same row used
+    // to silently do nothing (the target "below" test was never true
+    // for a card beside you) while dragging leftward happened to work
+    // (you were dropping into the row above). If the pointer is within
+    // the target's own row band, decide left/right off its horizontal
+    // position instead; only fall back to above/below once the pointer
+    // has actually left that row.
+    const sameRow = y >= r.top && y <= r.bottom;
+    const frac = sameRow ? (x - r.left) / r.width : (y - r.top) / r.height;
+
+    // A drop-onto-stack target can't itself be the card currently being
+    // dragged, and dragging a stack container itself is reorder-only
+    // (stacks can't be stacked -- see stack_widget's own 400 for that,
+    // matched here so the highlight never promises something the drop
+    // would then reject).
+    const canStackOnto = !dragCard.classList.contains("widget-stack");
+    if (canStackOnto && frac > EDGE_ZONE && frac < 1 - EDGE_ZONE) {
+      setStackTarget(target);
+      return;
+    }
+    setStackTarget(null);
+    const before = frac < 0.5;
+    target.parentElement.insertBefore(dragCard, before ? target : target.nextSibling);
+  }
+
+  // Takes the dropped card element itself, not just its uid -- endDrag
+  // below nulls out the `dragCard` closure variable *before* calling
+  // this (so a stray pointer event arriving during the await can't
+  // still see a stale in-progress drag), which used to mean this
+  // function's own `dragCard.previousElementSibling` read `null`'s
+  // sibling and threw on every single drop, silently, inside the
+  // pointerup handler -- the reorder never actually reached the server,
+  // no error surfaced anywhere, it just looked like dragging did
+  // nothing. Passing the already-captured element sidesteps that
+  // entirely.
+  async function persistOrder(card) {
+    const afterEl = card.previousElementSibling;
+    const afterUid = afterEl && afterEl.classList.contains("widget-card") ? afterEl.dataset.uid : "";
+    try {
+      const resp = await fetch(`/dashboard/widgets/${card.dataset.uid}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `after_uid=${encodeURIComponent(afterUid)}`,
+      });
+      if (!resp.ok) throw new Error("reorder failed");
+    } catch (err) {
+      window.ccToast({ message: "Could not save the new order. Reloading...", variant: "error", duration: 1400 });
+      setTimeout(() => window.location.reload(), 1200);
+    }
+  }
+
+  async function persistStack(uid, targetUid) {
+    // Unlike reorder/resize, stacking changes the actual card structure
+    // (a brand-new stack container wrapping two nested widgets, or an
+    // existing one gaining a member) -- rebuilding that in JS would mean
+    // duplicating the whole widget_inner macro's HTML client-side. A
+    // reload is the honest option here rather than a half-right DOM
+    // patch that doesn't actually look like what the Filters panel/
+    // resize handle/delete button expect the page to look like next.
+    try {
+      const resp = await fetch(`/dashboard/widgets/${uid}/stack-onto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `target_uid=${encodeURIComponent(targetUid)}`,
+      });
+      if (!resp.ok) throw new Error("stack failed");
+      window.location.reload();
+    } catch (err) {
+      window.ccToast({ message: "Could not stack that widget. Try again.", variant: "error", duration: 2200 });
+    }
+  }
+
+  function endDrag(e) {
+    if (!dragCard || e.pointerId !== dragPointerId) return;
+    const card = dragCard;
+    const wasDragging = dragging;
+    const targetEl = stackTargetEl;
+    card.classList.remove("is-dragging");
+    setStackTarget(null);
+    dragCard = null;
+    dragging = false;
+    dragPointerId = null;
+    if (!wasDragging) return;
+    if (targetEl) {
+      persistStack(card.dataset.uid, targetEl.dataset.uid);
+    } else {
+      persistOrder(card);
+    }
+  }
+
+  grid.querySelectorAll(".widget-drag-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      dragCard = handle.closest(".widget-card");
+      if (!dragCard) return;
+      dragPointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      dragging = false;
+      // Capture on the grid itself, not the handle. reorderPreview()
+      // relocates dragCard (and the handle inside it) elsewhere in the
+      // DOM every time the pointer crosses into another card -- browsers
+      // treat that detach+reattach as the captured element having left
+      // the document and silently drop capture, which fired
+      // "lostpointercapture" mid-drag and made the card deselect itself
+      // the instant you moved it. The grid element is never itself
+      // moved, so capturing there survives every reorder.
+      grid.setPointerCapture(e.pointerId);
+    });
+  });
+
+  grid.addEventListener("pointermove", (e) => {
+    if (!dragCard || e.pointerId !== dragPointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      dragging = true;
+      dragCard.classList.add("is-dragging");
+    }
+    reorderPreview(e.clientX, e.clientY);
+  });
+
+  grid.addEventListener("pointerup", endDrag);
+  grid.addEventListener("pointercancel", endDrag);
+  // Belt-and-suspenders: if capture is ever lost for a reason other than
+  // pointerup/pointercancel, this still guarantees the card doesn't get
+  // stuck at 50% opacity forever. endDrag() is idempotent (guarded on
+  // dragCard being non-null), so this can't double-fire persistOrder
+  // alongside a normal pointerup.
+  grid.addEventListener("lostpointercapture", endDrag);
+})();
+
+// Reordering *within* a stack (2026-08-02) -- deliberately a separate,
+// simpler script from the top-level grid drag above rather than
+// generalizing that one further: stack members aren't wrapped in
+// .widget-card (only the stack container itself is), so the "find
+// whichever card is under the pointer" 2D hit-test above doesn't apply
+// here at all -- this is a plain single-column vertical list, closer to
+// Kanban's own card-within-column reorder than the top-level grid drag.
+// One handler covers every stack on the page; each stack scopes its own
+// drag to its own .widget-stack-item children, so dragging in one stack
+// can never reorder into a different one (moving a widget *between*
+// stacks isn't supported by dragging -- Unstack, then stack it onto the
+// other one).
+(function () {
+  const stacks = document.querySelectorAll(".dashboard-grid.is-editing .widget-stack");
+  if (!stacks.length) return;
+
+  const DRAG_THRESHOLD = 6;
+
+  stacks.forEach((stack) => {
+    let dragItem = null;
+    let dragPointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let dragging = false;
+
+    function itemAtPoint(y) {
+      dragItem.style.visibility = "hidden";
+      const el = document.elementFromPoint(stack.getBoundingClientRect().left + 1, y);
+      dragItem.style.visibility = "";
+      return el ? el.closest(".widget-stack-item") : null;
+    }
+
+    function reorderPreview(y) {
+      const target = itemAtPoint(y);
+      if (!target || target === dragItem || !stack.contains(target)) return;
+      const r = target.getBoundingClientRect();
+      const before = y < r.top + r.height / 2;
+      target.parentElement.insertBefore(dragItem, before ? target : target.nextSibling);
+    }
+
+    // Takes the dropped item element itself, not just its uid -- same
+    // bug as the top-level grid drag had (see its own persistOrder's
+    // comment): endDrag nulls the `dragItem` closure variable *before*
+    // calling this, so reading `dragItem.previousElementSibling` in here
+    // was reading null's sibling and throwing on every single drop,
+    // silently, inside the pointerup handler -- the reorder never
+    // actually reached the server. Passing the already-captured element
+    // sidesteps that.
+    async function persistOrder(item) {
+      const afterEl = item.previousElementSibling;
+      const afterUid = afterEl && afterEl.classList.contains("widget-stack-item") ? afterEl.dataset.uid : "";
+      try {
+        const resp = await fetch(`/dashboard/widgets/${item.dataset.uid}/reorder`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `after_uid=${encodeURIComponent(afterUid)}`,
+        });
+        if (!resp.ok) throw new Error("reorder failed");
+      } catch (err) {
+        window.ccToast({ message: "Could not save the new order. Reloading...", variant: "error", duration: 1400 });
+        setTimeout(() => window.location.reload(), 1200);
+      }
+    }
+
+    function endDrag(e) {
+      if (!dragItem || e.pointerId !== dragPointerId) return;
+      const item = dragItem;
+      const wasDragging = dragging;
+      item.classList.remove("is-dragging");
+      dragItem = null;
+      dragging = false;
+      dragPointerId = null;
+      if (wasDragging) persistOrder(item);
+    }
+
+    stack.querySelectorAll(".widget-stack-drag-handle").forEach((handle) => {
+      handle.addEventListener("pointerdown", (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        dragItem = handle.closest(".widget-stack-item");
+        if (!dragItem) return;
+        dragPointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        dragging = false;
+        // Same lesson as the top-level grid drag above: capture on
+        // `stack` (never itself relocated) rather than the handle
+        // (relocated by reorderPreview's insertBefore on every crossing),
+        // so capture survives every reorder instead of silently
+        // releasing mid-drag.
+        stack.setPointerCapture(e.pointerId);
+      });
+    });
+
+    stack.addEventListener("pointermove", (e) => {
+      if (!dragItem || e.pointerId !== dragPointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        dragging = true;
+        dragItem.classList.add("is-dragging");
+      }
+      reorderPreview(e.clientY);
+    });
+
+    stack.addEventListener("pointerup", endDrag);
+    stack.addEventListener("pointercancel", endDrag);
+    stack.addEventListener("lostpointercapture", endDrag);
+  });
+})();
+
+// Dashboard widget drag-to-resize (dashboard.html's .widget-resize-handle,
+// edit mode only) -- "width is adjusted visually, by mouse action"
+// (2026-08-02), replacing the Width <select> that used to live in each
+// widget's Filters form. Valid spans are exactly {2,3,4,6} out of the
+// grid's 6 columns (routers/dashboard.py's WIDGET_WIDTHS: third/half/
+// two_thirds/full -- there's no 5, a "5/6 width" widget was never a real
+// option), so the drag snaps to the nearest of those rather than letting
+// the card land on an arbitrary column count.
+(function () {
+  const grid = document.getElementById("dashboard-grid");
+  if (!grid || !grid.classList.contains("is-editing")) return;
+
+  const VALID_SPANS = [2, 3, 4, 6];
+  const SPAN_TO_WIDTH = { 2: "third", 3: "half", 4: "two_thirds", 6: "full" };
+  // Must match the masonry layout's own GAP above -- both are reading
+  // the same --space-4 design token, just as two separate plain-number
+  // constants rather than a shared import (no module system in this
+  // file to share one across IIFEs).
+  const GAP = 16;
+
+  function nearestSpan(raw) {
+    return VALID_SPANS.reduce((best, span) => (Math.abs(span - raw) < Math.abs(best - raw) ? span : best));
+  }
+
+  function currentSpan(card) {
+    return parseInt(card.dataset.span, 10) || 6;
+  }
+
+  let card = null;
+  let pointerId = null;
+  let startX = 0;
+  let startSpan = 6;
+  let columnWidth = 0;
+
+  grid.querySelectorAll(".widget-resize-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      card = handle.closest(".widget-card");
+      if (!card) return;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startSpan = currentSpan(card);
+      // Grid gap is subtracted so a full-width drag lands exactly on
+      // span 6 instead of overshooting by 5 gaps' worth of pixels --
+      // gap doesn't count toward any single column's width. Uses the
+      // grid's own current width, same source of truth the masonry
+      // layout function itself reads from (grid.clientWidth there vs
+      // getBoundingClientRect().width here -- equivalent for a
+      // non-scrolling, border/padding-less container like this one).
+      const gridRect = grid.getBoundingClientRect();
+      columnWidth = (gridRect.width - GAP * 5) / 6 + GAP;
+      card.classList.add("is-resizing");
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!card || e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      const rawSpan = startSpan + dx / columnWidth;
+      const span = Math.max(2, Math.min(6, nearestSpan(rawSpan)));
+      // Writing data-span (not a width/gridColumn style directly) is
+      // what the masonry layout's MutationObserver is watching for --
+      // this is the one line that actually drives the live "everything
+      // else flows around the card while you resize it" reflow.
+      card.dataset.span = String(span);
+    });
+
+    async function finish(e) {
+      if (!card || e.pointerId !== pointerId) return;
+      const finalCard = card;
+      const span = currentSpan(finalCard);
+      finalCard.classList.remove("is-resizing");
+      card = null;
+      if (span === startSpan) return; // no actual change -- nothing to persist
+      const width = SPAN_TO_WIDTH[span];
+      try {
+        const resp = await fetch(`/dashboard/widgets/${finalCard.dataset.uid}/resize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `width=${encodeURIComponent(width)}`,
+        });
+        if (!resp.ok) throw new Error("resize failed");
+      } catch (err) {
+        finalCard.dataset.span = String(startSpan); // revert -- no reload needed, we know exactly what to put back
+        window.ccToast({ message: "Could not save the new width.", variant: "error" });
+      }
+    }
+
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", (e) => {
+      if (card && e.pointerId === pointerId) {
+        card.dataset.span = String(startSpan);
+        card.classList.remove("is-resizing");
+        card = null;
+      }
+    });
+  });
+})();
+
+// Dashboard widget drag-to-resize, vertical axis (2026-08-02 -- "a way to
+// resize them vertically ... a specific values for their width and
+// height, not any height"). Exact mirror of the width handler just above
+// -- same pointer-events/snap-to-preset/optimistic-then-persist shape --
+// just dragging each widget's own .widget-content bottom edge instead of
+// the whole card's right edge, and per-widget rather than per-card/
+// per-stack (a stack's members each get their own handle here, since
+// .widget-resize-handle-vertical is rendered once per widget by
+// widget_inner, not once per top-level card the way the width handle
+// is -- see routers/dashboard.py's _dissolve_stack docstring for why
+// height isn't shared across a stack the way width is).
+(function () {
+  const grid = document.getElementById("dashboard-grid");
+  if (!grid || !grid.classList.contains("is-editing")) return;
+
+  // Must match routers/dashboard.py's WIDGET_HEIGHTS exactly (key -> px).
+  const HEIGHT_PX = { short: 180, medium: 320, tall: 480, xl: 680 };
+  const VALID_HEIGHTS = Object.keys(HEIGHT_PX);
+
+  function nearestHeight(rawPx) {
+    return VALID_HEIGHTS.reduce((best, key) =>
+      Math.abs(HEIGHT_PX[key] - rawPx) < Math.abs(HEIGHT_PX[best] - rawPx) ? key : best
+    );
+  }
+
+  function currentHeightKey(content) {
+    return content.dataset.heightKey in HEIGHT_PX ? content.dataset.heightKey : "medium";
+  }
+
+  let content = null;
+  let uidHost = null;
+  let pointerId = null;
+  let startY = 0;
+  let startPx = HEIGHT_PX.medium;
+
+  grid.querySelectorAll(".widget-resize-handle-vertical").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      content = handle.parentElement; // the .widget-content div this handle belongs to
+      // Nearest ancestor carrying a real widget uid -- .widget-stack-item
+      // for a stacked member, .widget-card for a top-level widget (or a
+      // stack container itself, which never renders this handle since it
+      // has no .widget-content of its own). Falling back to the plain
+      // .widget-card covers the non-stacked case.
+      uidHost = handle.closest("[data-uid]");
+      if (!content || !uidHost) return;
+      pointerId = e.pointerId;
+      startY = e.clientY;
+      startPx = HEIGHT_PX[currentHeightKey(content)];
+      content.classList.add("is-resizing");
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!content || e.pointerId !== pointerId) return;
+      const dy = e.clientY - startY;
+      const rawPx = Math.max(HEIGHT_PX.short, startPx + dy);
+      const key = nearestHeight(rawPx);
+      // Writing both the data attribute (what the masonry layout's
+      // MutationObserver's `style` filter already reacts to, via the
+      // maxHeight change right below, subtree:true covers descendants
+      // too) and the actual max-height that makes the card visually
+      // taller/shorter and lets the masonry re-pack around it live.
+      content.dataset.heightKey = key;
+      content.style.maxHeight = `${HEIGHT_PX[key]}px`;
+    });
+
+    async function finish(e) {
+      if (!content || e.pointerId !== pointerId) return;
+      const finalContent = content;
+      const finalUidHost = uidHost;
+      const key = currentHeightKey(finalContent);
+      finalContent.classList.remove("is-resizing");
+      const startKey = nearestHeight(startPx);
+      content = null;
+      uidHost = null;
+      if (key === startKey) return; // no actual change -- nothing to persist
+      try {
+        const resp = await fetch(`/dashboard/widgets/${finalUidHost.dataset.uid}/resize-height`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `height=${encodeURIComponent(key)}`,
+        });
+        if (!resp.ok) throw new Error("resize failed");
+      } catch (err) {
+        // Revert -- no reload needed, we know exactly what to put back.
+        finalContent.dataset.heightKey = startKey;
+        finalContent.style.maxHeight = `${HEIGHT_PX[startKey]}px`;
+        window.ccToast({ message: "Could not save the new height.", variant: "error" });
+      }
+    }
+
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", (e) => {
+      if (content && e.pointerId === pointerId) {
+        const startKey = nearestHeight(startPx);
+        content.dataset.heightKey = startKey;
+        content.style.maxHeight = `${HEIGHT_PX[startKey]}px`;
+        content.classList.remove("is-resizing");
+        content = null;
+        uidHost = null;
+      }
+    });
+  });
+})();

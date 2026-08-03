@@ -1,0 +1,39 @@
+# Feature: Design system
+
+**Code:** `desktop/src/core/design/tokens.py`, `MainWindow._generate_qss` in `desktop/src/app.py`
+**Status:** Rebuilt 2026-07-17 — native theme integration, see below
+
+## What changed 2026-07-17
+
+The original OKLCH/Density/Shape/Accent token system documented here was never actually working, and the app didn't integrate with the desktop (KDE Plasma) at all. Both were fixed together, because the second problem was downstream of the first.
+
+**What was actually wrong**, found by reading `MainWindow._generate_qss` end to end: it hardcoded a fixed macOS-style dark palette — literal hex colors (`#1C1C1E` etc.), `-apple-system`/"SF Pro" font stack, and a dead `TitleBar` class drawing macOS traffic-light window buttons (unused — the window used native decorations regardless, so this was inert, but it's a good indicator of what the styling was aiming for). The `ThemeTokens` object built from the Theme/Accent settings — OKLCH colors, computed via `T.bg0.to_css()` etc. — was passed into `_generate_qss` as an argument and then **never referenced anywhere in the returned stylesheet**. Separately, `OklchColor.to_qss()`/`.to_css()` emitted `oklab(...)`/`oklch(...)` CSS syntax, which Qt's stylesheet engine (a CSS2.1-derived parser) doesn't understand at all — even if the dead code path had been wired up, Qt would have silently failed to parse those color values. Density and Shape settings were saved to `settings.json` and read back by nothing, anywhere. None of the four Appearance settings had any real effect, and the actual rendered app looked like a fixed-dark macOS skin regardless of the desktop it ran on — which is the root of "doesn't integrate with Plasma."
+
+**The fix:** removed the whole custom color system. `core/design/tokens.py` now provides `is_dark(widget)` and `semantic_colors(dark)` — the rest of the former OKLCH machinery is gone. `_generate_qss` builds its stylesheet from `palette(window)`, `palette(base)`, `palette(text)`, `palette(highlight)`, etc. — real Qt Style Sheet functions that resolve against the widget's live `QPalette`, which Qt populates from the desktop's actual theme (Breeze/Breeze Dark on Plasma, Adwaita on GNOME, whatever the platform theme plugin provides). Only `danger`/`warning`/`success` status colors stay hardcoded, since QPalette has no "destructive" role and those need to mean the same thing regardless of theme — but even those are chosen per dark/light rather than fixed. `QGuiApplication.styleHints().colorSchemeChanged` is connected to regenerate the stylesheet live, so switching Plasma's global theme (light/dark) updates the app immediately, no restart. Theme/Density/Shape/Accent were removed from Preferences entirely — see `settings.md`.
+
+**Correction, 2026-07-18:** the first pass also deleted the Appearance tab's **Qt Style** picker along with Theme/Density/Shape/Accent. That was wrong — Qt Style isn't part of the OKLCH system this section is about, and it wasn't dead code; `QStyleFactory`/`QApplication.setStyle()` is a separate, working Qt mechanism for choosing which widget style renders the app (e.g. Darkly instead of the platform default). It's restored — see `settings.md`. It doesn't conflict with the palette-based theming described above: a chosen style supplies its own palette, and `_generate_qss` reads colors from `palette()` regardless of which style is active, so the two layer correctly instead of fighting each other.
+
+## 2026-07-19: compared against a design reference, trimmed further toward native
+
+A design doc was provided ("ModernPlasma Productivity" — a macOS-styled reference mockup: grouped-list cards with hairline row separators, segmented controls, colored badges/pills, a right-side inspector slide-over, `QGroupBox`-style settings sections). Comparing it to the app confirmed the palette work above was right but incomplete — `_generate_qss` still had ~15 selector blocks re-skinning controls that the active Qt style (Darkly or whatever's chosen, see `settings.md`) already renders correctly on its own: a fully custom `QTabWidget::tab` bar, custom borders/backgrounds on plain `QLineEdit`/`QPlainTextEdit` fields, and custom chrome on ordinary `QPushButton`s (`cal-nav-btn`, `bottom-nav-btn`) that don't need a background/border to be legible — they're not primary-action buttons, just navigation controls.
+
+**Removed:** the `settings-tabs::tab` rule entirely (moot — see below, Preferences doesn't use a `QTabWidget` anymore), `md-source`/`md-preview` background+border (plain `QPlainTextEdit`/`QTextBrowser` already paint `palette(base)` on their own), `quick-add-input` background+border+radius (same reasoning — a bare `QLineEdit` renders correctly under any real Qt style), and `cal-nav-btn`/`bottom-nav-btn` custom background/border/radius (kept only font-size/weight, letting the style render the button itself).
+
+**Left alone, deliberately:** `command-palette-input`/`command-palette-results` keep their background+border — the command palette is a frameless, translucent-background `QDialog` (checked before touching it), so its child widgets are the *only* thing painting a visible surface; stripping that would have made the palette invisible, not "more native." `object-card`, `tag-chip`, `cal-event-chip`/`cal-event-block`, `priority-1..4`, `kanban-card` all stay — these are the app's actual information design (colored status/priority/category indicators), not reimplementations of controls Qt already has.
+
+**Fixed along the way:** `bottom-nav-btn`'s "active" state never rendered — the code set the Qt dynamic property to the literal string `"bottom-nav-btn active"`, but Qt Style Sheet `[class="..."]` attribute selectors require an *exact* string match (unlike HTML's space-separated class lists), and no rule existed for that exact two-word string. Added `*[class="bottom-nav-btn active"]` as its own selector.
+
+**Settings restructured to match the design doc directly:** Preferences was a `QTabWidget` (General/Appearance/WebDAV/Syncthing/Calendar/Tags/About as tabs); the design doc's Settings screen is one scrolling page of titled `QGroupBox` sections, no tabs. Converted to match — see `settings.md`. This needed zero new QSS (`QGroupBox` renders its border/title/rounding from the active style already) and let the `settings-tabs::tab` rule above be deleted rather than just trimmed.
+
+Full remaining gap list (Tasks/Calendar mini-sidebars with colored dots, a real reusable segmented-control widget instead of ad hoc per-module toolbar buttons, the inspector as a slide-over panel rather than a permanently-docked side pane) is tracked in [`../plans/design-alignment.md`](../plans/design-alignment.md) rather than rushed — those are structural layout changes with wider blast radius, not QSS trims.
+
+## What's still true / unchanged
+
+- Navigation identity: two-letter mono glyphs (`DB`, `TK`, `CA`, `NT`, `RM`, `SR`) in bordered boxes for the sidebar/bottom-nav module entries.
+- Structural idioms kept, now theme-neutral: 1px borders, near-zero elevation, mono uppercase section labels, mono status/data labels (IBM Plex Mono, where available — falls back to the system monospace font), 4px spacing grid, corner-bracket motif for pinned objects, 4px progress bars, persistent bottom status bar.
+- Responsive shell: sidebar (≥900px) vs. bottom nav (<900px), toggled by window width.
+- Motion: implicit animations only, 150–200ms ease-out.
+
+## Not done here
+
+Font choice (IBM Plex Sans/Mono, Fraunces) was left as declared where already in use for data/label text, but the previous hard-coded `-apple-system`/"SF Pro" UI font stack was dropped rather than replaced — general UI text now inherits whatever font Qt/the platform theme provides, which is the correct default for native integration. If IBM Plex isn't installed, Qt falls back per the font-family list already in place; no change needed there.

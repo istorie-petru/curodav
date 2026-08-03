@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+*.so
+
+# Virtualenvs
+.venv/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+
+# Dev-only Radicale data -- the webapp's throwaway local CalDAV/CardDAV
+# instance. The collections hold real calendar/task/contact data plus
+# backups; the users file holds dev credentials. Neither belongs in git.
+# .dev/radicale/config (the read-only dev config) IS tracked.
+webapp/.dev/radicale/collections/
+webapp/.dev/radicale/collections.bak-*/
+webapp/.dev/radicale/users

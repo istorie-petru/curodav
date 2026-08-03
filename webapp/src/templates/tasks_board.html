@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Tasks &middot; Board{% endblock %}
+{% block content %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">Tasks</h1>
+    <div class="spacer"></div>
+    <form method="get" action="/tasks/board" class="filter-bar">
+        <input type="search" name="q" placeholder="Search tasks..." value="{{ q }}">
+        <select name="list_path" class="filter-select" onchange="this.form.submit()" aria-label="Filter by list">
+            <option value="">All lists</option>
+            {% for l in task_lists %}
+            <option value="{{ l.uid }}" {% if active_list == l.uid %}selected{% endif %}>{{ l.name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+    <a class="icon-btn" href="/task-lists" data-modal title="Manage lists">{{ icon('list') }}</a>
+    <div class="segmented">
+        <a class="seg-btn" href="/tasks?{% if q %}q={{ q }}&{% endif %}{% if active_list %}list_path={{ active_list }}{% endif %}">Table</a>
+        <a class="seg-btn" href="/tasks/timeline">Timeline</a>
+        <a class="seg-btn active" href="/tasks/board?{% if q %}q={{ q }}&{% endif %}{% if active_list %}list_path={{ active_list }}{% endif %}">Board</a>
+    </div>
+    <a class="btn primary" href="/tasks/new{% if active_list %}?list_path={{ active_list }}{% endif %}" data-modal data-fab>{{ icon('plus') }} New task</a>
+</div>
+
+<div class="kanban-board" id="kanban-board">
+    {% for status in board_statuses %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="kanban-column-head">
+            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
+            <span class="kanban-count">{{ columns[status]|length }}</span>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for t in columns[status] %}
+            <div class="kanban-card" data-uid="{{ t.uid }}">
+                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                <div class="kanban-card-meta">
+                    {% if t.priority %}<span class="cell-tag tag-{{ priority_colors[t.priority] }}">{{ priority_labels[t.priority] }}</span>{% endif %}
+                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
+                    {% for tag in t.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="kanban-empty">No tasks</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}

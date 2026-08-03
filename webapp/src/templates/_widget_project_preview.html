@@ -1,0 +1,22 @@
+<!-- Project Preview widget (routers/dashboard.py's _render_project_preview)
+     -- the Dashboard-side half of moving Projects' add/rename/archive
+     into Settings: quick links + progress for one project (set the
+     widget's Project filter) or every active project (leave it unset). -->
+{% if data.previews %}
+<div class="project-preview-list">
+    {% for pv in data.previews %}
+    <a class="project-preview-row" href="/projects/{{ pv.project.uid }}">
+        <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
+        {% if pv.progress is not none %}
+        <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>
+        <span class="tag-usage-count">{{ pv.tasks_done }}/{{ pv.tasks_total }}</span>
+        {% else %}
+        <span class="spacer"></span>
+        <span class="tag-usage-count">No tasks yet</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No active projects -- add one from Settings.</div>
+{% endif %}

@@ -1,0 +1,34 @@
+[project]
+name = "command-center-web"
+version = "0.1.0"
+description = "Mobile/remote PWA client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server. Update 2026-08: local-only projects/tags (see src/db.py) were added on top of the synced CalDAV/CardDAV data, same precedent as checklists/schedule -- still no generic cross-type link/board graph, that stays desktop-only."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    # Pinned below 1.0: starlette 1.x's Jinja2Templates integration is
+    # incompatible with jinja2 3.1.6 (currently the latest jinja2 release --
+    # no 3.2 exists yet) -- `TemplateResponse` raises
+    # `TypeError: cannot use 'tuple' as a dict key` on every render.
+    # Confirmed via a minimal repro during development; revisit this pin
+    # once either project ships a fix.
+    "starlette<1.0",
+    "uvicorn[standard]>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "caldav>=1.3",
+    "icalendar>=6.0",
+    "vobject>=0.9.7",
+]
+
+[project.scripts]
+command-center-web = "src.main:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "httpx>=0.27",
+    "radicale>=3.3",
+]

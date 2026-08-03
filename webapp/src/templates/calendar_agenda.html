@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Agenda - Calendar{% endblock %}
+{% block content %}
+{% include "_calendar_nav.html" %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">Agenda</h1>
+    <span style="color:var(--fg-tertiary); font-size:var(--text-footnote)">Next 30 days, through {{ window_end.strftime('%b %d') }}</span>
+    <div class="spacer"></div>
+    <a class="btn primary" href="/events/new" data-modal data-fab>{{ icon('plus') }} New event</a>
+</div>
+
+{% if days %}
+{% for day in days %}
+<div class="card">
+    <h2 style="margin-top:0">
+        {{ day.date.strftime('%A, %b %d') }}
+        {% if day.is_today %}<span class="cell-tag tag-blue">Today</span>{% endif %}
+    </h2>
+    <table>
+        {% for e in day.events %}
+        <tr>
+            <td style="width:90px">{% if not e.all_day and e.start_at %}{{ e.start_at[11:16] }}{% else %}<span class="cell-tag tag-gray">All day</span>{% endif %}</td>
+            <td><span class="color-dot cal-{{ e.calendar_color }}"></span> <a href="/events/{{ e.uid }}/edit" data-modal>{{ e.title }}</a> {% if e.location %}<span class="cell-tag tag-gray">{{ e.location }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% for t in day.tasks %}
+        <tr>
+            <td style="width:90px"><span class="cell-tag tag-orange">Due</span></td>
+            <td><a href="/tasks/{{ t.uid }}/edit" data-modal>{{ t.title }}</a> {% if t.priority %}<span class="cell-tag tag-orange">P{{ t.priority }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endfor %}
+{% else %}
+<div class="card">
+    <div class="empty-state empty-state-rich">
+        <div class="empty-state-icon">{{ icon('calendar') }}</div>
+        <div class="empty-state-title">Nothing scheduled</div>
+        <div class="empty-state-text">Nothing in the next 30 days -- enjoy the quiet, or add an event.</div>
+        <a class="btn primary" href="/events/new" data-modal>{{ icon('plus') }} New event</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

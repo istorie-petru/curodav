@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Manage tags{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+<h1>Tags</h1>
+
+{% if groups %}
+<h2 class="section-label">Groups</h2>
+<div class="calendar-list">
+{% for g in groups %}
+<div class="calendar-row">
+    <form method="post" action="/tags/groups/{{ g.uid }}/edit" class="calendar-row-edit-form" data-modal-keep-open>
+        <input type="text" name="name" value="{{ g.name }}" onchange="this.form.requestSubmit()">
+    </form>
+    <form method="post" action="/tags/groups/{{ g.uid }}/delete" class="calendar-row-delete-form" data-modal-keep-open>
+        <button type="submit" class="icon-btn" title="Delete group (tags are kept, just ungrouped)">{{ icon('x', 'icon-sm') }}</button>
+    </form>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="/tags/groups" class="calendar-new-form" data-modal-keep-open>
+    <input type="text" name="name" placeholder="New tag group name">
+    <button type="submit" class="btn ghost">{{ icon('plus', 'icon-sm') }} Add group</button>
+</form>
+
+<h2 class="section-label" style="margin-top:20px">Tags</h2>
+{% if tags %}
+{% for group_name, group_tags in tags|groupby('group_name') %}
+{% if groups %}<div class="group-sublabel">{{ "Ungrouped" if group_name == "~ Ungrouped" else group_name }}</div>{% endif %}
+<div class="calendar-list">
+{% for t in group_tags %}
+<div class="calendar-row tag-manage-row">
+    <form method="post" action="/tags/{{ t.uid }}/edit" class="calendar-row-edit-form" id="tag-edit-{{ t.uid }}" data-modal-keep-open>
+        <span class="cell-tag tag-{{ t.color }}">{{ t.name }}</span>
+        <input type="text" name="name" value="{{ t.name }}" onchange="this.form.requestSubmit()">
+        <select name="color" class="filter-select" onchange="this.form.requestSubmit()" aria-label="Tag color">
+            {% for col in colors %}
+            <option value="{{ col }}" {% if t.color == col %}selected{% endif %}>{{ col }}</option>
+            {% endfor %}
+        </select>
+        <select name="group_uid" class="filter-select" onchange="this.form.requestSubmit()" aria-label="Tag group">
+            <option value="">(no group)</option>
+            {% for g in groups %}
+            <option value="{{ g.uid }}" {% if t.group_uid == g.uid %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+        <span class="tag-usage-count" title="Used on this many tasks/events/contacts">{{ t.usage_count }}&times;</span>
+    </form>
+    {% if tags|length > 1 %}
+    <form method="post" action="/tags/{{ t.uid }}/merge" class="calendar-row-edit-form" data-modal-keep-open>
+        <select name="dest_uid" class="filter-select" aria-label="Merge into">
+            <option value="" disabled selected>Merge into&hellip;</option>
+            {% for other in tags if other.uid != t.uid %}
+            <option value="{{ other.uid }}">{{ other.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn ghost btn-sm">Merge</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/tags/{{ t.uid }}/delete" class="calendar-row-delete-form" data-modal-keep-open data-confirm-sheet="Delete tag &quot;{{ t.name }}&quot;? It will be removed from every task/event/contact that has it.">
+        <button type="submit" class="icon-btn" title="Delete everywhere">{{ icon('trash', 'icon-sm') }}</button>
+    </form>
+</div>
+{% endfor %}
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">No tags yet -- tags are created automatically the first time you type one on a task, event, or contact.</div>
+{% endif %}
+
+<form method="post" action="/tags" class="calendar-new-form" data-modal-keep-open>
+    <input type="text" name="name" placeholder="New tag name" required list="existing-tag-names">
+    <select name="color" class="filter-select" aria-label="Color">
+        {% for col in colors %}
+        <option value="{{ col }}">{{ col }}</option>
+        {% endfor %}
+    </select>
+    {% if groups %}
+    <select name="group_uid" class="filter-select" aria-label="Group">
+        <option value="">(no group)</option>
+        {% for g in groups %}
+        <option value="{{ g.uid }}">{{ g.name }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit" class="btn primary">Add</button>
+</form>
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Done</a>
+</div>
+</div>
+{% endblock %}

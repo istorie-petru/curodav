@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ month_name }} {{ year }} - Calendar{% endblock %}
+{% block content %}
+{% include "_calendar_nav.html" %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">{{ month_name }} {{ year }}</h1>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="/calendar?year={{ prev_year }}&month={{ prev_month }}">{{ icon('chevron-left', 'icon-sm') }} Prev</a>
+    <a class="btn ghost" href="/calendar?year={{ next_year }}&month={{ next_month }}">Next {{ icon('chevron-right', 'icon-sm') }}</a>
+    <a class="btn primary" href="/events/new" data-modal data-fab>{{ icon('plus') }} New event</a>
+</div>
+
+<div class="card">
+<div class="table-scroll">
+<table class="month-table">
+    <thead>
+        <tr>
+            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for week in weeks %}
+        <tr>
+            {% for day in week %}
+            <td class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}">
+                <a href="/calendar/day/{{ day.iso }}" class="month-day-num">{{ day.date.day }}</a>
+                {% for e in day.events %}
+                    <a class="month-item" href="/events/{{ e.uid }}/edit" data-modal><span class="color-dot cal-{{ e.calendar_color }}"></span> {{ e.title }}</a>
+                {% endfor %}
+                {% for t in day.tasks %}
+                    <a class="month-item" href="/tasks/{{ t.uid }}/edit" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
+                {% endfor %}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script>{% endblock %}

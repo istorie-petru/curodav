@@ -1,0 +1,309 @@
+<!-- Shared widget grid -- Add-widget form + live preview + the grid itself
+     + each widget's own Filters panel. Factored out of dashboard.html
+     (2026-08-02, per-space widgets) so a Space page (routers/projects.py's
+     space_detail) gets the *exact* same widget system as Home, not a
+     second parallel implementation -- both routes build their context via
+     routers/dashboard.py's widget_page_context and simply include this
+     partial. Expects (all supplied by widget_page_context): edit_mode,
+     space_uid ("" on Home, a project_groups uid on a Space), page_url
+     (where actions here should redirect back to), widget_contexts,
+     widget_widths/widget_heights/widget_sources/widget_views/widget_ranges,
+     projects, task_lists, calendars, tag_names. Each widget_contexts
+     entry also carries its own `height` (routers/dashboard.py's
+     _widget_height) alongside `width` -- see widget_inner's
+     .widget-content wrapper below for how that's applied. -->
+{% if edit_mode %}
+<!-- Add widget -- gated behind edit_mode, closed by default (see the
+     dashboard-widget-config history this inherited from Home). -->
+<details class="widget-config" style="margin-bottom:16px">
+<summary class="btn ghost" style="display:inline-block; cursor:pointer">{{ icon('plus', 'icon-sm') }} Add widget</summary>
+<div class="card widget-add-layout" style="margin-top:10px">
+<!-- Source/View/Range -- what data (Source), how it's laid out (View),
+     how far out (Range, only shown when the chosen View uses one).
+     data-source/data-has-range/data-views are what static/
+     dashboard_widget_preview.js reads to filter View to the current
+     Source and show/hide Range; without JS every option stays
+     selectable and the server (_resolve_selection) falls back to a sane
+     combo. -->
+<form method="post" action="/dashboard/widgets" class="widget-select-form" data-preview-url="/dashboard/widgets/preview">
+    {% if space_uid %}<input type="hidden" name="space_uid" value="{{ space_uid }}">{% endif %}
+    <div class="field-grid">
+        <div class="field">
+            <label>Data source</label>
+            <select name="source" class="widget-source-select">
+                {% for key, spec in widget_sources.items() %}
+                <option value="{{ key }}">{{ spec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>View</label>
+            <select name="view" class="widget-view-select">
+                {% for key, spec in widget_views.items() %}
+                <option value="{{ key }}" data-source="{{ spec.source }}" data-has-range="{{ '1' if spec.has_range else '' }}">{{ spec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field widget-range-field">
+            <label>Range</label>
+            <select name="range" class="widget-range-select">
+                {% for key, spec in widget_ranges.items() %}
+                <option value="{{ key }}" data-views="{{ spec.views|join(',') }}">{{ spec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Title (optional)</label>
+            <input type="text" name="title" class="widget-preview-field" placeholder="Defaults to the view's name">
+        </div>
+        <div class="field">
+            <label>Width</label>
+            <select name="width">
+                <option value="">(use the view's own default)</option>
+                {% for wkey, wspec in widget_widths.items() %}
+                <option value="{{ wkey }}">{{ wspec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field widget-limit-field">
+            <label>Limit (Upcoming list only)</label>
+            <input type="number" name="limit" class="widget-preview-field" min="1" placeholder="10">
+        </div>
+    </div>
+    <div class="widget-filter-group">
+        <div class="widget-filter-group-label">
+            {% if space_uid %}Narrow down further (optional -- already scoped to this Space){% else %}Narrow down (optional){% endif %}
+        </div>
+        <div class="field-grid">
+            <div class="field">
+                <label>Project</label>
+                <select name="project_uid" class="widget-preview-field">
+                    <option value="">(any project)</option>
+                    {% for p in projects %}
+                    <option value="{{ p.uid }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>Tags (comma-separated)</label>
+                <input type="text" name="tags" class="tag-input widget-preview-field" list="tag-names-datalist">
+            </div>
+            {% if task_lists %}
+            <div class="field field-wide">
+                <label>Task lists (none selected = all; ignored by event-only widgets)</label>
+                <div class="widget-checkbox-row">
+                    {% for l in task_lists %}
+                    <label class="field-toggle"><input type="checkbox" name="task_list_uids" value="{{ l.uid }}" class="widget-preview-field"> {{ l.name }}</label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if calendars %}
+            <div class="field field-wide">
+                <label>Calendars (none selected = all; ignored by task-only widgets)</label>
+                <div class="widget-checkbox-row">
+                    {% for c in calendars %}
+                    <label class="field-toggle"><input type="checkbox" name="calendar_uids" value="{{ c.uid }}" class="widget-preview-field"> {{ c.name }}</label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="field" style="margin-top:10px">
+        <button type="submit" class="btn primary">Add widget</button>
+    </div>
+</form>
+
+<div class="widget-preview-pane">
+    <div class="widget-filter-group-label">Preview</div>
+    <div class="widget-preview-content" id="widget-preview-content">
+        <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+    </div>
+</div>
+</div>
+</details>
+{% endif %}
+
+<datalist id="tag-names-datalist">
+    {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+</datalist>
+
+{% if widget_contexts %}
+{% macro widget_inner(wc, in_stack) %}
+{% set widget = wc.widget %}
+{% set spec = wc.spec %}
+{% set data = wc.data %}
+<div class="widget-header">
+    {% if edit_mode and not in_stack %}
+    <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
+    {% elif edit_mode and in_stack %}
+    <button type="button" class="icon-btn widget-stack-drag-handle" title="Drag to reorder within this stack" aria-label="Drag to reorder within this stack">{{ icon('move', 'icon-sm') }}</button>
+    {% endif %}
+    <h2 style="margin:0">{{ widget.title or (spec.label if spec else widget.type) }}</h2>
+    <div class="spacer"></div>
+    {% if edit_mode %}
+    {% if in_stack %}
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/unstack" class="form-inline">
+        <button type="submit" class="icon-btn" title="Move out of this stack">{{ icon('corner-down-right', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/delete" class="form-inline" data-delete-undo="{{ widget.title or (spec.label if spec else widget.type) }}">
+        <button type="submit" class="icon-btn" title="Remove widget">{{ icon('x', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+</div>
+
+{% set height = wc.height %}
+<!-- Content height (2026-08-02 -- "a way to resize them vertically and
+     all the widgets having a specific values for their width and
+     height, not any height"). Same fixed-preset model width already
+     uses (routers/dashboard.py's WIDGET_HEIGHTS/_widget_height) --
+     applied to just this data area, not the whole card, so the header
+     above and the Filters panel below always stay their own natural
+     size regardless of how short/tall the content itself is set to.
+     Per-widget, not per-card/per-stack -- a stack's members each keep
+     their own independent height, unlike width, which the whole stack
+     shares (see _dissolve_stack's docstring in dashboard.py for why). -->
+<div class="widget-content" data-height-key="{{ height.key }}" style="max-height:{{ height.px }}px">
+{% if spec %}
+{% include spec.template %}
+{% else %}
+<div class="empty-state">Unknown widget type &ldquo;{{ widget.type }}&rdquo;.</div>
+{% endif %}
+{% if edit_mode %}
+<div class="widget-resize-handle-vertical" title="Drag to resize height"></div>
+{% endif %}
+</div>
+
+{% if edit_mode %}
+<details class="widget-config">
+    <summary>{{ icon('edit', 'icon-sm') }} Filters</summary>
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/edit" class="widget-select-form widget-filters-autosave" style="margin-top:10px">
+        <div class="field-grid">
+            <div class="field">
+                <label>Data source</label>
+                <select name="source" class="widget-source-select">
+                    {% for key, sspec in widget_sources.items() %}
+                    <option value="{{ key }}" {% if wc.selection.source == key %}selected{% endif %}>{{ sspec.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>View</label>
+                <select name="view" class="widget-view-select">
+                    {% for key, vspec in widget_views.items() %}
+                    <option value="{{ key }}" data-source="{{ vspec.source }}" data-has-range="{{ '1' if vspec.has_range else '' }}" {% if wc.selection.view == key %}selected{% endif %}>{{ vspec.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field widget-range-field">
+                <label>Range</label>
+                <select name="range" class="widget-range-select">
+                    {% for key, rspec in widget_ranges.items() %}
+                    <option value="{{ key }}" data-views="{{ rspec.views|join(',') }}" {% if wc.selection.range == key %}selected{% endif %}>{{ rspec.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label>Title</label>
+            <input type="text" name="title" value="{{ widget.title or '' }}" placeholder="{{ spec.label if spec else '' }}">
+        </div>
+        <div class="field widget-limit-field" {% if widget.type != 'upcoming_events' %}style="display:none"{% endif %}>
+            <label>Limit (Upcoming list only)</label>
+            <input type="number" name="limit" min="1" value="{{ widget.config.limit or '' }}" placeholder="10">
+        </div>
+        <div class="widget-filter-group">
+            <div class="widget-filter-group-label">
+                {% if space_uid %}Narrow down further (optional -- already scoped to this Space){% else %}Narrow down (optional){% endif %}
+            </div>
+            <div class="field-grid">
+                <div class="field">
+                    <label>Project</label>
+                    <select name="project_uid">
+                        <option value="">(any project)</option>
+                        {% for p in projects %}
+                        <option value="{{ p.uid }}" {% if widget.config.project_uid == p.uid %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Tags (any match)</label>
+                    <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ widget.config.tags|join(', ') if widget.config.tags else '' }}">
+                </div>
+                {% if spec and 'tasks' in spec.uses and task_lists %}
+                <div class="field field-wide">
+                    <label>Task lists (none selected = all)</label>
+                    <div class="widget-checkbox-row">
+                        {% for l in task_lists %}
+                        <label class="field-toggle"><input type="checkbox" name="task_list_uids" value="{{ l.uid }}" {% if l.uid in (widget.config.list_uids or []) %}checked{% endif %}> {{ l.name }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if spec and 'events' in spec.uses and calendars %}
+                <div class="field field-wide">
+                    <label>Calendars (none selected = all)</label>
+                    <div class="widget-checkbox-row">
+                        {% for c in calendars %}
+                        <label class="field-toggle"><input type="checkbox" name="calendar_uids" value="{{ c.uid }}" {% if c.uid in (widget.config.list_uids or []) %}checked{% endif %}> {{ c.name }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="field widget-filters-save-row" style="margin-top:10px">
+            <button type="submit" class="btn primary widget-save-filters-btn">Save filters</button>
+            <span class="widget-save-status" aria-live="polite"></span>
+        </div>
+    </form>
+</details>
+{% endif %}
+{% endmacro %}
+
+<div class="dashboard-grid {% if edit_mode %}is-editing{% endif %}" id="dashboard-grid">
+{% for wc in widget_contexts %}
+{% if wc.is_stack %}
+<div class="card widget-card widget-stack" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}">
+    {% if edit_mode %}
+    <div class="widget-header widget-stack-header">
+        <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
+        <div class="spacer"></div>
+        <form method="post" action="/dashboard/widgets/{{ wc.widget.uid }}/delete" class="form-inline" data-delete-undo="this stack (its widgets stay, just ungrouped)">
+            <button type="submit" class="icon-btn" title="Dissolve stack (keeps the widgets inside)">{{ icon('x', 'icon-sm') }}</button>
+        </form>
+    </div>
+    {% endif %}
+    {% for child in wc.children %}
+    <div class="widget-stack-item" data-uid="{{ child.widget.uid }}">
+        {{ widget_inner(child, true) }}
+    </div>
+    {% endfor %}
+    {% if edit_mode %}
+    <div class="widget-resize-handle" title="Drag to resize"></div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card widget-card" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}">
+    {{ widget_inner(wc, false) }}
+    {% if edit_mode %}
+    <div class="widget-resize-handle" title="Drag to resize"></div>
+    {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('home' if not space_uid else 'folder') }}</div>
+    <div class="empty-state-title">No widgets yet</div>
+    {% if edit_mode %}
+    <div class="empty-state-text">Add one above to see your agenda, overdue tasks, and upcoming events at a glance.</div>
+    {% else %}
+    <div class="empty-state-text">Turn on Edit layout to add your first widget.</div>
+    <a href="{{ page_url }}?edit=1" class="btn primary">{{ icon('edit', 'icon-sm') }} Edit layout</a>
+    {% endif %}
+</div>
+{% endif %}

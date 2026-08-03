@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{% if cls %}Edit block{% else %}New block{% endif %}{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+<h1>{% if cls %}Edit block{% else %}New block{% endif %}</h1>
+
+<div class="card">
+<form method="post" action="{% if cls %}/schedule/classes/{{ cls.uid }}{% else %}/schedule/classes{% endif %}">
+    <div class="field-grid">
+        <div class="field">
+            <label>Day</label>
+            <select name="day">
+                {% for d in ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"] %}
+                <option value="{{ d }}" {% if (cls and cls.day == d) or (not cls and prefill and prefill.day == d) %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Week</label>
+            <select name="parity">
+                {% for p in parities %}
+                <option value="{{ p }}" {% if cls and cls.parity == p %}selected{% endif %}>
+                    {% if p == 'all' %}Every week{% elif p == 'odd' %}Odd week{% else %}Even week{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Start time</label>
+            <input type="time" name="start_time" value="{{ cls.start_time if cls else (prefill.start_time if prefill else '08:00') }}" required>
+        </div>
+        <div class="field">
+            <label>End time</label>
+            <input type="time" name="end_time" value="{{ cls.end_time if cls else (prefill.end_time if prefill else '10:00') }}" required>
+        </div>
+        <div class="field field-wide">
+            <label>Course name</label>
+            <input type="text" name="name" required value="{{ cls.name if cls else '' }}">
+        </div>
+        <div class="field">
+            <label>Acronym</label>
+            <input type="text" name="acronym" value="{{ cls.acronym if cls else '' }}">
+        </div>
+        <div class="field">
+            <label>Type</label>
+            <input type="text" name="class_type" placeholder="Course, Seminar, Lab..." value="{{ cls.class_type if cls else '' }}">
+        </div>
+        <div class="field field-wide professor-field">
+            <label>Owner</label>
+            <!-- A real dropdown of contacts, not a free-text-with-suggestions
+                 field (a <datalist> looked and behaved inconsistently across
+                 browsers, and blurred "picked an existing person" and "typed
+                 something new" into the same ambiguous input) -- picking a
+                 contact links to it by uid directly, no name-matching
+                 involved. "+ Add new professor..." reveals a plain text box
+                 for a name that isn't a contact yet; routers/schedule.py's
+                 `_resolve_professor` still dedupes that against existing
+                 contacts by exact name before creating a new one, as a
+                 safety net, but the two *paths* here are unambiguous.
+                 CSS-only show/hide (`:has()`), same no-JS pattern
+                 schedule_export.html's mode radios already use. -->
+            <div class="professor-row">
+                <select name="professor_select" id="professor-select">
+                    <option value="">&mdash; None &mdash;</option>
+                    {% for contact in contacts %}
+                    <option value="{{ contact.uid }}" {% if cls and cls.professor_contact_uid == contact.uid %}selected{% endif %}>{{ contact.full_name }}</option>
+                    {% endfor %}
+                    <option value="__new__" {% if cls and cls.professor and not cls.professor_contact_uid %}selected{% endif %}>+ Add new owner...</option>
+                </select>
+                <input type="text" name="professor_new" class="professor-new-input" placeholder="New owner's name"
+                       value="{% if cls and not cls.professor_contact_uid %}{{ cls.professor or '' }}{% endif %}">
+            </div>
+        </div>
+        <div class="field">
+            <label>Room</label>
+            <input type="text" name="room" value="{{ cls.room if cls else '' }}">
+        </div>
+        <div class="field">
+            <label>Credits</label>
+            <input type="number" name="credits" min="0" step="0.5" value="{{ cls.credits if cls else 0 }}">
+        </div>
+        <div class="field">
+            <label>Project</label>
+            <!-- "make university courses to be projects and have a dropdown
+                 there" -- a course links to a project the same way any other
+                 list does (routers/schedule.py's set_schedule_class_project),
+                 not by literally becoming a project object; see db.py's
+                 `projects` table comment for why this app uses a plain FK
+                 column per collection type instead of a generic link/object
+                 graph. -->
+            <select name="project_uid">
+                <option value="">(no project)</option>
+                {% for p in projects %}
+                <option value="{{ p.uid }}" {% if cls and cls.project_uid == p.uid %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field field-toggle field-wide">
+            <input type="checkbox" id="enrolled" name="enrolled" value="1" {% if not cls or cls.enrolled %}checked{% endif %}>
+            <label for="enrolled">Enrolled</label>
+        </div>
+    </div>
+    <button type="submit" class="btn primary">Save</button>
+    <a href="/schedule" class="btn ghost" data-modal-cancel>Cancel</a>
+</form>
+</div>
+
+{% if cls %}
+<form method="post" action="/schedule/classes/{{ cls.uid }}/delete" data-delete-undo="{{ cls.name }}" data-delete-undo-redirect="/schedule">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this class</button>
+</form>
+{% endif %}
+</div>
+{% endblock %}

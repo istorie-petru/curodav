@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Import tasks{% endblock %}
+{% block content %}
+<!-- Plain full page, not a modal -- see calendars_import.html's note on
+     why (modal.js discards the response body of a normal form submit and
+     just reloads the underlying page, which would hide the import
+     result). -->
+<h1>Import tasks</h1>
+
+<p style="color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0 0 16px">
+    Upload an .ics file containing VTODO entries (e.g. an Apple Reminders export). Every task in it is imported
+    into the list you pick below -- an existing one, or a brand-new one created just for this import.
+</p>
+
+<div class="card">
+<form method="post" action="/task-lists/import" class="export-form" id="import-form" enctype="multipart/form-data">
+    {% if task_lists %}
+    <label class="export-mode-option">
+        <input type="radio" name="mode" value="existing" id="mode-existing" checked>
+        Import into an existing list
+    </label>
+    <div class="mode-fields mode-existing-fields">
+        <select name="list_uid">
+            {% for l in task_lists %}
+            <option value="{{ l.uid }}">{{ l.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    <label class="export-mode-option">
+        <input type="radio" name="mode" value="new" id="mode-new" {% if not task_lists %}checked{% endif %}>
+        Import into a new list
+    </label>
+    <div class="mode-fields mode-new-fields">
+        <select name="new_color">
+            {% for col in colors %}
+            <option value="{{ col }}">{{ col|capitalize }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="new_name" placeholder="New list name" value="Imported">
+    </div>
+
+    <div class="field" style="margin-top:14px; max-width:320px">
+        <label>.ics file</label>
+        <input type="file" name="file" accept=".ics,text/calendar" required>
+    </div>
+
+    <button type="submit" class="btn primary">Import</button>
+    <a href="/tasks" class="btn ghost">Cancel</a>
+</form>
+</div>
+{% endblock %}

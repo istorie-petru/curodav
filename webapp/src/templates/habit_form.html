@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{% if habit %}Edit habit{% else %}New habit{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if habit %}Edit habit{% else %}New habit{% endif %}</h1>
+
+<div class="card">
+<form method="post" action="{% if habit %}/habits/{{ habit.uid }}/edit{% else %}/habits{% endif %}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            <input type="text" name="name" required value="{{ habit.name if habit else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="2">{{ habit.description if habit else '' }}</textarea>
+        </div>
+        <div class="field">
+            <label>Color</label>
+            <select name="color">
+                {% for col in colors %}
+                <option value="{{ col }}" {% if habit and habit.color == col %}selected{% endif %}>{{ col }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>Icon (emoji or short glyph)</label>
+            <input type="text" name="icon" value="{{ habit.icon if habit else '' }}" class="project-icon-input">
+        </div>
+        <div class="field">
+            <label>Daily target</label>
+            <!-- Only affects heatmap color intensity (routers/habits.py's
+                 _heatmap_weeks) -- any logged value > 0 still counts as
+                 "done" for streaks, so this isn't a pass/fail threshold,
+                 just how many "units" (glasses, pages, minutes...) counts
+                 as a fully dark day. -->
+            <input type="number" name="target_per_day" min="0" step="0.5" value="{{ habit.target_per_day if habit else 1 }}">
+        </div>
+        <div class="field">
+            <label>Project</label>
+            <select name="project_uid">
+                <option value="">(no project)</option>
+                {% for p in projects %}
+                <option value="{{ p.uid }}" {% if habit and habit.project_uid == p.uid %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field field-wide">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ habit.tags|join(', ') if habit else '' }}">
+            <datalist id="tag-names-datalist">
+                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+            </datalist>
+        </div>
+    </div>
+    <button type="submit" class="btn primary">Save</button>
+    <a href="{% if habit %}/habits/{{ habit.uid }}{% else %}/habits{% endif %}" class="btn ghost">Cancel</a>
+</form>
+</div>
+
+{% if habit %}
+<form method="post" action="/habits/{{ habit.uid }}/delete" data-confirm-sheet="Delete &quot;{{ habit.name }}&quot; and all its logged history? This cannot be undone.">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this habit</button>
+</form>
+{% endif %}
+{% endblock %}

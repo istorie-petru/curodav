@@ -1,0 +1,11 @@
+make tags global, reccomandable. make a projects metadata tab that functions the same as tags, but they also have separate pages that centralizes all tasks, events, contacts etc. a project could be Publication, and University. A whole list could be linked to a project, like a Homework task list or Schedule calendar list or Professors contact list could be linked to University. As well an Editorial task list could be linked to Publication project. Tasks and project are managed in the app's setting in a way that supports multiple of them, to edit them, to manage, to merge, to delete etc.
+
+add the ability to easy add calendar events via mouse click and hold in the monthly view.
+
+also make that university courses to be projects and have drop down there.
+
+Also add options to group projects and tags. Also the ability to archive projects so that they won't appear anymore and all of their data becomes 'retired'. They are not deleted.
+
+Also completed tasks remain in the database view, in today, all, this week views. They will be clearly separated and be shown more to the bottom of the page. separate filtering by priority to  filter by process and by date.
+
+for tasks the start date is always today. also reimplement the timeline view that was in the qt version. all the features with multiple rows and stuff - read the qt files and the md files to see and implement verbatim and don't dare come with an imcomplete one.

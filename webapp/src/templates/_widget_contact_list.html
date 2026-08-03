@@ -1,0 +1,22 @@
+<!-- Contact List widget (routers/dashboard.py's _render_contact_list)
+     -- contacts filtered by tags matching the space's group project names
+     (when group_uid is set) or by explicit config["tags"]. Designed for
+     the Space widget grid so, e.g., a University space automatically shows
+     contacts tagged with its course/project names.
+
+     data.contacts is a list of contact dicts (full_name, org, email,
+     phone, tags, category). §2 Spaces v2, 2026-08-03. -->
+{% if data.contacts %}
+<div class="contact-list-widget">
+    {% for c in data.contacts %}
+    <a class="contact-list-row" href="/contacts/{{ c.uid }}">
+        <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
+        {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
+        {% if c.email %}<span class="contact-list-detail">{{ c.email }}</span>{% endif %}
+        {% if c.phone %}<span class="contact-list-detail">{{ c.phone }}</span>{% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No contacts match this filter.</div>
+{% endif %}

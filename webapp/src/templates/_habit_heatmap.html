@@ -1,0 +1,29 @@
+<!-- Shared GitHub-style heatmap grid, used by both habits_list.html (a
+     short preview per habit card) and habit_detail.html (the full ~year
+     view). Server-rendered HTML, not canvas/JS -- every non-future day
+     cell is its own tiny <form> posting a toggle
+     (/habits/{uid}/entries/{date}/toggle), so clicking a day is a single
+     no-JS request, matching db.py's toggle_habit_entry semantics (no
+     entry/zero -> create value=1; any logged entry -> remove it). -->
+{% macro heatmap(uid, weeks) %}
+<div class="heatmap">
+    <div class="heatmap-months">
+        {% for week in weeks %}<span class="heatmap-month-label">{{ week[0].month_label or '' }}</span>{% endfor %}
+    </div>
+    <div class="heatmap-grid">
+        {% for week in weeks %}
+        <div class="heatmap-week">
+            {% for day in week %}
+            {% if day.is_future %}
+            <span class="heatmap-cell level-future"></span>
+            {% else %}
+            <form method="post" action="/habits/{{ uid }}/entries/{{ day.date }}/toggle" class="heatmap-cell-form">
+                <button type="submit" class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></button>
+            </form>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endmacro %}

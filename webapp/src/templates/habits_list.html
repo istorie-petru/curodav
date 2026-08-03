@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_habit_heatmap.html" import heatmap %}
+{% block title %}Habits{% endblock %}
+{% block content %}
+{% include "_settings_nav.html" %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">Habits</h1>
+    <div class="spacer"></div>
+    <a class="btn primary" href="/habits/new" data-fab>{{ icon('plus') }} New habit</a>
+</div>
+
+{% if cards %}
+{% for card in cards %}
+<div class="card habit-card">
+    <div class="habit-card-header">
+        <a href="/habits/{{ card.habit.uid }}" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px">
+            <span class="cell-tag tag-{{ card.habit.color }}">{% if card.habit.icon %}{{ card.habit.icon }} {% endif %}{{ card.habit.name }}</span>
+        </a>
+        <div class="spacer"></div>
+        <span class="habit-streaks">
+            <span>{{ icon('repeat', 'icon-sm') }} <strong>{{ card.current_streak }}</strong> day streak</span>
+            <span>Best: <strong>{{ card.longest_streak }}</strong></span>
+        </span>
+        <a class="icon-btn" href="/habits/{{ card.habit.uid }}/edit" title="Edit">{{ icon('edit', 'icon-sm') }}</a>
+    </div>
+    {{ heatmap(card.habit.uid, card.weeks) }}
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('activity') }}</div>
+    <div class="empty-state-title">No habits yet</div>
+    <div class="empty-state-text">Track something daily -- reading, water, exercise -- and watch the streak build.</div>
+    <a class="btn primary" href="/habits/new" data-fab>{{ icon('plus') }} New habit</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Schedule{% endblock %}
+{% block content %}
+<!-- 2026-08-01: Schedule is now opened as a modal from Calendar's own nav
+     (_calendar_nav.html's "Schedule" button, data-modal) rather than
+     being a topbar tab/segmented view of its own -- see event_form.html
+     for why this needs the #modal-target wrapper (same reasoning: modal.js
+     fetches this same URL and pulls out just this div's innerHTML instead
+     of navigating). Still a real full page too if visited directly at
+     /schedule -- the wrapper div is inert outside the modal flow.
+
+     Also merged in this pass: Holidays used to be a separate page/nav tab
+     (schedule_holidays.html, now deleted) -- folded into a collapsible
+     section below instead, since a modal is the wrong place for a whole
+     second segmented sub-page, and holidays are a small, infrequent
+     add/remove list, not something that needs its own destination.
+     Settings (semester dates, credits, reminders) moved the other
+     direction -- out of Schedule's own nav entirely and into the app's
+     Settings section (routers/schedule.py's settings_view now uses
+     _settings_nav.html) rather than a details/summary, since editing
+     semester dates once at the start of a term is a genuine "settings"
+     action, not something worth surfacing every time you open the
+     modal. -->
+<div id="modal-target">
+<div class="toolbar">
+    <h1 style="margin:0">Schedule</h1>
+    <div class="spacer"></div>
+    <div class="segmented">
+        <!-- data-modal(-size) here too, not just on the Schedule button
+             that first opens this -- without it, switching Table/Calendar
+             while inside the modal would fall through to a plain page
+             navigation (modal.js only intercepts [data-modal] clicks) and
+             silently kick you out of the modal entirely. Both need "wide"
+             specifically -- the Calendar (week grid) view needs the room
+             even more than Table does. -->
+        <a class="seg-btn {% if view != 'calendar' %}active{% endif %}" href="/schedule?view=table{% if q %}&q={{ q }}{% endif %}" data-modal data-modal-size="wide">Table</a>
+        <a class="seg-btn {% if view == 'calendar' %}active{% endif %}" href="/schedule?view=calendar" data-modal data-modal-size="wide">Calendar</a>
+    </div>
+    {% if view != 'calendar' %}
+    <!-- Compact density (2026-08-01, "a lot of classes, easily viewed") --
+         localStorage-persisted per-device display preference, same
+         category as the Timeline view's gutter width: it doesn't change
+         what data exists, only how much vertical room each row takes, so
+         there's nothing here for the server to know or store. See
+         static/schedule_table.js's initDensity(). -->
+    <button type="button" class="icon-btn" id="schedule-density-toggle" title="Compact rows" aria-label="Toggle compact rows">{{ icon('list', 'icon-sm') }}</button>
+    {% endif %}
+    <a class="btn ghost" href="/schedule/export" data-modal>{{ icon('upload', 'icon-sm') }} Export</a>
+    <a class="btn primary" href="/schedule/classes/new" data-modal data-fab>{{ icon('plus') }} New block</a>
+</div>
+
+<div class="warnings-strip">
+    {% if needed_credits %}
+    <span class="credit-pill {% if used_credits == needed_credits %}ok{% else %}warn{% endif %}">
+        {{ used_credits }}/{{ needed_credits }} credits
+    </span>
+    {% endif %}
+    {% if conflicts %}
+    <span class="credit-pill danger">
+        Overlap:
+        {% for a, b in conflicts[:3] %}{{ a.acronym or a.name }}{{ icon('repeat', 'icon-sm') }}{{ b.acronym or b.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        {% if conflicts|length > 3 %} +{{ conflicts|length - 3 }} more{% endif %}
+    </span>
+    {% endif %}
+</div>
+
+{% if view == 'calendar' %}
+<p style="color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0 0 8px">
+    Hover to preview a slot, click for a 1-hour block, click-and-drag to pick a length. Drag an existing block to move it.
+</p>
+<div class="card">
+<div class="time-grid-wrap">
+<div class="time-grid-head week">
+    {% for d in week_grid.days %}
+    <div class="thd">{{ d[:3] }}</div>
+    {% endfor %}
+</div>
+<div class="time-grid-body" style="height:{{ 24 * week_grid.px_per_hour }}px">
+    <div class="time-gutter">
+        {% for h in week_grid.hours %}
+        <div class="hr-label" style="top:{{ h * week_grid.px_per_hour }}px">{{ "%02d:00"|format(h) }}</div>
+        {% endfor %}
+    </div>
+    <div class="time-cols week">
+        {% for d in week_grid.days %}
+        <div class="time-col schedule-create-col" style="--hr-h:{{ week_grid.px_per_hour }}px" data-day="{{ d }}">
+            {% for cls in week_grid.by_day[d] %}
+            <a class="time-event cal-{% if cls.parity == 'odd' %}orange{% elif cls.parity == 'even' %}green{% else %}blue{% endif %}"
+               data-uid="{{ cls.uid }}" data-start="{{ cls.start_time }}" data-end="{{ cls.end_time }}"
+               href="/schedule/classes/{{ cls.uid }}/edit" data-modal
+               style="top:{{ cls.top_px }}px; height:{{ cls.height_px }}px; left:{{ cls.left_pct }}%; width:{{ cls.width_pct }}%;">
+                <span class="te-name">{{ cls.acronym or cls.name }}</span>
+                <span class="te-time">{{ cls.start_time }}&ndash;{{ cls.end_time }}</span>
+                <span class="te-resize-handle" data-uid="{{ cls.uid }}"></span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+</div>
+</div>
+{% else %}
+
+<!-- Search bar -- same shape as tasks_list.html's filter-bar, just one
+     dimension (there's no natural second "which list" filter for a single
+     schedule the way Tasks has multiple lists). -->
+<!-- data-modal-get: GET forms (a search box) aren't something modal.js's
+     click-delegation covers at all -- without this, hitting Enter here
+     would submit as a normal navigation and, same as the Table/Calendar
+     toggle above, silently kick you out of the modal. -->
+<form method="get" action="/schedule" class="filter-bar" style="margin-bottom:12px" data-modal-get data-modal-size="wide">
+    <input type="hidden" name="view" value="table">
+    <input type="search" name="q" placeholder="Search course, owner, room..." value="{{ q }}">
+</form>
+
+<div class="card">
+{% if classes %}
+<div class="table-scroll">
+<table class="task-table" id="schedule-table">
+    <thead>
+        <tr>
+            <th style="width:26px"></th>
+            <th><a class="th-sort" href="/schedule?sort=day&dir={{ 'desc' if sort=='day' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Day{% if sort=='day' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=time&dir={{ 'desc' if sort=='time' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Time{% if sort=='time' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=name&dir={{ 'desc' if sort=='name' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Course{% if sort=='name' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th>Type</th>
+            <th><a class="th-sort" href="/schedule?sort=professor&dir={{ 'desc' if sort=='professor' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Owner{% if sort=='professor' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=room&dir={{ 'desc' if sort=='room' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Room{% if sort=='room' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=credits&dir={{ 'desc' if sort=='credits' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Credits{% if sort=='credits' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=parity&dir={{ 'desc' if sort=='parity' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Week{% if sort=='parity' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th>Next</th>
+            <th style="width:40px"></th>
+        </tr>
+    </thead>
+    <!-- Grouped by day, 2026-08-01 (see routers/schedule.py's
+         classes_by_day) -- a divider <tbody> per day, same "multiple
+         <tbody> sections in one table" pattern tasks_list.html already
+         uses to separate open/completed tasks, just one section per day
+         instead of two sections total. The Day select stays in each row
+         (dropping it would remove the ability to move a block to a
+         different day from the table) -- it's just visually redundant
+         with its own section header now, not removed. -->
+    {% for day, day_classes in classes_by_day %}
+    <tbody>
+        <tr class="task-section-divider"><td colspan="10">{{ day }} ({{ day_classes|length }})</td></tr>
+    </tbody>
+    <tbody>
+        {% for c in day_classes %}
+        <tr data-uid="{{ c.uid }}" style="{% if not c.enrolled %}opacity:.5{% endif %}">
+            <td>
+                <form class="form-inline" method="post" action="/schedule/classes/{{ c.uid }}/toggle-enrolled">
+                    <button type="submit" class="icon-btn" title="{% if c.enrolled %}Enrolled -- click to drop{% else %}Not enrolled -- click to enroll{% endif %}">{{ icon('check-square') if c.enrolled else icon('square') }}</button>
+                </form>
+            </td>
+            <td>
+                <select class="filter-select reposition-field" data-uid="{{ c.uid }}" data-field="day" style="max-width:90px">
+                    {% for d in days %}
+                    <option value="{{ d }}" {% if c.day == d %}selected{% endif %}>{{ d[:3] }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td style="white-space:nowrap">
+                <input type="time" class="inline-date reposition-field" data-uid="{{ c.uid }}" data-field="start_time" value="{{ c.start_time }}" style="width:auto">
+                &ndash;
+                <input type="time" class="inline-date reposition-field" data-uid="{{ c.uid }}" data-field="end_time" value="{{ c.end_time }}" style="width:auto">
+            </td>
+            <td><a href="/schedule/classes/{{ c.uid }}/edit" data-modal>{{ c.name }}</a> {% if c.acronym %}<span class="cell-tag tag-gray">{{ c.acronym }}</span>{% endif %}</td>
+            <td>{{ c.class_type or "" }}</td>
+            <td>
+                {% if c.professor_contact_uid %}
+                <a href="/contacts/{{ c.professor_contact_uid }}" data-modal>{{ c.professor }}</a>
+                {% else %}
+                {{ c.professor or "" }}
+                {% endif %}
+            </td>
+            <td>{{ c.room or "" }}</td>
+            <td>{{ c.credits }}</td>
+            <td>
+                <select class="pill-select pill-{% if c.parity == 'odd' %}orange{% elif c.parity == 'even' %}green{% else %}gray{% endif %}" data-uid="{{ c.uid }}" data-field="parity">
+                    <option value="all" data-color="gray" {% if c.parity == 'all' %}selected{% endif %}>All</option>
+                    <option value="odd" data-color="orange" {% if c.parity == 'odd' %}selected{% endif %}>Odd</option>
+                    <option value="even" data-color="green" {% if c.parity == 'even' %}selected{% endif %}>Even</option>
+                </select>
+            </td>
+            <td style="white-space:nowrap; color:var(--fg-secondary); font-size:var(--text-caption)">
+                {% if c.next_occurrence == 'today' %}
+                <span class="cell-tag tag-green">today</span>
+                {% elif c.next_occurrence == 'tomorrow' %}
+                <span class="cell-tag tag-blue">tomorrow</span>
+                {% elif c.next_occurrence %}
+                {{ c.next_occurrence }}
+                {% endif %}
+            </td>
+            <td style="text-align:right">
+                <form class="form-inline" method="post" action="/schedule/classes/{{ c.uid }}/delete" data-delete-undo="{{ c.name }}">
+                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    {% endfor %}
+</table>
+</div>
+{% else %}
+<div class="empty-state">{% if q %}No blocks match "{{ q }}".{% else %}No blocks yet. <a href="/schedule/classes/new" data-modal>Add one</a>.{% endif %}</div>
+{% endif %}
+</div>
+{% endif %}
+
+<!-- Holidays -- merged in here 2026-08-01 (was its own page/nav tab).
+     Collapsed by default, same "secondary, occasionally-needed content
+     doesn't need to be permanently visible" reasoning as dashboard.html's
+     "Add widget" panel. Deliberately compact (small labels-in-placeholder
+     inline row, .btn-sm, no field-grid) -- a holiday is a once-a-term,
+     three-field add, not a primary object on the level of a block, and
+     the old full field-grid treatment (big uppercase labels, a full-width
+     primary button) made it visually compete with the actual schedule for
+     attention instead of reading as the secondary utility it is. Same
+     compact-inline-add-form pattern as .calendar-new-form elsewhere
+     (projects_manage.html's "New project" row, etc). -->
+<details class="widget-config" style="margin-top:16px">
+<summary class="btn ghost" style="display:inline-block; cursor:pointer">{{ icon('chevron-down', 'icon-sm') }} Holidays{% if holidays %} ({{ holidays|length }}){% endif %}</summary>
+<div class="card" style="margin-top:10px; padding:12px 14px">
+    <form method="post" action="/schedule/holidays" class="calendar-new-form">
+        <input type="text" name="label" placeholder="Label (e.g. Winter break)">
+        <input type="date" name="date_from" required title="From">
+        <input type="date" name="date_to" required title="To">
+        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
+    </form>
+    {% if holidays %}
+    <table style="margin-top:10px; font-size:var(--text-caption)">
+        <thead><tr><th>Label</th><th>From</th><th>To</th><th></th></tr></thead>
+        {% for h in holidays %}
+        <tr>
+            <td>{{ h.label }}</td>
+            <td>{{ h.date_from }}</td>
+            <td>{{ h.date_to }}</td>
+            <td style="text-align:right">
+                <form class="form-inline" method="post" action="/schedule/holidays/{{ h.uid }}/delete">
+                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash', 'icon-sm') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="empty-state" style="padding:14px 0; font-size:var(--text-caption)">No holidays configured -- blocks repeat every week all semester.</div>
+    {% endif %}
+</div>
+</details>
+</div>
+{% endblock %}

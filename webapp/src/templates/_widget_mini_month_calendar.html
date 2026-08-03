@@ -1,0 +1,27 @@
+<!-- Mini Calendar widget (routers/dashboard.py's _render_mini_month_calendar)
+     -- day numbers only, a small dot for "something's on this day," and
+     prev/next month arrows (plain links to /?cal_year=&cal_month=,
+     same page, no JS required -- same convention routers/calendar.py's
+     own month view already uses). Each day links straight to that day's
+     full Calendar view -- this widget is a glance + jump-off point, not
+     a second place to manage events. -->
+<div class="mini-cal">
+    <div class="mini-cal-label-row">
+        <a class="icon-btn mini-cal-nav" href="/?cal_year={{ data.prev_year }}&cal_month={{ data.prev_month }}#widget-{{ widget.uid }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
+        <div class="mini-cal-label">{{ data.month_label }}</div>
+        <a class="icon-btn mini-cal-nav" href="/?cal_year={{ data.next_year }}&cal_month={{ data.next_month }}#widget-{{ widget.uid }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
+    </div>
+    <div class="mini-cal-weekdays">
+        {% for wd in ["M","T","W","T","F","S","S"] %}<span>{{ wd }}</span>{% endfor %}
+    </div>
+    <div class="mini-cal-grid">
+        {% for week in data.weeks %}
+        {% for day in week %}
+        <a href="/calendar/day/{{ day.date }}"
+           class="mini-cal-day {% if not day.in_month %}is-out{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.has_activity %}has-activity{% endif %}">
+            <span class="mini-cal-day-num">{{ day.day }}</span>
+        </a>
+        {% endfor %}
+        {% endfor %}
+    </div>
+</div>

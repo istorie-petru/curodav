@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{% if contact %}Edit contact{% else %}New contact{% endif %}{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+<h1>{% if contact %}Edit contact{% else %}New contact{% endif %}</h1>
+
+<div class="card">
+<form method="post" action="{% if contact %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Photo</label>
+            <div class="photo-field-row">
+                {{ avatar(contact, 'avatar-large') }}
+                <div class="photo-field-controls">
+                    <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp">
+                    {% if contact and contact.photo_b64 %}
+                    <label class="field-toggle field"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="field field-wide">
+            <label>Full name</label>
+            <input type="text" name="full_name" required value="{{ contact.full_name if contact else '' }}">
+        </div>
+        <div class="field">
+            <label>Organization</label>
+            <input type="text" name="org" value="{{ contact.org if contact else '' }}">
+        </div>
+        <div class="field">
+            <label>Category</label>
+            <input type="text" name="category" value="{{ contact.category if contact else '' }}">
+        </div>
+        <!-- Address book selector removed -- contacts now always live in
+             Active or Archived, toggled via the Archive/Unarchive button on
+             the contact detail page, not a dropdown on the edit form. -->
+        <div class="field">
+            <label>Phone</label>
+            <input type="text" name="phone" value="{{ contact.phone if contact else '' }}">
+        </div>
+        <div class="field">
+            <label>Email</label>
+            <input type="email" name="email" value="{{ contact.email if contact else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Address</label>
+            <input type="text" name="address" value="{{ contact.address if contact else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Tags (comma-separated)</label>
+            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ contact.tags|join(', ') if contact else '' }}">
+            <datalist id="tag-names-datalist">
+                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+            </datalist>
+        </div>
+        <div class="field field-wide">
+            <label>Notes</label>
+            <textarea name="notes" rows="3">{{ contact.notes if contact else '' }}</textarea>
+        </div>
+    </div>
+    <button type="submit" class="btn primary">Save</button>
+    <a href="/contacts" class="btn ghost" data-modal-cancel>Cancel</a>
+</form>
+</div>
+</div>
+{% endblock %}

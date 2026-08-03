@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+{% include "_settings_nav.html" %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">Contacts</h1>
+    <div class="spacer"></div>
+    <!-- Active / Archived toggle + search + category filter.
+         The old addressbook dropdown is gone -- there are now exactly two
+         fixed books (Active and Archived), toggled via the ?view= param. -->
+    <form method="get" action="/contacts" class="filter-bar">
+        <input type="search" name="q" placeholder="Search name, org, phone, email..." value="{{ q }}">
+        <!-- Active / Archived toggle as a styled segmented control -->
+        <div class="segmented-control" role="group" aria-label="View">
+            <a class="segmented-btn {% if view != 'archived' %}active{% endif %}"
+               href="/contacts?view=active{% if q %}&q={{ q|urlencode }}{% endif %}{% if active_category %}&category={{ active_category|urlencode }}{% endif %}">Active</a>
+            <a class="segmented-btn {% if view == 'archived' %}active{% endif %}"
+               href="/contacts?view=archived{% if q %}&q={{ q|urlencode }}{% endif %}{% if active_category %}&category={{ active_category|urlencode }}{% endif %}">Archived</a>
+        </div>
+        {% if categories %}
+        <select name="category" class="filter-select" onchange="this.form.submit()" aria-label="Filter by category">
+            <option value="">All categories</option>
+            {% for c in categories %}
+            <option value="{{ c }}" {% if active_category == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <!-- Carry the view through when the search form itself is submitted -->
+        <input type="hidden" name="view" value="{{ view }}">
+    </form>
+    <a class="icon-btn" href="/addressbooks" data-modal title="Manage address books">{{ icon('address-book') }}</a>
+    <a class="icon-btn" href="/tags" data-modal title="Manage tags">{{ icon('tag') }}</a>
+    <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
+</div>
+
+<div class="card">
+{% if contacts %}
+<div class="contact-list">
+    {% for c in contacts %}
+    <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
+        {{ avatar(c) }}
+        <span class="contact-row-main">
+            <span class="contact-row-name">{{ c.full_name }}</span>
+            <span class="contact-row-sub">
+                {% if c.org %}{{ c.org }}{% endif %}
+                {% if c.org and c.phone %}&middot;{% endif %}
+                {% if c.phone %}{{ c.phone }}{% endif %}
+            </span>
+        </span>
+        {% if c.category %}<span class="cell-tag tag-gray">{{ c.category }}</span>{% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('address-book') }}</div>
+    {% if q or active_category %}
+    <div class="empty-state-title">No contacts match</div>
+    <div class="empty-state-text">Try clearing the search or category filter.</div>
+    {% elif view == 'archived' %}
+    <div class="empty-state-title">No archived contacts</div>
+    <div class="empty-state-text">Contacts you archive will appear here.</div>
+    {% else %}
+    <div class="empty-state-title">No contacts yet</div>
+    <div class="empty-state-text">Add your first contact to get started.</div>
+    <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
+    {% endif %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

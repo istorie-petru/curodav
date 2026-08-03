@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}New project{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+<h1>New project{% if group %} in {{ group.name }}{% endif %}</h1>
+<div class="card">
+<form method="post" action="/projects">
+    <input type="hidden" name="group_uid" value="{{ group_uid }}">
+    <div class="field">
+        <label>Name</label>
+        <input type="text" name="name" required autofocus>
+    </div>
+    <button type="submit" class="btn primary">Create</button>
+    <a href="/projects" class="btn ghost" data-modal-cancel>Cancel</a>
+</form>
+</div>
+</div>
+{% endblock %}

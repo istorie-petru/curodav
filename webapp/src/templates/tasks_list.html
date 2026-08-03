@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block content %}
+{# Project/space filter helpers -- defined at block scope so they're
+   available in the sort_link macro, view switcher, and empty-state links
+   below as well as the filter dropdowns above. Use default([]) so this
+   template is safe when rendered from contexts (inbox_tasks) that don't
+   pass these keys. #}
+{% set _pg = project_groups | default([]) %}
+{% set _pr = projects | default([]) %}
+{% set _aguid = active_group_uid | default('') %}
+{% set _apuid = active_project_uid | default('') %}
+<div class="toolbar top-app-bar">
+    <h1 style="margin:0">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
+    <div class="spacer"></div>
+    <!-- Reworked 2026-08-01: date/status/priority used to be one combined
+         "smart filter" dropdown (a fixed list of presets like "Today" or
+         "High Priority") -- replaced with three independent selects that
+         AND together, so e.g. "this week's high-priority waiting tasks"
+         is expressible without a new preset. See
+         routers/tasks.py::DATE_FILTERS/STATUS_FILTERS/PRIORITY_FILTERS. -->
+    <form method="get" action="/tasks" class="filter-bar">
+        <input type="search" name="q" placeholder="Search tasks..." value="{{ q }}">
+        <select name="list_path" class="filter-select" onchange="this.form.submit()" aria-label="Filter by list">
+            <option value="">All lists</option>
+            {% for l in task_lists %}
+            <option value="{{ l.uid }}" {% if active_list == l.uid %}selected{% endif %}>{{ l.name }}</option>
+            {% endfor %}
+        </select>
+        <!-- Space and project filters (§7 of the plan) -- additive with the
+             list/date/status/priority filters above. Only one of space or
+             project is useful at a time (picking a project already implies a
+             space), so clearing one clears the other via onchange.
+             Not shown in the Inbox view (is_inbox) since inbox is already a
+             filter itself and project_groups/projects won't be in context.
+             _pg/_pr/_aguid/_apuid set at block scope above. -->
+        {% if _pg %}
+        <select name="group_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by space">
+            <option value="">All spaces</option>
+            {% for g in _pg %}
+            <option value="{{ g.uid }}" {% if _aguid == g.uid %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        {% if _pr %}
+        <select name="project_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by project">
+            <option value="">All projects</option>
+            {% for p in _pr %}
+            <option value="{{ p.uid }}" {% if _apuid == p.uid %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <select name="date_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by date">
+            {% for f in date_filters %}
+            <option value="{{ f }}" {% if active_date_filter == f %}selected{% endif %}>{{ date_filter_labels[f] }}</option>
+            {% endfor %}
+        </select>
+        <select name="status_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by status">
+            {% for f in status_filters %}
+            <option value="{{ f }}" {% if active_status_filter == f %}selected{% endif %}>{{ status_filter_labels[f] }}</option>
+            {% endfor %}
+        </select>
+        <select name="priority_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by priority">
+            {% for f in priority_filters %}
+            <option value="{{ f }}" {% if active_priority_filter == f %}selected{% endif %}>{{ priority_filter_labels[f] }}</option>
+            {% endfor %}
+        </select>
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="dir" value="{{ dir }}">
+    </form>
+    <a class="icon-btn" href="/task-lists" data-modal title="Manage lists">{{ icon('list') }}</a>
+    <a class="icon-btn" href="/tags" data-modal title="Manage tags">{{ icon('tag') }}</a>
+    <div class="segmented">
+        <a class="seg-btn active" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}{% if q %}&q={{ q }}{% endif %}{% if active_list %}&list_path={{ active_list }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">Table</a>
+        <a class="seg-btn" href="/tasks/timeline">Timeline</a>
+        <a class="seg-btn" href="/tasks/board?{% if q %}q={{ q }}&{% endif %}{% if active_list %}list_path={{ active_list }}{% endif %}">Board</a>
+    </div>
+    <a class="btn primary" href="/tasks/new{% if active_list %}?list_path={{ active_list }}{% endif %}" data-modal data-fab>{{ icon('plus') }} New task</a>
+</div>
+
+<!-- Quick-add -- 2026-08-01 (see plans/webapp-action-pipelines-audit.md's
+     "create is form-first everywhere" finding). Title-only, Enter to
+     submit, posts straight to the real create endpoint with every other
+     field left at its default -- the full field-grid modal (the "+ New
+     task" button above) is still there for anyone who wants due dates/
+     priority/tags up front, this is just for the common "jot it down"
+     case. A no-JS fallback works identically (it's a real form, not a
+     JS-only affordance) -- static/tasks_table.js only adds the
+     stay-on-page fetch behavior on top. -->
+<form method="post" action="/tasks" class="quick-add-form" id="quick-add-form" style="margin-bottom:12px">
+    {% if active_list %}<input type="hidden" name="list_path" value="{{ active_list }}">{% endif %}
+    <input type="text" name="title" placeholder="Quick-add a task and press Enter..." required>
+</form>
+
+<!-- Bulk actions -- 2026-08-01. Hidden until at least one row is selected
+     (static/tasks_table.js toggles it), same "don't show controls with
+     nothing to act on" reasoning as Dashboard's edit-mode gating. -->
+<div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none">
+    <span id="bulk-count" class="bulk-count"></span>
+    <div class="spacer"></div>
+    <select id="bulk-status-select" aria-label="Set status">
+        <option value="">Set status&hellip;</option>
+        {% for s in statuses %}<option value="{{ s }}">{{ status_labels[s] }}</option>{% endfor %}
+    </select>
+    <select id="bulk-list-select" aria-label="Move to list">
+        <option value="">Move to list&hellip;</option>
+        {% for l in task_lists %}<option value="{{ l.uid }}">{{ l.name }}</option>{% endfor %}
+    </select>
+    <input type="text" id="bulk-tag-input" placeholder="tag name" list="tag-names-datalist" style="width:120px">
+    <button type="button" id="bulk-tag-add" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Add</button>
+    <button type="button" id="bulk-tag-remove" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Remove</button>
+    <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
+<datalist id="tag-names-datalist">
+    {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+</datalist>
+
+{% macro sort_link(key, label) %}
+<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_list %}&list_path={{ active_list }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
+{% endmacro %}
+
+{% if open_tasks or completed_tasks %}
+<div class="card table-scroll">
+<table class="task-table" id="task-table">
+    <thead>
+        <tr>
+            <th style="width:26px"></th>
+            <th>{{ sort_link('title', 'Title') }}</th>
+            <th>{{ sort_link('status', 'Status') }}</th>
+            <th>{{ sort_link('priority', 'Priority') }}</th>
+            <th>{{ sort_link('due_at', 'Due') }}</th>
+            <th>Tags</th>
+            <th style="width:40px"></th>
+        </tr>
+    </thead>
+    {# Row-select checkbox for bulk actions (static/tasks_table.js) --
+       2026-08-01. This column used to be a "Mark done" checkbox, but it
+       duplicated the Status pill two columns over (which already covers
+       "set to Done" inline, no reload) -- one control per outcome, not
+       two. Marking a task done is now the pill's job exclusively; this
+       checkbox's only job is selection.
+
+       WARNING for whoever edits this comment next: Jinja comments end at
+       the FIRST close-marker found, full stop, no nesting -- so this
+       comment block must never contain that literal two-character close
+       marker (hash immediately followed by a closing curly brace)
+       anywhere in its text, not even inside quotes, or everything after
+       it renders as visible page text above every row (this happened
+       twice already: 2026-08-01 and again 2026-08-02, both times from
+       this same comment describing its own delimiters using the actual
+       characters instead of avoiding them). If you need to talk about
+       Jinja comment syntax here, describe it, do not type it. #}
+    {% macro task_row(t) %}
+    <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
+        <td>
+            <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}">
+        </td>
+        <td>
+            <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+            {% if t.parent_uid %}<span class="cell-tag tag-gray" title="Subtask">{{ icon('corner-down-right', 'icon-sm') }} sub</span>{% endif %}
+        </td>
+        <td>
+            <select class="pill-select pill-{{ status_colors[t.status] }}" data-uid="{{ t.uid }}" data-field="status">
+                {% for s in statuses %}
+                <option value="{{ s }}" data-color="{{ status_colors[s] }}" {% if t.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <select class="pill-select {% if t.priority %}pill-{{ priority_colors[t.priority] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="priority">
+                <option value="" data-color="gray" {% if not t.priority %}selected{% endif %}>&mdash;</option>
+                {% for p, label in priority_labels.items() %}
+                <option value="{{ p }}" data-color="{{ priority_colors[p] }}" {% if t.priority == p %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
+        </td>
+        <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}</td>
+        <td style="text-align:right">
+            <!-- Consistent delete confirmation, 2026-08-01 (see
+                 plans/webapp-action-pipelines-audit.md) -- a plain task is
+                 cheap to redo, so it gets real undo (delay-based, no
+                 confirmation dialog at all) same as a dashboard widget.
+                 One with subtasks gets an explicit confirm sheet instead,
+                 since deleting it cascades and that's not something a
+                 5-second undo window is a good fit for. -->
+            {% if t.uid in parent_uids %}
+            <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-confirm-sheet="Delete &quot;{{ t.title }}&quot; and its subtasks? This cannot be undone.">
+                <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+            </form>
+            {% else %}
+            <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}">
+                <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+            </form>
+            {% endif %}
+        </td>
+    </tr>
+    {% endmacro %}
+    <tbody>
+        {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
+    </tbody>
+    {% if completed_tasks and open_tasks %}
+    <!-- Completed tasks stay visible rather than vanishing on check-off,
+         but are clearly separated and pushed to the bottom -- a dedicated
+         header row (not just a CSS class) makes the boundary obvious even
+         scrolling through a long table. -->
+    <tbody>
+        <tr class="task-section-divider"><td colspan="7">Completed ({{ completed_tasks|length }})</td></tr>
+    </tbody>
+    {% endif %}
+    {% if completed_tasks %}
+    <tbody>
+        {% for t in completed_tasks %}{{ task_row(t) }}{% endfor %}
+    </tbody>
+    {% endif %}
+</table>
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('check-square') }}</div>
+    {% if q or active_list or _apuid or _aguid %}
+    <div class="empty-state-title">No tasks match this filter</div>
+    <div class="empty-state-text">Try a different list, project, or space, or clear the search and filters above.</div>
+    {% elif is_inbox %}
+    <div class="empty-state-title">Nothing to triage</div>
+    <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>
+    {% else %}
+    <div class="empty-state-title">No tasks yet</div>
+    <div class="empty-state-text">Add your first task to get started.</div>
+    <a class="btn primary" href="/tasks/new{% if active_list %}?list_path={{ active_list }}{% endif %}" data-modal data-fab>{{ icon('plus') }} New task</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{# Habits & Recurring section -- §3 of the plan. Only shown on the main
+   tasks list (not inbox), since recurring tasks and habits are global
+   concepts not scoped to a single inbox-style filtered view. Habit CRUD
+   stays in Settings at /habits; this section is for daily use only. #}
+{% if not is_inbox and (recurring_tasks or habits) %}
+<details class="habits-recurring-section" open>
+    <summary class="habits-recurring-summary">
+        {{ icon('repeat') }} Habits &amp; Recurring
+        <span class="habits-recurring-count">
+            {% set total = recurring_tasks|length + habits|length %}
+            {{ total }} item{{ 's' if total != 1 else '' }}
+        </span>
+    </summary>
+    <div class="card" style="margin-top:8px">
+        <table class="task-table habits-recurring-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Frequency</th>
+                    <th style="width:90px; text-align:center">Today</th>
+                    <th style="width:40px"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in recurring_tasks %}
+                <tr>
+                    <td>
+                        <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                        <span class="cell-tag tag-blue" title="Recurring">{{ icon('repeat', 'icon-sm') }} recurring</span>
+                    </td>
+                    <td><span class="cell-tag tag-gray">{{ t.recurrence }}</span></td>
+                    <td style="text-align:center">&mdash;</td>
+                    <td style="text-align:right">
+                        <a class="icon-btn" href="/tasks/{{ t.uid }}/edit" data-modal title="Edit">{{ icon('edit-2') }}</a>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% for h in habits %}
+                {% set entry = habit_entries_today.get(h.uid) %}
+                {% set done_today = entry and entry.value and entry.value > 0 %}
+                <tr class="{% if done_today %}task-row-completed{% endif %}">
+                    <td>
+                        <a href="/habits/{{ h.uid }}">{{ h.name }}</a>
+                        <span class="cell-tag tag-{{ h.color or 'blue' }}">habit</span>
+                    </td>
+                    <td>
+                        {% if h.target_per_day and h.target_per_day != 1 %}
+                        <span class="cell-tag tag-gray">{{ h.target_per_day|int if h.target_per_day == h.target_per_day|int else h.target_per_day }}x / day</span>
+                        {% else %}
+                        <span class="cell-tag tag-gray">daily</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center">
+                        {# Quick-toggle for today. Uses the existing toggle endpoint;
+                           redirect goes back to the tasks page via referer header. #}
+                        <form method="post" action="/habits/{{ h.uid }}/entries/{{ today_iso }}/toggle" class="form-inline">
+                            <button type="submit" class="habit-toggle-btn {% if done_today %}habit-toggle-done{% endif %}" title="{{ 'Mark undone' if done_today else 'Mark done' }}" aria-label="{{ 'Mark undone' if done_today else 'Mark done' }}">
+                                {{ icon('check-circle' if done_today else 'circle') }}
+                            </button>
+                        </form>
+                    </td>
+                    <td style="text-align:right">
+                        <a class="icon-btn" href="/habits/{{ h.uid }}/edit" data-modal title="Edit habit">{{ icon('edit-2') }}</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="padding:8px 12px; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted)">
+            <a href="/habits">Manage habits in Settings</a>
+        </div>
+    </div>
+</details>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}
