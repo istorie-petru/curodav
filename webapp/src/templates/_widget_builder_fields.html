@@ -1,0 +1,157 @@
+<!-- Widget configuration fields (Source/View/Range/Title/Limit +
+     project/tags/task-list/calendar filters) -- the *body* of the Add-widget
+     form, shared by the workspace Add-widget form (_widget_add_form.html)
+     and the Widget Builder in the Customize modal (dashboard_customize.html)
+     so the two surfaces can never drift apart. Deliberately has NO <form>
+     wrapper, NO submit button, and NO preview pane -- callers own those
+     (workspace: stacked form + preview below; builder: two-pane layout with
+     an always-visible preview and its own Add/Duplicate/Edit actions).
+     Expects the same context _widget_add_form.html does: space_uid,
+     widget_sources/widget_views/widget_ranges, projects,
+     task_lists, calendars, tag_names, tag_name_items (tag_names reshaped
+     into {uid, name} pairs -- uid == name, a label's own name IS its
+     identity -- for the Labels chip multiselect below, which reuses
+     _widget_list_multiselect.html's {uid, name} contract). There is no
+     Width field any more
+     (2026-08-07 removal of the manual width picker/drag-resize) -- a
+     widget's width is always just its type's own default_width, picked
+     automatically, no per-instance override.
+
+     2026-08-07 (modal-input-design Phase A) -- Source/View/Range/Limit/
+     Labels reworked from raw select/number/text-with-datalist into real
+     radio/checkbox/number inputs styled as a tile picker, segmented
+     controls, and a stepper, following the same "real input, CSS does the
+     visual trick" convention as .pill-select/.field-toggle/the icon-swatch
+     picker elsewhere in this app -- a no-JS submission still works
+     unchanged. See _widget_edit_form.html for the same treatment applied
+     to the per-widget Filters editor. -->
+{% if space_uid %}<input type="hidden" name="space_uid" value="{{ space_uid }}">{% endif %}
+{% if project_uid %}<input type="hidden" name="project_uid" value="{{ project_uid }}">{% endif %}
+{% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+<!-- Title first (2026-08-07 follow-up) -- was last in the field-grid,
+     below Source/View/Range/Advanced (the "Advanced" grouping itself is
+     gone now too, see the Labels/Task lists/Calendars comment below);
+     moved to the very top since it's the one thing every other field's
+     default depends on ("Defaults to the view's name") rather than the
+     other way around, and it's the one plain free-text field in a form
+     that's otherwise all pickers -- leading with it means the form opens
+     on something immediately typeable instead of a wall of choices. No
+     longer says "(optional)" in its own label text -- see
+     .field-required's own comment below for the replacement convention
+     (unmarked = optional, so Title simply isn't marked, same as Limit/
+     Labels below). -->
+<div class="field">
+    <label>Title</label>
+    <input type="text" name="title" class="widget-preview-field" placeholder="Defaults to the view's name">
+</div>
+<!-- Source/View/Range -- what data (Source), how it's laid out (View),
+     how far out (Range, only shown when the chosen View uses one). All
+     three are marked required (.field-required) -- unlike Title/Limit/
+     Project/Labels below, a widget can't exist without them; see
+     .field-required's own comment in style.css for why this replaces the
+     old "(optional)"-on-the-optional-ones convention rather than
+     matching it (marking the 3 required fields is fewer annotations than
+     marking every optional one, and "unmarked = optional" needs no label
+     text at all).
+     data-source/data-has-range/data-views (now carried on the radio
+     inputs themselves) are what static/dashboard_widget_preview.js reads
+     to filter View to the current Source and show/hide Range; without JS
+     every option stays a real, submittable radio input the whole time
+     (just hidden, never removed/disabled), so a no-JS submission still
+     works -- the server's own resolver (_resolve_selection) already
+     tolerates an inapplicable combo by falling back to something sane,
+     this only exists to stop a JS-equipped user from ever *seeing* a
+     combo that wouldn't do what the labels imply. -->
+<div class="field">
+    <label class="field-required">Data source</label>
+    <div class="tile-select widget-source-select">
+        {% for key, spec in widget_sources.items() %}
+        <label class="tile-option">
+            <input type="radio" name="source" value="{{ key }}" class="tile-radio" {% if loop.first %}checked{% endif %}>
+            <span class="tile-icon">{{ icon(spec.icon, 'icon-sm') }}</span>
+            <span class="tile-option-label">{{ spec.label }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+<div class="field-grid">
+    <!-- View/Range (2026-08-07, "should look the same as list") -- a
+         single-select variant of the same _widget_list_multiselect.html
+         trigger+panel used by Labels/Task lists/Calendars below, instead
+         of a native <select> (whose open-list chrome is unstyleable
+         browser UI -- see that partial's own header comment). -->
+    {% set _view_ns = namespace(items=[]) %}
+    {% for key, spec in widget_views.items() %}
+    {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': spec.label, 'data': {'source': spec.source, 'has-range': ('1' if spec.has_range else '')}}] %}
+    {% endfor %}
+    {% set ms_name = 'view' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'View' %}
+    {% set ms_label_class = 'field-required' %}
+    {% set ms_items = _view_ns.items %}
+    {% set ms_selected = '' %}
+    {% set ms_wide = false %}
+    {% set ms_root_class = 'widget-view-select' %}
+    {% include "_widget_list_multiselect.html" %}
+    {% set _range_ns = namespace(items=[]) %}
+    {% for key, spec in widget_ranges.items() %}
+    {% set _range_ns.items = _range_ns.items + [{'uid': key, 'name': spec.label, 'data': {'views': spec.views|join(',')}}] %}
+    {% endfor %}
+    {% set ms_name = 'range' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Range' %}
+    {% set ms_label_class = 'field-required' %}
+    {% set ms_items = _range_ns.items %}
+    {% set ms_selected = '' %}
+    {% set ms_wide = false %}
+    {% set ms_extra_class = 'widget-range-field' %}
+    {% set ms_root_class = 'widget-range-select' %}
+    {% include "_widget_list_multiselect.html" %}
+    <div class="field widget-limit-field">
+        <label>Limit</label>
+        <div class="stepper">
+            <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
+            <input type="number" name="limit" class="widget-preview-field stepper-input" min="1" placeholder="10">
+            <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
+        </div>
+    </div>
+</div>
+<!-- Labels/Task lists/Calendars -- used to be wrapped in a visually
+     distinct "Advanced" group (background/heading/its own field-grid);
+     2026-08-07 follow-up ("move them into normality") flattened that
+     away entirely -- these are now plain fields in the normal field
+     flow, same as Title/Source/View/Range/Limit above, no special
+     treatment. The manual "Project" filter select that used to live here
+     is gone too (2026-08-07, "purge all remains of projects") -- the
+     *hidden* project_uid field above (auto-scoping a widget to whichever
+     Space/Project page the modal was opened from) is unrelated and
+     still there. -->
+<!-- Labels -- chip multiselect (2026-08-07), reusing
+     _widget_list_multiselect.html's checkbox-dropdown pattern.
+     A label's own name IS its identity (no separate uid, see
+     object_labels' natural-key design), so ms_items is faked
+     as {uid: name, name: name} pairs -- the checkbox value
+     (ms_name="tags_labels") is the label name itself. The
+     server (_combine_tags in routers/dashboard.py) folds
+     tags_labels together with the legacy tags= string field
+     into the same comma-separated config["tags"] it always
+     stored, so no stored-config format changed. -->
+{% set ms_name = 'tags_labels' %}
+{% set ms_label = 'Labels' %}
+{% set ms_items = tag_name_items %}
+{% set ms_selected = [] %}
+{% include "_widget_list_multiselect.html" %}
+{% if task_lists %}
+{% set ms_name = 'task_list_uids' %}
+{% set ms_label = 'Task lists' %}
+{% set ms_items = task_lists %}
+{% set ms_selected = [] %}
+{% include "_widget_list_multiselect.html" %}
+{% endif %}
+{% if calendars %}
+{% set ms_name = 'calendar_uids' %}
+{% set ms_label = 'Calendars' %}
+{% set ms_items = calendars %}
+{% set ms_selected = [] %}
+{% include "_widget_list_multiselect.html" %}
+{% endif %}

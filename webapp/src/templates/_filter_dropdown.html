@@ -1,0 +1,68 @@
+{# Reusable "fancy dropdown" page filter (2026-08-08, direct feedback:
+   "make the label multi select thing a fancy drop down menu with multi
+   select. also make all the other filters on calendar, task, contact
+   page also fancy dropdown menus. remove the filters details button and
+   reintegrate these drop down menus into the topbar").
+
+   Visually and behaviorally the *same* component _widget_list_
+   multiselect.html already is (identical `.multiselect`/
+   `.multiselect-trigger`/`.multiselect-panel` markup, so there is only
+   one set of CSS rules and one JS handler -- static/app.js's generic
+   `.multiselect` open/close + summary-sync code -- for "a dropdown
+   trigger that opens a floating checkbox/radio panel" anywhere in this
+   app, not two near-identical copies that could drift). The one real
+   difference: that partial's inputs belong to a `<form>` this app POSTs
+   to save an edited object (a task's Labels, a widget's Task lists...).
+   These belong to a plain `method="get"` `<form>` a *page filter* This
+   navigates on every pick instead of waiting for a Save button, same
+   "direct control, no separate confirm step" convention every other
+   filter/preference in this app already uses (Settings' own segmented
+   controls, labels_manage.html's inline edits, etc.) -- clicking a label
+   in the dropdown re-navigates immediately with that label added to/
+   removed from the URL's `label=` params, the same way clicking a plain
+   filter chip always has.
+
+   Expects in context:
+     fd_name     -- query param name (e.g. "label", "status_filter")
+     fd_label    -- visible field label (e.g. "Labels", "Status")
+     fd_items    -- iterable of {value, name}
+     fd_selected -- multi mode: iterable of currently-selected values.
+                    single mode: one scalar current value.
+     fd_mode     -- "multi" (checkboxes, empty selection reads "All") or
+                    "single" (radios, exactly one always selected -- every
+                    caller's own fd_items already includes an explicit
+                    "All" entry as one of the real options, same as the
+                    `<select>`s this replaces already did).
+     fd_form_id  -- id of the shared `method="get"` `<form>` these
+                    inputs submit into (every filter on one page shares
+                    one form, so picking one filter's value doesn't
+                    lose whatever the others are currently set to --
+                    same `form="..."` cross-cell ownership pattern
+                    labels_manage.html's table already relies on). #}
+{% set _mode = fd_mode | default('multi') %}
+{% set _single = _mode == 'single' %}
+{# Single-select: fd_selected is a scalar, and an empty-string value is a
+   legit selection -- it's the caller's explicit "All" option (calendar's
+   "All labels", tasks' "All dates/statuses/priorities"). Wrapping it
+   unconditionally (rather than `[fd_selected] if fd_selected`) is what
+   makes that "All" radio actually render checked. #}
+{% set _sel = [fd_selected | default('')] if _single else (fd_selected | default([])) %}
+{% set _n = fd_items | selectattr('value', 'in', _sel) | list | length %}
+{% set _total = fd_items | length %}
+{% set _sel_item = (fd_items | selectattr('value', 'equalto', fd_selected) | list | first) if _single else none %}
+<div class="multiselect widget-list-multiselect filter-dropdown" data-ms data-ms-mode="{{ 'filter' if not _single else 'single' }}" data-ms-label="{{ fd_label|lower }}">
+    <button type="button" class="multiselect-trigger ms-trigger filter-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+        <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else fd_label }}{% else %}{% if _n == 0 %}{{ fd_label }}{% else %}{{ fd_label }} ({{ _n }}){% endif %}{% endif %}</span>
+        <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+    </button>
+    <div class="multiselect-panel ms-panel">
+        {% for it in fd_items %}
+        <label class="multiselect-option">
+            <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ fd_name }}" value="{{ it.value }}"
+                   form="{{ fd_form_id }}" onchange="this.form.requestSubmit()"
+                   {% if it.value in _sel %}checked{% endif %}>
+            <span>{{ it.name }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>

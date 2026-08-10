@@ -5,7 +5,8 @@
      contacts tagged with its course/project names.
 
      data.contacts is a list of contact dicts (full_name, org, email,
-     phone, tags, category). §2 Spaces v2, 2026-08-03. -->
+     phone, tags). §2 Spaces v2, 2026-08-03; `category` dropped Phase 5
+     (label-space rework, 2026-08-07). -->
 {% if data.contacts %}
 <div class="contact-list-widget">
     {% for c in data.contacts %}

@@ -8,9 +8,19 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import RedirectResponse
 
 from .. import db
-from ..deps import get_bridge, get_db, templates
+from ..deps import get_db, templates
+from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
+
+# Phase 1 (label-space rework, 2026-08-06) dropped the two-addressbook
+# model (Active/Archived as real CardDAV collections) along with
+# `addressbooks`/`addressbook_path` entirely, replacing "archived" with a
+# plain `Archived` tag. 2026-08-07: that tag-based Active/Archived split
+# is gone too, per explicit instruction -- Contacts has no special
+# "archived" state at all now, only labels, same as every other object
+# type. If you want to mark a contact as archived, put a label on it;
+# nothing in this router treats any particular label name specially.
 
 # Photo upload -- see db.py's contacts.photo_b64/photo_type columns and
 # vcard_rows.py for how this round-trips through the vCard PHOTO property.
@@ -18,10 +28,10 @@ router = APIRouter(prefix="/contacts", tags=["contacts"])
 # than trusting the browser-supplied filename extension -- this app has no
 # auth (see webapp/README.md's "Known gaps"), so anything reachable by an
 # unauthenticated POST should validate what it's actually being handed
-# before it goes anywhere near disk/Radicale, not just accept<->reject
-# based on the client's own claims about the file. No resizing/
-# transcoding (would need Pillow, a new dependency) -- the size cap is the
-# only guard against an oversized upload bloating the vCard.
+# before it goes anywhere near disk, not just accept<->reject based on the
+# client's own claims about the file. No resizing/transcoding (would need
+# Pillow, a new dependency) -- the size cap is the only guard against an
+# oversized upload bloating the vCard.
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024
 _CONTENT_TYPE_TO_VCARD_TYPE = {
     "image/jpeg": "JPEG",
@@ -56,41 +66,45 @@ def _tags_list(tags: str) -> list[str]:
 def list_contacts(
     request: Request,
     q: str | None = None,
-    category: str | None = None,
-    view: str | None = None,  # "active" (default) or "archived"
+    tag: str | None = None,
     conn=Depends(get_db),
 ):
-    # "active" is the default view; "archived" shows only Archived book contacts.
-    show_archived = view == "archived"
-    addressbook_path = (
-        db.ARCHIVED_ADDRESSBOOK_UID if show_archived else db.DEFAULT_ADDRESSBOOK_UID
-    )
-    contacts = db.list_contacts(conn, q=q, category=category, addressbook_path=addressbook_path)
-    categories = db.list_contact_categories(conn)
+    contacts = db.list_contacts(conn, q=q)
+    # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
+    # this is now the *only* grouping/filtering mechanism for contacts,
+    # `category` is gone) -- `?tag=` matches contacts.tags
+    # case-insensitively (a tag written both "University" and "university"
+    # is one filter), same matching the project People section uses.
+    active_tag = tag.lower() if tag else ""
+    if active_tag:
+        contacts = [
+            c for c in contacts
+            if any(t.lower() == active_tag for t in c.get("tags") or [])
+        ]
     return templates.TemplateResponse(
         "contacts_list.html",
         {
             "request": request,
             "active_tab": "contacts",
-            "settings_tab": "contacts",
             "contacts": contacts,
-            "categories": categories,
             "q": q or "",
-            "active_category": category or "",
-            "view": "archived" if show_archived else "active",
+            "contact_tags": db.list_contact_tag_names(conn),
+            "active_tag": active_tag,
         },
     )
 
 
 @router.get("/new")
 def new_contact_form(request: Request, conn=Depends(get_db)):
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "contact_form.html",
         {
             "request": request,
             "active_tab": "contacts",
             "contact": None,
-            "tag_names": db.list_tag_names_in_use(conn),
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
         },
     )
 
@@ -102,55 +116,43 @@ async def create_contact(
     phone: str = Form(""),
     email: str = Form(""),
     address: str = Form(""),
-    category: str = Form(""),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
-    bridge=Depends(get_bridge),
     conn=Depends(get_db),
 ):
+    tags = dashboard_router._combine_tags(tags, tags_labels)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
         "full_name": full_name,
-        "org": org or None,
-        "phone": phone or None,
-        "email": email or None,
-        "address": address or None,
-        "category": category or None,
+        "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
+        "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
+        "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
+        "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
         "tags": _tags_list(tags),
-        "notes": notes or None,
-        "addressbook_path": db.DEFAULT_ADDRESSBOOK_UID,
+        "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
         "photo_b64": photo_b64,
         "photo_type": photo_type,
         "created_at": now,
         "updated_at": now,
     }
-    saved = bridge.save_contact_row(row)
-    db.upsert_contact(conn, saved)
-    db.ensure_tags_registered(conn, row["tags"])
+    db.upsert_contact(conn, row)
     return RedirectResponse(url="/contacts", status_code=303)
 
 
 @router.get("/{uid}")
 def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
-    addressbook = db.get_addressbook(conn, contact["addressbook_path"]) if contact and contact.get("addressbook_path") else None
-    is_archived = (
-        contact["addressbook_path"] == db.ARCHIVED_ADDRESSBOOK_UID
-        if contact
-        else False
-    )
     return templates.TemplateResponse(
         "contact_detail.html",
         {
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
-            "addressbook": addressbook,
-            "is_archived": is_archived,
         },
     )
 
@@ -158,13 +160,15 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
 @router.get("/{uid}/edit")
 def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "contact_form.html",
         {
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
-            "tag_names": db.list_tag_names_in_use(conn),
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
         },
     )
 
@@ -177,34 +181,26 @@ async def update_contact(
     phone: str = Form(""),
     email: str = Form(""),
     address: str = Form(""),
-    category: str = Form(""),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     remove_photo: str = Form(""),
-    bridge=Depends(get_bridge),
     conn=Depends(get_db),
 ):
+    tags = dashboard_router._combine_tags(tags, tags_labels)
     existing = db.get_contact(conn, uid) or {}
-    # Keep the contact in whatever book it's currently in (Active or
-    # Archived); use the dedicated /archive and /unarchive endpoints to
-    # move between them.  The old form-field-based addressbook_path move
-    # is gone -- with only two books, archive/unarchive are explicit
-    # single-click actions, not a dropdown in the edit form.
-    current_addressbook = existing.get("addressbook_path") or db.DEFAULT_ADDRESSBOOK_UID
     row = dict(existing)
     row.update(
         {
             "uid": uid,
             "full_name": full_name,
-            "org": org or None,
-            "phone": phone or None,
-            "email": email or None,
-            "address": address or None,
-            "category": category or None,
+            "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
+            "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
+            "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
+            "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
             "tags": _tags_list(tags),
-            "notes": notes or None,
-            "addressbook_path": current_addressbook,
+            "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -217,58 +213,11 @@ async def update_contact(
             row["photo_b64"], row["photo_type"] = photo_result
         # else: no new file chosen -- row already carries the existing
         # photo_b64/photo_type through from `dict(existing)` above.
-    saved = bridge.save_contact_row(row)
-    db.upsert_contact(conn, saved)
-    db.ensure_tags_registered(conn, row["tags"])
-    return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
-
-
-@router.post("/{uid}/archive")
-def archive_contact(uid: str, bridge=Depends(get_bridge), conn=Depends(get_db)):
-    """Move a contact from Active to Archived.
-
-    This is a real CardDAV move: delete the vCard from 'contacts' and
-    save it into 'contacts-archived', exactly how update_contact handled
-    calendar/list moves before the two-addressbook simplification."""
-    existing = db.get_contact(conn, uid)
-    if not existing:
-        return RedirectResponse(url="/contacts", status_code=303)
-    old_addressbook = existing.get("addressbook_path") or db.DEFAULT_ADDRESSBOOK_UID
-    if old_addressbook == db.ARCHIVED_ADDRESSBOOK_UID:
-        # Already archived -- nothing to do.
-        return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
-    row = dict(existing)
-    row["addressbook_path"] = db.ARCHIVED_ADDRESSBOOK_UID
-    row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    bridge.delete_contact(uid, old_addressbook)
-    saved = bridge.save_contact_row(row)
-    db.upsert_contact(conn, saved)
-    return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
-
-
-@router.post("/{uid}/unarchive")
-def unarchive_contact(uid: str, bridge=Depends(get_bridge), conn=Depends(get_db)):
-    """Move a contact from Archived back to Active."""
-    existing = db.get_contact(conn, uid)
-    if not existing:
-        return RedirectResponse(url="/contacts", status_code=303)
-    old_addressbook = existing.get("addressbook_path") or db.DEFAULT_ADDRESSBOOK_UID
-    if old_addressbook == db.DEFAULT_ADDRESSBOOK_UID:
-        # Already active -- nothing to do.
-        return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
-    row = dict(existing)
-    row["addressbook_path"] = db.DEFAULT_ADDRESSBOOK_UID
-    row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    bridge.delete_contact(uid, old_addressbook)
-    saved = bridge.save_contact_row(row)
-    db.upsert_contact(conn, saved)
+    db.upsert_contact(conn, row)
     return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
 
 
 @router.post("/{uid}/delete")
-def delete_contact(uid: str, bridge=Depends(get_bridge), conn=Depends(get_db)):
-    existing = db.get_contact(conn, uid)
-    addressbook_path = (existing or {}).get("addressbook_path") or db.DEFAULT_ADDRESSBOOK_UID
-    bridge.delete_contact(uid, addressbook_path)
+def delete_contact(uid: str, conn=Depends(get_db)):
     db.delete_contact(conn, uid)
     return RedirectResponse(url="/contacts", status_code=303)

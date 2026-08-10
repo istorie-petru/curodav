@@ -9,15 +9,16 @@ for the specific desktop counterpart it mirrors.
 One deliberate adaptation, forced by this app's data model rather than a
 design choice: desktop groups swimlanes by `parent_id` (a task's direct
 parent, which for a top-level task IS a project object). This app has no
-such field -- a task belongs to a task list (`list_path`), and a list
-optionally belongs to a project (`project_uid`, Phase 3/4 of this rework).
-Swimlanes here are therefore grouped by task list, not by project
-directly -- the row label is the list's name, and (if that list is linked
-to a project) the project's own color, per Phase 3/4's existing linking
-mechanism. This is the faithful equivalent, not a reduction: it's exactly
-the same "whole list can be linked to a project" mental model the rest of
-this rework already established, applied to the one place desktop's
-model and this app's model genuinely differ.
+such field -- a task's grouping key is its first *label* (`tags`, queried
+live from the `object_labels` table -- see db.py's
+`list_labels_for_object`, which returns them already sorted COLLATE
+NOCASE), so each distinct label gets its own swimlane block with the
+label's name as its header row, and untagged tasks fall into a trailing
+"(No label)" block. This is the faithful equivalent, not a reduction: it
+reuses this app's existing label system (the same tags Table/Board/
+Calendar already show) as the thing the Timeline gutter is organized
+around, replacing the task-list grouping that Phase 1 of the label-space
+rework dropped.
 """
 
 from __future__ import annotations
@@ -27,15 +28,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-NO_LIST_LABEL = "(No list)"
-
-# Same fixed 10-color palette as desktop's BAR_COLORS (timeline_view.py),
-# cycled by each task's position in the overall (unsorted) task list --
-# not per-swimlane, matching desktop exactly.
-BAR_COLORS = [
-    "#7c3aed", "#0891b2", "#059669", "#d97706", "#dc2626", "#4f46e5",
-    "#0d9488", "#b45309", "#9333ea", "#0284c7",
-]
+NO_LABEL_KEY = ""  # assign_swimlanes grouping key for a task with no labels
+NO_LABEL_DISPLAY = "(No label)"
 
 
 def pack_intervals(
@@ -123,29 +117,57 @@ def _task_dates(task: dict) -> tuple[date, date] | None:
     return due, due
 
 
+def _task_label(task: dict) -> tuple[str, str]:
+    """(label_key, display_label) for a task's swimlane block -- its first
+    tag in case-insensitive sorted order (`db.list_labels_for_object`
+    already returns them COLLATE NOCASE, so "first" = alphabetically
+    first). The key is the lowercased tag (stable across case variants a
+    user might type across tasks); the display keeps the tag's own casing
+    so the header row shows the real label name. A task can paint only one
+    Gantt bar, so a multi-label task lives under its first label rather
+    than being duplicated across every label it carries; an untagged task
+    falls into the "(No label)" block."""
+    for tag in task.get("tags") or []:
+        if tag and tag.strip():
+            return tag.strip().lower(), tag.strip()
+    return NO_LABEL_KEY, NO_LABEL_DISPLAY
+
+
+def task_label_key(task: dict) -> str:
+    """The `assign_swimlanes` grouping key for a task (its first tag,
+    lowercased, or `NO_LABEL_KEY`) -- the caller-facing half of `_task_label`,
+    for looking a task's bar up in `SwimlaneResult.group_range_by_label`."""
+    return _task_label(task)[0]
+
+
 @dataclass
 class SwimlaneResult:
     row_of: dict[str, int]  # task uid -> global row index
-    group_labels: list[tuple[int, int, str, str | None]]  # (row_start, row_count, label, list_uid)
-    group_range_by_list: dict[str | None, tuple[int, int]]  # list_uid -> (row_start, row_count)
+    group_labels: list[tuple[int, int, str, str]]  # (row_start, row_count, label, label_key)
+    group_range_by_label: dict[str, tuple[int, int]]  # label_key -> (row_start, row_count)
     total_rows: int
     local_lane_of: dict[str, int] = field(default_factory=dict)
 
 
 def assign_swimlanes(
     tasks: list[dict],
-    list_names: dict[str, str],
     prev_local_lane: dict[str, int] | None = None,
 ) -> SwimlaneResult:
     """Port of desktop's `TimelineCanvas._assign_swimlanes` -- group tasks
-    by list (desktop: by project via `parent_id`, see this module's own
-    docstring for why list is the equivalent grouping key here), bin-pack
-    each list's tasks into the minimum rows needed via `pack_intervals`,
-    and stack the resulting per-list row blocks vertically so tasks from
-    different lists never share a row.
+    by label (desktop: by project via `parent_id`, see this module's own
+    docstring for why label is the equivalent grouping key here), bin-pack
+    each label's tasks into the minimum rows needed via `pack_intervals`,
+    and stack the resulting per-label row blocks vertically so tasks from
+    different labels never share a row. Each block's row 0 is its header
+    row, labeled with the label's own name (see `default_row_label`).
+
+    Block colors are deliberately NOT this module's concern: they come
+    from each label's own config (label_config.color, resolved by the
+    router via db.effective_label_config_ci), not from a palette assigned
+    here -- this stays a pure geometry module.
 
     `prev_local_lane` is this function's own previous `local_lane_of`
-    (task uid -> lane within its list's block), threaded through by the
+    (task uid -> lane within its label's block), threaded through by the
     caller across requests for the same stability `pack_intervals`'
     `preferred` gives -- see that function's docstring. A task's own
     `timeline_lane` (an explicit, user-dragged manual placement -- see
@@ -156,22 +178,29 @@ def assign_swimlanes(
     `manual_lane`/`clamped_preferred` split documents.
     """
     groups: dict[str, list[dict]] = {}
+    display_by_key: dict[str, str] = {}
     for t in tasks:
-        groups.setdefault(t.get("list_path") or "tasks", []).append(t)
+        key, display = _task_label(t)
+        groups.setdefault(key, []).append(t)
+        display_by_key.setdefault(key, display)
 
-    def group_sort_key(list_uid: str) -> str:
-        return list_names.get(list_uid, "￿" + list_uid)
+    def group_sort_key(key: str) -> str:
+        # "(No label)" always sorts last; real labels in case-insensitive
+        # name order (the key is already lowercased).
+        if key == NO_LABEL_KEY:
+            return "\uffff"
+        return key
 
     prev_local_lane = prev_local_lane or {}
     next_local_lane: dict[str, int] = {}
 
     row_of: dict[str, int] = {}
-    group_labels: list[tuple[int, int, str, str | None]] = []
-    group_range_by_list: dict[str | None, tuple[int, int]] = {}
+    group_labels: list[tuple[int, int, str, str]] = []
+    group_range_by_label: dict[str, tuple[int, int]] = {}
     row_offset = 0
 
-    for list_uid in sorted(groups, key=group_sort_key):
-        group_tasks = groups[list_uid]
+    for key in sorted(groups, key=group_sort_key):
+        group_tasks = groups[key]
         intervals = []
         for t in group_tasks:
             dates = _task_dates(t)
@@ -200,15 +229,15 @@ def assign_swimlanes(
             next_local_lane[uid] = lane
             lanes_used = max(lanes_used, lanes)
 
-        label = list_names.get(list_uid, list_uid)
-        group_labels.append((row_offset, lanes_used, label, list_uid))
-        group_range_by_list[list_uid] = (row_offset, lanes_used)
+        label = display_by_key.get(key, NO_LABEL_DISPLAY)
+        group_labels.append((row_offset, lanes_used, label, key))
+        group_range_by_label[key] = (row_offset, lanes_used)
         row_offset += lanes_used
 
     return SwimlaneResult(
         row_of=row_of,
         group_labels=group_labels,
-        group_range_by_list=group_range_by_list,
+        group_range_by_label=group_range_by_label,
         total_rows=row_offset,
         local_lane_of=next_local_lane,
     )
@@ -279,11 +308,10 @@ class BarGeometry:
     day_from: int
     day_to: int  # exclusive
     row: int
-    color: str
 
 
 def bar_geometry(
-    task: dict, index: int, start: date, total_days: int, row_of: dict[str, int]
+    task: dict, start: date, total_days: int, row_of: dict[str, int]
 ) -> BarGeometry | None:
     """Verbatim port of desktop's `TimelineCanvas._bar_rect`'s date/row
     math (the pixel conversion itself is left to the template/CSS, same
@@ -292,7 +320,12 @@ def bar_geometry(
     consistent with the `+timedelta(days=1)` exclusive-end convention
     `assign_swimlanes`'s interval packing already uses) and always at
     least `day_from + 1` so a same-day task still paints a visible-width
-    bar."""
+    bar.
+
+    The bar's color is deliberately NOT part of this geometry -- it comes
+    from the task's label block, resolved by the caller from the label's
+    own config (see routers/timeline.py's `_label_block_appearance`), so
+    the gutter label and its tasks share a color."""
     dates = _task_dates(task)
     if dates is None:
         return None
@@ -302,13 +335,13 @@ def bar_geometry(
     if day_to <= day_from:
         day_to = day_from + 1
     row = row_of.get(task["uid"], 0)
-    color = BAR_COLORS[index % len(BAR_COLORS)]
-    return BarGeometry(day_from=day_from, day_to=day_to, row=row, color=color)
+    return BarGeometry(day_from=day_from, day_to=day_to, row=row)
 
 
-def default_row_label(list_label: str, local_idx: int) -> str:
-    """Verbatim port of desktop's `_default_row_label` -- the list's own
-    name for row 0, 'Row N' for every row after it."""
+def default_row_label(label: str, local_idx: int) -> str:
+    """Verbatim port of desktop's `_default_row_label` -- the label's own
+    name for row 0 (the swimlane block's header row), 'Row N' for every
+    row after it."""
     if local_idx == 0:
-        return list_label
+        return label
     return f"Row {local_idx}"

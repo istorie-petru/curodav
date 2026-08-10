@@ -1,0 +1,167 @@
+{# Reusable checkbox-dropdown for the widget config forms' multi-select
+   filters (Task lists / Calendars). Shared by _widget_builder_fields.html,
+   _widget_edit_form.html, and _widget_workspace.html so the control is
+   exactly one markup+style contract everywhere.
+
+   ms_mode="single" (2026-08-07, "View/Range should look the same as
+   list") -- a single-choice variant of this exact same trigger+panel
+   markup/CSS, used for the widget builder's View/Range fields instead of
+   a native <select>. A native <select>'s *open* dropdown list is drawn by
+   the OS/browser, not this stylesheet -- no amount of CSS on the <select>
+   itself can make its open state look like anything else on the page,
+   which is why View/Range kept looking inconsistent no matter how much
+   was applied to them. Reusing this partial (rather than a second,
+   near-duplicate sibling file) means "identical CSS" is literal -- there
+   is only one .multiselect-trigger/.multiselect-panel/.ms-summary rule
+   set in style.css, not two copies that could drift. Renders radio
+   inputs instead of checkboxes, `ms_selected` is a single scalar (not a
+   list), and picking an option closes the panel immediately (see
+   static/app.js's change handler) instead of staying open for more picks.
+   `ms_wide` (default true) and `ms_extra_class` let a single-mode caller
+   opt out of the field-wide 2-column span and add its own class (e.g.
+   "widget-range-field" for the existing show/hide-on-View-change
+   behavior) since View/Range sit side-by-side in a field-grid rather than
+   full-width like Labels/Task lists/Calendars. `ms_root_class` adds an
+   extra class to the outer `.multiselect` wrapper (e.g.
+   "widget-view-select") so static/dashboard_widget_preview.js can find it
+   the same way it used to find the `<select>` it replaces. Each item may
+   carry an optional `data` dict of extra data-* attributes on its input
+   (e.g. {"source": "...", "has-range": "1"} for View, {"views": "a,b"}
+   for Range) for that same script's Source->View->Range filtering.
+
+   Why checkboxes instead of a <select multiple>: a listbox forces a
+   Ctrl/Cmd-click to pick several -- invisible to a touch user and easy to
+   get wrong with the keyboard. Checkboxes in a dropdown are the obvious
+   "pick several" affordance: click the trigger, tick the ones you want, no
+   modifier keys. Each checkbox is a real form field (name = ms_name), so it
+   submits with the surrounding form and the server reads them back as a
+   list (routers/dashboard.py's task_list_uids/calendar_uids). Empty
+   selection = "All" (no filter), matching the server's list_uids semantics
+   in _config_from_form.
+
+   Reuses the app-wide .multiselect open/close behavior (static/app.js) --
+   clicking the trigger toggles .is-open on .multiselect-panel; that same
+   script also keeps the trigger's .ms-summary text in sync as checkboxes
+   are (un)checked (2026-08-07, modal-input-design Phase B -- previously
+   this lived only in dashboard_widget_preview.js, scoped to the widget
+   builder's own .widget-select-form, so every other page reusing this
+   partial had a summary that was correct on load but went stale the
+   moment a checkbox changed; generalized into app.js's canonical
+   .multiselect handling, keyed off data-ms-mode/data-ms-label below, so
+   it now works the same everywhere this partial is included). Because a
+   panel here lives inside a form (and, in the Customize modal, inside
+   .modal-body, which clips overflow), the panel is width:100% of its
+   trigger and scrolls internally instead of hanging off-screen.
+
+   Expects in context:
+     ms_name      -- form field name (e.g. "task_list_uids")
+     ms_label     -- visible field label (e.g. "Task lists")
+     ms_items     -- iterable of {uid, name}, optionally with a `data`
+                     dict of extra data-* attributes per item (View/Range's
+                     single-mode use, see above)
+     ms_selected  -- iterable of selected uids (default []; may be the
+                     combined config.list_uids, uid namespaces don't collide)
+                     -- for ms_mode="single" this is one scalar uid instead
+                     of an iterable.
+     ms_mode      -- (2026-08-07, modal-input-design Phase B) "filter"
+                     (default, unchanged), "select", or "single" (see
+                     above). The widget builder's Task lists/Calendars/
+                     Labels checkboxes are *filters*: an empty selection
+                     means "no filter applied", so the trigger reads "All"
+                     whether nothing or everything is checked. Reused
+                     outside the widget builder (task_form/event_form/
+                     contact_form/habit_form/tasks_list.html's bulk-tag
+                     Labels, which pick a record's *actual* label set
+                     rather than filter anything), an empty selection
+                     genuinely means "no labels" and every option checked
+                     is not the same as "no constraint" -- "select" mode
+                     reads "No labels"/"N selected" instead, never
+                     collapsing to "All".
+     ms_wide         -- (single mode) false to render a plain `.field`
+                        instead of `.field field-wide` (default true).
+     ms_extra_class  -- (single mode) extra class(es) on the outer `.field`.
+     ms_root_class   -- (single mode) extra class(es) on the `.multiselect`
+                        wrapper, e.g. "widget-view-select".
+     ms_placeholder  -- (single mode) trigger text when nothing is selected
+                        and there are no items to default to (rare --
+                        every real caller always has at least one item).
+   No leading category icon on the trigger any more (2026-08-07 follow-up,
+   "shouldn't ... have an icon") -- only the trailing chevron caret stays,
+   since that one signals "this opens a dropdown," not "this is a Labels
+   field." `ms_icon` is no longer read by this partial at all.
+     ms_form_id   -- (2026-08-08 direct feedback: "this drop down menus
+                     should be able to exit the modal window, not be
+                     masked inside it") id of the enclosing `<form>`.
+                     static/app.js now portals `.multiselect-panel` out to
+                     a fixed-position layer outside the modal on open (the
+                     "always lives directly in the page" assumption this
+                     partial's older comments made turned out to be wrong
+                     -- task_form/event_form/contact_form/habit_form/the
+                     widget builder all render this inside `.modal-body`,
+                     which clips overflow, so the panel was getting
+                     visually cut off/overlapped instead of just scrolling
+                     internally as intended). Reparenting a real form
+                     control outside its `<form>` element would silently
+                     drop it from that form's submission, so every input
+                     here also needs an explicit `form="..."` attribute
+                     once it might move -- same fix base.html's
+                     #color-popover/#icon-popover portals already use for
+                     the exact same reason. Left unset for callers that
+                     aren't inside a `<form>` at all (tasks_list.html's
+                     bulk-tag picker is a JS-only action bar, not a
+                     submittable form field) -- the attribute is simply
+                     omitted then, same as before this existed.
+     ms_allow_new -- (2026-08-07, modal-input-design Phase B follow-up)
+                     when true, adds a plain text input at the bottom of
+                     the panel, same `name="{{ ms_name }}"` as the
+                     checkboxes above it. Converting Labels from a free-
+                     text+datalist field to a checkbox-only list removed
+                     the app's only way to originate a brand-new label
+                     name (labels_manage.html's own copy: "labels are
+                     created automatically the first time you apply one
+                     on a task/event/contact") -- this restores that
+                     without reintroducing free-text-instead-of-picking
+                     for the common case, since it's an addition
+                     alongside the checkboxes, not a replacement for them.
+                     No server-side change needed: FastAPI's
+                     `tags_labels: list[str] = Form([])` already collects
+                     every form field sharing that name regardless of
+                     control type, and `_tags_list`/`_combine_tags`
+                     already drop blank entries, so a form submitted with
+                     this input left empty behaves exactly as if it
+                     weren't there. #}
+{% set _mode = ms_mode | default('filter') %}
+{% set _single = _mode == 'single' %}
+{% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
+{% set _allow_new = ms_allow_new | default(false) %}
+{% set _n = ms_items | selectattr('uid', 'in', _sel) | list | length %}
+{% set _total = ms_items | length %}
+{% set _wide = ms_wide | default(true) %}
+{% set _sel_item = (ms_items | selectattr('uid', 'equalto', ms_selected) | list | first) if (_single and ms_selected) else ((ms_items | first) if (_single and ms_items) else none) %}
+<div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}">
+    <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
+    <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
+        <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+            <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else (ms_placeholder | default('Select')) }}{% elif _mode == 'select' %}{% if _n == 0 %}No {{ ms_label|lower }}{% else %}{{ _n }} selected{% endif %}{% else %}{% if _n == 0 or _n >= _total %}All{% else %}{{ _n }} selected{% endif %}{% endif %}</span>
+            <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+        </button>
+        <div class="multiselect-panel ms-panel">
+            {% for it in ms_items %}
+            <label class="multiselect-option">
+                <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ ms_name }}" value="{{ it.uid }}"
+                       {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}
+                       {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
+                       {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}>
+                <span>{{ it.name }}</span>
+            </label>
+            {% endfor %}
+            {% if _allow_new %}
+            <label class="multiselect-option multiselect-new-option">
+                {{ icon('plus', 'icon-sm') }}
+                <input type="text" name="{{ ms_name }}" class="multiselect-new-input" placeholder="New {{ ms_label|lower|replace('labels', 'label') }}&hellip;"
+                       {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
+            </label>
+            {% endif %}
+        </div>
+    </div>
+</div>

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Customize {{ page_label }}{% endblock %}
+{% block content %}
+<!-- Customize dashboard modal (Phase 3 rework, 2026-08-03,
+     MD3 Dialog rework 2026-08-04) -- the single friendly
+     surface for arranging one dashboard/Space's widgets, replacing
+     the old Edit-layout bar. Reuses widget_page_context and every
+     widget endpoint; only the presentation is a modal. So a no-JS
+     click on its trigger lands here as a full page (this template
+     extends base.html), while static/modal.js's data-modal on the
+     trigger strips everything but #modal-target and shows it as a
+     dialog. Every form here carries data-modal-keep-open, so after
+     each add/move/edit/delete modal.js keeps the dialog open and
+     re-fetches this same URL to re-render the list in place.
+     CCWidgetPreview.init() (base.html) re-binds the widget form
+     selects + live preview on each (re)render. -->
+<div id="modal-target">
+    {% include "_modal_widget_customize.html" %}
+</div>
+{% endblock %}

@@ -1,10 +1,26 @@
 {% extends "base.html" %}
 {% block title %}{% if habit %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
-<h1>{% if habit %}Edit habit{% else %}New habit{% endif %}</h1>
+<!-- see event_form.html for why this is split into .modal-header/
+     .modal-body/.modal-footer, and why Save/Delete live in the footer as
+     plain buttons tied back to the form via `form="habit-form"` rather
+     than being nested inside it -- static/modal.js.
 
+     Found during the modal-footer rework (2026-08-07): tasks_list.html's
+     "Edit habit" icon-button already opens this via `data-modal`, but this
+     template never had a `#modal-target` wrapper at all -- modal.js's
+     `injectModalContent` looks for that id and, not finding it, falls back
+     to a plain full-page navigation (openModal's "didn't opt into modal
+     rendering" branch). Adding the wrapper here means that link now
+     actually opens a modal instead of silently always navigating away. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>{% if habit %}Edit habit{% else %}New habit{% endif %}</h1>
+</div>
+<div class="modal-body">
 <div class="card">
-<form method="post" action="{% if habit %}/habits/{{ habit.uid }}/edit{% else %}/habits{% endif %}">
+<form method="post" id="habit-form" action="{% if habit %}/habits/{{ habit.uid }}/edit{% else %}/habits{% endif %}">
+    {% set ms_form_id = 'habit-form' %}
     <div class="field-grid">
         <div class="field field-wide">
             <label>Name</label>
@@ -16,15 +32,36 @@
         </div>
         <div class="field">
             <label>Color</label>
-            <select name="color">
-                {% for col in colors %}
-                <option value="{{ col }}" {% if habit and habit.color == col %}selected{% endif %}>{{ col }}</option>
-                {% endfor %}
-            </select>
+            <!-- Swatch-grid popover (modal-input-design Phase C) -- revives
+                 the dormant .color-picker/wireColorPickers built for the
+                 pre-rework calendars/projects pages (see calendars_list.html/
+                 projects_manage.html in the initial commit for the original
+                 markup this is copied from), same `colors` palette
+                 routers/habits.py's COLORS enumerates (2026-08-08: imported
+                 directly from routers/labels.py's own COLORS, not a second
+                 hand-copied list anymore -- see that import's own comment).
+                 The radio's `form="habit-form"` keeps it associated with
+                 the form even while modal.js has floated its grid out to
+                 #color-popover. -->
+            {% set cp_current = habit.color if habit else colors[0] %}
+            {% set cp_colors = colors %}
+            {% set cp_form_id = "habit-form" %}
+            {% include "_color_swatch_picker.html" %}
         </div>
         <div class="field">
-            <label>Icon (emoji or short glyph)</label>
-            <input type="text" name="icon" value="{{ habit.icon if habit else '' }}" class="project-icon-input">
+            <label>Icon</label>
+            <!-- Same swatch-grid popover mechanism as Color above, but
+                 drawing from the app's own icon sprite (icons/icon_groups
+                 context vars, routers/habits.py -- the same curated,
+                 grouped set routers/labels.py's ICON_GROUPS already offers
+                 labels/Spaces, reused rather than inventing a
+                 habit-specific list) instead of a free-typed emoji glyph.
+                 See modal.js's wireIconPickers/_icons_sprite.html. -->
+            {% set ip_current = habit.icon if habit else None %}
+            {% set ip_groups = icon_groups %}
+            {% set ip_form_id = "habit-form" %}
+            {% set ip_default_icon = "activity" %}
+            {% include "_icon_swatch_picker.html" %}
         </div>
         <div class="field">
             <label>Daily target</label>
@@ -33,7 +70,11 @@
                  "done" for streaks, so this isn't a pass/fail threshold,
                  just how many "units" (glasses, pages, minutes...) counts
                  as a fully dark day. -->
-            <input type="number" name="target_per_day" min="0" step="0.5" value="{{ habit.target_per_day if habit else 1 }}">
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
+                <input type="number" name="target_per_day" class="stepper-input" min="0" step="0.5" value="{{ habit.target_per_day if habit else 1 }}">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
+            </div>
         </div>
         <div class="field">
             <label>Project</label>
@@ -44,22 +85,32 @@
                 {% endfor %}
             </select>
         </div>
+        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
+             Phase B), same pattern as task_form.html -- see that
+             template's own comment. -->
         <div class="field field-wide">
-            <label>Tags (comma-separated)</label>
-            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ habit.tags|join(', ') if habit else '' }}">
-            <datalist id="tag-names-datalist">
-                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
-            </datalist>
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = habit.tags if habit else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
         </div>
     </div>
-    <button type="submit" class="btn primary">Save</button>
-    <a href="{% if habit %}/habits/{{ habit.uid }}{% else %}/habits{% endif %}" class="btn ghost">Cancel</a>
 </form>
 </div>
-
+</div>
+<div class="modal-footer">
 {% if habit %}
 <form method="post" action="/habits/{{ habit.uid }}/delete" data-confirm-sheet="Delete &quot;{{ habit.name }}&quot; and all its logged history? This cannot be undone.">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this habit</button>
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
+<span class="spacer"></span>
 {% endif %}
+<a href="{% if habit %}/habits/{{ habit.uid }}{% else %}/habits{% endif %}" class="btn ghost" data-modal-cancel>Cancel</a>
+<button type="submit" form="habit-form" class="btn primary">Save</button>
+</div>
+</div>
 {% endblock %}

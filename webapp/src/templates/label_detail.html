@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ label.name if label else "Label" }}{% endblock %}
+<!-- 2026-08-08: opt out of the default 1120px-max-width centered column,
+     same fix dashboard.html already applies (see that template's own
+     comment) -- this page includes the exact same widget grid
+     (_widget_workspace.html) as Home, and app.js's masonry layout sizes
+     its 6 virtual columns off the grid's own rendered width, so a Space/
+     Project page left in the boxed column reproduces the identical
+     "permanent empty region on the right, widgets crowded into less
+     width than the page actually has" bug Home was already fixed for. -->
+{% block main_class %}main-full-width{% endblock %}
+{% block content %}
+<!-- Header banner + one page-action bar (2026-08-10) -- same merged
+     header as dashboard.html: the banner cover (when set) plus ALL of
+     this page's actions (New / Edit mode / Done / New widget / Add-Change
+     banner / Reset layout) live together in one .page-banner-wrap -- with
+     a banner the buttons float bottom-right over the photo, without one
+     they're a plain top bar with the label title left of them. The old
+     separate .toolbar row is gone. -->
+<div class="page-banner-wrap">
+{% include "_page_banner.html" %}
+{% if banner %}
+<h1 class="page-banner-title">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
+{% endif %}
+<div class="page-banner-actions">
+    {% if not banner %}
+    <h1 class="page-banner-title-plain">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
+    {% endif %}
+    {% if edit_mode %}
+    <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
+    <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
+    <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
+         Opens the banner editor modal (routers/banners.py); "Add" vs
+         "Change" labels by whether a banner is already set. -->
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}&amp;edit=1" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+    <!-- Reset to default layout (item #1, dashboard usability rework,
+         2026-08-07) -- Settings has no per-space subpage to host this
+         (it's a single hub page, see routers/settings.py's module
+         docstring), so it lives here instead, next to this page's own
+         "New widget" edit-mode control. data-confirm-sheet is the same
+         confirmation mechanism every other destructive action in this
+         app already uses, not a second confirmation UI. -->
+    <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset this page's widgets to the default layout? This deletes every widget you've added or customized here.">
+        <input type="hidden" name="label_name" value="{{ label.uid }}">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
+    </form>
+    {% else %}
+    <!-- Quick capture, one merged "+" (2026-08-10) -- same single "+"
+         button as dashboard.html, opening the merged task/event quick-add
+         modal (quick_add.html) -- no pre-fill of this label onto the new
+         task/event (the quick-add doesn't accept a tags/label query param
+         yet, and this pass doesn't add new prefill plumbing for it).
+         Hidden in edit mode, same reasoning as dashboard.html. -->
+    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
+    <a href="/labels/{{ label.uid }}?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
+    {% endif %}
+</div>
+</div>
+
+{% if label.description %}<p>{{ label.description }}</p>{% endif %}
+
+{% if is_space and children %}
+<div class="project-scope-section">
+<h2>{{ icon('folder', 'icon-sm') }} Projects <span class="tag-usage-count">{{ children|length }}</span></h2>
+<div class="card">
+{% for child in children %}
+<a class="calendar-row settings-row" href="/labels/{{ child.uid }}">
+    <span class="cell-tag cal-{{ child.color }}">{{ icon(child.icon or 'folder', 'icon-sm') }} {{ child.name }}</span>
+    <span class="spacer"></span>
+    <span class="tag-usage-count">Open</span>
+</a>
+{% endfor %}
+</div>
+</div>
+{% endif %}
+
+<!-- Widget grid -- the exact same customizable system as Home
+     (routers/dashboard.py's widget_page_context/WIDGET_TYPES), scoped to
+     this label via dashboard_widgets.label_name. Seeded on first visit --
+     see routers/dashboard.py's _ensure_default_label_widgets. -->
+{% include "_widget_workspace.html" %}
+
+{% include "_project_university_section.html" %}
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('habit_checkin.js') }}"></script>
+{% endblock %}

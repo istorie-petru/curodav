@@ -1,67 +1,122 @@
 {% extends "base.html" %}
 {% block title %}{% if contact %}Edit contact{% else %}New contact{% endif %}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is wrapped -- static/modal.js -->
-<div id="modal-target">
-<h1>{% if contact %}Edit contact{% else %}New contact{% endif %}</h1>
+<!-- see event_form.html for why this is split into .modal-header/
+     .modal-body/.modal-footer, and why Save lives in the footer as a
+     plain button tied back to the form via `form="contact-form"` rather
+     than being nested inside it -- static/modal.js. Contacts have no
+     Delete button here -- deleting a contact happens from
+     contact_detail.html (Archive/Unarchive), not this edit form.
 
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial contact_detail.html's view uses too -- same structure,
+     the detail modal's "Edit" link swapped for this "Save" submit button
+     (and, like the view, no Delete, since this template has none either)
+     -- and #modal-target carries the modal-stable-height marker so
+     modal.js keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>{% if contact %}Edit contact{% else %}New contact{% endif %}</h1>
+</div>
+<div class="modal-body">
 <div class="card">
-<form method="post" action="{% if contact %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data">
+<form method="post" id="contact-form" action="{% if contact %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data">
+    {% set ms_form_id = 'contact-form' %}
     <div class="field-grid">
+        <!-- Photo + Full name share one row (2026-08-07 modal-input rework,
+             direct feedback) -- the avatar sits to the left with a
+             hover-to-reveal upload affordance directly on top of it
+             instead of a separate always-visible native file input/
+             "Browse" button below. The real `<input type="file">` is kept
+             in the DOM but visually hidden and stretched over the whole
+             avatar circle (`.avatar-upload-input`, see style.css) so a
+             plain click anywhere on the avatar opens the file picker --
+             zero JS needed, upload still posts as `name="photo"` exactly
+             as before. `.avatar-upload-overlay` is the dark circle +
+             camera icon that only becomes visible on hover/focus via
+             pure CSS (`.avatar-upload:hover`/`:focus-within`). Removing a
+             photo is a deliberate action, not a hover-discoverable one, so
+             that checkbox stays visible below the row rather than living
+             inside the hover overlay too. Scoped to the new `.avatar-upload`
+             wrapper class, not `.avatar-large`/the shared `avatar()` macro
+             itself, so contact_detail.html's own read-only avatar (also
+             `.avatar-large`) is untouched by any of this. -->
         <div class="field field-wide">
-            <label>Photo</label>
             <div class="photo-field-row">
-                {{ avatar(contact, 'avatar-large') }}
-                <div class="photo-field-controls">
-                    <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp">
-                    {% if contact and contact.photo_b64 %}
-                    <label class="field-toggle field"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
-                    {% endif %}
+                <div class="avatar-upload" title="Change photo">
+                    {{ avatar(contact, 'avatar-large') }}
+                    <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
+                    <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change photo">
+                </div>
+                <div class="field">
+                    <label>Full name</label>
+                    <input type="text" name="full_name" required value="{{ contact.full_name if contact else '' }}">
                 </div>
             </div>
-        </div>
-        <div class="field field-wide">
-            <label>Full name</label>
-            <input type="text" name="full_name" required value="{{ contact.full_name if contact else '' }}">
-        </div>
-        <div class="field">
-            <label>Organization</label>
-            <input type="text" name="org" value="{{ contact.org if contact else '' }}">
-        </div>
-        <div class="field">
-            <label>Category</label>
-            <input type="text" name="category" value="{{ contact.category if contact else '' }}">
-        </div>
-        <!-- Address book selector removed -- contacts now always live in
-             Active or Archived, toggled via the Archive/Unarchive button on
-             the contact detail page, not a dropdown on the edit form. -->
-        <div class="field">
-            <label>Phone</label>
-            <input type="text" name="phone" value="{{ contact.phone if contact else '' }}">
+            {% if contact and contact.photo_b64 %}
+            <label class="field-toggle field avatar-remove-toggle"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
+            {% endif %}
         </div>
         <div class="field">
             <label>Email</label>
             <input type="email" name="email" value="{{ contact.email if contact else '' }}">
         </div>
+        <div class="field">
+            <label>Phone</label>
+            <input type="text" name="phone" value="{{ contact.phone if contact else '' }}">
+        </div>
+        <!-- Address book selector removed -- contacts now always live in
+             Active or Archived, toggled via the Archive/Unarchive button on
+             the contact detail page, not a dropdown on the edit form.
+             Category field removed (Phase 5, label-space rework) --
+             grouping is now purely via the Tags field below. -->
+        <div class="field">
+            <label>Organization</label>
+            <input type="text" name="org" value="{{ contact.org if contact else '' }}">
+        </div>
         <div class="field field-wide">
             <label>Address</label>
             <input type="text" name="address" value="{{ contact.address if contact else '' }}">
         </div>
+        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
+             Phase B), same pattern as task_form.html -- see that
+             template's own comment. -->
         <div class="field field-wide">
-            <label>Tags (comma-separated)</label>
-            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ contact.tags|join(', ') if contact else '' }}">
-            <datalist id="tag-names-datalist">
-                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
-            </datalist>
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = contact.tags if contact else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
         </div>
         <div class="field field-wide">
             <label>Notes</label>
             <textarea name="notes" rows="3">{{ contact.notes if contact else '' }}</textarea>
         </div>
     </div>
-    <button type="submit" class="btn primary">Save</button>
-    <a href="/contacts" class="btn ghost" data-modal-cancel>Cancel</a>
 </form>
 </div>
+</div>
+{% if contact %}
+<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
+     view modal (footer_back_mode='modal' -- a data-modal link into
+     /contacts/uid), NOT a data-modal-cancel that closes the whole window;
+     the modal's X is the way to fully close. A brand-new contact has no
+     view to return to, so its Cancel is still a plain data-modal-cancel
+     close. -->
+{% set footer_back_url = '/contacts/' ~ contact.uid %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
+{% set footer_back_url = '/contacts' %}
+{% endif %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'contact-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

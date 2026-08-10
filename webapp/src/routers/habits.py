@@ -25,10 +25,27 @@ from fastapi.responses import RedirectResponse
 
 from .. import db
 from ..deps import get_db, templates
+from .. import habit_heatmap
+from . import dashboard as dashboard_router
+from .labels import COLORS, ICON_GROUPS, LABEL_ICONS
 
 router = APIRouter(prefix="/habits", tags=["habits"])
 
-COLORS = ["blue", "green", "orange", "red", "purple", "pink", "gray", "yellow"]
+# 2026-08-08: imported directly from routers/labels.py rather than a
+# second hand-copied literal -- this used to be its own identical 8-entry
+# list with a comment pointing out it was "identical to routers/labels
+# .py's own COLORS," which is exactly the kind of duplication that drifts
+# the moment one of the two copies gets edited and the other doesn't (see
+# this same file's ICON_GROUPS/LABEL_ICONS import just below, already
+# solving the equivalent problem for icons). One list, two importers.
+#
+# Same curated icon-sprite set routers/labels.py already offers for a
+# label/project's icon (modal-input-design Phase C, swatch-grid revival) --
+# a habit's icon used to be a free-typed emoji glyph; reusing this list
+# (grouped, same as labels -- 2026-08-08) rather than inventing a
+# habit-specific one keeps "which icons exist, and how they're grouped" a
+# single source of truth.
+ICONS = LABEL_ICONS
 
 # How many weeks the full detail-page heatmap shows vs. the compact
 # preview on the list page -- 53 weeks is "a bit over a year" (the extra
@@ -45,89 +62,19 @@ def _now() -> str:
 
 
 def _heatmap_weeks(entries_by_date: dict[str, float], target: float, weeks: int, today: date | None = None) -> list[list[dict]]:
-    """Builds a Monday-aligned grid of `weeks` columns x 7 day-rows ending
-    on `today` (real date.today() by default; a fixed value is accepted
-    purely so tests are deterministic instead of depending on the clock).
-    Each cell carries enough to both paint and act as a toggle target:
-    `date` (ISO string, used as both the form action and a stable dict
-    key), `level` (0-4 color-intensity bucket, or -1 for a future day that
-    should render blank/non-interactive since there's nothing to log yet),
-    and `month_label` (only set on the first Monday of a month, so the
-    header row can print month names without repeating them every
-    column)."""
-    today = today or date.today()
-    start = today - timedelta(days=weeks * 7 - 1)
-    start -= timedelta(days=start.weekday())  # snap back to the preceding Monday
-
-    days = []
-    d = start
-    while d <= today:
-        days.append(d)
-        d += timedelta(days=1)
-    while len(days) % 7 != 0:
-        days.append(days[-1] + timedelta(days=1))
-
-    result: list[list[dict]] = []
-    for week_start in range(0, len(days), 7):
-        col = []
-        for day in days[week_start : week_start + 7]:
-            iso = day.isoformat()
-            is_future = day > today
-            value = entries_by_date.get(iso, 0)
-            if is_future:
-                level = -1
-            elif value <= 0:
-                level = 0
-            elif target and target > 0:
-                ratio = value / target
-                level = 4 if ratio >= 1 else 3 if ratio >= 0.66 else 2 if ratio >= 0.33 else 1
-            else:
-                level = 4  # no meaningful target (e.g. 0) -- any logged value is "full"
-            col.append(
-                {
-                    "date": iso,
-                    "value": value,
-                    "level": level,
-                    "is_future": is_future,
-                    "weekday": day.weekday(),
-                    "month_label": day.strftime("%b") if day.day <= 7 and day.weekday() == 0 else None,
-                }
-            )
-        result.append(col)
-    return result
+    """Thin wrapper -- the actual logic moved to ../habit_heatmap.py
+    (2026-08-08) so routers/tasks.py's own habits_view (Tasks > Habits)
+    can share it without a circular import (routers/labels.py imports
+    from routers/tasks.py, which would otherwise need to import this
+    module, which imports from routers/labels.py for LABEL_ICONS). Kept
+    under its old name/signature here so every existing call site in this
+    file is unchanged."""
+    return habit_heatmap.heatmap_weeks(entries_by_date, target, weeks, today)
 
 
 def _streaks(entries_by_date: dict[str, float], today: date | None = None) -> tuple[int, int]:
-    """(current_streak, longest_streak) in days, counting any day with a
-    logged value > 0 as "done" -- target_per_day only affects heatmap
-    color, not whether a day counts at all (a habit tracker that required
-    hitting the exact target to keep a streak alive would punish e.g.
-    "read 8/10 pages" as a broken streak, which isn't the intent). Current
-    streak tolerates today itself not being logged yet (you haven't lost
-    your streak just because it's 9am and you haven't meditated yet) but
-    breaks the moment a full calendar day is skipped."""
-    today = today or date.today()
-    done_dates = sorted(d for d, v in entries_by_date.items() if v and v > 0)
-    if not done_dates:
-        return 0, 0
-    done_set = set(done_dates)
-
-    longest = current_run = 0
-    prev: date | None = None
-    for d_str in done_dates:
-        d = date.fromisoformat(d_str)
-        current_run = current_run + 1 if prev and (d - prev).days == 1 else 1
-        longest = max(longest, current_run)
-        prev = d
-
-    cursor = today
-    if cursor.isoformat() not in done_set:
-        cursor -= timedelta(days=1)
-    current = 0
-    while cursor.isoformat() in done_set:
-        current += 1
-        cursor -= timedelta(days=1)
-    return current, longest
+    """Thin wrapper -- see _heatmap_weeks above."""
+    return habit_heatmap.streaks(entries_by_date, today)
 
 
 @router.get("")
@@ -147,12 +94,22 @@ def list_habits(request: Request, conn=Depends(get_db)):
         )
     return templates.TemplateResponse(
         "habits_list.html",
-        {"request": request, "active_tab": "habits", "settings_tab": "habits", "cards": cards},
+        {
+            "request": request,
+            "active_tab": "habits",
+            # 2026-08-08: promoted to a direct Settings hub category (was
+            # nested under "Data & backup," now deleted -- see
+            # routers/settings.py's module docstring).
+            "crumbs": [{"url": "/settings", "name": "Settings"}],
+            "title": "Habits",
+            "cards": cards,
+        },
     )
 
 
 @router.get("/new")
 def new_habit_form(request: Request, conn=Depends(get_db)):
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "habit_form.html",
         {
@@ -160,8 +117,11 @@ def new_habit_form(request: Request, conn=Depends(get_db)):
             "active_tab": "habits",
             "habit": None,
             "colors": COLORS,
-            "projects": db.list_projects(conn),
-            "tag_names": db.list_tag_names_in_use(conn),
+            "icons": ICONS,
+            "icon_groups": ICON_GROUPS,
+            "projects": [l for l in db.list_labels(conn) if not l.get("generate_space")],
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
         },
     )
 
@@ -178,6 +138,7 @@ def create_habit(
     icon: str = Form(""),
     target_per_day: str = Form("1"),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
     conn=Depends(get_db),
 ):
@@ -185,7 +146,7 @@ def create_habit(
     if not name:
         return RedirectResponse(url="/habits", status_code=303)
     now = _now()
-    tag_list = _tags_list(tags)
+    tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     db.upsert_habit(
         conn,
         {
@@ -201,13 +162,13 @@ def create_habit(
             "updated_at": now,
         },
     )
-    db.ensure_tags_registered(conn, tag_list)
     return RedirectResponse(url="/habits", status_code=303)
 
 
 @router.get("/{uid}/edit")
 def edit_habit_form(uid: str, request: Request, conn=Depends(get_db)):
     habit = db.get_habit(conn, uid)
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "habit_form.html",
         {
@@ -215,8 +176,11 @@ def edit_habit_form(uid: str, request: Request, conn=Depends(get_db)):
             "active_tab": "habits",
             "habit": habit,
             "colors": COLORS,
-            "projects": db.list_projects(conn),
-            "tag_names": db.list_tag_names_in_use(conn),
+            "icons": ICONS,
+            "icon_groups": ICON_GROUPS,
+            "projects": [l for l in db.list_labels(conn) if not l.get("generate_space")],
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
         },
     )
 
@@ -230,13 +194,14 @@ def edit_habit(
     icon: str = Form(""),
     target_per_day: str = Form("1"),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
     conn=Depends(get_db),
 ):
     existing = db.get_habit(conn, uid)
     if existing is None:
         return RedirectResponse(url="/habits", status_code=303)
-    tag_list = _tags_list(tags)
+    tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     row = dict(existing)
     row.update(
         {
@@ -251,7 +216,6 @@ def edit_habit(
         }
     )
     db.upsert_habit(conn, row)
-    db.ensure_tags_registered(conn, tag_list)
     return RedirectResponse(url=f"/habits/{uid}", status_code=303)
 
 
@@ -287,7 +251,7 @@ def habit_detail(uid: str, request: Request, conn=Depends(get_db)):
                 "current_streak": current,
                 "longest_streak": longest,
                 "total_logged": total_logged,
-                "project": db.get_project(conn, habit["project_uid"]) if habit.get("project_uid") else None,
+                "project": db.effective_label_config(conn, habit["project_uid"]) if habit.get("project_uid") else None,
             }
         )
     return templates.TemplateResponse("habit_detail.html", ctx)

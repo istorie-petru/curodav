@@ -1,0 +1,45 @@
+<!-- Calendar label filter (2026-08-08): a "fancy dropdown" inline in the
+     toolbar, replacing the old icon-only Filters button + collapsible
+     chips body (direct feedback: "make all the other filters on calendar,
+     task, contact page also fancy dropdown menus. remove the filters
+     details button and reintegrate these drop down menus into the
+     topbar"). One macro now -- the old checkbox-hack needed three
+     separately-placed macros (checkbox/trigger/body), but a dropdown
+     lives entirely inside .toolbar-row, so it renders as a single element.
+
+     Picks a single label (radios, one always checked -- "All labels" is
+     just another option, matching the `<select>`/chips it replaces).
+     Every calendar_month/week/day.html sets `calendar_filter_base_url`
+     beforehand to its own canonical URL (carrying whatever page-specific
+     params -- year/month, date_, day -- it needs to preserve); the macro
+     splits that URL into the shared `method="get"` form's action + hidden
+     inputs so choosing a label keeps the page right where it was, exactly
+     like clicking a label chip used to.
+
+     Uses _filter_dropdown.html underneath (same .multiselect component
+     as the widget builder's View/Range, single-select mode). -->
+{% macro calendar_filters(active_label, base_url, event_label_names) %}
+{% if event_label_names %}
+{% set _fd_action = base_url.split('?')[0] %}
+{% set _fd_qs = base_url.split('?')[1] if '?' in base_url else '' %}
+<form method="get" action="{{ _fd_action }}" id="calendar-filters-form">
+    {% if _fd_qs %}{% for _pair in _fd_qs.split('&') if _pair %}
+    {% set _kv = _pair.split('=', 1) %}
+    {% if _kv[0] != 'label' %}
+    <input type="hidden" name="{{ _kv[0] }}" value="{{ _kv[1] if _kv|length > 1 else '' }}">
+    {% endif %}
+    {% endfor %}{% endif %}
+</form>
+{% set _fd_items = [{'value': '', 'name': 'All labels'}] %}
+{% for _name in event_label_names %}
+{% set _ = _fd_items.append({'value': _name, 'name': _name}) %}
+{% endfor %}
+{% set fd_name = 'label' %}
+{% set fd_label = 'Label' %}
+{% set fd_items = _fd_items %}
+{% set fd_selected = active_label %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = 'calendar-filters-form' %}
+{% include '_filter_dropdown.html' %}
+{% endif %}
+{% endmacro %}

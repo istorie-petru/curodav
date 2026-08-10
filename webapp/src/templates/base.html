@@ -22,7 +22,7 @@
       })();
     </script>
 </head>
-<body data-px-per-hour="{{ px_per_hour|default(48) }}">
+<body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}">
 {% include "_icons_sprite.html" %}
 <div class="app-window">
     <!-- Icons + a scrollable, snap-aligned row (see .tabbar in style.css)
@@ -42,47 +42,97 @@
          earn permanent top-level real estate (a project/habit/contact is
          set up once, then rarely revisited as its own destination; the
          *content* -- previews, check-ins -- now lives on the Dashboard
-         instead, see dashboard.html). Management for all three moved to
-         the new /settings section, reached via the gear icon below rather
-         than a tab, matching Databases/Calendar/Tasks staying as the
-         primary, frequently-visited tabs.
+         instead, see dashboard.html). Management for Projects/Habits moved
+         to the new /settings section, reached via the gear icon below
+         rather than a tab.
 
-         Schedule: its Blocks/Holidays view is a modal opened from
-         Calendar's own nav (a button, not a tab -- see _calendar_nav.html),
-         so those pages keep active_tab="schedule" and highlight the
-         Calendar tab below. Its Settings page is different -- reached only
-         via the gear now (routers/schedule.py's settings_view sets
-         active_tab="schedule_settings" specifically so it does NOT also
-         highlight Calendar), same as Projects/Habits/Contacts. -->
+         2026-08-07: Schedule and Contacts restored as primary tabbar
+         destinations (both are fully working, frequently-visited routers
+         that were previously reachable only via the Settings hub) --
+         Databases removed entirely in the same pass (see plans/
+         label-space-rework.md's Grades/Databases deactivation-and-removal
+         note; the feature and every route/table under it is gone, not
+         just unlinked). Schedule's day-to-day Blocks/Holidays view
+         (schedule_classes.html) sets active_tab="schedule" (routers/
+         schedule.py) and highlights this tab. 2026-08-08: Schedule's
+         Settings page was folded back into schedule_classes.html itself
+         (a <details> block, same as Holidays) -- active_tab="schedule_settings"
+         no longer exists, so the tab check below only needs "schedule".
+         Contacts' own sub-pages (detail/edit) all set active_tab="contacts"
+         (routers/contacts.py), unchanged by this rework. -->
     <nav class="tabbar" role="navigation" aria-label="Main">
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'schedule') %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
+        <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
-        <a href="/databases" data-tab="databases" class="tab-btn {% if active_tab == 'databases' %}active{% endif %}">{{ icon('database') }}<span>Data</span></a>
+        <a href="/schedule" data-tab="schedule" class="tab-btn {% if active_tab == 'schedule' %}active{% endif %}">{{ icon('repeat') }}<span>Schedule</span></a>
+        <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
+        <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
+             user-defined list in the same rail, directly below the five
+             fixed destinations above: every label with "Generate a Space
+             page" on shows here automatically, no separate pin/unpin step
+             -- see deps.py's sidebar_spaces() docstring for why that extra
+             step got removed the same day it was added (a label worth
+             turning into a Space is a label worth finding quickly).
+             `.tab-separator` is a small divider, not another tab --
+             signals "everything below this line is yours, not the app's
+             fixed nav" the same way a native OS sidebar splits pinned
+             items from system locations. Empty (no Spaces yet) renders
+             nothing at all, not an empty section header. -->
+        {% set spaces = sidebar_spaces(request) %}
+        {% if spaces %}
+        <div class="tab-separator" role="separator" aria-label="Spaces"></div>
+        {% for l in spaces %}
+        <a href="/labels/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/labels/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+        {% endfor %}
+        {% endif %}
         <div class="spacer"></div>
-        <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab in ('projects', 'habits', 'contacts', 'schedule_settings') %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
+        <!-- 2026-08-08 Settings redesign: the gear now has to stay lit for
+             every page inside the Settings area, not just the hub itself
+             -- the hub's six children (settings_general/appearance/data/
+             widgets/advanced, all active_tab="settings_*") plus Labels'
+             own manage page and Data & backup's own children (Habits/
+             Published lists/Export, active_tab="labels"/"habits"/
+             "published_lists"/"export"). One check covering the whole
+             family instead of hand-listing it keeps this from silently
+             going stale the next time a settings child page is added.
+             A label's *generated* page (/labels/{name}, a Space or plain
+             label's dashboard) is deliberately not in this family -- it
+             sets active_tab="label" (see routers/labels.py) so only the
+             Space's own rail link highlights, not this gear too. -->
+        <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'habits', 'published_lists', 'export')) %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
         <button class="tab-btn" id="btnTheme" aria-label="Toggle theme" title="Toggle theme">{{ icon('moon') }}<span>Theme</span></button>
     </nav>
-    <main>
+    <!-- 2026-08-07: the main-class block below lets a page opt out of the
+         default 1120px-max-width centered column -- Calendar (Month/
+         Week/Day, Agenda merged into Day 2026-08-08) is the first user of
+         this, per direct feedback
+         that a calendar reads better using the full width next to the
+         sidebar rather than being boxed in like a text-heavy page. Empty
+         by default so every other page keeps the current column width
+         unchanged. -->
+    <main class="{% block main_class %}{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 </div>
 
 <!-- Generic modal shell (static/modal.js) -- any link/button with
-     data-modal="/some/url" opens that URL's #modal-target fragment here
-     instead of navigating, and its form submits via fetch instead of a
-     full page load. Empty until JS populates it. -->
+      data-modal="/some/url" opens that URL's #modal-target fragment here
+      instead of navigating, and its form submits via fetch instead of a
+      full page load. Empty until JS populates it. MD3 Dialog structure:
+      header (title + close), scrollable body, footer (actions). -->
 <div class="modal-overlay" id="modal-overlay">
     <div class="modal" id="modal-dialog" role="dialog" aria-modal="true">
         <!-- Grab handle -- only visible/interactive below the mobile
-             breakpoint (see .modal-handle in style.css), where .modal
-             becomes a bottom sheet instead of a centered dialog. Gives
-             the drag-to-dismiss gesture (static/modal.js) something to
-             visually anchor to, the same way iOS/Android sheets show a
-             small bar at the top as the "this is draggable" affordance. -->
+              breakpoint (see .modal-handle in style.css), where .modal
+              becomes a bottom sheet instead of a centered dialog. Gives
+              the drag-to-dismiss gesture (static/modal.js) something to
+              visually anchor to, the same way iOS/Android sheets show a
+              small bar at the top as the "this is draggable" affordance. -->
         <div class="modal-handle" id="modal-handle" aria-hidden="true"></div>
-        <button type="button" class="modal-close" id="modal-close" aria-label="Close">{{ icon('x') }}</button>
+        <div class="modal-header" id="modal-header"></div>
         <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer" id="modal-footer"></div>
+        <button type="button" class="modal-close" id="modal-close" aria-label="Close">{{ icon('x') }}</button>
     </div>
 </div>
 
@@ -106,10 +156,27 @@
      swatches. See static/modal.js's wireSwatchPicker. -->
 <div class="icon-popover" id="icon-popover"></div>
 
+<!-- Multiselect/single-select dropdown portal (_widget_list_multiselect.html,
+     static/app.js), 2026-08-08 -- same reasoning and technique as
+     #color-popover/#icon-popover above: .modal/.modal-body clip any
+     descendant that visually overflows them, so a `.multiselect-panel`
+     (View/Range/Labels/Task lists/Calendars, and now Priority/Status too)
+     opened while it's inside a modal-rendered form (task_form.html,
+     event_form.html, contact_form.html, habit_form.html, the widget
+     builder) was getting visually cut off/overlapped instead of rendering
+     in full. app.js moves the panel itself in here on open (each option
+     input carries `form="..."` -- see that partial's ms_form_id comment --
+     so it stays part of its real form even while reparented outside it)
+     and moves it back to its original spot on close. -->
+<div class="multiselect-portal" id="multiselect-portal"></div>
+
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
 <script src="{{ static_url('tag_input.js') }}"></script>
+<script src="{{ static_url('recurrence_picker.js') }}"></script>
+<script src="{{ static_url('reminders_picker.js') }}"></script>
+<script src="{{ static_url('stepper.js') }}"></script>
 <!-- Loaded on every page (not just schedule_classes.html's own
      extra_scripts, as before 2026-08-01) so modal.js's wireContent() can
      call CCScheduleTable.init()/CCScheduleGrid.init() when Schedule is
@@ -119,6 +186,46 @@
      Schedule isn't involved. -->
 <script src="{{ static_url('schedule_table.js') }}"></script>
 <script src="{{ static_url('schedule_grid.js') }}"></script>
+{#
+    Widget scripts (2026-08-03) -- loaded globally for the same reason as
+    Schedule's above: the Customize modal's Widget Builder and live preview
+    are injected via innerHTML, which never runs <script> tags, so modal.js's
+    wireContent() calls CCWidgetPreview.init against the freshly-injected
+    content. It no-ops instantly when its target elements aren't present.
+    dashboard_widget_preview.js also self-initializes over the whole page
+    for the workspace's own inline Add-widget form.
+
+    dashboard_widget_builder.js (the Customize modal's old "stay open,
+    offer Duplicate/Edit" add-widget flow) was removed 2026-08-07 -- the
+    builder form is a plain add-and-close form now, same as every other
+    non-keep-open modal form in this app; see _modal_widget_customize.html's
+    own comment.
+#}
+<script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
+<!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
+     -- loaded globally for the same reason as Schedule's own scripts above:
+     contact_form.html is normally injected into the modal via innerHTML,
+     which never runs <script> tags, so modal.js's wireContent() calls
+     CCAvatarCropper.init(body) against the freshly-injected content. -->
+<script src="{{ static_url('avatar_cropper.js') }}"></script>
+<!-- task_form.html's Daily target field (2026-08-08) -- loaded globally
+     for the same reason as the scripts above: task_form.html is normally
+     injected into the modal via innerHTML, so modal.js's wireContent()
+     calls CCHabitFieldToggle.init(body) against the freshly-injected
+     content. -->
+ <script src="{{ static_url('task_habit_field_toggle.js') }}"></script>
+<!-- Relations cards' add-row "＋ New…" title reveal (_task_relations.html/
+     _event_relations.html, 2026-08-09) -- loaded globally for the same
+     reason as the scripts above: those cards are normally injected into
+     the modal via innerHTML, so modal.js's wireContent() calls
+     CCRelationPicker.init(body) against the freshly-injected content. -->
+<script src="{{ static_url('relations_picker.js') }}"></script>
+<!-- Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
+     loaded globally for the same reason as the scripts above: quick_add.html
+     is normally injected into the modal via innerHTML (which never runs
+     <script> tags), so modal.js's wireContent() calls CCQuickAdd.init(body)
+     against the freshly-injected content to wire its Task/Event tab switch. -->
+<script src="{{ static_url('quick_add.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

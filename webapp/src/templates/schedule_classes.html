@@ -1,52 +1,70 @@
 {% extends "base.html" %}
 {% block title %}Schedule{% endblock %}
 {% block content %}
-<!-- 2026-08-01: Schedule is now opened as a modal from Calendar's own nav
-     (_calendar_nav.html's "Schedule" button, data-modal) rather than
-     being a topbar tab/segmented view of its own -- see event_form.html
-     for why this needs the #modal-target wrapper (same reasoning: modal.js
-     fetches this same URL and pulls out just this div's innerHTML instead
-     of navigating). Still a real full page too if visited directly at
-     /schedule -- the wrapper div is inert outside the modal flow.
+<!-- 2026-08-08: Schedule is always a real page now, never opened as a
+     modal -- it's already a primary tabbar destination (base.html), so
+     forcing it into a modal from elsewhere (the old behavior) was
+     redundant with that; the Table/Calendar toggle below is now plain
+     navigation too (no data-modal), so switching views never depends on
+     JS. No #modal-target wrapper on this page anymore -- see modal.js's
+     wireContent() comment: a stray data-modal link pointed at /schedule
+     now just falls back to a normal navigation instead of a broken open.
 
-     Also merged in this pass: Holidays used to be a separate page/nav tab
-     (schedule_holidays.html, now deleted) -- folded into a collapsible
-     section below instead, since a modal is the wrong place for a whole
-     second segmented sub-page, and holidays are a small, infrequent
-     add/remove list, not something that needs its own destination.
-     Settings (semester dates, credits, reminders) moved the other
-     direction -- out of Schedule's own nav entirely and into the app's
-     Settings section (routers/schedule.py's settings_view now uses
-     _settings_nav.html) rather than a details/summary, since editing
-     semester dates once at the start of a term is a genuine "settings"
-     action, not something worth surfacing every time you open the
-     modal. -->
-<div id="modal-target">
-<div class="toolbar">
-    <h1 style="margin:0">Schedule</h1>
-    <div class="spacer"></div>
-    <div class="segmented">
-        <!-- data-modal(-size) here too, not just on the Schedule button
-             that first opens this -- without it, switching Table/Calendar
-             while inside the modal would fall through to a plain page
-             navigation (modal.js only intercepts [data-modal] clicks) and
-             silently kick you out of the modal entirely. Both need "wide"
-             specifically -- the Calendar (week grid) view needs the room
-             even more than Table does. -->
-        <a class="seg-btn {% if view != 'calendar' %}active{% endif %}" href="/schedule?view=table{% if q %}&q={{ q }}{% endif %}" data-modal data-modal-size="wide">Table</a>
-        <a class="seg-btn {% if view == 'calendar' %}active{% endif %}" href="/schedule?view=calendar" data-modal data-modal-size="wide">Calendar</a>
+     Holidays and Settings (semester dates, credits, reminders, event
+     label) both live below as collapsible <details> blocks, same shape --
+     small, infrequent, once-a-term config doesn't need its own page or
+     permanent visibility. Settings moved back here 2026-08-08 from the
+     standalone /schedule/settings page (reached only via the Settings
+     hub) -- that split just put the one thing this page actually needs
+     (semester dates, without which no block ever generates a calendar
+     occurrence) one extra hop away. -->
+<!-- 2026-08-07: brought into the same .toolbar.top-app-bar.toolbar-2row/
+     .toolbar-row shell Calendar/Tasks/Contacts use, including a visible
+     search box -- routers/schedule.py's classes_view already accepted `q`
+     and filtered by it, there was just never an input for it in this
+     toolbar. 2026-08-08: title h1 is sr-only now (minimalist-toolbar pass,
+     see style.css's .sr-only comment) -- the Table/Calendar segmented
+     switcher is the leftmost visible element instead. Search merged into
+     just this one box (was duplicated below in the Table-view body too),
+     and the block's label is now a single-select "fancy dropdown"
+     (_filter_dropdown.html, same as Calendar/Tasks -- direct feedback:
+     "make all the other filters on calendar, task, contact page also
+     fancy dropdown menus. remove the filters details button and
+     reintegrate these drop down menus into the topbar"). The dropdown's
+     radios submit `label` (a block's project_uid) into the shared
+     #schedule-filters-form; it's visible in both views and filters the
+     calendar grid too (unlike search, which is Table-only). -->
+<div class="toolbar top-app-bar toolbar-2row">
+    <div class="toolbar-row">
+        <h1 class="sr-only">Schedule</h1>
+        <div class="segmented">
+            <a class="seg-btn {% if view != 'calendar' %}active{% endif %}" href="/schedule?view=table{% if q %}&q={{ q|urlencode }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Table</a>
+            <a class="seg-btn {% if view == 'calendar' %}active{% endif %}" href="/schedule?view=calendar{% if label %}&label={{ label|urlencode }}{% endif %}">Calendar</a>
+        </div>
+        <div class="spacer"></div>
+        <form method="get" action="/schedule" class="filter-bar" id="schedule-filters-form">
+            <input type="hidden" name="view" value="{{ view }}">
+            {% if view != 'calendar' %}
+            <input type="search" name="q" placeholder="Search course, professor, room..." value="{{ q or '' }}">
+            {% endif %}
+        </form>
+        {% if schedule_label_items %}
+        {% set _lf_items = [{'value': '', 'name': 'All labels'}] + schedule_label_items %}
+        {% set fd_name = 'label' %}
+        {% set fd_label = 'Label' %}
+        {% set fd_items = _lf_items %}
+        {% set fd_selected = label %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'schedule-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+        {% endif %}
+        <!-- Phase 1 (label-space rework, 2026-08-06) removed the Export
+             button/modal here -- it picked (or created) a calendar for the
+             mirrored class events, and calendars is gone (see
+             routers/schedule.py's own comment on the removal). Every class's
+             mirrored VEVENT lands directly in the universal events pool. -->
+        <a class="btn primary" href="/schedule/classes/new" data-modal data-fab title="New block">{{ icon('plus') }} New</a>
     </div>
-    {% if view != 'calendar' %}
-    <!-- Compact density (2026-08-01, "a lot of classes, easily viewed") --
-         localStorage-persisted per-device display preference, same
-         category as the Timeline view's gutter width: it doesn't change
-         what data exists, only how much vertical room each row takes, so
-         there's nothing here for the server to know or store. See
-         static/schedule_table.js's initDensity(). -->
-    <button type="button" class="icon-btn" id="schedule-density-toggle" title="Compact rows" aria-label="Toggle compact rows">{{ icon('list', 'icon-sm') }}</button>
-    {% endif %}
-    <a class="btn ghost" href="/schedule/export" data-modal>{{ icon('upload', 'icon-sm') }} Export</a>
-    <a class="btn primary" href="/schedule/classes/new" data-modal data-fab>{{ icon('plus') }} New block</a>
 </div>
 
 <div class="warnings-strip">
@@ -65,20 +83,22 @@
 </div>
 
 {% if view == 'calendar' %}
-<p style="color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0 0 8px">
-    Hover to preview a slot, click for a 1-hour block, click-and-drag to pick a length. Drag an existing block to move it.
-</p>
-<div class="card">
+<!-- 2026-08-08: same .card.calendar-viewport shell as Calendar's Week/Day
+     views -- the 24-hour grid keeps its true pixel height and the
+     .time-grid-wrap scrolls internally, so the calendar fits the page
+     instead of pushing everything (and the Holidays/Settings panels
+     below) off-screen. -->
+<div class="card calendar-viewport">
 <div class="time-grid-wrap">
 <div class="time-grid-head week">
     {% for d in week_grid.days %}
     <div class="thd">{{ d[:3] }}</div>
     {% endfor %}
 </div>
-<div class="time-grid-body" style="height:{{ 24 * week_grid.px_per_hour }}px">
+<div class="time-grid-body" style="--hr-h:{{ week_grid.px_per_hour }}px; height:calc(25 * var(--hr-h));">
     <div class="time-gutter">
         {% for h in week_grid.hours %}
-        <div class="hr-label" style="top:{{ h * week_grid.px_per_hour }}px">{{ "%02d:00"|format(h) }}</div>
+        <div class="hr-label" style="top:{{ h * week_grid.px_per_hour }}px">{{ h | fmt_hour }}</div>
         {% endfor %}
     </div>
     <div class="time-cols week">
@@ -90,7 +110,7 @@
                href="/schedule/classes/{{ cls.uid }}/edit" data-modal
                style="top:{{ cls.top_px }}px; height:{{ cls.height_px }}px; left:{{ cls.left_pct }}%; width:{{ cls.width_pct }}%;">
                 <span class="te-name">{{ cls.acronym or cls.name }}</span>
-                <span class="te-time">{{ cls.start_time }}&ndash;{{ cls.end_time }}</span>
+                <span class="te-time">{{ cls.start_time | fmt_time }}&ndash;{{ cls.end_time | fmt_time }}</span>
                 <span class="te-resize-handle" data-uid="{{ cls.uid }}"></span>
             </a>
             {% endfor %}
@@ -102,18 +122,6 @@
 </div>
 {% else %}
 
-<!-- Search bar -- same shape as tasks_list.html's filter-bar, just one
-     dimension (there's no natural second "which list" filter for a single
-     schedule the way Tasks has multiple lists). -->
-<!-- data-modal-get: GET forms (a search box) aren't something modal.js's
-     click-delegation covers at all -- without this, hitting Enter here
-     would submit as a normal navigation and, same as the Table/Calendar
-     toggle above, silently kick you out of the modal. -->
-<form method="get" action="/schedule" class="filter-bar" style="margin-bottom:12px" data-modal-get data-modal-size="wide">
-    <input type="hidden" name="view" value="table">
-    <input type="search" name="q" placeholder="Search course, owner, room..." value="{{ q }}">
-</form>
-
 <div class="card">
 {% if classes %}
 <div class="table-scroll">
@@ -121,14 +129,14 @@
     <thead>
         <tr>
             <th style="width:26px"></th>
-            <th><a class="th-sort" href="/schedule?sort=day&dir={{ 'desc' if sort=='day' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Day{% if sort=='day' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-            <th><a class="th-sort" href="/schedule?sort=time&dir={{ 'desc' if sort=='time' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Time{% if sort=='time' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-            <th><a class="th-sort" href="/schedule?sort=name&dir={{ 'desc' if sort=='name' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Course{% if sort=='name' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=day&dir={{ 'desc' if sort=='day' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Day{% if sort=='day' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=time&dir={{ 'desc' if sort=='time' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Time{% if sort=='time' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=name&dir={{ 'desc' if sort=='name' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Course{% if sort=='name' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
             <th>Type</th>
-            <th><a class="th-sort" href="/schedule?sort=professor&dir={{ 'desc' if sort=='professor' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Owner{% if sort=='professor' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-            <th><a class="th-sort" href="/schedule?sort=room&dir={{ 'desc' if sort=='room' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Room{% if sort=='room' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-            <th><a class="th-sort" href="/schedule?sort=credits&dir={{ 'desc' if sort=='credits' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Credits{% if sort=='credits' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-            <th><a class="th-sort" href="/schedule?sort=parity&dir={{ 'desc' if sort=='parity' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}">Week{% if sort=='parity' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=professor&dir={{ 'desc' if sort=='professor' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Professor{% if sort=='professor' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=room&dir={{ 'desc' if sort=='room' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Room{% if sort=='room' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=credits&dir={{ 'desc' if sort=='credits' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Credits{% if sort=='credits' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
+            <th><a class="th-sort" href="/schedule?sort=parity&dir={{ 'desc' if sort=='parity' and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if label %}&label={{ label|urlencode }}{% endif %}">Week{% if sort=='parity' %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
             <th>Next</th>
             <th style="width:40px"></th>
         </tr>
@@ -183,7 +191,7 @@
                     <option value="even" data-color="green" {% if c.parity == 'even' %}selected{% endif %}>Even</option>
                 </select>
             </td>
-            <td style="white-space:nowrap; color:var(--fg-secondary); font-size:var(--text-caption)">
+            <td class="text-muted-secondary" style="white-space:nowrap; font-size:var(--text-caption)">
                 {% if c.next_occurrence == 'today' %}
                 <span class="cell-tag tag-green">today</span>
                 {% elif c.next_occurrence == 'tomorrow' %}
@@ -204,11 +212,16 @@
 </table>
 </div>
 {% else %}
-<div class="empty-state">{% if q %}No blocks match "{{ q }}".{% else %}No blocks yet. <a href="/schedule/classes/new" data-modal>Add one</a>.{% endif %}</div>
+<div class="empty-state">{% if q or label %}No blocks match{% if q %} "{{ q }}"{% endif %}{% if label %} for this label{% endif %}.{% else %}No blocks yet. <a href="/schedule/classes/new" data-modal>Add one</a>.{% endif %}</div>
 {% endif %}
 </div>
 {% endif %}
 
+<!-- Holidays/Settings only belong with the Table view -- in the Calendar
+     view the grid fills the page (calendar-viewport above), so these
+     once-a-term config panels would just sit below the fold under a
+     scrollable grid that never reaches them. -->
+{% if view != 'calendar' %}
 <!-- Holidays -- merged in here 2026-08-01 (was its own page/nav tab).
      Collapsed by default, same "secondary, occasionally-needed content
      doesn't need to be permanently visible" reasoning as dashboard.html's
@@ -250,5 +263,59 @@
     {% endif %}
 </div>
 </details>
+
+<!-- Settings -- moved back onto this page 2026-08-08 (was a standalone
+     /schedule/settings page reached only via the Settings hub, see
+     routers/settings.py's module docstring and _settings_nav.html's own
+     comment) as a second <details> block, same shape/reasoning as
+     Holidays right above: semester dates/credits/reminder/event label are
+     a once-a-term, few-field edit, not something that needs permanent
+     visibility or its own destination -- and it's the one thing that
+     actually gates whether any block ever generates a real calendar
+     occurrence (schedule.py's class_to_event_row returns nothing until
+     both semester dates are set), so it belongs one click away on the
+     page that shows the result, not buried in the Settings hub. -->
+<details class="widget-config" style="margin-top:10px">
+<summary class="btn ghost" style="display:inline-block; cursor:pointer">{{ icon('chevron-down', 'icon-sm') }} Settings</summary>
+<div class="card" style="margin-top:10px; padding:12px 14px">
+    <form method="post" action="/schedule/settings" id="schedule-settings-form" class="field-grid">
+        <div class="field">
+            <label>Semester start</label>
+            <input type="date" name="semester_start" value="{{ settings.semester_start or '' }}">
+        </div>
+        <div class="field">
+            <label>Semester end</label>
+            <input type="date" name="semester_end" value="{{ settings.semester_end or '' }}">
+        </div>
+        <div class="field">
+            <label>Credits needed</label>
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease credits needed" tabindex="-1">&minus;</button>
+                <input type="number" name="credits_needed" class="stepper-input" min="0" step="1" value="{{ settings.credits_needed or '' }}">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase credits needed" tabindex="-1">+</button>
+            </div>
+        </div>
+        {% set ms_mode = 'single' %}
+        {% set ms_form_id = 'schedule-settings-form' %}
+        {% set ms_name = 'reminder_minutes' %}
+        {% set ms_label = 'Reminder' %}
+        {% set ms_items = [{'uid': '0', 'name': 'No reminder'}, {'uid': '5', 'name': '5 minutes before'}, {'uid': '10', 'name': '10 minutes before'}, {'uid': '15', 'name': '15 minutes before'}, {'uid': '30', 'name': '30 minutes before'}, {'uid': '60', 'name': '1 hour before'}] %}
+        {% set ms_selected = (settings.reminder_minutes | default(15)) | string %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = '' %}
+        {% include '_widget_list_multiselect.html' %}
+        <div class="field">
+            <label>Event label</label>
+            <input type="text" name="schedule_label" value="{{ settings.schedule_label or 'Schedule' }}" placeholder="Schedule">
+        </div>
+    </form>
+    <p class="settings-hint" style="margin-top:8px">
+        Blocks only generate calendar occurrences once both semester dates are set.
+        The event label is the tag applied to every generated occurrence -- saving here regenerates all of them.
+    </p>
+    <button type="submit" form="schedule-settings-form" class="btn primary">Save</button>
 </div>
+</details>
+{% endif %}
+
 {% endblock %}

@@ -9,7 +9,7 @@
             </form>
         </td>
         <td><a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></td>
-        <td style="text-align:right; color:var(--fg-tertiary)">{{ t.due_at[:10] }}</td>
+        <td class="text-muted" style="text-align:right">{{ t.due_at[:10] }}</td>
     </tr>
     {% endfor %}
 </table>

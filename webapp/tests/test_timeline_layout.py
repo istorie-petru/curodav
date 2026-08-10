@@ -80,57 +80,95 @@ class TestPackIntervals:
 
 
 class TestAssignSwimlanes:
-    def _task(self, uid, list_path="tasks", start=None, due=None, timeline_lane=None):
-        t = {"uid": uid, "list_path": list_path, "due_at": due}
+    def _task(self, uid, tags=None, start=None, due=None, timeline_lane=None):
+        t = {"uid": uid, "tags": list(tags or []), "due_at": due}
         if start:
             t["start_at"] = start
         if timeline_lane is not None:
             t["timeline_lane"] = timeline_lane
         return t
 
-    def test_single_list_no_overlap_all_row_zero(self):
+    def test_single_label_no_overlap_all_row_zero(self):
         tasks = [
-            self._task("a", due="2026-08-01"),
-            self._task("b", start="2026-08-05", due="2026-08-06"),
+            self._task("a", tags=["University"], due="2026-08-01"),
+            self._task("b", tags=["University"], start="2026-08-05", due="2026-08-06"),
         ]
-        result = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        result = tl.assign_swimlanes(tasks)
         assert result.row_of["a"] == 0
         assert result.row_of["b"] == 0
         assert result.total_rows == 1
 
-    def test_overlapping_same_list_different_rows(self):
+    def test_overlapping_same_label_different_rows(self):
         tasks = [
-            self._task("a", start="2026-08-01", due="2026-08-05"),
-            self._task("b", start="2026-08-03", due="2026-08-07"),
+            self._task("a", tags=["University"], start="2026-08-01", due="2026-08-05"),
+            self._task("b", tags=["University"], start="2026-08-03", due="2026-08-07"),
         ]
-        result = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        result = tl.assign_swimlanes(tasks)
         assert result.row_of["a"] != result.row_of["b"]
         assert result.total_rows == 2
 
-    def test_different_lists_never_share_a_row(self):
+    def test_different_labels_never_share_a_row(self):
         tasks = [
-            self._task("a", list_path="hw", due="2026-08-01"),
-            self._task("b", list_path="other", due="2026-08-01"),
+            self._task("a", tags=["Homework"], due="2026-08-01"),
+            self._task("b", tags=["Work"], due="2026-08-01"),
         ]
-        result = tl.assign_swimlanes(tasks, {"hw": "Homework", "other": "Other"})
+        result = tl.assign_swimlanes(tasks)
         assert result.row_of["a"] != result.row_of["b"]
-        # each list gets its own contiguous block
-        ranges = list(result.group_range_by_list.values())
+        # each label gets its own contiguous block
+        ranges = list(result.group_range_by_label.values())
         (start_a, count_a), (start_b, count_b) = sorted(ranges)
         assert start_a + count_a <= start_b or start_b + count_b <= start_a
 
-    def test_lists_sorted_by_name(self):
-        tasks = [self._task("a", list_path="zz", due="2026-08-01"), self._task("b", list_path="aa", due="2026-08-01")]
-        result = tl.assign_swimlanes(tasks, {"zz": "Zeta", "aa": "Alpha"})
+    def test_labels_sorted_by_name(self):
+        tasks = [
+            self._task("a", tags=["Work"], due="2026-08-01"),
+            self._task("b", tags=["University"], due="2026-08-01"),
+        ]
+        result = tl.assign_swimlanes(tasks)
         labels_in_order = [label for _, _, label, _ in result.group_labels]
-        assert labels_in_order == ["Alpha", "Zeta"]
+        assert labels_in_order == ["University", "Work"]
+
+    def test_multi_label_task_goes_under_first_label(self):
+        # tags arrive already COLLATE NOCASE-sorted from db.list_labels_
+        # for_object, so "first" is alphabetical -- and a task can only
+        # paint one Gantt bar, so it lives in exactly one block.
+        tasks = [self._task("a", tags=["Homework", "Work"], due="2026-08-01")]
+        result = tl.assign_swimlanes(tasks)
+        assert result.row_of["a"] == 0
+        assert list(result.group_labels) == [(0, 1, "Homework", "homework")]
+
+    def test_untagged_tasks_get_the_no_label_block_last(self):
+        tasks = [
+            self._task("a", tags=["Work"], due="2026-08-01"),
+            self._task("b", due="2026-08-01"),
+            self._task("c", tags=["University"], due="2026-08-01"),
+        ]
+        result = tl.assign_swimlanes(tasks)
+        labels_in_order = [label for _, _, label, _ in result.group_labels]
+        assert labels_in_order == ["University", "Work", "(No label)"]
+        # the "(No label)" block is the last one
+        no_label_start, _ = result.group_range_by_label[tl.NO_LABEL_KEY]
+        assert no_label_start == result.total_rows - 1
+
+    def test_header_label_uses_preserved_case_from_first_task(self):
+        # grouping is case-insensitive (key lowercased); the header shows
+        # the first task's real tag casing.
+        tasks = [
+            self._task("a", tags=["university"], due="2026-08-01"),
+            self._task("b", tags=["University"], due="2026-08-02"),
+        ]
+        result = tl.assign_swimlanes(tasks)
+        assert result.total_rows == 1
+        (_, _, label, key) = result.group_labels[0]
+        assert key == "university"
+        assert label == "university"
 
     def test_manual_lane_wins_and_is_unclamped(self):
         """A task with an explicit timeline_lane lands there even if it
         opens a gap above lane 0 -- the whole point of manual placement,
         per desktop's docstring."""
         tasks = [self._task("a", due="2026-08-01", timeline_lane=3)]
-        result = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        result = tl.assign_swimlanes(tasks)
         assert result.row_of["a"] == 3
         assert result.total_rows == 4
 
@@ -139,7 +177,7 @@ class TestAssignSwimlanes:
             self._task("a", start="2026-08-01", due="2026-08-10"),
             self._task("b", start="2026-08-05", due="2026-08-06", timeline_lane=0),  # conflicts with a's lane 0
         ]
-        result = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        result = tl.assign_swimlanes(tasks)
         assert result.row_of["a"] != result.row_of["b"]
 
     def test_stability_via_prev_local_lane(self):
@@ -147,17 +185,17 @@ class TestAssignSwimlanes:
         previous lane passed through as prev_local_lane keeps the same row
         -- doesn't silently reflow every call."""
         tasks = [self._task("solo", due="2026-08-01")]
-        first = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        first = tl.assign_swimlanes(tasks)
         assert first.row_of["solo"] == 0
         # Simulate a lane 2 preference (as if from a prior wider layout)
-        second = tl.assign_swimlanes(tasks, {"tasks": "Tasks"}, prev_local_lane={"solo": 0})
+        second = tl.assign_swimlanes(tasks, prev_local_lane={"solo": 0})
         assert second.row_of["solo"] == 0
 
     def test_task_with_no_due_date_is_skipped(self):
-        tasks = [{"uid": "a", "list_path": "tasks", "due_at": None}]
-        result = tl.assign_swimlanes(tasks, {"tasks": "Tasks"})
+        tasks = [{"uid": "a", "tags": [], "due_at": None}]
+        result = tl.assign_swimlanes(tasks)
         assert "a" not in result.row_of
-        # still gets a (empty) group row for the list itself
+        # still gets a (empty) group row for the label block itself
         assert result.total_rows == 1
 
 
@@ -221,21 +259,15 @@ class TestWeekStartIndices:
 class TestBarGeometry:
     def test_single_day_task_has_visible_width(self):
         task = {"uid": "a", "due_at": "2026-08-05"}
-        geo = tl.bar_geometry(task, 0, date(2026, 8, 1), 30, {"a": 0})
+        geo = tl.bar_geometry(task, date(2026, 8, 1), 30, {"a": 0})
         assert geo.day_to > geo.day_from
 
     def test_exclusive_end_is_one_past_due_date(self):
         task = {"uid": "a", "start_at": "2026-08-05", "due_at": "2026-08-07"}
-        geo = tl.bar_geometry(task, 0, date(2026, 8, 1), 30, {"a": 0})
+        geo = tl.bar_geometry(task, date(2026, 8, 1), 30, {"a": 0})
         assert geo.day_from == 4  # Aug 5 is day offset 4 from Aug 1
         assert geo.day_to == 7  # one past Aug 7's offset (6)
 
     def test_no_due_date_returns_none(self):
         task = {"uid": "a", "due_at": None}
-        assert tl.bar_geometry(task, 0, date(2026, 8, 1), 30, {}) is None
-
-    def test_color_cycles_by_index(self):
-        task = {"uid": "a", "due_at": "2026-08-05"}
-        c0 = tl.bar_geometry(task, 0, date(2026, 8, 1), 30, {"a": 0}).color
-        c10 = tl.bar_geometry(task, 10, date(2026, 8, 1), 30, {"a": 0}).color
-        assert c0 == c10  # palette has 10 colors, wraps around
+        assert tl.bar_geometry(task, date(2026, 8, 1), 30, {}) is None

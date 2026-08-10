@@ -47,9 +47,15 @@ class TestHabitCRUD:
         assert h["archived_at"] is None
 
     def test_create_with_tags_and_project(self, conn):
+        # 2026-08-06 correction: a habit's project is just another label
+        # now (see db.py's project_label_for docstring), not tracked
+        # separately from its tags -- so it shows up in `tags` too. This
+        # is required, not incidental: it's what makes the habit
+        # discoverable from a Space page's aggregation, the same way a
+        # task tagged with a label is.
         uid = _make_habit(conn, "Study", tags=["uni"], project_uid="p1", target_per_day=2, color="purple")
         h = db.get_habit(conn, uid)
-        assert h["tags"] == ["uni"]
+        assert set(h["tags"]) == {"uni", "p1"}
         assert h["project_uid"] == "p1"
         assert h["target_per_day"] == 2
         assert h["color"] == "purple"

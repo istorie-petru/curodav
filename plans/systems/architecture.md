@@ -1,8 +1,16 @@
 # Personal Command Center — Architecture
 
-**Status:** Current · v0.2 · 2026-07-17
+**Status:** Historical · v0.2 · 2026-07-17 · superseded 2026-08-07
 **Owner:** Peter
 **Scope:** Single-user, offline-first, file-tree-backed desktop app with optional P2P sync
+
+> **This document is no longer current.** `desktop/` (the PySide6 app this
+> document describes) was deleted 2026-08-07 as the final phase of
+> [`../label-space-rework.md`](../label-space-rework.md) (Phase 8) —
+> `webapp/` is now the sole client. This file is kept as the historical
+> record of the file-tree/Syncthing/HLC design, same as
+> [`decisions-log.md`](decisions-log.md). For the current architecture, see
+> [`../../architecture.md`](../../architecture.md) (root).
 
 > **Supersedes** the v0.1 draft (2026-07-09), which specified a Flutter client
 > synced through a custom FastAPI + Postgres backend. That design was
@@ -285,7 +293,7 @@ Current test locations: `desktop/tests/`. No server tests remain (the server no 
 
 ## 12. Status
 
-The rework is implemented — `desktop/` is the current, sole client, and every module planned for it is built. See [`../../features/`](../../features/README.md) for what each module actually does today, and [`decisions-log.md`](decisions-log.md) for the phase-by-phase delivery history. The old Flutter client (`app/`), the FastAPI+Postgres server (`server/`), and the static HTML mockups (`dashboard.html`, `identity-mockup-v3.html`) have been removed from the repository; this document and `decisions-log.md` are the historical record of what they were and why they were replaced.
+The rework was implemented and shipped — `desktop/` was the sole client for its lifetime, and every module planned for it was built. See [`../../features/`](../../features/README.md) for what each module did (historical, per that folder's own README), and [`decisions-log.md`](decisions-log.md) for the phase-by-phase delivery history. The old Flutter client (`app/`), the FastAPI+Postgres server (`server/`), the static HTML mockups (`dashboard.html`, `identity-mockup-v3.html`), and — as of 2026-08-07 — `desktop/` itself have all been removed from the repository; this document and `decisions-log.md` are the historical record of what they were and why they were replaced. `webapp/` is now the sole client; see [`../../architecture.md`](../../architecture.md) (root) for its current architecture.
 
 ---
 

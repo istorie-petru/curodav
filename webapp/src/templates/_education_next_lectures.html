@@ -1,0 +1,21 @@
+<!-- Education "Next lectures" badge strip (Phase 6, calendar.py's
+     _group_education_next_lectures) -- shown on every calendar view only
+     when the view is filtered to an education Space. Each badge is the
+     class acronym + its next lecture's relative label, so glancing at the
+     calendar tells you which lectures are coming up without opening each
+     class. schedule_next_lectures is [] for every other filter, so this
+     partial simply renders nothing. -->
+{% if schedule_next_lectures %}
+<div class="card education-next-lectures" style="margin-bottom:var(--space-3)">
+    <div class="section-label">Next lectures</div>
+    <div class="education-next-lectures-row">
+        {% for b in schedule_next_lectures %}
+        <span class="cell-tag cal-{{ b.class.color or 'blue' }}">
+            {{ b.class.acronym or b.class.name }}
+            <span class="education-next-label">{{ b.label }}</span>
+            <span class="education-next-date">{{ b.date.strftime('%a %b %d') }}</span>
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

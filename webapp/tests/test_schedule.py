@@ -92,7 +92,16 @@ class TestClassToEventRow:
         assert "Professor: Dr. X" in row["description"]
         assert row["exdates"] == ["2026-09-15T10:00:00"]
         assert row["recurrence"] == "FREQ=WEEKLY;UNTIL=2026-09-22"
-        assert row["tags"] == ["schedule"]
+        # 2026-08-08: the tag is a real per-install setting now
+        # (schedule_label, default "Schedule"), not a hardcoded literal --
+        # this settings dict doesn't set one, so class_to_event_row falls
+        # back to the same default get_schedule_settings would return.
+        assert row["tags"] == ["Schedule"]
+
+    def test_schedule_label_setting_is_used_as_the_tag(self):
+        settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22", "schedule_label": "University"}
+        row = class_to_event_row(self.BASE_CLASS, settings, [])
+        assert row["tags"] == ["University"]
 
     def test_odd_even_parity_adds_interval(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-12-20"}

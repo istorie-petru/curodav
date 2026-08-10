@@ -28,13 +28,15 @@
 // otherwise do (a "Cancel"/"Back" link that would normally navigate).
 
 (function () {
-  const overlay = document.getElementById("modal-overlay");
-  const dialog = document.getElementById("modal-dialog");
-  const body = document.getElementById("modal-body");
-  const closeBtn = document.getElementById("modal-close");
-  const colorPopover = document.getElementById("color-popover");
-  const iconPopover = document.getElementById("icon-popover");
-  if (!overlay || !body) return;
+    const overlay = document.getElementById("modal-overlay");
+    const dialog = document.getElementById("modal-dialog");
+    const header = document.getElementById("modal-header");
+    const body = document.getElementById("modal-body");
+    const footer = document.getElementById("modal-footer");
+    const closeBtn = document.getElementById("modal-close");
+    const colorPopover = document.getElementById("color-popover");
+    const iconPopover = document.getElementById("icon-popover");
+    if (!overlay || !body) return;
 
   let currentUrl = null;
   let pendingReload = false;
@@ -172,36 +174,78 @@
     });
   }
 
-  function closeModal() {
-    closeOpenPopover();
-    overlay.classList.remove("is-open");
-    body.innerHTML = "";
-    currentUrl = null;
-    if (pendingReload) {
-      pendingReload = false;
-      window.location.reload();
-    }
-  }
+   function closeModal() {
+     closeOpenPopover();
+     overlay.classList.remove("is-open");
+     body.innerHTML = "";
+     if (header) header.innerHTML = "";
+     if (footer) footer.innerHTML = "";
+     currentUrl = null;
+     if (pendingReload) {
+       pendingReload = false;
+       window.location.reload();
+     }
+   }
 
-  async function refreshModalContent() {
-    if (!currentUrl) return;
-    closeOpenPopover(); // its "home" element is about to be replaced
-    const resp = await fetch(currentUrl);
-    const html = await resp.text();
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const fragment = doc.getElementById("modal-target");
-    if (!fragment) return;
-    body.innerHTML = fragment.innerHTML;
-    wireContent();
-  }
+   function injectModalContent(html) {
+     const doc = new DOMParser().parseFromString(html, "text/html");
+     const fragment = doc.getElementById("modal-target");
+     if (!fragment) return null;
+     const inner = fragment.innerHTML;
+     const temp = document.createElement("div");
+     temp.innerHTML = inner;
+     const hasSections = temp.querySelector(".modal-header, .modal-body, .modal-footer");
+     if (hasSections) {
+       if (header) {
+         const h = temp.querySelector(".modal-header");
+         header.innerHTML = h ? h.innerHTML : "";
+         header.style.display = h ? "" : "none";
+       }
+       if (body) {
+         const b = temp.querySelector(".modal-body");
+         body.innerHTML = b ? b.innerHTML : (inner);
+         body.style.display = b ? "" : "none";
+       }
+       if (footer) {
+         const f = temp.querySelector(".modal-footer");
+         footer.innerHTML = f ? f.innerHTML : "";
+         footer.style.display = f ? "" : "none";
+       }
+     } else {
+       if (header) { header.innerHTML = ""; header.style.display = "none"; }
+       if (body) body.innerHTML = inner;
+       if (footer) { footer.innerHTML = ""; footer.style.display = "none"; }
+     }
+     return fragment;
+   }
 
-  function wireContent() {
-    body.querySelectorAll("[data-modal-cancel]").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        e.preventDefault();
-        closeModal();
-      });
-    });
+   async function refreshModalContent() {
+     if (!currentUrl) return;
+     closeOpenPopover(); // its "home" element is about to be replaced
+     const resp = await fetch(currentUrl);
+     const html = await resp.text();
+     const fragment = injectModalContent(html);
+     if (!fragment) return;
+     wireContent();
+     stabilizeHeight(fragment);
+     animateContentSwap();
+   }
+
+   function wireContent() {
+     body.querySelectorAll("[data-modal-cancel]").forEach((el) => {
+       el.addEventListener("click", (e) => {
+         e.preventDefault();
+         closeModal();
+       });
+     });
+     if (footer) {
+       footer.querySelectorAll("[data-modal-cancel]").forEach((el) => {
+         el.addEventListener("click", (e) => {
+           e.preventDefault();
+           closeModal();
+         });
+       });
+     }
 
     // Schedule opened as a modal (2026-08-01, from _calendar_nav.html) --
     // its Table/Calendar views have their own interactive JS
@@ -216,6 +260,17 @@
     // aren't Schedule.
     if (window.CCScheduleTable) window.CCScheduleTable.init(body);
     if (window.CCScheduleGrid) window.CCScheduleGrid.init(body);
+    // Contact photo cropper (contact_form.html) -- same re-init reasoning.
+    if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
+    // task_form.html's Daily target visibility -- same re-init reasoning.
+    if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
+    // Relations cards' add-row "＋ New…" title reveal -- same re-init
+    // reasoning (innerHTML-injected content never runs <script> tags).
+    if (window.CCRelationPicker) window.CCRelationPicker.init(body);
+    // Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
+    // tab switch between the two create-forms + retargeting the footer
+    // Save button's `form` attribute. Same re-init reasoning.
+    if (window.CCQuickAdd) window.CCQuickAdd.init(body);
 
     // Single-circle color picker / emoji icon picker: click the trigger to
     // open the floating palette (see wireSwatchPickers/openPopover above).
@@ -228,6 +283,16 @@
     // still needs typing.
     wireColorPickers(body);
     wireIconPickers(body);
+
+    // Widget Builder (dashboard_customize.html): add-widget form + live
+    // preview live inside the modal, injected via innerHTML like Schedule's
+    // widgets. CCWidgetPreview.init wires the Source/View/Range controls
+    // and the live preview for both the builder and each edit form. The
+    // builder form itself is a plain add-and-close form now (2026-08-07,
+    // "Add widget should be the only button") -- it has no data-builder
+    // any more, so it falls straight through to the generic form handler
+    // below like any other modal form.
+    if (window.CCWidgetPreview) window.CCWidgetPreview.init(body);
 
     body.querySelectorAll("form").forEach((form) => {
       // data-modal-get forms (a search box) are handled by their own
@@ -308,48 +373,73 @@
     });
   }
 
-  async function openModal(url, trigger) {
-    if (trigger) trigger.classList.add("is-loading");
-    let html;
-    try {
-      const resp = await fetch(url);
-      html = await resp.text();
-    } catch (err) {
-      window.location.href = url; // offline/network failure -- fall back to a normal navigation
-      return;
-    } finally {
-      if (trigger) trigger.classList.remove("is-loading");
-    }
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const fragment = doc.getElementById("modal-target");
-    if (!fragment) {
-      // The page didn't opt into modal rendering (no #modal-target) --
-      // don't guess, just navigate normally.
-      window.location.href = url;
-      return;
-    }
-    currentUrl = url;
-    pendingReload = false;
-    body.innerHTML = fragment.innerHTML;
-    overlay.classList.add("is-open");
-    // Size variant (2026-08-01) -- most modals (a field-grid form) are
-    // fine at the default width, but a few (Schedule's Blocks table/week
-    // grid, 9+ columns wide) need real room or they force a horizontal
-    // scrollbar inside a modal that's already narrower than the content
-    // wants. `data-modal-size="wide"` on the *trigger* link (not
-    // hardcoded to a URL) is what the opening page decides, same as
-    // data-modal/data-fab already work -- see _calendar_nav.html's
-    // Schedule button. Reset on every open (not just when going wide) so
-    // a wide modal doesn't stay wide once you navigate to a normal one
-    // inside it (e.g. Schedule -> New block).
-    if (dialog) {
-      const size = trigger ? trigger.getAttribute("data-modal-size") : null;
-      dialog.classList.toggle("is-wide", size === "wide");
-    }
-    wireContent();
-    const firstInput = body.querySelector("input, select, textarea");
-    if (firstInput) firstInput.focus();
+  // 2026-08-08 view<->edit merge (see _modal_footer.html, and the
+  // modal-stable-height marker the event/task/contact detail + form
+  // templates carry): the dialog keeps one fixed width/height for a
+  // detail-view/edit-form pair, and the header/body/footer cross-fade in
+  // place when the modal navigates between the two states (or refreshes
+  // via refreshModalContent) instead of hard-replacing.
+  function stabilizeHeight(fragment) {
+    if (!dialog) return;
+    const stable = fragment && fragment.classList &&
+      fragment.classList.contains("modal-stable-height");
+    dialog.classList.toggle("is-stable-height", !!stable);
   }
+  function animateContentSwap() {
+    if (!dialog) return;
+    dialog.classList.remove("is-swapped");
+    void dialog.offsetWidth; // restart the animation cleanly
+    dialog.classList.add("is-swapped");
+  }
+
+   async function openModal(url, trigger) {
+     const wasOpen = overlay.classList.contains("is-open");
+     if (trigger) trigger.classList.add("is-loading");
+     let html;
+     try {
+       const resp = await fetch(url);
+       html = await resp.text();
+     } catch (err) {
+       window.location.href = url; // offline/network failure -- fall back to a normal navigation
+       return;
+     } finally {
+       if (trigger) trigger.classList.remove("is-loading");
+     }
+     const fragment = injectModalContent(html);
+     if (!fragment) {
+       // The page didn't opt into modal rendering (no #modal-target) --
+       // don't guess, just navigate normally.
+       window.location.href = url;
+       return;
+     }
+     currentUrl = url;
+     pendingReload = false;
+     overlay.classList.add("is-open");
+     // Size variant (2026-08-01) -- most modals (a field-grid form) are
+     // fine at the default width, but a few (Schedule's Blocks table/week
+     // grid, 9+ columns wide) need real room or they force a horizontal
+     // scrollbar inside a modal that's already narrower than the content
+     // wants. `data-modal-size="wide"` on the *trigger* link (not
+     // hardcoded to a URL) is what the opening page decides, same as
+     // data-modal/data-fab already work -- see _calendar_nav.html's
+     // Schedule button. Reset on every open (not just when going wide) so
+     // a wide modal doesn't stay wide once you navigate to a normal one
+     // inside it (e.g. Schedule -> New block).
+     if (dialog) {
+       const size = trigger ? trigger.getAttribute("data-modal-size") : null;
+       dialog.classList.toggle("is-wide", size === "wide");
+     }
+     // Show/hide the modal header based on whether the fragment
+     // populated it -- the close button stays visible regardless
+     // so the user always has an escape route.
+     if (header) header.style.display = header.innerHTML.trim() ? "" : "none";
+     if (footer) footer.style.display = footer.innerHTML.trim() ? "" : "none";
+     wireContent();
+     stabilizeHeight(fragment);
+     if (wasOpen) animateContentSwap();
+     const firstInput = body.querySelector("input, select, textarea");
+     if (firstInput) firstInput.focus();
+   }
 
   document.addEventListener("click", (e) => {
     // Event/class blocks on the Calendar and Schedule time-grids
@@ -401,7 +491,33 @@
     closeOpenPopover();
   });
   window.addEventListener("resize", closeOpenPopover);
-  window.addEventListener("scroll", closeOpenPopover, true);
+  // Closes the popover when the page (or any scrollable ancestor of the
+  // trigger) scrolls out from under it -- `position:fixed` means it would
+  // otherwise stay pinned to the old viewport coordinates while the
+  // trigger it's supposed to be anchored to visibly moves away.
+  //
+  // 2026-08-08 bug fix: `scroll` doesn't bubble, so `true` (capture) is
+  // the only way for a single `window` listener to hear scroll events
+  // from ANY scrollable descendant at all -- but that includes the
+  // popover's own internal icon grid (.icon-popover has `overflow-y:auto`
+  // + a fixed max-height, since the full icon set is ~70 options, far
+  // more than fit without scrolling). Every scroll event was closing the
+  // very popover the user was in the middle of scrolling through --
+  // reported as "scrolling breaks it," and it did: literally un-openable
+  // for long enough to actually browse the icon list, since any scroll
+  // attempt closed it before a second one could register. Mirrors the
+  // mousedown handler's own click-outside check just above: a scroll
+  // whose target is the open popover itself (or something inside it)
+  // isn't "the page scrolled out from under the trigger," so it's not a
+  // close signal.
+  window.addEventListener(
+    "scroll",
+    (e) => {
+      if (openPicker && openPicker.popover.contains(e.target)) return;
+      closeOpenPopover();
+    },
+    true
+  );
 
   if (closeBtn) closeBtn.addEventListener("click", closeModal);
   overlay.addEventListener("click", (e) => {
@@ -460,5 +576,21 @@
     handle.addEventListener("pointercancel", endDrag);
   }
 
-  window.CCModal = { open: openModal, close: closeModal };
+  window.CCModal = {
+    open: openModal,
+    close: closeModal,
+    // markChanged() flags the modal as having unsaved page state so
+    // closing (X/Escape/backdrop) reloads the underlying page; refresh()
+    // re-fetches the modal's own URL and re-renders it in place without
+    // closing -- used by data-modal-keep-open forms (e.g. calendars_list.
+    // html's per-row edits). No longer used by the Customize modal's own
+    // builder form (2026-08-07 removal of dashboard_widget_builder.js's
+    // stay-open flow) -- that form is a plain add-and-close form now.
+    markChanged: function () {
+      pendingReload = true;
+    },
+    refresh: function () {
+      return refreshModalContent();
+    },
+  };
 })();

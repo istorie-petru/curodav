@@ -5,7 +5,7 @@
 {% if data.previews %}
 <div class="project-preview-list">
     {% for pv in data.previews %}
-    <a class="project-preview-row" href="/projects/{{ pv.project.uid }}">
+    <a class="project-preview-row" href="/labels/{{ pv.project.uid }}">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
         {% if pv.progress is not none %}
         <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>

@@ -1,0 +1,21 @@
+# Dev SearXNG config used by run.sh for the banner editor's image search
+# (src/searxng.py, routers/banners.py). Mounted read-only into the SearXNG
+# container at /etc/searxng/settings.yml so the JSON search API works: the
+# stock image only enables the `html` result format, so `format=json`
+# requests from the banner editor get a 403 Forbidden. Everything else
+# stays on the image's defaults (use_default_settings: true).
+use_default_settings: true
+
+server:
+  # Static dev-only secret -- this config is only ever bound to
+  # 127.0.0.1 by run.sh and must never be reused in production.
+  secret_key: "command-center-dev-searxng-secret"
+  # Keep engine image URLs as-is so the banner editor can hotlink the raw
+  # img_src directly (the image default; making this true would rewrite them
+  # to /image_proxy?url=... paths that only resolve inside SearXNG's pages).
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json

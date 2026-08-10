@@ -25,7 +25,21 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from .. import db, timeline_layout as tl
-from ..deps import get_bridge, get_db, templates
+from ..deps import get_db, templates
+from .labels import CAL_COLOR_FOREGROUND, CAL_COLOR_HEX
+from .tasks import (
+    DATE_FILTER_LABELS,
+    DATE_FILTERS,
+    PRIORITY_FILTER_LABELS,
+    PRIORITY_FILTERS,
+    STATUS_FILTER_LABELS,
+    STATUS_FILTERS,
+    _apply_date_filter,
+    _apply_label_filter,
+    _apply_priority_filter,
+    _apply_status_filter,
+    _active_filter_count,
+)
 
 router = APIRouter(tags=["timeline"])
 
@@ -33,17 +47,72 @@ DAY_WIDTH = 24
 ROW_HEIGHT = 36
 HEADER_HEIGHT = 40
 
+# Neutral fallback for the "(No label)" block -- it has no label_config
+# to carry an assigned color, so it paints gray (style.css's cal-gray).
+# 2026-08-09: unified medium swatch set (see CAL_COLOR_HEX) -- the gray
+# medium-tone background / white foreground here back the `color` fields
+# for anything still reading a hex; the *rendered* paint is CSS vars
+# (--cal-bg-* / --cal-fg-*), which are theme-independent now.
+NO_LABEL_BLOCK_COLOR = "#70767d"
+NO_LABEL_BLOCK_FOREGROUND = "#ffffff"
+
+
+def _label_block_appearance(conn, label_key: str, display_label: str) -> tuple[str, str]:
+    """(color_name, icon) for one timeline label block -- the label's own
+    assigned color/icon from `label_config` (matched case-insensitively,
+    since labels are deduped case-insensitively), so a block's task bars
+    paint the label's pastel tint while the gutter header icon paints its
+    hue-matched foreground, both via CSS variables (the bar's
+    `var(--cal-bg-{color_name})`, the icon's `var(--cal-fg-{color_name})`)
+    so the swatch set's light/dark theme variants apply automatically.
+    The "(No label)" block has no config: neutral gray + the generic tag
+    icon. `color_name` (not a hex) is what the template needs; the hex
+    fields on bars/rows are derived from it for anything reading a value."""
+    if label_key == tl.NO_LABEL_KEY:
+        return "gray", "tag"
+    cfg = db.effective_label_config_ci(conn, display_label)
+    return cfg.get("color") or "gray", cfg.get("icon") or "tag"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _build_context(conn) -> dict:
-    task_lists = db.list_task_lists(conn)
-    list_names = {l["uid"]: l["name"] for l in task_lists}
-    list_row_names = {l["uid"]: l["timeline_row_names"] for l in task_lists}
+def _build_context(
+    conn,
+    q: str | None = None,
+    date_filter: str = "all",
+    status_filter: str = "all",
+    priority_filter: str = "all",
+    label: str | None = None,
+) -> dict:
+    # Timeline's gutter is organized by *label*: assign_swimlanes groups
+    # tasks by their first tag (timeline_layout.py's task_label_key -- the
+    # same `object_labels`-backed tags Table/Board/Calendar already show),
+    # so each distinct label gets its own swimlane block whose header row
+    # shows the label's name, and untagged tasks fall into a trailing
+    # "(No label)" block. This replaces the Phase 1 (label-space rework)
+    # dead `task_lists` grouping -- `list_names`/`list_row_names` (and the
+    # per-row rename endpoint they backed) are gone with `task_lists`.
 
-    tasks = [t for t in db.list_tasks(conn) if t.get("due_at") and t["status"] != "archived"]
+    # 2026-08-07: `q` added so Timeline's toolbar can offer the same
+    # search box Table/Board already have (plans/label-space-rework.md
+    # Phase 9's toolbar-consistency pass) -- filters which tasks get laid
+    # out as bars, same title-substring match `db.list_tasks` already does
+    # for every other view.
+    tasks = [t for t in db.list_tasks(conn, q=q) if t.get("due_at") and t["status"] != "archived"]
+    # Phase 9b toolbar rework: Timeline gains the same date/status/
+    # priority/label filters Table/Board already have, reusing the exact
+    # same helpers rather than duplicating the filtering logic (see
+    # routers/tasks.py). Archived tasks are already excluded above by
+    # Timeline's own long-standing convention (a Gantt bar for something
+    # already done/archived isn't useful), so picking `status_filter=
+    # archived` here yields an empty timeline rather than reintroducing
+    # them -- a deliberate, narrow edge case, not a bug.
+    tasks = _apply_date_filter(tasks, date_filter)
+    tasks = _apply_status_filter(tasks, status_filter)
+    tasks = _apply_priority_filter(tasks, priority_filter)
+    tasks = _apply_label_filter(tasks, label)
 
     start, end = tl.compute_range(tasks)
     total_days = max((end - start).days, 14)
@@ -57,27 +126,43 @@ def _build_context(conn) -> dict:
     # tasks recompute fresh each page load, which is the correct behavior
     # for a page that can be reloaded from a different device/session
     # anyway.
-    swimlanes = tl.assign_swimlanes(tasks, list_names)
+    swimlanes = tl.assign_swimlanes(tasks)
 
+    # Resolve each block's color + icon once (from the label's own
+    # config), then hand them to both the block's bars and gutter rows so
+    # the label reads as the color of its tasks.
+    block_appearance = {
+        label_key: _label_block_appearance(conn, label_key, label)
+        for _row_start, _row_count, label, label_key in swimlanes.group_labels
+    }
     bars = []
     for index, task in enumerate(tasks):
-        geo = tl.bar_geometry(task, index, start, total_days, swimlanes.row_of)
+        geo = tl.bar_geometry(task, start, total_days, swimlanes.row_of)
         if geo is None:
             continue
-        list_uid = task.get("list_path") or "tasks"
-        group_start, group_lanes = swimlanes.group_range_by_list.get(list_uid, (0, 1))
+        label_key = tl.task_label_key(task)
+        group_start, group_lanes = swimlanes.group_range_by_label.get(label_key, (0, 1))
+        color_name = block_appearance[label_key][0]
         bars.append(
             {
                 "task": task,
                 "day_from": geo.day_from,
                 "day_to": geo.day_to,
                 "row": geo.row,
-                "color": geo.color,
+                # The label's own assigned color -- every task under a
+                # label paints the same color as that label (its gutter
+                # header icon), so the label reads as "the color of its
+                # tasks" (see _label_block_appearance). `color_name`
+                # feeds the CSS var the bar's background uses
+                # (var(--cal-bg-{color_name})); `color` is the light-
+                # theme hex, kept for anything reading a concrete value.
+                "color_name": color_name,
+                "color": CAL_COLOR_HEX.get(color_name, NO_LABEL_BLOCK_COLOR),
                 "left_px": geo.day_from * DAY_WIDTH,
                 "width_px": max((geo.day_to - geo.day_from) * DAY_WIDTH, 4),
                 "top_px": HEADER_HEIGHT + geo.row * ROW_HEIGHT + 6,
                 "height_px": ROW_HEIGHT - 12,
-                # Own list + local lane (row within just this list's own
+                # Own label + local lane (row within just this label's own
                 # swimlane block) + how many lanes that block currently
                 # has -- what a vertical drag (static/timeline.js) needs
                 # to compute a target *local* lane the same way desktop's
@@ -85,9 +170,9 @@ def _build_context(conn) -> dict:
                 # delta_rows`, clamped to `group_lanes + 4`), rather than
                 # hit-testing whatever DOM element happens to be under the
                 # cursor -- desktop never does that either; a vertical
-                # drag can only ever move a task within its own list's
-                # block, not onto some other list's rows.
-                "list_path": list_uid,
+                # drag can only ever move a task within its own label's
+                # block, not onto some other label's rows.
+                "label_key": label_key,
                 "local_idx": geo.row - group_start,
                 "group_lanes": group_lanes,
             }
@@ -113,19 +198,28 @@ def _build_context(conn) -> dict:
         )
 
     rows = []
-    for row_start, row_count, label, list_uid in swimlanes.group_labels:
-        row_names = list_row_names.get(list_uid, {})
+    for row_start, row_count, label, label_key in swimlanes.group_labels:
+        block_color_name, block_icon = block_appearance[label_key]
         for local_idx in range(row_count):
-            default_label = tl.default_row_label(label, local_idx)
-            display_label = row_names.get(str(local_idx)) or default_label
             rows.append(
                 {
                     "global_row": row_start + local_idx,
                     "local_idx": local_idx,
-                    "list_uid": list_uid,
+                    "label_key": label_key,
                     "is_header": local_idx == 0,
-                    "label": display_label,
-                    "default_label": default_label,
+                    "label": tl.default_row_label(label, local_idx),
+                    "group_label": label,
+                    # The block's label color + icon, rendered on the
+                    # header (is-header) gutter row as a colored icon to
+                    # the left of the label text (the text itself stays
+                    # uncolored). `color_name` feeds the CSS var the icon
+                    # paints with (var(--cal-fg-{color_name})) so the
+                    # swatch set's dark-theme foreground applies
+                    # automatically; `color` is that var's light-theme
+                    # value, kept for anything reading a concrete hex.
+                    "color_name": block_color_name,
+                    "color": CAL_COLOR_FOREGROUND.get(block_color_name, NO_LABEL_BLOCK_FOREGROUND),
+                    "icon": block_icon,
                     "top_px": HEADER_HEIGHT + (row_start + local_idx) * ROW_HEIGHT,
                 }
             )
@@ -143,24 +237,51 @@ def _build_context(conn) -> dict:
         "week_headers": week_headers,
         "rows": rows,
         "bars": bars,
-        "task_lists": task_lists,
     }
 
 
 @router.get("/tasks/timeline")
-def timeline_view(request: Request, conn=Depends(get_db)):
-    ctx = _build_context(conn)
-    ctx.update({"request": request, "active_tab": "tasks"})
+def timeline_view(
+    request: Request,
+    q: str | None = None,
+    date_filter: str = "all",
+    status_filter: str = "all",
+    priority_filter: str = "all",
+    label: str | None = None,
+    conn=Depends(get_db),
+):
+    ctx = _build_context(
+        conn, q=q, date_filter=date_filter, status_filter=status_filter, priority_filter=priority_filter, label=label
+    )
+    ctx.update(
+        {
+            "request": request,
+            "active_tab": "tasks",
+            "q": q or "",
+            "date_filters": DATE_FILTERS,
+            "date_filter_labels": DATE_FILTER_LABELS,
+            "status_filters": STATUS_FILTERS,
+            "status_filter_labels": STATUS_FILTER_LABELS,
+            "priority_filters": PRIORITY_FILTERS,
+            "priority_filter_labels": PRIORITY_FILTER_LABELS,
+            "active_date_filter": date_filter,
+            "active_status_filter": status_filter,
+            "active_priority_filter": priority_filter,
+            "active_label": label or "",
+            "task_label_names": db.list_task_label_names(conn),
+            "active_filter_count": _active_filter_count(date_filter, status_filter, priority_filter, label),
+        }
+    )
     return templates.TemplateResponse("tasks_timeline.html", ctx)
 
 
 @router.post("/tasks/{uid}/timeline-reschedule")
-async def timeline_reschedule(uid: str, request: Request, bridge=Depends(get_bridge), conn=Depends(get_db)):
+async def timeline_reschedule(uid: str, request: Request, conn=Depends(get_db)):
     """JSON endpoint for drag-to-move / drag-to-resize (static/
     timeline.js) -- day-granularity start_at/due_at only, same minimal-
-    surface pattern as calendar.js's /events/{uid}/reschedule. A task
-    still round-trips through the bridge here (unlike timeline_lane,
-    start_at/due_at ARE real synced fields)."""
+    surface pattern as calendar.js's /events/{uid}/reschedule. Plain SQL
+    write (Phase 1, label-space rework) -- no bridge in this path anymore,
+    see db.py's Phase 1 comments."""
     payload = await request.json()
     existing = db.get_task(conn, uid)
     if existing is None:
@@ -169,9 +290,8 @@ async def timeline_reschedule(uid: str, request: Request, bridge=Depends(get_bri
     row["start_at"] = payload["start_at"]
     row["due_at"] = payload["due_at"]
     row["updated_at"] = _now()
-    saved = bridge.save_task_row(row)
-    db.upsert_task(conn, saved)
-    return JSONResponse({"ok": True, "start_at": saved.get("start_at"), "due_at": saved.get("due_at")})
+    db.upsert_task(conn, row)
+    return JSONResponse({"ok": True, "start_at": row.get("start_at"), "due_at": row.get("due_at")})
 
 
 @router.post("/tasks/{uid}/timeline-lane")
@@ -188,19 +308,25 @@ async def timeline_set_lane(uid: str, request: Request, conn=Depends(get_db)):
 
 
 @router.post("/tasks/timeline/create")
-async def timeline_create(request: Request, bridge=Depends(get_bridge), conn=Depends(get_db)):
+async def timeline_create(request: Request, conn=Depends(get_db)):
     """Click-and-drag-to-create on empty grid space (static/timeline.js)
-    -- turns a selected (list, date-range, row) into a real task, landing
-    in the exact row that was dragged across via the same manual-
-    placement mechanism a vertical bar drag uses. Mirrors desktop's
-    `_finish_create_drag`."""
+    -- turns a selected (date-range, row) into a real task, landing in the
+    exact row that was dragged across via the same manual-placement
+    mechanism a vertical bar drag uses. Mirrors desktop's
+    `_finish_create_drag`. Plain SQL write (Phase 1, label-space rework)
+    -- `list_path` is gone (see db.py's Phase 1 comments and this
+    router's `_build_context` comment above). Since the gutter is now
+    organized by label (each block's rows carry its label), dragging in a
+    labeled block carries that label's name through and attaches it to the
+    new task so it lands back in the same block on the next layout; a
+    drag on the "(No label)" block just creates an unlabeled task."""
     import uuid
 
     payload = await request.json()
-    list_path = payload.get("list_path") or db.DEFAULT_TASK_LIST_UID
     start_at = payload["start_at"]
     due_at = payload["due_at"]
     local_idx = payload.get("local_idx")
+    label = (payload.get("label") or "").strip()
 
     now = _now()
     row = {
@@ -212,24 +338,19 @@ async def timeline_create(request: Request, bridge=Depends(get_bridge), conn=Dep
         "status": "active",
         "progress": 0.0,
         "tags": [],
-        "list_path": list_path,
         "created_at": now,
         "updated_at": now,
     }
-    saved = bridge.save_task_row(row)
-    db.upsert_task(conn, saved)
+    db.upsert_task(conn, row)
+    if label:
+        db.set_object_labels(conn, "task", row["uid"], [label])
     if local_idx is not None:
-        db.set_task_timeline_lane(conn, saved["uid"], int(local_idx))
-    return JSONResponse({"ok": True, "uid": saved["uid"]})
+        db.set_task_timeline_lane(conn, row["uid"], int(local_idx))
+    return JSONResponse({"ok": True, "uid": row["uid"]})
 
 
-@router.post("/task-lists/{uid}/timeline-row-name")
-async def timeline_row_name(uid: str, request: Request, conn=Depends(get_db)):
-    """Double-click a gutter label to rename it (static/timeline.js) --
-    port of desktop's `_rename_row`/`_set_row_name`. Local-only, see
-    set_task_list_row_name."""
-    payload = await request.json()
-    local_idx = int(payload.get("local_idx", 0))
-    name = (payload.get("name") or "").strip()
-    db.set_task_list_row_name(conn, uid, local_idx, name or None)
-    return JSONResponse({"ok": True})
+# Double-clicking a gutter label used to rename a task-list row (POST
+# /task-lists/{uid}/timeline-row-name) -- Phase 1 of the label-space
+# rework dropped that endpoint and `task_lists` itself. Gutter rows are
+# now generated directly from labels (see `_build_context`), so there is
+# no client-side rename handler to point at a removed endpoint anymore.

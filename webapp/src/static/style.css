@@ -1,36 +1,41 @@
-/* Design system ported from the user's "Uni Schedule -> ICS" app
-   (uploaded index.html) -- same tokens/components, adapted for a
-   multi-page server-rendered app instead of a single-file SPA.
-   Tabbar, buttons, segmented control, cards, tables, field grids, tag
-   pills, warnings strip carry over close to verbatim so
-   Calendar/Tasks/Contacts/Schedule all look like one app. Modal styling
-   (below, see "Modal") was added back once the create flows moved from
-   full-page navigation to an in-place dialog -- see static/modal.js.
-
-   File organization, reworked 2026-07-31 into one deliberate general-to-
-   specific progression -- read top to bottom:
-     1. Tokens (:root, [data-theme="dark"])
-     2. Base reset (html/body/headings/links)
-     3. Form controls -- ONE generic base for every input type (text-like
-        inputs, select, textarea, checkbox, radio, file, range), so
-        anything not otherwise specialized still gets themed correctly in
-        both light and dark instead of falling back to unstyled browser
-        defaults. Component-specific rules further down only ever add
-        *deltas* on top of this (a width, a tighter padding, a transparent-
-        until-hover border) -- never re-declare background/border/color
-        that the base already provides. That repetition (the same
-        background/border/padding/focus-ring block copy-pasted into half a
-        dozen page-specific selectors) was the main source of drift this
-        pass cleaned up.
-     4. Buttons & icon buttons
-     5. Layout primitives (tabbar, toolbar, segmented control)
-     6. Cards & tables
-     7. Tags/pills (status/priority/category/credit labels)
-     8. Everything else, one component section per page/feature, in
-        roughly the order those features appear in the app's own nav
-        (Dashboard-adjacent bits, Tasks, Contacts, Calendar/Schedule
-        grids, Modal, Manage-calendars, Export form), each still scoped to
-        its own template(s) as noted in its comment. */
+/* Design tokens ported from the user's "Uni Schedule -> ICS" app
+    (uploaded index.html) -- same tokens/components, adapted for a
+    multi-page server-rendered app instead of a single-file SPA.
+    Tabbar, buttons, segmented control, cards, tables, field grids, tag
+    pills, warnings strip carry over close to verbatim so
+    Calendar/Tasks/Contacts/Schedule all look like one app. Modal styling
+    (below, see "Modal") was added back once the create flows moved from
+    full-page navigation to an in-place dialog -- see static/modal.js.
+    Reworked 2026-08-04 to align with Google Material Design 3 (MD3):
+    stronger elevation system, tonal surface hierarchy, MD3 component
+    shapes (larger border-radius on dialogs, FAB, cards), ripple feedback
+    on interactive elements, proper MD3 type scale, and a dedicated
+    widget-customization modal with MD3 dialog chrome.
+ 
+    File organization, reworked 2026-07-31 into one deliberate general-to-
+    specific progression -- read top to bottom:
+      1. Tokens (:root, [data-theme="dark"])
+      2. Base reset (html/body/headings/links)
+      3. Form controls -- ONE generic base for every input type (text-like
+         inputs, select, textarea, checkbox, radio, file, range), so
+         anything not otherwise specialized still gets themed correctly in
+         both light and dark instead of falling back to unstyled browser
+         defaults. Component-specific rules further down only ever add
+         *deltas* on top of this (a width, a tighter padding, a transparent-
+         until-hover border) -- never re-declare background/border/color
+         that the base already provides. That repetition (the same
+         background/border/padding/focus-ring block copy-pasted into half a
+         dozen page-specific selectors) was the main source of drift this
+         pass cleaned up.
+      4. Buttons & icon buttons
+      5. Layout primitives (tabbar, toolbar, segmented control)
+      6. Cards & tables
+      7. Tags/pills (status/priority/category/credit labels)
+      8. Everything else, one component section per page/feature, in
+         roughly the order those features appear in the app's own nav
+         (Dashboard-adjacent bits, Tasks, Contacts, Calendar/Schedule
+         grids, Modal, Manage-calendars, Export form), each still scoped to
+         its own template(s) as noted in its comment. */
 
 /* --------------------------------------------------------------------- */
 /* 1. Tokens                                                              */
@@ -62,10 +67,66 @@
   --tag-purple-fg:#8a5cb0; --tag-purple-bg:#f6f3f9;
   --tag-pink-fg:#c14c8a;   --tag-pink-bg:#faf1f5;
   --tag-red-fg:#d44c47;    --tag-red-bg:#fdebec;
+  /* 2026-08-08 -- 8 more label/habit colors (16 total, see routers/labels
+     .py's COLORS) -- same pastel-bg/saturated-fg pairing as the original
+     8 above, extended to fill the gaps in a full rainbow + a second
+     neutral (slate, a cooler gray-blue distinct from plain gray). */
+  --tag-lime-fg:#6b8f00;   --tag-lime-bg:#f3f9e0;
+  --tag-mint-fg:#059c8f;   --tag-mint-bg:#e0f7f5;
+  --tag-teal-fg:#1a94a8;   --tag-teal-bg:#e2f5f7;
+  --tag-cyan-fg:#0e93c4;   --tag-cyan-bg:#e3f4fb;
+  --tag-indigo-fg:#4b49c8; --tag-indigo-bg:#eeeefb;
+  --tag-magenta-fg:#c01f8f;--tag-magenta-bg:#fbe9f5;
+  --tag-slate-fg:#475569;  --tag-slate-bg:#eef1f4;
+
+  /* Calendar/label swatch palette (.cal-* classes, the color picker,
+     detail accents, the timeline's inline-painted bars) -- each hue
+     exposed as a background + foreground pair via variables
+     (`var(--cal-bg-green)` / `var(--cal-fg-green)`) so any consumer
+     references a color by name without restating a hex. 2026-08-09: the
+     set grew 8 -> 16, went pastel, then converged again that same day --
+     the first two-packs attempt (deep tints for the light theme, pale
+     pastels for the dark theme) landed at the extremes, chips that were
+     too dark on white or too washed-out on dark. The two packs were
+     merged into ONE set of *mixed* medium tones (moderate brightness,
+     moderate saturation) that read clearly on both a light and a dark
+     surface, so [data-theme="dark"] redefines nothing -- the same
+     variables serve every .cal-* consumer and every var(--cal-*)
+     reference in both themes, zero per-use overrides. Foregrounds are
+     picked for contrast per hue: white on the deeper mids, near-black
+     on the two inherently light hues (yellow, lime). */
+  --cal-bg-red:#c6594f;   --cal-fg-red:#ffffff;
+  --cal-bg-orange:#bf7a33;--cal-fg-orange:#ffffff;
+  --cal-bg-yellow:#b59b33;--cal-fg-yellow:#1d1d1f;
+  --cal-bg-lime:#96a93e;  --cal-fg-lime:#1d1d1f;
+  --cal-bg-green:#3f8f60; --cal-fg-green:#ffffff;
+  --cal-bg-mint:#2f9c8a;  --cal-fg-mint:#ffffff;
+  --cal-bg-teal:#2f8fa3;  --cal-fg-teal:#ffffff;
+  --cal-bg-cyan:#2f86ab;  --cal-fg-cyan:#ffffff;
+  --cal-bg-blue:#3778bd;  --cal-fg-blue:#ffffff;
+  --cal-bg-indigo:#575dcf;--cal-fg-indigo:#ffffff;
+  --cal-bg-purple:#8a56c1;--cal-fg-purple:#ffffff;
+  --cal-bg-magenta:#ac4e93;--cal-fg-magenta:#ffffff;
+  --cal-bg-pink:#c1577e;  --cal-fg-pink:#ffffff;
+  --cal-bg-brown:#967a44; --cal-fg-brown:#ffffff;
+  --cal-bg-gray:#70767d;  --cal-fg-gray:#ffffff;
+  --cal-bg-slate:#5b6b7d; --cal-fg-slate:#ffffff;
+
+  /* Detail-view modal accents (event_detail.html/task_detail.html,
+     2026-08-08) -- the color a `.detail-card`'s colored left border and
+     the `.detail-identity-dot` background reference
+     (`var(--cal-accent-blue)`). With the unified mid-tone swatches
+     (2026-08-09) one accent value works for both themes -- a medium hue
+     reads against a white card and against a dark card alike -- so each
+     accent simply reuses its swatch's background tone. */
+  --cal-accent-red:var(--cal-bg-red);--cal-accent-orange:var(--cal-bg-orange);--cal-accent-yellow:var(--cal-bg-yellow);--cal-accent-lime:var(--cal-bg-lime);
+  --cal-accent-green:var(--cal-bg-green);--cal-accent-mint:var(--cal-bg-mint);--cal-accent-teal:var(--cal-bg-teal);--cal-accent-cyan:var(--cal-bg-cyan);
+  --cal-accent-blue:var(--cal-bg-blue);--cal-accent-indigo:var(--cal-bg-indigo);--cal-accent-purple:var(--cal-bg-purple);--cal-accent-magenta:var(--cal-bg-magenta);
+  --cal-accent-pink:var(--cal-bg-pink);--cal-accent-brown:var(--cal-bg-brown);--cal-accent-gray:var(--cal-bg-gray);--cal-accent-slate:var(--cal-bg-slate);
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
-  --text-caption:11px;--text-footnote:12px;--text-body:13px;--text-callout:13.5px;
-  --text-headline:15px;--text-title3:16px;--text-title2:19px;
+  --text-caption:13px;--text-footnote:14px;--text-body:15px;--text-callout:15.5px;
+  --text-headline:17px;--text-title3:18px;--text-title2:21px;
 
   --radius-control:12px;--radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-pill:999px;
 
@@ -139,6 +200,23 @@
   --tag-purple-fg:#d19bf0; --tag-purple-bg:rgba(191,90,242,.22);
   --tag-pink-fg:#ff9bb3;   --tag-pink-bg:rgba(255,55,95,.2);
   --tag-red-fg:#ff8a80;    --tag-red-bg:rgba(255,69,58,.2);
+  /* 2026-08-08 -- dark-mode pairs for the 8 new colors, same "translucent
+     color over the dark surface" treatment as the original 8 above. */
+  --tag-lime-fg:#d4f57a;    --tag-lime-bg:rgba(164,209,0,.22);
+  --tag-mint-fg:#5eead4;    --tag-mint-bg:rgba(0,199,190,.2);
+  --tag-teal-fg:#5cd6e8;    --tag-teal-bg:rgba(48,176,199,.22);
+  --tag-cyan-fg:#7dd3fc;    --tag-cyan-bg:rgba(50,173,230,.22);
+  --tag-indigo-fg:#a5a3ff;  --tag-indigo-bg:rgba(94,92,230,.24);
+  --tag-magenta-fg:#ff8fdb; --tag-magenta-bg:rgba(214,36,159,.24);
+  --tag-slate-fg:#b6c2d1;   --tag-slate-bg:rgba(100,116,139,.28);
+
+  /* Calendar swatch palette: no dark overrides -- 2026-08-09 the two
+     theme packs (deep tints for light, pale pastels for dark) were
+     merged into one set of *mixed* medium tones in :root that read on
+     both a light and a dark surface, so the same --cal-bg-*/--cal-fg-*/
+     --cal-accent-* variables serve both themes. Nothing is restated
+     here (see the :root block); this comment exists so nobody re-adds a
+     dark pack without realizing it defeats that convergence. */
 
   /* Elevation shadows are lighter in dark mode (less contrast needed against a dark bg) */
   --elevation-1:0 1px 3px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.22);
@@ -177,6 +255,19 @@ h2{font-size:var(--text-headline); margin:20px 0 8px;}
    ring on click *into* a field is expected there, unlike on a button. */
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
   outline:2px solid var(--accent); outline-offset:2px;
+}
+
+/* Visually-hidden but still in the accessibility tree/document outline --
+   2026-08-08 minimalist-topbar pass removed the visible page-title h1 from
+   every list-level top-app-bar (Calendar/Tasks/Schedule/Contacts/Habits --
+   the tabbar rail's active-state already answers "where am I" for sighted
+   users, and a segmented view-switcher or search box now sits leftmost
+   instead). The h1 itself stays in the DOM as `class="sr-only"` rather than
+   being deleted outright -- screen readers and the browser's own heading
+   outline still get a real page title, only the visual rendering is gone. */
+.sr-only{
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0,0,0,0); white-space:nowrap; border:0;
 }
 .tab-btn:focus-visible, .seg-btn:focus-visible, .icon-btn:focus-visible,
 button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
@@ -252,6 +343,29 @@ input[type="file"]{
   background:var(--bg-secondary); border:1px dashed var(--control-border);
   font-size:var(--text-footnote); color:var(--fg-secondary); cursor:pointer;
 }
+/* Import file inputs (settings_advanced.html's Restore/Import forms,
+   2026-08-08) -- the native `<input type="file">` draws its own
+   always-visible "Choose File"/"Browse" button in the browser's OS chrome,
+   which no amount of CSS on the input itself can restyle and which clashes
+   with the app's buttons. Replaced with a label-styled-as-button that
+   wraps a real, sr-only file input: clicking the label opens the picker
+   (label+control association, no JS), and the input stays a genuine form
+   field inside its form so the chosen file still submits under `name="file"`.
+   The label is deliberately a `.btn` lookalike, not `button.btn` itself --
+   a `<button>` can't open a file picker without JS, but a `<label>` can. */
+.import-form{
+  display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+}
+label.file-btn{
+  background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
+  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
+  display:inline-flex; align-items:center; gap:var(--space-1);
+  transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+label.file-btn:hover{background:var(--control-bg-hover); box-shadow:var(--elevation-1);}
+label.file-btn:focus-within{
+  outline:2px solid var(--accent); outline-offset:-2px;
+}
 /* Native date/time picker indicator glyphs are drawn by the browser, not
    this stylesheet -- `color-scheme` (set per-theme above) is what makes
    Chrome/Firefox render the picker popup itself in the right theme, but
@@ -266,66 +380,90 @@ input[type="file"]{
 /* --------------------------------------------------------------------- */
 
 button.btn, a.btn{
-  background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
-  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
-  display:inline-block; text-decoration:none;
-  transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
-             transform var(--dur-fast) var(--ease-standard);
+   background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
+   padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
+   display:inline-flex; align-items:center; gap:var(--space-1);
+   text-decoration:none; position:relative; overflow:hidden;
+   transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
+              transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
-button.btn:hover, a.btn:hover{background:var(--control-bg-hover); text-decoration:none;}
+button.btn:hover, a.btn:hover{background:var(--control-bg-hover); text-decoration:none; box-shadow:var(--elevation-1);}
 /* Pressed feedback -- previously hover was the only state a click gave
-   any visual response to, so on a touchscreen (no hover at all) tapping a
-   button gave zero feedback until whatever it triggered finished loading.
-   A brief scale-down on :active is the same tactile cue iOS/macOS give
-   native buttons, and costs nothing extra since the transition above
-   already exists for hover. */
+    any visual response to, so on a touchscreen (no hover at all) tapping a
+    button gave zero feedback until whatever it triggered finished loading.
+    A brief scale-down on :active is the same tactile cue iOS/macOS give
+    native buttons, and costs nothing extra since the transition above
+    already exists for hover. */
 button.btn:active, a.btn:active{transform:scale(.96);}
-/* Primary/danger were previously the same rectangle as a neutral button
-   with just the fill color swapped -- easy to miss next to a row of
-   otherwise-identical buttons, and a "Delete" action read as no more
-   serious than "Cancel" next to it. Adwaita's suggested-action/
-   destructive-action classes solve this the same way: a filled, slightly
-   heavier-weight button with its own soft color-matched shadow, so the
-   one button that matters on a form reads as such at a glance instead of
-   needing color alone to carry the distinction. */
-button.btn.primary, a.btn.primary{
-  background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:600;
-  box-shadow:var(--elevation-1), 0 2px 8px var(--accent-subtle);
+/* MD3 ripple: a circular overlay that expands from the point of
+    contact, providing the tactile "ink" feedback Material Design
+    is known for. Uses ::after so it doesn't affect layout, and
+    opacity animation keeps it cheap. Only visible on interactive
+    elements that don't already have a stronger hover state. */
+button.btn::after, a.btn::after{
+   content:""; position:absolute; inset:0; border-radius:inherit;
+   background:currentColor; opacity:0; pointer-events:none;
+   transition:opacity var(--dur-fast) var(--ease-standard);
 }
-button.btn.primary:hover, a.btn.primary:hover{background:var(--accent-hover);}
+button.btn:active::after, a.btn:active::after{opacity:.08;}
+/* Primary/danger were previously the same rectangle as a neutral button
+    with just the fill color swapped -- easy to miss next to a row of
+    otherwise-identical buttons, and a "Delete" action read as no more
+    serious than "Cancel" next to it. Adwaita's suggested-action/
+    destructive-action classes solve this the same way: a filled, slightly
+    heavier-weight button with its own soft color-matched shadow, so the
+    one button that matters on a form reads as such at a glance instead of
+    needing color alone to carry the distinction. */
+button.btn.primary, a.btn.primary{
+   background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:600;
+   box-shadow:var(--elevation-1), 0 2px 8px var(--accent-subtle);
+}
+button.btn.primary:hover, a.btn.primary:hover{background:var(--accent-hover); box-shadow:var(--elevation-2);}
 button.btn.primary:active, a.btn.primary:active{background:var(--accent-active);}
+button.btn.primary::after, a.btn.primary::after{background:#fff;}
 button.btn.ghost, a.btn.ghost{background:transparent; border-color:transparent; box-shadow:none;}
-button.btn.ghost:hover, a.btn.ghost:hover{background:var(--bg-secondary);}
+button.btn.ghost:hover, a.btn.ghost:hover{background:var(--bg-secondary); box-shadow:none;}
 /* .danger used to be a quiet red-on-transparent button (fine for a small
-   icon-adjacent action, but every real usage in this app -- Delete task/
-   event/habit/project/contact/database -- is the one committing,
-   irreversible action on its form). Filled to match .primary's weight so
-   it's unmistakable as "the serious button here," not a lesser sibling. */
+    icon-adjacent action, but every real usage in this app -- Delete task/
+    event/habit/project/contact/database -- is the one committing,
+    irreversible action on its form). Filled to match .primary's weight so
+    it's unmistakable as "the serious button here," not a lesser sibling. */
 button.btn.danger, a.btn.danger{
-  background:var(--danger); color:#fff; border-color:var(--danger); font-weight:600;
-  box-shadow:0 1px 2px rgba(0,0,0,.06), 0 2px 8px var(--tag-red-bg);
+   background:var(--danger); color:#fff; border-color:var(--danger); font-weight:600;
+   box-shadow:0 1px 2px rgba(0,0,0,.06), 0 2px 8px var(--tag-red-bg);
 }
 button.btn.danger:hover, a.btn.danger:hover{background:#d92c22;}
 [data-theme="dark"] button.btn.danger:hover, [data-theme="dark"] a.btn.danger:hover{background:#ff6259;}
 button.btn.danger:active, a.btn.danger:active{background:#c2261d;}
+button.btn.danger::after, a.btn.danger::after{background:#fff;}
 /* A lighter-weight danger for contexts where red-filled would be too loud
-   next to a primary action in the same row (e.g. a small inline "remove"
-   next to Save) -- opt-in via an extra class rather than the default, so
-   existing .btn.danger call sites (all real delete-this-record buttons)
-   keep the filled treatment without every template needing an update. */
+    next to a primary action in the same row (e.g. a small inline "remove"
+    next to Save) -- opt-in via an extra class rather than the default, so
+    existing .btn.danger call sites (all real delete-this-record buttons)
+    keep the filled treatment without every template needing an update. */
 button.btn.danger.subtle, a.btn.danger.subtle{
-  background:transparent; color:var(--danger); border-color:var(--tag-red-bg); box-shadow:none; font-weight:500;
+   background:transparent; color:var(--danger); border-color:var(--tag-red-bg); box-shadow:none; font-weight:500;
 }
 button.btn.danger.subtle:hover, a.btn.danger.subtle:hover{background:var(--tag-red-bg);}
 /* MD3 tonal button -- accent-tinted fill without the full-weight primary look. */
 button.btn.tonal, a.btn.tonal{background:var(--accent-subtle); color:var(--accent); border-color:transparent;}
 button.btn.tonal:hover, a.btn.tonal:hover{background:var(--accent-subtle-strong);}
-/* Disabled -- input/select/textarea already had this (section 3); .btn
-   never did, so a disabled submit button looked identical to an enabled
-   one and only failed silently on click. */
-button.btn:disabled, a.btn[aria-disabled="true"]{
-  opacity:.5; cursor:not-allowed; transform:none; pointer-events:none;
+/* MD3 outlined button -- a border-only button for secondary actions
+    that need more visual weight than a ghost but less than a filled
+    primary. Used in the customize modal for "Cancel" and destructive
+    actions that shouldn't compete with the primary action. */
+button.btn.outlined, a.btn.outlined{
+   background:transparent; border:1px solid var(--control-border); color:var(--fg-primary);
+   box-shadow:none;
 }
+button.btn.outlined:hover, a.btn.outlined:hover{background:var(--control-bg-hover); box-shadow:var(--elevation-1);}
+/* Disabled -- input/select/textarea already had this (section 3); .btn
+    never did, so a disabled submit button looked identical to an enabled
+    one and only failed silently on click. */
+button.btn:disabled, a.btn[aria-disabled="true"]{
+   opacity:.5; cursor:not-allowed; transform:none; pointer-events:none;
+}
+button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
 
 .icon-btn{
   width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
@@ -414,7 +552,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   gap:2px; flex:none;
   width:64px; min-height:48px;
   background:none; border:none; padding:6px 4px 4px; cursor:pointer;
-  font-size:11px; font-weight:500; line-height:1.1;
+  font-size:12px; font-weight:500; line-height:1.1;
   color:var(--fg-secondary); text-decoration:none; white-space:nowrap;
   border-radius:0; position:relative;
   transition:color var(--dur-fast) var(--ease-standard);
@@ -433,21 +571,70 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   transition:background var(--dur-fast) var(--ease-standard);
 }
 
+/* Spaces in the sidebar (base.html, 2026-08-08) -- a second, shorter list
+   in the same rail, directly below the fixed nav destinations, one entry
+   per Space (no separate pin step -- see deps.py's sidebar_spaces()).
+   `.tab-separator` is a thin rule spanning the rail's own icon column
+   width, the same "everything past this line is user-defined" affordance
+   a native OS sidebar gives its own pinned-items divider. `.tab-btn-space`
+   reuses `.tab-btn` entirely (same size/active-indicator/hover treatment)
+   -- these deltas only handle the one thing generic enough not to fit a
+   fixed 64px-wide rail button automatically: a label name is arbitrary
+   user text (unlike "Home"/"Calendar"/...), so it needs its own
+   overflow/ellipsis instead of assuming it always fits. */
+.tab-separator{width:40px; height:1px; background:var(--separator); margin:var(--space-2) 0;}
+.tab-btn-space span{max-width:100%; overflow:hidden; text-overflow:ellipsis;}
+
 /* Main content area: offset by rail width on desktop */
 main{
   flex:1; width:100%;
   max-width:1120px; margin:0 auto;
   padding:var(--space-5) var(--space-5) var(--space-6);
   margin-left:80px;
+  /* 2026-08-07: a flex item's default min-width is `auto`, which means it
+     won't shrink below its content's intrinsic (min-content) width -- the
+     Tasks Timeline page's Gantt canvas (tasks_timeline.html) has a wide,
+     JS-computed inline width, and without this it was forcing `main`
+     itself wider than its max-width/flex-basis, pushing the whole page
+     into horizontal scroll instead of staying contained inside
+     `.timeline-scroll`'s own overflow:auto (style.css's timeline-scroll
+     rule further down). min-width:0 is the standard fix for exactly this
+     flexbox behavior -- it doesn't change how anything actually renders
+     when content fits, only removes the artificial floor that was letting
+     one wide child override the page layout. */
+  min-width:0;
 }
+/* 2026-08-07: opt-out of the centered 1120px column (base.html's
+   {% block main_class %}) -- Calendar (Month/Week/Day/Agenda) uses this
+   per direct feedback that the grid should use the full width available
+   next to the sidebar rail, not be boxed into the same column width a
+   text-heavy page like Settings uses. Only removes the max-width/
+   right-margin cap; the rail clearance (margin-left) and padding stay
+   exactly the same as every other page. */
+main.main-full-width{max-width:none; margin-right:var(--space-5);}
 
 .toolbar{display:flex; gap:var(--space-2); margin-bottom:var(--space-3); flex-wrap:wrap; align-items:center;}
+/* A page-title h1 sitting inline in any toolbar-shaped row (this plain
+   .toolbar, .toolbar-row below, or .top-app-bar) never wants the default
+   h1 bottom margin (base reset, section 2) -- it's flush against the
+   buttons/badges beside it, not a block of prose. Was previously
+   `style="margin:0"` hand-copied onto the h1 itself in ~16 templates
+   (dashboard, task/contact/habit/label detail, every list toolbar) --
+   moved to the container rule that's actually always true, once, here. */
+.toolbar h1{margin:0;}
 /* Top app bar variant -- an elevated card-like surface for page-level
-   toolbars on Calendar/Tasks/Settings/Databases pages. */
+    toolbars on Calendar/Tasks/Settings/Databases pages. MD3 Top App Bar:
+    tonal surface with elevation, title aligned to the start,
+    action icons aligned to the end.
+    2026-08-07: compacted (padding/margin/title size all reduced) per
+    direct feedback that these read as too tall -- same surface/shape
+    language, just less air. */
 .top-app-bar{
-  padding:var(--space-3) var(--space-4); background:var(--bg-elevated);
-  border-radius:16px; box-shadow:var(--elevation-1); margin-bottom:var(--space-5);
+   padding:10px var(--space-3); background:var(--surface-container-high);
+   border-radius:var(--radius-lg); box-shadow:var(--elevation-1); margin-bottom:var(--space-4);
+   display:flex; align-items:center; gap:var(--space-2);
 }
+.top-app-bar h1{font-size:var(--text-title3); margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .toolbar .spacer{flex:1;}
 /* Generic fallback so `.spacer` also works inside any other flex row
    (2026-08-02, projects_manage.html's archived-project row) without
@@ -461,24 +648,248 @@ main{
   position:relative; display:inline-flex; background:var(--bg-secondary); border-radius:20px;
   padding:3px; gap:1px;
 }
+/* 2026-08-07: tightened padding (was 8px 16px) as part of the toolbar
+   compaction pass -- this is the single biggest contributor to toolbar
+   height on Calendar/Tasks, since every row-1 toolbar has one of these. */
 .seg-btn{
-  position:relative; z-index:1; border:none; background:transparent; padding:8px 16px; font-size:var(--text-footnote);
+  position:relative; z-index:1; border:none; background:transparent; padding:6px 12px; font-size:var(--text-footnote);
   font-weight:500; border-radius:18px; cursor:pointer; color:var(--fg-secondary); text-decoration:none; display:inline-block;
 }
 .seg-btn.active{color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
 .seg-btn:hover{text-decoration:none;}
 .seg-btn:active{opacity:.7;}
+/* Radio-backed .seg-btn (2026-08-07, modal-input-design Phase A -- widget
+   builder's View/Range) -- same visual `.seg-btn`, now a `<label>`
+   wrapping a real `<input type="radio">` instead of a plain `<a>`/link, so
+   the segmented control is a real submittable form field (no-JS-safe)
+   rather than a page-navigating switcher like the Table/Timeline/Board
+   one above. `.seg-radio` is visually hidden the same way `.icon-swatch`
+   is (absolute + opacity:0, not display:none, so it stays focusable/
+   submittable); `:has()` on the wrapping label picks up the checked state
+   for the active look, same trick as `.icon-swatch-label:has(...)`
+   elsewhere in this file. */
+.seg-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
+label.seg-btn{display:inline-flex; align-items:center; gap:0;}
+label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
+label.seg-btn[hidden]{display:none;}
+.segmented{flex-wrap:wrap;}
+/* Vertical variant (2026-08-07 follow-up) -- .segmented's compact pill
+   look (transparent buttons floating on one shared grey pill background,
+   only the checked one getting a visible surface) only reads as "a row
+   of clickable choices" when every option actually fits on one row. The
+   widget builder's View (6 options) and, once the config column is only
+   ~180px wide, Range too, wrap onto their own lines instead -- at that
+   point every unchecked option has literally no visible border/
+   background of its own, so it looks like inert disabled text stacked
+   under the one real-looking button ("the dropdown menu should actually
+   work"). This variant gives every option a real, always-visible button
+   surface (border + background), not just the checked one, so a
+   single-column list of them still reads as N equally-clickable rows. */
+.segmented-list{display:flex; flex-direction:column; background:none; padding:0; gap:6px; border-radius:0;}
+.segmented-list .seg-btn{
+  display:block; text-align:left; border:1.5px solid var(--control-border);
+  border-radius:var(--radius-md); background:var(--surface-container-high); padding:8px 12px;
+}
+.segmented-list .seg-btn:hover{box-shadow:var(--elevation-1);}
+.segmented-list label.seg-btn:has(.seg-radio:checked){
+  border-color:var(--accent); background:var(--accent-subtle); color:var(--fg-primary); box-shadow:none;
+}
+/* Merged task/event quick-add modal (2026-08-10, quick_add.html) -- only
+   the active form panel is visible; static/quick_add.js toggles `.is-active`
+   (and the header tab's .seg-btn.active) when a tab is picked. The tab
+   switch itself reuses the existing .segmented/.seg-btn control above for
+   its look, and the modal shell's own layout handles the regions -- this
+   pair of rules is the only quick-add-specific CSS. */
+.quick-add-panel{display:none;}
+.quick-add-panel.is-active{display:block;}
+/* Required-field marker (2026-08-07 follow-up) -- replaces "(optional)"
+   suffixes spelled out in whichever fields happened to need one with the
+   opposite, more scannable convention: only the fields that must be set
+   get a marker at all, so an unmarked label is the default/quiet case
+   ("optional" needs no annotation) and a marked one stands out as the
+   exception ("required" does). */
+.field-required::after{content:" *"; color:var(--danger);}
 
 /* --------------------------------------------------------------------- */
-/* 6. Cards & tables                                                      */
-/* --------------------------------------------------------------------- */
-
+/* 6. Cards & tables -- MD3 surface hierarchy: cards use the
+    elevated surface token, with elevation that lifts on hover. */
 .card{
-  background:var(--bg-elevated); border:none; border-radius:var(--radius-card);
-  box-shadow:var(--elevation-1); padding:var(--space-4); margin-bottom:var(--space-4);
-  transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+   background:var(--surface-container-high); border:none; border-radius:var(--radius-card);
+   box-shadow:var(--elevation-1); padding:var(--space-4); margin-bottom:var(--space-4);
+   transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
 .card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* First heading inside a card never wants the h2 top margin (section 2) --
+   was `style="margin-top:0"` repeated per-instance (calendar_agenda,
+   task_detail, habit_detail); one structural rule instead. */
+.card > h2{margin-top:0;}
+
+/* Generic muted/secondary text -- was `style="color:var(--fg-tertiary)"` (or
+   --fg-secondary) hand-copied onto ~25 individual elements across detail
+   pages, widget tables and hint text. Two utilities, reused everywhere that
+   color is needed instead of restating the variable every time. */
+.text-muted{color:var(--fg-tertiary);}
+.text-muted-secondary{color:var(--fg-secondary);}
+
+/* Back-navigation link above page content ("< Back to X") -- task/contact/
+   habit/label detail each hand-rolled `<p style="margin:0 0 10px">` for
+   this exact same one-line link row. Reuses .breadcrumb (below): visually
+   the same "small nav trail above the title" component, whether it's one
+   link or the full Home > Space > Project trail. */
+.breadcrumb{margin:0 0 10px; font-size:var(--text-footnote);}
+.breadcrumb + .breadcrumb{margin-top:-4px;}
+
+/* Detail-view modals (event_detail.html/task_detail.html/contact_detail.
+   html) -- the shared read-only "view before you edit" layout, reworked
+   2026-08-08 into one visual language across all three object types. Each
+   modal now splits into the standard .modal-header (identity: a big bold
+   title + a colored dot or avatar) / .modal-body (a padded, elevated
+   .detail-card) / .modal-footer (Done, a demoted Delete text-link, and
+   the primary Edit) -- same structure the *_form.html modals already use.
+   Within the card, a 2-column grid of compact label+value pairs packs
+   related short fields side by side instead of stacking them (the same
+   idea .field-grid, task_form.html etc., already uses), so the detail
+   view doesn't occupy more vertical space than it used to. Only
+   Description/Notes breaks out to its own full-width block below the
+   grid (a table's kv-wrap equivalent -- that text is the one value here
+   genuinely too long to sit next to a label in a column). This replaces
+   .detail-kv, the old one-row-per-field <table> contact_detail.html used
+   to hand-roll -- removed with its last consumer. */
+.detail-meta-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-3) var(--space-4);}
+/* align-items:flex-start (2026-08-08 fix) -- a column-direction flex
+   container's items default to align-items:stretch, which was pulling
+   the *value* row's own children (a plain .cell-tag pill, e.g. Status)
+   out to the item's full column width instead of staying their natural
+   inline size -- read as a giant button spanning the column instead of a
+   normal small pill everywhere else in the app uses this exact class. */
+.detail-meta-item{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
+.detail-meta-item.detail-meta-wide{grid-column:1 / -1;}
+.detail-meta-label{font-size:var(--text-caption); color:var(--fg-tertiary);}
+.detail-meta-description{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
+/* Description/Notes value -- crisp like the rest of the .detail-meta-value
+   typography (primary color, callout size) while keeping its pre-wrap
+   prose layout. */
+.detail-meta-description p{margin:4px 0 0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-callout);}
+/* 2026-08-08 fix -- task_detail.html's meta card and its Subtasks card
+   right below it visually ran together with zero gap when opened as a
+   modal: .modal-body .card{margin-bottom:0} (deliberate, elsewhere --
+   neutralizes card chrome that would be redundant with the dialog's own)
+   also zeroes the spacing *between* two stacked cards, which the
+   standalone full-page view never needed (it had other margin below the
+   first card) but this two-card layout does. margin-top isn't touched by
+   that override, so putting the gap there instead survives both
+   contexts. */
+.detail-section-gap{margin-top:var(--space-4);}
+@media (max-width:720px){
+  .detail-meta-grid{grid-template-columns:1fr;}
+}
+
+/* Identity mark in the modal header (event_detail/task_detail) -- a
+   saturated dot in the entity's own color, the same .cal-* hues the
+   calendar swatches use, so the object's identity is readable at a
+   glance before any field value. Slightly larger than .color-dot and
+   ringed with a hairline so it reads against both the light and dark
+   dialog surfaces. Contacts use the avatar instead (see .avatar-large). */
+.detail-identity-dot{width:14px; height:14px; border-radius:50%; flex:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+/* Title + optional subtitle column inside .modal-header (contact org,
+   a task's parent). .modal-header h1 already owns flex:1/ellipsis; this
+   only layers a subtitle line beneath it. */
+.detail-heading-text{flex:1; min-width:0;}
+.detail-heading-text h1{margin:0;}
+/* Large, bold semantic title for the detail modals -- .modal-header h1
+   already provides the base size/ellipsis; this layers on the heavier
+   weight and tighter tracking that makes the entity's name the dominant
+   thing in the dialog. */
+.modal-header .detail-title{font-weight:700; letter-spacing:-0.3px;}
+.detail-heading-sub{margin-top:2px; font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+/* The elevated "panel" every detail modal's body is wrapped in -- a
+   tonal surface (--surface-container, deliberately one step below the
+   dialog's own --surface-container-high so the panel reads as embedded
+   in the dialog rather than invisible against it) with generous padding,
+   a hairline border, a soft shadow, and a colored left border whose hue
+   follows the entity's identity color (event's calendar color, task's
+   status color) via `--detail-accent`. Deliberately NOT .card: inside a
+   modal .modal-body .card is flattened to borderless/chromeless on
+   purpose, and these panels exist to carry exactly that chrome. */
+.detail-card{
+  --detail-accent:var(--border-strong);
+  background:var(--surface-container);
+  border:1px solid var(--separator);
+  border-left:4px solid var(--detail-accent);
+  border-radius:var(--radius-lg);
+  padding:var(--space-5);
+  box-shadow:var(--elevation-1);
+  margin-bottom:var(--space-4);
+  transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+}
+.detail-card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* A card's own heading (the Subtasks card's h2) never wants the section-
+   level h2 top margin -- same "first heading inside a card" rule .card
+   already has. */
+.detail-card > h2{margin-top:0;}
+/* Crisp value typography -- the label stays the small gray caption above
+   (.detail-meta-label); the value gets the larger, heavier, primary-color
+   treatment so it reads as the answer to that label. inline-flex so a
+   value that bundles a color-dot/pill/link keeps them on one baseline
+   with a consistent gap. */
+.detail-meta-value{
+  display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;
+  min-width:0; line-height:1.35;
+  font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
+}
+.detail-meta-value a{font-weight:600;}
+
+/* Demoted Delete action in the detail modals' footer -- the old filled
+   red .btn.danger was the loudest button on the view, outranking the
+   actual next step (Edit). Now a quiet text-link that only flushes red
+   on hover/focus, so the primary Edit button owns the footer's weight. */
+.detail-delete-link{
+  display:inline-flex; align-items:center; gap:5px;
+  background:none; border:none; padding:var(--space-2); cursor:pointer;
+  font-family:inherit; font-size:var(--text-footnote); font-weight:500;
+  color:var(--fg-tertiary);
+  border-radius:var(--radius-control);
+  transition:color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.detail-delete-link:hover{color:var(--danger); background:var(--tag-red-bg);}
+.detail-delete-link:focus-visible{outline:2px solid var(--danger); outline-offset:-2px;}
+.detail-delete-link .icon{width:14px; height:14px;}
+
+/* Filled cards widget (Material You style filled rounded squares) */
+.filled-cards-grid{
+  display:grid; gap:var(--space-3);
+  grid-template-columns:repeat(auto-fill, minmax(140px,1fr));
+  margin:var(--space-2) var(--space-4);
+}
+.filled-card{
+  display:block; text-decoration:none;
+  border:none; border-radius:var(--radius-card);
+  padding:var(--space-3);
+  color:#fff;
+  min-height:120px;
+  box-shadow:var(--elevation-1);
+  transition:transform var(--dur-normal) var(--ease-standard);
+}
+.filled-card:hover{
+  transform:translateY(-2px);
+  box-shadow:var(--elevation-2);
+}
+.filled-card-content{
+  display:flex; flex-direction:column; gap:var(--space-2);
+}
+.filled-card-title{
+  font-size:var(--text-title3); font-weight:600; line-height:1.2;
+}
+.filled-card-description{
+  font-size:var(--text-footnote); opacity:.85; line-height:1.3; margin-top:auto;
+}
+.filled-card-meta{
+  font-size:var(--text-caption); opacity:.7; margin-top:auto;
+}
+
+/* Color variants for filled cards */
+/* (see cal-* color palette below in light/dark theme blocks) */
 /* Horizontal-scroll affordance, 2026-08-02 -- a wide table (Schedule,
    database detail) inside `.table-scroll` used to just get clipped at the
    container edge with zero visual signal that there's more to the right,
@@ -505,7 +916,7 @@ main{
 }
 table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
 thead th{
-  text-align:left; font-weight:600; color:var(--fg-secondary); font-size:12px;
+  text-align:left; font-weight:600; color:var(--fg-secondary); font-size:13px;
   text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
   white-space:nowrap;
 }
@@ -537,6 +948,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .tag-yellow{background:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
 .tag-brown{background:var(--tag-brown-bg); color:var(--tag-brown-fg);}
 .tag-pink{background:var(--tag-pink-bg); color:var(--tag-pink-fg);}
+/* 2026-08-08 -- the 8 new label/habit colors' pill rules. */
+.tag-lime{background:var(--tag-lime-bg); color:var(--tag-lime-fg);}
+.tag-mint{background:var(--tag-mint-bg); color:var(--tag-mint-fg);}
+.tag-teal{background:var(--tag-teal-bg); color:var(--tag-teal-fg);}
+.tag-cyan{background:var(--tag-cyan-bg); color:var(--tag-cyan-fg);}
+.tag-indigo{background:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
+.tag-magenta{background:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
+.tag-slate{background:var(--tag-slate-bg); color:var(--tag-slate-fg);}
 
 .warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
 .credit-pill{
@@ -547,12 +966,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .credit-pill.warn{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
 .credit-pill.danger{background:var(--tag-red-bg); color:var(--tag-red-fg);}
 
-/* Settings sub-nav (templates/_settings_nav.html) -- the segmented row
-   handles the four "real" settings sections; the four dual-purpose
-   manage pages (Tags/Calendars/Task lists/Address books, see that
-   partial's own comment for why they're not segmented tabs) get a
-   plainer inline link row underneath instead, visually secondary to the
-   segmented control but still one click away. */
+/* Secondary inline link row (dashboard.html) -- a plainer, smaller-text
+   row of links, visually secondary to a page's primary controls but
+   still one click away. (2026-08-08: `_settings_nav.html`, this rule's
+   original consumer, is gone -- Settings pages that need a back-nav now
+   use `_settings_breadcrumb.html` directly, see routers/settings.py's
+   module docstring -- this class lives on in dashboard.html.) */
 .settings-subnav-links{
   display:flex; flex-wrap:wrap; gap:var(--space-4); margin:0 0 var(--space-4); padding:0 var(--space-1);
 }
@@ -570,29 +989,148 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .filter-bar input[type="search"]{width:180px; font-size:var(--text-footnote); padding:6px 10px;}
 .filter-select{max-width:150px; font-size:var(--text-footnote); padding:6px 26px 6px 10px;}
 
+/* --------------------------------------------------------------------- */
+/* Two-row toolbar (Phase 9b toolbar rework) -- Tasks (Table/Timeline/    */
+/* Board), Calendar (Month/Week/Day/Agenda), Contacts all share this      */
+/* shape now: row 1 stays light (title, view switcher, search, primary    */
+/* action) so it never overflows, row 2's heavier filters live behind a   */
+/* collapsible <details> that auto-opens when a filter in it is active.   */
+/* Reuses .toolbar/.top-app-bar/.segmented/.filter-bar/.cell-tag as-is -- */
+/* these are just the layout deltas for stacking two toolbar rows inside  */
+/* one visual toolbar surface instead of two separate ones.               */
+/* --------------------------------------------------------------------- */
+.toolbar-2row{flex-direction:column; align-items:stretch;}
+.toolbar-row{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; width:100%;}
+/* Row-1 title matches the compacted .top-app-bar h1 above -- kept as its
+   own rule (rather than folded into that one) since a couple of pages
+   still use .toolbar-row outside a .top-app-bar. */
+.toolbar-row h1{font-size:var(--text-title3); margin:0;}
+/* 2026-08-07 compaction pass: row-1 buttons/inputs run smaller than the
+   app-wide .btn/.filter-bar defaults (which stay full-size everywhere
+   else, e.g. forms/modals) -- a toolbar is scanned, not read, so it gets
+   the tightest, most icon-forward treatment in the app. Prev/Next go
+   icon-only (see calendar_*.html) using the existing .icon-btn size. */
+.toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-caption);}
+.toolbar-row .filter-bar input[type="search"]{width:160px; height:40px; padding:0 9px;}
+/* 2026-08-07, revised same day (2026-08-07 evening) after the first
+   version visibly broke: putting the whole <details> (summary + body)
+   inline in row 1 and giving it flex-basis:100% when [open] pushed BOTH
+   itself *and* the New button (its next sibling) onto a cascading third/
+   fourth line instead of a clean two-row result -- flex-wrap wraps
+   everything after a 100%-width item, not just that item.
+
+   Replaced with the checkbox-hack pattern instead of <details>: a hidden
+   checkbox, a <label> styled as the icon trigger (sits inline in row 1,
+   fixed 28px size, never changes size or wraps anything), and the actual
+   filter body as a plain sibling <div> *after* .toolbar-row entirely --
+   completely outside row 1's flex layout, so it can never affect row 1's
+   wrapping no matter how wide its own content gets. `~` (general sibling
+   combinator) reveals the body and highlights the trigger when the
+   checkbox is checked; the checkbox itself is set `checked` server-side
+   (via the `open`-equivalent Jinja condition) to auto-expand when a
+   filter is active, same behavior as before, just a robuster mechanism.
+   No JS required either way -- checkboxes are as native as <details>. */
+.toolbar-filters-checkbox{
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+.toolbar-filters-trigger{
+  cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:3px;
+  width:28px; height:28px; border-radius:var(--radius-control); position:relative;
+  color:var(--fg-secondary); user-select:none;
+  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.toolbar-filters-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.toolbar-filters-checkbox:checked ~ .toolbar-row .toolbar-filters-trigger{
+  color:var(--accent); background:var(--accent-subtle);
+}
+.toolbar-filters-trigger .icon{width:15px; height:15px;}
+.toolbar-filters-badge{
+  position:absolute; top:-2px; right:-2px;
+  background:var(--accent); color:var(--fg-on-accent); border-radius:var(--radius-pill);
+  min-width:14px; height:14px; padding:0 3px; font-size:9px; font-weight:700; line-height:14px; text-align:center;
+}
+.toolbar-filters-body{
+  display:none; width:100%; flex-direction:column; gap:6px; margin-top:6px; padding-top:6px;
+  border-top:1px solid var(--separator);
+}
+.toolbar-filters-checkbox:checked ~ .toolbar-filters-body{display:flex;}
+
 /* Multi-select dropdown (app.js's generic .multiselect script) -- Calendar's
    "which calendars are visible" toggle (_calendar_nav.html) is the one
    place in this app where more than one option can be selected at once,
    so it gets a checkbox-panel dropdown instead of the single-choice
-   <select> everywhere else (.filter-select above). */
+   <select> everywhere else (.filter-select above). Also reused in "single"
+   mode (radios, not checkboxes) for View/Range/Priority/Status -- see
+   _widget_list_multiselect.html's own header comment. */
 .multiselect{position:relative;}
 .multiselect-trigger{display:inline-flex; align-items:center; gap:6px;}
 .multiselect-count{
   background:var(--bg-secondary); color:var(--fg-secondary); border-radius:var(--radius-pill);
   padding:1px 7px; font-size:var(--text-caption); font-weight:600;
 }
+/* 2026-08-08: position:fixed, not :absolute -- static/app.js now always
+   moves this into #multiselect-portal (base.html) on open and positions it
+   with real viewport coordinates (getBoundingClientRect), the same portal
+   technique .color-popover/.icon-popover already use, and for the same
+   reason: .modal/.modal-body clip any descendant that visually overflows
+   them regardless of its own position value, so a panel opened from inside
+   a modal-rendered form was getting cut off/overlapped instead of
+   rendering in full. z-index matches those two popovers (150) -- needs to
+   sit above an open .modal-overlay (100). max-height/overflow so a long
+   option list (e.g. many labels) scrolls internally instead of running off
+   the bottom of the viewport. */
 .multiselect-panel{
-  display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:40; min-width:200px;
+  display:none; position:fixed; z-index:150; min-width:200px; max-height:min(360px, 70vh); overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   box-shadow:var(--elevation-3); padding:6px;
 }
 .multiselect-panel.is-open{display:block;}
+/* Compact toolbar "fancy dropdown" filter trigger (templates/_filter_dropdown
+   .html, used by the calendar label filter and the tasks date/status/priority
+   filters -- 2026-08-08 "reintegrate these drop down menus into the topbar"
+   feedback that removed the old icon-only Filters button + collapsible
+   body). Sits inline in .toolbar-row: a descriptor text + a count when
+   something's selected + a chevron that flips open. Deliberately a subtle
+   raised button (bg-secondary, like the old hover state) rather than a full
+   field border, so a row of them next to the segmented switcher reads as
+   controls, not form fields. app.js mirrors `is-open` onto the .multiselect
+   wrapper (the panel itself is portaled out), which is what the caret
+   rotation below keys off. */
+.filter-dropdown-trigger{
+  display:inline-flex; align-items:center; gap:6px;
+  height:40px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
+  background:var(--bg-secondary); color:var(--fg-secondary);
+  font-family:inherit; font-size:var(--text-footnote); font-weight:600;
+  cursor:pointer; white-space:nowrap;
+  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.filter-dropdown-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.filter-dropdown-trigger:focus-visible{outline:none; box-shadow:0 0 0 3px var(--accent-subtle);}
+.filter-dropdown-trigger .ms-summary{white-space:nowrap;}
+.filter-dropdown-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard);}
+.multiselect.is-open > .filter-dropdown-trigger .filter-caret{transform:rotate(180deg);}
 .multiselect-option-form{display:block;}
 .multiselect-option{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
   font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
+/* "+ New label" row (2026-08-07, modal-input-design Phase B follow-up) --
+   converting Labels to a checkbox-only list removed the app's only way
+   to type a brand-new label name; this restores it as one extra row at
+   the bottom of the same panel rather than a separate control, so
+   picking-from-existing stays the common, one-click path and typing a
+   new one is still right there when needed. Not a checkbox, so it skips
+   the icon-first flex layout the real options use -- the plus icon here
+   is decorative labeling for the row, not a selection state. */
+.multiselect-new-option{cursor:default;}
+.multiselect-new-option:hover{background:none;}
+.multiselect-new-input{
+  flex:1; border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:4px 8px; font-size:var(--text-callout); background:var(--bg-elevated); color:var(--fg-primary);
+  min-width:0;
+}
 .multiselect-divider{height:1px; background:var(--separator); margin:6px 2px;}
 .multiselect-manage{
   display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:var(--radius-sm);
@@ -608,25 +1146,21 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    pill-<color> class (data-color attributes on each <option>, read in
    tasks_table.js) rather than a fixed value here. */
 .task-table td{white-space:nowrap;}
-/* Compact density (schedule_classes.html's Schedule table, static/
-   schedule_table.js), 2026-08-01 -- shrinks row height/font so more
-   blocks fit on screen at once without scrolling, once a full course
-   load's worth are all listed under their day headers. Only touches
-   cell padding/font-size, not the interactive controls inside (pill
-   selects, time inputs) -- those already read fine at their normal
-   compact size, shrinking them further would make them fiddly to click
-   for no real space savings. */
-.task-table.is-compact td{padding:2px 6px; font-size:11px;}
-.task-table.is-compact .task-section-divider td{padding:4px 6px 2px;}
 /* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
 tr.is-selected{background:var(--accent-subtle);}
-.quick-add-form input[type="text"]{width:100%;}
 .bulk-actions-bar{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
   background:var(--accent-subtle); border:1px solid var(--accent); border-radius:var(--radius-control);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
 }
 .bulk-count{font-weight:600; font-size:var(--text-footnote);}
+/* Reuses _widget_list_multiselect.html's .field/.field-wide-wrapped markup
+   (2026-08-07, modal-input-design Phase B) inside this flex toolbar --
+   strip the field's own label/margin so it sits inline with the
+   Add/Remove/Delete buttons instead of as a labeled block. */
+#bulk-tag-picker.field, #bulk-tag-picker .field{margin-bottom:0;}
+#bulk-tag-picker label{display:none;}
+#bulk-tag-picker .widget-list-multiselect{width:160px;}
 /* Completed tasks stay in the table (Today/All/This-week views) but read
    as visually distinct and de-emphasized -- dimmed + strikethrough title,
    plus the divider row above (tasks_list.html) that separates them from
@@ -634,7 +1168,7 @@ tr.is-selected{background:var(--accent-subtle);}
 .task-row-completed{opacity:.55;}
 .task-row-completed td:nth-child(2) a{text-decoration:line-through;}
 .task-section-divider td{
-  padding:8px 10px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+  padding:8px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
 }
 .pill-select{
@@ -655,8 +1189,18 @@ tr.is-selected{background:var(--accent-subtle);}
 
 /* Kanban board (tasks_board.html/tasks_board.js) */
 .kanban-board{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:var(--space-1); align-items:flex-start;}
+/* 2026-08-08 -- columns are responsive now: each grows/shrinks with the
+   page width so the board fills the viewport without a horizontal scroll
+   whenever the columns can actually fit side by side. 340px is the
+   cap (PC keeps the old fixed feel, just never wider); 240px is the
+   floor -- below that a side-by-side row stops making sense, so the
+   overflow-x:auto on .kanban-board kicks in until the ≤720px mobile
+   rule below stacks the columns vertically instead. flex-basis:0 (not
+   340px) is what lets every column share the board width equally when
+   the cap isn't binding. */
 .kanban-column{
-  flex:0 0 260px; background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2);
+  flex:1 1 0; min-width:240px; max-width:340px;
+  background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2);
   display:flex; flex-direction:column; gap:var(--space-2); min-height:80px;
 }
 .kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
@@ -673,6 +1217,21 @@ tr.is-selected{background:var(--accent-subtle);}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
 .kanban-empty{color:var(--fg-tertiary); font-size:var(--text-caption); text-align:center; padding:14px 0;}
 
+/* Narrow windows / mobile: from a full-width desktop screen down to
+   1100px the columns just resize to fill the board (flex:1 1 0 +
+   max-width:340px above); at/below 1123px a side-by-side row no longer
+   has room (columns would each drop below the 240px floor and the board
+   would only be reachable by horizontal scroll, which is awkward to keep
+   track of on a snapped-half window or phone). Below that width, stack
+   the columns vertically instead -- every column gets the full board
+   width and you "see" them by scrolling down, exactly like a mobile task
+   list. Drag-and-drop still works: tasks_board.js resolves the drop
+   target via elementFromPoint, which is layout-agnostic. */
+@media (max-width:1123px){
+  .kanban-board{flex-direction:column; overflow-x:visible; overflow-y:visible;}
+  .kanban-column{flex:0 0 auto; width:100%; max-width:none; min-width:0;}
+}
+
 /* Checklist (task_detail.html) */
 .checklist-progress{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-left:6px;}
 .checklist{display:flex; flex-direction:column; margin-bottom:8px;}
@@ -685,6 +1244,20 @@ tr.is-selected{background:var(--accent-subtle);}
 .checklist-delete{margin-left:auto;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
+
+/* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
+   -- the merged Subtasks+relations detail card. Two stacked sub-groups
+   (Subtasks / Related events|tasks), each its own caption head + checklist
+   + add row, so the merged card still reads like two clearly-labelled
+   lists rather than one undifferentiated blob. The add row's <select> is
+   the "link an existing object" picker; the sibling title input (revealed
+   by static/relations_picker.js only when "＋ New…" is chosen) is the
+   "create a new object" path. */
+.relations-group{border-top:1px solid var(--separator); padding-top:var(--space-3); margin-top:var(--space-3);}
+.relations-group:first-child{border-top:none; padding-top:0; margin-top:0;}
+.relations-group-head{display:flex; align-items:baseline; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:4px; text-transform:uppercase; letter-spacing:.4px;}
+.relations-add-form .relations-picker{flex:1; min-width:0;}
+.relations-add-form .relations-new-title{flex:1; min-width:0;}
 
 /* Contacts list (contacts_list.html) */
 .contact-list{display:flex; flex-direction:column;}
@@ -703,15 +1276,53 @@ tr.is-selected{background:var(--accent-subtle);}
 }
 .avatar-large{width:52px; height:52px; font-size:20px;}
 img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
-.contact-detail-org{color:var(--fg-tertiary); font-size:var(--text-footnote);}
 .contact-quick-actions{display:flex; gap:8px; margin-bottom:14px;}
 
-/* Photo upload field (contact_form.html) -- avatar preview (real photo or
-   initials fallback, see deps.py's `avatar()` global) beside the file
-   input + optional remove checkbox. */
+/* Photo upload field (contact_form.html) -- avatar (real photo or initials
+   fallback, see deps.py's `avatar()` global) sits beside the Full name
+   field in one row; the file input itself is invisible, see
+   `.avatar-upload` below. */
 .photo-field-row{display:flex; align-items:center; gap:14px;}
-.photo-field-controls{display:flex; flex-direction:column; gap:6px;}
-.photo-field-controls input[type="file"]{font-size:var(--text-footnote);}
+.photo-field-row > .field{flex:1; margin-bottom:0;}
+.avatar-remove-toggle{margin-top:var(--space-2);}
+
+/* Hover-to-reveal upload on the avatar itself (2026-08-07, direct
+   feedback: the native file input used to render its own always-visible
+   "Choose File"/"Browse" button next to the avatar -- ugly and redundant
+   once the avatar itself can be the upload target). `.avatar-upload` is a
+   small relatively-positioned box sized to match `.avatar-large`; both the
+   dark overlay and the real `<input type="file">` are stretched
+   `position:absolute; inset:0` on top of the avatar image/initials inside
+   it. The input stays a real, focusable, zero-opacity element (not
+   `display:none`) so a plain click anywhere in the circle opens the file
+   picker with no JavaScript at all -- the overlay underneath it is purely
+   decorative (`pointer-events:none`) and only fades in on
+   `:hover`/`:focus-within` (the latter so keyboard users tabbing to the
+   input see the same affordance sighted mouse users get on hover).
+   Deliberately a new class, not a change to `.avatar-large`/the shared
+   `avatar()` macro -- contact_detail.html renders that same class as a
+   plain read-only avatar with no upload interaction at all, and must stay
+   that way. */
+.avatar-upload{
+  position:relative; flex:none;
+  width:52px; height:52px; border-radius:50%;
+}
+.avatar-upload .avatar-circle{width:52px; height:52px;}
+.avatar-upload-overlay{
+  position:absolute; inset:0; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.5); color:#fff;
+  opacity:0; pointer-events:none;
+  transition:opacity var(--dur-fast) var(--ease-standard);
+}
+.avatar-upload-overlay .icon{width:16px; height:16px;}
+.avatar-upload:hover .avatar-upload-overlay,
+.avatar-upload:focus-within .avatar-upload-overlay{opacity:1;}
+.avatar-upload-input{
+  position:absolute; inset:0; width:100%; height:100%;
+  margin:0; padding:0; border-radius:50%;
+  opacity:0; cursor:pointer;
+}
 
 /* --------------------------------------------------------------------- */
 /* Form layout (field/grid wrappers -- deltas on top of the base input   */
@@ -732,8 +1343,82 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .field input:not([type="checkbox"], [type="radio"], [type="file"]), .field select, .field textarea{width:100%;}
 .field-toggle{flex-direction:row; align-items:center; gap:8px;}
 .field-toggle label{text-transform:none; font-weight:500; font-size:var(--text-body);}
+/* An arbitrary-length set of checkboxes (e.g. published_lists.html's
+   label-filter editor): a wrapping row of .field-toggle pairs instead of
+   one long vertical stack, same idea as .field-grid but for checkboxes
+   rather than fixed fields. */
+.field-toggle-group{display:flex; flex-wrap:wrap; gap:4px var(--space-4); margin-top:4px;}
+/* Recurrence/Reminders pickers (static/recurrence_picker.js,
+   static/reminders_picker.js) -- both progressively enhance a plain text
+   input into real controls while keeping the original input as the actual
+   submitted field, either hidden (a preset is active) or shown as the
+   "Custom..."/"other minutes" escape hatch. Reminders (2026-08-07
+   follow-up) now builds a `.multiselect`/`.widget-list-multiselect`
+   dropdown panel instead of an inline row of checkboxes -- see that
+   file's own header comment -- so it only needs the "other minutes" input
+   spacing here, reusing `.multiselect-new-input` for the input itself. */
+.recurrence-preset-select{margin-bottom:var(--space-2);}
+.recurrence-raw-input{margin-top:var(--space-1);}
+.reminders-custom-input{margin-bottom:0;}
 .field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
 .field-grid .field-wide{grid-column:span 2;}
+/* All-day events have no meaningful start/end time -- hiding the pair
+   while the All day checkbox is checked (event_form.html), same `:has()`
+   progressive-disclosure pattern the professor/class-type fields use. */
+#event-form:has(#all_day:checked) .event-start-end-field{display:none;}
+
+/* Tile/card picker (2026-08-07, modal-input-design pattern 1) -- a row of
+   large tappable cards (icon + label), one visibly selected, for a
+   handful (2-4) of "what kind of thing" options where showing every
+   choice beats a dropdown you have to open to see one. Radio-backed the
+   same way `.seg-btn`/`.pill-select` are: `.tile-radio` is visually
+   hidden (absolute + opacity:0, same as `.icon-swatch`/`.seg-radio`
+   above) inside the `<label class="tile-option">` that IS the visible
+   card, so a no-JS submission still works. Border/radius/padding echo
+   `.card`'s own tokens (surface-container-high/radius-card/elevation-1)
+   at a smaller scale appropriate for an inline row of several. */
+/* 2026-08-07 follow-up: was `flex-wrap:wrap` with a 92px min-width per
+   tile -- for exactly 4 Data-source options that reliably wrapped to a
+   2x2 grid inside the Customize modal's ~380px config column (4*92px +
+   3 gaps > 380px), which read as awkward/broken rather than "a row of
+   choices" ("data source should be one row"). `flex-wrap:nowrap` + each
+   tile taking an equal `flex:1 1 0` share of the row (no fixed min-width
+   to fight the container for) guarantees one row at any width the
+   picker is ever shown at; the label just wraps onto a second line
+   inside its own narrower tile instead of pushing the row wider. */
+.tile-select{display:flex; flex-wrap:nowrap; gap:var(--space-2);}
+.tile-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
+.tile-option{
+  position:relative; display:flex; flex-direction:column; align-items:center; gap:4px;
+  flex:1 1 0; min-width:0; padding:var(--space-2) 2px; border-radius:var(--radius-md);
+  border:1.5px solid var(--control-border); background:var(--surface-container-high);
+  cursor:pointer; text-align:center; color:var(--fg-secondary);
+  transition:box-shadow var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.tile-option:hover{box-shadow:var(--elevation-1);}
+.tile-option:has(.tile-radio:checked){border-color:var(--accent); background:var(--accent-subtle); color:var(--fg-primary); box-shadow:var(--elevation-1);}
+.tile-icon{color:var(--fg-secondary);}
+.tile-option:has(.tile-radio:checked) .tile-icon{color:var(--accent);}
+.tile-option-label{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
+
+/* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
+   field flanked by -/+ buttons (static/stepper.js), the real
+   `<input type="number">` kept underneath so plain typing and a no-JS
+   submission both still work unchanged; the buttons just nudge
+   `.value` by the input's own step/min/max. The native up/down spinner
+   is hidden since these buttons replace it (still keyboard/scroll-
+   wheel-adjustable via the bare input itself). */
+.stepper{display:flex; align-items:stretch; border:1.5px solid var(--control-border); border-radius:var(--radius-control); overflow:hidden; width:fit-content;}
+.stepper-input{
+  width:64px !important; border:none !important; border-radius:0 !important; text-align:center; -moz-appearance:textfield;
+}
+.stepper-input::-webkit-outer-spin-button, .stepper-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+.stepper-btn{
+  flex:none; border:none; background:var(--bg-secondary); color:var(--fg-secondary); width:30px;
+  font-size:15px; font-weight:600; cursor:pointer; line-height:1;
+}
+.stepper-btn:hover{background:var(--control-bg-hover); color:var(--fg-primary);}
+.stepper-btn:active{opacity:.7;}
 .settings-grid{display:grid; grid-template-columns:repeat(3,minmax(150px,220px)); gap:0 var(--space-6);}
 .form-inline{display:inline;}
 
@@ -765,30 +1450,143 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .week-head .wd{text-align:center; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
 .week-body{display:grid; grid-template-columns:52px repeat(7,1fr); position:relative;}
 .week-gutter{position:relative;}
-.week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:10px; color:var(--fg-tertiary);}
+.week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary);}
 .week-col{
   position:relative; border-left:1px solid var(--separator); min-height:1px;
   background-image:repeating-linear-gradient(to bottom, var(--separator) 0, var(--separator) 1px, transparent 1px, transparent var(--hr-h));
 }
 .week-event{
   position:absolute; left:2px; right:2px; border-radius:6px; padding:4px 6px; overflow:hidden;
-  font-size:10.5px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
+  font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
 }
 .week-event .we-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .week-event .we-room{opacity:.8; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .week-event.conflict{box-shadow:0 0 0 1px var(--warning) inset, 0 1px 2px rgba(0,0,0,.08);}
 
+/* Calendar "fit the page" layout (2026-08-08, direct feedback: "make the
+   calendar month view fit the page, with a slight resize... week view to
+   fit the page and be scrollable... merge the day and agenda view in a
+   side by side manner, both independently scrollable") -- desktop only
+   (mobile already spends screen height on the bottom tab bar/FAB, and a
+   shrink-to-fit calendar grid on top of that is a separate problem this
+   pass doesn't attempt to solve blind). `--calendar-chrome-h` is a fixed
+   estimate of everything vertically surrounding the grid on these pages
+   -- main's own top/bottom padding plus the two-row toolbar -- not a
+   measured value; the toolbar's real height shifts a few px depending on
+   whether its filter row is expanded, and the request was a "slight"
+   resize, not pixel-perfect math, so a generous fixed estimate (rather
+   than JS measuring the toolbar every render) is the right amount of
+   precision here. */
+@media (min-width:721px){
+  :root{--calendar-chrome-h:172px;}
+  .calendar-viewport{
+    height:calc(100vh - var(--calendar-chrome-h));
+    min-height:320px;
+    display:flex; flex-direction:column;
+  }
+  /* Month: no scroll -- the grid itself shrinks to fit ("a slight
+     resize"). Each week row flex-grows evenly across whatever vertical
+     space is left under the weekday header, and day cells drop their
+     usual fixed-height floor (see .month-day-cell's own base rule) so
+     they can actually shrink instead of forcing the card taller than
+     its budget -- the same day-cell content (day number, event bars,
+     task list) just renders a bit more tightly on a short viewport.
+     2026-08-08 direct feedback: Month specifically gets a taller budget
+     than the shared 100vh baseline (108vh, still against the same
+     --calendar-chrome-h estimate) -- more selector-specificity than
+     `.calendar-viewport` alone (two classes) so it wins without an
+     `!important`. Week/Day intentionally keep the 100vh rule above --
+     they scroll their time grid internally instead of resizing, so a
+     taller budget there would just be unused blank space, not more
+     visible content the way it is for Month's shrink-to-fit grid.
+     2026-08-08 follow-up: 108vh -> 128vh -- direct feedback that tasks
+     were still overflowing cells badly even with the item cap below
+     (routers/calendar.py's MONTH_MAX_VISIBLE_ITEMS, dropped 3 -> 2 in the
+     same follow-up). More vh means each of the 6 week rows gets a taller
+     share of the page, at the cost of the grid now running taller than
+     one screen (page scrolls to see the last week row or two) -- an
+     accepted tradeoff per the same feedback, same as 108vh already was
+     accepted over 100vh. */
+  .calendar-viewport.month-viewport{height:calc(128vh - var(--calendar-chrome-h));}
+  .month-viewport{overflow:hidden;}
+  .month-viewport .month-weekday-row{flex:none;}
+  .month-viewport .month-week-grid{flex:1 1 0; min-height:0;}
+  .month-viewport .month-day-cell{min-height:0;}
+
+  /* Week/Day: the time grid is a real fixed height (24 * one hour's own
+     pixel height, the same spacing every other time-grid view in the app
+     uses) -- almost always taller than the viewport budget, so these
+     scroll internally instead of resizing. Squashing an hour to be
+     shorter here than everywhere else it appears would make the one
+     piece of the UI that's supposed to be a consistent ruler
+     inconsistent, which "slight resize" was never asked for on these
+     two views specifically (only Month was).
+
+     `.card.calendar-viewport` (Week and Day, 2026-08-08) is a flex
+     column -- `.time-grid-wrap` (the actual hour-by-hour grid) is the
+     one that grows to fill whatever's left and scrolls internally.
+     `.time-grid-head` (the day-of-week header row on Week, single date
+     on Day) sticks to the top of that scroll so it stays visible while
+     you scroll through the hours below it, instead of scrolling away
+     with them. On Week/Day the header and the all-day strip below it
+     are wrapped in `.time-grid-top` (2026-08-09), so the whole thing --
+     day-of-week labels AND the all-day events/tasks strip -- stays put
+     together while the hour grid scrolls; `.time-grid-head` keeps its
+     own sticky rule for schedule_classes.html, which has no strip. */
+  .time-grid-wrap{flex:1 1 auto; min-height:0; overflow-y:auto;}
+  .time-grid-top, .time-grid-head{position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
+}
+
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
-.calendar-subnav{margin-bottom:14px;}
+.calendar-subnav{margin-bottom:0;}
 .time-grid-wrap{overflow-x:auto;}
 .time-grid-head{display:grid; padding-left:52px;}
 .time-grid-head.week{grid-template-columns:repeat(7,1fr);}
 .time-grid-head.day{grid-template-columns:1fr;}
 .time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-footnote); font-weight:600; border-bottom:1px solid var(--separator);}
 .time-grid-head .thd.is-today{color:var(--accent);}
+/* 2026-08-09 -- all-day strip between the day-of-week header and the hour
+   grid on Week/Day, showing all-day events and due tasks per day. Same
+   52px-gutter + column grid as .time-grid-body so its columns line up
+   pixel-for-pixel with the hour grid below. Both item types reuse the
+   quiet text-row style Month's own non-all-day events/tasks already use
+   (.month-task-item): all-day events get a small colored calendar dot
+   (.color-dot cal-*) on the left -- direct feedback: no filled chip
+   background, look like a timed event in Month -- and tasks keep the
+   square+title text. */
+.time-grid-allday{display:grid; grid-template-columns:52px 1fr; background:var(--bg-elevated); border-bottom:1px solid var(--separator);}
+.allday-gutter{font-size:11px; color:var(--fg-tertiary); text-align:right; padding:2px 8px 4px; white-space:nowrap; line-height:15px;}
+.allday-cols{display:grid;}
+.allday-cols.week{grid-template-columns:repeat(7,1fr);}
+.allday-cols.day{grid-template-columns:1fr;}
+.allday-col{display:flex; flex-direction:column; gap:1px; padding:2px 4px 4px; border-left:1px solid var(--separator); overflow:hidden;}
+.allday-task{
+  display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
+  overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
+}
+.allday-task > *{overflow:hidden; text-overflow:ellipsis;}
+.allday-task .color-dot{margin:0;}
+.allday-task:hover{text-decoration:underline;}
 .time-grid-body{display:grid; grid-template-columns:52px 1fr; position:relative;}
+/* 2026-08-09 -- lock the hour grid into its own stacking context one
+   layer BELOW the sticky top (z-index:1 vs .time-grid-top/.time-grid-head's
+   z-index:2). The events inside it keep z-index:3 *locally* so they still
+   paint above gridlines/columns and each other, but they can no longer
+   overlap the day-of-week names or the All-day strip when scrolling --
+   previously they competed in the shared context and their z-index:3 won,
+   so a tall event scrolled up right over the header and the All day cells. */
+/* 2026-08-08 -- the first hour label ("00:00") sat at the very top edge
+   of the scrollable grid, centered on it via the gutter's translateY(-50%),
+   so its upper half was permanently clipped under the sticky
+   .time-grid-head. Half an hour of padding above AND below (the grid is
+   rendered one extra hour tall to compensate -- templates set
+   height:calc(25 * var(--hr-h)) while the columns still span 24) gives
+   every label, including the first and last, a full box of room. The
+   padding is symmetric so hour rows and event tops stay aligned to the
+   same pixel scale as before, just shifted down by half an hour. */
+.time-grid-body{padding-top:calc(var(--hr-h) * 0.5); padding-bottom:calc(var(--hr-h) * 0.5); z-index:1;}
 .time-gutter{position:relative;}
-.time-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:10px; color:var(--fg-tertiary); white-space:nowrap;}
+.time-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary); white-space:nowrap;}
 .time-cols{display:grid;}
 .time-cols.week{grid-template-columns:repeat(7,1fr);}
 .time-cols.day{grid-template-columns:1fr;}
@@ -811,7 +1609,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .time-event{
   position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
-  font-size:10.5px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
+  font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
   cursor:grab; touch-action:none; z-index:3;
 }
 .time-event:hover{text-decoration:none; filter:brightness(1.08);}
@@ -826,28 +1624,77 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   z-index:30; cursor:grabbing;
 }
 .time-event .te-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:9.5px;}
+.time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
-.all-day-strip{display:flex; flex-wrap:wrap; gap:4px; padding:6px 0 10px 52px; border-bottom:1px solid var(--separator); margin-bottom:6px;}
-.all-day-chip{
-  display:inline-block; padding:2px 8px; border-radius:var(--radius-sm); font-size:var(--text-caption);
-  font-weight:600; color:#fff; text-decoration:none;
-}
-.all-day-chip:hover{text-decoration:none; filter:brightness(1.08);}
 
 /* Calendar colors -- shared by month chips, week/day time-grid blocks,
-   all-day chips, and the calendar-visibility multiselect. Deliberately
-   fixed, theme-independent hues (not tokens) -- a calendar's color is a
-   user choice that should look the same regardless of light/dark mode,
-   the same way a colored folder label wouldn't repaint itself. */
-.cal-blue{background:#007aff;}
-.cal-green{background:#34c759;}
-.cal-orange{background:#ff9500;}
-.cal-red{background:#ff3b30;}
-.cal-purple{background:#af52de;}
-.cal-pink{background:#ff2d55;}
-.cal-gray{background:#8e8e93;}
-.cal-yellow{background:#ffcc00; color:#1d1d1f !important;}
+   all-day chips, and the calendar-visibility multiselect. Fixed,
+   user-choice hues -- a label/event/calendar stays its chosen hue in
+   either theme (same idea as a colored folder label). 2026-08-09 the
+   set grew 8 -> 16, went pastel, then the two theme packs converged into
+   ONE set of *mixed* medium tones (moderate brightness + saturation)
+   defined once in :root and shared by both themes -- the deep-tints-for-
+   light / pale-pastels-for-dark split landed at the extremes (too dark
+   on white, too washed-out on dark), and a single mid-tone set reads on
+   both surfaces instead. Every consumer (calendar chips, all-day rows,
+   dots, the color picker, the timeline's inline-painted bars, the
+   --cal-accent-* detail accents) reads these variables, so this one
+   block is the only place that maps color-name -> paint. Hue mapping
+   stays one-for-one with routers/labels.py's CAL_COLOR_HEX/
+   CAL_COLOR_FOREGROUND (which mirror the same background/foreground
+   pairs for anything the server must paint at request time). */
+.cal-red{background:var(--cal-bg-red); color:var(--cal-fg-red);}
+.cal-orange{background:var(--cal-bg-orange); color:var(--cal-fg-orange);}
+.cal-yellow{background:var(--cal-bg-yellow); color:var(--cal-fg-yellow);}
+.cal-lime{background:var(--cal-bg-lime); color:var(--cal-fg-lime);}
+.cal-green{background:var(--cal-bg-green); color:var(--cal-fg-green);}
+.cal-mint{background:var(--cal-bg-mint); color:var(--cal-fg-mint);}
+.cal-teal{background:var(--cal-bg-teal); color:var(--cal-fg-teal);}
+.cal-cyan{background:var(--cal-bg-cyan); color:var(--cal-fg-cyan);}
+.cal-blue{background:var(--cal-bg-blue); color:var(--cal-fg-blue);}
+.cal-indigo{background:var(--cal-bg-indigo); color:var(--cal-fg-indigo);}
+.cal-purple{background:var(--cal-bg-purple); color:var(--cal-fg-purple);}
+.cal-magenta{background:var(--cal-bg-magenta); color:var(--cal-fg-magenta);}
+.cal-pink{background:var(--cal-bg-pink); color:var(--cal-fg-pink);}
+.cal-brown{background:var(--cal-bg-brown); color:var(--cal-fg-brown);}
+.cal-gray{background:var(--cal-bg-gray); color:var(--cal-fg-gray);}
+.cal-slate{background:var(--cal-bg-slate); color:var(--cal-fg-slate);}
+
+/* Filled cards widget (Material You) -- uses the same cal-* color palette
+   but with slightly desaturated/muted variants for a softer Material You
+   tonal look. Light mode uses vibrant fills; dark mode uses muted tonal. */
+[data-theme="light"] .filled-card.cal-blue{background:#007aff;}
+[data-theme="light"] .filled-card.cal-green{background:#34c759;}
+[data-theme="light"] .filled-card.cal-orange{background:#ff9500;}
+[data-theme="light"] .filled-card.cal-red{background:#ff3b30;}
+[data-theme="light"] .filled-card.cal-purple{background:#af52de;}
+[data-theme="light"] .filled-card.cal-pink{background:#ff2d55;}
+[data-theme="light"] .filled-card.cal-gray{background:#8e8e93;}
+[data-theme="light"] .filled-card.cal-yellow{background:#ffcc00; color:#1d1d1f !important;}
+[data-theme="light"] .filled-card.cal-brown{background:#a2845e;}
+[data-theme="light"] .filled-card.cal-teal{background:#30b0c7;}
+[data-theme="light"] .filled-card.cal-cyan{background:#32ade6;}
+[data-theme="light"] .filled-card.cal-mint{background:#00c7be;}
+[data-theme="light"] .filled-card.cal-indigo{background:#5856d6;}
+[data-theme="light"] .filled-card.cal-magenta{background:#d6249f;}
+[data-theme="light"] .filled-card.cal-slate{background:#64748b;}
+[data-theme="light"] .filled-card.cal-lime{background:#a4d100; color:#1d1d1f !important;}
+[data-theme="dark"] .filled-card.cal-blue{background:#0a84ff;}
+[data-theme="dark"] .filled-card.cal-green{background:#30d158;}
+[data-theme="dark"] .filled-card.cal-orange{background:#ff9f0a;}
+[data-theme="dark"] .filled-card.cal-red{background:#ff453a;}
+[data-theme="dark"] .filled-card.cal-purple{background:#b872ff;}
+[data-theme="dark"] .filled-card.cal-pink{background:#ff3ba6;}
+[data-theme="dark"] .filled-card.cal-gray{background:#98989d;}
+[data-theme="dark"] .filled-card.cal-yellow{background:#ffd60a; color:#1d1d1f !important;}
+[data-theme="dark"] .filled-card.cal-brown{background:#ac8e68;}
+[data-theme="dark"] .filled-card.cal-teal{background:#6ac4dc;}
+[data-theme="dark"] .filled-card.cal-cyan{background:#64d2ff;}
+[data-theme="dark"] .filled-card.cal-mint{background:#66d4cf;}
+[data-theme="dark"] .filled-card.cal-indigo{background:#5e5ce6;}
+[data-theme="dark"] .filled-card.cal-magenta{background:#f74dd6;}
+[data-theme="dark"] .filled-card.cal-slate{background:#94a3b8;}
+[data-theme="dark"] .filled-card.cal-lime{background:#c2f542; color:#1d1d1f !important;}
 
 /* A plain round color dot -- e.g. an event's calendar color in Month/Agenda
    view (calendar_month.html/calendar_agenda.html), or a calendar's swatch
@@ -858,32 +1705,94 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    actual fixed-size circle instead, no content needed. */
 .color-dot{width:9px; height:9px; border-radius:50%; flex:none; display:inline-block;}
 
-/* `.cal-*` on its own (a bare swatch dot, or `.time-event`/`.all-day-chip`,
-   which already set their own white text) never needed a text color. But
-   `.cell-tag.cal-*` -- the calendar/task-list/address-book multiselect and
-   filter chips -- uses this combination for a colored, labeled pill, which
-   inherited `.cell-tag`'s unset color (so: body text color) against these
-   solid, saturated backgrounds, illegible in both light and dark mode
-   (dark-on-blue, off-white-on-yellow, etc). `.cal-yellow` already
-   special-cased a dark color for exactly this reason; this generalizes the
-   same fix to every other swatch color. */
-.cell-tag.cal-blue, .cell-tag.cal-green, .cell-tag.cal-orange, .cell-tag.cal-red,
-.cell-tag.cal-purple, .cell-tag.cal-pink, .cell-tag.cal-gray{
-  color:#fff;
-}
+/* `.cal-*` on its own (a bare swatch dot) never needed a text color, and
+   `.time-event`/`.month-all-day`/`.timeline-bar` set their own text --
+   which used to be white-on-saturated. Since 2026-08-09 the swatch set
+   pairs each mid-tone background with a contrast-picked foreground baked
+   into the .cal-* class (white on the deeper hues, near-black on yellow
+   and lime), so `.cell-tag.cal-*` -- the calendar/task-list/address-book
+   multiselect and filter chips -- needs no color override at all:
+   `.cell-tag` sets no color, and the cal class's own foreground wins the
+   cascade (the old white-forcing override is gone, 2026-08-09, because
+   it would have been illegible against the tinted backgrounds). */
 
-/* Calendar month grid (routers/calendar.py) */
-.month-table{table-layout:fixed;}
-.month-table td{vertical-align:top; height:90px; padding:6px; font-size:var(--text-footnote);}
-.month-table td.not-in-month{opacity:.35;}
-.month-table td.is-today{box-shadow:inset 0 0 0 2px var(--accent);}
-.month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); margin-bottom:2px; display:block;}
-.month-item{display:block; font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:1px 0;}
+/* Calendar month grid (routers/calendar.py, calendar_month.html) --
+   One CSS Grid per week of day cells. 2026-08-08 rework: the old
+   Apple/Google-style continuous multi-day bar lanes (`.month-bar` grid
+   siblings placed at explicit grid-row/grid-column) are GONE -- they
+   were layered on top of the day cells and that layering is exactly what
+   let the colored all-day rows overlap the quiet text events/tasks.
+   Every day cell now carries ONE flat list (`day.rows`, each tagged with
+   `kind`) in which all three types -- all-day colored rows, timed
+   time+dot text, task square+title text -- sit as normal flow children,
+   so nothing can overlap. `.month-day-cell` still spans the week row's
+   height at its own column (the click/drag-select surface for that day,
+   `static/calendar_month.js` depends on its DOM order + `data-date`). */
+/* 2026-08-08: --month-row-gap and --month-lane-h were bar-lane concepts
+   and are dropped with the lane system; only the day-number row height
+   survives. */
+:root{--month-daynum-h:22px;}
+.month-weekday-row{display:grid; grid-template-columns:repeat(7,1fr); padding:0 0 4px;}
+.month-weekday-row span{text-align:left; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); padding-left:4px;}
+.month-week-grid{
+  position:relative; display:grid; grid-template-columns:repeat(7,1fr);
+  /* Day number row + one auto row for the flat item list that follows. */
+  grid-template-rows:var(--month-daynum-h) minmax(24px,auto);
+  border-top:1px solid var(--separator);
+}
+.month-week-grid:last-child{border-bottom:1px solid var(--separator);}
+.month-day-cell{
+  grid-row:1 / -1; display:flex; flex-direction:column; min-height:90px;
+  padding:3px 4px 4px; cursor:pointer; position:relative; z-index:1;
+  border-right:1px solid var(--separator);
+}
+.month-day-cell:last-child{border-right:none;}
+.month-day-cell.not-in-month{opacity:.4;}
+.month-day-cell.is-today{background:var(--accent-subtle);}
+.month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
+.month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
+/* Today's day number, circled in the accent color -- same convention
+   `.mini-cal-day.is-today .mini-cal-day-num` already established for the
+   dashboard mini calendar, reused verbatim rather than inventing a new
+   "today" treatment. */
+.month-day-cell.is-today .month-day-num span{background:var(--accent); color:var(--fg-on-accent); font-weight:700;}
+.month-day-bottom{display:flex; flex-direction:column; gap:1px; overflow:hidden;}
+/* 2026-08-08 follow-up: a task and a single-day timed event (both
+   `kind:"event"`/`kind:"task"` in routers/calendar.py's _month_grid)
+   share this exact same row style -- flex so the icon/color-dot, optional
+   time, and title all sit on one baseline regardless of which kind of
+   item it is. This is the "coherence" fix: a 2pm call and a task due
+   today look like each other, and only the all-day rows below get the
+   colored background. */
+.month-task-item{
+  display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
+  overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
+}
+.month-task-item > *{overflow:hidden; text-overflow:ellipsis;}
+.month-task-item .color-dot{margin:0;}
+.month-item-time{flex:none; color:var(--fg-tertiary); font-variant-numeric:tabular-nums; font-weight:500;}
+.month-task-item:hover{text-decoration:underline;}
+.month-more-link{font-size:11px; font-weight:600; color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
+.month-more-link:hover{text-decoration:underline;}
+/* All-day rows are the only colored thing left in a day cell (single-day
+   timed events are quiet text above) -- a full-width row in the same
+   `.cal-*` palette the old bars used, now as a plain flow item inside
+   `.month-day-bottom` so it can never overlap the text rows. Same
+   compact height as a text row so the list stays evenly dense.
+   No color declaration: the `.cal-*` class on the same element owns the
+   text color (its dark hue-matched foreground -- pastel bg since
+   2026-08-09). A later `color:#fff` would override that and be
+   illegible against the light tint. */
+.month-all-day{
+  display:block; border-radius:6px; font-size:12px; font-weight:500;
+  line-height:15px; padding:2px 5px 3px 5px; overflow:hidden; white-space:nowrap;
+  text-overflow:ellipsis; text-decoration:none;
+}
+.month-all-day:hover{text-decoration:none; filter:brightness(1.08);}
 /* Month-view click-and-hold drag-to-create range (static/calendar_month.js)
    -- highlights every day cell between the press-down day and whatever
    day the cursor is currently over, inclusive, regardless of drag
    direction. */
-.month-day-cell{cursor:pointer;}
 /* A solid theme-aware highlight (not opacity on the cell itself, which
    would also fade the day number and event chips inside it, not just
    show a tinted background) plus an accent ring so the selected range
@@ -904,8 +1813,33 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    each element's inline `left`, so static/timeline.js's gutter-resize
    drag can reflow the whole grid with one property set instead of
    recomputing every element's position. */
-.timeline-scroll{overflow:auto; max-height:75vh; padding:0;}
-.timeline-canvas{position:relative; font-family:var(--font-mono, monospace); font-size:11px;}
+/* Same left/right scroll-fade affordance as .table-scroll above -- now that
+   `main`'s min-width:0 fix keeps this container properly clipped instead
+   of the whole page overflowing, there needs to be a visible signal that
+   there's more Gantt chart off-screen to the right, or a wide timeline
+   just looks abruptly cut off instead of "scroll for more." */
+.timeline-scroll{
+  overflow:auto; max-height:75vh; padding:0;
+  background:
+    linear-gradient(to right, var(--bg-elevated) 30%, transparent) left,
+    linear-gradient(to left, var(--bg-elevated) 30%, transparent) right,
+    linear-gradient(to right, rgba(0,0,0,.08), transparent 8px) left,
+    linear-gradient(to left, rgba(0,0,0,.08), transparent 8px) right;
+  background-repeat:no-repeat;
+  background-color:var(--bg-elevated);
+  background-size:20px 100%, 20px 100%, 20px 100%, 20px 100%;
+  background-attachment:local, local, scroll, scroll;
+}
+/* 2026-08-08 direct feedback ("copy the theme style of calendar month
+   view") -- was `font-family:var(--font-mono, monospace)`, a raw
+   monospace fallback (`--font-mono` was never actually defined as a
+   token anywhere in this file) that made Timeline look like a different
+   tool from the rest of the app -- Calendar's own grid (.month-week-grid
+   etc.) uses the normal system font like everything else. Font-size
+   switched to the real type-scale token (--text-caption, 11px --
+   numerically identical to the old hardcoded value, just no longer a
+   magic number disconnected from the rest of the scale). */
+.timeline-canvas{position:relative; font-family:var(--font-system); font-size:var(--text-caption);}
 
 .timeline-gutter-sep{
   position:absolute; top:0; width:2px; background:var(--separator); cursor:col-resize; z-index:4;
@@ -916,9 +1850,10 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .timeline-gutter-row{
   position:absolute; left:0; display:flex; align-items:center; padding:0 6px; box-sizing:border-box;
   color:var(--fg-tertiary); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:default;
-  background:var(--bg-primary); z-index:2;
+  background:var(--bg-elevated); z-index:2;
 }
 .timeline-gutter-row.is-header{font-weight:700; color:var(--fg-primary);}
+.timeline-gutter-icon{flex:none; margin-right:6px; display:inline-flex; color:var(--fg-tertiary);}
 
 .timeline-week-label{
   position:absolute; top:0; height:18px; display:flex; align-items:center; padding-left:3px;
@@ -932,21 +1867,33 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .timeline-row-target{position:absolute; cursor:crosshair; touch-action:none;}
 
 .timeline-bar{
-  position:absolute; border-radius:3px; display:flex; align-items:center; overflow:hidden;
+  position:absolute; border-radius:var(--radius-sm); display:flex; align-items:center; overflow:hidden;
   text-decoration:none; cursor:grab; box-shadow:0 0 0 0 transparent; user-select:none; touch-action:none;
 }
 .timeline-bar.is-dragging{cursor:grabbing; box-shadow:0 0 0 2px #fff;}
-.timeline-bar-progress{position:absolute; left:0; top:0; bottom:0; background:rgba(255,255,255,.3);}
+.timeline-bar-progress{position:absolute; left:0; top:0; bottom:0; background:rgba(0,0,0,.14);}
 .timeline-bar-title{
-  position:relative; padding:0 6px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  pointer-events:none; font-size:10.5px;
+  /* No color of its own: the bar paints `color:var(--cal-fg-{…})` inline
+     (the hue-matched text for the swatch's background), so the title must
+     inherit that exact value rather than restate a hex that would be
+     illegible in one of the two themes (e.g. the old #1d1d1f vanished on
+     the light theme's now-deep bars, 2026-08-09). */
+  position:relative; padding:0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  pointer-events:none; font-size:12px;
 }
 .timeline-bar-handle{position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize;}
 .timeline-bar-handle-left{left:0;}
 .timeline-bar-handle-right{right:0;}
 
+/* 2026-08-08 direct feedback ("copy the theme style of calendar month
+   view") -- was a hardcoded purple (rgba(124,58,237,.28) fill, #c4b5fd
+   border) unrelated to this app's actual accent color (blue by default).
+   Same accent-ring-over-tinted-fill treatment Calendar month's own
+   click-and-drag create/select highlight already uses
+   (.month-day-cell.is-selecting: var(--row-alt) fill + inset var(--accent)
+   ring) -- same gesture, same visual language, in both places now. */
 .timeline-create-ghost{
-  position:absolute; background:rgba(124,58,237,.28); border:2px solid #c4b5fd; box-sizing:border-box; z-index:3;
+  position:absolute; background:var(--accent-subtle); border:2px solid var(--accent); box-sizing:border-box; z-index:3;
   pointer-events:none;
 }
 
@@ -958,26 +1905,27 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    FAB which lives bottom-*right*), bottom-right on desktop where a corner
    toast is the established convention and there's no FAB to avoid. */
 /* Mobile FAB (static/app.js clones whatever [data-fab] link/button exists
-   in the page's own toolbar -- each page keeps exactly one source of
-   truth for its primary create action's href/data-modal target, this
-   just gives it a second, thumb-reachable presentation on small screens
-   instead of a duplicate hardcoded URL living here or in JS). Hidden by
-   default -- only shown below the mobile breakpoint, where the toolbar's
-   own button scrolls out of reach the moment a list is longer than one
-   screen. */
+    in the page's own toolbar -- each page keeps exactly one source of
+    truth for its primary create action's href/data-modal target, this
+    just gives it a second, thumb-reachable presentation on small screens
+    instead of a duplicate hardcoded URL living here or in JS). Hidden by
+    default -- only shown below the mobile breakpoint, where the toolbar's
+    own button scrolls out of reach the moment a list is longer than one
+    screen. MD3 FAB: circular, elevated, accent-colored. */
 .fab{
-  display:none; position:fixed; right:var(--space-4); z-index:90;
-  bottom:calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-  width:56px; height:56px; border-radius:16px; background:var(--accent); color:var(--fg-on-accent);
-  align-items:center; justify-content:center; box-shadow:var(--elevation-3);
-  border:none; cursor:pointer; text-decoration:none;
-  transition:background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+   display:none; position:fixed; right:var(--space-4); z-index:90;
+   bottom:calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+   width:56px; height:56px; border-radius:16px; background:var(--accent); color:var(--fg-on-accent);
+   align-items:center; justify-content:center; box-shadow:var(--elevation-3);
+   border:none; cursor:pointer; text-decoration:none;
+   transition:background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
 }
 .fab .icon{width:22px; height:22px;}
-.fab:hover{background:var(--accent-hover); text-decoration:none;}
+.fab:hover{background:var(--accent-hover); text-decoration:none; box-shadow:var(--elevation-4);}
 .fab:active{transform:scale(.94); background:var(--accent-active); box-shadow:var(--elevation-1);}
+.fab::after{background:rgba(255,255,255,.24);}
 @media (max-width:720px){
-  .fab{display:flex; bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
+   .fab{display:flex; bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
 }
 
 /* Mobile: rail becomes a bottom bar (§6 Material Design) */
@@ -995,6 +1943,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     z-index:100;
   }
   .tabbar .spacer{display:none;}
+  /* Spaces in the sidebar are a desktop-rail-only convenience (2026-08-08)
+     -- the bottom bar's fixed destinations already use `flex:1` to fill
+     the width evenly (see .tab-btn below); an arbitrary, user-growable
+     count of Spaces sharing that same row would shrink every icon
+     unpredictably as more get created, on the one layout with no spare
+     width to give them. Reaching a Space on mobile still works the same
+     way it always has -- Settings > Labels, or that label's own page. */
+  .tab-separator, .tab-btn-space{display:none;}
   .tab-btn{
     width:auto; min-height:auto; flex:1;
     padding:8px 4px 6px;
@@ -1034,6 +1990,8 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .toast-error .toast-close{color:#fff;}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
+  /* Remove max-width constraint on desktop so content uses full width */
+  main{max-width:none;}
 }
 @media (max-width:720px){
   /* Toast above the bottom nav on mobile */
@@ -1073,67 +2031,176 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    No user-facing content worth keeping. */
 
 /* Modal (static/modal.js) -- the create-event/create-class dialog. Content
-   is injected server-rendered HTML (the same event_form.html/
-   schedule_class_form.html fragment a full-page nav would show), so this
-   is purely the dialog chrome, not a duplicate of the form styling. */
+    is injected server-rendered HTML (the same event_form.html/
+    schedule_class_form.html fragment a full-page nav would show), so this
+    is purely the dialog chrome, not a duplicate of the form styling.
+    MD3 Dialog: large rounded corners, tonal surface, scrim overlay,
+    top-app-bar + bottom-sheet footer pattern. */
 .modal-overlay{
-  position:fixed; inset:0; background:var(--overlay-scrim); display:flex;
-  align-items:center; justify-content:center; opacity:0; visibility:hidden; z-index:100; padding:var(--space-5);
-  transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
+   position:fixed; inset:0; background:var(--overlay-scrim); display:flex;
+   align-items:center; justify-content:center; opacity:0; visibility:hidden; z-index:100; padding:var(--space-5);
+   transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
 }
 .modal-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
 .modal{
-  width:560px; max-width:100%; background:var(--bg-elevated); border-radius:28px;
-  box-shadow:var(--elevation-3); transform:translateY(10px) scale(.97);
-  transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);
-  border:none;
-  max-height:88vh; display:flex; flex-direction:column; overflow:hidden;
+   width:700px; min-width:500px; max-width:100%; background:var(--surface-container-high); border-radius:28px;
+   box-shadow:var(--elevation-3); transform:translateY(10px) scale(.97);
+   transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);
+   border:none;
+   max-height:88vh; min-height:600px; display:flex; flex-direction:column; overflow:hidden;
 }
 .modal-overlay.is-open .modal{transform:translateY(0) scale(1);}
 /* Size variant (static/modal.js's data-modal-size="wide") -- most modals
-   are a field-grid form and 560px is plenty; a few (Schedule's Blocks
-   table -- day/time/course/type/owner/room/credits/week columns -- and
-   its week grid) genuinely need more room or they force a horizontal
-   scrollbar inside a dialog that's already narrower than the content
-   wants. Still capped by max-width:100% (inherited) and the mobile
-   breakpoint below, which ignores this entirely -- a bottom sheet is
-   already full-width regardless of variant. */
-.modal.is-wide{width:1040px;}
-.modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto;}
-.modal-body h1{margin-top:0;}
-/* Inside the modal, the fetched fragment's own card/button chrome would be
-   redundant with the dialog's -- these neutralize it without touching the
-   full-page version's markup. */
-.modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
-.modal-body .card:hover{box-shadow:none;}
-.modal-close{
-  position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
-  justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
-  cursor:pointer; color:var(--fg-secondary); font-size:16px; z-index:2;
+    are a field-grid form and 560px is plenty; a few (Schedule's Blocks
+    table -- day/time/course/type/owner/room/credits/week columns -- and
+    its week grid) genuinely need more room or they force a horizontal
+    scrollbar inside a dialog that's already narrower than the content
+    wants. Still capped by max-width:100% (inherited) and the mobile
+    breakpoint below, which ignores this entirely -- a bottom sheet is
+    already full-width regardless of variant. */
+.modal.is-wide{min-width:700px; width:1040px;}
+/* 2026-08-08 view<->edit merge -- the event/task/contact detail-view and
+    edit-form modals are one continuous dialog now (their #modal-target
+    carries .modal-stable-height, set by static/modal.js from the
+    fragment's modal-stable-height marker). The pair keeps ONE fixed
+    dialog size in both states so "view this, then Edit it" never makes
+    the     window jump or resize -- width is already locked by .modal's
+    own 700px, this locks the height too and the body scrolls instead
+    (it already does, overflow-y:auto above). The mobile bottom-sheet
+    breakpoint below keeps this same fixed height (78vh), so the
+    view<->edit pair stays stable on phones as well. */
+.modal.is-stable-height{height:min(78vh, 720px);}
+/* The in-place content swap animation for that same merge --
+    static/modal.js toggles .is-swapped on the dialog when it navigates
+    between the two states (or refreshes content in place) and the body
+    content cross-fades/rises in instead of hard-replacing. Subtle on
+    purpose: a gentle opacity dip + a few px of lift, "to" matching the
+    resting open-state transform so there's no snap at the end. The
+    global prefers-reduced-motion rule already collapses the duration. */
+.modal.is-swapped{animation:cc-modal-swap-in var(--dur-normal) var(--ease-standard);}
+@keyframes cc-modal-swap-in{
+   from{opacity:.6; transform:translateY(5px) scale(.995);}
+   to{opacity:1; transform:translateY(0) scale(1);}
 }
-.modal-close:hover{background:var(--bg-secondary); color:var(--fg-primary);}
-.modal-handle{display:none;}
+/* Modal header -- MD3 top app bar pattern inside the dialog: title
+    on the left, close button on the right, separated by a subtle
+    divider from the body. Gives the dialog a clear "page" identity
+    instead of floating content with no hierarchy. */
+.modal-header{
+   display:flex; align-items:center; gap:var(--space-3);
+   padding:var(--space-4) var(--space-5) var(--space-3);
+   padding-right:44px;
+   border-bottom:1px solid var(--separator);
+   flex:none;
+}
+.modal-header h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.modal-close{
+   position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
+   justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
+   cursor:pointer; color:var(--fg-secondary); font-size:16px; z-index:2;
+}
+ .modal-close:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+ .modal-handle{display:none;}
+ /* Modal body -- scrollable content area inside the dialog. */
+ .modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto; flex:1;}
+ .modal-body h1{margin-top:0;}
+ /* Inside the modal, the fetched fragment's own card/button chrome would be
+     redundant with the dialog's -- these neutralize it without touching the
+     full-page version's markup. */
+ .modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
+ .modal-body .card:hover{box-shadow:none;}
+
+/* Modal footer -- MD3 bottom sheet action bar: a flex row of
+    buttons at the bottom of the dialog, separated from the body
+    by a subtle divider. The "Done" / "Cancel" / primary action
+    lives here instead of being buried inside the body content. */
+.modal-footer{
+   display:flex; align-items:center; gap:var(--space-2);
+   padding:var(--space-3) var(--space-5);
+   border-top:1px solid var(--separator);
+   flex:none;
+}
+.modal-footer .spacer{flex:1;}
+
+/* --------------------------------------------------------------------- */
+/* Photo crop/resize/rotate editor (static/avatar_cropper.js,            */
+/* contact_form.html's .avatar-upload-input) -- 2026-08-08. A second,     */
+/* self-contained overlay layered above the regular .modal-overlay        */
+/* (contact_form.html is itself usually already open as a modal), same    */
+/* MD3 dialog language (surface/elevation/radius tokens) as .modal above  */
+/* rather than an unrelated visual style.                                 */
+/* --------------------------------------------------------------------- */
+.cropper-overlay{
+  position:fixed; inset:0; z-index:200; background:var(--overlay-scrim);
+  display:flex; align-items:center; justify-content:center; padding:var(--space-5);
+  opacity:0; visibility:hidden;
+  transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
+}
+.cropper-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
+.cropper-panel{
+  background:var(--surface-container-high); border-radius:var(--radius-lg); box-shadow:var(--elevation-3);
+  max-width:100%; max-height:90vh; overflow:auto;
+  display:flex; flex-direction:column;
+}
+.cropper-header{
+  display:flex; align-items:center; gap:var(--space-3);
+  padding:var(--space-4) var(--space-5) var(--space-3); border-bottom:1px solid var(--separator);
+}
+.cropper-header h2{margin:0; font-size:var(--text-title3); flex:1;}
+.cropper-stage{
+  position:relative; margin:var(--space-4) auto 0; background:var(--bg-tertiary);
+  border-radius:var(--radius-sm); overflow:hidden; touch-action:none;
+}
+.cropper-canvas{display:block; width:100%; height:100%;}
+.cropper-box{
+  position:absolute; border:2px solid var(--accent); box-shadow:0 0 0 1000px rgba(0,0,0,.45);
+  cursor:move; touch-action:none;
+}
+.cropper-box-handle{
+  position:absolute; width:12px; height:12px; background:var(--accent); border:2px solid var(--fg-on-accent);
+  border-radius:50%; transform:translate(-50%, -50%);
+}
+.cropper-box-handle[data-handle="n"]{top:0; left:50%; cursor:ns-resize;}
+.cropper-box-handle[data-handle="s"]{top:100%; left:50%; cursor:ns-resize;}
+.cropper-box-handle[data-handle="e"]{top:50%; left:100%; cursor:ew-resize;}
+.cropper-box-handle[data-handle="w"]{top:50%; left:0; cursor:ew-resize;}
+.cropper-box-handle[data-handle="ne"]{top:0; left:100%; cursor:nesw-resize;}
+.cropper-box-handle[data-handle="sw"]{top:100%; left:0; cursor:nesw-resize;}
+.cropper-box-handle[data-handle="nw"]{top:0; left:0; cursor:nwse-resize;}
+.cropper-box-handle[data-handle="se"]{top:100%; left:100%; cursor:nwse-resize;}
+.cropper-toolbar{
+  display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
+  padding:var(--space-4) var(--space-5) 0; flex-wrap:wrap;
+}
+.cropper-rotate-group{display:flex; gap:var(--space-1);}
+.cropper-rotate-group .icon-btn{font-size:18px; width:32px; height:32px;}
+.cropper-footer{
+  display:flex; align-items:center; justify-content:flex-end; gap:var(--space-2);
+  padding:var(--space-4) var(--space-5);
+}
 
 /* Below the mobile breakpoint, the centered/margined dialog becomes a
-   full-width sheet anchored to the bottom edge instead -- a 560px dialog
-   shrunk to fit a phone with padding on all sides reads as "desktop
-   dialog, resized," not native to the platform. Both iOS and Material
-   solve this the same way: full width, rounded top corners only, slides
-   up from off-screen, dismissible by dragging down or tapping the
-   backdrop (static/modal.js's dragHandle logic below the CSS). */
+    full-width sheet anchored to the bottom edge instead -- a 560px dialog
+    shrunk to fit a phone with padding on all sides reads as "desktop
+    dialog, resized," not native to the platform. Both iOS and Material
+    solve this the same way: full width, rounded top corners only, slides
+    up from off-screen, dismissible by dragging down or tapping the
+    backdrop (static/modal.js's dragHandle logic below the CSS). */
 @media (max-width:720px){
-  .modal-overlay{align-items:flex-end; padding:0;}
-  .modal{
-    width:100%; max-width:100%; border-radius:28px 28px 0 0;
-    max-height:90vh; transform:translateY(100%);
-    padding-bottom:env(safe-area-inset-bottom, 0px);
-  }
-  .modal-overlay.is-open .modal{transform:translateY(0);}
-  .modal-handle{
-    display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
-    margin:var(--space-2) auto 0; flex:none; touch-action:none;
-  }
-  .modal-close{top:var(--space-2);}
+   .modal-overlay{align-items:flex-end; padding:0;}
+   .modal{
+     width:100%; max-width:100%; border-radius:28px 28px 0 0;
+     max-height:90vh; transform:translateY(100%);
+     padding-bottom:env(safe-area-inset-bottom, 0px);
+   }
+   .modal-overlay.is-open .modal{transform:translateY(0);}
+   .modal-handle{
+     display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
+     margin:var(--space-2) auto 0; flex:none; touch-action:none;
+   }
+    .modal-header{padding:var(--space-3) var(--space-4) var(--space-2); padding-right:44px;}
+   .modal-body{padding:var(--space-3) var(--space-4);}
+   .modal-footer{padding:var(--space-2) var(--space-4) var(--space-3);}
 }
 
 /* Manage-calendars/task-lists/addressbooks modal (routers/calendars.py,
@@ -1183,17 +2250,31 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    it stays display:none so it never occupies layout space there. */
 .color-picker .color-dropdown{display:none;}
 .color-popover{
-  position:fixed; display:none; z-index:150; width:104px;
+  position:fixed; display:none; z-index:150; width:236px; max-height:280px; overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
-  padding:8px; box-shadow:var(--elevation-3);
+  padding:10px; box-shadow:var(--elevation-3);
 }
 .color-popover.is-open{display:block;}
-.color-popover .color-dropdown{display:flex; gap:5px; flex-wrap:wrap;}
+/* 2026-08-08 -- grew from 8 colors to 16 (routers/labels.py's COLORS) and
+   from bare circles to circle-plus-name (direct feedback: "small label
+   under each color"), so the old `display:flex; flex-wrap` row of plain
+   swatches became a real grid instead -- 4 columns keeps 16 colors to a
+   tidy 4x4 without the popover growing too tall, and every swatch lines
+   up with its neighbors instead of wrapping at whatever width its own
+   (now taller, label-bearing) box happens to need. */
+.color-popover .color-dropdown{display:grid; grid-template-columns:repeat(4, 1fr); gap:10px 6px;}
+.color-swatch-label{
+  display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  padding:4px 2px; border-radius:var(--radius-sm);
+}
+.color-swatch-label:hover{background:var(--bg-secondary);}
+.color-swatch-name{font-size:10px; color:var(--fg-tertiary); text-align:center; line-height:1.1;}
 .color-swatch{
-  appearance:none; -webkit-appearance:none; width:18px; height:18px; border-radius:50%; padding:0;
+  appearance:none; -webkit-appearance:none; width:22px; height:22px; border-radius:50%; padding:0;
   cursor:pointer; border:2px solid transparent; box-shadow:0 0 0 1px var(--border) inset;
 }
 .color-swatch:checked{border-color:var(--fg-primary);}
+.color-swatch-label:has(.color-swatch:checked) .color-swatch-name{color:var(--fg-primary); font-weight:600;}
 
 /* Icon picker -- same shared-popover mechanism as .color-picker above
    (2026-08-02, Projects manage page; revised same day to draw from the
@@ -1214,12 +2295,26 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent); border-color:transparent;}
 .icon-picker .icon-dropdown{display:none;}
 .icon-popover{
-  position:fixed; display:none; z-index:150; width:224px; max-height:260px; overflow-y:auto;
+  position:fixed; display:none; z-index:150; width:260px; max-height:320px; overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   padding:8px; box-shadow:var(--elevation-3);
 }
 .icon-popover.is-open{display:block;}
-.icon-popover .icon-dropdown{display:flex; gap:4px; flex-wrap:wrap;}
+.icon-popover .icon-dropdown{display:flex; flex-direction:column; gap:2px;}
+/* 2026-08-08 -- icons grouped into named categories (routers/labels.py's
+   ICON_GROUPS) instead of one long undifferentiated grid, once the set
+   grew from ~100 to nearly the sprite's full ~140 usable icons -- a flat
+   wall that size stopped being scannable. Each group is its own small
+   flex-wrap row of swatches under a label, same visual weight
+   `.group-sublabel`/`.section-label` already use elsewhere in the app for
+   "here's a named subsection of a list," not a bespoke heading style. */
+.icon-group{display:flex; flex-direction:column; gap:4px; padding:4px 0;}
+.icon-group:first-child{padding-top:0;}
+.icon-group-label{
+  font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--fg-tertiary); padding:2px 2px 0;
+}
+.icon-group-swatches{display:flex; gap:4px; flex-wrap:wrap;}
 /* Each option is a <label><input type="radio" class="icon-swatch"><span>
    {{ icon(name) }}</span></label> -- the radio itself is invisible (an
    arbitrary SVG icon can't be drawn as a styled appearance:none input
@@ -1257,11 +2352,11 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    Groups/Tags split, the row growing a third form (merge, between edit and
    delete) instead of just two, and a usage-count badge. */
 .section-label{
-  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:0 0 6px;
 }
 .group-sublabel{
-  font-size:11px; font-weight:600; color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
+  font-size:12px; font-weight:600; color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
 }
 .tag-manage-row .calendar-row-edit-form select{padding:5px 7px; min-width:0;}
 .tag-manage-row .calendar-row-edit-form input[type="text"]{max-width:140px;}
@@ -1281,9 +2376,9 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .project-manage-row .calendar-row-edit-form{flex-wrap:wrap; row-gap:6px;}
 .project-manage-row .calendar-row-edit-form input[name="name"]{max-width:none; flex:1 1 220px;}
 .tag-usage-count{
-  flex:none; font-size:11px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
+  flex:none; font-size:12px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
 }
-.btn-sm{padding:4px 10px; font-size:12px;}
+.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* Row hover feedback -- .calendar-row had none before (unlike the plain
    <table> rows elsewhere, which already highlight via `tbody tr:hover`).
@@ -1296,7 +2391,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* One-line orientation text above the page's lists (2026-08-02) -- this
    page's rows save on change with no visible "Save" button, which isn't
    obvious without a hint the first time. */
-.settings-hint{font-size:12px; color:var(--fg-tertiary); margin:0 0 8px;}
+.settings-hint{font-size:13px; color:var(--fg-tertiary); margin:0 0 8px;}
 /* Row symmetry (2026-08-02 -- "make the layout more neat ... more
    symmetrical"). Every icon-btn is already a fixed 28x28 square, but two
    things on the Projects page weren't: the "Lists"/"Lists (N)" button
@@ -1326,7 +2421,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .space-group-projects{
   margin:2px 0 0 13px; padding-left:14px; border-left:2px solid var(--separator);
 }
-.space-group-empty-hint{font-size:12px; color:var(--fg-tertiary); padding:8px 0 8px 2px;}
+.space-group-empty-hint{font-size:13px; color:var(--fg-tertiary); padding:8px 0 8px 2px;}
 
 .project-row-block{margin-bottom:4px;}
 /* Project -> linked WebDAV collections (2026-08-02, reworked twice same
@@ -1338,7 +2433,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    "click a candidate directly" pattern project_merge.html already uses
    for picking a merge destination. */
 .project-sublists{display:flex; flex-direction:column; gap:18px;}
-.project-sublist-label{font-weight:600; font-size:13px; margin-bottom:6px;}
+.project-sublist-label{font-weight:600; font-size:14px; margin-bottom:6px;}
 .project-sublist-pills{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;}
 /* Both pill kinds are real <button>s (their own one-item <form>, since
    each posts a different uid) so clicking one acts immediately -- no
@@ -1369,13 +2464,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .tag-input-menu.is-open{display:block;}
 .tag-input-option{
   display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none;
-  cursor:pointer; font-size:13px; color:var(--fg-primary);
+  cursor:pointer; font-size:14px; color:var(--fg-primary);
 }
 .tag-input-option:hover, .tag-input-option:focus{background:var(--bg-secondary);}
 
 /* projects_manage.html/project_detail.html */
 .project-icon-input{max-width:64px; flex:none; text-align:center;}
-.project-open-link{flex:none; font-size:12px; color:var(--fg-tertiary); white-space:nowrap;}
+.project-open-link{flex:none; font-size:13px; color:var(--fg-tertiary); white-space:nowrap;}
 .project-open-link:hover{color:var(--accent);}
 .project-cover{
   width:100%; max-height:180px; object-fit:cover; border-radius:var(--radius-md);
@@ -1412,9 +2507,57 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .heatmap-cell.level-future{background:transparent; cursor:default; visibility:hidden;}
 .heatmap-cell:hover:not(.level-future){box-shadow:0 0 0 1px var(--fg-primary) inset;}
 
+/* .heatmap-wide (2026-08-08, direct feedback: "the graphs should cover
+   all the width of that white space") -- the default .heatmap-cell above
+   is a fixed 11px so a compact preview (habits_list.html's card, sitting
+   next to other UI) doesn't take over the page; Tasks > Habits' cards
+   have nothing else competing for width, so this modifier makes each
+   week column (and the cells in it) flex to fill the card instead of
+   sitting fixed-size in mostly-empty space. `aspect-ratio:1` keeps cells
+   square as their width grows -- height is no longer a fixed px value. */
+.heatmap-wide.heatmap{overflow-x:visible;}
+.heatmap-wide .heatmap-months{margin-left:0;}
+.heatmap-wide .heatmap-month-label{width:auto; flex:1; text-align:left;}
+.heatmap-wide .heatmap-grid{width:100%;}
+.heatmap-wide .heatmap-week{flex:1;}
+.heatmap-wide .heatmap-cell{width:100%; height:auto; aspect-ratio:1;}
+
+/* Tasks > Habits' card grid (2026-08-08, direct feedback: "in a 2 column
+   grid") -- reuses .habit-card/.habit-card-header/.habit-streaks as-is
+   (same visual language as the standalone Habits feature), just wrapped
+   in a real 2-column grid instead of the single vertical stack
+   habits_list.html uses, since this page can show several habit-tasks at
+   once and a single column would push the heatmaps far down the page.
+   Collapses to 1 column at the same mobile breakpoint .field-grid uses. */
+.habit-task-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-4); margin-bottom:var(--space-4);}
+.habit-task-grid .habit-card{margin-bottom:0;}
+@media (max-width:720px){
+  .habit-task-grid{grid-template-columns:1fr;}
+}
+/* "View full year" expand toggle (2026-08-08 direct feedback) -- CSS
+   Grid's `grid-column` (which line an item starts/ends on) is a discrete
+   placement property, not a continuously-interpolatable one, so browsers
+   can't smoothly animate the reflow itself the way they can a width or
+   transform -- there's no CSS-only way around that. What *is* smoothly
+   animatable, and is what actually reads as "an animation" to someone
+   using it, is the newly-revealed full-year heatmap fading/sliding in
+   once the reflow has already happened -- static/task_habit_checkin.js
+   toggles `.is-expanded` (instant grid-column change) and `hidden` on the
+   two heatmap variants together, and this transition covers the reveal.
+   prefers-reduced-motion already disables all transitions globally (see
+   this file's base-reset section), so no separate override needed here. */
+.habit-card.is-expanded{grid-column:1 / -1;}
+.habit-card-heatmap-full{
+  animation:cc-habit-card-reveal var(--dur-normal) var(--ease-standard);
+}
+@keyframes cc-habit-card-reveal{
+  from{opacity:0; transform:translateY(-4px);}
+  to{opacity:1; transform:translateY(0);}
+}
+.habit-card-expand-btn{margin-left:auto;}
 .habit-card{margin-bottom:16px;}
 .habit-card-header{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
-.habit-streaks{display:flex; gap:14px; font-size:12px; color:var(--fg-tertiary); margin-top:6px;}
+.habit-streaks{display:flex; gap:14px; font-size:13px; color:var(--fg-tertiary); margin-top:6px;}
 .habit-streaks strong{color:var(--fg-primary);}
 .habit-entries-list{margin-top:8px;}
 .habit-entry-row{display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--separator);}
@@ -1425,7 +2568,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .db-formula-input{min-width:170px;}
 .db-column-edit-form select{padding:5px 7px;}
 #database-table tfoot td{border-top:2px solid var(--border); padding-top:8px;}
-#database-table code{font-size:11px; background:var(--bg-secondary); padding:1px 4px; border-radius:3px;}
+#database-table code{font-size:12px; background:var(--bg-secondary); padding:1px 4px; border-radius:3px;}
 
 /* dashboard.html: widget cards, per-widget filter panel, the weekly
    overview's 7-column day grid. */
@@ -1473,42 +2616,27 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .widget-stack-drag-handle:active{cursor:grabbing;}
 .widget-stack-item{position:relative;}
 .widget-stack-item.is-dragging{opacity:.5;}
-/* Drag-to-resize handle (dashboard.html, edit mode only, static/app.js) --
-   a thin strip on the card's right edge rather than a small square grip
-   in a corner, so there's a generous hit target the full height of the
-   card instead of one fiddly corner pixel to aim for. */
-.widget-resize-handle{
-  position:absolute; top:0; right:-6px; bottom:0; width:12px; cursor:col-resize; touch-action:none; z-index:2;
-}
-.widget-resize-handle::after{
-  content:""; position:absolute; top:50%; right:5px; transform:translateY(-50%);
-  width:3px; height:28px; border-radius:var(--radius-pill); background:var(--border-strong);
-  transition:background var(--dur-fast) var(--ease-standard);
-}
-.widget-resize-handle:hover::after, .widget-card.is-resizing .widget-resize-handle::after{background:var(--accent);}
-.widget-card.is-resizing{transition:none;}
-/* Widget content height (2026-08-02 -- "a way to resize them vertically
-   ... a specific values for their width and height, not any height").
+/* Manual width picker's drag-to-resize handle (.widget-resize-handle) and
+   its .widget-card.is-resizing state removed 2026-08-07 along with the
+   feature itself -- see static/app.js's "Manual width picker /
+   drag-to-resize-width removed" comment. A widget's width is now always
+   automatic (its type's own default, or a stack's own stored width). */
+/* Widget content height (2026-08-07 -- manual height editor/drag-resize
+   removed per direct feedback: a widget's height should just be "how
+   much content it is", no scrollbar, unless it goes over a max height).
    Applied to just this data area (_widget_workspace.html's widget_inner
    macro), not the whole card, so the header above and the Filters panel
-   below always keep their own natural size regardless of how the
-   content itself is set. `position:relative` gives the vertical resize
-   handle below a stable per-widget anchor -- one per widget, including
-   one per stack member, not one shared per card/stack the way the
-   width handle is (see routers/dashboard.py's _dissolve_stack docstring
-   for why height isn't stack-shared). overflow-y:auto is what makes
-   "shorter than its content" mean "scrolls" instead of "gets clipped." */
-.widget-content{position:relative; overflow-y:auto; overflow-x:hidden;}
-.widget-resize-handle-vertical{
-  position:absolute; left:0; right:0; bottom:-6px; height:12px; cursor:row-resize; touch-action:none; z-index:2;
-}
-.widget-resize-handle-vertical::after{
-  content:""; position:absolute; left:50%; bottom:5px; transform:translateX(-50%);
-  width:28px; height:3px; border-radius:var(--radius-pill); background:var(--border-strong);
-  transition:background var(--dur-fast) var(--ease-standard);
-}
-.widget-resize-handle-vertical:hover::after, .widget-content.is-resizing .widget-resize-handle-vertical::after{background:var(--accent);}
-.widget-content.is-resizing{transition:none;}
+   below always keep their own natural size. One flat max-height shared
+   by every widget type -- not a per-type/per-widget value the way the
+   old preset system was -- with overflow-y:auto as a backstop for the
+   rare case content still exceeds it; each widget's own item-count
+   limit (e.g. _render_contact_list's `limit`) is what normally keeps
+   content within bounds day to day. 640px sits between the old "tall"
+   (480px) and "xl" (680px) presets -- generous enough for the tallest
+   everyday content (e.g. calendar_agenda, weekly_overview) without
+   letting any one widget dominate the page. */
+.widget-content{position:relative; overflow-y:auto; overflow-x:hidden; max-height:640px;}
+.widget-content td{word-wrap:break-word; overflow-wrap:break-word;}
 /* Stacking (2026-08-02) -- dropping one widget onto another's middle
    (not its narrow top/bottom or left/right reorder edges, see
    static/app.js's dashboard drag handler) merges them into one grid
@@ -1555,7 +2683,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .mini-cal-nav{width:24px; height:24px;}
 .mini-cal-weekdays, .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr);}
 .mini-cal-weekdays span{
-  text-align:center; font-size:10px; font-weight:600; color:var(--fg-tertiary);
+  text-align:center; font-size:11px; font-weight:600; color:var(--fg-tertiary);
   text-transform:uppercase; padding-bottom:3px;
 }
 .mini-cal-day{
@@ -1619,92 +2747,248 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .project-preview-row:hover{text-decoration:none;}
 .project-preview-row:hover .cell-tag{box-shadow:0 0 0 1px var(--border-strong) inset;}
 
+/* At a Glance widget (_widget_at_a_glance.html, dashboard usability
+   rework 2026-08-07) -- a row of number+label stat blocks, each a link to
+   the matching filtered Tasks view. Reuses .widget-section-label for the
+   small caption under each number rather than inventing a new label
+   style. */
+.at-a-glance-row{display:flex; gap:var(--space-4); flex-wrap:wrap;}
+.at-a-glance-stat{
+  flex:1; text-align:center; text-decoration:none; color:inherit;
+  padding:var(--space-2); border-radius:var(--radius-md);
+  min-width:0;
+}
+.at-a-glance-stat:hover{background:var(--bg-secondary); text-decoration:none;}
+.at-a-glance-number{font-size:28px; font-weight:600; line-height:1.1;}
+.at-a-glance-number.is-overdue{color:var(--danger);}
+/* 2026-08-07: at third/half width there isn't room for all three stats at
+   full size -- the number and its caption were clipping/wrapping badly,
+   only two of the three blocks fitting legibly. `.widget-card[data-span]`
+   (routers/dashboard.py's WIDGET_WIDTHS -- 2=third, 3=half, 4=two_thirds,
+   6=full) already tells every widget how wide it is, so this scales the
+   number and caption down specifically at the two narrow widths rather
+   than shrinking a widget that has room to spare at two_thirds/full. */
+.widget-card[data-span="2"] .at-a-glance-number,
+.widget-card[data-span="3"] .at-a-glance-number{font-size:20px;}
+.widget-card[data-span="2"] .at-a-glance-row,
+.widget-card[data-span="3"] .at-a-glance-row{gap:var(--space-2);}
+.widget-card[data-span="2"] .at-a-glance-stat .widget-section-label,
+.widget-card[data-span="3"] .at-a-glance-stat .widget-section-label{font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
 /* Habit Check-in widget (_widget_habit_checkin.html) */
 .habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
 .habit-checkin-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0;}
 .widget-header{display:flex; align-items:center; gap:4px; margin-bottom:10px;}
+.widget-header h2{margin:0;}
 .widget-section-label{
-  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:10px 0 4px;
 }
 .widget-section-label:first-child{margin-top:0;}
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
-.widget-config summary{cursor:pointer; font-size:12px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
+.widget-config summary{cursor:pointer; font-size:13px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
 .widget-checkbox-row .field-toggle{flex-direction:row-reverse; justify-content:flex-end; gap:5px; margin-bottom:0;}
-/* "Narrow down (optional)" group (dashboard.html's Add-widget + per-widget
-   Filters forms), 2026-08-02 -- visually secondary to the widget-type/
-   title/width choices above it: smaller label, muted background, tighter
-   spacing, so it reads as "further narrow the data down if you want to,"
-   not a decision of the same weight as picking the widget itself. */
-.widget-filter-group{
-  background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-3);
-  margin-top:var(--space-2);
+/* Labels/Task lists/Calendars in the widget builder (dashboard.html's
+    Add-widget + per-widget Filters forms) used to live in a visually
+    distinct "Advanced" group here (.widget-filter-group -- muted
+    background, smaller label text, its own nested field-grid, briefly a
+    collapsed <details> before the 2026-08-07 "remove the details view"
+    follow-up made it a plain always-visible section instead). The
+    2026-08-07 "move them into normality" follow-up removed that grouping
+    entirely -- these fields are now plain fields in the normal flow, same
+    visual weight as every other field in the form, no special treatment
+    left to style here. */
+
+/* caret rotation for the "Add widget" collapsible on the workspace
+   (widget-add-config, still a real <details> -- unlike widget-filter-
+   group above, that one collapses the *entire* form, a much bigger
+   chunk of UI than Project/Labels, so keeping it collapsed by default
+   still earns its keep). */
+.widget-add-config summary .filter-caret{
+   margin-left:auto; display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard);
 }
-.widget-filter-group-label{
-  font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
-  font-weight:600; margin-bottom:var(--space-2);
+.widget-add-config[open] summary .filter-caret{transform:rotate(180deg);}
+
+/* "Add widget" details on the workspace (edit mode) -- header-like trigger */
+.widget-add-config summary.widget-add-summary{
+   cursor:pointer; font-size:16px; font-weight:600; color:var(--fg-primary);
+   display:flex; align-items:center; gap:6px; user-select:none;
+   list-style:none; padding:8px 0;
 }
-.widget-filter-group .field label{font-size:10px; color:var(--fg-tertiary);}
-.widget-filter-group .field{margin-bottom:var(--space-2);}
+.widget-add-config summary.widget-add-summary:hover{color:var(--accent);}
+
+/* "Add a widget" header in the Customize modal's builder pane */
+.widget-add-header{
+   display:flex; align-items:center; gap:6px; font-size:16px; font-weight:600;
+   margin:0 0 8px; color:var(--fg-primary);
+}
+
+/* Checkbox-dropdown for task lists / calendars / labels / reminders
+   (replaces <select multiple>). 2026-08-07 follow-up ("the label dropdown
+   should be themed the same as any other dropdown, font size etc") --
+   this used to have its own smaller border-width/radius/padding
+   (1px/--radius-sm(8px)/8px 10px) instead of matching the real `input,
+   select, textarea` rule's (1.5px/--radius-control(12px)/10px 14px), so
+   this trigger looked visibly slighter than an actual <select> sitting
+   right next to it even though the font-size already matched. Now it's
+   the exact same border/radius/padding as any other field -- only the
+   popup panel underneath (.multiselect-panel) has its own distinct
+   "dropdown menu" chrome (border/shadow), same as every other custom
+   popup in this app (.color-popover/.icon-popover/.tag-input-menu all
+   already share that one theme; see their own comments). */
+.widget-list-multiselect .multiselect-trigger{
+   width:100%; justify-content:flex-start; background:var(--control-bg);
+   border:1.5px solid var(--control-border); border-radius:var(--radius-control);
+    padding:10px 14px; font-size:var(--text-body); font-weight:400; color:var(--fg-primary);
+   font-family:inherit; cursor:pointer;
+}
+.widget-list-multiselect .multiselect-trigger:hover{
+   background:var(--bg-secondary); border-color:var(--border-strong);
+}
+.widget-list-multiselect .multiselect-trigger:focus-visible{
+   outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle);
+}
+.widget-list-multiselect .ms-trigger .filter-caret{margin-left:auto;}
+.widget-list-multiselect .ms-panel{left:0; right:auto; width:100%; max-height:220px; overflow:auto;}
+/* View sits in the same two-column .field-grid row as Range (each 1fr,
+   see .field-grid above), which was forcing a long label like "Agenda
+   (grouped by day)" to wrap across 3 lines inside a half-width box --
+   direct feedback: "make the view button box long as the label and
+   title? not min width" (a min-width would still leave it narrower than
+   the row above it). `:has()` (already used elsewhere in this file, e.g.
+   .tile-option/.seg-btn's checked-state styling) lets View's own field
+   span the full row -- same width as Title/Data source above it -- while
+   Range stays exactly as it was, now alone on the next row alongside
+   Limit. */
+.field-grid .field:has(> .widget-view-select){grid-column:1 / -1;}
+
+/* Customize modal (dashboard_customize.html) -- the existing-widgets list
+    is a collapsible <details> so a full page of widgets doesn't push the
+    builder below the fold; the Widget Builder itself is a two-pane layout:
+    configuration fields left, always-live preview right.
+    MD3 surface hierarchy: the modal body uses surface-container-low
+    for the existing-widgets section, and the builder uses a card-like
+    surface with its own elevation. */
+.widget-customize-existing{margin:4px 0 14px; border:1px solid var(--separator); border-radius:var(--radius-md); background:var(--surface-container);}
+.widget-customize-existing > summary{
+   cursor:pointer; font-size:13px; font-weight:600; color:var(--fg-secondary);
+   padding:8px 10px; display:flex; align-items:center; gap:6px; user-select:none;
+}
+.widget-customize-existing > summary:hover{color:var(--accent);}
+.widget-customize-existing[open] > summary{border-bottom:1px solid var(--separator);}
+.widget-customize-existing .calendar-list{padding:0 10px;}
+.widget-customize-row{flex-wrap:wrap; gap:4px 6px; padding:var(--space-1) 0;}
+.widget-customize-stack{background:var(--surface-container); border-radius:var(--radius-sm); padding:var(--space-1) var(--space-2); margin:2px 0;}
+.widget-customize-name{font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.widget-customize-child{padding-left:20px;}
+.widget-customize-edit{flex:1; min-width:0;}
+.widget-customize-footer{margin-top:var(--space-4); text-align:right;}
+.widget-builder{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4); align-items:start;}
+.widget-builder-config{
+   background:var(--surface-container-high); border-radius:var(--radius-lg);
+   padding:var(--space-4); box-shadow:var(--elevation-1);
+}
+.widget-builder-preview{
+   position:sticky; top:var(--space-3);
+   background:var(--surface-container-high); border-radius:var(--radius-lg);
+   padding:var(--space-4); box-shadow:var(--elevation-1);
+}
+/* .widget-builder-disabled removed 2026-08-08 -- the "Custom widgets"
+   toggle it was the fallback state for is gone; the Widget Builder is
+   always shown now (see _modal_widget_customize.html's own comment). */
+@media (max-width:720px){
+   .widget-builder{grid-template-columns:1fr;}
+   .widget-builder-preview{position:static;}
+}
 
 /* Live preview (dashboard.html's Add-widget form, static/
-   dashboard_widget_preview.js), 2026-08-02 -- a real rendered widget
-   below the form, refreshed on every change. Boxed in a dashed border
-   rather than a solid card so it visually reads as "a preview of
-   something not saved yet," not an actual widget already on the page. */
+    dashboard_widget_preview.js), 2026-08-02 -- a real rendered widget
+    below the form, refreshed on every change. Boxed in a dashed border
+    rather than a solid card so it visually reads as "a preview of
+    something not saved yet," not an actual widget already on the page. */
 .widget-preview-pane{margin-top:var(--space-4); padding-top:var(--space-3); border-top:1px solid var(--separator);}
 .widget-preview-content{
-  border:1.5px dashed var(--border-strong); border-radius:var(--radius-md); padding:var(--space-3);
-  background:var(--bg-base);
+   border:1.5px dashed var(--border-strong); border-radius:var(--radius-md); padding:var(--space-3);
+   overflow:hidden;
 }
-.widget-preview-content .widget-preview-card{box-shadow:none; border:none; padding:0; margin:0;}
+/* .widget-preview-card is still a .widget-card, which is position:absolute
+    (dashboard-grid layout) -- inside the preview box that makes it escape
+    the dashed container and overflow the rest of the page. Reset it to a
+    static, full-width block so it fits the box it's meant to sit in. */
+.widget-preview-content .widget-preview-card{
+   position:static; width:auto; box-shadow:none; border:none; padding:0; margin:0;
+}
+.widget-preview-content .widget-preview-card .dashboard-grid,
+.widget-preview-content .widget-preview-card .widget-stack{position:static;}
+.widget-preview-content .widget-preview-card .dashboard-grid,
+.widget-preview-content .widget-preview-card .widget-stack{position:static;}
 /* Range is visible by default (a real, usable field with no JS at all --
-   picking one for a View that doesn't use it, e.g. Mini Calendar, is
-   harmless: the server-side resolver (_resolve_selection) just ignores
-   it for any View that doesn't have has_range). static/
-   dashboard_widget_preview.js *hides* it once JS confirms the current
-   View doesn't use a range, decluttering the form -- progressive
-   enhancement on top of an already-working base, not a requirement for
-   the field to be reachable at all. */
+    picking one for a View that doesn't use it, e.g. Mini Calendar, is
+    harmless: the server-side resolver (_resolve_selection) just ignores
+    it for any View that doesn't have has_range). static/
+    dashboard_widget_preview.js *hides* it once JS confirms the current
+    View doesn't use a range, decluttering the form -- progressive
+    enhancement on top of an already-working base, not a requirement for
+    the field to be reachable at all. */
 .widget-range-field.is-hidden{display:none;}
 
-/* Habits & Recurring section on tasks_list.html (§3 of the plan).
-   A <details> collapsible so it doesn't push tasks off-screen when there
-   are many, but open by default so daily habits are visible immediately. */
-.habits-recurring-section{margin-top:20px;}
-.habits-recurring-summary{
-  cursor:pointer; display:flex; align-items:center; gap:6px;
-  font-size:14px; font-weight:600; color:var(--fg-secondary);
-  padding:6px 2px; user-select:none; list-style:none;
+/* MD3 Card variant for widget cards in the customize modal --
+    elevated surface with clear visual boundary, replacing the
+    generic .card style inside the modal context. */
+.widget-customize-card{
+   background:var(--surface-container-high); border-radius:var(--radius-lg);
+   box-shadow:var(--elevation-1); padding:var(--space-3); margin-bottom:var(--space-2);
+   transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
-.habits-recurring-summary::-webkit-details-marker{display:none;}
-.habits-recurring-summary .icon{width:16px; height:16px; color:var(--fg-tertiary);}
-.habits-recurring-count{
-  font-size:11px; font-weight:500; color:var(--fg-tertiary);
-  background:var(--bg-secondary); border-radius:var(--radius-sm);
-  padding:2px 7px; margin-left:2px;
+.widget-customize-card:hover{box-shadow:var(--elevation-2);}
+
+/* Widget card header inside the customize modal -- MD3 list-item
+    pattern: icon + title + subtitle + trailing actions in a row. */
+.widget-customize-card-header{
+   display:flex; align-items:center; gap:var(--space-3);
+   padding:var(--space-2) 0;
 }
-.habits-recurring-table td:first-child{font-weight:500;}
-/* Quick-toggle button for today's habit completion. Styled like an icon-btn
-   but with a filled green when done to signal "logged today." */
-.habit-toggle-btn{
-  background:transparent; border:none; cursor:pointer; padding:0;
-  display:inline-flex; align-items:center; justify-content:center;
-  color:var(--fg-tertiary); border-radius:50%;
-  width:28px; height:28px;
-  transition:color var(--dur-fast) var(--ease-standard),
-             background var(--dur-fast) var(--ease-standard);
+.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-body); font-weight:500;}
+.widget-customize-card-actions{display:flex; gap:2px; flex:none;}
+
+/* Section divider inside the customize modal -- a subtle
+    horizontal rule with a label, MD3's "section divider" pattern. */
+.widget-customize-divider{
+   display:flex; align-items:center; gap:var(--space-3);
+   margin:var(--space-4) 0;
 }
-.habit-toggle-btn:hover{color:var(--accent); background:var(--accent-subtle);}
-.habit-toggle-btn.habit-toggle-done{color:var(--tag-green-fg);}
-.habit-toggle-btn.habit-toggle-done .icon{width:18px; height:18px;}
-.habit-toggle-btn .icon{width:18px; height:18px;}
+.widget-customize-divider::before, .widget-customize-divider::after{
+   content:""; flex:1; height:1px; background:var(--separator);
+}
+.widget-customize-divider-label{
+   font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary);
+   text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
+}
+
+/* Section label -- used as a heading for widget groups.
+    MD3 uses a smaller, muted type style for section headers. */
+.section-label{
+   font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+   margin:0 0 6px;
+}
+
 .widget-limit-field.is-hidden{display:none;}
 .widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2);}
 .widget-save-filters-btn.is-hidden{display:none;}
 .widget-save-status{font-size:.85em; color:var(--fg-secondary); opacity:0; transition:opacity .2s ease;}
 .widget-save-status.is-visible{opacity:1;}
+
+/* task_form.html's Daily target field (2026-08-08) -- static/
+   task_habit_field_toggle.js toggles this the same way, same convention
+   as the widget-builder's own is-hidden fields above. */
+.habit-target-field.is-hidden{display:none;}
+/* Subtasks-in-place-of-Recurrence (2026-08-08, task_form.html) -- sits
+   below #task-form as a sibling section (a real <form> can't nest inside
+   another), so it needs its own top spacing/divider instead of inheriting
+   .field-grid's row gap the way Recurrence used to. */
+.task-form-subtasks{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
+.task-form-subtasks h2{margin:0 0 var(--space-2); font-size:var(--text-headline);}
 .widget-save-status.is-error{color:var(--danger);}
 
 .week-overview-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}
@@ -1712,13 +2996,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   border:1px solid var(--separator); border-radius:var(--radius-md); padding:6px; min-height:70px;
 }
 .week-overview-day.is-today{border-color:var(--accent);}
-.week-overview-day-label{font-size:11px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px;}
+.week-overview-day-label{font-size:12px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px;}
 .week-overview-day.is-today .week-overview-day-label{color:var(--accent);}
 .week-overview-item{
-  display:flex; align-items:center; gap:4px; font-size:12px; padding:2px 0;
+  display:flex; align-items:center; gap:4px; font-size:13px; padding:2px 0;
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.week-overview-empty{font-size:11px; color:var(--fg-tertiary);}
+.week-overview-empty{font-size:12px; color:var(--fg-tertiary);}
 @media (max-width:700px){
   .week-overview-grid{grid-template-columns:repeat(2,1fr);}
 }
@@ -1742,10 +3026,140 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    above, just with a <select>'s chosen <option> instead of a radio.
    `.professor-row` holds the select and (when shown) the new-name input
    side by side, each taking half the row, rather than stacked. */
-.professor-row{display:flex; gap:8px;}
-.professor-row select{flex:1; min-width:0;}
-.professor-new-input{display:none; flex:1; min-width:0;}
-.professor-field:has(#professor-select option[value="__new__"]:checked) .professor-new-input{display:block;}
+.professor-new-input{display:none; margin-top:8px;}
+/* 2026-08-08: Professor is a fancy single-select dropdown now (the
+   _widget_list_multiselect.html radio version), so the "reveal the
+   new-professor text box" trigger keys off the dropdown's own `__new__`
+   radio instead of a <select> option. The radio is a descendant of
+   .professor-field again once the dropdown panel closes (single-select
+   closes it on pick), so this :has() fires exactly when + Add new
+   professor... is the chosen value. */
+.professor-field:has(input[name="professor_select"][value="__new__"]:checked) .professor-new-input{display:block;}
+
+/* Schedule class form: Class type field (2026-08-07, modal-input-design
+   Phase E) -- same :has() progressive-disclosure trick as .professor-field
+   above, just keyed off a radio (`.seg-radio`) instead of a <select>'s
+   chosen <option>, since Class type is a `.segmented` control, not a
+   dropdown. */
+.class-type-other-input{display:none; margin-top:8px;}
+.class-type-field:has(input[name="class_type_select"][value="__other__"]:checked) .class-type-other-input{display:block;}
+
+/* ============ Settings area (2026-08-08 redesign) ============
+   Settings is its own navigable environment now: a hub (settings_index.html,
+   six focused categories, not a page of every control) plus one page per
+   category (settings_general/appearance/data/widgets/advanced.html) and
+   Labels' own manage page -- see plans/settings-rework.md's 2026-08-08
+   entry for the full rationale. Every page in this family shares the same
+   row/breadcrumb/card language defined here rather than each inventing its
+   own layout, so moving between them feels like one place, not a
+   collection of unrelated screens. */
+.settings-group{margin-bottom:var(--space-5);}
+.settings-row{text-decoration:none; color:var(--fg); gap:var(--space-3);}
+.settings-row:hover{color:var(--accent);}
+.settings-row-icon{color:var(--fg-tertiary); display:inline-flex;}
+.settings-row-name{font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-row .tag-usage-count{flex:none;}
+
+/* Hub rows (settings_index.html) are a step chunkier than an ordinary
+   .settings-row -- each one *is* a whole category, not one setting among
+   several in a card -- plus a trailing chevron for the "this navigates
+   somewhere" affordance every other disclosure control in this app
+   already uses (multiselect triggers, the modal's own nav). */
+.settings-hub-row{padding:var(--space-3) var(--space-2);}
+.settings-hub-row .settings-row-icon{width:32px; height:32px; border-radius:var(--radius-md); background:var(--bg-secondary); align-items:center; justify-content:center; flex:none;}
+.settings-hub-row .settings-row-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.settings-hub-row .settings-row-name{font-size:var(--text-headline); font-weight:600; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-hub-row .settings-row-desc{color:var(--fg-tertiary); font-size:var(--text-footnote);}
+.settings-hub-row .settings-row-chevron{color:var(--fg-tertiary); flex:none;}
+.settings-hub-row:hover .settings-row-chevron{color:var(--accent);}
+
+/* Settings breadcrumb (_settings_breadcrumb.html) -- one line, every
+   ancestor a link, current page plain text at the end. Distinct from the
+   plain stacked .breadcrumb (label_detail.html's "< Labels" / "< Parent",
+   one per line) since this is always a single trail rendered inline, not
+   however many independent single-link rows a page happens to have. */
+.settings-breadcrumb{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.settings-breadcrumb a{display:inline-flex; align-items:center; gap:2px; color:var(--fg-tertiary); text-decoration:none;}
+.settings-breadcrumb a:hover{color:var(--accent);}
+.settings-breadcrumb .breadcrumb-sep{color:var(--fg-tertiary); opacity:.5;}
+.settings-breadcrumb .breadcrumb-current{color:var(--fg-primary); font-weight:500;}
+
+/* Settings field row -- "Setting name [ control ]" on one line, the fast-
+   editing shape every child page (General/Appearance/Widgets/Advanced)
+   uses for its actual controls, direct descendant of .card like
+   .settings-row/.calendar-row already are. */
+.settings-field-row{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-2);}
+.settings-field-row + .settings-field-row{border-top:1px solid var(--separator);}
+.settings-field-row .settings-field-label{font-weight:500;}
+.settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-footnote); margin-top:2px;}
+.settings-field-row .spacer{flex:1;}
+.settings-field-row input[type="text"]{max-width:220px;}
+
+/* Labels manage page search box (labels_manage.html) -- reuses the same
+   filter-input look tasks_list.html's own search field already has, not a
+   bespoke style. */
+.settings-search{margin-bottom:12px;}
+.settings-search input{width:100%; max-width:320px;}
+
+/* Labels manage table (labels_manage.html, 2026-08-08 follow-up) -- was a
+   flex-row list with no fixed columns (Color/Icon/Space/Sections/Merge/
+   Remove each landed at a different horizontal position row to row,
+   depending on that row's own name/usage-count text length, and wrapped
+   unpredictably below a very wide viewport). Reuses the Tasks table view's
+   own `table`/`thead th`/`tbody tr`/.table-scroll rules as-is -- this is
+   the same "real columns, one header per control" component, not a second
+   table system. These are just this table's own deltas. This is a
+   management list meant to be scanned row after row (rename, recolor,
+   remove, repeat), not read -- every row/column gets tighter padding and
+   smaller controls than Tasks' own table, which mixes in real content
+   (titles, due dates) that needs more breathing room. */
+.label-table td, .label-table th{padding:5px 8px;}
+.label-table td{vertical-align:middle;}
+/* A handful of this table's own per-label forms (Rename/Merge/Remove) are
+   small enough to live entirely inside one <td> -- unlike Color, which
+   owns the shared "set" form other cells attach to via `form="..."` (see
+   labels_manage.html's own comment), these three need no cross-cell
+   reach, so each is just a plain inline form scoped to its own cell. */
+.label-cell-inline{display:flex; align-items:center; gap:6px;}
+
+/* Open/Merge/Remove (2026-08-08 follow-up) -- the actions cell's own row
+   wrapper: without this, its three children (a plain `<a>` plus two
+   `display:flex` forms) had no shared flex context, and a flex container
+   is block-level by default, so each form broke onto its own line inside
+   the cell instead of sitting next to the Open link. `justify-content:
+   flex-end` keeps everything right-aligned, matching the <td>'s own
+   text-align:right the rest of this table uses for its trailing column. */
+.label-actions{display:inline-flex; align-items:center; gap:6px; justify-content:flex-end;}
+.label-cell-inline input[type="text"]{min-width:0; width:150px; padding:4px 7px;}
+.label-table .tag-usage-count{flex:none; white-space:nowrap;}
+.label-table .filter-select{max-width:110px; padding:4px 22px 4px 8px; font-size:var(--text-caption);}
+.label-table .color-swatch-current{width:18px; height:18px;}
+.label-table .icon-picker-current{width:22px; height:22px;}
+.label-table .icon-btn{width:24px; height:24px;}
+.label-table .icon-btn .icon{width:14px; height:14px;}
+.label-table .btn-sm{padding:3px 8px; font-size:var(--text-caption);}
+.label-table details > summary{list-style:none; width:fit-content;}
+.label-table details > summary::-webkit-details-marker{display:none;}
+.label-table details[open] summary{color:var(--accent);}
+.label-table input[type="checkbox"]{width:15px; height:15px;}
+
+/* Small on-off switch (app preferences).
+    MD3 Switch: track is a rounded rectangle, thumb is a circle
+    that slides, with a ripple on the track. Uses the same
+    accent color as the rest of the app. */
+.switch{position:relative; display:inline-block; width:38px; height:22px; flex:none; vertical-align:middle;}
+.switch input{opacity:0; width:0; height:0; position:absolute;}
+.switch .slider{
+   position:absolute; inset:0; cursor:pointer; border-radius:999px;
+   background:var(--border-strong); transition:background .15s ease;
+}
+.switch .slider::before{
+   content:""; position:absolute; width:16px; height:16px; left:3px; top:3px;
+   border-radius:50%; background:var(--fg-primary); transition:transform .15s ease, background .15s ease;
+}
+.switch input:checked + .slider{background:var(--accent-subtle-strong);}
+.switch input:checked + .slider::before{transform:translateX(16px); background:var(--accent);}
+.switch input:focus-visible + .slider{box-shadow:0 0 0 3px var(--accent-subtle);}
 
 @media (max-width:720px){
   .settings-grid{grid-template-columns:1fr 1fr;}
@@ -1753,4 +3167,163 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   .field-grid .field-wide{grid-column:span 1;}
   /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
   main{padding-top:14px; padding-left:12px; padding-right:12px;}
+}
+
+/* --------------------------------------------------------------------- */
+/* Dashboard page banner (_page_banner.html, 2026-08-09) -- Home and every
+   label/Space/Project page can have a wide header image ("banner"/"cover")
+   chosen from the banner editor modal (routers/banners.py: search SearXNG
+   images, upload, or remove). Rendered at the very top of the page
+   content, above the toolbar: a rounded box the image fills with
+   object-fit:cover (non-matching images are center-cropped, never
+   distorted -- the editor's own note tells the user the preferred ratio).
+   The aspect ratio is responsive: 3:1 on phones (a ~375px-wide banner
+   would be a huge 125px+ header at 3:1 only if it were wider, but at that
+   width 3:1 reads right), widening to 5:1 on ≥721px so a full-width
+   desktop banner (~1120px) stays a slim ~224px header instead of a
+   ~373px tower. The edit-mode toggle ("Done"/"Edit mode") sits in the
+   banner's bottom-right overlay (_page_banner.html); the "Add/Change
+   banner" button lives in the page toolbar next to "New widget"
+   (dashboard.html / label_detail.html). */
+.page-banner{
+  width:100%; aspect-ratio:3 / 1; overflow:hidden; position:relative;
+  border-radius:var(--radius-card); margin-bottom:var(--space-3);
+  background:var(--bg-elevated); border:1px solid var(--border);
+}
+@media (min-width:721px){
+  .page-banner{aspect-ratio:5 / 1;}
+}
+.page-banner img{
+  width:100%; height:100%; object-fit:cover; display:block;
+}
+/* Title overlay + readability scrim (2026-08-09) -- when a banner exists,
+   the page's h1 (Home's greeting / the label's name) sits at the banner's
+   bottom-left. Readability comes from a permanent bottom gradient scrim
+   plus a soft text shadow rather than per-image color analysis: the
+   banner feature hotlinks remote images, and reading pixels back from a
+   cross-origin <img> (canvas getImageData) throws a SecurityError unless
+   the host sends CORS headers -- most don't -- so a scrim is the only
+   reliably readable approach. `.page-banner-wrap` (dashboard.html /
+   label_detail.html) carries position:relative so the absolutely-
+   positioned title can pin to the banner box above it. */
+.page-banner-wrap{position:relative;}
+.page-banner-title{
+  position:absolute; left:var(--space-4); bottom:var(--space-3); margin:0;
+  z-index:1; color:#fff; font-weight:700; letter-spacing:-0.3px;
+  font-size:clamp(1.15rem, 2.5vw, 1.6rem); line-height:1.15;
+  text-shadow:0 1px 4px rgba(0,0,0,.55), 0 1px 12px rgba(0,0,0,.3);
+  max-width:75%;
+}
+.page-banner-title .icon{width:1.15em; height:1.15em; vertical-align:-0.2em;}
+/* Page action bar (2026-08-10) -- ALL of a dashboard/label page's actions
+   (New / Edit mode / Done / New widget / Add-Change banner / Reset
+   layout) live together in .page-banner-actions, inside the same
+   .page-banner-wrap as the cover banner; the old separate .toolbar row is
+   gone. With a banner the bar floats bottom-right over the photo, in the
+   same scrim band as the overlay title; without one it's a plain top bar
+   and the page's h1 title sits left of the buttons (as
+   .page-banner-title-plain), filling the toolbar's old role. */
+.page-banner-actions{
+  display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+}
+.page-banner-wrap:has(.page-banner) .page-banner-actions{
+  position:absolute; right:var(--space-4); bottom:var(--space-3); z-index:1;
+  justify-content:flex-end; max-width:100%;
+}
+.page-banner-wrap:not(:has(.page-banner)) .page-banner-actions{
+  margin-bottom:var(--space-3);
+}
+/* Title on a bannerless page: flexes to fill the bar so the buttons are
+   pushed right, mimicking the old toolbar's title + spacer layout. */
+.page-banner-actions .page-banner-title-plain{
+  flex:1; min-width:0; margin:0; font-weight:700; letter-spacing:-0.3px;
+  font-size:var(--text-title2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* Title clearance -- with several actions in edit mode a banner can hold
+   a wide button row, so keep a long overlay title from sliding under it. */
+.page-banner-title{max-width:calc(100% - 300px);}
+/* Buttons pinned over a photo need to read against whatever image is
+   behind them, not a page background -- the ghost buttons become
+   translucent frosted chips; the primary Done button keeps its accent
+   fill, which is already high-contrast on any photo. Bannerless pages
+   skip this (their ghost buttons sit on the normal page background). */
+.page-banner-wrap:has(.page-banner) .page-banner-actions .btn.ghost{
+  background:rgba(0,0,0,.4); color:#fff;
+  border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+}
+.page-banner-wrap:has(.page-banner) .page-banner-actions .btn.ghost:hover{background:rgba(0,0,0,.55); color:#fff;}
+.page-banner::after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:55%;
+  background:linear-gradient(to top, rgba(0,0,0,.6), transparent);
+  pointer-events:none; z-index:0;
+}
+
+/* Banner editor modal (banner_editor.html, 2026-08-09). */
+.banner-editor-note{
+  color:var(--fg-tertiary); font-size:var(--text-footnote);
+  margin:0 0 var(--space-3); line-height:1.5;
+}
+.banner-current{margin-bottom:var(--space-4);}
+.banner-current .settings-field-label{margin-bottom:var(--space-2);}
+.banner-current img{
+  width:100%; aspect-ratio:3 / 1; object-fit:cover; display:block;
+  border-radius:var(--radius-card); border:1px solid var(--border);
+  margin-bottom:var(--space-2);
+}
+/* Minimalist upload row (2026-08-09 follow-up) -- one ghost button (its
+   hidden file input sits inside the label; onchange auto-submits) plus a
+   small format/size hint, at the top of the modal. */
+.banner-upload-form{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; margin-bottom:var(--space-4);}
+.banner-upload-btn{cursor:pointer;}
+.banner-upload-input{display:none;}
+.banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
+/* The "Search the web" section in its own card; results scroll inside the
+   card so a long result list never pushes the rest of the modal off
+   screen. */
+.banner-search-card{padding:var(--space-4);}
+.banner-editor-section{
+  font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
+  margin:var(--space-4) 0 var(--space-2); display:flex; align-items:center; gap:6px;
+}
+.banner-search-card .banner-editor-section{margin-top:0;}
+.banner-search-row{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
+.banner-search-row input[type="search"]{flex:1; min-width:0;}
+.banner-search-state{
+  padding:var(--space-4) var(--space-2); text-align:center;
+  color:var(--fg-tertiary); font-size:var(--text-callout);
+}
+/* Pinterest-style masonry wall (2026-08-09 follow-up): the results show
+   only the pictures -- no title/source text -- as bare rounded tiles that
+   keep each image's natural aspect ratio, laid out via CSS multi-column so
+   tiles stack vertically down each column. A fixed column-count (not
+   column-width) means the columns always fit the modal's width: no height
+   clamp and no overflow on this container either, so the wall grows as
+   tall as its content and the *modal body* (overflow-y:auto) provides the
+   vertical scrollbar -- long result lists never force a horizontal one. */
+.banner-results{
+  column-count:4; column-gap:var(--space-2);
+}
+.banner-results > form{break-inside:avoid; margin:0 0 var(--space-2);}
+.banner-result{
+  display:block; width:100%; margin:0; padding:0;
+  border:none; background:none; text-align:left; cursor:pointer;
+  border-radius:var(--radius-card); overflow:hidden;
+  transition:box-shadow var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.banner-result:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* color:transparent hides a broken image's alt text (the result title)
+   while bannerImgFallback() retries the full-size URL then drops the
+   tile -- the empty gap is a bad look for a "pictures only" wall. */
+.banner-result img{width:100%; height:auto; display:block; object-fit:cover; color:transparent;}
+
+/* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
+   upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,
+   when a photo exists, the sibling Remove button. The two forms sit side by
+   side rather than nested (HTML forbids a form inside a form); everything
+   stays on one tight row (no wrap). */
+.profile-photo-controls{display:flex; align-items:center; gap:var(--space-2);}
+
+@media (max-width:720px){
+  .banner-results{column-count:2;}
 }

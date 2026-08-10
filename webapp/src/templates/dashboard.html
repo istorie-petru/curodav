@@ -1,9 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
+<!-- 2026-08-07: opt out of the default 1120px-max-width centered column
+     (base.html's main_class block), same mechanism Calendar already uses
+     (calendar_month/week/day/agenda.html). Direct feedback: the boxed
+     column left a permanent empty region to the right of the widget grid
+     on wide viewports, crowding the widgets into a narrower area than the
+     page actually has room for -- the masonry layout in app.js sizes its
+     6 virtual columns off the grid's own (boxed) rendered width, so the
+     fix is simply giving the grid the full width to lay out in, not a
+     change to the masonry math itself. -->
+{% block main_class %}main-full-width{% endblock %}
 {% block content %}
-<div class="toolbar">
-    <h1 style="margin:0">Dashboard</h1>
-    <div class="spacer"></div>
+<!-- Header banner + one page-action bar (2026-08-10) -- the banner cover
+     (when set, routers/banners.py) and ALL of this page's actions live
+     together in one .page-banner-wrap: with a banner the buttons float
+     bottom-right over the photo (see style.css's .page-banner-actions
+     rules); without one they're a plain top bar with the greeting h1 left
+     of them. The old separate .toolbar row is gone. -->
+<div class="page-banner-wrap">
+{% include "_page_banner.html" %}
+{% if banner %}
+<h1 class="page-banner-title">{{ greeting }}</h1>
+{% endif %}
+<div class="page-banner-actions">
+    {% if not banner %}
+    <!-- Dynamic greeting (dashboard usability rework, 2026-08-07) --
+         "Good morning/afternoon/evening[, name]" computed server-side in
+         routers/dashboard.py's dashboard_view (_greeting_for_hour), local
+         server time same as date.today() uses everywhere else in this
+         app. Replaces the old static "Dashboard" h1 -- this is Home's own
+         identity element specifically. Rendered here (left of the actions)
+         only when there's no banner -- with one the same greeting is the
+         overlay title above instead, so the page always has exactly one
+         h1. -->
+    <h1 class="page-banner-title-plain">{{ greeting }}</h1>
+    {% endif %}
     <!-- Move/reorder/delete controls on each widget below are hidden
          unless this is on -- plain ?edit=1 query param (not JS/
          localStorage) so it works with no JS, same pattern as every
@@ -12,40 +43,40 @@
          by design -- same "you turn it on, do your rearranging, turn it
          back off" session-scoped flow as most dashboard edit modes. -->
     {% if edit_mode %}
-    <a href="/" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
+    <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
+    <!-- New widget (Phase 3 rework, 2026-08-03) -- opens the widget
+         customization modal (dashboard_customize.html) to add a new widget.
+         Only visible in edit mode -- adding/removing widgets is an explicit
+         edit action, not a browsing action. -->
+    <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
+    <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode,
+         since both are page-content edits. Opens the banner editor modal
+         (routers/banners.py); "Add" vs "Change" labels by whether a banner
+         is already set. -->
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}&amp;edit=1" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+    <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
+         a label page's (label_detail.html): wipes Home's widgets back to
+         the seeded default via /dashboard/reset. data-confirm-sheet is the
+         same confirmation mechanism every other destructive action in this
+         app already uses, not a second confirmation UI. -->
+    <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset Home's widgets to the default layout? This deletes every widget you've added or customized here.">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
+    </form>
     {% else %}
-    <a href="/?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit layout</a>
+    <!-- Quick capture, one merged "+" (2026-08-10) -- the single button
+         opens one modal (quick_add.html via static/modal.js's data-modal)
+         with a Task/Event tab switch inside it, replacing the old pair of
+         separate New task / New event buttons and modals (dashboard
+         usability rework, 2026-08-07). Hidden in edit mode: editing the
+         widget grid and quick-capturing a new task/event are different
+         modes of using this page, and edit mode's own actions (New
+         widget/the Done button) take that slot instead. -->
+    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
+    <a href="?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
     {% endif %}
 </div>
-
-<!-- Quick Capture (spaces-home-pipeline, 2026-08-02) -- identical markup
-     to tasks_list.html's own #quick-add-form (same title-only POST /tasks,
-     no-JS-required, static/tasks_table.js adds the stay-on-page fetch
-     behavior on top). No `list_path` hidden field, unlike that page's
-     version when a list filter is active -- landing in the default list
-     is exactly what makes a Home capture an Inbox item unless that
-     default list already has a project_uid (see routers/tasks.py's
-     /tasks/inbox). -->
-<form method="post" action="/tasks" class="quick-add-form" id="quick-add-form" style="margin-bottom:16px">
-    <input type="text" name="title" placeholder="Quick-add a task and press Enter..." required>
-</form>
-
-<!-- Space cards (spaces-home-pipeline, 2026-08-02) -- the only way to
-     reach a Space page (routers/projects.py's space_detail); deliberately
-     not a tabbar entry, see the plan doc's scope guardrails. Reuses
-     .cell-tag/card styling already in style.css, no new component. -->
-{% if project_groups %}
-<div class="card" style="margin-bottom:16px">
-    <div class="section-label">Spaces</div>
-    <div class="calendar-list">
-    {% for g in project_groups %}
-    <a class="calendar-row" href="/projects/groups/{{ g.uid }}" style="text-decoration:none; color:inherit">
-        <span class="cell-tag cal-{{ g.color }}">{{ icon('folder') }} {{ g.name }}</span>
-    </a>
-    {% endfor %}
-    </div>
 </div>
-{% endif %}
 
 <!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
      with every Space page (routers/projects.py's space_detail) via
@@ -53,25 +84,25 @@
 {% include "_widget_workspace.html" %}
 
 <!-- "See more" -- mobile-only (see .dashboard-see-more's media query in
-     style.css). Desktop already has Databases as a topbar tab and the
-     Settings gear right next to the theme toggle, both always visible --
-     this exists specifically because neither of those has anywhere to go
-     on a narrow phone-width topbar beyond what's already there. Plain
-     links, not another modal/sheet -- these are infrequent destinations
-     (Databases aside), a static list is simpler than building yet
-     another overlay for a handful of rarely-tapped rows. -->
+     style.css). Desktop already has the full tabbar (Home/Calendar/Tasks/
+     Schedule/Contacts/Settings, 2026-08-07 nav rework) and the Settings
+     gear right next to the theme toggle, both always visible -- this
+     exists specifically because a narrow phone-width topbar can't fit
+     every tab plus these rarer destinations. Plain links, not another
+     modal/sheet -- these are infrequent destinations, a static list is
+     simpler than building yet another overlay for a handful of
+     rarely-tapped rows. Databases dropped from this list entirely
+     (2026-08-07) along with the feature itself -- see plans/
+     label-space-rework.md's Grades/Databases removal note. -->
 <div class="card dashboard-see-more">
     <div class="section-label">See more</div>
     <div class="settings-subnav-links">
-        <a href="/databases">{{ icon('database', 'icon-sm') }} Databases</a>
-        <a href="/projects">{{ icon('folder', 'icon-sm') }} Projects</a>
+        <a href="/labels">{{ icon('folder', 'icon-sm') }} Projects</a>
         <a href="/habits">{{ icon('activity', 'icon-sm') }} Habits</a>
-        <a href="/contacts">{{ icon('address-book', 'icon-sm') }} Contacts</a>
         <a href="/settings">{{ icon('settings', 'icon-sm') }} Settings</a>
     </div>
 </div>
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ static_url('habit_checkin.js') }}"></script>
-<script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
 {% endblock %}

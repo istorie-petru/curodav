@@ -25,17 +25,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _seed_task(conn, uid, list_path="tasks", due_at=None, tags=None, status="active"):
+def _seed_task(conn, uid, due_at=None, tags=None, status="active"):
     db.upsert_task(conn, {
-        "uid": uid, "href": f"/{uid}", "calendar_path": "tasks", "list_path": list_path,
+        "uid": uid,
         "title": uid, "description": "", "status": status, "due_at": due_at,
         "tags": tags or [], "created_at": _now(),
     })
 
 
-def _seed_event(conn, uid, calendar_path="calendar", start_at=None, tags=None):
+def _seed_event(conn, uid, start_at=None, tags=None):
     db.upsert_event(conn, {
-        "uid": uid, "href": f"/{uid}", "calendar_path": calendar_path, "title": uid,
+        "uid": uid, "title": uid,
         "description": "", "status": "active", "all_day": 0, "start_at": start_at,
         "tags": tags or [], "created_at": _now(),
     })
@@ -43,30 +43,61 @@ def _seed_event(conn, uid, calendar_path="calendar", start_at=None, tags=None):
 
 class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
-        # 2026-08-03 §1 Dashboard rework: first two defaults are now
-        # calendar_agenda (third/30%) and today_agenda (two_thirds/70%)
-        # side by side, replacing the old mini_month_calendar + today_agenda
-        # pairing -- see dashboard_router._DEFAULT_WIDGETS.
+        # 2026-08-07 (screenshot-driven default-layout rework): default
+        # seed is now exactly Today's Agenda + a stack of At a Glance /
+        # Upcoming Events / Overdue Tasks -- see
+        # dashboard_router._seed_agenda_stack_layout.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
-        assert [w["type"] for w in widgets] == ["calendar_agenda", "today_agenda", "weekly_overview", "upcoming_events"]
+        top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
+        assert [w["type"] for w in top_level] == ["today_agenda", "stack"]
 
-    def test_default_seed_sets_width_on_first_two_widgets(self, conn):
-        # calendar_agenda gets third (30%) and today_agenda gets two_thirds
-        # (70%) so the side-by-side layout is correct out of the box.
+        stack = top_level[1]
+        members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
+        assert [w["type"] for w in members] == ["at_a_glance", "upcoming_events", "overdue_tasks"]
+
+    def test_default_seed_sets_width_on_paired_widgets(self, conn):
+        # Today's Agenda and the stack share the width split (half/half)
+        # so the side-by-side layout is correct out of the box.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
-        assert widgets[0]["config"]["width"] == "third"
-        assert widgets[1]["config"]["width"] == "two_thirds"
+        today_agenda = next(w for w in widgets if w["type"] == "today_agenda")
+        stack = next(w for w in widgets if w["type"] == "stack")
+        assert today_agenda["config"]["width"] == "half"
+        assert stack["config"]["width"] == "half"
 
-    def test_is_a_noop_once_any_widget_exists(self, conn):
+    def test_default_seed_no_longer_includes_removed_types(self, conn):
+        # calendar_agenda/weekly_overview/mini_month_calendar are no
+        # longer pre-seeded -- still addable manually via "New widget".
         dashboard_router._ensure_default_widgets(conn)
-        db.delete_dashboard_widget(conn, db.list_dashboard_widgets(conn)[0]["uid"])
+        types = {w["type"] for w in db.list_dashboard_widgets(conn)}
+        assert types.isdisjoint({"calendar_agenda", "weekly_overview", "mini_month_calendar"})
+
+    def test_seeds_default_widgets_on_first_visit_only(self, conn):
+        # First call seeds the defaults and sets the app_meta flag.
         dashboard_router._ensure_default_widgets(conn)
-        # One fewer than the full default set (one deleted) -- re-seeding
-        # must not top it back up, since "any widget exists" already made
-        # it a no-op.
-        assert len(db.list_dashboard_widgets(conn)) == len(dashboard_router._DEFAULT_WIDGETS) - 1
+        assert len(db.list_dashboard_widgets(conn)) == 5  # today_agenda + stack + 3 members
+        assert db.get_app_meta(conn, dashboard_router._HOME_SEEDED_KEY) == "1"
+
+    def test_does_not_reseed_after_all_widgets_deleted(self, conn):
+        # Seed once, then delete every widget -- the flag is set, so a
+        # second call must NOT re-seed. This is the fix for "delete all
+        # widgets, reload, defaults reappear" (Scenario 1).
+        dashboard_router._ensure_default_widgets(conn)
+        for w in db.list_dashboard_widgets(conn):
+            db.delete_dashboard_widget(conn, w["uid"])
+        dashboard_router._ensure_default_widgets(conn)
+        assert db.list_dashboard_widgets(conn) == []
+
+    def test_reseed_is_a_one_time_thing_per_scope(self, conn):
+        # Even on a completely fresh DB (no app_meta flag, no widgets),
+        # calling _ensure_default_widgets twice must seed exactly once.
+        dashboard_router._ensure_default_widgets(conn)
+        first_count = len(db.list_dashboard_widgets(conn))
+        dashboard_router._ensure_default_widgets(conn)
+        second_count = len(db.list_dashboard_widgets(conn))
+        assert first_count == 5
+        assert second_count == first_count  # no duplicate seeding
 
 
 class TestFiltering:
@@ -76,49 +107,23 @@ class TestFiltering:
         result = dashboard_router._filtered_tasks(conn, {"tags": ["uni"]})
         assert {t["uid"] for t in result} == {"t1"}
 
-    def test_project_filter_resolves_through_list(self, conn):
-        db.upsert_project(conn, {"uid": "p1", "name": "Uni", "created_at": _now(), "updated_at": _now()})
-        db.upsert_task_list(conn, {"uid": "hw", "name": "Homework", "color": "blue", "created_at": _now()})
-        db.set_task_list_project(conn, "hw", "p1")
-        db.upsert_task_list(conn, {"uid": "other", "name": "Other", "color": "green", "created_at": _now()})
-        _seed_task(conn, "t1", list_path="hw")
-        _seed_task(conn, "t2", list_path="other")
+    def test_project_filter_is_a_noop_since_task_lists_are_gone(self, conn):
+        # Phase 1 (label-space rework, 2026-08-06) dropped `task_lists` --
+        # there's no more list->project link to resolve a task's project
+        # through (see db.py's Phase 1 comments and dashboard.py's
+        # _passes_filters comment), so project_uid no longer narrows
+        # anything; only the tags filter still applies.
+        db.upsert_label_config(conn, {"name": "Uni", "created_at": _now()})
+        _seed_task(conn, "t1")
+        _seed_task(conn, "t2")
         result = dashboard_router._filtered_tasks(conn, {"project_uid": "p1"}, open_only=False)
-        assert {t["uid"] for t in result} == {"t1"}
-
-    def test_group_filter_resolves_through_projects(self, conn):
-        # Step 2a (spaces-home-pipeline, 2026-08-02) -- config["group_uid"]
-        # pools every project under that group, same as project_uid pools
-        # every list under one project, one level up.
-        db.upsert_project_group(conn, {"uid": "g1", "name": "University", "created_at": _now()})
-        db.upsert_project(conn, {"uid": "p1", "name": "CS101", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
-        db.upsert_project(conn, {"uid": "p2", "name": "MATH201", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
-        db.upsert_project(conn, {"uid": "p3", "name": "Personal", "created_at": _now(), "updated_at": _now()})
-        db.upsert_task_list(conn, {"uid": "hw1", "name": "HW1", "color": "blue", "created_at": _now()})
-        db.set_task_list_project(conn, "hw1", "p1")
-        db.upsert_task_list(conn, {"uid": "hw2", "name": "HW2", "color": "blue", "created_at": _now()})
-        db.set_task_list_project(conn, "hw2", "p2")
-        db.upsert_task_list(conn, {"uid": "other", "name": "Other", "color": "green", "created_at": _now()})
-        db.set_task_list_project(conn, "other", "p3")
-        _seed_task(conn, "t1", list_path="hw1")
-        _seed_task(conn, "t2", list_path="hw2")
-        _seed_task(conn, "t3", list_path="other")
-        result = dashboard_router._filtered_tasks(conn, {"group_uid": "g1"}, open_only=False)
         assert {t["uid"] for t in result} == {"t1", "t2"}
 
-    def test_group_filter_with_no_matching_projects_returns_nothing(self, conn):
-        db.upsert_project_group(conn, {"uid": "g1", "name": "Empty group", "created_at": _now()})
+    def test_list_uids_filter_is_a_noop_since_task_lists_are_gone(self, conn):
         _seed_task(conn, "t1")
-        result = dashboard_router._filtered_tasks(conn, {"group_uid": "g1"}, open_only=False)
-        assert result == []
-
-    def test_list_uids_filter(self, conn):
-        db.upsert_task_list(conn, {"uid": "hw", "name": "HW", "color": "blue", "created_at": _now()})
-        db.upsert_task_list(conn, {"uid": "other", "name": "Other", "color": "green", "created_at": _now()})
-        _seed_task(conn, "t1", list_path="hw")
-        _seed_task(conn, "t2", list_path="other")
+        _seed_task(conn, "t2")
         result = dashboard_router._filtered_tasks(conn, {"list_uids": ["hw"]}, open_only=False)
-        assert {t["uid"] for t in result} == {"t1"}
+        assert {t["uid"] for t in result} == {"t1", "t2"}
 
     def test_open_only_excludes_done_and_archived(self, conn):
         _seed_task(conn, "t1", status="active")
@@ -210,10 +215,17 @@ class TestWidgetCRUD:
         assert db.list_dashboard_widgets(conn) == []
 
     def test_add_widget_resolves_every_source_view_range_combo(self, conn):
-        # Every entry in _SELECTION_TO_TYPE should be reachable through
-        # the real add_widget entry point, not just the internal resolver
-        # -- 2026-08-02's Source/View/Range rework.
+        # Every entry in _SELECTION_TO_TYPE whose view is still offered by
+        # the builder should be reachable through the real add_widget entry
+        # point, not just the internal resolver -- 2026-08-02's Source/
+        # View/Range rework. "cards"/"filled_cards_view" (2026-08-07
+        # Projects purge) stay in _SELECTION_TO_TYPE as harmless dead
+        # forward-lookup data but are no longer in WIDGET_VIEWS/
+        # WIDGET_SOURCES -- add_widget correctly rejects them as an unknown
+        # source now (see test_add_widget_rejects_removed_projects_source).
         for (view, range_), (expected_type, expected_range_days) in dashboard_router._SELECTION_TO_TYPE.items():
+            if view not in dashboard_router.WIDGET_VIEWS:
+                continue
             source = dashboard_router.WIDGET_VIEWS[view]["source"]
             dashboard_router.add_widget(
                 source=source, view=view, range=range_ or "", title="", project_uid="", tags="",
@@ -246,6 +258,60 @@ class TestWidgetCRUD:
         dashboard_router.delete_widget(w["uid"], conn=conn)
         assert db.list_dashboard_widgets(conn) == []
 
+    def test_add_widget_plain_limit_post_still_works(self, conn):
+        # Limit became a stepper (2026-08-07, modal-input-design Phase A)
+        # but the underlying field is still a plain <input type="number">
+        # -- a form post of a bare limit=N (no JS, no stepper buttons
+        # involved) must keep working exactly as before.
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="upcoming_list", range="next_7_days", title="",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="7", space_uid="", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn)[0]
+        assert w["config"]["limit"] == 7
+
+    def test_add_widget_labels_chip_multiselect_combines_with_tags(self, conn):
+        # Labels became a chip multiselect (2026-08-07) -- checkboxes named
+        # `tags_labels`, one per known label name -- instead of the old
+        # `tags` free-text field. _combine_tags folds both into the same
+        # config["tags"] list _config_from_form always produced, so a
+        # widget created by checking two labels ends up with exactly the
+        # same stored shape as the old text-input flow did.
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="Two labels",
+            project_uid="", tags="", tags_labels=["Work", "Urgent"],
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn)[0]
+        assert w["config"]["tags"] == ["Work", "Urgent"]
+
+    def test_add_widget_labels_multiselect_combines_with_legacy_tags_field(self, conn):
+        # A stray/legacy `tags` value (e.g. _widget_edit_form.html's hidden
+        # carry-forward field for a Project-filter uid) still combines
+        # correctly alongside the new checkbox values, in the order tags
+        # first then tags_labels.
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="",
+            project_uid="", tags="proj-uid-123", tags_labels=["Work"],
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn)[0]
+        assert w["config"]["tags"] == ["proj-uid-123", "Work"]
+
+    def test_edit_widget_labels_chip_multiselect(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn)[0]
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="",
+            project_uid="", tags="", tags_labels=["Focus", "Reading"],
+            task_list_uids=[], calendar_uids=[], limit="", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert updated["config"]["tags"] == ["Focus", "Reading"]
+
     def test_legacy_widget_with_empty_config_reverse_maps_correctly(self, conn):
         # Every dashboard seeded before 2026-08-02's Source/View/Range
         # rework has widgets stored with `config == {}` -- no range_days
@@ -273,12 +339,13 @@ class TestWidgetCRUD:
         assert [w["title"] for w in widgets] == ["B", "A"]
 
 
-class TestWidgetHeight:
-    """2026-08-02 -- "a way to resize them vertically and all the widgets
-    having a specific values for their width and height, not any
-    height." Exact mirror of width's WIDGET_WIDTHS/_widget_width/
-    /resize, just the other axis and its own config key -- see
-    dashboard.py's WIDGET_HEIGHTS/_widget_height/resize_widget_height."""
+class TestWidgetHeightRemoved:
+    """2026-08-07 -- the manual height editor/drag-resize feature (four
+    fixed height presets, a drag handle, its own resize endpoint) was
+    fully removed per direct feedback: a widget's height should just be
+    "how much content it is", no scrollbar, unless it goes over a max
+    height. These are regression guards against any of that quietly
+    coming back, not tests of behavior that still exists."""
 
     def _add(self, conn, view="agenda", range_="today"):
         dashboard_router.add_widget(
@@ -287,59 +354,116 @@ class TestWidgetHeight:
         )
         return db.list_dashboard_widgets(conn)[-1]
 
-    def test_default_height_comes_from_the_widget_type(self, conn):
-        w = self._add(conn)  # today_agenda -> default_height "medium"
-        height = dashboard_router._widget_height(w, dashboard_router.WIDGET_TYPES["today_agenda"])
-        assert height["key"] == "medium"
-        assert height["px"] == dashboard_router.WIDGET_HEIGHTS["medium"]["px"]
+    def test_no_height_preset_system_left_on_the_module(self):
+        assert not hasattr(dashboard_router, "WIDGET_HEIGHTS")
+        assert not hasattr(dashboard_router, "_widget_height")
+        assert not hasattr(dashboard_router, "resize_widget_height")
 
-    def test_unknown_type_falls_back_to_medium(self, conn):
-        height = dashboard_router._widget_height({"config": {}}, None)
-        assert height["key"] == "medium"
+    def test_widget_types_have_no_default_height(self):
+        for spec in dashboard_router.WIDGET_TYPES.values():
+            assert "default_height" not in spec
 
-    def test_resize_sets_config_height(self, conn):
+    def test_edit_widget_does_not_carry_height_through(self, conn):
         w = self._add(conn)
-        resp = dashboard_router.resize_widget_height(w["uid"], height="tall", conn=conn)
-        assert resp.status_code == 200
-        updated = db.get_dashboard_widget(conn, w["uid"])
-        assert updated["config"]["height"] == "tall"
-        assert dashboard_router._widget_height(updated, None)["key"] == "tall"
-
-    def test_resize_rejects_invalid_height(self, conn):
-        w = self._add(conn)
-        resp = dashboard_router.resize_widget_height(w["uid"], height="huge", conn=conn)
-        assert resp.status_code == 400
-        assert db.get_dashboard_widget(conn, w["uid"])["config"].get("height") is None
-
-    def test_resize_unknown_widget_404s(self, conn):
-        resp = dashboard_router.resize_widget_height("does-not-exist", height="tall", conn=conn)
-        assert resp.status_code == 404
-
-    def test_edit_widget_preserves_height_like_it_preserves_width(self, conn):
-        w = self._add(conn)
-        dashboard_router.resize_widget(w["uid"], width="third", conn=conn)
-        dashboard_router.resize_widget_height(w["uid"], height="xl", conn=conn)
+        row = dict(db.get_dashboard_widget(conn, w["uid"]))
+        row["config"] = dict(row.get("config") or {})
+        row["config"]["height"] = "xl"  # simulate a stale value from before removal
+        db.upsert_dashboard_widget(conn, row)
         dashboard_router.edit_widget(
             w["uid"], source="calendar_tasks", view="agenda", range="next_7_days", title="Renamed",
             project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
         )
         updated = db.get_dashboard_widget(conn, w["uid"])
-        assert updated["config"]["width"] == "third"
-        assert updated["config"]["height"] == "xl"
+        assert "height" not in updated["config"]
 
-    def test_stacked_widgets_keep_independent_heights(self, conn):
-        # Unlike width, height is NOT shared across a stack's members --
-        # each keeps whatever it had before being stacked (dashboard.py's
-        # _dissolve_stack docstring explains why: stack members render
-        # one above another, so "same height" doesn't mean the same
-        # thing "same width, side by side" does).
-        a = self._add(conn)
-        b = self._add(conn)
-        dashboard_router.resize_widget_height(a["uid"], height="short", conn=conn)
-        dashboard_router.resize_widget_height(b["uid"], height="xl", conn=conn)
-        dashboard_router.stack_widget(b["uid"], target_uid=a["uid"], conn=conn)
-        assert db.get_dashboard_widget(conn, a["uid"])["config"]["height"] == "short"
-        assert db.get_dashboard_widget(conn, b["uid"])["config"]["height"] == "xl"
+    def test_widget_page_context_has_no_widget_heights(self, conn):
+        self._add(conn)
+        ctx = dashboard_router.widget_page_context(conn)
+        assert "widget_heights" not in ctx
+
+
+class TestWidgetWidthAutomatic:
+    """2026-08-07 -- the manual width picker/drag-resize feature (a Width
+    <select> in the widget builder form, a drag handle on each card, its
+    own /resize endpoint) was fully removed per direct feedback: "auto-fit
+    by content" -- each widget type gets a natural width from its own
+    default_width, no per-instance override. These are regression guards
+    against any of that quietly coming back, not tests of behavior that
+    still exists (see TestWidgetStacking above for the width-sharing
+    behavior that *does* still exist, for stacks)."""
+
+    def _add(self, conn, view="agenda", range_="today", **extra):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view=view, range=range_, title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn, **extra,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_no_resize_endpoint_left_on_the_module(self):
+        assert not hasattr(dashboard_router, "resize_widget")
+
+    def test_add_widget_form_has_no_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.add_widget).parameters
+        assert "width" not in params
+
+    def test_edit_widget_form_has_no_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.edit_widget).parameters
+        assert "width" not in params
+
+    def test_created_widget_always_renders_at_its_types_default_width(self, conn):
+        # calendar_tasks/agenda resolves to today_agenda, whose
+        # default_width is "half" -- confirm that's what actually renders
+        # regardless of anything a stale/forged client might have sent.
+        w = self._add(conn)
+        assert w["type"] == "today_agenda"
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["width"]["key"] == "half"
+
+    def test_editing_a_widget_does_not_accept_a_width_override(self, conn):
+        w = self._add(conn)
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in updated["config"]
+
+    def test_widget_types_default_width_is_the_only_source_of_truth(self, conn):
+        # Even if a stale config["width"] is sitting in a widget's config
+        # (e.g. from before this removal), it's never read any more --
+        # the type's own default_width always wins.
+        w = self._add(conn)
+        row = dict(db.get_dashboard_widget(conn, w["uid"]))
+        row["config"] = dict(row.get("config") or {})
+        row["config"]["width"] = "full"  # simulate a stale override
+        db.upsert_dashboard_widget(conn, row)
+        wc = dashboard_router._widget_context(conn, row)
+        assert wc["width"]["key"] == "half"  # today_agenda's own default, not "full"
+
+    def test_widget_page_context_has_no_widget_widths(self, conn):
+        self._add(conn)
+        ctx = dashboard_router.widget_page_context(conn)
+        assert "widget_widths" not in ctx
+
+    def test_builder_fields_partial_has_no_width_field(self, conn):
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        body = resp.body.decode()
+        assert 'name="width"' not in body
+
+    def test_edit_mode_renders_no_width_resize_handle(self, conn):
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        body = resp.body.decode()
+        assert "widget-resize-handle" not in body
 
 
 class TestWidgetStacking:
@@ -554,7 +678,10 @@ class TestDashboardRoute:
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
         resp = dashboard_router.dashboard_view(req, conn=conn)
         assert resp.status_code == 200
-        assert len(resp.context["widget_contexts"]) == len(dashboard_router._DEFAULT_WIDGETS)
+        # Top-level layout is now Today's Agenda + one stack card (the
+        # stack's 3 members render nested inside it, not as their own
+        # top-level entries).
+        assert len(resp.context["widget_contexts"]) == 2
 
     def test_renders_in_edit_mode_with_the_add_widget_form(self, conn):
         # Smoke test for the Add-widget form/Filters panel/masonry grid
@@ -568,17 +695,23 @@ class TestDashboardRoute:
         assert resp.status_code == 200
         assert b"Add widget" in resp.body
 
-    def test_edit_mode_renders_the_vertical_resize_handle_per_widget(self, conn):
-        # 2026-08-02 -- confirms widget_inner's .widget-content wrapper +
-        # .widget-resize-handle-vertical actually reach the page for every
-        # seeded default widget, not just that the route doesn't 500.
+    def test_edit_mode_renders_no_height_resize_handle(self, conn):
+        # 2026-08-07 -- the manual height editor/drag-resize handle was
+        # fully removed; .widget-content now renders identically (no
+        # data-height-key, no inline max-height style) for every widget,
+        # regardless of type, with the fixed CSS max-height doing the
+        # capping instead.
         from starlette.requests import Request
 
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
         resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
         body = resp.body.decode()
-        assert body.count("widget-resize-handle-vertical") == len(dashboard_router._DEFAULT_WIDGETS)
-        assert 'class="widget-content"' in body
+        assert "widget-resize-handle-vertical" not in body
+        assert "data-height-key" not in body
+        # Every widget's .widget-content opens with the exact same bare
+        # markup -- no per-widget/per-type variation left at all (today_agenda
+        # + the stack's 3 members == 4 occurrences).
+        assert body.count('<div class="widget-content">') == 4
 
 
 class TestSpaceWidgets:
@@ -597,21 +730,21 @@ class TestSpaceWidgets:
     def test_add_widget_is_scoped_to_the_space_and_auto_group_filtered(self, conn):
         w = self._add(conn, "Space Widget", space_uid="space1")
         assert w["space_uid"] == "space1"
-        assert w["config"]["group_uid"] == "space1"
+        assert w["config"]["label_name"] == "space1"
         # Doesn't leak into Home's own (space_uid=None) list.
         assert db.list_dashboard_widgets(conn) == []
 
     def test_add_widget_redirects_back_to_the_space_page(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", edit=False, conn=conn,
         )
-        assert resp.headers["location"] == "/projects/groups/space1"
+        assert resp.headers["location"] == "/labels/space1"
 
     def test_add_widget_with_no_space_uid_redirects_home(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", edit=False, conn=conn,
         )
         assert resp.headers["location"] == "/"
 
@@ -627,17 +760,17 @@ class TestSpaceWidgets:
         w = self._add(conn, "Original", space_uid="space1")
         resp = dashboard_router.edit_widget(
             w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", edit=False, conn=conn,
         )
         updated = db.get_dashboard_widget(conn, w["uid"])
         assert updated["title"] == "Renamed"
-        assert updated["config"]["group_uid"] == "space1"  # not clobbered by the edit form
-        assert resp.headers["location"] == "/projects/groups/space1"
+        assert updated["config"]["label_name"] == "space1"  # not clobbered by the edit form
+        assert resp.headers["location"] == "/labels/space1"
 
     def test_delete_widget_redirects_to_its_own_space(self, conn):
         w = self._add(conn, "A", space_uid="space1")
-        resp = dashboard_router.delete_widget(w["uid"], conn=conn)
-        assert resp.headers["location"] == "/projects/groups/space1"
+        resp = dashboard_router.delete_widget(w["uid"], edit=False, conn=conn)
+        assert resp.headers["location"] == "/labels/space1"
         assert db.get_dashboard_widget(conn, w["uid"]) is None
 
     def test_reorder_does_not_mix_widgets_from_different_pages(self, conn):
@@ -684,15 +817,23 @@ class TestCalendarAgendaWidget:
         data = dashboard_router._render_calendar_agenda(conn, {})
         assert len(data["agenda"]["days"]) == 7
 
-    def test_group_uid_scoping_filters_tasks_in_both_sub_renders(self, conn):
-        db.upsert_project_group(conn, {"uid": "g1", "name": "Uni", "created_at": _now()})
-        db.upsert_project(conn, {"uid": "p1", "name": "CS101", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
-        db.upsert_task_list(conn, {"uid": "hw", "name": "HW", "color": "blue", "created_at": _now()})
-        db.set_task_list_project(conn, "hw", "p1")
+    def test_label_name_scoping_now_filters_tasks_by_child_labels(self, conn):
+        # 2026-08-07 bug fix: this test used to assert the *opposite* --
+        # that calendar_agenda's label_name config never filtered tasks,
+        # documenting a real bug (see _effective_tags_filter's own
+        # docstring in routers/dashboard.py): _passes_filters never
+        # resolved config["label_name"] into a tag filter at all, so every
+        # Space/Project page's today_agenda/weekly_overview/overdue_tasks/
+        # calendar_agenda widget silently showed the *entire app's* tasks,
+        # not just that page's own. Fixed via the shared
+        # _effective_tags_filter helper, now exercised here: a task tagged
+        # with the Space's child label passes, an untagged task doesn't.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
         today = date.today()
-        _seed_task(conn, "t_in", list_path="hw", due_at=today.isoformat())
+        _seed_task(conn, "t_in", due_at=today.isoformat(), tags=["CS101"])
         _seed_task(conn, "t_out", due_at=today.isoformat())
-        data = dashboard_router._render_calendar_agenda(conn, {"group_uid": "g1"})
+        data = dashboard_router._render_calendar_agenda(conn, {"label_name": "Uni"})
         all_agenda_task_uids = {t["uid"] for day in data["agenda"]["days"] for t in day["tasks"]}
         assert "t_in" in all_agenda_task_uids
         assert "t_out" not in all_agenda_task_uids
@@ -701,7 +842,7 @@ class TestCalendarAgendaWidget:
         assert "calendar_agenda" in dashboard_router.WIDGET_TYPES
         spec = dashboard_router.WIDGET_TYPES["calendar_agenda"]
         assert spec["default_width"] == "third"
-        assert spec["default_height"] == "xl"
+        assert "default_height" not in spec
 
     def test_registered_in_selection_tables(self, conn):
         assert ("calendar_agenda_view", None) in dashboard_router._SELECTION_TO_TYPE
@@ -715,7 +856,7 @@ class TestContactListWidget:
 
     def _seed_contact(self, conn, uid, full_name, tags=None):
         db.upsert_contact(conn, {
-            "uid": uid, "href": f"/{uid}", "addressbook_path": "contacts",
+            "uid": uid,
             "full_name": full_name, "tags": tags or [], "created_at": _now(),
         })
 
@@ -735,12 +876,12 @@ class TestContactListWidget:
         data = dashboard_router._render_contact_list(conn, {"tags": ["professor"]})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
-    def test_group_uid_scoping_uses_project_names_as_tags(self, conn):
-        db.upsert_project_group(conn, {"uid": "g1", "name": "Uni", "created_at": _now()})
-        db.upsert_project(conn, {"uid": "p1", "name": "CS101", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
+    def test_label_name_scoping_uses_child_label_names_as_tags(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
         self._seed_contact(conn, "c1", "Alice", tags=["CS101"])
         self._seed_contact(conn, "c2", "Bob", tags=["Personal"])
-        data = dashboard_router._render_contact_list(conn, {"group_uid": "g1"})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni"})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
     def test_limit_caps_results(self, conn):
@@ -760,34 +901,78 @@ class TestContactListWidget:
 
 
 class TestDefaultSpaceWidgets:
-    """§2 Spaces v2, 2026-08-03 -- _DEFAULT_SPACE_WIDGETS now seeds
-    calendar_agenda + weekly_overview (30/70) + project_preview + habit_checkin."""
+    """§2 Spaces v2, 2026-08-03 originally; 2026-08-07 (screenshot-driven
+    default-layout rework) replaced the old widget set with the same
+    Today's Agenda + At a Glance/Upcoming Events/Overdue Tasks stack Home
+    now seeds -- see dashboard_router._seed_agenda_stack_layout."""
 
-    def test_seeds_four_defaults_for_a_new_space(self, conn):
-        dashboard_router._ensure_default_space_widgets(conn, "space1")
-        widgets = db.list_dashboard_widgets(conn, space_uid="space1")
-        types = [w["type"] for w in widgets]
-        assert "calendar_agenda" in types
-        assert "weekly_overview" in types
-        assert "project_preview" in types
-        assert "habit_checkin" in types
+    def _make_space(self, conn, name):
+        db.upsert_label_config(conn, {"name": name, "generate_space": 1, "created_at": _now()})
 
-    def test_calendar_agenda_seeded_with_third_width(self, conn):
-        dashboard_router._ensure_default_space_widgets(conn, "space1")
+    def test_seeds_defaults_for_a_new_space(self, conn):
+        self._make_space(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
         widgets = db.list_dashboard_widgets(conn, space_uid="space1")
-        cal_widget = next(w for w in widgets if w["type"] == "calendar_agenda")
-        assert cal_widget["config"]["width"] == "third"
+        top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
+        assert [w["type"] for w in top_level] == ["today_agenda", "stack"]
 
-    def test_weekly_overview_seeded_with_range_days_7(self, conn):
-        dashboard_router._ensure_default_space_widgets(conn, "space1")
-        widgets = db.list_dashboard_widgets(conn, space_uid="space1")
-        wo_widget = next(w for w in widgets if w["type"] == "weekly_overview")
-        assert wo_widget["config"]["range_days"] == 7
+        stack = top_level[1]
+        members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
+        assert [w["type"] for w in members] == ["at_a_glance", "upcoming_events", "overdue_tasks"]
 
-    def test_all_space_widgets_auto_scoped_with_group_uid(self, conn):
-        dashboard_router._ensure_default_space_widgets(conn, "space1")
+    def test_default_seed_no_longer_includes_removed_types(self, conn):
+        self._make_space(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        types = {w["type"] for w in db.list_dashboard_widgets(conn, space_uid="space1")}
+        assert types.isdisjoint({"calendar_agenda", "weekly_overview", "mini_month_calendar", "project_preview", "habit_checkin"})
+
+    def test_today_agenda_and_stack_seeded_with_half_width(self, conn):
+        self._make_space(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
         widgets = db.list_dashboard_widgets(conn, space_uid="space1")
-        assert all(w["config"].get("group_uid") == "space1" for w in widgets)
+        today_agenda = next(w for w in widgets if w["type"] == "today_agenda")
+        stack = next(w for w in widgets if w["type"] == "stack")
+        assert today_agenda["config"]["width"] == "half"
+        assert stack["config"]["width"] == "half"
+
+    def test_data_rendering_space_widgets_auto_scoped_with_label_name(self, conn):
+        # Every widget that actually renders data (today_agenda + the
+        # stack's 3 members) carries config["label_name"] so its query is
+        # filtered to this space -- the stack container itself has no
+        # render of its own and so no config["label_name"] to check.
+        self._make_space(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        widgets = db.list_dashboard_widgets(conn, space_uid="space1")
+        renderable = [w for w in widgets if w["type"] != "stack"]
+        assert renderable  # sanity: didn't accidentally filter everything out
+        assert all(w["config"].get("label_name") == "space1" for w in renderable)
+        assert all(w["label_name"] == "space1" for w in widgets)  # page-scope column, every row including the stack
+
+    def test_does_not_reseed_space_after_all_widgets_deleted(self, conn):
+        # Fix for Scenario 2: deleting all Space widgets must not trigger
+        # a re-seed on the next call.
+        self._make_space(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        assert db.get_app_meta(conn, "dashboard_label_space1_seeded_v1") == "1"
+        for w in db.list_dashboard_widgets(conn, space_uid="space1"):
+            db.delete_dashboard_widget(conn, w["uid"])
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        assert db.list_dashboard_widgets(conn, space_uid="space1") == []
+
+    def test_each_space_tracked_independently(self, conn):
+        # space1 and space2 have independent app_meta flags.
+        self._make_space(conn, "space1")
+        self._make_space(conn, "space2")
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        dashboard_router._ensure_default_label_widgets(conn, "space2")
+        assert db.get_app_meta(conn, "dashboard_label_space1_seeded_v1") == "1"
+        assert db.get_app_meta(conn, "dashboard_label_space2_seeded_v1") == "1"
+        # Deleting all of space1's widgets must not affect space2's.
+        for w in db.list_dashboard_widgets(conn, space_uid="space1"):
+            db.delete_dashboard_widget(conn, w["uid"])
+        dashboard_router._ensure_default_label_widgets(conn, "space1")
+        assert db.list_dashboard_widgets(conn, space_uid="space1") == []
+        assert len(db.list_dashboard_widgets(conn, space_uid="space2")) == 5  # today_agenda + stack + 3 members
 
 
 class TestSpaceScopedRenderers:
@@ -796,17 +981,17 @@ class TestSpaceScopedRenderers:
     events already do, since a Space's default widgets use group_uid, not
     project_uid, to auto-scope (2026-08-02)."""
 
-    def test_project_preview_group_filter(self, conn):
-        db.upsert_project_group(conn, {"uid": "g1", "name": "Uni", "created_at": _now()})
-        db.upsert_project(conn, {"uid": "p1", "name": "CS101", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
-        db.upsert_project(conn, {"uid": "p2", "name": "Personal", "created_at": _now(), "updated_at": _now()})
-        data = dashboard_router._render_project_preview(conn, {"group_uid": "g1"})
-        assert [pv["project"]["uid"] for pv in data["previews"]] == ["p1"]
+    def test_project_preview_label_filter(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
+        data = dashboard_router._render_project_preview(conn, {"label_name": "Uni"})
+        assert [pv["project"]["uid"] for pv in data["previews"]] == ["CS101"]
 
-    def test_habit_checkin_group_filter(self, conn):
-        db.upsert_project_group(conn, {"uid": "g1", "name": "Uni", "created_at": _now()})
-        db.upsert_project(conn, {"uid": "p1", "name": "CS101", "group_uid": "g1", "created_at": _now(), "updated_at": _now()})
-        db.upsert_habit(conn, {"uid": "h1", "name": "Study", "project_uid": "p1", "created_at": _now(), "updated_at": _now()})
+    def test_habit_checkin_label_filter(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_habit(conn, {"uid": "h1", "name": "Study", "project_uid": "CS101", "created_at": _now(), "updated_at": _now()})
         db.upsert_habit(conn, {"uid": "h2", "name": "Read", "created_at": _now(), "updated_at": _now()})
-        data = dashboard_router._render_habit_checkin(conn, {"group_uid": "g1"})
+        data = dashboard_router._render_habit_checkin(conn, {"label_name": "Uni"})
         assert [r["habit"]["uid"] for r in data["rows"]] == ["h1"]

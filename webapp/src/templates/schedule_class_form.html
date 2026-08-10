@@ -1,31 +1,73 @@
 {% extends "base.html" %}
 {% block title %}{% if cls %}Edit block{% else %}New block{% endif %}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<!-- see event_form.html for why this is split into .modal-header/
+     .modal-body/.modal-footer, and why Save/Delete live in the footer as
+     plain buttons tied back to the form via `form="class-form"` rather
+     than being nested inside it -- static/modal.js. -->
 <div id="modal-target">
+<div class="modal-header">
 <h1>{% if cls %}Edit block{% else %}New block{% endif %}</h1>
-
+</div>
+<div class="modal-body">
 <div class="card">
-<form method="post" action="{% if cls %}/schedule/classes/{{ cls.uid }}{% else %}/schedule/classes{% endif %}">
+<form method="post" id="class-form" action="{% if cls %}/schedule/classes/{{ cls.uid }}{% else %}/schedule/classes{% endif %}">
+    <!-- 2026-08-08: Day/Week/Type/Professor/Label are now the app-wide fancy
+         single-select dropdowns (_widget_list_multiselect.html, the same
+         radio version the widget builder's View/Range fields use), instead
+         of segmented controls and native <select>s. Same form field names
+         and values as before, so routers/schedule.py's create_class reads
+         them back unchanged. ms_selected is a scalar uid; when nothing is
+         selected (ms_selected = "") the partial falls back to checking its
+         first item, which is why every list below is ordered with the
+         "empty" option first (none / Every week / — None — / (no label)).
+         Type and Professor keep their "+ Other"/"+ Add new professor..." reveal
+         inputs (CSS-only :has() progressive disclosure) --
+         `.class-type-other-input`/.`.professor-new-input` sit inside the
+         field wrapper so the :has() trigger still finds them once the
+         dropdown panel closes back into it. -->
     <div class="field-grid">
-        <div class="field">
-            <label>Day</label>
-            <select name="day">
-                {% for d in ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"] %}
-                <option value="{{ d }}" {% if (cls and cls.day == d) or (not cls and prefill and prefill.day == d) %}selected{% endif %}>{{ d }}</option>
-                {% endfor %}
-            </select>
+        {% set _days_items = [{'uid': 'Monday', 'name': 'Monday'}, {'uid': 'Tuesday', 'name': 'Tuesday'}, {'uid': 'Wednesday', 'name': 'Wednesday'}, {'uid': 'Thursday', 'name': 'Thursday'}, {'uid': 'Friday', 'name': 'Friday'}, {'uid': 'Saturday', 'name': 'Saturday'}, {'uid': 'Sunday', 'name': 'Sunday'}] %}
+        {% set _week_items = [{'uid': 'all', 'name': 'Every week'}, {'uid': 'odd', 'name': 'Odd week'}, {'uid': 'even', 'name': 'Even week'}] %}
+        {% set _type_items = [{'uid': '', 'name': '(none)'}] %}
+        {% for _t in class_types %}
+        {% set _ = _type_items.append({'uid': _t, 'name': _t}) %}
+        {% endfor %}
+        {% set _ = _type_items.append({'uid': '__other__', 'name': '+ Other'}) %}
+        {% set class_type_is_other = cls and cls.class_type and cls.class_type not in class_types %}
+        {% set _professor_items = [{'uid': '', 'name': '\u2014 None \u2014'}] %}
+        {% for _c in contacts %}
+        {% set _ = _professor_items.append({'uid': _c.uid, 'name': _c.full_name}) %}
+        {% endfor %}
+        {% set _ = _professor_items.append({'uid': '__new__', 'name': '+ Add new professor...'}) %}
+        {% set _professor_val = '__new__' if (cls and cls.professor and not cls.professor_contact_uid) else (cls.professor_contact_uid if cls else '') %}
+        {% set _label_items = [{'uid': '', 'name': '(no label)'}] %}
+        {% for _l in projects %}
+        {% set _ = _label_items.append({'uid': _l.uid, 'name': _l.name}) %}
+        {% endfor %}
+        {% set ms_mode = 'single' %}
+        {% set ms_form_id = 'class-form' %}
+
+        <div class="field field-wide">
+            <label>Course name</label>
+            <input type="text" name="name" required value="{{ cls.name if cls else '' }}">
         </div>
-        <div class="field">
-            <label>Week</label>
-            <select name="parity">
-                {% for p in parities %}
-                <option value="{{ p }}" {% if cls and cls.parity == p %}selected{% endif %}>
-                    {% if p == 'all' %}Every week{% elif p == 'odd' %}Odd week{% else %}Even week{% endif %}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
+
+        {% set ms_name = 'day' %}
+        {% set ms_label = 'Day' %}
+        {% set ms_items = _days_items %}
+        {% set ms_selected = (cls.day if cls else (prefill.day if prefill else 'Monday')) %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = '' %}
+        {% include '_widget_list_multiselect.html' %}
+
+        {% set ms_name = 'parity' %}
+        {% set ms_label = 'Week' %}
+        {% set ms_items = _week_items %}
+        {% set ms_selected = (cls.parity if cls else 'all') %}
+        {% set ms_wide = false %}
+        {% include '_widget_list_multiselect.html' %}
+
         <div class="field">
             <label>Start time</label>
             <input type="time" name="start_time" value="{{ cls.start_time if cls else (prefill.start_time if prefill else '08:00') }}" required>
@@ -34,82 +76,91 @@
             <label>End time</label>
             <input type="time" name="end_time" value="{{ cls.end_time if cls else (prefill.end_time if prefill else '10:00') }}" required>
         </div>
-        <div class="field field-wide">
-            <label>Course name</label>
-            <input type="text" name="name" required value="{{ cls.name if cls else '' }}">
-        </div>
         <div class="field">
             <label>Acronym</label>
             <input type="text" name="acronym" value="{{ cls.acronym if cls else '' }}">
         </div>
         <div class="field">
-            <label>Type</label>
-            <input type="text" name="class_type" placeholder="Course, Seminar, Lab..." value="{{ cls.class_type if cls else '' }}">
-        </div>
-        <div class="field field-wide professor-field">
-            <label>Owner</label>
-            <!-- A real dropdown of contacts, not a free-text-with-suggestions
-                 field (a <datalist> looked and behaved inconsistently across
-                 browsers, and blurred "picked an existing person" and "typed
-                 something new" into the same ambiguous input) -- picking a
-                 contact links to it by uid directly, no name-matching
-                 involved. "+ Add new professor..." reveals a plain text box
-                 for a name that isn't a contact yet; routers/schedule.py's
-                 `_resolve_professor` still dedupes that against existing
-                 contacts by exact name before creating a new one, as a
-                 safety net, but the two *paths* here are unambiguous.
-                 CSS-only show/hide (`:has()`), same no-JS pattern
-                 schedule_export.html's mode radios already use. -->
-            <div class="professor-row">
-                <select name="professor_select" id="professor-select">
-                    <option value="">&mdash; None &mdash;</option>
-                    {% for contact in contacts %}
-                    <option value="{{ contact.uid }}" {% if cls and cls.professor_contact_uid == contact.uid %}selected{% endif %}>{{ contact.full_name }}</option>
-                    {% endfor %}
-                    <option value="__new__" {% if cls and cls.professor and not cls.professor_contact_uid %}selected{% endif %}>+ Add new owner...</option>
-                </select>
-                <input type="text" name="professor_new" class="professor-new-input" placeholder="New owner's name"
-                       value="{% if cls and not cls.professor_contact_uid %}{{ cls.professor or '' }}{% endif %}">
-            </div>
-        </div>
-        <div class="field">
             <label>Room</label>
             <input type="text" name="room" value="{{ cls.room if cls else '' }}">
         </div>
+
+        <!-- Class type -- dropdown pre-populated with the class_type values
+             already seen across this user's own classes
+             (db.list_schedule_class_types, queried not hardcoded) plus a
+             "+ Other" option that reveals a plain text fallback for a
+             genuinely new type, CSS-only via the same :has()
+             progressive-disclosure trick the Professor field uses. If the class
+             being edited already has a class_type that ISN'T in the
+             distinct-values list, "+ Other" is pre-selected and pre-filled
+             with that existing value instead of silently dropping it. -->
+        <div class="field field-wide class-type-field">
+            {% set ms_name = 'class_type_select' %}
+            {% set ms_label = 'Type' %}
+            {% set ms_items = _type_items %}
+            {% set ms_selected = '__other__' if class_type_is_other else (cls.class_type if cls else '') %}
+            {% set ms_wide = true %}
+            {% set ms_extra_class = '' %}
+            {% include '_widget_list_multiselect.html' %}
+            <input type="text" name="class_type_other" class="class-type-other-input" placeholder="Course, Seminar, Lab..."
+                   value="{% if class_type_is_other %}{{ cls.class_type }}{% endif %}">
+        </div>
+
+        <!-- Professor -- a real dropdown of contacts, not free-text: picking a
+             contact links to it by uid directly. "+ Add new professor..." reveals
+             a plain text box for a name that isn't a contact yet;
+             routers/schedule.py's _resolve_professor_field still dedupes that
+             against existing contacts by exact name as a safety net. -->
+        <div class="field field-wide professor-field">
+            {% set ms_name = 'professor_select' %}
+            {% set ms_label = 'Professor' %}
+            {% set ms_items = _professor_items %}
+            {% set ms_selected = _professor_val %}
+            {% set ms_wide = true %}
+            {% set ms_extra_class = '' %}
+            {% include '_widget_list_multiselect.html' %}
+            <input type="text" name="professor_new" class="professor-new-input" placeholder="New professor's name"
+                   value="{% if cls and not cls.professor_contact_uid %}{{ cls.professor or '' }}{% endif %}">
+        </div>
+
         <div class="field">
             <label>Credits</label>
-            <input type="number" name="credits" min="0" step="0.5" value="{{ cls.credits if cls else 0 }}">
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease credits" tabindex="-1">&minus;</button>
+                <input type="number" name="credits" class="stepper-input" min="0" step="0.5" value="{{ cls.credits if cls else 0 }}">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase credits" tabindex="-1">+</button>
+            </div>
         </div>
+
+        <!-- Label -- a course links to a label the same way any other
+             list does (routers/schedule.py's set_schedule_class_project),
+             not by literally becoming a label object. -->
         <div class="field">
-            <label>Project</label>
-            <!-- "make university courses to be projects and have a dropdown
-                 there" -- a course links to a project the same way any other
-                 list does (routers/schedule.py's set_schedule_class_project),
-                 not by literally becoming a project object; see db.py's
-                 `projects` table comment for why this app uses a plain FK
-                 column per collection type instead of a generic link/object
-                 graph. -->
-            <select name="project_uid">
-                <option value="">(no project)</option>
-                {% for p in projects %}
-                <option value="{{ p.uid }}" {% if cls and cls.project_uid == p.uid %}selected{% endif %}>{{ p.name }}</option>
-                {% endfor %}
-            </select>
+            {% set ms_name = 'project_uid' %}
+            {% set ms_label = 'Label' %}
+            {% set ms_items = _label_items %}
+            {% set ms_selected = cls.project_uid if cls else '' %}
+            {% set ms_wide = false %}
+            {% set ms_extra_class = '' %}
+            {% include '_widget_list_multiselect.html' %}
         </div>
         <div class="field field-toggle field-wide">
             <input type="checkbox" id="enrolled" name="enrolled" value="1" {% if not cls or cls.enrolled %}checked{% endif %}>
             <label for="enrolled">Enrolled</label>
         </div>
     </div>
-    <button type="submit" class="btn primary">Save</button>
-    <a href="/schedule" class="btn ghost" data-modal-cancel>Cancel</a>
 </form>
 </div>
-
+</div>
+<div class="modal-footer">
 {% if cls %}
 <form method="post" action="/schedule/classes/{{ cls.uid }}/delete" data-delete-undo="{{ cls.name }}" data-delete-undo-redirect="/schedule">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this class</button>
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
+<span class="spacer"></span>
 {% endif %}
+<a href="/schedule" class="btn ghost" data-modal-cancel>Cancel</a>
+<button type="submit" form="class-form" class="btn primary">Save</button>
+</div>
 </div>
 {% endblock %}

@@ -162,7 +162,7 @@
         // move. `.te-time` can appear twice on Day view (time range +
         // location) -- the time range is always the first one.
         const timeEl = el.querySelector(".te-time");
-        if (timeEl) timeEl.textContent = `${minutesToHHMM(startMin)}–${minutesToHHMM(endMin)}`;
+        if (timeEl) timeEl.textContent = `${minutesToDisplayTime(startMin)}–${minutesToDisplayTime(endMin)}`;
       }).catch(() => {
         el.style.top = origTop + "px";
         el.style.height = origHeight + "px";
@@ -209,6 +209,28 @@
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+  }
+
+  // 2026-08-08 -- display-only counterpart to minutesToHHMM above:
+  // respects the "24-hour time" Settings > General preference (deps.py's
+  // time_format(), exposed here via base.html's `data-time-format` body
+  // attribute, same pattern as `data-px-per-hour`) for the drag-resize
+  // preview *label* text. Deliberately a separate function, not a
+  // TIME_FORMAT branch added to minutesToHHMM itself -- that function's
+  // output also feeds `start_time`/`end_time` prefill values for the New
+  // Event redirect (see setupCreateCol below), which a native
+  // `<input type="time">` requires in plain 24-hour "HH:MM" regardless of
+  // this display preference; branching the one function by format would
+  // have silently broken that prefill whenever "12-hour time" was on.
+  const TIME_FORMAT = document.body.dataset.timeFormat || "24h";
+  function minutesToDisplayTime(totalMinutes) {
+    if (TIME_FORMAT !== "12h") return minutesToHHMM(totalMinutes);
+    totalMinutes = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const period = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 || 12;
+    return h12 + ":" + String(m).padStart(2, "0") + " " + period;
   }
 
   // Deliberately NOT given `touch-action:none` the way .time-event/

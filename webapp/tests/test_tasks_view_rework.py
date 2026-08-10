@@ -28,23 +28,10 @@ def _now() -> str:
 
 def _seed_task(conn, uid, due_at=None, status="active", priority=None):
     db.upsert_task(conn, {
-        "uid": uid, "href": f"/{uid}", "calendar_path": "tasks", "title": uid,
+        "uid": uid, "title": uid,
         "description": "", "status": status, "due_at": due_at, "priority": priority,
         "tags": [], "created_at": _now(),
     })
-
-
-class FakeBridge:
-    def save_task_row(self, row):
-        row = dict(row)
-        row.setdefault("href", f"/{row['uid']}")
-        row.setdefault("calendar_path", "tasks")
-        return row
-
-
-@pytest.fixture()
-def bridge():
-    return FakeBridge()
 
 
 class TestDateFilter:
@@ -170,16 +157,33 @@ class TestCompletedTasksSeparation:
         assert any(t["uid"] == "done_this_week" for t in resp.context["completed_tasks"])
 
 
-class TestStartDateAlwaysToday:
-    def test_create_task_ignores_form_and_uses_today(self, conn, bridge):
+class TestStartDateConfigurableAtCreation:
+    # 2026-08-08 direct feedback ("tasks should also have start date") --
+    # reverses the previous "start date is always today, not a form field
+    # on creation" rule this class used to enforce: task_form.html now
+    # shows Start date on the new-task form too, and routers/tasks.py's
+    # create_task accepts it. Still defaults to today when left blank/not
+    # sent at all, so every pre-existing caller that doesn't pass start_at
+    # (this suite's other direct create_task() calls, task_detail.html's
+    # subtask quick-add form) keeps the old "starts today" behavior.
+    def test_create_task_defaults_to_today_when_start_at_omitted(self, conn):
         tasks_router.create_task(title="Test", description="", due_at="", priority="", status="active",
-                                   tags="", recurrence="", parent_uid="", list_path=db.DEFAULT_TASK_LIST_UID,
-                                   bridge=bridge, conn=conn)
+                                   tags="", recurrence="", parent_uid="",
+                                   conn=conn)
         task = db.list_tasks(conn)[0]
         assert task["start_at"] == date.today().isoformat()
 
-    def test_start_date_not_configurable_at_creation(self):
-        import inspect
+    def test_create_task_honors_an_explicit_start_at(self, conn):
+        tasks_router.create_task(title="Test", description="", due_at="", start_at="2026-09-01",
+                                   priority="", status="active", tags="", recurrence="", parent_uid="",
+                                   conn=conn)
+        task = db.list_tasks(conn)[0]
+        assert task["start_at"] == "2026-09-01"
 
-        sig = inspect.signature(tasks_router.create_task)
-        assert "start_at" not in sig.parameters
+    def test_start_date_is_a_real_field_on_the_new_task_form(self, conn):
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/tasks/new", "headers": []})
+        resp = tasks_router.new_task_form(req, conn=conn)
+        body = resp.body.decode()
+        assert 'name="start_at"' in body

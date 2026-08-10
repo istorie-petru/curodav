@@ -1,89 +1,73 @@
 {% extends "base.html" %}
+{% from "_task_relations.html" import task_relations_section %}
 {% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is wrapped -- static/modal.js -->
-<div id="modal-target">
+<!-- see event_form.html for why this is split into .modal-header/
+     .modal-body/.modal-footer, and why Save/Delete live in the footer as
+     plain buttons tied back to the form via `form="task-form"` rather than
+     being nested inside it -- static/modal.js.
+
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial task_detail.html's view uses too -- same structure, the
+     detail modal's "Edit" link swapped for this "Save" submit button --
+     and #modal-target carries the modal-stable-height marker so modal.js
+     keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
 <h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
-
-<div class="card">
-<form method="post" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}">
-    {% if parent_uid %}<input type="hidden" name="parent_uid" value="{{ parent_uid }}">{% endif %}
-    <div class="field-grid">
-        <div class="field field-wide">
-            <label>Title</label>
-            <input type="text" name="title" required value="{{ task.title if task else '' }}">
-        </div>
-        <div class="field field-wide">
-            <label>Description</label>
-            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
-        </div>
-        <div class="field">
-            <label>Due date</label>
-            <input type="date" name="due_at" value="{{ task.due_at[:10] if task and task.due_at else '' }}">
-        </div>
-        {% if task %}
-        <!-- Start date is only editable once a task already exists (e.g.
-             pushing it out later) -- a brand-new task's start date is
-             always today and isn't a choice on this form at all, see
-             routers/tasks.py::create_task. -->
-        <div class="field">
-            <label>Start date</label>
-            <input type="date" name="start_at" value="{{ task.start_at[:10] if task.start_at else '' }}">
-        </div>
-        {% endif %}
-        <div class="field">
-            <label>Priority</label>
-            <select name="priority">
-                <option value="">(none)</option>
-                <option value="1" {% if task and task.priority == 1 %}selected{% endif %}>1 - Urgent</option>
-                <option value="2" {% if task and task.priority == 2 %}selected{% endif %}>2 - High</option>
-                <option value="3" {% if task and task.priority == 3 %}selected{% endif %}>3 - Medium</option>
-                <option value="4" {% if task and task.priority == 4 %}selected{% endif %}>4 - Low</option>
-            </select>
-        </div>
-        <div class="field">
-            <label>Status</label>
-            <select name="status">
-                {% for s in statuses %}
-                <option value="{{ s }}" {% if task and task.status == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="field">
-            <label>List</label>
-            <select name="list_path">
-                {% for l in task_lists %}
-                <option value="{{ l.uid }}" {% if selected_list == l.uid %}selected{% endif %}>{{ l.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="field">
-            <label>Tags (comma-separated)</label>
-            <input type="text" name="tags" class="tag-input" list="tag-names-datalist" value="{{ task.tags|join(', ') if task else '' }}">
-            <datalist id="tag-names-datalist">
-                {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
-            </datalist>
-        </div>
-        <div class="field field-wide">
-            <label>Recurrence (RRULE, e.g. FREQ=WEEKLY;BYDAY=MO,WE)</label>
-            <input type="text" name="recurrence" value="{{ task.recurrence if task else '' }}">
-        </div>
-    </div>
-    <button type="submit" class="btn primary">Save</button>
-    <a href="/tasks" class="btn ghost" data-modal-cancel>Cancel</a>
-</form>
 </div>
-
+<div class="modal-body">
+<div class="card">
+<form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}">
+    {% include "_task_form_fields.html" %}
+</form>
+<!-- 2026-08-08 ("remove Recurrence, add a way to add subtasks in place of
+     it") -- a real sibling <form> (task_relations_section's own add-row),
+     not nested inside #task-form -- HTML doesn't allow nested forms, and
+     task_detail.html's identical section already lives outside its own
+     page's main form for the same reason. Edit-only: a subtask needs a
+     real parent_uid (and a relation needs a real task uid) to attach to,
+     which a not-yet-saved new task doesn't have. 2026-08-09: the section
+     is now the merged Relations card (subtasks + related events). -->
 {% if task %}
-{% if subtask_count %}
-<form method="post" action="/tasks/{{ task.uid }}/delete" data-confirm-sheet="Delete &quot;{{ task.title }}&quot; and its {{ subtask_count }} subtask{{ 's' if subtask_count != 1 }}? This cannot be undone.">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task (and its subtasks)</button>
-</form>
+<div class="task-form-subtasks">
+    {{ task_relations_section(task, subtasks, related_events, linkable_events) }}
+</div>
+{% endif %}
+</div>
+</div>
+{% if task %}
+<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
+     view modal (footer_back_mode='modal' -- a data-modal link into
+     /tasks/uid), NOT a data-modal-cancel that closes the whole window;
+     the modal's X is the way to fully close. A brand-new task has no
+     view to return to, so its Cancel is still a plain data-modal-cancel
+     close. -->
+{% set footer_back_url = '/tasks/' ~ task.uid %}
+{% set footer_back_mode = 'modal' %}
 {% else %}
-<form method="post" action="/tasks/{{ task.uid }}/delete" data-delete-undo="{{ task.title }}" data-delete-undo-redirect="/tasks">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete this task</button>
-</form>
+{% set footer_back_url = '/tasks' %}
+{% endif %}
+{% set footer_back_label = 'Cancel' %}
+{% if task %}
+{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
+{% if subtask_count %}
+<!-- Consistent delete confirmation, 2026-08-01 -- see tasks_list.html's
+     identical split for the reasoning (undo for a plain task, an actual
+     confirm sheet -- not just a button label -- when it cascades). -->
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete "' ~ task.title ~ '" and its ' ~ subtask_count ~ ' subtask' ~ ('s' if subtask_count != 1 else '') ~ '? This cannot be undone.' %}
+{% else %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = task.title %}
+{% set footer_delete_redirect = '/tasks' %}
 {% endif %}
 {% endif %}
+{% set footer_primary_form = 'task-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

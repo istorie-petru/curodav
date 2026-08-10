@@ -1,7 +1,7 @@
 [project]
 name = "command-center-web"
 version = "0.1.0"
-description = "Mobile/remote PWA client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server. Update 2026-08: local-only projects/tags (see src/db.py) were added on top of the synced CalDAV/CardDAV data, same precedent as checklists/schedule -- still no generic cross-type link/board graph, that stays desktop-only."
+description = "Mobile/remote PWA client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server. Update 2026-08: local-only projects/tags (see src/db.py) were folded into the universal label/object_labels model (see plans/label-space-rework.md); a generic cross-type link/board graph was never carried over from the now-deleted desktop app (plans/label-space-rework.md Phase 8) -- accepted gap, not planned."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

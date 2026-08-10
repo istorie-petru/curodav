@@ -80,6 +80,7 @@ def radicale_settings(tmp_path: Path) -> Settings:
             contacts_collection="contacts",
             db_path=tmp_path / "cache.sqlite",
             sync_interval_seconds=9999,
+            searxng_base_url="http://127.0.0.1:8080",
         )
     finally:
         proc.terminate()
@@ -191,24 +192,21 @@ class TestCalDavBridgeLive:
 
 
 class TestFullRefreshSync:
-    def test_sync_mirrors_radicale_into_sqlite(self, radicale_settings: Settings):
+    def test_full_refresh_is_a_noop_since_the_base_pool_is_plain_sql(self, radicale_settings: Settings):
+        """Phase 1 (label-space rework, 2026-08-06): the base pool
+        (tasks/events/contacts) is plain SQL now, no Radicale relationship
+        at all (see plans/label-space-rework.md §1 and sync.py's own
+        module docstring) -- sync.full_refresh no longer mirrors Radicale
+        into the cache; it's a deliberate no-op until Phase 6 (published
+        Lists) gives it a real body again. Writing straight to Radicale
+        via the bridge (still exercised here, for Phase 6's sake) must
+        NOT appear in the SQLite cache via a full_refresh call anymore."""
         bridge = CalDavBridge(radicale_settings)
         bridge.save_event_row(
             {"uid": "e1", "title": "Event one", "start_at": "2026-08-05T09:00:00"}
         )
-        bridge.save_task_row({"uid": "t1", "title": "Task one", "status": "active"})
-        bridge.save_contact_row({"uid": "p1", "full_name": "Person One"})
 
-        with db.connect(radicale_settings.db_path) as conn:
-            sync.full_refresh(bridge, conn)
-            assert db.get_event(conn, "e1")["title"] == "Event one"
-            assert db.get_task(conn, "t1")["title"] == "Task one"
-            assert db.get_contact(conn, "p1")["full_name"] == "Person One"
-
-        # Deleting on the server and re-syncing should remove the local row
-        # too -- this is the "someone edited it on their phone" path.
-        bridge.delete_event("e1", "calendar")
         with db.connect(radicale_settings.db_path) as conn:
             sync.full_refresh(bridge, conn)
             assert db.get_event(conn, "e1") is None
-            assert db.get_task(conn, "t1") is not None  # untouched
+            assert db.list_events(conn) == []

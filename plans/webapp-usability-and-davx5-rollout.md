@@ -8,7 +8,7 @@ Three independent workstreams, scoped together because they were all requested i
 
 - **Phase A** -- pipeline/interaction fixes. Checked against current code before writing this plan: **already fully shipped**, ahead of its own source audit's dateline. Kept here as a record of that check, not a to-do.
 - **Phase B** -- visual/design rework. Also checked against current code: 3 of 5 original items are done; 2 real gaps remain (pagination/collapsible sections; a project's own Databases section + the larger projects-as-widgets question).
-- **Phase C** -- DAVx5 mobile access via a public server + reverse proxy. Genuinely new, unbuilt -- infra, not app code, separate from A/B entirely; also unblocks desktop's CalDAV bridge sharing the same Radicale, per the README's existing "Deploying for real" note.
+- **Phase C** -- DAVx5 mobile access via a public server + reverse proxy. Genuinely new, unbuilt -- infra, not app code, separate from A/B entirely. (Originally also framed as unblocking a separate desktop app's CalDAV bridge sharing the same Radicale -- moot since `desktop/` was deleted 2026-08-07 as the final phase of `label-space-rework.md`; `webapp/` is now the sole client, so Phase C is just about mobile access via DAVx5.)
 
 ---
 

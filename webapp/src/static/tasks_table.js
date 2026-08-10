@@ -218,16 +218,25 @@
     }
   });
 
+  // Labels picker is now a chip multiselect (2026-08-07, modal-input-design
+  // Phase B) instead of a typed-with-datalist text input -- reads whichever
+  // "bulk_tag_names" checkboxes are ticked (there's no <form> wrapping
+  // #bulk-tag-picker, so these are just plain checkboxes with a shared
+  // name attribute, read directly rather than via FormData) and sends them
+  // all through in one request. /tasks/bulk's "tag" action already looped
+  // per-uid; it now also loops per-tag (see routers/tasks.py's bulk_action),
+  // so Add/Remove's existing "apply this labels change to every selected
+  // row" semantics are unchanged, just no longer limited to one label at a
+  // time.
   function bulkTag(mode) {
-    const input = document.getElementById("bulk-tag-input");
-    const tag = (input.value || "").trim();
-    if (!tag) return;
-    bulkPost("tag", { tag, mode })
+    const tags = Array.from(document.querySelectorAll('#bulk-tag-picker input[name="bulk_tag_names"]:checked')).map((cb) => cb.value);
+    if (!tags.length) return;
+    bulkPost("tag", { tags, mode })
       .then(() => {
-        window.ccToast({ message: `Tag ${mode === "add" ? "added" : "removed"}. Reloading...` });
+        window.ccToast({ message: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}. Reloading...` });
         window.location.reload();
       })
-      .catch(() => window.ccToast({ message: "Could not update tags for the selected tasks.", variant: "error" }));
+      .catch(() => window.ccToast({ message: "Could not update labels for the selected tasks.", variant: "error" }));
   }
   document.getElementById("bulk-tag-add")?.addEventListener("click", () => bulkTag("add"));
   document.getElementById("bulk-tag-remove")?.addEventListener("click", () => bulkTag("remove"));

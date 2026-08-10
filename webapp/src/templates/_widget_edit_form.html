@@ -1,0 +1,142 @@
+<!-- Per-widget Filters editor form. Used inside the widget edit modal
+     (_widget_edit_modal.html), opened from the Filters button on each
+     widget card in edit mode. Expects in context:
+     widget (the row with .config/.type), wc (selection prefills), spec,
+     space_uid, and the widget_source/views/ranges + projects/task_lists/
+     calendars/tag_names/tag_name_items the form populates.
+
+     2026-08-07 (modal-input-design Phase A) -- same tile picker/segmented/
+     stepper/chip-multiselect treatment as _widget_builder_fields.html, so
+     the Add-widget form and this per-widget Filters editor never
+     visually diverge; see that file's own header comment for the
+     rationale. -->
+<form method="post" id="widget-edit-form" action="/dashboard/widgets/{{ widget.uid }}/edit" class="widget-select-form widget-filters-autosave" data-preview-url="/dashboard/widgets/preview" data-modal-keep-open>
+    {% set ms_form_id = 'widget-edit-form' %}
+    <input type="hidden" name="edit" value="1">
+    <!-- Title first, no "(optional)" suffix, Source/View/Range marked
+         .field-required instead -- same 2026-08-07 follow-up treatment
+         as _widget_builder_fields.html; see that file's own comments for
+         the full rationale (kept in sync here so the two forms never
+         visually diverge, per this file's header comment). -->
+    <div class="field">
+        <label>Title</label>
+        <input type="text" name="title" value="{{ widget.title or '' }}" placeholder="{{ spec.label if spec else '' }}">
+    </div>
+    {% if wc.selection.source in widget_sources %}
+    <div class="field">
+        <label class="field-required">Data source</label>
+        <div class="tile-select widget-source-select">
+            {% for key, sspec in widget_sources.items() %}
+            <label class="tile-option">
+                <input type="radio" name="source" value="{{ key }}" class="tile-radio" {% if wc.selection.source == key %}checked{% endif %}>
+                <span class="tile-icon">{{ icon(sspec.icon, 'icon-sm') }}</span>
+                <span class="tile-option-label">{{ sspec.label }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <!-- This widget's Data source is a legacy one no longer offered by the
+         builder (2026-08-07, "purge all remains of projects" -- a
+         Projects-sourced widget placed before that change). There's no
+         tile to render/pre-select any more, so rather than crash or show
+         a picker with nothing checked, submit its current Source/View/
+         Range unchanged via hidden fields (edit_widget's own comment
+         explains how the server recognizes this and keeps the widget's
+         type as-is) -- Title/Labels/etc below still save normally, only
+         Source/View/Range themselves aren't editable here any more. -->
+    <input type="hidden" name="source" value="{{ wc.selection.source }}">
+    <input type="hidden" name="view" value="{{ wc.selection.view }}">
+    {% if wc.selection.range %}<input type="hidden" name="range" value="{{ wc.selection.range }}">{% endif %}
+    <div class="field">
+        <label>Data source</label>
+        <div class="text-muted" style="font-size:var(--text-caption);">{{ spec.label if spec else widget.type }} -- no longer available in the builder, can't be changed here.</div>
+    </div>
+    {% endif %}
+    <div class="field-grid">
+        {% if wc.selection.source in widget_sources %}
+        <!-- View/Range (2026-08-07, "should look the same as list") -- see
+             _widget_builder_fields.html's own comment for why this is a
+             single-select mode of _widget_list_multiselect.html rather
+             than a native <select>. -->
+        {% set _view_ns = namespace(items=[]) %}
+        {% for key, vspec in widget_views.items() %}
+        {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': vspec.label, 'data': {'source': vspec.source, 'has-range': ('1' if vspec.has_range else '')}}] %}
+        {% endfor %}
+        {% set ms_name = 'view' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'View' %}
+        {% set ms_label_class = 'field-required' %}
+        {% set ms_items = _view_ns.items %}
+        {% set ms_selected = wc.selection.view %}
+        {% set ms_wide = false %}
+        {% set ms_root_class = 'widget-view-select' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set _range_ns = namespace(items=[]) %}
+        {% for key, rspec in widget_ranges.items() %}
+        {% set _range_ns.items = _range_ns.items + [{'uid': key, 'name': rspec.label, 'data': {'views': rspec.views|join(',')}}] %}
+        {% endfor %}
+        {% set ms_name = 'range' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Range' %}
+        {% set ms_label_class = 'field-required' %}
+        {% set ms_items = _range_ns.items %}
+        {% set ms_selected = wc.selection.range or '' %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = 'widget-range-field' %}
+        {% set ms_root_class = 'widget-range-select' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endif %}
+        <div class="field widget-limit-field" {% if widget.type != 'upcoming_events' %}style="display:none"{% endif %}>
+            <label>Limit</label>
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
+                <input type="number" name="limit" class="stepper-input" min="1" value="{{ widget.config.limit or '' }}" placeholder="10">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
+            </div>
+        </div>
+        <!-- Labels/Task lists/Calendars -- used to be wrapped in a
+             visually distinct "Advanced" group; 2026-08-07 follow-up
+             ("move them into normality") flattened that away, same as
+             _widget_builder_fields.html. The manual "Project" filter
+             select that used to live here is gone too (2026-08-07,
+             "purge all remains of projects"). -->
+        <!-- Labels -- chip multiselect (2026-08-07), see
+             _widget_builder_fields.html's own comment for the
+             tags-format rationale. Pre-selects whatever this
+             widget's config.tags already holds. config.tags
+             can also carry a Project filter's uid (folded in
+             by _config_from_form -- "a label IS a tag"), which
+             won't appear in tag_name_items/isn't meant to be
+             picked here -- carried forward untouched via a
+             hidden `tags` field (same legacy str param
+             _combine_tags still merges tags_labels into) so
+             editing Labels/Source/View never silently drops
+             that Project scoping on save. -->
+        {% set _extra_tags = (widget.config.tags or []) | reject('in', tag_names) | list %}
+        {% if _extra_tags %}<input type="hidden" name="tags" value="{{ _extra_tags|join(',') }}">{% endif %}
+        {% set ms_name = 'tags_labels' %}
+        {% set ms_label = 'Labels' %}
+        {% set ms_items = tag_name_items %}
+        {% set ms_selected = widget.config.tags or [] %}
+        {% include "_widget_list_multiselect.html" %}
+        {% if spec and 'tasks' in spec.uses and task_lists %}
+        {% set ms_name = 'task_list_uids' %}
+        {% set ms_label = 'Task lists' %}
+        {% set ms_items = task_lists %}
+        {% set ms_selected = widget.config.list_uids or [] %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endif %}
+        {% if spec and 'events' in spec.uses and calendars %}
+        {% set ms_name = 'calendar_uids' %}
+        {% set ms_label = 'Calendars' %}
+        {% set ms_items = calendars %}
+        {% set ms_selected = widget.config.list_uids or [] %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endif %}
+    </div>
+    <div class="field widget-filters-save-row" style="margin-top:10px">
+        <button type="submit" class="btn primary widget-save-filters-btn">Save filters</button>
+        <span class="widget-save-status" aria-live="polite"></span>
+    </div>
+</form>

@@ -12,7 +12,28 @@
 
 (function () {
   const THEME_KEY = "commandCenterWeb.theme";
+  const mql = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  // 2026-08-07 (Settings rework): was a single getElementById("btnTheme")
+  // bound to the one tabbar icon button -- Settings now has its own theme
+  // control too, so this needs to drive an arbitrary number of controls
+  // in sync instead of exactly one.
+  //
+  // 2026-08-08 redesign: the tabbar icon button is still a plain
+  // click-to-flip between explicit light/dark (unchanged), but Settings >
+  // Appearance's control is now a three-way System/Light/Dark segmented
+  // choice, not an on/off switch -- a switch can only ever represent two
+  // states, so "follow the OS" (the actual out-of-the-box behavior,
+  // computed once by base.html's inline <head> script from
+  // prefers-color-scheme whenever localStorage has nothing stored yet)
+  // became permanently unreachable the instant anyone touched the old
+  // switch even once. "System" isn't a third stored value -- it's the
+  // *absence* of a stored value, same meaning the inline head script
+  // already gives that absence; picking "System" here just clears the
+  // key instead of writing one, and a live prefers-color-scheme listener
+  // keeps the page in sync if the OS theme changes while "System" is
+  // active and the tab stays open.
   const btnTheme = document.getElementById("btnTheme");
+  const segmented = document.getElementById("themeSegmented");
   // Same sprite reference base.html's {{ icon(...) }} global renders --
   // see templates/_icons_sprite.html. Swapping which symbol id a plain
   // <use> points at is cheaper than swapping DOM nodes and keeps this in
@@ -20,26 +41,72 @@
   const ICON_SUN = '<svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg>';
   const ICON_MOON = '<svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>';
 
-  function applyTheme(t) {
-    if (t === "dark") {
+  function osPrefersDark() {
+    return !!(mql && mql.matches);
+  }
+
+  function storedChoice() {
+    // "system" | "light" | "dark" -- whatever's actually in localStorage,
+    // defaulting to "system" (no key at all) rather than guessing.
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored === "dark" || stored === "light" ? stored : "system";
+  }
+
+  function effectiveTheme(choice) {
+    return choice === "system" ? (osPrefersDark() ? "dark" : "light") : choice;
+  }
+
+  function render() {
+    const choice = storedChoice();
+    const effective = effectiveTheme(choice);
+    if (effective === "dark") {
       document.documentElement.setAttribute("data-theme", "dark");
       if (btnTheme) btnTheme.innerHTML = ICON_SUN;
     } else {
       document.documentElement.removeAttribute("data-theme");
       if (btnTheme) btnTheme.innerHTML = ICON_MOON;
     }
+    if (segmented) {
+      segmented.querySelectorAll("[data-theme-choice]").forEach((btn) => {
+        const isActive = btn.getAttribute("data-theme-choice") === choice;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
   }
 
-  let theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-  applyTheme(theme);
+  render();
+
+  function setChoice(choice) {
+    if (choice === "system") {
+      localStorage.removeItem(THEME_KEY);
+    } else {
+      localStorage.setItem(THEME_KEY, choice);
+    }
+    render();
+  }
 
   if (btnTheme) {
-    btnTheme.addEventListener("click", () => {
-      theme = theme === "dark" ? "light" : "dark";
-      localStorage.setItem(THEME_KEY, theme);
-      applyTheme(theme);
+    // Explicit click-to-flip -- always lands on a concrete light/dark,
+    // same as before; flipping away from "System" this way is a
+    // deliberate, understood tradeoff (the tabbar button has no room for
+    // a three-way choice), not a bug -- Settings > Appearance is where
+    // "back to System" lives.
+    btnTheme.addEventListener("click", () => setChoice(effectiveTheme(storedChoice()) === "dark" ? "light" : "dark"));
+  }
+  if (segmented) {
+    segmented.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-theme-choice]");
+      if (btn) setChoice(btn.getAttribute("data-theme-choice"));
     });
   }
+  if (mql && mql.addEventListener) {
+    mql.addEventListener("change", () => {
+      if (storedChoice() === "system") render();
+    });
+  }
+
+  window.CCTheme = { apply: (t) => setChoice(t), current: () => effectiveTheme(storedChoice()), choice: storedChoice };
 })();
 
 // Tabbar now scrolls horizontally on narrow viewports (style.css) -- if
@@ -67,14 +134,23 @@ document.addEventListener("DOMContentLoaded", () => {
 //
 //   data-delete-undo="Label"
 //     Cheap, non-cascading deletes (a dashboard widget, one checklist
-//     item) where losing it costs the user nothing to redo by hand.
-//     Optimistically hides the row and *delays* the actual network
-//     request behind the toast's timer -- clicking Undo just cancels the
-//     pending request and un-hides the row, so nothing is sent at all if
-//     the user changes their mind. Deliberate tradeoff: if the tab closes
-//     or the user navigates away inside that window, the delete never
-//     happens either -- a safe failure mode (nothing destructive occurs
-//     without the user having seen it through), not a bug.
+//     item, a task/schedule-class row) where losing it costs the user
+//     nothing to redo by hand. Optimistically hides the row and *delays*
+//     the actual network request behind the toast's timer -- clicking Undo
+//     just cancels the pending request and un-hides the row, so nothing is
+//     sent at all if the user changes their mind. Deliberate tradeoff: if
+//     the tab closes or the user navigates away inside that window, the
+//     delete never happens either -- a safe failure mode (nothing
+//     destructive occurs without the user having seen it through), not a
+//     bug.
+//
+//     Adding data-delete-undo-redirect="/some/list" switches to the
+//     detail/view/edit-modal form of the same control (event_form.html,
+//     task_detail.html, schedule_class_form.html, ...): there's no row to
+//     hide, so no undo window is offered -- the delete goes out immediately
+//     and, once it lands, the page behind a modal is reloaded (or the page
+//     navigates to the redirect on a standalone page) so the removed object
+//     isn't left showing on stale markup.
 //
 //   (no data attribute, but action still matches "/delete")
 //     Falls back to a generic confirm-sheet -- covers every delete form
@@ -115,6 +191,34 @@ document.addEventListener("submit", (event) => {
     const label = form.getAttribute("data-delete-undo") || "Item";
     const row = form.closest("[data-undo-row]") || form.closest("tr, .kanban-card, .card, .calendar-row, .contact-row, .checklist-row, .widget-card");
     if (row) row.style.display = "none";
+    // Detail/view/edit-modal delete (task_detail.html, the event/task/
+    // contact/class forms opened as a modal or standalone page, not a list
+    // row) -- no `row` to hide in place, so there's nothing an undo window
+    // could restore; delete for real right away. `data-delete-undo-redirect`
+    // marks these: from a modal, close it and reload the page it was opened
+    // over once the delete lands; on a standalone page, follow the redirect
+    // once the delete lands. `inModal` must be captured before closeModal()
+    // drops the overlay's .is-open class.
+    const redirect = form.getAttribute("data-delete-undo-redirect");
+    const inModal = !!(window.CCModal && document.getElementById("modal-overlay").classList.contains("is-open"));
+
+    if (redirect) {
+      if (inModal) window.CCModal.close();
+      fetch(form.action, { method: "POST", body: new FormData(form) })
+        .then(() => {
+          if (inModal) window.location.reload();
+          else window.location.href = redirect;
+        })
+        .catch(() => {
+          // Best-effort: the modal is already closed; a failed delete just
+          // means the object reappears on next reload rather than silently
+          // vanishing forever.
+        });
+      return;
+    }
+
+    // List-row delete: optimistic hide + undo toast + delayed background
+    // fetch so Undo can cancel it before anything is sent.
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return;
@@ -134,23 +238,6 @@ document.addEventListener("submit", (event) => {
       },
       duration: 4500,
     });
-    // Detail-page delete (task_detail.html, event forms opened as a
-    // standalone page/modal, not a list row) -- there's no `row` to hide
-    // in place, so leaving the user sitting on the page for an object
-    // that's about to disappear would be worse than a list row silently
-    // fading out. `data-delete-undo-redirect` closes the modal (if the
-    // form is inside one) or navigates the whole page otherwise; the
-    // toast/undo/background-delete timer above keeps running either way,
-    // so Undo still works even after leaving -- it just won't visibly
-    // restore anything in a place the user isn't currently looking at.
-    const redirect = form.getAttribute("data-delete-undo-redirect");
-    if (redirect) {
-      if (window.CCModal && document.getElementById("modal-overlay").classList.contains("is-open")) {
-        window.CCModal.close();
-      } else {
-        window.location.href = redirect;
-      }
-    }
     return;
   }
 
@@ -228,35 +315,110 @@ document.addEventListener("submit", (event) => {
 // visibility-toggling is already a real server-side POST, not client
 // state) -- this script only owns open/close, not what's inside.
 //
-// Simpler than modal.js's color-picker popover: that one has to portal
-// out of the modal's clipped/scrolling box to render outside it. A
-// `.multiselect` here always lives directly in the page (never inside
-// `.modal-body`), so plain `position:absolute` positioned against its own
-// trigger is enough -- no clipping context to escape, no portal needed.
+// 2026-08-08 direct feedback ("this drop down menus should be able to
+// exit the modal window, not be masked inside it, always [available]") --
+// the "always lives directly in the page" assumption above turned out to
+// be wrong: task_form/event_form/contact_form/habit_form/the widget
+// builder all render this inside `.modal-body`, which clips overflow same
+// as modal.js's color/icon popovers do, so the panel was getting visually
+// cut off or overlapping other modal content instead of just scrolling
+// internally. Same portal technique as modal.js's openPopover/
+// closeOpenPopover now: on open, move the panel itself into
+// #multiselect-portal (base.html, a fixed-position layer outside any
+// modal) and position it with `position:fixed` against its trigger; on
+// close, move it back to exactly where it came from. Each option input
+// carries a `form="..."` attribute (_widget_list_multiselect.html's
+// ms_form_id) so it stays part of its real `<form>` even while reparented
+// outside it -- otherwise the browser silently drops a moved form control
+// from its form's submission.
 (function () {
-  let openPanel = null;
+  const portal = document.getElementById("multiselect-portal");
+  let openPanel = null; // { panel, trigger, anchor, nextSibling }
+
+  function position(panel, trigger) {
+    const rect = trigger.getBoundingClientRect();
+    panel.style.minWidth = rect.width + "px";
+    const panelRect = panel.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 6;
+    if (left + panelRect.width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - panelRect.width - 8);
+    }
+    if (top + panelRect.height > window.innerHeight - 8) {
+      top = rect.top - panelRect.height - 6; // flip above the trigger instead
+    }
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+  }
 
   function closeOpenPanel() {
     if (!openPanel) return;
-    openPanel.classList.remove("is-open");
+    const { panel, anchor, nextSibling } = openPanel;
+    panel.classList.remove("is-open");
+    // The wrapper keeps a mirror class too so a trigger's chevron/caret can
+    // flip while its panel is open -- the panel itself is portaled out to
+    // #multiselect-portal at that point, so a `.multiselect:has(.panel.is-
+    // open)` selector can never see it from the wrapper.
+    anchor.classList.remove("is-open");
+    panel.style.left = panel.style.top = panel.style.minWidth = "";
+    // Move it back to exactly where it started -- insertBefore(node, null)
+    // is the same as appendChild, so a null nextSibling (it was already
+    // the last child) still lands in the right place.
+    anchor.insertBefore(panel, nextSibling);
     openPanel = null;
   }
+
+  function openPanelFor(trigger, panel) {
+    const anchor = panel.parentElement;
+    const nextSibling = panel.nextSibling;
+    if (!portal) {
+      // No portal container on the page (shouldn't happen -- it's in
+      // base.html -- but degrade to the old in-place behavior rather than
+      // silently doing nothing if it's ever missing).
+      panel.classList.add("is-open");
+      anchor.classList.add("is-open");
+      openPanel = { panel, trigger, anchor, nextSibling };
+      return;
+    }
+    portal.appendChild(panel);
+    panel.classList.add("is-open");
+    anchor.classList.add("is-open");
+    position(panel, trigger);
+    openPanel = { panel, trigger, anchor, nextSibling };
+  }
+
+  // Finds the `.multiselect-panel` belonging to a given `.multiselect`
+  // wrapper regardless of whether it's currently sitting in its normal
+  // spot (never opened yet, or closed again) or portaled out to
+  // #multiselect-portal (currently open). Only one panel is ever portaled
+  // at a time (opening a new one always closes whatever was open first),
+  // so "the currently portaled panel, if its remembered anchor is this
+  // wrapper" is an unambiguous fallback. Exposed as window.CCMultiselect
+  // so other scripts that need to reach into a panel's actual `<input>`s
+  // (dashboard_widget_preview.js's Source->View->Range filtering) don't
+  // have to duplicate this lookup or, worse, assume the panel is still a
+  // plain DOM descendant of its wrapper the way a `.querySelector` would.
+  function resolvePanel(wrapper) {
+    if (!wrapper) return null;
+    return wrapper.querySelector(".multiselect-panel") || (openPanel && openPanel.anchor === wrapper ? openPanel.panel : null);
+  }
+  window.CCMultiselect = { panelFor: resolvePanel };
 
   document.addEventListener("click", (e) => {
     const trigger = e.target.closest(".multiselect-trigger");
     if (trigger) {
-      const panel = trigger.parentElement.querySelector(".multiselect-panel");
+      const wrapper = trigger.closest(".multiselect");
+      const panel = resolvePanel(wrapper);
       if (!panel) return;
-      if (panel === openPanel) {
+      if (openPanel && openPanel.panel === panel) {
         closeOpenPanel();
       } else {
         closeOpenPanel();
-        panel.classList.add("is-open");
-        openPanel = panel;
+        openPanelFor(trigger, panel);
       }
       return;
     }
-    if (openPanel && !openPanel.contains(e.target)) {
+    if (openPanel && !openPanel.panel.contains(e.target)) {
       closeOpenPanel();
     }
   });
@@ -264,6 +426,72 @@ document.addEventListener("submit", (event) => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeOpenPanel();
   });
+
+  window.addEventListener("resize", () => {
+    if (openPanel) position(openPanel.panel, openPanel.trigger);
+  });
+
+  // Keep each .widget-list-multiselect's trigger summary ("All"/"N
+  // selected"/"No labels") in sync with its checkboxes (2026-08-07,
+  // modal-input-design Phase B -- generalized here, out of
+  // dashboard_widget_preview.js, so every page reusing
+  // _widget_list_multiselect.html gets this for free, not just the widget
+  // builder's own .widget-select-form). data-ms-mode is set by the
+  // template: "filter" (default, unchanged widget-builder behavior --
+  // empty or fully-checked both read "All"), "select" (task_form/
+  // event_form/contact_form/habit_form/tasks_list.html's Labels pickers --
+  // empty reads "No <label>", never collapses to "All"), or "single"
+  // (2026-08-07, widget builder's View/Range -- a single-select mode of
+  // the same partial, radios instead of checkboxes, summary is just the
+  // checked option's own label text).
+  function updateMsSummary(ms) {
+    const summary = ms.querySelector(".ms-summary");
+    if (!summary) return;
+    // The trigger (and its .ms-summary) never moves, but the panel -- and
+    // every radio/checkbox inside it -- does once opened (portaled to
+    // #multiselect-portal). `resolvePanel(ms)` finds it either way instead
+    // of assuming it's still a plain descendant of `ms`.
+    const panel = resolvePanel(ms);
+    const mode = ms.dataset.msMode || "filter";
+    if (mode === "single") {
+      const checked = panel ? panel.querySelector('input[type="radio"]:checked') : null;
+      const row = checked ? checked.closest(".multiselect-option") : null;
+      const label = row ? row.querySelector("span:last-child") : null;
+      summary.textContent = label ? label.textContent : "Select";
+      return;
+    }
+    const boxes = panel ? panel.querySelectorAll('input[type="checkbox"]') : [];
+    const checked = Array.from(boxes).filter((b) => b.checked).length;
+    if (mode === "select") {
+      summary.textContent = checked === 0 ? "No " + (ms.dataset.msLabel || "selection") : checked + " selected";
+    } else {
+      summary.textContent = checked === 0 || checked === boxes.length ? "All" : checked + " selected";
+    }
+  }
+  // Resolves the `.widget-list-multiselect` wrapper an input belongs to --
+  // a plain `.closest()` from the input only works while its panel is
+  // still in its original spot in the DOM. Once opened, the panel (and
+  // every input inside it) lives in #multiselect-portal instead, outside
+  // the wrapper entirely, so `.closest()` from inside it would find
+  // nothing; fall back to the currently-open panel's remembered anchor in
+  // that case.
+  function wrapperFor(input) {
+    return input.closest(".widget-list-multiselect") || (openPanel && openPanel.panel.contains(input) ? openPanel.anchor : null);
+  }
+
+  document.addEventListener("change", (e) => {
+    const ms = wrapperFor(e.target);
+    if (!ms) return;
+    updateMsSummary(ms);
+    // Single-select (View/Range/the reworked Priority/Status): picking an
+    // option is a complete choice, not one tick among several -- close
+    // the panel right away instead of staying open for more picks like
+    // the multiselect does.
+    if (ms.dataset.msMode === "single" && e.target.type === "radio" && openPanel && openPanel.anchor === ms) {
+      closeOpenPanel();
+    }
+  });
+  document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);
 })();
 
 // Dashboard masonry layout (dashboard.html's #dashboard-grid, both edit
@@ -304,6 +532,40 @@ document.addEventListener("submit", (event) => {
     return card.style.display !== "none";
   }
 
+  // Skyline packing (shared by the dry-run and the real pass below) --
+  // takes a column count and returns, for each card in order, which
+  // column it starts in and how tall each column's skyline was left. Pure
+  // index math, no pixel sizes or DOM involved, so it's cheap to run
+  // twice: once just to find out how many of the `cols` virtual columns
+  // this particular set of cards actually ends up touching, and again for
+  // real once that number is known (see effectiveCols below).
+  function packColumns(cards, cols) {
+    const colHeights = new Array(cols).fill(0);
+    const placements = [];
+    let maxTouched = 0;
+    cards.forEach((card) => {
+      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      let bestStart = 0;
+      let bestTop = Infinity;
+      for (let start = 0; start <= cols - span; start++) {
+        const top = Math.max(...colHeights.slice(start, start + span));
+        if (top < bestTop) {
+          bestTop = top;
+          bestStart = start;
+        }
+      }
+      // Real height isn't known yet in the dry run (no DOM writes happen
+      // here), so column-height bookkeeping uses a placeholder of 1 per
+      // card -- enough to make the skyline algorithm's "shortest column"
+      // choice keep behaving the same way run to run, without needing to
+      // duplicate the real bottom/GAP math from the pixel pass below.
+      for (let i = bestStart; i < bestStart + span; i++) colHeights[i] += 1;
+      maxTouched = Math.max(maxTouched, bestStart + span);
+      placements.push({ card, span, bestStart });
+    });
+    return { placements, maxTouched };
+  }
+
   function layout() {
     const cards = Array.from(grid.children).filter((el) => el.classList.contains("widget-card") && cardIsVisible(el));
     if (!cards.length) {
@@ -311,7 +573,23 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const containerWidth = grid.clientWidth;
-    const cols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 6;
+    const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 6;
+    // 2026-08-08 direct feedback ("weird permanent empty space on the
+    // right, widgets crowded") -- a dashboard with only a couple of
+    // widgets (e.g. two half/third-width cards, 5 of 6 virtual columns
+    // claimed) always reserved the full 6-column width regardless, so the
+    // one never-touched column sat there as dead space on the right
+    // forever, and every card's own pixel width was computed against a
+    // colWidth one column narrower than the space actually available.
+    // Fix: a cheap dry run (packColumns, pure index math, no DOM) using
+    // the full 6 columns first, just to find out how many columns this
+    // actual set of cards ends up touching -- then the real pass below
+    // uses THAT as its column count, so colWidth (and therefore every
+    // card's width) is computed against the space genuinely in use, not
+    // an assumed max. A dashboard with enough widgets to fill all 6
+    // columns anyway sees no change at all (effectiveCols === maxCols).
+    const dryRun = packColumns(cards, maxCols);
+    const cols = Math.max(1, dryRun.maxTouched);
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
     const colHeights = new Array(cols).fill(0);
     let maxBottom = 0;
@@ -681,207 +959,38 @@ document.addEventListener("submit", (event) => {
   });
 })();
 
-// Dashboard widget drag-to-resize (dashboard.html's .widget-resize-handle,
-// edit mode only) -- "width is adjusted visually, by mouse action"
-// (2026-08-02), replacing the Width <select> that used to live in each
-// widget's Filters form. Valid spans are exactly {2,3,4,6} out of the
-// grid's 6 columns (routers/dashboard.py's WIDGET_WIDTHS: third/half/
-// two_thirds/full -- there's no 5, a "5/6 width" widget was never a real
-// option), so the drag snaps to the nearest of those rather than letting
-// the card land on an arbitrary column count.
-(function () {
-  const grid = document.getElementById("dashboard-grid");
-  if (!grid || !grid.classList.contains("is-editing")) return;
+// Manual width picker / drag-to-resize-width (2026-08-02) removed
+// 2026-08-07 per direct feedback: "auto-fit by content" -- a widget's
+// width is now always just its type's own default_width (or, for a
+// stack, the stack's own stored config -- see routers/dashboard.py's
+// _widget_width), no manual override. There is no more
+// .widget-resize-handle element and no more
+// /dashboard/widgets/{uid}/resize endpoint to POST to. The masonry
+// layout function above still reads each card's data-span attribute and
+// does skyline packing exactly as before -- it never cared whether
+// data-span came from a manual choice or an automatic default, so it
+// needed no changes here.
 
-  const VALID_SPANS = [2, 3, 4, 6];
-  const SPAN_TO_WIDTH = { 2: "third", 3: "half", 4: "two_thirds", 6: "full" };
-  // Must match the masonry layout's own GAP above -- both are reading
-  // the same --space-4 design token, just as two separate plain-number
-  // constants rather than a shared import (no module system in this
-  // file to share one across IIFEs).
-  const GAP = 16;
+// Manual height editor / drag-to-resize-height (2026-08-02) removed
+// 2026-08-07 per direct feedback -- a widget's height is now just "how
+// much content it is", no scrollbar, unless it goes over a max height
+// (a single flat CSS max-height on .widget-content, see style.css).
+// There is no more .widget-resize-handle-vertical element and no more
+// /dashboard/widgets/{uid}/resize-height endpoint to POST to.
 
-  function nearestSpan(raw) {
-    return VALID_SPANS.reduce((best, span) => (Math.abs(span - raw) < Math.abs(best - raw) ? span : best));
+// Banner search results (2026-08-09, banner_editor.html) -- broken-image
+// fallback: a result tile whose thumbnail fails to load retries once with
+// the full-size image (some engines' thumbnails are hotlink-blocked or
+// dead while the original still works), then drops the tile entirely if
+// that fails too, so the masonry wall never shows broken alt-text boxes.
+// Global (not an IIFE) because it's called from inline onerror attributes
+// on images that are swapped in after the modal fragment is fetched.
+function bannerImgFallback(img) {
+  const full = img.dataset.full;
+  if (full && !img.dataset.fallbackTried) {
+    img.dataset.fallbackTried = "1";
+    img.src = full;
+    return;
   }
-
-  function currentSpan(card) {
-    return parseInt(card.dataset.span, 10) || 6;
-  }
-
-  let card = null;
-  let pointerId = null;
-  let startX = 0;
-  let startSpan = 6;
-  let columnWidth = 0;
-
-  grid.querySelectorAll(".widget-resize-handle").forEach((handle) => {
-    handle.addEventListener("pointerdown", (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      card = handle.closest(".widget-card");
-      if (!card) return;
-      pointerId = e.pointerId;
-      startX = e.clientX;
-      startSpan = currentSpan(card);
-      // Grid gap is subtracted so a full-width drag lands exactly on
-      // span 6 instead of overshooting by 5 gaps' worth of pixels --
-      // gap doesn't count toward any single column's width. Uses the
-      // grid's own current width, same source of truth the masonry
-      // layout function itself reads from (grid.clientWidth there vs
-      // getBoundingClientRect().width here -- equivalent for a
-      // non-scrolling, border/padding-less container like this one).
-      const gridRect = grid.getBoundingClientRect();
-      columnWidth = (gridRect.width - GAP * 5) / 6 + GAP;
-      card.classList.add("is-resizing");
-      handle.setPointerCapture(e.pointerId);
-    });
-
-    handle.addEventListener("pointermove", (e) => {
-      if (!card || e.pointerId !== pointerId) return;
-      const dx = e.clientX - startX;
-      const rawSpan = startSpan + dx / columnWidth;
-      const span = Math.max(2, Math.min(6, nearestSpan(rawSpan)));
-      // Writing data-span (not a width/gridColumn style directly) is
-      // what the masonry layout's MutationObserver is watching for --
-      // this is the one line that actually drives the live "everything
-      // else flows around the card while you resize it" reflow.
-      card.dataset.span = String(span);
-    });
-
-    async function finish(e) {
-      if (!card || e.pointerId !== pointerId) return;
-      const finalCard = card;
-      const span = currentSpan(finalCard);
-      finalCard.classList.remove("is-resizing");
-      card = null;
-      if (span === startSpan) return; // no actual change -- nothing to persist
-      const width = SPAN_TO_WIDTH[span];
-      try {
-        const resp = await fetch(`/dashboard/widgets/${finalCard.dataset.uid}/resize`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `width=${encodeURIComponent(width)}`,
-        });
-        if (!resp.ok) throw new Error("resize failed");
-      } catch (err) {
-        finalCard.dataset.span = String(startSpan); // revert -- no reload needed, we know exactly what to put back
-        window.ccToast({ message: "Could not save the new width.", variant: "error" });
-      }
-    }
-
-    handle.addEventListener("pointerup", finish);
-    handle.addEventListener("pointercancel", (e) => {
-      if (card && e.pointerId === pointerId) {
-        card.dataset.span = String(startSpan);
-        card.classList.remove("is-resizing");
-        card = null;
-      }
-    });
-  });
-})();
-
-// Dashboard widget drag-to-resize, vertical axis (2026-08-02 -- "a way to
-// resize them vertically ... a specific values for their width and
-// height, not any height"). Exact mirror of the width handler just above
-// -- same pointer-events/snap-to-preset/optimistic-then-persist shape --
-// just dragging each widget's own .widget-content bottom edge instead of
-// the whole card's right edge, and per-widget rather than per-card/
-// per-stack (a stack's members each get their own handle here, since
-// .widget-resize-handle-vertical is rendered once per widget by
-// widget_inner, not once per top-level card the way the width handle
-// is -- see routers/dashboard.py's _dissolve_stack docstring for why
-// height isn't shared across a stack the way width is).
-(function () {
-  const grid = document.getElementById("dashboard-grid");
-  if (!grid || !grid.classList.contains("is-editing")) return;
-
-  // Must match routers/dashboard.py's WIDGET_HEIGHTS exactly (key -> px).
-  const HEIGHT_PX = { short: 180, medium: 320, tall: 480, xl: 680 };
-  const VALID_HEIGHTS = Object.keys(HEIGHT_PX);
-
-  function nearestHeight(rawPx) {
-    return VALID_HEIGHTS.reduce((best, key) =>
-      Math.abs(HEIGHT_PX[key] - rawPx) < Math.abs(HEIGHT_PX[best] - rawPx) ? key : best
-    );
-  }
-
-  function currentHeightKey(content) {
-    return content.dataset.heightKey in HEIGHT_PX ? content.dataset.heightKey : "medium";
-  }
-
-  let content = null;
-  let uidHost = null;
-  let pointerId = null;
-  let startY = 0;
-  let startPx = HEIGHT_PX.medium;
-
-  grid.querySelectorAll(".widget-resize-handle-vertical").forEach((handle) => {
-    handle.addEventListener("pointerdown", (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      content = handle.parentElement; // the .widget-content div this handle belongs to
-      // Nearest ancestor carrying a real widget uid -- .widget-stack-item
-      // for a stacked member, .widget-card for a top-level widget (or a
-      // stack container itself, which never renders this handle since it
-      // has no .widget-content of its own). Falling back to the plain
-      // .widget-card covers the non-stacked case.
-      uidHost = handle.closest("[data-uid]");
-      if (!content || !uidHost) return;
-      pointerId = e.pointerId;
-      startY = e.clientY;
-      startPx = HEIGHT_PX[currentHeightKey(content)];
-      content.classList.add("is-resizing");
-      handle.setPointerCapture(e.pointerId);
-    });
-
-    handle.addEventListener("pointermove", (e) => {
-      if (!content || e.pointerId !== pointerId) return;
-      const dy = e.clientY - startY;
-      const rawPx = Math.max(HEIGHT_PX.short, startPx + dy);
-      const key = nearestHeight(rawPx);
-      // Writing both the data attribute (what the masonry layout's
-      // MutationObserver's `style` filter already reacts to, via the
-      // maxHeight change right below, subtree:true covers descendants
-      // too) and the actual max-height that makes the card visually
-      // taller/shorter and lets the masonry re-pack around it live.
-      content.dataset.heightKey = key;
-      content.style.maxHeight = `${HEIGHT_PX[key]}px`;
-    });
-
-    async function finish(e) {
-      if (!content || e.pointerId !== pointerId) return;
-      const finalContent = content;
-      const finalUidHost = uidHost;
-      const key = currentHeightKey(finalContent);
-      finalContent.classList.remove("is-resizing");
-      const startKey = nearestHeight(startPx);
-      content = null;
-      uidHost = null;
-      if (key === startKey) return; // no actual change -- nothing to persist
-      try {
-        const resp = await fetch(`/dashboard/widgets/${finalUidHost.dataset.uid}/resize-height`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `height=${encodeURIComponent(key)}`,
-        });
-        if (!resp.ok) throw new Error("resize failed");
-      } catch (err) {
-        // Revert -- no reload needed, we know exactly what to put back.
-        finalContent.dataset.heightKey = startKey;
-        finalContent.style.maxHeight = `${HEIGHT_PX[startKey]}px`;
-        window.ccToast({ message: "Could not save the new height.", variant: "error" });
-      }
-    }
-
-    handle.addEventListener("pointerup", finish);
-    handle.addEventListener("pointercancel", (e) => {
-      if (content && e.pointerId === pointerId) {
-        const startKey = nearestHeight(startPx);
-        content.dataset.heightKey = startKey;
-        content.style.maxHeight = `${HEIGHT_PX[startKey]}px`;
-        content.classList.remove("is-resizing");
-        content = null;
-        uidHost = null;
-      }
-    });
-  });
-})();
+  img.closest("form")?.remove();
+}

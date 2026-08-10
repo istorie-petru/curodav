@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="settings-hint">Six places, each for one kind of thing -- not a page of every control at once.</p>
+
+<div class="card">
+{% for c in categories %}
+<a class="calendar-row settings-row settings-hub-row" href="{{ c.url }}">
+    <span class="settings-row-icon">{{ icon(c.icon) }}</span>
+    <span class="settings-row-text">
+        <span class="settings-row-name">{{ c.name }}</span>
+        <span class="settings-row-desc">{{ c.desc }}</span>
+    </span>
+    <span class="spacer"></span>
+    <span class="settings-row-chevron">{{ icon('chevron-right', 'icon-sm') }}</span>
+</a>
+{% endfor %}
+</div>
+{% endblock %}

@@ -2,7 +2,7 @@
 
 **Status:** Not started, not scheduled — kept as a record of what was deliberately cut and why, so it isn't accidentally re-proposed without re-litigating the reasons below.
 
-These were scoped out at the very first design pass (see [`systems/decisions-log.md`](systems/decisions-log.md)) and reconfirmed when the app was reworked from Flutter to PySide6. None of the current codebase (`desktop/src/`) touches them.
+These were scoped out at the very first design pass (see [`systems/decisions-log.md`](systems/decisions-log.md)) and reconfirmed when the app was reworked from Flutter to PySide6. None of that codebase (`desktop/src/`, deleted 2026-08-07 per [`label-space-rework.md`](label-space-rework.md) Phase 8 -- `webapp/` is now the current codebase) touched them, and this rework didn't reopen any of these decisions either.
 
 | Feature/system | Why deferred |
 |---|---|

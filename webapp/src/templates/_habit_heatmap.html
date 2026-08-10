@@ -1,12 +1,21 @@
-<!-- Shared GitHub-style heatmap grid, used by both habits_list.html (a
-     short preview per habit card) and habit_detail.html (the full ~year
-     view). Server-rendered HTML, not canvas/JS -- every non-future day
-     cell is its own tiny <form> posting a toggle
-     (/habits/{uid}/entries/{date}/toggle), so clicking a day is a single
-     no-JS request, matching db.py's toggle_habit_entry semantics (no
-     entry/zero -> create value=1; any logged entry -> remove it). -->
-{% macro heatmap(uid, weeks) %}
-<div class="heatmap">
+<!-- Shared GitHub-style heatmap grid, used by habits_list.html (a short
+     preview per habit card), habit_detail.html (the full ~year view), and
+     (2026-08-08) tasks_habits.html (Tasks > Habits, a habit-labeled
+     task's ~2-month history). Server-rendered HTML, not canvas/JS -- every
+     non-future day cell is its own tiny clickable <form>/<button> posting
+     a toggle, so clicking a day is a single no-JS request. Defaults to
+     the real Habits feature's endpoint (/habits/{uid}/entries/{date}/
+     toggle, db.py's toggle_habit_entry semantics: no entry/zero -> create
+     value=1; any logged entry -> remove it) -- `action_prefix` lets a
+     caller point the same markup/CSS at a different toggle endpoint
+     entirely (tasks_habits.html passes routers/tasks.py's
+     /tasks/{uid}/completion, same "no entry -> create; existing -> clear"
+     semantics via db.upsert_task_completion/delete_task_completion) so
+     there's exactly one heatmap implementation, not two near-duplicates
+     for the two "quantified daily thing" object types this app has. -->
+{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='') %}
+{% set _prefix = action_prefix or ('/habits/' ~ uid ~ '/entries') %}
+<div class="heatmap {{ extra_class }}" {{ extra_attrs|safe }}>
     <div class="heatmap-months">
         {% for week in weeks %}<span class="heatmap-month-label">{{ week[0].month_label or '' }}</span>{% endfor %}
     </div>
@@ -17,7 +26,7 @@
             {% if day.is_future %}
             <span class="heatmap-cell level-future"></span>
             {% else %}
-            <form method="post" action="/habits/{{ uid }}/entries/{{ day.date }}/toggle" class="heatmap-cell-form">
+            <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form">
                 <button type="submit" class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></button>
             </form>
             {% endif %}

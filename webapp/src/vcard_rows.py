@@ -51,12 +51,23 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
 def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
     row: dict[str, Any] = {"uid": str(card.uid.value)}
     row["full_name"] = str(card.fn.value) if hasattr(card, "fn") else ""
-    if hasattr(card, "org"):
+    # `hasattr(card, "org")` (and the tel/email checks below) is only "this
+    # property line exists in the vCard," not "it has a real value" -- a
+    # CardDAV client can round-trip a card with an empty `ORG:;`/`TEL:`/
+    # `EMAIL:` line, in which case `.value` comes back `None` and the old
+    # unconditional `str(org_val)` stored the literal string "None" (not
+    # the value None) into the row -- which the web UI then dutifully
+    # rendered ("None" reads as text, not as "field is empty"). Found via a
+    # live contact showing a literal "None" in its list-row subtitle. Every
+    # branch below now checks the actual value is truthy before storing it,
+    # same as every other optional field here (adr/categories/note already
+    # did this implicitly via `or`/isinstance guards).
+    if hasattr(card, "org") and card.org.value:
         org_val = card.org.value
         row["org"] = org_val[0] if isinstance(org_val, list) else str(org_val)
-    if hasattr(card, "tel"):
+    if hasattr(card, "tel") and card.tel.value:
         row["phone"] = str(card.tel.value)
-    if hasattr(card, "email"):
+    if hasattr(card, "email") and card.email.value:
         row["email"] = str(card.email.value)
     if hasattr(card, "adr"):
         adr = card.adr.value

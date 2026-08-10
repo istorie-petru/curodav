@@ -1,0 +1,21 @@
+<!-- Data: {overdue_count, today_count, week_count, overdue_link, today_link,
+     week_link} -- see routers/dashboard.py::_render_at_a_glance. Three
+     number+label stat blocks, each a link to the matching filtered Tasks
+     view (?date_filter=overdue/today/this_week, plus &label=<name> when
+     this widget is scoped to a label page). Zero counts still render --
+     "nothing's overdue" is itself useful at-a-glance information, not an
+     empty state to hide. -->
+<div class="at-a-glance-row">
+    <a class="at-a-glance-stat" href="{{ data.overdue_link }}">
+        <div class="at-a-glance-number is-overdue">{{ data.overdue_count }}</div>
+        <div class="widget-section-label">Overdue</div>
+    </a>
+    <a class="at-a-glance-stat" href="{{ data.today_link }}">
+        <div class="at-a-glance-number">{{ data.today_count }}</div>
+        <div class="widget-section-label">Due today</div>
+    </a>
+    <a class="at-a-glance-stat" href="{{ data.week_link }}">
+        <div class="at-a-glance-number">{{ data.week_count }}</div>
+        <div class="widget-section-label">Due this week</div>
+    </a>
+</div>

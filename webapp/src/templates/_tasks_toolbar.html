@@ -1,0 +1,101 @@
+<!-- Phase 9b toolbar rework: one shared two-row toolbar for all three Tasks
+     views (Table/Timeline/Board), included by tasks_list.html/
+     tasks_timeline.html/tasks_board.html. Row 1 (always visible) stays
+     light -- title, the Table/Timeline/Board segmented switcher, search,
+     "New task" -- so it never overflows/wraps at a normal desktop width
+     (the screenshot-reported bug this rework fixes).
+
+     2026-08-08: the collapsible row-2 filter body is GONE. Direct
+     feedback ("make all the other filters on calendar, task, contact
+     page also fancy dropdown menus. remove the filters details button
+     and reintegrate these drop down menus into the topbar") -- the
+     date/status/priority `<select>`s and the label chips that used to
+     live behind the "Filters" button are now four inline fancy dropdowns
+     (templates/_filter_dropdown.html, the same .multiselect component
+     the widget builder's View/Range uses, single-select mode), sitting
+     right in row 1 next to search. Every dropdown's radios are
+     associated with the shared `#tasks-filters-form` via form="...", and
+     each pick submits immediately (onchange -> requestSubmit), exactly
+     like the `<select>`s did.
+
+     Context this partial expects (all optional except request/q):
+       q, active_date_filter, active_status_filter, active_priority_filter,
+       active_label, date_filters, date_filter_labels, status_filters,
+       status_filter_labels, priority_filters, priority_filter_labels,
+       task_label_names, active_filter_count, is_inbox (Table only),
+       sort/dir (Table only -- guarded with `is defined` so Timeline/Board,
+       which have no sort concept, don't need to pass them). -->
+{% set _df = active_date_filter | default('all') %}
+{% set _sf = active_status_filter | default('all') %}
+{% set _pf = active_priority_filter | default('all') %}
+{% set _lbl = active_label | default('') %}
+{% set _q = q | default('') %}
+{% set _has_sort = sort is defined %}
+
+{% macro _switcher_qs() %}date_filter={{ _df }}&status_filter={{ _sf }}&priority_filter={{ _pf }}{% if _q %}&q={{ _q|urlencode }}{% endif %}{% if _lbl %}&label={{ _lbl|urlencode }}{% endif %}{% endmacro %}
+
+<div class="toolbar top-app-bar toolbar-2row">
+    <div class="toolbar-row">
+        <h1 class="sr-only">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
+        <div class="segmented">
+            <a class="seg-btn {% if request.url.path == '/tasks' %}active{% endif %}" href="/tasks?{{ _switcher_qs() }}{% if _has_sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">Table</a>
+            <a class="seg-btn {% if request.url.path == '/tasks/timeline' %}active{% endif %}" href="/tasks/timeline?{{ _switcher_qs() }}">Timeline</a>
+            <a class="seg-btn {% if request.url.path == '/tasks/board' %}active{% endif %}" href="/tasks/board?{{ _switcher_qs() }}">Board</a>
+            <!-- 2026-08-08 ("add habits page as a view on tasks") -- a 4th
+                 tab, deliberately not carrying the date/status/priority/
+                 label querystring the other three share (see
+                 routers/tasks.py's habits_view -- none of those concepts
+                 apply to habit-labeled tasks), just its own optional
+                 search term. -->
+            <a class="seg-btn {% if request.url.path == '/tasks/habits' %}active{% endif %}" href="/tasks/habits{% if _q %}?q={{ _q|urlencode }}{% endif %}">Habits</a>
+        </div>
+        <div class="spacer"></div>
+        <form method="get" action="{{ request.url.path }}" class="filter-bar" id="tasks-filters-form">
+            <input type="search" name="q" placeholder="Search {{ 'habits' if request.url.path == '/tasks/habits' else 'tasks' }}..." value="{{ _q }}">
+            {% if _has_sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+        </form>
+        {% if request.url.path != '/tasks/habits' %}
+        {% set _lf_items = [{'value': '', 'name': 'All labels'}] %}
+        {% for _n in task_label_names %}{% set _ = _lf_items.append({'value': _n, 'name': _n}) %}{% endfor %}
+        {% set _df_items = [] %}
+        {% for _v in date_filters %}{% set _ = _df_items.append({'value': _v, 'name': date_filter_labels[_v]}) %}{% endfor %}
+        {% set _sf_items = [] %}
+        {% for _v in status_filters %}{% set _ = _sf_items.append({'value': _v, 'name': status_filter_labels[_v]}) %}{% endfor %}
+        {% set _pf_items = [] %}
+        {% for _v in priority_filters %}{% set _ = _pf_items.append({'value': _v, 'name': priority_filter_labels[_v]}) %}{% endfor %}
+
+        {% set fd_name = 'label' %}
+        {% set fd_label = 'Label' %}
+        {% set fd_items = _lf_items %}
+        {% set fd_selected = _lbl %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'tasks-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+
+        {% set fd_name = 'date_filter' %}
+        {% set fd_label = 'Date' %}
+        {% set fd_items = _df_items %}
+        {% set fd_selected = _df %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'tasks-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+
+        {% set fd_name = 'status_filter' %}
+        {% set fd_label = 'Status' %}
+        {% set fd_items = _sf_items %}
+        {% set fd_selected = _sf %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'tasks-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+
+        {% set fd_name = 'priority_filter' %}
+        {% set fd_label = 'Priority' %}
+        {% set fd_items = _pf_items %}
+        {% set fd_selected = _pf %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'tasks-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+        {% endif %}
+        <a class="btn primary" href="{{ '/tasks/new' if request.url.path != '/tasks/habits' else '/tasks/new?habit=1' }}" data-modal data-fab title="{{ 'New habit task' if request.url.path == '/tasks/habits' else 'New task' }}">{{ icon('plus') }} New</a>
+    </div>
+</div>

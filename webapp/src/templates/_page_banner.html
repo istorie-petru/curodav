@@ -1,0 +1,32 @@
+{# Shared dashboard-page cover banner (2026-08-09, routers/banners.py).
+   Home and every label/Space/Project page render this at the top of their
+   content. Variables supplied by dashboard_view / label_detail:
+     - banner: db.get_page_banner() dict, or None when the page has no
+       banner set. kind="upload" carries image_b64/image_type; kind="remote"
+       carries image_url (+ optional source_url/alt attribution).
+   This partial renders ONLY the cover image itself (nothing when the page
+   has no banner). The page's own action bar -- quick-add "New" / Edit mode
+   / Done / New widget / Add-Change banner -- lives alongside it in the
+   same .page-banner-wrap (dashboard.html / label_detail.html, 2026-08-10);
+   with a banner the buttons float bottom-right over this image, without
+   one they're a plain top bar. The overlay title (greeting / label name)
+   is also rendered by the pages, since it's page-specific. #}
+{% if banner %}
+<div class="page-banner">
+    {% if banner.kind == 'upload' %}
+    {# Uploaded banners are served via /banners/image (routers/banners.py)
+       instead of being embedded inline as a base64 data URI -- embedding a
+       multi-MB blob directly in the HTML was what made pages with a banner
+       load at 100ms+/2MB+ while identical pages without one were ~7ms. The
+       separate request keeps the page small and cacheable, and the ?v=
+       (banner.version, a content hash) makes the immutable-cached URL
+       change when the banner does. #}
+    <img src="/banners/image?scope={{ banner_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" loading="lazy">
+    {% else %}
+    {# referrerpolicy="no-referrer" keeps a hotlinked search image from
+       leaking the page URL to the host serving it; loading="lazy" because
+       a banner is below-the-fold on most devices. #}
+    <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer" loading="lazy">
+    {% endif %}
+</div>
+{% endif %}

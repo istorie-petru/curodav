@@ -7,9 +7,36 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, recurrence_expand
-from ..deps import get_bridge, get_db, templates
-from .calendars import get_hidden_calendars
+from .. import db, grid_layout, recurrence_expand, schedule
+from ..deps import _week_start, get_db, templates
+from . import dashboard as dashboard_router
+
+# Month-view per-day list: how many rows (all-day colored rows + timed
+# events + tasks, all in ONE flat list per day cell -- no more separate
+# bar lanes, see _month_grid) to show before the rest collapse into a
+# "+N more" overflow link to the day view. 2026-08-08 direct feedback
+# ("reduce the number of events/tasks shown in a cell", then "maximum of
+# four before adding a label") -- this list was previously unbounded and
+# could run a cell's content well past its own border, especially now
+# that the month grid can shrink to fit the viewport (see style.css's
+# .month-viewport height rule) instead of always having a full 90px+ of
+# vertical room to spill into.
+MONTH_MAX_VISIBLE_ITEMS = 4
+
+# Free-text fields (Location / Meeting URL / Recurrence) once got the
+# literal string "None" saved into them by a pre-2026-08-08 str(None) sync
+# bug (see db.py's init_schema self-heal) -- `"" or None` treats a truly
+# empty submission as empty, but "None" is a *truthy* string, so it sailed
+# straight through `location or None` and kept persisting. Normalize those
+# placeholder-ish values to a real None on the way in so they can't round-
+# trip any more, same for the task/contact forms' recurrence/org/etc.
+_NONE_LIKE = ("None", "Nothing", "none", "nothing")
+
+
+def _clean_field(value: str) -> str | None:
+    stripped = (value or "").strip()
+    return None if stripped in _NONE_LIKE else (stripped or None)
+
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 # Event CRUD is a separate, unprefixed router -- these are shared item
@@ -19,90 +46,288 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 events_router = APIRouter(tags=["events"])
 
 
-def _week_bounds(d: date) -> tuple[date, date]:
-    monday = d - timedelta(days=d.weekday())
-    return monday, monday + timedelta(days=6)
+def _week_bounds(d: date, week_start: str = "monday") -> tuple[date, date]:
+    """First/last day of the calendar week `d` falls in. `date.weekday()`
+    is always Monday=0..Sunday=6 regardless of preference -- `offset`
+    below is how many days back from `d` its own week's first day is,
+    computed against whichever day the "Week starts on" Settings >
+    General preference (deps.py's week_start()) names as day 0."""
+    first_weekday = 6 if week_start == "sunday" else 0  # Python's date.weekday(): Mon=0..Sun=6
+    offset = (d.weekday() - first_weekday) % 7
+    start = d - timedelta(days=offset)
+    return start, start + timedelta(days=6)
 
 
 def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
-def _color_map(conn) -> dict[str, str]:
-    return {c["uid"]: c["color"] for c in db.list_calendars(conn)}
+_TASK_STATUS_DOT_COLORS = {
+    "active": "blue",
+    "in_progress": "orange",
+    "waiting": "yellow",
+    "done": "green",
+    "archived": "gray",
+}
 
 
-def _annotate_colors(events: list[dict], color_map: dict[str, str]) -> list[dict]:
+def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
+    """The defining rule of a relation (2026-08-09): an event and a task
+    may only be linked when they carry at least one label in common --
+    "both have at least one label in common." Enforced by the picker (it
+    only offers already-shared candidates) and re-checked defensively by
+    the add-relation routes, since labels can change between render and
+    submit. Same helper as routers/tasks.py's, kept local like this
+    router's own _tags_list."""
+    return bool(set(a_tags or []) & set(b_tags or []))
+
+
+def _related_context(conn, event: dict | None) -> dict:
+    """Context keys every event view modal needs for its Relations card:
+    the tasks already linked to this event, plus the not-yet-linked tasks
+    sharing at least one label (the "link an existing task" picker pool).
+    `None` event -> empty lists, so templates never branch on the object
+    existing."""
+    if event is None:
+        return {"related_tasks": [], "linkable_tasks": []}
+    related = db.related_tasks_for_event(conn, event["uid"])
+    # The event card's relation rows use a status-colored identity dot, the
+    # same mapping task views render task status with (routers/tasks.py's
+    # STATUS_COLORS, duplicated here rather than imported -- the two
+    # routers share helpers in only one direction, and this is a tiny,
+    # table-driven lookup that never changes on its own).
+    for t in related:
+        t["status_color"] = _TASK_STATUS_DOT_COLORS.get(t["status"], "blue")
+    linked = {t["uid"] for t in related}
+    linkable = [
+        t for t in db.list_tasks_sharing_labels(conn, event.get("tags") or []) if t["uid"] not in linked
+    ]
+    return {"related_tasks": related, "linkable_tasks": linkable}
+
+
+def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
+    """Phase 6 -- the education "next lecture" badge strip for a Space-
+    filtered calendar. Phase 2 (label-space rework) dropped project_groups'
+    `kind='education'` column -- there's no dedicated "education space"
+    flag anymore, so this now just checks whether the filtered Space
+    (a generate_space=1 label) has any schedule classes among its child
+    labels' members at all; any other filter renders no badges. Phase 9b
+    toolbar rework: the calendar's filter is now a plain event label
+    filter (`label`, see month_view/week_view/day_view/agenda_view below),
+    not a dedicated Space/Project picker -- this still works unchanged
+    since a Space is just a label like any other, `label` here plays the
+    same role `group_uid` used to. Each entry: {"class": <schedule class
+    row>, "date": <next date>, "label": "today"|"tomorrow"|"in N days"}."""
+    from datetime import date as _date
+
+    if not label:
+        return []
+    cfg = db.get_label_config(conn, label)
+    if not cfg or not cfg.get("generate_space"):
+        return []
+    child_names = {c["name"] for c in db.list_child_labels(conn, label)}
+    classes = [c for c in db.list_schedule_classes(conn) if child_names & set(c.get("tags") or [])]
+    if not classes:
+        return []
+    settings = db.get_schedule_settings(conn)
+    holidays = db.list_holidays(conn)
+    today = _date.today()
+    badges = []
+    for cl in classes:
+        nxt = schedule.next_occurrence(cl, settings, holidays, today)
+        if nxt:
+            badges.append({"class": cl, "date": nxt, "label": schedule.next_label(nxt, today)})
+    return badges
+
+
+def _apply_event_label_filter(events: list[dict], label: str | None) -> list[dict]:
+    """Phase 9b toolbar rework -- Calendar's new event label filter,
+    replacing the dead Space/Project dropdowns (see _calendar_nav.html's
+    former project_groups/projects form). Same case-insensitive
+    single-label match every other label filter in this app uses."""
+    if not label:
+        return events
+    wanted = label.lower()
+    return [e for e in events if any((tg or "").lower() == wanted for tg in e.get("tags") or [])]
+
+
+_DEFAULT_EVENT_COLOR = "blue"
+
+
+def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
+    """Fixes a real, pre-existing bug found 2026-08-07 while reworking
+    Month view's multi-day bars: every calendar template (Month/Week/
+    Day/Agenda) has always read `e.calendar_color` to color-code events
+    (`cal-{{ e.calendar_color }}`, the same class convention labels use
+    for their own color pills) -- but nothing anywhere in db.py has ever
+    set that key on an event row. It's been silently undefined since the
+    label-space rework removed the old `calendars` table (which used to
+    be where an event's color genuinely lived, one color per calendar);
+    every event has been rendering with the class `cal-` (empty suffix,
+    no color) this whole time, on every calendar view, not just Month.
+
+    Fix, consistent with how color already works everywhere else in this
+    app post-rework (a label's own `color` field, e.g. `label_config`
+    rows, `cell-tag cal-{{ l.color }}` in labels_manage.html): an event's
+    color is its first label's color (alphabetical, for a stable pick
+    when an event carries more than one label), falling back to a fixed
+    neutral default for an unlabeled event. Mutates and returns the same
+    list (matches _apply_event_label_filter's sibling functions' style
+    of returning a list rather than annotating in place silently)."""
+    color_by_label: dict[str, str] = {}
     for e in events:
-        e["calendar_color"] = color_map.get(e.get("calendar_path"), "blue")
+        tags = sorted(e.get("tags") or [], key=str.lower)
+        color = _DEFAULT_EVENT_COLOR
+        for name in tags:
+            if name not in color_by_label:
+                # effective_label_config, not get_label_config -- fills in
+                # the same 'blue' default a label with no config row would
+                # show on its own manage page, so an event's color matches
+                # what that label looks like everywhere else in the app.
+                cfg = db.effective_label_config(conn, name)
+                color_by_label[name] = cfg.get("color") or _DEFAULT_EVENT_COLOR
+            color = color_by_label[name]
+            break
+        e["calendar_color"] = color
     return events
 
 
-def _project_calendar_uids(conn, project_uid: str | None, group_uid: str | None) -> set[str] | None:
-    """Return the set of calendar UIDs that satisfy the project/space filter,
-    or None when no filter is active (caller should not filter at all).
-    Only one filter is expected to be set at a time from the UI, but both are
-    supported; project_uid takes priority when both arrive together."""
-    if not project_uid and not group_uid:
+def _apply_task_label_filter(tasks: list[dict], label: str | None) -> list[dict]:
+    """Same as _apply_event_label_filter, for the task chips Day/Week/
+    Month/Agenda also show alongside events (object_type='task' labels)."""
+    if not label:
+        return tasks
+    wanted = label.lower()
+    return [t for t in tasks if any((tg or "").lower() == wanted for tg in t.get("tags") or [])]
+
+
+def _is_bar_worthy(e: dict) -> bool:
+    """2026-08-07 follow-up to the Month-view bar rework: not every event
+    belongs in the bar system. Apple/Google both draw a hard line here --
+    an all-day event or a genuine multi-day span gets a colored bar; a
+    plain timed event on a single day (a 2-hour meeting) renders as
+    compact text with a time + color dot instead, the same visual weight
+    this app's tasks already have. The first version of this rework put
+    *every* event through the old bar-lane layout regardless, which is
+    why a single "9am" timed event was showing up as a full-width filled
+    pill getting its title truncated to "9" -- there was no length/weight
+    distinction between a week-long trip and an hour-long call.
+
+    Bar-worthy: `all_day` is set. Full stop -- a *timed* event that
+    happens to span multiple days (e.g. an overnight flight, or a
+    conference with specific 9am-5pm times across three days) is still
+    text, not a bar, matching direct feedback: "color background should
+    be only all day and multi day all day. The rest are text only."
+    2026-08-07's first version of this function also treated any multi-
+    day date range as bar-worthy regardless of the all_day flag -- that
+    was wrong per this feedback and has been narrowed to just the
+    all_day check."""
+    return bool(e.get("all_day"))
+
+
+def _event_date_range(e: dict) -> tuple[date, date] | None:
+    """(start_date, end_date), both inclusive, for laying an event out on
+    the Month grid -- `end_at` is stored inclusive-of-last-day here (see
+    `new_event_form`'s all-day prefill: `f"{end_date}T23:59"`, not next-day
+    midnight), so no exclusive/inclusive adjustment is needed beyond
+    slicing the date portion off each timestamp. Falls back to a same-day
+    range when `end_at` is missing or (defensively) earlier than
+    `start_at`."""
+    start_raw = e.get("start_at")
+    if not start_raw:
         return None
-    calendars = db.list_calendars(conn)
-    if project_uid:
-        return {c["uid"] for c in calendars if c.get("project_uid") == project_uid}
-    # Space (group_uid) filter: collect project UIDs for this space first.
-    group_project_uids = {
-        p["uid"] for p in db.list_projects(conn, include_archived=False)
-        if p.get("group_uid") == group_uid
-    }
-    return {c["uid"] for c in calendars if c.get("project_uid") in group_project_uids}
+    start_d = date.fromisoformat(start_raw[:10])
+    end_raw = e.get("end_at")
+    end_d = date.fromisoformat(end_raw[:10]) if end_raw else start_d
+    if end_d < start_d:
+        end_d = start_d
+    return start_d, end_d
 
 
-def _project_list_uids(conn, project_uid: str | None, group_uid: str | None) -> set[str] | None:
-    """Same logic as _project_calendar_uids but for task_lists, used to filter
-    tasks shown alongside events in every calendar view."""
-    if not project_uid and not group_uid:
-        return None
-    task_lists = db.list_task_lists(conn)
-    if project_uid:
-        return {l["uid"] for l in task_lists if l.get("project_uid") == project_uid}
-    group_project_uids = {
-        p["uid"] for p in db.list_projects(conn, include_archived=False)
-        if p.get("group_uid") == group_uid
-    }
-    return {l["uid"] for l in task_lists if l.get("project_uid") in group_project_uids}
+def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
+    # 2026-08-08 rework: every day cell is a single flat list, no more
+    # lane-packed bars layered on top of a separate quiet-text list --
+    # that layering is exactly what let the colored all-day rows overlap
+    # the text events/tasks. Now all three types live in one list where
+    # each item is tagged with its `kind` so the template can render
+    # all-day events as colored rows, timed events as time+dot text, and
+    # tasks as square+title text, with no overlap between them.
+    # Everything past MONTH_MAX_VISIBLE_ITEMS folds into the "+N more"
+    # overflow link that directs to the day view.
+    all_day_events = [e for e in events if _is_bar_worthy(e)]
+    timed_events = [e for e in events if not _is_bar_worthy(e)]
 
-
-def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict]) -> list[list[dict]]:
-    events_by_date: dict[str, list[dict]] = {}
-    for e in events:
-        if not e.get("start_at"):
+    # Multi-day events (all-day or timed) repeat on every day they touch,
+    # not just their start date -- same "repeated entry per day" behavior
+    # Apple/Google use, and the fix for the original "event only showed on
+    # its start day" bug this view's rework started from.
+    all_day_by_date: dict[str, list[dict]] = {}
+    for e in all_day_events:
+        rng = _event_date_range(e)
+        if rng is None:
             continue
-        events_by_date.setdefault(e["start_at"][:10], []).append(e)
+        start_d, end_d = rng
+        d = start_d
+        while d <= end_d:
+            all_day_by_date.setdefault(d.isoformat(), []).append(e)
+            d += timedelta(days=1)
+
+    timed_by_date: dict[str, list[dict]] = {}
+    for e in timed_events:
+        rng = _event_date_range(e)
+        if rng is None:
+            continue
+        start_d, end_d = rng
+        d = start_d
+        while d <= end_d:
+            timed_by_date.setdefault(d.isoformat(), []).append(e)
+            d += timedelta(days=1)
+    for day_events in timed_by_date.values():
+        day_events.sort(key=lambda e: e.get("start_at") or "")
+
     tasks_by_date: dict[str, list[dict]] = {}
     for t in tasks:
         if not t.get("due_at"):
             continue
         tasks_by_date.setdefault(t["due_at"][:10], []).append(t)
 
-    cal = py_calendar.Calendar(firstweekday=0)
+    # Python's calendar module: firstweekday=0 is Monday, 6 is Sunday --
+    # same "Week starts on" preference _week_bounds above reads.
+    cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
     today = date.today()
     weeks = []
     for week in cal.monthdatescalendar(year, month):
         week_days = []
         for day in week:
             key = day.isoformat()
+
+            # One flat list: all-day colored rows first, then timed events
+            # by time, then tasks -- same visual priority the cell shows
+            # top-to-bottom, and the count that feeds the "+N more" link.
+            # Key is `rows`, NOT `items` -- a dict key named `items` would
+            # collide with Python's own `dict.items` method in Jinja (the
+            # template's `day.items` would resolve to the bound method and
+            # crash iterating over it).
+            rows = []
+            for e in all_day_by_date.get(key, []):
+                rows.append({"kind": "all_day", "event": e})
+            for e in timed_by_date.get(key, []):
+                rows.append({"kind": "event", "event": e})
+            for t in tasks_by_date.get(key, []):
+                rows.append({"kind": "task", "task": t})
+
+            visible = rows[:MONTH_MAX_VISIBLE_ITEMS]
             week_days.append(
                 {
                     "date": day,
                     "iso": key,
                     "in_month": day.month == month,
                     "is_today": day == today,
-                    "events": sorted(
-                        events_by_date.get(key, []), key=lambda e: e.get("start_at") or ""
-                    ),
-                    "tasks": tasks_by_date.get(key, []),
+                    "rows": visible,
+                    "overflow_count": len(rows) - len(visible),
                 }
             )
-        weeks.append(week_days)
+        weeks.append({"days": week_days})
     return weeks
 
 
@@ -111,41 +336,44 @@ def month_view(
     request: Request,
     year: int | None = None,
     month: int | None = None,
-    project_uid: str | None = None,
-    group_uid: str | None = None,
+    label: str | None = None,
     conn=Depends(get_db),
 ):
     today = date.today()
     year = year or today.year
     month = month or today.month
-    hidden = get_hidden_calendars(request)
+    week_start = _week_start(request)
 
     # Expand across the visible 6-week grid, not just the calendar month,
     # so recurring events show correctly on the leading/trailing days from
     # the adjacent months that the grid always displays a few of.
     grid_start = date(year, month, 1) - timedelta(days=6)
     grid_end = date(year, month, 28) + timedelta(days=13)
-    events = db.list_events(
-        conn, start=grid_start.isoformat(), end=grid_end.isoformat() + "T23:59:59",
-        exclude_calendars=list(hidden),
-    )
+    events = db.list_events(conn, start=grid_start.isoformat(), end=grid_end.isoformat() + "T23:59:59")
     events = recurrence_expand.expand_events(events, grid_start, grid_end)
-    events = _annotate_colors(events, _color_map(conn))
+    events = _apply_event_label_filter(events, label)
+    events = _annotate_calendar_colors(conn, events)
 
-    # Project/space filter -- applied after calendar-visibility so the two
-    # systems stay independent. None means "no filter, show everything."
-    cal_uids = _project_calendar_uids(conn, project_uid, group_uid)
-    if cal_uids is not None:
-        events = [e for e in events if e.get("calendar_path") in cal_uids]
-    list_uids = _project_list_uids(conn, project_uid, group_uid)
+    # Phase 9b toolbar rework: the dead Space/Project dropdowns
+    # (project_uid/group_uid) are gone -- `label` is the one real filter
+    # now, applied to both events and the all-day task chips this page
+    # also shows (see db.py's Phase 1 comments for why there's only ever
+    # one universal pool of each to filter in the first place).
     tasks = db.list_tasks(conn)
-    if list_uids is not None:
-        tasks = [t for t in tasks if t.get("list_path") in list_uids]
+    tasks = _apply_task_label_filter(tasks, label)
 
-    weeks = _month_grid(year, month, events, tasks)
+    weeks = _month_grid(year, month, events, tasks, week_start)
 
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
+
+    # Weekday header row (calendar_month.html) -- 2026-08-08: was
+    # hardcoded Mon..Sun; now rotated to start on whichever day "Week
+    # starts on" (Settings > General) names, so the header always
+    # matches the actual column order _month_grid just built above.
+    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    if week_start == "sunday":
+        weekday_names = weekday_names[6:] + weekday_names[:6]
 
     return templates.TemplateResponse(
         "calendar_month.html",
@@ -155,6 +383,7 @@ def month_view(
             "calendar_view": "month",
             "today_iso": today.isoformat(),
             "weeks": weeks,
+            "weekday_names": weekday_names,
             "year": year,
             "month": month,
             "month_name": py_calendar.month_name[month],
@@ -162,12 +391,9 @@ def month_view(
             "prev_month": prev_month,
             "next_year": next_year,
             "next_month": next_month,
-            "calendars": db.list_calendars(conn),
-            "hidden": hidden,
-            "projects": db.list_projects(conn, include_archived=False),
-            "project_groups": db.list_project_groups(conn),
-            "active_project_uid": project_uid or "",
-            "active_group_uid": group_uid or "",
+            "event_label_names": db.list_event_label_names(conn),
+            "active_label": label or "",
+            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -176,47 +402,49 @@ def month_view(
 def week_view(
     request: Request,
     date_: str | None = None,
-    project_uid: str | None = None,
-    group_uid: str | None = None,
+    label: str | None = None,
     conn=Depends(get_db),
 ):
     anchor = date.fromisoformat(date_) if date_ else date.today()
-    monday, sunday = _week_bounds(anchor)
-    hidden = get_hidden_calendars(request)
+    week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
 
     # `end` must be an end-of-day timestamp, not a bare date -- db.list_events
     # compares these as plain strings, and "2026-09-02T09:00:00" sorts
     # *after* "2026-09-02" lexicographically, so a bare end-date would
     # silently exclude every timed event on the range's last calendar day.
-    events = db.list_events(
-        conn, start=monday.isoformat(), end=sunday.isoformat() + "T23:59:59",
-        exclude_calendars=list(hidden),
-    )
-    events = recurrence_expand.expand_events(events, monday, sunday)
-    events = _annotate_colors(events, _color_map(conn))
+    events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
+    events = recurrence_expand.expand_events(events, week_start_date, week_end_date)
+    events = _apply_event_label_filter(events, label)
+    events = _annotate_calendar_colors(conn, events)
 
-    cal_uids = _project_calendar_uids(conn, project_uid, group_uid)
-    if cal_uids is not None:
-        events = [e for e in events if e.get("calendar_path") in cal_uids]
-    list_uids = _project_list_uids(conn, project_uid, group_uid)
     tasks = db.list_tasks(conn)
-    if list_uids is not None:
-        tasks = [t for t in tasks if t.get("list_path") in list_uids]
+    tasks = _apply_task_label_filter(tasks, label)
 
     days = []
     for i in range(7):
-        d = monday + timedelta(days=i)
+        d = week_start_date + timedelta(days=i)
         key = d.isoformat()
         day_events = [e for e in events if e.get("start_at", "").startswith(key)]
-        all_day = [e for e in day_events if e.get("all_day")]
         timed = grid_layout.layout_day(day_events)
         day_tasks = [t for t in tasks if (t.get("due_at") or "").startswith(key)]
+        # All-day events repeat on every day they span, not just their
+        # start date -- the same "repeated entry per day" behavior Month's
+        # _month_grid already has (a multi-day all-day trip should fill
+        # every day's strip, not just the first), so the strip and the
+        # month view agree on which days an all-day event touches.
+        day_all_day = []
+        for e in events:
+            if not e.get("all_day"):
+                continue
+            rng = _event_date_range(e)
+            if rng and rng[0] <= d <= rng[1]:
+                day_all_day.append(e)
         days.append(
             {
                 "date": d,
                 "iso": key,
                 "is_today": d == date.today(),
-                "all_day": all_day,
+                "all_day": day_all_day,
                 "timed": timed,
                 "tasks": day_tasks,
             }
@@ -232,16 +460,19 @@ def week_view(
             "days": days,
             "hours": list(range(grid_layout.GRID_HOURS)),
             "px_per_hour": grid_layout.PX_PER_HOUR,
-            "monday": monday,
-            "sunday": sunday,
-            "prev_week": (monday - timedelta(days=7)).isoformat(),
-            "next_week": (monday + timedelta(days=7)).isoformat(),
-            "calendars": db.list_calendars(conn),
-            "hidden": hidden,
-            "projects": db.list_projects(conn, include_archived=False),
-            "project_groups": db.list_project_groups(conn),
-            "active_project_uid": project_uid or "",
-            "active_group_uid": group_uid or "",
+            # Context keys kept as "monday"/"sunday" for calendar_week.html
+            # (unchanged template contract) even though the actual first
+            # day of the displayed week is now whichever "Week starts on"
+            # (Settings > General) names -- these are just "first/last
+            # displayed day of the week," same as before this preference
+            # existed.
+            "monday": week_start_date,
+            "sunday": week_end_date,
+            "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
+            "next_week": (week_start_date + timedelta(days=7)).isoformat(),
+            "event_label_names": db.list_event_label_names(conn),
+            "active_label": label or "",
+            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -250,28 +481,39 @@ def week_view(
 def day_view(
     day: str,
     request: Request,
-    project_uid: str | None = None,
-    group_uid: str | None = None,
+    label: str | None = None,
     conn=Depends(get_db),
 ):
+    """2026-08-08: Day's 24-hour grid now fills the whole viewport and
+    scrolls internally, the same single-pane layout Week uses (direct
+    feedback: "make day-agenda-split calendar-viewport scrollable like the
+    calendar week view. Remove the agenda at the bottom of the calendar
+    day view") -- the old Day+Agenda side-by-side split is gone along with
+    _build_agenda_days (the separate rolling-30-day list that used to sit
+    beside it). GET /calendar/agenda (agenda_view, below) still redirects
+    here."""
     d = date.fromisoformat(day)
-    hidden = get_hidden_calendars(request)
-    events = db.list_events(conn, start=day, end=day + "T23:59:59", exclude_calendars=list(hidden))
+    events = db.list_events(conn, start=day, end=day + "T23:59:59")
     events = recurrence_expand.expand_events(events, d, d)
-    events = [e for e in events if e.get("start_at", "").startswith(day)]
-    events = _annotate_colors(events, _color_map(conn))
+    events = _apply_event_label_filter(events, label)
+    events = _annotate_calendar_colors(conn, events)
 
-    cal_uids = _project_calendar_uids(conn, project_uid, group_uid)
-    if cal_uids is not None:
-        events = [e for e in events if e.get("calendar_path") in cal_uids]
-    list_uids = _project_list_uids(conn, project_uid, group_uid)
     all_tasks = db.list_tasks(conn)
-    if list_uids is not None:
-        all_tasks = [t for t in all_tasks if t.get("list_path") in list_uids]
     tasks = [t for t in all_tasks if (t.get("due_at") or "").startswith(day)]
+    tasks = _apply_task_label_filter(tasks, label)
 
-    all_day = [e for e in events if e.get("all_day")]
-    timed = grid_layout.layout_day(events)
+    # All-day events repeat on every day they span (same as _month_grid) --
+    # a multi-day all-day event that started yesterday must still fill
+    # today's strip, so this runs over the full overlap set BEFORE the
+    # start-day filter below (which is fine to keep for the hour grid:
+    # timed events are positioned off their own start_at, so a timed event
+    # that merely overlaps today without starting today has no grid slot).
+    all_day = [
+        e for e in events
+        if e.get("all_day") and (rng := _event_date_range(e)) and rng[0] <= d <= rng[1]
+    ]
+    day_events = [e for e in events if e.get("start_at", "").startswith(day)]
+    timed = grid_layout.layout_day(day_events)
 
     return templates.TemplateResponse(
         "calendar_day.html",
@@ -288,86 +530,27 @@ def day_view(
             "tasks": tasks,
             "hours": list(range(grid_layout.GRID_HOURS)),
             "px_per_hour": grid_layout.PX_PER_HOUR,
-            "calendars": db.list_calendars(conn),
-            "hidden": hidden,
-            "projects": db.list_projects(conn, include_archived=False),
-            "project_groups": db.list_project_groups(conn),
-            "active_project_uid": project_uid or "",
-            "active_group_uid": group_uid or "",
+            "event_label_names": db.list_event_label_names(conn),
+            "active_label": label or "",
+            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
 
 @router.get("/agenda")
-def agenda_view(
-    request: Request,
-    project_uid: str | None = None,
-    group_uid: str | None = None,
-    conn=Depends(get_db),
-):
-    today = date.today()
-    window_end = today + timedelta(days=30)
-    hidden = get_hidden_calendars(request)
-
-    events = db.list_events(
-        conn, start=today.isoformat(), end=window_end.isoformat() + "T23:59:59",
-        exclude_calendars=list(hidden),
-    )
-    events = recurrence_expand.expand_events(events, today, window_end)
-    events = _annotate_colors(events, _color_map(conn))
-
-    cal_uids = _project_calendar_uids(conn, project_uid, group_uid)
-    if cal_uids is not None:
-        events = [e for e in events if e.get("calendar_path") in cal_uids]
-    list_uids = _project_list_uids(conn, project_uid, group_uid)
-    all_tasks = db.list_tasks(conn)
-    if list_uids is not None:
-        all_tasks = [t for t in all_tasks if t.get("list_path") in list_uids]
-    tasks = [
-        t
-        for t in all_tasks
-        if t.get("due_at") and today.isoformat() <= t["due_at"][:10] <= window_end.isoformat()
-    ]
-
-    by_day: dict[str, dict[str, list]] = {}
-    for e in events:
-        key = (e.get("start_at") or "")[:10]
-        if not key:
-            continue
-        by_day.setdefault(key, {"events": [], "tasks": []})["events"].append(e)
-    for t in tasks:
-        key = t["due_at"][:10]
-        by_day.setdefault(key, {"events": [], "tasks": []})["tasks"].append(t)
-
-    days = []
-    for key in sorted(by_day.keys()):
-        days.append(
-            {
-                "date": date.fromisoformat(key),
-                "iso": key,
-                "is_today": key == today.isoformat(),
-                "events": sorted(by_day[key]["events"], key=lambda e: e.get("start_at") or ""),
-                "tasks": by_day[key]["tasks"],
-            }
-        )
-
-    return templates.TemplateResponse(
-        "calendar_agenda.html",
-        {
-            "request": request,
-            "active_tab": "calendar",
-            "calendar_view": "agenda",
-            "today_iso": today.isoformat(),
-            "days": days,
-            "window_end": window_end,
-            "calendars": db.list_calendars(conn),
-            "hidden": hidden,
-            "projects": db.list_projects(conn, include_archived=False),
-            "project_groups": db.list_project_groups(conn),
-            "active_project_uid": project_uid or "",
-            "active_group_uid": group_uid or "",
-        },
-    )
+def agenda_view(label: str | None = None):
+    """2026-08-08: Agenda is no longer its own page -- Day and Agenda were
+    merged into one view, and then (direct feedback) Day became the sole
+    single-pane grid and the merged Agenda list was removed entirely (see
+    day_view above, calendar_day.html). This route stays registered as a
+    redirect (matching the same pattern GET /export uses after Export &
+    backup was inlined into Settings > Advanced) so an old bookmark/link
+    to /calendar/agenda still lands somewhere real."""
+    today_iso = date.today().isoformat()
+    url = f"/calendar/day/{today_iso}"
+    if label:
+        url += f"?label={label}"
+    return RedirectResponse(url=url, status_code=303)
 
 
 @events_router.get("/events/new")
@@ -394,6 +577,7 @@ def new_event_form(
     else:
         prefill_start = f"{date}T{start_time}" if date and start_time else (f"{date}T09:00" if date else None)
         prefill_end = f"{date}T{end_time}" if date and end_time else None
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "event_form.html",
         {
@@ -403,8 +587,8 @@ def new_event_form(
             "prefill_start": prefill_start,
             "prefill_end": prefill_end,
             "prefill_all_day": prefill_all_day,
-            "calendars": db.list_calendars(conn),
-            "tag_names": db.list_tag_names_in_use(conn),
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
         },
     )
 
@@ -419,12 +603,12 @@ def create_event(
     location: str = Form(""),
     meeting_url: str = Form(""),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
-    calendar_uid: str = Form(db.DEFAULT_CALENDAR_UID),
-    bridge=Depends(get_bridge),
     conn=Depends(get_db),
 ):
+    tags = dashboard_router._combine_tags(tags, tags_labels)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
@@ -433,33 +617,60 @@ def create_event(
         "start_at": start_at,
         "end_at": end_at or None,
         "all_day": bool(all_day),
-        "location": location or None,
-        "meeting_url": meeting_url or None,
+        "location": _clean_field(location),
+        "meeting_url": _clean_field(meeting_url),
         "status": "active",
         "tags": _tags_list(tags),
-        "recurrence": recurrence or None,
+        "recurrence": _clean_field(recurrence),
         "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
-        "calendar_path": calendar_uid,
         "created_at": now,
         "updated_at": now,
     }
-    saved = bridge.save_event_row(row)
-    db.upsert_event(conn, saved)
-    db.ensure_tags_registered(conn, row["tags"])
+    db.upsert_event(conn, row)
     return RedirectResponse(url="/calendar", status_code=303)
+
+
+@events_router.get("/events/{uid}")
+def event_detail(uid: str, request: Request, conn=Depends(get_db)):
+    """2026-08-08 direct feedback ("add for events a way like for tasks to
+    only view the event before editing it") -- events previously had no
+    read-only view at all, every event link (Calendar's own Month/Week/
+    Day/Agenda grids, every dashboard widget that lists events) went
+    straight to /events/{uid}/edit. Mirrors task_detail.html's shape:
+    #modal-target wrapper (same "modal is progressive enhancement over a
+    real page" pattern), a compact meta grid, an Edit button leading to
+    the real edit form, Delete at the bottom -- see event_detail.html.
+    /events/{uid}/edit itself is unchanged, still reachable directly (a
+    bookmark, or this page's own Edit button)."""
+    event = db.get_event(conn, uid)
+    if event:
+        _annotate_calendar_colors(conn, [event])
+    return templates.TemplateResponse(
+        "event_detail.html",
+        {
+            "request": request,
+            "active_tab": "calendar",
+            "event": event,
+            # Relations card (2026-08-09) -- see _related_context above.
+            **_related_context(conn, event),
+        },
+    )
 
 
 @events_router.get("/events/{uid}/edit")
 def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
     event = db.get_event(conn, uid)
+    tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "event_form.html",
         {
             "request": request,
             "active_tab": "calendar",
             "event": event,
-            "calendars": db.list_calendars(conn),
-            "tag_names": db.list_tag_names_in_use(conn),
+            "tag_names": tag_names,
+            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            # Relations card (2026-08-09) -- see _related_context above.
+            **_related_context(conn, event),
         },
     )
 
@@ -475,15 +686,13 @@ def update_event(
     location: str = Form(""),
     meeting_url: str = Form(""),
     tags: str = Form(""),
+    tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
-    calendar_uid: str = Form(""),
-    bridge=Depends(get_bridge),
     conn=Depends(get_db),
 ):
+    tags = dashboard_router._combine_tags(tags, tags_labels)
     existing = db.get_event(conn, uid) or {}
-    old_calendar_path = existing.get("calendar_path", db.DEFAULT_CALENDAR_UID)
-    new_calendar_path = calendar_uid or old_calendar_path
     row = dict(existing)
     row.update(
         {
@@ -493,39 +702,105 @@ def update_event(
             "start_at": start_at,
             "end_at": end_at or None,
             "all_day": bool(all_day),
-            "location": location or None,
-            "meeting_url": meeting_url or None,
+            "location": _clean_field(location),
+            "meeting_url": _clean_field(meeting_url),
             "tags": _tags_list(tags),
-            "recurrence": recurrence or None,
+            "recurrence": _clean_field(recurrence),
             "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
-            "calendar_path": new_calendar_path,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    if new_calendar_path != old_calendar_path:
-        # Moving between calendars = different CalDAV collection = delete
-        # from the old one, create fresh in the new one (same uid, so the
-        # cache row and any external references by uid still make sense).
-        bridge.delete_event(uid, old_calendar_path)
-    saved = bridge.save_event_row(row)
-    db.upsert_event(conn, saved)
-    db.ensure_tags_registered(conn, row["tags"])
+    db.upsert_event(conn, row)
     return RedirectResponse(url="/calendar", status_code=303)
 
 
 @events_router.post("/events/{uid}/delete")
-def delete_event(uid: str, bridge=Depends(get_bridge), conn=Depends(get_db)):
-    existing = db.get_event(conn, uid)
-    calendar_path = existing.get("calendar_path", db.DEFAULT_CALENDAR_UID) if existing else db.DEFAULT_CALENDAR_UID
-    bridge.delete_event(uid, calendar_path)
+def delete_event(uid: str, conn=Depends(get_db)):
     db.delete_event(conn, uid)
     return RedirectResponse(url="/calendar", status_code=303)
 
 
-@events_router.post("/events/{uid}/reschedule")
-async def reschedule_event(
-    uid: str, request: Request, bridge=Depends(get_bridge), conn=Depends(get_db)
+# --------------------------------------------------------------------- #
+# Relations -- 2026-08-09, event<->task associative links ("a relation can
+# link an event with existing/new tasks that both have at least one label
+# in common"; see the event_task_relations comment in db.py). The event
+# side of the feature: an event's Relations card links it to tasks -- either
+# an existing task (the picker only offers ones already sharing a label,
+# and _shares_label re-checks defensively) or a brand-new task created
+# inline that inherits this event's labels, which guarantees the rule. Both
+# routes redirect back to the event's own detail page so the card's
+# data-modal-keep-open forms re-render in place (modal.js).
+# --------------------------------------------------------------------- #
+
+
+def _create_related_task(conn, event: dict, title: str) -> str | None:
+    """Create a new task related to `event` from the Relations card's
+    "＋ New task…" path. Inherits the event's labels (guaranteeing the
+    shared-label rule), starts today (the same default create_task applies
+    when a task form leaves start_at blank), status active -- the user
+    edits due date/priority/labels later. Returns None (no task created)
+    when the event has no labels at all, since no shared-label link could
+    ever hold."""
+    event_tags = event.get("tags") or []
+    if not event_tags:
+        return None
+    title = (title or "").strip()
+    if not title:
+        return None
+    now = datetime.now(timezone.utc).isoformat()
+    task = {
+        "uid": str(uuid.uuid4()),
+        "title": title,
+        "description": "",
+        "start_at": date.today().isoformat(),
+        "due_at": None,
+        "priority": None,
+        "status": "active",
+        "progress": 0.0,
+        "parent_uid": None,
+        "recurrence": None,
+        "tags": event_tags,
+        "target_per_day": 1.0,
+        "created_at": now,
+        "updated_at": now,
+    }
+    db.upsert_task(conn, task)
+    return task["uid"]
+
+
+@events_router.post("/events/{uid}/relations")
+def add_event_relation(
+    uid: str,
+    target_uid: str = Form(""),
+    new_title: str = Form(""),
+    conn=Depends(get_db),
 ):
+    event = db.get_event(conn, uid)
+    if event is None:
+        return RedirectResponse(url="/calendar", status_code=303)
+    task_uid = None
+    if target_uid == "__new__":
+        task_uid = _create_related_task(conn, event, new_title)
+    elif target_uid:
+        task = db.get_task(conn, target_uid)
+        if task and _shares_label(event.get("tags") or [], task.get("tags") or []):
+            task_uid = task["uid"]
+    if task_uid:
+        db.add_event_task_relation(conn, uid, task_uid)
+    return RedirectResponse(url=f"/events/{uid}", status_code=303)
+
+
+@events_router.post("/events/{uid}/relations/remove")
+def remove_event_relation(uid: str, task_uid: str = Form(...), conn=Depends(get_db)):
+    """Unlink a task from an event's Relations card. Graph link only -- the
+    task itself is left entirely alone (relations are associative, not
+    ownership; no cascade, matching delete_event/delete_task's cleanup)."""
+    db.remove_event_task_relation(conn, uid, task_uid)
+    return RedirectResponse(url=f"/events/{uid}", status_code=303)
+
+
+@events_router.post("/events/{uid}/reschedule")
+async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     """JSON endpoint for the Week/Day grid's drag-to-move / drag-to-resize
     (see static/calendar.js) -- only touches start_at/end_at, leaves every
     other field alone. A plain form POST to /events/{uid} would also work
@@ -539,7 +814,5 @@ async def reschedule_event(
     row["start_at"] = payload["start_at"]
     row["end_at"] = payload.get("end_at")
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    saved = bridge.save_event_row(row)
-    db.upsert_event(conn, saved)
-    db.ensure_tags_registered(conn, row["tags"])
-    return JSONResponse({"ok": True, "start_at": saved.get("start_at"), "end_at": saved.get("end_at")})
+    db.upsert_event(conn, row)
+    return JSONResponse({"ok": True, "start_at": row.get("start_at"), "end_at": row.get("end_at")})

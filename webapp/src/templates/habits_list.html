@@ -2,9 +2,9 @@
 {% from "_habit_heatmap.html" import heatmap %}
 {% block title %}Habits{% endblock %}
 {% block content %}
-{% include "_settings_nav.html" %}
+{% include "_settings_breadcrumb.html" with context %}
 <div class="toolbar top-app-bar">
-    <h1 style="margin:0">Habits</h1>
+    <h1 class="sr-only">Habits</h1>
     <div class="spacer"></div>
     <a class="btn primary" href="/habits/new" data-fab>{{ icon('plus') }} New habit</a>
 </div>
@@ -14,7 +14,10 @@
 <div class="card habit-card">
     <div class="habit-card-header">
         <a href="/habits/{{ card.habit.uid }}" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px">
-            <span class="cell-tag tag-{{ card.habit.color }}">{% if card.habit.icon %}{{ card.habit.icon }} {% endif %}{{ card.habit.name }}</span>
+            <!-- habit.icon is now a sprite icon name (modal-input-design
+                 Phase C swatch-grid revival), not a free-typed emoji glyph
+                 -- render it the same way every other icon() call does. -->
+            <span class="cell-tag tag-{{ card.habit.color }}">{% if card.habit.icon %}{{ icon(card.habit.icon, 'icon-sm') }} {% endif %}{{ card.habit.name }}</span>
         </a>
         <div class="spacer"></div>
         <span class="habit-streaks">

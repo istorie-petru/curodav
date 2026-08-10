@@ -1,96 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Tasks{% endblock %}
 {% block content %}
-{# Project/space filter helpers -- defined at block scope so they're
-   available in the sort_link macro, view switcher, and empty-state links
-   below as well as the filter dropdowns above. Use default([]) so this
-   template is safe when rendered from contexts (inbox_tasks) that don't
-   pass these keys. #}
-{% set _pg = project_groups | default([]) %}
-{% set _pr = projects | default([]) %}
+{# active_group_uid/active_project_uid helpers -- defined at block scope so
+   they're available in the sort_link macro and empty-state links below.
+   Always empty today: nothing populates these query params since the dead
+   Space/Project filter dropdowns were removed 2026-08-07. The real
+   label-based filter Phase 9b added uses a separate `label` param/
+   `active_label` context key instead (see _tasks_toolbar.html) -- these
+   two are kept as plain default('') reads rather than deleted outright
+   since the URLs below still harmlessly reference them, not because
+   they're still load-bearing. #}
 {% set _aguid = active_group_uid | default('') %}
 {% set _apuid = active_project_uid | default('') %}
-<div class="toolbar top-app-bar">
-    <h1 style="margin:0">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
-    <div class="spacer"></div>
-    <!-- Reworked 2026-08-01: date/status/priority used to be one combined
-         "smart filter" dropdown (a fixed list of presets like "Today" or
-         "High Priority") -- replaced with three independent selects that
-         AND together, so e.g. "this week's high-priority waiting tasks"
-         is expressible without a new preset. See
-         routers/tasks.py::DATE_FILTERS/STATUS_FILTERS/PRIORITY_FILTERS. -->
-    <form method="get" action="/tasks" class="filter-bar">
-        <input type="search" name="q" placeholder="Search tasks..." value="{{ q }}">
-        <select name="list_path" class="filter-select" onchange="this.form.submit()" aria-label="Filter by list">
-            <option value="">All lists</option>
-            {% for l in task_lists %}
-            <option value="{{ l.uid }}" {% if active_list == l.uid %}selected{% endif %}>{{ l.name }}</option>
-            {% endfor %}
-        </select>
-        <!-- Space and project filters (§7 of the plan) -- additive with the
-             list/date/status/priority filters above. Only one of space or
-             project is useful at a time (picking a project already implies a
-             space), so clearing one clears the other via onchange.
-             Not shown in the Inbox view (is_inbox) since inbox is already a
-             filter itself and project_groups/projects won't be in context.
-             _pg/_pr/_aguid/_apuid set at block scope above. -->
-        {% if _pg %}
-        <select name="group_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by space">
-            <option value="">All spaces</option>
-            {% for g in _pg %}
-            <option value="{{ g.uid }}" {% if _aguid == g.uid %}selected{% endif %}>{{ g.name }}</option>
-            {% endfor %}
-        </select>
-        {% endif %}
-        {% if _pr %}
-        <select name="project_uid" class="filter-select" onchange="this.form.submit()" aria-label="Filter by project">
-            <option value="">All projects</option>
-            {% for p in _pr %}
-            <option value="{{ p.uid }}" {% if _apuid == p.uid %}selected{% endif %}>{{ p.name }}</option>
-            {% endfor %}
-        </select>
-        {% endif %}
-        <select name="date_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by date">
-            {% for f in date_filters %}
-            <option value="{{ f }}" {% if active_date_filter == f %}selected{% endif %}>{{ date_filter_labels[f] }}</option>
-            {% endfor %}
-        </select>
-        <select name="status_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by status">
-            {% for f in status_filters %}
-            <option value="{{ f }}" {% if active_status_filter == f %}selected{% endif %}>{{ status_filter_labels[f] }}</option>
-            {% endfor %}
-        </select>
-        <select name="priority_filter" class="filter-select" onchange="this.form.submit()" aria-label="Filter by priority">
-            {% for f in priority_filters %}
-            <option value="{{ f }}" {% if active_priority_filter == f %}selected{% endif %}>{{ priority_filter_labels[f] }}</option>
-            {% endfor %}
-        </select>
-        <input type="hidden" name="sort" value="{{ sort }}">
-        <input type="hidden" name="dir" value="{{ dir }}">
-    </form>
-    <a class="icon-btn" href="/task-lists" data-modal title="Manage lists">{{ icon('list') }}</a>
-    <a class="icon-btn" href="/tags" data-modal title="Manage tags">{{ icon('tag') }}</a>
-    <div class="segmented">
-        <a class="seg-btn active" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}{% if q %}&q={{ q }}{% endif %}{% if active_list %}&list_path={{ active_list }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">Table</a>
-        <a class="seg-btn" href="/tasks/timeline">Timeline</a>
-        <a class="seg-btn" href="/tasks/board?{% if q %}q={{ q }}&{% endif %}{% if active_list %}list_path={{ active_list }}{% endif %}">Board</a>
-    </div>
-    <a class="btn primary" href="/tasks/new{% if active_list %}?list_path={{ active_list }}{% endif %}" data-modal data-fab>{{ icon('plus') }} New task</a>
-</div>
+{% include "_tasks_toolbar.html" %}
 
-<!-- Quick-add -- 2026-08-01 (see plans/webapp-action-pipelines-audit.md's
-     "create is form-first everywhere" finding). Title-only, Enter to
-     submit, posts straight to the real create endpoint with every other
-     field left at its default -- the full field-grid modal (the "+ New
-     task" button above) is still there for anyone who wants due dates/
-     priority/tags up front, this is just for the common "jot it down"
-     case. A no-JS fallback works identically (it's a real form, not a
-     JS-only affordance) -- static/tasks_table.js only adds the
-     stay-on-page fetch behavior on top. -->
-<form method="post" action="/tasks" class="quick-add-form" id="quick-add-form" style="margin-bottom:12px">
-    {% if active_list %}<input type="hidden" name="list_path" value="{{ active_list }}">{% endif %}
-    <input type="text" name="title" placeholder="Quick-add a task and press Enter..." required>
-</form>
+<!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
+     pass) -- the "+ New" button in the toolbar above opens the same create
+     endpoint via the full field-grid modal; that's the one create path now,
+     not two. -->
 
 <!-- Bulk actions -- 2026-08-01. Hidden until at least one row is selected
      (static/tasks_table.js toggles it), same "don't show controls with
@@ -102,22 +29,45 @@
         <option value="">Set status&hellip;</option>
         {% for s in statuses %}<option value="{{ s }}">{{ status_labels[s] }}</option>{% endfor %}
     </select>
-    <select id="bulk-list-select" aria-label="Move to list">
-        <option value="">Move to list&hellip;</option>
-        {% for l in task_lists %}<option value="{{ l.uid }}">{{ l.name }}</option>{% endfor %}
-    </select>
-    <input type="text" id="bulk-tag-input" placeholder="tag name" list="tag-names-datalist" style="width:120px">
+    <!-- Phase 1 (label-space rework, 2026-08-06) removed the "Move to
+         list" bulk action here -- task_lists is gone, and the bulk `tag`
+         action below already covers the generic "reorganize a batch of
+         tasks" need via labels (see routers/tasks.py's bulk_action).
+
+         Labels -- chip multiselect (2026-08-07, modal-input-design
+         Phase B), reusing _widget_list_multiselect.html. NOT wired the
+         same way as task_form.html's Labels field: this isn't a <form>
+         field at all -- it picks which already-known label(s) the "Add"/
+         "Remove" buttons below apply to the currently-selected rows, a
+         JS-only fetch-driven delta action (POST /tasks/bulk, routers/
+         tasks.py's bulk_action) with no plain-form/no-JS fallback, same as
+         every other control in this bulk-actions-bar (it's hidden by
+         `style="display:none"` until static/tasks_table.js's row-select
+         checkboxes reveal it). static/tasks_table.js's bulkTag() reads
+         whichever of these checkboxes are ticked and posts each one
+         through in one request; Add/Remove keep their existing per-label
+         add/remove-from-selected-rows semantics unchanged, this only
+         replaces free-typed-with-datalist-suggestions with pick-from-the-
+         actual-list-of-known-labels (ms_mode=select, same as the other
+         per-record Labels fields, since "no boxes ticked" means "nothing
+         chosen yet", not "no filter"). -->
+    <div id="bulk-tag-picker">
+        {% set ms_name = 'bulk_tag_names' %}
+        {% set ms_icon = 'tag' %}
+        {% set ms_label = 'Labels' %}
+        {% set ms_items = tag_name_items %}
+        {% set ms_selected = [] %}
+        {% set ms_mode = 'select' %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
     <button type="button" id="bulk-tag-add" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Add</button>
     <button type="button" id="bulk-tag-remove" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Remove</button>
     <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
     <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
 </div>
-<datalist id="tag-names-datalist">
-    {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
-</datalist>
 
 {% macro sort_link(key, label) %}
-<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_list %}&list_path={{ active_list }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
+<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
 {% endmacro %}
 
 {% if open_tasks or completed_tasks %}
@@ -130,7 +80,7 @@
             <th>{{ sort_link('status', 'Status') }}</th>
             <th>{{ sort_link('priority', 'Priority') }}</th>
             <th>{{ sort_link('due_at', 'Due') }}</th>
-            <th>Tags</th>
+            <th>Labels</th>
             <th style="width:40px"></th>
         </tr>
     </thead>
@@ -178,7 +128,7 @@
         <td>
             <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
         </td>
-        <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}</td>
+        <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}</td>
         <td style="text-align:right">
             <!-- Consistent delete confirmation, 2026-08-01 (see
                  plans/webapp-action-pipelines-audit.md) -- a plain task is
@@ -221,93 +171,25 @@
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_list or _apuid or _aguid %}
+    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_priority_filter != 'all' or _apuid or _aguid %}
     <div class="empty-state-title">No tasks match this filter</div>
-    <div class="empty-state-text">Try a different list, project, or space, or clear the search and filters above.</div>
+    <div class="empty-state-text">Try a different label, or clear the search and filters above.</div>
     {% elif is_inbox %}
     <div class="empty-state-title">Nothing to triage</div>
     <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>
     {% else %}
     <div class="empty-state-title">No tasks yet</div>
     <div class="empty-state-text">Add your first task to get started.</div>
-    <a class="btn primary" href="/tasks/new{% if active_list %}?list_path={{ active_list }}{% endif %}" data-modal data-fab>{{ icon('plus') }} New task</a>
+    <a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
     {% endif %}
 </div>
 {% endif %}
 
-{# Habits & Recurring section -- §3 of the plan. Only shown on the main
-   tasks list (not inbox), since recurring tasks and habits are global
-   concepts not scoped to a single inbox-style filtered view. Habit CRUD
-   stays in Settings at /habits; this section is for daily use only. #}
-{% if not is_inbox and (recurring_tasks or habits) %}
-<details class="habits-recurring-section" open>
-    <summary class="habits-recurring-summary">
-        {{ icon('repeat') }} Habits &amp; Recurring
-        <span class="habits-recurring-count">
-            {% set total = recurring_tasks|length + habits|length %}
-            {{ total }} item{{ 's' if total != 1 else '' }}
-        </span>
-    </summary>
-    <div class="card" style="margin-top:8px">
-        <table class="task-table habits-recurring-table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Frequency</th>
-                    <th style="width:90px; text-align:center">Today</th>
-                    <th style="width:40px"></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in recurring_tasks %}
-                <tr>
-                    <td>
-                        <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
-                        <span class="cell-tag tag-blue" title="Recurring">{{ icon('repeat', 'icon-sm') }} recurring</span>
-                    </td>
-                    <td><span class="cell-tag tag-gray">{{ t.recurrence }}</span></td>
-                    <td style="text-align:center">&mdash;</td>
-                    <td style="text-align:right">
-                        <a class="icon-btn" href="/tasks/{{ t.uid }}/edit" data-modal title="Edit">{{ icon('edit-2') }}</a>
-                    </td>
-                </tr>
-                {% endfor %}
-                {% for h in habits %}
-                {% set entry = habit_entries_today.get(h.uid) %}
-                {% set done_today = entry and entry.value and entry.value > 0 %}
-                <tr class="{% if done_today %}task-row-completed{% endif %}">
-                    <td>
-                        <a href="/habits/{{ h.uid }}">{{ h.name }}</a>
-                        <span class="cell-tag tag-{{ h.color or 'blue' }}">habit</span>
-                    </td>
-                    <td>
-                        {% if h.target_per_day and h.target_per_day != 1 %}
-                        <span class="cell-tag tag-gray">{{ h.target_per_day|int if h.target_per_day == h.target_per_day|int else h.target_per_day }}x / day</span>
-                        {% else %}
-                        <span class="cell-tag tag-gray">daily</span>
-                        {% endif %}
-                    </td>
-                    <td style="text-align:center">
-                        {# Quick-toggle for today. Uses the existing toggle endpoint;
-                           redirect goes back to the tasks page via referer header. #}
-                        <form method="post" action="/habits/{{ h.uid }}/entries/{{ today_iso }}/toggle" class="form-inline">
-                            <button type="submit" class="habit-toggle-btn {% if done_today %}habit-toggle-done{% endif %}" title="{{ 'Mark undone' if done_today else 'Mark done' }}" aria-label="{{ 'Mark undone' if done_today else 'Mark done' }}">
-                                {{ icon('check-circle' if done_today else 'circle') }}
-                            </button>
-                        </form>
-                    </td>
-                    <td style="text-align:right">
-                        <a class="icon-btn" href="/habits/{{ h.uid }}/edit" data-modal title="Edit habit">{{ icon('edit-2') }}</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div style="padding:8px 12px; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted)">
-            <a href="/habits">Manage habits in Settings</a>
-        </div>
-    </div>
-</details>
-{% endif %}
+{# "Habits & Recurring" section removed 2026-08-08 -- superseded by the
+   real Tasks > Habits tab (tasks_habits.html), which shows every
+   habit-labeled task with a proper check-in row + heatmap grid instead of
+   this one flat table. Habit-labeled tasks are excluded from this page
+   entirely now (db.list_tasks' default include_habit_tasks=False) so
+   they don't appear in both places. #}
 {% endblock %}
 {% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

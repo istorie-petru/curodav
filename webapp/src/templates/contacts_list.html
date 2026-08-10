@@ -1,36 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Contacts{% endblock %}
 {% block content %}
-{% include "_settings_nav.html" %}
-<div class="toolbar top-app-bar">
-    <h1 style="margin:0">Contacts</h1>
-    <div class="spacer"></div>
-    <!-- Active / Archived toggle + search + category filter.
-         The old addressbook dropdown is gone -- there are now exactly two
-         fixed books (Active and Archived), toggled via the ?view= param. -->
-    <form method="get" action="/contacts" class="filter-bar">
-        <input type="search" name="q" placeholder="Search name, org, phone, email..." value="{{ q }}">
-        <!-- Active / Archived toggle as a styled segmented control -->
-        <div class="segmented-control" role="group" aria-label="View">
-            <a class="segmented-btn {% if view != 'archived' %}active{% endif %}"
-               href="/contacts?view=active{% if q %}&q={{ q|urlencode }}{% endif %}{% if active_category %}&category={{ active_category|urlencode }}{% endif %}">Active</a>
-            <a class="segmented-btn {% if view == 'archived' %}active{% endif %}"
-               href="/contacts?view=archived{% if q %}&q={{ q|urlencode }}{% endif %}{% if active_category %}&category={{ active_category|urlencode }}{% endif %}">Archived</a>
-        </div>
-        {% if categories %}
-        <select name="category" class="filter-select" onchange="this.form.submit()" aria-label="Filter by category">
-            <option value="">All categories</option>
-            {% for c in categories %}
-            <option value="{{ c }}" {% if active_category == c %}selected{% endif %}>{{ c }}</option>
-            {% endfor %}
-        </select>
+<!-- 2026-08-07: dropped the include of _settings_nav.html that used to
+     sit here -- Contacts is a primary tabbar destination now (base.html),
+     not a Settings sub-page, so the Settings segmented strip doesn't
+     belong on it anymore. See _settings_nav.html's own comment. -->
+<div class="toolbar top-app-bar toolbar-2row">
+    <!-- 2026-08-08: the old checkbox-hack Filters button + collapsible
+         body (see style.css's filters-checkbox rule) is gone -- direct
+         feedback ("make all the other filters on calendar, task, contact
+         page also fancy dropdown menus. remove the filters details button
+         and reintegrate these drop down menus into the topbar"). The tag
+         filter is now the same single-select "fancy dropdown"
+         (_filter_dropdown.html) Calendar/Tasks use, sitting inline in the
+         row next to search; its radios submit `tag` into the shared
+         #contacts-filters-form (the search form), with values lowercased
+         so the router's case-insensitive match still highlights the right
+         option ("University" stored, "university" selected). -->
+    <div class="toolbar-row">
+        <h1 class="sr-only">Contacts</h1>
+        <div class="spacer"></div>
+        <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
+            <input type="search" name="q" placeholder="Search name, org, phone, email..." value="{{ q }}">
+        </form>
+        {% if contact_tags %}
+        {% set _lf_items = [{'value': '', 'name': 'All labels'}] %}
+        {% for _t in contact_tags %}{% set _ = _lf_items.append({'value': _t|lower, 'name': _t}) %}{% endfor %}
+        {% set fd_name = 'tag' %}
+        {% set fd_label = 'Label' %}
+        {% set fd_items = _lf_items %}
+        {% set fd_selected = active_tag %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'contacts-filters-form' %}
+        {% include '_filter_dropdown.html' %}
         {% endif %}
-        <!-- Carry the view through when the search form itself is submitted -->
-        <input type="hidden" name="view" value="{{ view }}">
-    </form>
-    <a class="icon-btn" href="/addressbooks" data-modal title="Manage address books">{{ icon('address-book') }}</a>
-    <a class="icon-btn" href="/tags" data-modal title="Manage tags">{{ icon('tag') }}</a>
-    <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
+        <a class="btn primary" href="/contacts/new" data-modal data-fab title="New contact">{{ icon('plus') }} New</a>
+    </div>
 </div>
 
 <div class="card">
@@ -45,21 +50,19 @@
                 {% if c.org %}{{ c.org }}{% endif %}
                 {% if c.org and c.phone %}&middot;{% endif %}
                 {% if c.phone %}{{ c.phone }}{% endif %}
+                {% if not c.org and not c.phone and c.email %}{{ c.email }}{% endif %}
             </span>
         </span>
-        {% if c.category %}<span class="cell-tag tag-gray">{{ c.category }}</span>{% endif %}
+        {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
     </a>
     {% endfor %}
 </div>
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('address-book') }}</div>
-    {% if q or active_category %}
+    {% if q or active_tag %}
     <div class="empty-state-title">No contacts match</div>
-    <div class="empty-state-text">Try clearing the search or category filter.</div>
-    {% elif view == 'archived' %}
-    <div class="empty-state-title">No archived contacts</div>
-    <div class="empty-state-text">Contacts you archive will appear here.</div>
+    <div class="empty-state-text">Try clearing the search or label filter.</div>
     {% else %}
     <div class="empty-state-title">No contacts yet</div>
     <div class="empty-state-text">Add your first contact to get started.</div>

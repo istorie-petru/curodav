@@ -44,6 +44,23 @@
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
+  // 2026-08-08 -- display-only counterpart to minutesToHHMM above, same
+  // split and same reasoning as calendar.js's identical pair: minutesToHHMM's
+  // output also feeds the /reposition POST's start_time/end_time (24-hour
+  // "HH:MM" required there, not a display choice), so the "24-hour time"
+  // Settings > General preference only ever applies to the .te-time label
+  // text via this separate function, never to the data actually sent.
+  const TIME_FORMAT = document.body.dataset.timeFormat || "24h";
+  function minutesToDisplayTime(totalMinutes) {
+    if (TIME_FORMAT !== "12h") return minutesToHHMM(totalMinutes);
+    totalMinutes = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const period = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 || 12;
+    return h12 + ":" + String(m).padStart(2, "0") + " " + period;
+  }
+
   function setupCreateCol(col) {
     if (col.dataset.ccWired) return;
     col.dataset.ccWired = "1";
@@ -241,7 +258,7 @@
         // Same "position updated, label didn't" fix as calendar.js's
         // identical drag -- see its end() for the full reasoning.
         const timeEl = el.querySelector(".te-time");
-        if (timeEl) timeEl.textContent = `${minutesToHHMM(startMin)}–${minutesToHHMM(endMin)}`;
+        if (timeEl) timeEl.textContent = `${minutesToDisplayTime(startMin)}–${minutesToDisplayTime(endMin)}`;
       }).catch(() => {
         el.style.top = origTop + "px";
         el.style.height = origHeight + "px";
@@ -268,7 +285,15 @@
   function init(root) {
     const scope = root || document;
     scope.querySelectorAll(".schedule-create-col").forEach(setupCreateCol);
-    scope.querySelectorAll(".time-event").forEach(setupEvent);
+    // Scope the drag-to-move wiring to the Schedule grid's OWN events --
+    // the calendar Week/Day pages carry the same `.time-event` markup but
+    // with `data-day`/`data-uid` for a *calendar* event, and calendar.js
+    // already wires those to POST /events/{uid}/reschedule. Wiring this
+    // handler onto them too (the old init(document) call did) meant every
+    // drag on a calendar page ALSO fired POST
+    // /schedule/classes/{uid}/reposition for that same uid -- the 404
+    // seen in the server log when moving a normal, non-schedule event.
+    scope.querySelectorAll(".schedule-create-col .time-event").forEach(setupEvent);
   }
 
   window.CCScheduleGrid = { init };

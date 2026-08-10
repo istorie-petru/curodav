@@ -1,6 +1,13 @@
-"""Data-layer tests for Timeline (Phase 11) storage: tasks.timeline_lane
-and task_lists.timeline_row_names_json, plus the write-through-safety
-properties (ordinary task/list edits must not clobber either)."""
+"""Data-layer tests for Timeline (Phase 11) storage: tasks.timeline_lane,
+plus the write-through-safety property (an ordinary task edit must not
+clobber it).
+
+Phase 1 (label-space rework, 2026-08-06) dropped `task_lists` (and with
+it `timeline_row_names_json`/`set_task_list_row_name`) -- there's no more
+per-list swimlane block to carry a custom row-name map (see db.py's
+Phase 1 comments and routers/timeline.py's `_build_context` comment).
+`TestTimelineRowNames` below is gone with that table; `TestTimelineLane`
+survives unchanged in spirit."""
 
 from __future__ import annotations
 
@@ -25,7 +32,7 @@ def _now() -> str:
 class TestTimelineLane:
     def test_set_and_read_back(self, conn):
         db.upsert_task(conn, {
-            "uid": "t1", "href": "/t1", "calendar_path": "tasks", "title": "X",
+            "uid": "t1", "title": "X",
             "description": "", "status": "active", "tags": [], "created_at": _now(),
         })
         db.set_task_timeline_lane(conn, "t1", 3)
@@ -33,7 +40,7 @@ class TestTimelineLane:
 
     def test_clear_with_none(self, conn):
         db.upsert_task(conn, {
-            "uid": "t1", "href": "/t1", "calendar_path": "tasks", "title": "X",
+            "uid": "t1", "title": "X",
             "description": "", "status": "active", "tags": [], "created_at": _now(),
         })
         db.set_task_timeline_lane(conn, "t1", 2)
@@ -47,7 +54,7 @@ class TestTimelineLane:
         write uses) can never clobber it -- this simulates that pattern
         directly rather than going through the router."""
         db.upsert_task(conn, {
-            "uid": "t1", "href": "/t1", "calendar_path": "tasks", "title": "X",
+            "uid": "t1", "title": "X",
             "description": "", "status": "active", "tags": [], "created_at": _now(),
         })
         db.set_task_timeline_lane(conn, "t1", 2)
@@ -57,38 +64,3 @@ class TestTimelineLane:
         db.upsert_task(conn, row)
         assert db.get_task(conn, "t1")["timeline_lane"] == 2
         assert db.get_task(conn, "t1")["title"] == "Renamed"
-
-
-class TestTimelineRowNames:
-    def test_set_and_read_back(self, conn):
-        db.ensure_default_task_list(conn)
-        db.set_task_list_row_name(conn, db.DEFAULT_TASK_LIST_UID, 1, "Assignments")
-        tl = db.get_task_list(conn, db.DEFAULT_TASK_LIST_UID)
-        assert tl["timeline_row_names"] == {"1": "Assignments"}
-
-    def test_clear_with_empty_string(self, conn):
-        db.ensure_default_task_list(conn)
-        db.set_task_list_row_name(conn, db.DEFAULT_TASK_LIST_UID, 1, "Assignments")
-        db.set_task_list_row_name(conn, db.DEFAULT_TASK_LIST_UID, 1, "")
-        tl = db.get_task_list(conn, db.DEFAULT_TASK_LIST_UID)
-        assert tl["timeline_row_names"] == {}
-
-    def test_row_zero_overridable_too(self, conn):
-        """Desktop: 'this now includes row 0 -- the project's own display
-        name in this gutter can now be overridden independently of the
-        project's actual title.' Same here for the list's own name."""
-        db.ensure_default_task_list(conn)
-        db.set_task_list_row_name(conn, db.DEFAULT_TASK_LIST_UID, 0, "Custom Display Name")
-        tl = db.get_task_list(conn, db.DEFAULT_TASK_LIST_UID)
-        assert tl["timeline_row_names"]["0"] == "Custom Display Name"
-
-    def test_ordinary_list_rename_preserves_row_names(self, conn):
-        db.ensure_default_task_list(conn)
-        db.set_task_list_row_name(conn, db.DEFAULT_TASK_LIST_UID, 1, "Assignments")
-        db.upsert_task_list(conn, {"uid": db.DEFAULT_TASK_LIST_UID, "name": "Renamed", "color": "green"})
-        tl = db.get_task_list(conn, db.DEFAULT_TASK_LIST_UID)
-        assert tl["name"] == "Renamed"
-        assert tl["timeline_row_names"] == {"1": "Assignments"}
-
-    def test_missing_list_is_a_noop(self, conn):
-        db.set_task_list_row_name(conn, "does-not-exist", 0, "X")  # must not raise

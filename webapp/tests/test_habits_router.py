@@ -140,8 +140,11 @@ class TestCreateEditHabit:
         )
         h = next(x for x in db.list_habits(conn) if x["name"] == "Study")
         assert set(h["tags"]) == {"uni", "focus"}
-        assert db.get_tag_by_name(conn, "uni") is not None
-        assert db.get_tag_by_name(conn, "focus") is not None
+        # Phase 2 (label-space rework): there's no separate tag registry
+        # to "register" into -- applying a label the first time is enough
+        # for it to show up everywhere labels are listed.
+        assert "uni" in db.list_all_label_names(conn)
+        assert "focus" in db.list_all_label_names(conn)
 
     def test_blank_name_is_a_noop(self, conn):
         habits_router.create_habit(
@@ -232,8 +235,8 @@ class TestHabitDetailRoute:
     def test_detail_includes_streaks_and_project(self, conn):
         from starlette.requests import Request
 
-        db.upsert_project(conn, {"uid": "p1", "name": "Uni", "created_at": _now(), "updated_at": _now()})
-        uid = _make_habit(conn, "Study", project_uid="p1")
+        db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
+        uid = _make_habit(conn, "Study", project_uid="Uni")
         db.upsert_habit_entry(conn, uid, date.today().isoformat(), 1, None, _now())
         req = Request({"type": "http", "method": "GET", "path": f"/habits/{uid}", "headers": []})
         resp = habits_router.habit_detail(uid, req, conn=conn)

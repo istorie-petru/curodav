@@ -224,9 +224,9 @@
         }).catch(() => {});
         if (deltaRows !== 0) {
           // A vertical drag can only ever move a task within its OWN
-          // list's swimlane block -- never hit-test the DOM for whatever
+          // label's swimlane block -- never hit-test the DOM for whatever
           // happens to be under the cursor (which could be a different
-          // list's rows entirely). Same formula as desktop's
+          // label's rows entirely). Same formula as desktop's
           // mouseReleaseEvent: original local lane + row delta, clamped
           // to a handful of rows past the block's current size so a
           // stray huge drag can't pin the task hundreds of rows away by
@@ -286,7 +286,7 @@
 
   const ghost = document.getElementById("timeline-create-ghost");
   let creating = false;
-  let createListPath = null;
+  let createLabel = "";
   let createLocalIdx = 0;
   let createRowTopPx = 0;
   let createStartIso = null;
@@ -309,7 +309,7 @@
     target.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !startIso) return;
       creating = true;
-      createListPath = target.dataset.listPath;
+      createLabel = target.dataset.label || "";
       createLocalIdx = parseInt(target.dataset.localIdx, 10);
       createRowTopPx = target.offsetTop;
       createStartIso = addDays(startIso, xToDayIndex(e.clientX));
@@ -348,7 +348,7 @@
     const resp = await fetch("/tasks/timeline/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ list_path: createListPath, start_at: from, due_at: to, local_idx: createLocalIdx }),
+      body: JSON.stringify({ label: createLabel, start_at: from, due_at: to, local_idx: createLocalIdx }),
     }).catch(() => null);
     if (resp) reload();
   });
@@ -356,27 +356,5 @@
   document.addEventListener("pointercancel", () => {
     creating = false;
     if (ghost) ghost.style.display = "none";
-  });
-
-  // ------------------------------------------------------------------ //
-  // Gutter row rename -- double-click any label (including a list's own
-  // row 0) to rename it, port of desktop's _rename_row/_set_row_name.
-  // ------------------------------------------------------------------ //
-
-  document.querySelectorAll(".timeline-gutter-row").forEach((row) => {
-    row.addEventListener("dblclick", async () => {
-      const listUid = row.dataset.listUid;
-      if (!listUid) return;
-      const current = row.textContent.trim();
-      const title = row.classList.contains("is-header") ? "Rename list display name" : "Rename row";
-      const text = window.prompt(title + ":", current);
-      if (text === null) return;
-      await fetch(`/task-lists/${listUid}/timeline-row-name`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ local_idx: parseInt(row.dataset.localIdx, 10), name: text }),
-      }).catch(() => {});
-      reload();
-    });
   });
 })();

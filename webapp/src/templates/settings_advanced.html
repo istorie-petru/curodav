@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Advanced - Settings{% endblock %}
+{% block content %}
+{% include "_settings_breadcrumb.html" with context %}
+<h1>Advanced</h1>
+<p class="settings-hint">Real capability, deliberately not surfaced casually.</p>
+
+<!-- Export & backup (2026-08-08) -- was a link out to its own /export
+     page, then a link-row here; now the whole thing (standard-format
+     downloads, JSON backup, restore forms) is inlined directly, per
+     direct feedback ("export and backup should be fully with all
+     buttons... in the advanced page"). /export itself (routers/export.py)
+     is now a redirect here, not a page of its own -- see that route's own
+     docstring. The actual download/import *routes* (/export/events.ics,
+     /export/import/events, etc.) are unchanged; only where the buttons
+     that point at them live moved. -->
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('download', 'icon-sm') }} Export · standard formats</h2>
+    <p class="settings-hint">Your own data in standard formats (.ics/.vcf/.csv) that open in any calendar or contacts app. Published lists sync via Radicale ({{ radicale_url }}) separately.</p>
+    <div class="card">
+        <a class="calendar-row settings-row" href="/export/events.ics">
+            <span class="settings-row-icon">{{ icon('calendar', 'icon-sm') }}</span>
+            <span class="settings-row-name">Events (.ics)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">{{ event_count }} events · open in any calendar app</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/tasks.ics">
+            <span class="settings-row-icon">{{ icon('check-square', 'icon-sm') }}</span>
+            <span class="settings-row-name">Tasks (.ics)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">{{ task_count }} tasks · VTODO</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/contacts.vcf">
+            <span class="settings-row-icon">{{ icon('users', 'icon-sm') }}</span>
+            <span class="settings-row-name">Contacts (.vcf)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">{{ contact_count }} contacts · any address book app</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/tasks.csv">
+            <span class="settings-row-icon">{{ icon('grid', 'icon-sm') }}</span>
+            <span class="settings-row-name">Tasks (CSV)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">Spreadsheet</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/contacts.csv">
+            <span class="settings-row-icon">{{ icon('grid', 'icon-sm') }}</span>
+            <span class="settings-row-name">Contacts (CSV)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">Spreadsheet</span>
+        </a>
+    </div>
+</div>
+
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('package', 'icon-sm') }} Export · JSON backup</h2>
+    <div class="card">
+        <a class="calendar-row settings-row" href="/export/labels.json">
+            <span class="settings-row-icon">{{ icon('tag', 'icon-sm') }}</span>
+            <span class="settings-row-name">Labels (JSON)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">Every label, its config, and its membership</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/schedule.json">
+            <span class="settings-row-icon">{{ icon('clock', 'icon-sm') }}</span>
+            <span class="settings-row-name">Schedule (JSON)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">Classes, holidays, settings</span>
+        </a>
+        <a class="calendar-row settings-row" href="/export/data.json">
+            <span class="settings-row-icon">{{ icon('archive', 'icon-sm') }}</span>
+            <span class="settings-row-name">Full backup (data.json)</span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">Everything · restorable below</span>
+        </a>
+    </div>
+</div>
+
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('upload', 'icon-sm') }} Import &amp; restore</h2>
+    <p class="settings-hint">Each import is a merge, not a replace -- existing items are matched by their own identifiers and updated, everything else stays.</p>
+    <div class="card import-card">
+        <h3 class="import-title">Events</h3>
+        <form method="post" action="/export/import/events" enctype="multipart/form-data" class="import-form">
+            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .ics file
+                <input type="file" name="file" accept=".ics,text/calendar" class="sr-only" required>
+            </label>
+            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .ics</button>
+        </form>
+        <h3 class="import-title">Tasks</h3>
+        <form method="post" action="/export/import/tasks" enctype="multipart/form-data" class="import-form">
+            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .ics file
+                <input type="file" name="file" accept=".ics,text/calendar" class="sr-only" required>
+            </label>
+            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .ics</button>
+        </form>
+        <h3 class="import-title">Contacts</h3>
+        <form method="post" action="/export/import/contacts" enctype="multipart/form-data" class="import-form">
+            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .vcf file
+                <input type="file" name="file" accept=".vcf,text/vcard" class="sr-only" required>
+            </label>
+            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .vcf</button>
+        </form>
+        <h3 class="import-title">Full backup</h3>
+        <form method="post" action="/export/import/json" enctype="multipart/form-data" class="import-form">
+            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose data.json
+                <input type="file" name="file" accept=".json,application/json" class="sr-only" required>
+            </label>
+            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Restore data.json</button>
+        </form>
+    </div>
+</div>
+
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('sliders', 'icon-sm') }} Data &amp; layout lifecycle</h2>
+    <p class="settings-hint">Every action below is disruptive or permanent.</p>
+    <div class="card">
+        <!-- Reset to default layout (item #1, dashboard usability rework,
+             2026-08-07; moved here 2026-08-08 when "Widgets" -- its old home
+             -- was folded into Advanced, see routers/settings.py's module
+             docstring) -- deletes Home's own widgets and re-seeds the
+             default layout immediately (routers/dashboard.py's
+             _reset_dashboard). A Space/Project page's own reset lives on
+             that page itself instead (label_detail.html's edit-mode
+             toolbar) -- this hub has no per-space subpage to host it. -->
+        <form class="settings-field-row" method="post" action="/dashboard/reset" data-confirm-sheet="Reset the Home dashboard to its default widget layout? This deletes every widget you've added or customized here.">
+            <span class="settings-field-label">Reset Home to default layout
+                <span class="settings-field-hint">Deletes your current Home widgets and restores the defaults</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset</button>
+        </form>
+        <!-- Auto-archive completed tasks (2026-08-08) -- the automatic,
+             age-based sibling of "Purge completed" right below: checked
+             lazily on every visit to the Tasks table view
+             (routers/tasks.py's _auto_archive_if_configured), not on a
+             schedule -- this app has no background job runner beyond the
+             Radicale sync loop. Fixed preset choices, not a free-typed
+             number (see routers/settings.py's DAYS_CHOICES) -- a select
+             autosubmits on pick, same as this page's other direct controls. -->
+        <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
+            <span class="settings-field-label">Auto-archive completed tasks
+                <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
+            </span>
+            <span class="spacer"></span>
+            <select name="days" onchange="this.form.requestSubmit()">
+                {% for value, label in days_choices %}
+                <option value="{{ value }}" {% if task_auto_archive_days == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <form class="settings-field-row" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
+            <span class="settings-field-label">Purge completed tasks
+                <span class="settings-field-hint">Deletes every done/archived task ({{ completed_task_count }} right now)</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn danger subtle">{{ icon('trash', 'icon-sm') }} Purge completed</button>
+        </form>
+        <form class="settings-field-row" method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app — every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Export &amp; backup, above).">
+            <span class="settings-field-label">Purge all data
+                <span class="settings-field-hint">Deletes everything in the app — tasks, events, contacts, labels, habits, schedule, published lists</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn danger">{{ icon('shield', 'icon-sm') }} Purge all</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

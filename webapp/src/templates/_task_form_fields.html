@@ -1,0 +1,130 @@
+{# Shared task create/edit field grid (2026-08-10) -- the exact inner
+   content of task_form.html's #task-form, extracted so the standalone
+   new/edit forms AND the merged dashboard quick-add modal
+   (quick_add.html) render literally the same fields (one markup contract
+   instead of two copies that could drift).
+
+   The surrounding <form> (with its own action/id) lives in the parent
+   template; this partial just fills it in. Parent must provide:
+     task         -- the task being edited, or None for a new task
+     priority_items, status_items, tag_name_items -- multiselect items
+     tag_names    -- (unused directly; tag_name_items is derived from it)
+     today        -- ISO date for the Start date default
+     habit_label  -- the habit label name (Daily target field's toggle)
+     parent_uid   -- for the subtask-quick-add hidden field (None/absent
+                     on quick_add, so that input simply doesn't render)
+   ms_form_id is set inside the partial (it's always this form's own id),
+   and carries into the included _widget_list_multiselect.html instances. #}
+    {% set ms_form_id = 'task-form' %}
+    {% if parent_uid %}<input type="hidden" name="parent_uid" value="{{ parent_uid }}">{% endif %}
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            <input type="text" name="title" required value="{{ task.title if task else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
+        </div>
+        <div class="field">
+            <label>Due date</label>
+            <input type="date" name="due_at" value="{{ task.due_at[:10] if task and task.due_at else '' }}">
+        </div>
+        <!-- 2026-08-08 direct feedback: Start date is editable on the
+             new-task form now too, not just when editing -- defaults to
+             today (routers/tasks.py::create_task falls back to today if
+             left blank either way; this just prefills the visible value
+             so "today" reads as the default rather than a blank field). -->
+        <div class="field">
+            <label>Start date</label>
+            <input type="date" name="start_at" value="{{ task.start_at[:10] if task and task.start_at else today }}">
+        </div>
+        <!-- Priority/Status -- 2026-08-08 direct feedback ("rework the
+             drop down menus for priority, status, Recurrence to look the
+             same as ... range, view, labels") -- single-mode
+             _widget_list_multiselect.html instead of a plain <select>,
+             same component View/Range already use and for the same
+             reason (a native <select>'s open dropdown is unstyleable
+             browser chrome, see that partial's own header comment). -->
+        {% set ms_name = 'priority' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Priority' %}
+        {% set ms_items = priority_items %}
+        {% set ms_selected = task.priority|string if task and task.priority else '' %}
+        {% set ms_wide = false %}
+        {% set ms_form_id = 'task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_name = 'status' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Status' %}
+        {% set ms_items = status_items %}
+        {% set ms_selected = task.status if task else '' %}
+        {% set ms_wide = false %}
+        {% set ms_form_id = 'task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        <!-- Phase 1 (label-space rework, 2026-08-06) removed the List
+             picker here -- task_lists is gone, every task lives in one
+             universal pool now (see db.py's Phase 1 comments). Organizing
+             by label is a Phase 2/3 hook, not this field. -->
+        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
+             Phase B), reusing _widget_list_multiselect.html the same way
+             the widget builder's Labels field does (see
+             _widget_builder_fields.html's own comment). A label's own name
+             IS its identity, so tag_name_items fakes {uid, name} pairs and
+             the checkbox value (name="tags_labels") is the label name
+             itself; the server (routers/tasks.py, via
+             routers/dashboard.py's _combine_tags) folds tags_labels back
+             into the same comma-separated tags= string create_task/
+             update_task always stored, so the stored tags format is
+             unchanged. ms_mode=select (not the widget builder's default
+             "filter" mode) since an empty selection here means "no
+             labels", not "no filter". -->
+        <div class="field">
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = task.tags if task else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <!-- 2026-08-08 follow-up ("both tasks and event should have
+             recurrence") -- back after a brief removal the same day
+             ("remove recurrence-input... add a way to add subtasks in
+             place of it"); Subtasks stayed where it landed (below the
+             form, see the sibling section after </form>) rather than
+             losing Recurrence a second time -- there's room for both.
+             static/recurrence_picker.js turns this into a preset
+             dropdown instead of typed-out RRULE syntax; its own custom-
+             value field now lives inside that same dropdown's panel
+             instead of a second element below it ("integrate the
+             dropdown menu with the text input one") -- see that file's
+             own header comment. routers/tasks.py's create_task/
+             update_task still just pass this straight through unparsed,
+             completely unchanged. -->
+        <div class="field field-wide">
+            <label>Recurrence</label>
+            <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task else '' }}">
+        </div>
+        <!-- 2026-08-08 direct feedback: Daily target is only relevant for
+             a task carrying the habit label (Tasks > Habits' check-in row
+             shows a checkbox for target=1, a number-stepper for
+             target>1) -- hidden unless that label is actually applied.
+             Initial state is server-rendered (is-hidden class, based on
+             whether the label is already on this task); static/
+             task_habit_field_toggle.js keeps it in sync live as the
+             Labels field above is checked/unchecked, without a page
+             reload. `id`/`data-*` are that script's hook -- see its own
+             header comment for why it can't just query this field's
+             sibling relationship to the Labels checkboxes directly. -->
+        <div class="field habit-target-field {{ '' if (task and habit_label in (task.tags or [])) else 'is-hidden' }}"
+             id="habit-target-field" data-habit-label="{{ habit_label }}" data-form-id="task-form">
+            <label>Daily target</label>
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
+                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day|int if task and task.target_per_day else 1 }}">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
+            </div>
+        </div>
+    </div>

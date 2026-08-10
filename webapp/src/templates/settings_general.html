@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}General - Settings{% endblock %}
+{% block content %}
+{% include "_settings_breadcrumb.html" with context %}
+<h1>General</h1>
+
+<div class="card">
+    <!-- Profile picture (2026-08-09, routers/settings.py) -- the user's
+         own avatar, stored in app_meta (db.py's profile-photo helpers).
+         Reuses the `.avatar-upload` markup from contact_form.html, so the
+         shared avatar_cropper.js crop/resize tool wires up automatically;
+         the cropped JPEG lands back in this same `name="photo"` file input
+         and the form's `data-autosubmit` flag makes the crop editor submit
+         right on Apply -- this row has no other Save button to piggyback
+         on, unlike a contact's edit form. -->
+    <!-- The row is a plain .settings-field-row div, not a form: two
+         sibling forms live inside it (upload + remove) and HTML forbids
+         nesting a form inside a form, which would silently break the
+         remove button. -->
+    <div class="settings-field-row">
+        <span class="settings-field-label">Profile picture
+            <span class="settings-field-hint">Your avatar in the nav rail; JPEG, PNG, GIF or WEBP, max 5MB</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="profile-photo-controls">
+            <form method="post" action="/settings/profile-photo" enctype="multipart/form-data" data-autosubmit>
+                <div class="avatar-upload" title="Change photo">
+                    {{ avatar({'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
+                    <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
+                    <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change profile picture">
+                </div>
+            </form>
+            {% if profile_photo %}
+            <form method="post" action="/settings/profile-photo-remove" data-confirm-sheet="Remove your profile picture?">
+                <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <form class="settings-field-row" method="post" action="/settings/display-name">
+        <span class="settings-field-label">Your name
+            <span class="settings-field-hint">Used in Home's greeting ("Good evening, {name}")</span>
+        </span>
+        <span class="spacer"></span>
+        <input type="text" name="display_name" value="{{ display_name }}" placeholder="(not set)" onchange="this.form.requestSubmit()">
+    </form>
+    <!-- Week starts on (2026-08-08) -- affects Calendar's Month/Week
+         views (routers/calendar.py). Radio-backed segmented control
+         (same `.seg-btn`/`.seg-radio`/:has() pattern the widget builder's
+         View/Range fields already use), autosubmits on pick -- a
+         two-choice preference like this is a complete choice the instant
+         it changes, no separate Save step needed. -->
+    <form class="settings-field-row" method="post" action="/settings/week-start">
+        <span class="settings-field-label">Week starts on
+            <span class="settings-field-hint">Calendar's Month and Week views</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Week starts on">
+            <label class="seg-btn"><input type="radio" name="week_start" value="monday" class="seg-radio" {% if current_week_start == 'monday' %}checked{% endif %} onchange="this.form.requestSubmit()"> Monday</label>
+            <label class="seg-btn"><input type="radio" name="week_start" value="sunday" class="seg-radio" {% if current_week_start == 'sunday' %}checked{% endif %} onchange="this.form.requestSubmit()"> Sunday</label>
+        </div>
+    </form>
+    <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
+         in the app (deps.py's fmt_time/fmt_hour filters) plus the
+         Calendar/Schedule drag-preview labels. Same autosubmit segmented
+         pattern as Week starts on above. -->
+    <form class="settings-field-row" method="post" action="/settings/time-format">
+        <span class="settings-field-label">Time format
+            <span class="settings-field-hint">Used everywhere a time is shown</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Time format">
+            <label class="seg-btn"><input type="radio" name="time_format" value="24h" class="seg-radio" {% if current_time_format == '24h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 24-hour</label>
+            <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 12-hour</label>
+        </div>
+    </form>
+</div>
+{% endblock %}

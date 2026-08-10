@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_event_relations.html" import event_relations_section %}
+{% block title %}{{ event.title if event else "Event" }}{% endblock %}
+{% block content %}
+<!-- 2026-08-08 direct feedback ("add for events a way like for tasks to
+     only view the event before editing it") -- same #modal-target/
+     progressive-enhancement pattern as task_detail.html/event_form.html,
+     and the same detail-view language task_detail.html's own 2026-08-08
+     redesign introduced (.detail-card/.detail-meta-grid/.modal-header/
+     .modal-footer, style.css) rather than a third, differently-shaped
+     "detail view" layout in this app.
+
+     2026-08-08 visual rework (all three detail modals at once -- events,
+     tasks, contacts -- one cohesive stroke): header = identity (a colored
+     dot in the event's calendar color + the large bold title), body = the
+     meta grid inside an elevated tonal .detail-card with a colored left
+     accent, footer = a quiet "Done" back-link, a demoted Delete text-link
+     (was the loudest filled-red button on the view), and the primary Edit
+     action taking center stage.
+
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial the edit form uses too (same structure, "Edit" swapped
+     for "Save"), and #modal-target carries the modal-stable-height marker
+     so modal.js keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place -- one continuous modal instead of a hard page swap. -->
+<div id="modal-target" class="modal-stable-height">
+{% if event %}
+<div class="modal-header">
+    <span class="detail-identity-dot cal-{{ event.calendar_color }}"></span>
+    <h1 class="detail-title">{{ event.title }}</h1>
+</div>
+
+<div class="modal-body">
+<div class="detail-card" style="--detail-accent: var(--cal-accent-{{ event.calendar_color }});">
+    <div class="detail-meta-grid">
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Start</span>
+            <span class="detail-meta-value"><span class="color-dot cal-{{ event.calendar_color }}"></span>{% if event.all_day %}{{ event.start_at[:10] }} (all day){% else %}{{ event.start_at[:10] }} {{ event.start_at | fmt_time }}{% endif %}</span>
+        </div>
+        {% if event.end_at %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">End</span>
+            <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at[:10] }}{% else %}{{ event.end_at[:10] }} {{ event.end_at | fmt_time }}{% endif %}</span>
+        </div>
+        {% endif %}
+        {% if event.location %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Location</span>
+            <span class="detail-meta-value">{{ event.location }}</span>
+        </div>
+        {% endif %}
+        {% if event.meeting_url %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Meeting</span>
+            <span class="detail-meta-value"><a href="{{ event.meeting_url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} Join</a></span>
+        </div>
+        {% endif %}
+        {% if event.recurrence %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Recurrence</span>
+            <span class="detail-meta-value">{{ event.recurrence }}</span>
+        </div>
+        {% endif %}
+        {% if event.reminders %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Reminders</span>
+            <span class="detail-meta-value">{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before</span>
+        </div>
+        {% endif %}
+        {% if event.tags %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Labels</span>
+            <span class="detail-meta-value">{% for tag in event.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span> {% endfor %}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% if event.description %}
+    <div class="detail-meta-description">
+        <span class="detail-meta-label">Description</span>
+        <p>{{ event.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Relations card (2026-08-09) -- same merged-card language task_detail
+     uses for its Relations section, the event side only (related tasks;
+     events have no subtasks). See _event_relations.html. -->
+<div class="detail-card detail-section-gap">
+    {{ event_relations_section(event, related_tasks, linkable_tasks) }}
+</div>
+</div>
+
+{% set footer_back_url = '/calendar' %}
+{% set footer_back_label = 'Done' %}
+{% set footer_delete_url = '/events/' ~ event.uid ~ '/delete' %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = event.title %}
+{% set footer_delete_redirect = '/calendar' %}
+{% set footer_primary_href = '/events/' ~ event.uid ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+{% else %}
+<div class="modal-body">
+<div class="empty-state">Event not found.</div>
+<p><a href="/calendar" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to calendar</a></p>
+</div>
+{% endif %}
+</div>
+{% endblock %}

@@ -625,8 +625,10 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 
 ## Deploying for real
 
-Not covered yet: running Radicale with real (non-plaintext) auth, putting
-both Radicale and this app behind Tailscale, and pointing desktop's
-CalDAV/CardDAV bridge daemon (see `../desktop/src/core/caldav/`) at the
-same Radicale instance so desktop and this app share one dataset. That's
-the next piece of work, not this one.
+Not covered yet: running Radicale with real (non-plaintext) auth, and
+putting both Radicale and this app behind Tailscale. That's the next
+piece of work, not this one. (Older versions of this note also covered
+pointing a separate desktop app's CalDAV/CardDAV bridge at the same
+Radicale instance -- moot since `desktop/` was deleted 2026-08-07;
+`webapp/` is now the sole client, see `plans/label-space-rework.md`
+Phase 8.)

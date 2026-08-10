@@ -105,12 +105,22 @@ def create_app() -> FastAPI:
 
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
-    from .routers import addressbooks, calendar, calendars, contacts, dashboard, databases, habits, projects, schedule, settings, tags, task_lists, tasks, timeline
+    # Phase 1 (label-space rework, 2026-08-06): routers/calendars.py,
+    # routers/task_lists.py, routers/addressbooks.py are deleted -- those
+    # collection-management concepts are gone (see plans/
+    # label-space-rework.md §3 Phase 1 and db.py's Phase 1 comments).
+    #
+    # 2026-08-07: routers/databases.py and routers/grades.py are deleted
+    # too -- Databases (and Grades, which was built on top of it) is
+    # deactivated and removed entirely, not just unlinked from nav. See
+    # plans/label-space-rework.md's Grades/Databases removal note and
+    # db.py's own removal comments on the `databases`/`database_columns`/
+    # `database_rows`/`grades` tables.
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, published_lists, schedule, settings, tasks, timeline
 
     app.include_router(dashboard.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
-    app.include_router(calendars.router)
     app.include_router(schedule.router)
     # timeline.router's literal routes (/tasks/timeline, /tasks/timeline/
     # create) must be registered BEFORE tasks.router -- tasks.router
@@ -123,14 +133,13 @@ def create_app() -> FastAPI:
     # of the Timeline view.
     app.include_router(timeline.router)
     app.include_router(tasks.router)
-    app.include_router(task_lists.router)
     app.include_router(contacts.router)
-    app.include_router(addressbooks.router)
-    app.include_router(tags.router)
-    app.include_router(projects.router)
+    app.include_router(labels.router)
     app.include_router(habits.router)
-    app.include_router(databases.router)
+    app.include_router(banners.router)
     app.include_router(settings.router)
+    app.include_router(published_lists.router)
+    app.include_router(export.router)
     return app
 
 

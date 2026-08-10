@@ -17,16 +17,13 @@
 //    status/priority pills.
 //
 // Exposed as window.CCScheduleTable.init(root), not a bare top-level IIFE
-// -- 2026-08-01, Schedule became a modal opened from Calendar
-// (_calendar_nav.html), and a modal's content is injected via
-// `body.innerHTML = ...` (modal.js), which never executes embedded
-// <script> tags and never re-runs a script that already finished loading
-// on the *original* page (Calendar's own extra_scripts doesn't include
-// this file at all). Loading this file globally (base.html) plus calling
-// .init() again from modal.js's wireContent() after every injection is
-// what makes it work both as a normal full-page view AND inside the
-// modal -- same "listeners have to be reattached to fresh DOM nodes"
-// problem wireContent() already solves for color pickers and forms.
+// -- the create/edit class form (schedule_class_form.html) still opens as
+// a modal (data-modal) from a row's Edit link, and modal.js's
+// wireContent() re-runs .init() after that content is injected the same
+// way it does for every other page-level script. Schedule itself
+// (schedule_classes.html) stopped being modal-openable 2026-08-08, but
+// the re-init entry point stays since the modal-opened edit form can still
+// land back on a freshly-reloaded table row.
 (function () {
   function init(root) {
     const table = (root || document).querySelector("#schedule-table") || document.getElementById("schedule-table");
@@ -72,32 +69,6 @@
       });
     });
 
-    initDensity(table, root);
-  }
-
-  // Compact density (2026-08-01, "a lot of classes, easily viewed") --
-  // localStorage-persisted, same "pure per-device display preference"
-  // category as the Timeline view's gutter width (timeline.js), not
-  // something the server needs to know about. Scoped to whichever table
-  // was just wired (not a bare getElementById) so this also works
-  // correctly when re-run inside the modal.
-  const DENSITY_KEY = "commandCenterWeb.scheduleTableDensity";
-  function initDensity(table, root) {
-    const toggle = (root || document).querySelector("#schedule-density-toggle") || document.getElementById("schedule-density-toggle");
-    if (!toggle || toggle.dataset.ccWired) return;
-    toggle.dataset.ccWired = "1";
-
-    function apply(on) {
-      table.classList.toggle("is-compact", on);
-      toggle.classList.toggle("active", on);
-    }
-    apply(localStorage.getItem(DENSITY_KEY) === "1");
-
-    toggle.addEventListener("click", () => {
-      const on = !table.classList.contains("is-compact");
-      apply(on);
-      localStorage.setItem(DENSITY_KEY, on ? "1" : "0");
-    });
   }
 
   window.CCScheduleTable = { init };

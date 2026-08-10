@@ -41,10 +41,10 @@
 <div class="cal-agenda-day {% if day.is_today %}is-today{% endif %}">
     <div class="cal-agenda-day-label">{{ day.label }}</div>
     {% for t in day.tasks %}
-    <a class="cal-agenda-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
+    <a class="cal-agenda-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
     {% endfor %}
     {% for e in day.events %}
-    <a class="cal-agenda-item" href="/events/{{ e.uid }}/edit" data-modal>{{ icon('calendar', 'icon-sm') }}{% if not e.all_day and e.start_at %} <span class="cal-agenda-time">{{ e.start_at[11:16] }}</span>{% endif %} {{ e.title }}</a>
+    <a class="cal-agenda-item" href="/events/{{ e.uid }}" data-modal>{{ icon('calendar', 'icon-sm') }}{% if not e.all_day and e.start_at %} <span class="cal-agenda-time">{{ e.start_at | fmt_time }}</span>{% endif %} {{ e.title }}</a>
     {% endfor %}
 </div>
 {% endif %}

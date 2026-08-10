@@ -1,42 +1,76 @@
 {% extends "base.html" %}
 {% block title %}{{ month_name }} {{ year }} - Calendar{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
 {% block content %}
-{% include "_calendar_nav.html" %}
-<div class="toolbar top-app-bar">
-    <h1 style="margin:0">{{ month_name }} {{ year }}</h1>
-    <div class="spacer"></div>
-    <a class="btn ghost" href="/calendar?year={{ prev_year }}&month={{ prev_month }}">{{ icon('chevron-left', 'icon-sm') }} Prev</a>
-    <a class="btn ghost" href="/calendar?year={{ next_year }}&month={{ next_month }}">Next {{ icon('chevron-right', 'icon-sm') }}</a>
-    <a class="btn primary" href="/events/new" data-modal data-fab>{{ icon('plus') }} New event</a>
+{% import "_calendar_filters.html" as cf %}
+{% set _lbl = active_label | default('') %}
+{% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
+{% set calendar_filter_base_url = '/calendar?year=' ~ year ~ '&month=' ~ month %}
+<div class="toolbar top-app-bar toolbar-2row">
+    <div class="toolbar-row">
+        <h1 class="sr-only">{{ month_name }} {{ year }}</h1>
+        <div class="segmented calendar-subnav">
+            <a class="seg-btn active" href="/calendar?year={{ year }}&month={{ month }}{{ _lq }}">Month</a>
+            <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
+            <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
+        </div>
+        <div class="spacer"></div>
+        <a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
+        <a class="icon-btn" href="/calendar?year={{ next_year }}&month={{ next_month }}{{ _lq }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
+        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
+    </div>
 </div>
 
-<div class="card">
-<div class="table-scroll">
-<table class="month-table">
-    <thead>
-        <tr>
-            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for week in weeks %}
-        <tr>
-            {% for day in week %}
-            <td class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}">
-                <a href="/calendar/day/{{ day.iso }}" class="month-day-num">{{ day.date.day }}</a>
-                {% for e in day.events %}
-                    <a class="month-item" href="/events/{{ e.uid }}/edit" data-modal><span class="color-dot cal-{{ e.calendar_color }}"></span> {{ e.title }}</a>
-                {% endfor %}
-                {% for t in day.tasks %}
-                    <a class="month-item" href="/tasks/{{ t.uid }}/edit" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
-                {% endfor %}
-            </td>
-            {% endfor %}
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+{% include "_education_next_lectures.html" %}
+
+<!-- 2026-08-08: fits the viewport instead of pushing the page taller and
+     letting the whole page scroll -- see style.css's own comment on
+     .calendar-viewport/.month-viewport for the "slight resize" mechanics
+     (each week row flexes to share whatever height is left, day cells
+     drop their fixed-height floor). Desktop only, see that same comment. -->
+<div class="card calendar-viewport month-viewport">
+<!-- 2026-08-08: was hardcoded Mon..Sun -- now rotated by
+     routers/calendar.py's month_view to match whichever day "Week
+     starts on" (Settings > General) names, so this header always lines
+     up with weeks/_month_grid's own column order. -->
+<div class="month-weekday-row">
+    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
 </div>
+{% for week in weeks %}
+<div class="month-week-grid">
+    {% for day in week.days %}
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
+        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
+        <div class="month-day-bottom">
+            <!-- 2026-08-08: one flat list per day, all three types, no
+                 overlap -- all-day events as full-width colored rows
+                 (.month-all-day), timed events as quiet time+dot text,
+                 tasks as square+title text (routers/calendar.py's
+                 _month_grid tags each with its `kind`). Everything past
+                 MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
+                 below, which directs to the day view. -->
+            {% for item in day.rows %}
+                {% if item.kind == "all_day" %}
+                    <a class="month-all-day cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}" data-modal title="{{ item.event.title }}">{{ item.event.title }}</a>
+                {% elif item.kind == "event" %}
+                    <a class="month-task-item" href="/events/{{ item.event.uid }}" data-modal>
+                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
+                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
+                        {{ item.event.title }}
+                    </a>
+                {% else %}
+                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ item.task.title }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if day.overflow_count %}
+                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
 </div>
 {% endblock %}
 {% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script>{% endblock %}

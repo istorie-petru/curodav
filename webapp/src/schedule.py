@@ -63,6 +63,51 @@ def compute_excluded(occurrences: list[date], holidays: list[dict[str, str]]) ->
     return [occ for occ in occurrences if any(lo <= occ <= hi for lo, hi in ranges)]
 
 
+def next_occurrence(
+    cls: dict[str, Any],
+    settings: dict[str, Any],
+    holidays: list[dict[str, str]],
+    today: date | None = None,
+) -> date | None:
+    """The next date a class actually meets, on or after `today` (Phase 6
+    rework -- the calendar's education "next lecture" badge and a project
+    page's per-class "Next: today/tomorrow/in N days"). Respects parity
+    (odd/even-week classes) and semester bounds by generating the class's
+    real occurrences from first_occurrence, then skipping any that land on
+    a holiday. Returns None if the class couldn't be scheduled (no
+    semester_start) or no occurrence remains at/after today."""
+    today = today or date.today()
+    start_str = (settings or {}).get("semester_start")
+    if not start_str:
+        return None
+    semester_end = date.fromisoformat((settings or {}).get("semester_end")) if (settings or {}).get("semester_end") else None
+    anchor = first_occurrence(date.fromisoformat(start_str), (cls or {}).get("day") or "Monday", (cls or {}).get("parity") or "all")
+    until = semester_end if semester_end and semester_end >= today else today
+    occurrences = generate_occurrences(anchor, until, (cls or {}).get("parity") or "all")
+    excluded = set(compute_excluded(occurrences, holidays))
+    for occ in occurrences:
+        if occ < today:
+            continue
+        if occ.isoformat() in excluded:
+            continue
+        return occ
+    return None
+
+
+def next_label(next_date: date, today: date | None = None) -> str:
+    """Label for a "next lecture" badge: 'today', 'tomorrow', or 'in N
+    days' (never a past date -- next_occurrence only ever returns >=
+    today, and a bare date reads worse than the relative form for the
+    near future)."""
+    today = today or date.today()
+    delta = (next_date - today).days
+    if delta <= 0:
+        return "today"
+    if delta == 1:
+        return "tomorrow"
+    return f"in {delta} days"
+
+
 def class_to_event_row(
     cls: dict[str, Any], settings: dict[str, Any], holidays: list[dict[str, str]]
 ) -> dict[str, Any] | None:
@@ -113,7 +158,7 @@ def class_to_event_row(
         "all_day": False,
         "location": cls.get("room") or None,
         "status": "active" if cls.get("enrolled", True) else "archived",
-        "tags": ["schedule"],
+        "tags": [settings.get("schedule_label") or "Schedule"],
         "calendar_path": settings.get("target_calendar_uid") or "calendar",
         "recurrence": ";".join(recurrence_parts),
         "exdates": exdates,

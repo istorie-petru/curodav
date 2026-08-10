@@ -2,11 +2,13 @@
 {% from "_habit_heatmap.html" import heatmap %}
 {% block title %}{{ habit.name if habit else "Habit" }}{% endblock %}
 {% block content %}
-<p style="margin:0 0 10px"><a href="/habits">{{ icon('chevron-left', 'icon-sm') }} Habits</a></p>
+<p class="breadcrumb"><a href="/habits">{{ icon('chevron-left', 'icon-sm') }} Habits</a></p>
 {% if habit %}
 
 <div class="toolbar">
-    <h1 style="margin:0">{% if habit.icon %}{{ habit.icon }} {% endif %}{{ habit.name }}</h1>
+    <!-- habit.icon is a sprite icon name (modal-input-design Phase C),
+         not a free-typed emoji glyph. -->
+    <h1>{% if habit.icon %}{{ icon(habit.icon) }} {% endif %}{{ habit.name }}</h1>
     <span class="cell-tag tag-{{ habit.color }}">{{ habit.color }}</span>
     {% if habit.archived_at %}<span class="cell-tag tag-gray">Archived</span>{% endif %}
     <div class="spacer"></div>
@@ -28,7 +30,7 @@
 </div>
 
 <div class="card" style="margin-top:16px">
-<h2 style="margin-top:0">Log past data</h2>
+<h2>Log past data</h2>
 <!-- The explicit "add past data" path, distinct from clicking a heatmap
      cell (which only ever toggles 0/1) -- lets you enter an exact value
      for any date, e.g. backfilling "drank 6 glasses last Tuesday" or
@@ -40,7 +42,11 @@
     </div>
     <div class="field">
         <label>Value{% if habit.target_per_day %} (target: {{ habit.target_per_day }}){% endif %}</label>
-        <input type="number" name="value" min="0" step="0.5" value="1">
+        <div class="stepper">
+            <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease value" tabindex="-1">&minus;</button>
+            <input type="number" name="value" class="stepper-input" min="0" step="0.5" value="1">
+            <button type="button" class="stepper-btn stepper-inc" aria-label="Increase value" tabindex="-1">+</button>
+        </div>
     </div>
     <div class="field field-wide">
         <label>Note (optional)</label>

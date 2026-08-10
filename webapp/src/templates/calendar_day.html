@@ -1,43 +1,71 @@
 {% extends "base.html" %}
 {% block title %}{{ day }} - Calendar{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
 {% block content %}
-{% include "_calendar_nav.html" %}
-<div class="toolbar top-app-bar">
-    <h1 style="margin:0">{{ day }}</h1>
-    <div class="spacer"></div>
-    <a class="btn ghost" href="/calendar/day/{{ prev_day }}">{{ icon('chevron-left', 'icon-sm') }} Prev</a>
-    <a class="btn ghost" href="/calendar/day/{{ next_day }}">Next {{ icon('chevron-right', 'icon-sm') }}</a>
-    <a class="btn primary" href="/events/new?date={{ day }}" data-modal data-fab>{{ icon('plus') }} New event on this day</a>
+{% import "_calendar_filters.html" as cf %}
+{% set _lbl = active_label | default('') %}
+{% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
+{% set calendar_filter_base_url = '/calendar/day/' ~ day %}
+<div class="toolbar top-app-bar toolbar-2row">
+    <div class="toolbar-row">
+        <h1 class="sr-only">{{ day }}</h1>
+        <div class="segmented calendar-subnav">
+            <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
+            <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
+            <a class="seg-btn active" href="/calendar/day/{{ day }}{{ _lq }}">Day</a>
+        </div>
+        <div class="spacer"></div>
+        <a class="icon-btn" href="/calendar/day/{{ prev_day }}{{ _lq }}" title="Previous day" aria-label="Previous day">{{ icon('chevron-left', 'icon-sm') }}</a>
+        <a class="icon-btn" href="/calendar/day/{{ next_day }}{{ _lq }}" title="Next day" aria-label="Next day">{{ icon('chevron-right', 'icon-sm') }}</a>
+        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+        <a class="btn primary" href="/events/new?date={{ day }}" data-modal data-fab title="New event on this day">{{ icon('plus') }} New</a>
+    </div>
 </div>
-<p style="color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0 0 8px">
-    Hover to preview a slot, click for a 1-hour event, click-and-drag to pick a length. Drag an existing event to move or resize it.
-</p>
+{% include "_education_next_lectures.html" %}
 
-<div class="card">
-<div class="all-day-strip">
-    {% for e in all_day %}
-    <a class="all-day-chip cal-{{ e.calendar_color }}" href="/events/{{ e.uid }}/edit" data-modal>{{ e.title }}</a>
-    {% endfor %}
-    {% for t in tasks %}
-    <a class="all-day-chip cal-gray" href="/tasks/{{ t.uid }}/edit" data-modal>{{ icon('square', 'icon-sm') }} {{ t.title }}</a>
-    {% endfor %}
-    {% if not all_day and not tasks %}<span style="color:var(--fg-tertiary); font-size:var(--text-footnote)">Nothing all-day / due today</span>{% endif %}
-</div>
+<!-- 2026-08-08: Day is now the same single-pane, fit-the-page scrollable
+     layout as Week (direct feedback: make the day view's scrollable
+     calendar-viewport behave like the calendar week view, and remove the
+     agenda at the bottom of the calendar day view) -- the old Day+Agenda
+     side-by-side split is gone; the 24-hour grid fills the viewport and
+     scrolls internally exactly like calendar_week.html's. -->
+<div class="card calendar-viewport">
 <div class="time-grid-wrap">
-<div class="time-grid-body" style="height:{{ 24 * px_per_hour }}px">
+<div class="time-grid-top">
+<div class="time-grid-head day">
+    <div class="thd {% if day == today_iso %}is-today{% endif %}">{{ day }}</div>
+</div>
+<div class="time-grid-allday day">
+    <div class="allday-gutter">All day</div>
+    <div class="allday-cols day">
+        <div class="allday-col">
+            {% for e in all_day %}
+            <a class="allday-task" href="/events/{{ e.uid }}" data-modal title="{{ e.title }}">
+                <span class="color-dot cal-{{ e.calendar_color }}"></span>
+                {{ e.title }}
+            </a>
+            {% endfor %}
+            {% for t in tasks %}
+            <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+</div>
+<div class="time-grid-body" style="--hr-h:{{ px_per_hour }}px; height:calc(25 * var(--hr-h));">
     <div class="time-gutter">
         {% for h in hours %}
-        <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ "%02d:00"|format(h) }}</div>
+        <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ h | fmt_hour }}</div>
         {% endfor %}
     </div>
     <div class="time-cols day">
         <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
             {% for e in timed %}
             <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
-               href="/events/{{ e.uid }}/edit" data-modal
+               href="/events/{{ e.uid }}" data-modal
                style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                 <span class="te-name">{{ e.title }}</span>
-                <span class="te-time">{{ e.start_at[11:16] }}{% if e.end_at %}&ndash;{{ e.end_at[11:16] }}{% endif %}</span>
+                <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
                 {% if e.location %}<span class="te-time">{{ e.location }}</span>{% endif %}
                 <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
             </a>

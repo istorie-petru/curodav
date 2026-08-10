@@ -23,8 +23,8 @@
 <table>
     {% for e in data.events %}
     <tr>
-        <td style="width:60px; color:var(--fg-tertiary)">{% if not e.all_day and e.start_at %}{{ e.start_at[11:16] }}{% else %}All day{% endif %}</td>
-        <td><a href="/events/{{ e.uid }}/edit" data-modal>{{ e.title }}</a></td>
+        <td class="text-muted" style="width:60px">{% if not e.all_day and e.start_at %}{{ e.start_at | fmt_time }}{% else %}All day{% endif %}</td>
+        <td><a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a></td>
     </tr>
     {% endfor %}
 </table>

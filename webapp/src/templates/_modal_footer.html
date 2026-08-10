@@ -1,0 +1,54 @@
+{# Shared footer for the view (detail) and edit (form) modal windows --
+   2026-08-08 merge: one footer language for both states, so switching
+   between "view this event/task/contact" and "edit it" inside the same
+   modal never changes the action bar. Same layout the detail modals
+   introduced: a ghost back/cancel link on the left, the demoted Delete
+   text-link (was the old filled-red .btn.danger), and the primary action
+   -- Edit (a link back into the edit form) or Save (a submit button tied
+   to the body's form by id) -- on the right.
+
+   Set these Jinja variables before `{% include %}`:
+     footer_back_url        -- where the back/cancel link navigates
+     footer_back_mode       -- "cancel" (data-modal-cancel, closes the
+                               modal; the view's "Done", and an edit form
+                               with no view to go back to) or "modal"
+                               (data-modal, swaps in another fragment --
+                               the edit form's "Cancel" returning to the
+                               detail view). Default "cancel".
+     footer_back_label      -- "Done" (view) or "Cancel" (edit); default Done
+     footer_delete_url      -- POST target; omit to skip Delete entirely
+                                (new-object forms, contact_form)
+     footer_delete_mode     -- "undo" (data-delete-undo) or "confirm"
+                               (data-confirm-sheet); default "undo"
+     footer_delete_label    -- undo label / confirm-sheet message
+     footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
+     footer_primary_href    -- Edit link (view modals); when set the primary
+                               is an <a>, otherwise a submit <button>
+     footer_primary_form    -- id of the body <form> the Save button submits
+     footer_primary_label   -- "Edit" / "Save"
+     footer_primary_icon    -- sprite icon name; default "edit" for a link,
+                               "check-square" for a submit button #}
+<div class="modal-footer">
+{% if footer_back_mode == 'modal' %}
+<a href="{{ footer_back_url }}" class="btn ghost" data-modal>{{ icon('chevron-left', 'icon-sm') }} {{ footer_back_label|default('Done') }}</a>
+{% else %}
+<a href="{{ footer_back_url }}" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} {{ footer_back_label|default('Done') }}</a>
+{% endif %}
+<span class="spacer"></span>
+{% if footer_delete_url %}
+{% if footer_delete_mode == 'confirm' %}
+<form method="post" action="{{ footer_delete_url }}" data-confirm-sheet="{{ footer_delete_label }}">
+    <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
+</form>
+{% else %}
+<form method="post" action="{{ footer_delete_url }}" data-delete-undo="{{ footer_delete_label }}" data-delete-undo-redirect="{{ footer_delete_redirect }}">
+    <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
+</form>
+{% endif %}
+{% endif %}
+{% if footer_primary_href %}
+<a class="btn primary" href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
+{% else %}
+<button type="submit" form="{{ footer_primary_form }}" class="btn primary">{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
+{% endif %}
+</div>
