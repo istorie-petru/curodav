@@ -1,0 +1,43 @@
+{# Reusable color swatch-grid popover (2026-08-08) -- shared by
+   labels_manage.html, label_detail.html, and habit_form.html so "pick one
+   of the 16 colors" is exactly one markup+style contract everywhere,
+   the same "one partial, not three near-duplicate copies" reasoning
+   _widget_list_multiselect.html already established for the label/task-
+   list/calendar filter dropdowns. Grew out of the original bare-circle
+   swatch grid (modal-input-design Phase C) when the palette grew from 8
+   to 16 colors and picked up a text name under each swatch (direct
+   feedback: "more colors options (16) with small label under each
+   color") -- three separate copies of that markup would have meant three
+   places to keep in sync every time the palette changes again.
+
+   Uses the same #color-popover portal + `form="..."` attribute mechanism
+   every other swatch picker in this app relies on (see modal.js's
+   wireSwatchPickers/openPopover) -- the actual <form> element owning
+   these radios lives wherever the caller's own markup puts it (a fixed
+   id for a whole-page form, a per-row dynamic id for labels_manage.html's
+   table), never inside this partial itself.
+
+   Expects in context:
+     cp_current    -- the currently selected color name (e.g. "blue")
+     cp_colors     -- iterable of color names to offer (routers/labels.py's
+                       COLORS -- always all 16; no caller currently offers
+                       a narrower set, but nothing here assumes 16
+                       specifically)
+     cp_form_id    -- id of the real <form> these radios submit into
+     cp_autosubmit -- (default false) sets data-autosubmit on the wrapping
+                       .color-picker, for callers that want to submit the
+                       instant a swatch is picked (labels_manage.html's
+                       table rows) rather than wait for an explicit Save
+                       button (label_detail.html/habit_form.html's forms). #}
+<div class="color-picker"{% if cp_autosubmit|default(false) %} data-autosubmit{% endif %}>
+    <button type="button" class="color-swatch-current cal-{{ cp_current }}" title="Change color"></button>
+    <div class="color-dropdown">
+        {% for col in cp_colors %}
+        <label class="color-swatch-label" title="{{ col|capitalize }}">
+            <input type="radio" name="color" value="{{ col }}" class="color-swatch cal-{{ col }}"
+                   {% if cp_current == col %}checked{% endif %} form="{{ cp_form_id }}">
+            <span class="color-swatch-name">{{ col|capitalize }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Appearance - Settings{% endblock %}
+{% block content %}
+{% include "_settings_breadcrumb.html" with context %}
+<h1>Appearance</h1>
+
+<div class="card">
+    <div class="settings-field-row">
+        <span class="settings-field-label">Theme
+            <span class="settings-field-hint">Follows your system by default</span>
+        </span>
+        <span class="spacer"></span>
+        <!-- Segmented System/Light/Dark (2026-08-08 redesign) -- replaces
+             the old on/off "Dark theme" switch, which couldn't represent
+             "follow the OS" once you'd touched it even once: the switch
+             only ever stored an explicit light/dark, so the one-time-only
+             OS-preference fallback base.html's inline <head> script and
+             app.js already have (prefers-color-scheme, used only when
+             localStorage has never been set) became permanently
+             unreachable the instant anyone flipped the switch. This
+             control can express all three states explicitly and put the
+             user back in "System" at any time -- same underlying
+             mechanism (window.CCTheme, static/app.js), no new storage. -->
+        <div class="segmented" id="themeSegmented" role="radiogroup" aria-label="Theme">
+            <button type="button" class="seg-btn" data-theme-choice="system">{{ icon('monitor', 'icon-sm') }} System</button>
+            <button type="button" class="seg-btn" data-theme-choice="light">{{ icon('sun', 'icon-sm') }} Light</button>
+            <button type="button" class="seg-btn" data-theme-choice="dark">{{ icon('moon', 'icon-sm') }} Dark</button>
+        </div>
+    </div>
+</div>
+<!-- Show icons next to labels (2026-08-09) -- a second Appearance
+     preference: when on, every label pill in the app (task/event label
+     pills, Tasks table/board, calendar chips) renders the label's
+     assigned icon before its name. Same autosubmit segmented on/off
+     pattern as General's Week-starts-on control. Read back everywhere
+     via deps.py's show_label_icons()/label_icon() Jinja globals. -->
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/label-icons">
+        <span class="settings-field-label">Show icons next to labels
+            <span class="settings-field-hint">Each label's icon before its name, wherever labels appear</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Show icons next to labels">
+            <label class="seg-btn"><input type="radio" name="show" value="1" class="seg-radio" {% if current_show_label_icons %}checked{% endif %} onchange="this.form.requestSubmit()"> On</label>
+            <label class="seg-btn"><input type="radio" name="show" value="" class="seg-radio" {% if not current_show_label_icons %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
+        </div>
+    </form>
+</div>
+{% endblock %}

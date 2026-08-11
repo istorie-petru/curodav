@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Labels{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
+{% include "_settings_breadcrumb.html" with context %}
+<h1>Labels</h1>
+<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and flip "Generate a Space page" on to aggregate its child labels into their own page.</p>
+
+{% if labels %}
+<!-- Search (2026-08-08 redesign) -- client-side only, same "everything's
+     already server-rendered, JS just filters what's visible" approach as
+     app.js's multiselect summaries: no round trip needed for a list this
+     size, and it keeps every row's own inline forms (rename/color/icon/
+     merge/clear) working completely unchanged underneath. Filters on
+     label name only, case-insensitive; a group's divider row hides itself
+     too once every label in that group is filtered out (static/label_search.js). -->
+<div class="settings-search">
+    <input type="search" id="label-search-input" placeholder="Search labels..." aria-label="Search labels">
+</div>
+
+<!-- Real table, not a flex row list (2026-08-08 follow-up) -- the previous
+     flex-row layout had no fixed columns, so Color/Icon/Space/Sections/
+     Merge/Remove landed at a different horizontal position on every row
+     depending on how long that row's name/rename-input/usage-count text
+     happened to be, and wrapped unpredictably on anything narrower than a
+     very wide viewport. Reuses the exact same base `table`/`thead th`/
+     `tbody tr` rules and `.table-scroll` horizontal-scroll-fade wrapper as
+     the Tasks table view (tasks_list.html) -- one column per control, a
+     header labeling each, real alignment -- rather than inventing a
+     second table-ish layout system for this one page. `.label-table` adds
+     its own tighter row padding on top of that shared base (see
+     style.css) -- this page is a management list meant to be scanned row
+     after row, not a content table, so it earns a denser row height than
+     Tasks' own. -->
+<div class="card table-scroll">
+<table class="task-table label-table" id="label-table">
+    <thead>
+        <tr>
+            <th>Label</th>
+            <th style="text-align:center">Abbrev.</th>
+            <th>Color</th>
+            <th>Icon</th>
+            <th style="text-align:center">Space</th>
+            <th style="width:1%"></th>
+        </tr>
+    </thead>
+{% for parent_name, group_labels in labels|groupby('parent_display') %}
+<!-- `outer_index` captured here, before the inner per-label loop below
+     redefines Jinja's own `loop` variable for its own scope -- used by
+     the per-row color/icon-picker's form id further down, since a plain
+     inner-loop index alone would repeat across groups (labels are
+     grouped by parent) and collide. -->
+{% set outer_index = loop.index0 %}
+<tbody data-label-group>
+    <tr class="task-section-divider" data-label-group-header><td colspan="6">{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</td></tr>
+    {% for l in group_labels %}
+    <!-- `label_index` captured immediately on entering this loop, before
+         any of the nested per-color/per-icon/per-module loops below
+         redefine Jinja's own `loop` variable for their own scope -- this
+         is THE bug fix (2026-08-08 follow-up): every `form="label-set-
+         {{ outer_index }}-{{ loop.index0 }}"` reference inside those
+         nested loops used to read `loop.index0` *after* it had already
+         been rebound to that inner loop's own index (0,1,2... over
+         colors/icons/modules, not over labels) -- so only the row where
+         a control's inner-loop position happened to coincide with its
+         label's own position (in practice: the very first label in each
+         group, only for that control's very first option) ever pointed
+         at a form id that actually existed. Every other color swatch,
+         every other icon, and Space/Sections on any label past the first
+         in its group silently posted to a form id nothing on the page
+         had -- `radio.form`/`this.form` resolved to `null`, so
+         static/modal.js's autosubmit (`radio.form.requestSubmit()`) and
+         the plain `onchange="this.form.requestSubmit()"` handlers below
+         both silently did nothing. Capturing the label's own index once,
+         under its own name, before it can be shadowed, is what makes
+         every reference below actually point at this row's real form. -->
+    {% set label_index = loop.index0 %}
+    <tr data-label-row data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
+        <!-- Rename -- self-contained in this cell, own small form; typing
+             a new name and tabbing/clicking away autosubmits (onchange),
+             no separate Save step for the single fastest-changing field
+             on this page. Usage count sits right next to the name
+             (2026-08-08 follow-up) rather than its own column -- it's
+             read-only context about *this* label, not a control, so it
+             belongs next to the thing it describes, not spread across
+             the table. The color swatch that used to sit here too is
+             gone -- Color is its own column now, showing the chip a
+             second time next to the name was pure repetition. -->
+        <td>
+            <form method="post" action="/labels/{{ l.name }}/rename" class="label-cell-inline" data-modal-keep-open>
+                <input type="text" name="new_name" value="{{ l.name }}" onchange="this.form.requestSubmit()">
+                <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
+            </form>
+        </td>
+        <!-- Abbreviation (2026-08-09) -- a short synonym (max 5 chars)
+             shown as this Space's label in the nav rail (base.html) and
+             accepted wherever a label name is typed, resolving to the
+             full name (see db.set_object_labels). Like Icon/Space below,
+             it lives in its own cell but submits into the row's real
+             "set" form (id label-set-...) via the form attribute. -->
+        <td style="text-align:center">
+            <input type="text" name="abbreviation" maxlength="5" value="{{ l.abbreviation or '' }}"
+                   form="label-set-{{ outer_index }}-{{ label_index }}"
+                   title="Abbreviation (max 5 characters)"
+                   onchange="this.form.requestSubmit()">
+        </td>
+        <!-- Color -- the actual "set" form for this row lives here (id
+             lets Icon/Space/Sections cells below, which are visually
+             separate <td>s, still submit into it via `form="..."`, the
+             same attribute-based ownership modal.js's color/icon popovers
+             already rely on to keep a reparented swatch grid part of its
+             real form). -->
+        <td>
+            <form method="post" action="/labels/{{ l.name }}/set" id="label-set-{{ outer_index }}-{{ label_index }}" data-modal-keep-open>
+                <input type="hidden" name="description" value="{{ l.description or '' }}">
+                <input type="hidden" name="parent_name" value="{{ l.parent_name or '' }}">
+                {% set cp_current = l.color %}
+                {% set cp_colors = colors %}
+                {% set cp_form_id = "label-set-" ~ outer_index ~ "-" ~ label_index %}
+                {% set cp_autosubmit = true %}
+                {% include "_color_swatch_picker.html" %}
+            </form>
+        </td>
+        <!-- Icon (2026-08-08 redesign) -- was only reachable one label at
+             a time via each label's own /labels/{name} detail page
+             (label_detail.html); a proper label-management view shouldn't
+             make you open every label individually just to set its icon,
+             so this is the same portal-based picker, inline in the row
+             like color already was. Same #icon-popover portal (base.html)
+             modal.js's swatch-picker wiring already drives. -->
+        <td>
+            {% set ip_current = l.icon %}
+            {% set ip_groups = icon_groups %}
+            {% set ip_form_id = "label-set-" ~ outer_index ~ "-" ~ label_index %}
+            {% set ip_default_icon = "tag" %}
+            {% set ip_autosubmit = true %}
+            {% include "_icon_swatch_picker.html" %}
+        </td>
+        <!-- Space -- generate_space is the only thing that decides both
+             whether this label appears as a Space in the sidebar rail
+             (base.html/deps.py's sidebar_spaces(), unconditionally --
+             2026-08-08 removed the separate pin/unpin step that used to
+             sit here too, per direct feedback: a label worth turning
+             into a Space is a label worth finding quickly, so a second
+             manual step to also show it in the rail was friction with no
+             real benefit) and whether it groups child labels as
+             "Projects" on its own page. -->
+        <td style="text-align:center">
+            <input type="checkbox" name="generate_space" value="1" title="Generate a Space page" {% if l.generate_space %}checked{% endif %} onchange="this.form.requestSubmit()" form="label-set-{{ outer_index }}-{{ label_index }}">
+        </td>
+        <!-- Open/Merge/Remove, one line (2026-08-08 follow-up) -- each of
+             the three lived in its own <form>, and `.label-cell-inline`
+             is `display:flex`, which is block-level by default: with no
+             shared flex wrapper around the three of them, each form
+             started its own line inside the cell (Open, then Merge, then
+             Remove stacked vertically) instead of sitting side by side --
+             `white-space:nowrap` on the <td> only ever affects text, not
+             block-level children, so it did nothing for this. One
+             `.label-actions` flex row around all three fixes it; the two
+             forms inside keep `.label-cell-inline` (still needed on the
+             merge form specifically, to lay its own label+select out) but
+             no longer have to *also* carry the whole row's own layout. -->
+        <td style="text-align:right">
+            <div class="label-actions">
+                <a href="/labels/{{ l.name }}" class="icon-btn" title="Open">{{ icon('external-link', 'icon-sm') }}</a>
+                {% if labels|length > 1 %}
+                <form method="post" action="/labels/{{ l.name }}/merge" class="label-cell-inline" data-modal-keep-open>
+                    <select name="dest_name" class="filter-select" aria-label="Merge into" onchange="this.form.requestSubmit()">
+                        <option value="" disabled selected>Merge into&hellip;</option>
+                        {% for other in labels if other.name != l.name %}
+                        <option value="{{ other.name }}">{{ other.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+                {% endif %}
+                <form method="post" action="/labels/{{ l.name }}/clear" data-modal-keep-open data-confirm-sheet="Remove &quot;{{ l.name }}&quot; from every object that carries it? This doesn't delete anything else.">
+                    <button type="submit" class="icon-btn" title="Remove (strip from everything)">{{ icon('x', 'icon-sm') }}</button>
+                </form>
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+</tbody>
+{% endfor %}
+</table>
+</div>
+<p class="empty-state" id="label-search-empty" hidden>No labels match "<span id="label-search-empty-query"></span>".</p>
+{% else %}
+<div class="empty-state">No labels yet -- labels are created automatically the first time you apply one on a task, event, or contact.</div>
+{% endif %}
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Done</a>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('label_search.js') }}"></script>
+{% endblock %}

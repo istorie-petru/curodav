@@ -1,0 +1,98 @@
+{# Relations card (2026-08-09) -- the merged successor to the old
+   Subtasks-only card. Direct feedback: "implement relations between events
+   and tasks, which exists in a similar fashion like the 'Subtasks'
+   feature... Actually 'Subtasks' is already very similar to this feature
+   so they should just be merged." So this one card holds both halves:
+
+   - Subtasks -- unchanged, the parent/child task list that used to own
+     the whole card (see the old _task_subtasks.html): a .checklist of
+     rows with a done checkbox, plus the quick-add form that creates a
+     child task (parent_uid). This half is a task->task structural link.
+   - Related events -- the new cross-type half: an event and a task are
+     related when they carry at least one label in common, and the link is
+     stored in event_task_relations. The add row's <select> offers every
+     not-yet-linked event that already shares a label ("link an existing
+     event"), plus a "＋ New event…" sentinel that reveals a title input
+     (static/relations_picker.js) -- a new event inherits this task's
+     labels server-side, which guarantees the shared-label rule. Each
+     related row's ✕ unlinks (relations are associative, never cascade).
+
+   Both sub-add-forms are data-modal-keep-open: incremental edits, the
+   modal stays open and re-renders (modal.js's refreshModalContent).
+   Shared by task_detail.html (the full read-only view, header shown) and
+   task_form.html (the edit modal, same spot the old subtasks section sat;
+   no header there, just the compact lists + add rows, to fit the form). #}
+{% macro task_relations_section(task, subtasks, related_events, linkable_events, show_header=true) %}
+{% set has_labels = (task.tags or []) | length > 0 %}
+{% if show_header %}
+<h2>
+    Relations
+    <span class="checklist-progress">{{ subtasks|length + related_events|length }}</span>
+</h2>
+{% endif %}
+<div class="relations-group">
+    <div class="relations-group-head">Subtasks
+        {% if subtasks %}<span class="checklist-progress">{{ subtasks|selectattr('status', 'in', ['done','archived'])|list|length }}/{{ subtasks|length }}</span>{% endif %}
+    </div>
+    {% if subtasks %}
+    <div class="checklist">
+        {% for st in subtasks %}
+        <div class="checklist-row {% if st.status in ('done', 'archived') %}is-done{% endif %}">
+            {% if st.status not in ('done', 'archived') %}
+            <form class="form-inline" method="post" action="/tasks/{{ st.uid }}/complete" data-modal-keep-open>
+                <button type="submit" class="checklist-check" title="Mark done">{{ icon('square') }}</button>
+            </form>
+            {% else %}
+            <span class="checklist-check is-done" style="cursor:default">{{ icon('check-square') }}</span>
+            {% endif %}
+            <a class="checklist-text" href="/tasks/{{ st.uid }}" data-modal>{{ st.title }}</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:10px 0">No subtasks yet.</div>
+    {% endif %}
+    <form method="post" action="/tasks" class="checklist-add-form" data-modal-keep-open>
+        <input type="hidden" name="parent_uid" value="{{ task.uid }}">
+        <input type="hidden" name="status" value="active">
+        <input type="text" name="title" placeholder="Add a subtask and press Enter" required>
+        <button type="submit" class="btn">Add</button>
+    </form>
+</div>
+<div class="relations-group">
+    <div class="relations-group-head">Related events
+        {% if related_events %}<span class="checklist-progress">{{ related_events|length }}</span>{% endif %}
+    </div>
+    {% if related_events %}
+    <div class="checklist">
+        {% for ev in related_events %}
+        <div class="checklist-row">
+            <span class="detail-identity-dot cal-{{ ev.calendar_color }}"></span>
+            <a class="checklist-text" href="/events/{{ ev.uid }}" data-modal>{{ ev.title }}</a>
+            <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/relations/remove" data-modal-keep-open>
+                <input type="hidden" name="event_uid" value="{{ ev.uid }}">
+                <button type="submit" class="checklist-delete" title="Unlink event">{{ icon('x') }}</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif not has_labels and not linkable_events %}
+    <div class="empty-state" style="padding:10px 0">No related events yet.</div>
+    {% endif %}
+    {% if has_labels %}
+    <form method="post" action="/tasks/{{ task.uid }}/relations" class="checklist-add-form relations-add-form" data-modal-keep-open>
+        <select name="target_uid" class="relations-picker" title="Link an existing event, or create a new one">
+            <option value="" selected>Add a related event…</option>
+            {% for ev in linkable_events %}
+            <option value="{{ ev.uid }}">{{ ev.title }}</option>
+            {% endfor %}
+            <option value="__new__">＋ New event…</option>
+        </select>
+        <input type="text" name="new_title" class="relations-new-title" placeholder="New event title" disabled>
+        <button type="submit" class="btn">Link</button>
+    </form>
+    {% else %}
+    <div class="empty-state" style="padding:10px 0; font-size:var(--text-caption)">Add a label to this task to relate events.</div>
+    {% endif %}
+</div>
+{% endmacro %}

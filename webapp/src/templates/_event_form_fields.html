@@ -1,0 +1,91 @@
+{# Shared event create/edit field grid (2026-08-10) -- same extraction as
+   _task_form_fields.html: the inner content of event_form.html's
+   #event-form, shared with the merged dashboard quick-add modal
+   (quick_add.html) so both render the exact same fields.
+
+   The surrounding <form> (action/id) lives in the parent template.
+   Parent must provide:
+     event        -- the event being edited, or None for a new event
+     tag_name_items -- the Labels multiselect items
+     prefill_start / prefill_end / prefill_all_day -- new-event defaults
+                     (all blank/false on quick_add)
+   ms_form_id is set inside the partial (always this form's own id). #}
+    {% set ms_form_id = 'event-form' %}
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            <input type="text" name="title" required value="{{ event.title if event else '' }}">
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ event.description if event else '' }}</textarea>
+        </div>
+        <!-- Phase 1 (label-space rework, 2026-08-06) removed the Calendar
+             picker here -- calendars is gone, every event lives in one
+             universal pool now (see db.py's Phase 1 comments). -->
+        <!-- Start/End wrap in .event-start-end-field so the All-day
+             checkbox can hide them as a unit (style.css's
+             #event-form:has(#all_day:checked) rule) -- an all-day event
+             has no meaningful start/end time of day, so the pair goes
+             away while the toggle is on and comes straight back when
+             it's turned off. -->
+        <div class="field event-start-end-field">
+            <label>Start</label>
+            <input type="datetime-local" name="start_at"
+                   value="{{ event.start_at if event else (prefill_start or '') }}" required>
+        </div>
+        <div class="field event-start-end-field">
+            <label>End</label>
+            <input type="datetime-local" name="end_at" value="{{ event.end_at if event else (prefill_end or '') }}">
+        </div>
+        <div class="field field-toggle field-wide">
+            <input type="checkbox" id="all_day" name="all_day" value="1" {% if (event and event.all_day) or (not event and prefill_all_day) %}checked{% endif %}>
+            <label for="all_day">All day</label>
+        </div>
+        <div class="field">
+            <label>Location</label>
+            <!-- `or ''` + the empty-check below: the DB has legacy literal
+                 "None" strings from a pre-2026-08-08 str(None) sync bug
+                 (see db.py's init_schema self-heal) -- treat those as
+                 empty here too, so they render as a blank field with a
+                 placeholder example rather than a value that re-saves. -->
+            <input type="text" name="location" placeholder="e.g. Coffee Shop, Room 204" value="{{ event.location if event and event.location not in (None, 'None', 'Nothing') else '' }}">
+        </div>
+        <div class="field">
+            <label>Meeting URL</label>
+            <input type="url" name="meeting_url" placeholder="e.g. https://meet.example.com/abc123" value="{{ event.meeting_url if event and event.meeting_url not in (None, 'None', 'Nothing') else '' }}">
+        </div>
+        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
+             Phase B), same pattern as task_form.html -- see that
+             template's own comment. -->
+        <div class="field">
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = event.tags if event else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide">
+            <!-- static/reminders_picker.js turns this into a set of preset
+                 checkboxes ("At start time"/"5 minutes before"/etc.) plus a
+                 small "other minutes" escape hatch, all feeding back into
+                 this same `reminders` field -- see that file's own comment.
+                 routers/calendar.py's create_event/update_event still just
+                 parse it as `[int(m) for m in reminders.split(",") ...]`,
+                 completely unchanged. -->
+            <label>Reminders</label>
+            <input type="text" name="reminders" class="reminders-input" value="{{ event.reminders|join(', ') if event else '' }}">
+        </div>
+        <div class="field field-wide">
+            <!-- static/recurrence_picker.js turns this into a preset
+                 dropdown (Daily/Weekly/Monthly/Yearly/Custom...) instead of
+                 typed-out RRULE syntax -- see that file's own comment.
+                 routers/calendar.py's create_event/update_event still just
+                 pass this straight through unparsed, completely unchanged. -->
+            <label>Recurrence</label>
+            <input type="text" name="recurrence" class="recurrence-input" value="{{ event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '' }}">
+        </div>
+    </div>

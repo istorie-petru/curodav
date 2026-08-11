@@ -1,0 +1,119 @@
+<!-- Shared widget grid + each widget's own Filters panel. Factored out of dashboard.html
+     (2026-08-02, per-space widgets) so a Space page (routers/projects.py's
+     space_detail) gets the *exact* same widget system as Home, not a
+     second parallel implementation -- both routes build their context via
+     routers/dashboard.py's widget_page_context and simply include this
+     partial. Adding new widgets opens the customization modal via the
+     toolbar's "New widget" button (only visible in edit mode).
+     A Project page (routers/projects.py's project_detail) shares it too
+     (2026-08-05) via project_uid, the third value of the same page-identity
+     split space_uid already is.
+     Expects (all supplied by widget_page_context): edit_mode,
+     space_uid ("" on Home, a project_groups uid on a Space),
+     project_uid ("" on Home/Space, a projects uid on a Project page),
+     page_url (where actions here should redirect back to), widget_contexts,
+     widget_sources/widget_views/widget_ranges,
+     projects, task_lists, calendars, tag_names. There is no per-widget
+     height selection anymore (2026-08-07 removal of the manual
+     height-editor/drag-resize feature) -- .widget-content just sizes to
+     its own content, capped by a single flat CSS max-height (see
+     static/style.css) as a backstop, not a per-widget knob. Likewise
+     there is no per-widget width selection any more (same day, same
+     reasoning) -- each `wc.width`/`wc.width.span` below always comes from
+     the widget's own type default (or a stack's own stored config, see
+     _widget_width in routers/dashboard.py), never a manual override. -->
+{% if edit_mode %}
+<!-- Add widget -- now opens the customization modal via the toolbar's
+     "New widget" button instead of an inline form, keeping a single
+     surface for adding widgets. -->
+{% endif %}
+
+<datalist id="tag-names-datalist">
+    {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+</datalist>
+
+{% if widget_contexts %}
+{% macro widget_inner(wc, in_stack) %}
+{% set widget = wc.widget %}
+{% set spec = wc.spec %}
+{% set data = wc.data %}
+<div class="widget-header">
+    {% if edit_mode and not in_stack %}
+    <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
+    {% elif edit_mode and in_stack %}
+    <button type="button" class="icon-btn widget-stack-drag-handle" title="Drag to reorder within this stack" aria-label="Drag to reorder within this stack">{{ icon('move', 'icon-sm') }}</button>
+    {% endif %}
+    <h2>{{ widget.title or (spec.label if spec else widget.type) }}</h2>
+    <div class="spacer"></div>
+    {% if edit_mode %}
+    {% if in_stack %}
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/unstack" class="form-inline" data-confirm-sheet="Unstack this widget?">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="icon-btn" title="Move out of this stack">{{ icon('corner-down-right', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+    <a href="/dashboard/widgets/{{ widget.uid }}/edit?space_uid={{ space_uid or '' }}&amp;project_uid={{ project_uid or '' }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit</a>
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/delete" class="form-inline" data-confirm-sheet="Remove this widget?">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="icon-btn" title="Remove widget">{{ icon('x', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+</div>
+
+<!-- Content height (2026-08-07 -- manual height editor/drag-resize
+     removed per direct feedback: a widget's height should just be
+     "how much content it is", no scrollbar, unless it goes over a
+     max height. .widget-content's CSS max-height (static/style.css)
+     is one flat value shared by every widget type, a backstop only --
+     each widget's own item-count limit (e.g. _render_contact_list's
+     `limit`) is what normally keeps content within bounds. Applied to
+     just this data area, not the whole card, so the header above and
+     the Filters panel below always stay their own natural size. -->
+<div class="widget-content">
+{% if spec %}
+{% include spec.template %}
+{% else %}
+<div class="empty-state">Unknown widget type &ldquo;{{ widget.type }}&rdquo;.</div>
+{% endif %}
+</div>
+
+{% endmacro %}
+
+<div class="dashboard-grid {% if edit_mode %}is-editing{% endif %}" id="dashboard-grid">
+{% for wc in widget_contexts %}
+{% if wc.is_stack %}
+<div class="card widget-card widget-stack" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}">
+    {% if edit_mode %}
+    <div class="widget-header widget-stack-header">
+        <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
+        <div class="spacer"></div>
+        <form method="post" action="/dashboard/widgets/{{ wc.widget.uid }}/delete" class="form-inline" data-confirm-sheet="Dissolve this stack? (its widgets stay, just ungrouped)">
+            <input type="hidden" name="edit" value="1">
+            <button type="submit" class="icon-btn" title="Dissolve stack (keeps the widgets inside)">{{ icon('x', 'icon-sm') }}</button>
+        </form>
+    </div>
+    {% endif %}
+    {% for child in wc.children %}
+    <div class="widget-stack-item" data-uid="{{ child.widget.uid }}">
+        {{ widget_inner(child, true) }}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card widget-card" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}">
+    {{ widget_inner(wc, false) }}
+</div>
+{% endif %}
+{% endfor %}
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('home' if not space_uid and not project_uid else ('folder' if space_uid else 'target')) }}</div>
+    <div class="empty-state-title">No widgets yet</div>
+    {% if edit_mode %}
+    <div class="empty-state-text">Click "New widget" in the toolbar to add one.</div>
+    {% else %}
+    <div class="empty-state-text">Switch to Edit mode to add and arrange widgets.</div>
+    {% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,30 @@
+<!-- Per-widget Filters editor modal target (edit mode only) -- opened via
+     the Edit button on each widget card in the header. Same two-pane
+     layout as the Customize modal (dashboard_customize.html's builder):
+     form on the left, live preview on the right. Reuses
+     _widget_edit_form.html for the field markup so it never drifts from
+     the workspace inline version. The form POSTs to
+     /dashboard/widgets/{uid}/edit and modal.js keeps the dialog open
+     after submit via data-modal-keep-open so multiple edits don't require
+     re-opening the dialog each time. -->
+<div id="modal-target">
+    <div class="modal-header">
+        <h1>{{ icon('edit', 'icon-sm') }} Edit widget</h1>
+    </div>
+    <div class="modal-body">
+        <datalist id="tag-names-datalist">
+            {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
+        </datalist>
+        <div class="widget-builder">
+            <div class="widget-builder-config">
+                <h2 class="widget-add-header">{{ icon('edit', 'icon-sm') }} Edit {{ widget.title or (spec.label if spec else widget.type) }}</h2>
+                {% include "_widget_edit_form.html" %}
+            </div>
+            <div class="widget-builder-preview">
+                <div class="widget-preview-content" id="widget-preview-content">
+                    <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

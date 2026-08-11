@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}New habit{% endblock %}
+{% block content %}
+<!-- Tasks > Habits' own "New" form (2026-08-08 direct feedback) -- a
+     stripped-down, dedicated create form, not task_form.html with fields
+     pre-filled. A habit-labeled task doesn't have a due date, a start
+     date, a status worth choosing (it's just always "active" -- there's
+     no "done" for a thing you do every day), or a priority, so none of
+     those fields are here at all; Recurrence is required instead of
+     optional (a habit is defined by recurring, defaults to "Daily") and
+     the habit label is a hidden field, always applied, not a removable
+     checkbox -- "adding a task in that view should automatically add the
+     default habit label." Posts to the exact same POST /tasks
+     (create_task) every other task uses; nothing server-side is
+     habit-specific except which fields this particular form happens to
+     send. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>New habit</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="habit-task-form" action="/tasks">
+    <input type="hidden" name="tags_labels" value="{{ habit_label }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            <input type="text" name="title" required autofocus>
+        </div>
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="2"></textarea>
+        </div>
+        <div class="field field-wide">
+            <!-- static/recurrence_picker.js turns this into the same
+                 preset dropdown task_form.html/event_form.html use --
+                 required and pre-set to "Daily" here (task_form.html's
+                 equivalent field defaults to blank/"Does not repeat")
+                 since a habit that doesn't recur isn't a habit. -->
+            <label class="field-required">Recurrence</label>
+            <input type="text" name="recurrence" class="recurrence-input" value="FREQ=DAILY" required>
+        </div>
+        <div class="field">
+            <label>Daily target</label>
+            <div class="stepper">
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
+                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="1">
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
+            </div>
+        </div>
+    </div>
+</form>
+</div>
+</div>
+<div class="modal-footer">
+<a href="/tasks/habits" class="btn ghost" data-modal-cancel>Cancel</a>
+<button type="submit" form="habit-task-form" class="btn primary">Save</button>
+</div>
+</div>
+{% endblock %}

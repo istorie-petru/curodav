@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Tasks &middot; Board{% endblock %}
+{% block content %}
+{% include "_tasks_toolbar.html" %}
+
+<div class="kanban-board" id="kanban-board">
+    {% for status in board_statuses %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="kanban-column-head">
+            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
+            <span class="kanban-count">{{ columns[status]|length }}</span>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for t in columns[status] %}
+            <div class="kanban-card" data-uid="{{ t.uid }}">
+                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                <div class="kanban-card-meta">
+                    {% if t.priority %}<span class="cell-tag tag-{{ priority_colors[t.priority] }}">{{ priority_labels[t.priority] }}</span>{% endif %}
+                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
+                    {% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="kanban-empty">No tasks</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}

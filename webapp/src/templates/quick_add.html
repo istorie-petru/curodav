@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}New task or event{% endblock %}
+{% block content %}
+<!-- Merged task/event quick-add modal (2026-08-10) -- the dashboard and
+     label-page "+" button opens this single modal instead of two separate
+     New task / New event buttons opening two separate forms. Both forms
+     are rendered server-side in the same fragment (sharing their field
+     grids with the standalone forms via _task_form_fields.html /
+     _event_form_fields.html, so there's still exactly one markup contract
+     for each); the tab switcher in the header only toggles which panel is
+     visible (static/quick_add.js, run through static/modal.js's
+     wireContent() hook) and retargets the footer Save button's `form`
+     attribute to whichever form is active.
+
+     #modal-target: static/modal.js fetches this page and injects its
+     .modal-header/.modal-body/.modal-footer into the modal shell (see
+     event_form.html's header comment for the full reasoning), and the
+     modal-stable-height marker keeps the dialog one fixed size. -->
+
+     <!-- Why this works (mirrors task_form.html/event_form.html):
+     - The Save button lives in the footer, physically outside both
+       <form>s, tied back to whichever one is active via the standard
+       `form="..."` attribute -- modal.js's injectModalContent peels the
+       fragment's three regions into different dialog elements, so a form
+       can't span them all; a button outside the form can still submit it.
+     - The two forms' field ids never collide: the multiselect partial
+       (_widget_list_multiselect.html) uses no element ids, the event
+       form's #all_day and the task form's #habit-target-field are each
+       unique, and each multiselect's checkboxes carry `form="..."` so the
+       Labels/Status/Priority picks submit with the right form.
+     - All the picker scripts (recurrence, reminders, steppers, label
+       toggles) scan via MutationObserver and bind to injected content
+       automatically -- nothing to rebind here beyond the tab switch. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>New</h1>
+<!-- Segmented tab switch -- reuses the app-wide .segmented/.seg-btn
+     control (style.css). The active state is what CCQuickAdd.init (see
+     static/quick_add.js) toggles to swap panels and the footer Save
+     button's form target. -->
+<div class="segmented quick-add-tabs" role="tablist" aria-label="What to create">
+    <button type="button" class="seg-btn quick-add-tab active" role="tab" aria-selected="true" data-quick-add-tab="task">{{ icon('check-square', 'icon-sm') }} Task</button>
+    <button type="button" class="seg-btn quick-add-tab" role="tab" aria-selected="false" data-quick-add-tab="event">{{ icon('calendar', 'icon-sm') }} Event</button>
+</div>
+</div>
+<div class="modal-body">
+<div class="card">
+<div class="quick-add-panels" id="quick-add-panels" data-active="task">
+    <section class="quick-add-panel" data-quick-add-panel="task" role="tabpanel" aria-label="New task">
+        <form method="post" id="task-form" action="/tasks">
+            {% set ms_form_id = 'task-form' %}
+            {% include "_task_form_fields.html" %}
+        </form>
+    </section>
+    <section class="quick-add-panel" data-quick-add-panel="event" role="tabpanel" aria-label="New event">
+        <form method="post" id="event-form" action="/events">
+            {% set ms_form_id = 'event-form' %}
+            {% include "_event_form_fields.html" %}
+        </form>
+    </section>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<a href="#" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
+<span class="spacer"></span>
+<button type="submit" form="task-form" id="quick-add-save" class="btn primary">{{ icon('check-square', 'icon-sm') }} Save</button>
+</div>
+</div>
+{% endblock %}

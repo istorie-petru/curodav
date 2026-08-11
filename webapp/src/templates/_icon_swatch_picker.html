@@ -1,0 +1,57 @@
+{# Reusable icon swatch-grid popover (2026-08-08) -- shared by
+   labels_manage.html, label_detail.html, and habit_form.html, same "one
+   partial instead of three copies" reasoning as _color_swatch_picker.html
+   right next to this file (see its own header comment). Grew out of the
+   original flat, ungrouped icon grid (modal-input-design Phase C) when
+   the offered set grew from ~100 to nearly the full sprite (~140 icons)
+   and picked up named groups (direct feedback: "more icons grouped into
+   very useful icons") -- a flat wall that size stopped being scannable,
+   so routers/labels.py's ICON_GROUPS sorts them into named categories
+   (Organization, Documents, Tech & Devices, ...) each rendered as its own
+   small labeled section instead of one undifferentiated grid.
+
+   Same #icon-popover portal + `form="..."` attribute mechanism as
+   _color_swatch_picker.html -- see that file's own comment.
+
+   2026-08-08 follow-up (reverted same day): briefly moved the "No icon"
+   reset option to sit inside the first group instead of floating above
+   all of them -- direct feedback was that Organization (and this row's
+   original placement) were fine as they were, reverted back to a
+   standalone row above every group.
+
+   Expects in context:
+     ip_current      -- the currently selected icon name, or "" / None if
+                          unset
+     ip_groups       -- dict of group label -> list of icon names
+                          (routers/labels.py's ICON_GROUPS)
+     ip_form_id      -- id of the real <form> these radios submit into
+     ip_default_icon -- fallback icon shown on the trigger and as the
+                          "No icon" option when ip_current is unset (e.g.
+                          "tag" for a plain label, "folder" for a Space,
+                          "activity" for a habit -- each caller's own
+                          existing convention, unchanged by this partial)
+     ip_autosubmit   -- (default false) sets data-autosubmit on the
+                          wrapping .icon-picker, same meaning as
+                          _color_swatch_picker.html's cp_autosubmit. #}
+<div class="icon-picker"{% if ip_autosubmit|default(false) %} data-autosubmit{% endif %}>
+    <button type="button" class="icon-picker-current" title="Change icon">{{ icon(ip_current) if ip_current else icon(ip_default_icon) }}</button>
+    <div class="icon-dropdown">
+        <label class="icon-swatch-label icon-swatch-none-label" title="No icon (defaults to {{ ip_default_icon }})">
+            <input type="radio" name="icon" value="" class="icon-swatch" {% if not ip_current %}checked{% endif %} form="{{ ip_form_id }}">
+            <span>{{ icon(ip_default_icon) }}</span>
+        </label>
+        {% for group_label, group_icons in ip_groups.items() %}
+        <div class="icon-group">
+            <div class="icon-group-label">{{ group_label }}</div>
+            <div class="icon-group-swatches">
+                {% for name in group_icons %}
+                <label class="icon-swatch-label" title="{{ name }}">
+                    <input type="radio" name="icon" value="{{ name }}" class="icon-swatch" {% if ip_current == name %}checked{% endif %} form="{{ ip_form_id }}">
+                    <span>{{ icon(name) }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>

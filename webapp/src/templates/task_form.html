@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_task_relations.html" import task_relations_section %}
+{% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
+{% block content %}
+<!-- see event_form.html for why this is split into .modal-header/
+     .modal-body/.modal-footer, and why Save/Delete live in the footer as
+     plain buttons tied back to the form via `form="task-form"` rather than
+     being nested inside it -- static/modal.js.
+
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial task_detail.html's view uses too -- same structure, the
+     detail modal's "Edit" link swapped for this "Save" submit button --
+     and #modal-target carries the modal-stable-height marker so modal.js
+     keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}">
+    {% include "_task_form_fields.html" %}
+</form>
+<!-- 2026-08-08 ("remove Recurrence, add a way to add subtasks in place of
+     it") -- a real sibling <form> (task_relations_section's own add-row),
+     not nested inside #task-form -- HTML doesn't allow nested forms, and
+     task_detail.html's identical section already lives outside its own
+     page's main form for the same reason. Edit-only: a subtask needs a
+     real parent_uid (and a relation needs a real task uid) to attach to,
+     which a not-yet-saved new task doesn't have. 2026-08-09: the section
+     is now the merged Relations card (subtasks + related events). -->
+{% if task %}
+<div class="task-form-subtasks">
+    {{ task_relations_section(task, subtasks, related_events, linkable_events) }}
+</div>
+{% endif %}
+</div>
+</div>
+{% if task %}
+<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
+     view modal (footer_back_mode='modal' -- a data-modal link into
+     /tasks/uid), NOT a data-modal-cancel that closes the whole window;
+     the modal's X is the way to fully close. A brand-new task has no
+     view to return to, so its Cancel is still a plain data-modal-cancel
+     close. -->
+{% set footer_back_url = '/tasks/' ~ task.uid %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
+{% set footer_back_url = '/tasks' %}
+{% endif %}
+{% set footer_back_label = 'Cancel' %}
+{% if task %}
+{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
+{% if subtask_count %}
+<!-- Consistent delete confirmation, 2026-08-01 -- see tasks_list.html's
+     identical split for the reasoning (undo for a plain task, an actual
+     confirm sheet -- not just a button label -- when it cascades). -->
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete "' ~ task.title ~ '" and its ' ~ subtask_count ~ ' subtask' ~ ('s' if subtask_count != 1 else '') ~ '? This cannot be undone.' %}
+{% else %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = task.title %}
+{% set footer_delete_redirect = '/tasks' %}
+{% endif %}
+{% endif %}
+{% set footer_primary_form = 'task-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

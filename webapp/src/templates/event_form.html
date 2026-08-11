@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_event_relations.html" import event_relations_section %}
+{% block title %}{% if event %}Edit event{% else %}New event{% endif %}{% endblock %}
+{% block content %}
+<!-- #modal-target: static/modal.js fetches this page and injects it into
+     the create-event modal instead of navigating here (see modal.js's
+     `injectModalContent`, which splits this fragment's own .modal-header/
+     .modal-body/.modal-footer sub-sections into the modal shell's three
+     regions -- header/footer then stay fixed in place, only the body
+     scrolls, purely from style.css's existing .modal layout, no extra CSS
+     needed). Loading the page directly (no JS, or a bookmark) still
+     renders the full page normally -- these are just plain divs with CSS
+     classes, not modal-shell-specific markup, so the same structure reads
+     fine as an ordinary page too.
+
+     The Save button lives in the footer, physically outside the <form>
+     element -- since modal.js's `injectModalContent` peels this fragment
+     apart by picking out .modal-header/.modal-body/.modal-footer and
+     assigning each one's innerHTML to a *different* dialog element, a
+     <form> couldn't itself span across all three regions and still submit
+     its fields as one POST. It's tied back to the form via the standard
+     HTML `form="event-form"` attribute instead, which associates a button
+     with a form by id regardless of DOM nesting, in both the modal and the
+     plain full-page rendering.
+
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial event_detail.html's view uses too -- same structure, the
+     detail modal's "Edit" link swapped for this "Save" submit button --
+     and #modal-target carries the modal-stable-height marker so modal.js
+     keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>{% if event %}Edit event{% else %}New event{% endif %}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="event-form" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}">
+    {% include "_event_form_fields.html" %}
+</form>
+</div>
+<!-- Relations card (2026-08-09) -- a real sibling <form> (the section's
+     own add row), not nested inside #event-form -- HTML doesn't allow
+     nested forms, and event_detail.html's identical section already lives
+     outside its own page's main form for the same reason. Edit-only: a
+     relation needs a real event uid to attach to, which a not-yet-saved
+     new event doesn't have. Mirrors task_form.html's task_relations_section. -->
+{% if event %}
+<div class="task-form-subtasks">
+    {{ event_relations_section(event, related_tasks, linkable_tasks) }}
+</div>
+{% endif %}
+</div>
+{% if event %}
+<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
+     view modal (footer_back_mode='modal' -- a data-modal link into
+     /events/uid), NOT a data-modal-cancel that closes the whole window;
+     the modal's X is the way to fully close. A brand-new event has no
+     view to return to, so its Cancel is still a plain data-modal-cancel
+     close. -->
+{% set footer_back_url = '/events/' ~ event.uid %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
+{% set footer_back_url = '/calendar' %}
+{% endif %}
+{% set footer_back_label = 'Cancel' %}
+{% if event %}
+<!-- Consistent delete confirmation, 2026-08-01 -- an event has no
+     cascade concerns at all (unlike a task with subtasks), so it's
+     always the undo path, no confirm sheet needed. A standalone <form>
+     (not tied to event-form) -- app.js's document-level `data-delete-undo`
+     handler picks up its submit regardless of where in the document it
+     lives, so this doesn't need any of modal.js's own per-form wiring. -->
+{% set footer_delete_url = '/events/' ~ event.uid ~ '/delete' %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = event.title %}
+{% set footer_delete_redirect = '/calendar' %}
+{% endif %}
+{% set footer_primary_form = 'event-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}4-Week View - Calendar{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
+{% block content %}
+{% import "_calendar_filters.html" as cf %}
+{% set _lbl = active_label | default('') %}
+{% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
+{% set calendar_filter_base_url = '/calendar/fourweek?date_=' ~ anchor_iso %}
+<div class="toolbar top-app-bar toolbar-2row">
+    <div class="toolbar-row">
+        <h1 class="sr-only">4-Week View</h1>
+        <div class="segmented calendar-subnav">
+            <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
+            <a class="seg-btn active" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
+            <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
+            <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
+        </div>
+        <div class="spacer"></div>
+        <a class="icon-btn" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+        <a class="icon-btn" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
+    </div>
+</div>
+
+{% include "_education_next_lectures.html" %}
+
+<!-- 2026-08-11: the same Month-viewport shell as calendar_month.html
+     (fits the viewport, week rows flex to share the height, day cells drop
+     their fixed-height floor -- see style.css's .month-viewport comment) --
+     always exactly four week rows, and every day is in-window (no
+     .not-in-month cells at all: the window is a continuous 28 days and
+     never bleeds into surrounding weeks/months). `.fourweek-viewport`
+     just trims the height back from Month's 128vh (tuned for up to six
+     rows) so four rows don't stretch across a page-and-a-half. -->
+<div class="card calendar-viewport month-viewport fourweek-viewport">
+<div class="month-weekday-row">
+    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
+</div>
+{% for week in weeks %}
+<div class="month-week-grid">
+    {% for day in week.days %}
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
+        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
+        <div class="month-day-bottom">
+            {% for item in day.rows %}
+                {% if item.kind == "all_day" %}
+                    <a class="month-all-day cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}" data-modal title="{{ item.event.title }}">{{ item.event.title }}</a>
+                {% elif item.kind == "event" %}
+                    <a class="month-task-item" href="/events/{{ item.event.uid }}" data-modal>
+                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
+                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
+                        {{ item.event.title }}
+                    </a>
+                {% else %}
+                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ item.task.title }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if day.overflow_count %}
+                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script>{% endblock %}

@@ -1,0 +1,54 @@
+<!-- Widget customization modal fragment (dashboard_customize.html).
+     Self-contained #modal-target fragment for the dedicated
+     widget-customization dialog. Same two-pane layout as the widget edit
+     modal (_widget_edit_modal.html): form on the left, live preview on the
+     right, reusing _widget_builder_fields.html for field markup.
+
+     2026-08-07 follow-up ("Add widget should be the only button, done and
+     add widget should do the same thing") -- this form used to POST via
+     CCWidgetBuilder.init (data-builder), which kept the modal open and
+     showed a "Added to dashboard." bar with Duplicate/Edit so you could
+     keep building variants without reopening the dialog; a separate Done
+     button (or X/Escape/backdrop) was the only way to actually leave.
+     That whole stay-open flow is gone now -- the form has no data-builder
+     any more, so modal.js's generic form handler (static/modal.js) owns
+     its submit like any other non-keep-open modal form in this app: POST,
+     and on success close the modal and reload the page, landing back on
+     the dashboard with the new widget already on it. One button
+     ("Add widget", in the footer like every other form's primary action)
+     does the add-and-close that used to take two clicks across two
+     buttons. static/dashboard_widget_builder.js (the old stay-open
+     mechanism) and its wiring in modal.js are removed as a result --
+     nothing else used them. -->
+<div class="modal-header">
+    <h1>Customize {{ page_label }}</h1>
+</div>
+<div class="modal-body">
+    <!-- 2026-08-08: the Widget Builder is always available now -- the
+         "Custom widgets" Settings toggle that used to gate it (off, hide
+         this pane and the Add widget button entirely) is removed, per
+         direct feedback ("remove the Custom widgets... in the settings").
+         It was the kind of setting nobody actually turns off: a single
+         boolean whose only effect was hiding the one way to add a new
+         widget, with no other consequence -- not a real preference, just
+         a way to shoot yourself in the foot and then need Settings to
+         undo it. -->
+    <div class="widget-builder">
+        <div class="widget-builder-config">
+            <form id="widget-builder-form" method="post" action="/dashboard/widgets"
+                  class="widget-select-form widget-builder-form"
+                  data-preview-url="/dashboard/widgets/preview">
+                {% set ms_form_id = 'widget-builder-form' %}
+                {% include "_widget_builder_fields.html" %}
+            </form>
+        </div>
+        <div class="widget-builder-preview">
+            <div class="widget-preview-content" id="widget-preview-content">
+                <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-footer">
+    <button type="submit" form="widget-builder-form" class="btn primary">{{ icon('plus', 'icon-sm') }} Add widget</button>
+</div>

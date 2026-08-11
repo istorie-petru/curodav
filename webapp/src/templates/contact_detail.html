@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
+{% block content %}
+<!-- see event_form.html/task_detail.html for why this is wrapped -- opens
+     as a modal from contacts_list.html (data-modal) but still renders as a
+     normal standalone page on a direct visit.
+
+     2026-08-08 visual rework (all three detail modals at once -- events,
+     tasks, contacts -- one cohesive stroke): the old one-row-per-field
+     <table> (.detail-kv, contact_detail.html's own differently-shaped
+     layout) is gone -- contacts now use the exact same header/body/footer
+     language as event/task detail: header = identity (the contact's
+     avatar + large bold title + org subtitle), body = the meta fields in
+     the same 2-column grid and elevated tonal .detail-card, footer = a
+     quiet "Done" back-link, a demoted Delete text-link, and the primary
+     Edit action taking center stage.
+
+     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
+     html partial the edit form uses too (same structure, "Edit" swapped
+     for "Save"), and #modal-target carries the modal-stable-height marker
+     so modal.js keeps the dialog one fixed size in both states while the
+     header/body/footer cross-fade when the Edit link swaps them in
+     place -- one continuous modal instead of a hard page swap. -->
+<div id="modal-target" class="modal-stable-height">
+{% if contact %}
+<div class="modal-header">
+    {{ avatar(contact, 'avatar-large') }}
+    <div class="detail-heading-text">
+        <h1 class="detail-title">{{ contact.full_name }}</h1>
+        {% if contact.org %}<div class="detail-heading-sub">{{ contact.org }}</div>{% endif %}
+    </div>
+</div>
+
+<div class="modal-body">
+{% if contact.phone or contact.email %}
+<div class="contact-quick-actions">
+    {% if contact.phone %}<a class="btn" href="tel:{{ contact.phone }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
+    {% if contact.email %}<a class="btn" href="mailto:{{ contact.email }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="detail-card">
+    <div class="detail-meta-grid">
+        {% if contact.phone %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Phone</span>
+            <span class="detail-meta-value"><a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></span>
+        </div>
+        {% endif %}
+        {% if contact.email %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Email</span>
+            <span class="detail-meta-value"><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></span>
+        </div>
+        {% endif %}
+        {% if contact.address %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Address</span>
+            <span class="detail-meta-value">{{ contact.address }}</span>
+        </div>
+        {% endif %}
+        {% if contact.tags %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Labels</span>
+            <span class="detail-meta-value">{% for tag in contact.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% if contact.notes %}
+    <div class="detail-meta-description">
+        <span class="detail-meta-label">Notes</span>
+        <p>{{ contact.notes }}</p>
+    </div>
+    {% endif %}
+    {% if not (contact.phone or contact.email or contact.address or contact.tags or contact.notes) %}
+    <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
+    {% endif %}
+</div>
+</div>
+
+{% set footer_back_url = '/contacts' %}
+{% set footer_back_label = 'Done' %}
+{% set footer_delete_url = '/contacts/' ~ contact.uid ~ '/delete' %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = contact.full_name %}
+{% set footer_delete_redirect = '/contacts' %}
+{% set footer_primary_href = '/contacts/' ~ contact.uid ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+{% else %}
+<div class="modal-body">
+<div class="empty-state">Contact not found.</div>
+</div>
+{% endif %}
+</div>
+{% endblock %}

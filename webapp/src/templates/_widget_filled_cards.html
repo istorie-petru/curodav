@@ -1,0 +1,19 @@
+{% if data.cards %}
+<div class="filled-cards-grid">
+    {% for card in data.cards %}
+    {% set color_class = 'cal-' + (card.color if card.color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
+    <a class="filled-card {{ color_class }}" href="/labels/{{ card.uid }}">
+        <div class="filled-card-content">
+            <div class="filled-card-title">{{ card.name }}</div>
+            {% if card.description %}
+            <div class="filled-card-description">{{ card.description }}</div>
+            {% else %}
+            <div class="filled-card-meta">{{ card.project_count }} project{{ 's' if card.project_count != 1 else '' }}</div>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No spaces found -- add projects from Settings to get started.</div>
+{% endif %}

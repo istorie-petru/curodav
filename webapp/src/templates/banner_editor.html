@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Page banner{% endblock %}
+{% block content %}
+<!-- Banner editor modal (2026-08-09, routers/banners.py) -- the single
+     dialog for a dashboard page's header banner, opened from edit mode
+     via _page_banner.html's "Add/Change banner" button. Server-rendered
+     #modal-target fragment like dashboard_customize.html: a no-JS click
+     lands here as a full page, while static/modal.js's data-modal strips
+     everything but #modal-target and shows it as a wide dialog.
+
+     The only way to set a banner is uploading a local image -- the
+     SearXNG "search the web" picker was removed 2026-08-11. Legacy
+     searched banners (kind="remote") set before that keep rendering and
+     show their Remove control here; this modal only carries the current
+     banner, the upload form, and the remove form.
+
+     The upload form's hidden file input sits inside its label, so a
+     click on the button opens the picker, and the file's onchange
+     auto-submits the form on selection -- routed through static/app.js's
+     CCBannerUpload.onFile (2026-08-10), which resizes the picked image
+     in the browser first so the stored/served banner is a ~2400px
+     WebP/JPEG rather than the camera's multi-MB original; browsers
+     without that script still submit the original unchanged.
+
+     Variables: scope (page key, "" = Home), page_url (where to return),
+     banner (current banner dict or None). -->
+<div id="modal-target">
+    <div class="modal-header">
+        <h1>{{ icon('image', 'icon-sm') }} Page banner</h1>
+    </div>
+    <div class="modal-body">
+        <div class="banner-editor">
+            <!-- Preferred aspect ratio -- the one spec the upload control
+                 needs to tell the user: on desktop the banner renders
+                 object-fit: cover in a 5:1 box (3:1 on phones), so a
+                 wide landscape image works best and a non-matching image
+                 is center-cropped rather than distorted. -->
+            <p class="banner-editor-note">A wide header image for this page. Preferred aspect ratio is <strong>5:1</strong> &mdash; about 2400&times;480&nbsp;px, or any wide landscape image. Non-5:1 images are center-cropped to fit.</p>
+
+            {% if banner %}
+            <div class="card banner-current">
+                <div class="settings-field-label">Current banner</div>
+                {# Same served /banners/image URL as _page_banner.html when the
+                   banner has local bytes (version) -- never embed the base64
+                   blob inline, that was the page-size leak. Only a legacy
+                   hotlink-only searched banner (set before the web-search
+                   feature was removed) falls back to its remote URL. #}
+                {% if banner.version %}
+                <img src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
+                {% else %}
+                <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
+                {% endif %}
+                <form method="post" action="/banners/remove" class="form-inline">
+                    <input type="hidden" name="scope" value="{{ scope }}">
+                    <input type="hidden" name="page_url" value="{{ page_url }}">
+                    <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove banner</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- Upload -- minimalist: a single ghost button.
+                 The file input is hidden inside its label (click the
+                 button = open the picker), and onchange auto-submits on
+                 selection, so the form POSTs the moment a file is chosen
+                 with no extra "Upload" step. -->
+            <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form">
+                <input type="hidden" name="scope" value="{{ scope }}">
+                <input type="hidden" name="page_url" value="{{ page_url }}">
+                <label class="btn ghost banner-upload-btn">
+                    {{ icon('upload', 'icon-sm') }} Upload image
+                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload" onchange="window.CCBannerUpload ? CCBannerUpload.onFile(this) : this.form.requestSubmit()">
+                </label>
+                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; auto-compressed to max 2400px &middot; 8MB cap</span>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
