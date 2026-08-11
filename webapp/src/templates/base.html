@@ -4,7 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Command Center{% endblock %}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
     <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
+    <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
          (app.js used to do this at the bottom of <body>, which painted the
