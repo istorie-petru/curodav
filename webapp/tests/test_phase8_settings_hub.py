@@ -3,7 +3,7 @@
 `/settings` goes from a plain redirect to the first section (the old tab
 drill-through) to a real hub page.
 
-2026-08-07 (plans/settings-rework.md): reworked from the Global/Space/
+2026-08-07 (features/settings.md): reworked from the Global/Space/
 Project three-section split into four honest groups on one page
 (Organization/Data/Appearance/Widgets + a Danger zone).
 

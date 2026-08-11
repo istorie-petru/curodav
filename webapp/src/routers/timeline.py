@@ -96,7 +96,7 @@ def _build_context(
     # per-row rename endpoint they backed) are gone with `task_lists`.
 
     # 2026-08-07: `q` added so Timeline's toolbar can offer the same
-    # search box Table/Board already have (plans/label-space-rework.md
+    # search box Table/Board already have (features/architecture.md
     # Phase 9's toolbar-consistency pass) -- filters which tasks get laid
     # out as bars, same title-substring match `db.list_tasks` already does
     # for every other view.

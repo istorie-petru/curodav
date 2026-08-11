@@ -4,7 +4,7 @@
 ; reachable off localhost. A real deployment needs bcrypt auth (or better,
 ; sits behind Tailscale + its own hardened config) -- revisit before this
 ; goes anywhere near the actual self-hosted setup discussed in
-; plans/systems/architecture.md.
+; plans/abandoned.md.
 
 [server]
 hosts = 127.0.0.1:5232

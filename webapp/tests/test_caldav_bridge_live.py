@@ -194,7 +194,7 @@ class TestFullRefreshSync:
     def test_full_refresh_is_a_noop_since_the_base_pool_is_plain_sql(self, radicale_settings: Settings):
         """Phase 1 (label-space rework, 2026-08-06): the base pool
         (tasks/events/contacts) is plain SQL now, no Radicale relationship
-        at all (see plans/label-space-rework.md §1 and sync.py's own
+        at all (see features/architecture.md §1 and sync.py's own
         module docstring) -- sync.full_refresh no longer mirrors Radicale
         into the cache; it's a deliberate no-op until Phase 6 (published
         Lists) gives it a real body again. Writing straight to Radicale

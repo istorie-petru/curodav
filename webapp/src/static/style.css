@@ -3131,7 +3131,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    Settings is its own navigable environment now: a hub (settings_index.html,
    six focused categories, not a page of every control) plus one page per
    category (settings_general/appearance/data/widgets/advanced.html) and
-   Labels' own manage page -- see plans/settings-rework.md's 2026-08-08
+   Labels' own manage page -- see features/settings.md's 2026-08-08
    entry for the full rationale. Every page in this family shares the same
    row/breadcrumb/card language defined here rather than each inventing its
    own layout, so moving between them feels like one place, not a

@@ -124,7 +124,7 @@ def _effective_tags_filter(conn, config: dict) -> list[str]:
     showed every task due today across the *entire* app, not just that
     project's own tasks, because nothing ever translated `label_name` into
     a tag filter for the tasks/events path. Pre-existing bug, not
-    introduced here -- see plans/dashboard-usability-rework.md's follow-up
+    introduced here -- see features/dashboard.md's follow-up
     notes for the finding."""
     tags_filter = list(config.get("tags") or [])
     label_name = config.get("label_name")

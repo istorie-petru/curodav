@@ -1,6 +1,6 @@
 """Labels (label-space rework Phase 2) -- replaces `routers/tags.py`
 entirely and the Space/Project-management half of the old
-`routers/projects.py`. See `plans/label-space-rework.md` §0/§2/§3 Phase 2
+`routers/projects.py`. See `features/architecture.md` §0/§2/§3 Phase 2
 for the full model: a label is not an entity with a lifecycle (no
 create/delete workflow, no cascading-delete concerns) -- it's a name that
 tasks/events/contacts/habits/schedule_classes point at via the one

@@ -1,3 +1,0 @@
-# Plan: Settings rework — an actually usable hub
-
-**Status:** ✅ DONE (2026-08-07), superseded by a full redesign (2026-08-08). The hub restructure shipped: export/backup is reachable from the UI, Habits appears in the Settings landing page, the Global/Space/Project three-section split was removed (there's no Space/Project type distinction — labels only), an Appearance section with the System/Light/Dark theme choice exists, and the hub/sub-nav sets are consistent. See `webapp/src/routers/settings.py`, `settings_index.html`, `_settings_nav.html`, `settings_appearance.html`. Outcome is in `webapp/`; no further action from this plan.

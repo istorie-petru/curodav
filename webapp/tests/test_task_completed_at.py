@@ -1,4 +1,4 @@
-"""tasks.completed_at (2026-08-07, plans/widget-consolidation-design.md's
+"""tasks.completed_at (2026-08-07, plans/open.md's
 Streak widget) -- the one thing this table couldn't answer before: which
 day a plain (non-recurring) task was completed. Auto-managed by
 db.upsert_task based on the done/not-done status transition; a JSON

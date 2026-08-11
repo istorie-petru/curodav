@@ -1,6 +1,6 @@
 """Pulled Radicale's calendar/tasks/contacts collections into the local
 SQLite cache (db.py) prior to the Phase 1 label-space rework
-(2026-08-06, see plans/label-space-rework.md §1). That's no longer
+(2026-08-06, see features/architecture.md §1). That's no longer
 what this module does.
 
 Per §1 of the plan: the base pool (`tasks`/`events`/`contacts`) is now

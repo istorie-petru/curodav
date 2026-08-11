@@ -113,7 +113,7 @@ def create_app() -> FastAPI:
     # 2026-08-07: routers/databases.py and routers/grades.py are deleted
     # too -- Databases (and Grades, which was built on top of it) is
     # deactivated and removed entirely, not just unlinked from nav. See
-    # plans/label-space-rework.md's Grades/Databases removal note and
+    # features/architecture.md's Grades/Databases removal note and
     # db.py's own removal comments on the `databases`/`database_columns`/
     # `database_rows`/`grades` tables.
     from .routers import banners, calendar, contacts, dashboard, export, habits, labels, published_lists, schedule, settings, tasks, timeline

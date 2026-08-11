@@ -1,6 +1,6 @@
 """Tests for the 2026-08-09 "Relations" feature -- explicit event<->task
 associative links, the webapp's answer to desktop's old links/backlinks
-graph (plans/label-space-rework.md Phase 8 left it an accepted gap).
+graph (features/architecture.md Phase 8 left it an accepted gap).
 
 Rules, as specified:
 - A relation links exactly one event to exactly one task (many-to-many

@@ -1,7 +1,7 @@
 """Tests for modal-input-design Phase C: reviving the dormant
 `.color-picker`/`.icon-picker` swatch-grid popover (built once for the
 pre-rework calendars/projects pages, then orphaned when those templates
-were deleted -- see plans/modal-input-design.md §1 pattern 3) into
+were deleted -- see features/design-system.md §1 pattern 3) into
 habit_form.html (color select + free-text emoji icon input) and
 labels_manage.html (per-row color select). label_detail.html's own inline
 "Edit label" form once offered the same pickers but was removed (the

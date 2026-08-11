@@ -1,6 +1,6 @@
 """Regression test for a real live bug (2026-08-07): a user with a
 pre-label-space-rework `cache.sqlite` (from before Phase 1 of
-plans/label-space-rework.md) hit `sqlite3.IntegrityError: NOT NULL
+features/architecture.md) hit `sqlite3.IntegrityError: NOT NULL
 constraint failed: events.href` trying to create an event, because the
 old `href`/`etag`/collection-path columns are still physically present
 on an existing database (deliberately -- scripts/migrate_labels.py needs

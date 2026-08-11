@@ -1,30 +1,64 @@
-# Feature: Dashboard (Today)
+# Dashboard
 
-**Code:** `desktop/src/features/dashboard/`
-**Status:** Implemented
+Home page at `/`, powered by a registry-driven widget system
+(`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
+entry + a render function; add/edit/reorder/delete machinery is generic.
 
-The default landing page. A smart aggregation of everything due, overdue, or pinned, across every object type — not a module of its own data.
+## Widget types (11)
 
-## What's built
+| Type | Shows | Default width |
+|---|---|---|
+| `today_agenda` | Today's Agenda — overdue + due-today tasks and today's events | half |
+| `weekly_overview` | next-N-days day-by-day breakdown (`range_days`: 7/30) | full |
+| `upcoming_events` | next events from now (`limit` + optional `range_days`) | third |
+| `overdue_tasks` | open tasks past due, most-overdue first | third |
+| `at_a_glance` | 3-number stats strip (Overdue / Due today / Due this week), each linking to the matching filtered Tasks view | third |
+| `mini_month_calendar` | month grid, busy dots only, prev/next | half |
+| `calendar_agenda` | mini calendar + 7-day agenda combined | third |
+| `habit_checkin` | check-off-today per active habit (checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
+| `project_preview` | child-label progress bars | third |
+| `contact_list` | contacts filtered by labels, `limit` | third |
+| `filled_cards` | Material-You filled squares per Space, linking to `/labels/{name}` | full |
 
-- **Stats strip** — counts of open tasks, overdue items, items due today, active projects. Click a stat to jump to the filtered list.
-- **Overdue/Today sections only** (Pinned and Upcoming removed 2026-07-19, see below) — each renders as one bordered grouped-list box with hairline separators between rows (changed 2026-07-19, see below), not individually-carded rows with gaps between them. Overdue sorted most-overdue first; Today sorted by time.
-- **Quick-add row** — type a title with optional tokens (`@today`/`@tomorrow`, `!1`–`!4`, `#project`, `>tag`) and press enter to create a task with smart defaults. Shared logic with the Tasks quick-add lives in `features/shared/create.py`.
-- **Activity feed** — computed from object history (created/edited/completed/overdue); see `data-and-attachments.md`.
-- Empty states show placeholder text instead of blank space (e.g. "Nothing overdue").
+Plus the `stack` container type (not in the registry): drag a widget onto another
+card → one shared-width card with both stacked; members share `group_uid`; stacks
+can't nest; deleting a stack dissolves it back to top level (never destroys
+members).
 
-## Underlying query
+## Adding / arranging
 
-Roughly: objects where `due_at` is today, or `start_at` is today, or `pinned`, or overdue, and status is not in (done, archived) — across all types, sorted overdue → pinned → timed → rest. Same query shape as the smart lists in Tasks.
+- **Widget Builder** with always-live preview (`POST /dashboard/widgets/preview`,
+  `dashboard_widget_preview.js`) — pick Source/View/Range (`WIDGET_SOURCES`,
+  `WIDGET_VIEWS`, `WIDGET_RANGES`), resolved via `_resolve_selection`.
+- **Customize modal** (`/dashboard/customize`, `dashboard_customize.html`): one
+  friendly flat list per dashboard/Space for add/move/up/down/delete/stack-dissolve
+  and per-widget filters.
+- **Filters** use the shared label vocabulary; a task's "project" is always
+  inherited from its list — no per-task project field.
+- Grid is masonry over 6 virtual columns (app.js); width is each type's
+  `default_width` (manual width/height pickers were removed).
 
-## Changed 2026-07-19: grouped-list-card pattern
+## Seeding & scope
 
-Comparing against the "ModernPlasma Productivity" design doc (a macOS-styled reference mockup) surfaced a real structural gap: the design's task/agenda lists render as one elevated container per section with 1px hairline separators between rows (the macOS System Settings pattern) — the app instead stacked individually-bordered, individually-shadowed `ObjectCard` widgets with visible gaps between them, which reads as a list of separate cards rather than one grouped list.
+- One-time per page (`app_meta` keys): `_seed_agenda_stack_layout` (Today's
+  Agenda + stacked At a Glance/Upcoming Events/Overdue Tasks) for Home and every
+  label page; `_backfill_mini_calendar_widget` one-time migration. Reset layout
+  re-seeds.
+- Scope rules: Home offers all types; a generated label page excludes
+  `filled_cards`; a plain label page excludes `filled_cards` + `project_preview`.
 
-Fixed by adding a `flush` mode to `ObjectCard` (`widgets/object_card.py`) — no border/radius of its own, just a bottom hairline, meant to sit directly against the next row — and having `SectionGroup` (this module) wrap flush rows in one bordered `QFrame` container (`section-list-box`) instead of a bare `QVBoxLayout` with spacing. Default `ObjectCard` behavior (search results, link picker, project task list) is unchanged — only `flush=True` differs, and only `SectionGroup` passes it. See `design-system.md` for the fuller design-doc comparison and `../plans/design-alignment.md` (deleted 2026-08-11, superseded by the webapp rework) for what's still not matched elsewhere (Tasks/Calendar mini-sidebars, a real segmented-control widget, the inspector as a slide-over panel).
+## Page chrome
 
-## Changed 2026-07-19: Pinned and Upcoming sections removed; absorbed the old Tasks Smart-view role
+- Server-side time-of-day greeting ("Good morning/afternoon/evening, {name}",
+  driven by Settings' display name).
+- Per-page **banner** (cover image) — see `banners.md`.
+- **Quick add**: the merged "+" button opens one modal (`/quick/add`,
+  `quick_add.html`) with a Task/Event tab switch; the tab switcher retargets the
+  footer Save via `form=`. Same form fields as the full task/event forms.
 
-The Tasks module's Smart list view (a sidebar of saved filters: Today, Upcoming, All Open, High Priority, Waiting, Completed, Archived) was removed entirely — see `tasks.md`. Dashboard took over its "Today"/"Overdue" role specifically (the two filters that make sense on a daily landing page); the request was explicit that Dashboard should show *only* overdue and today, so the pre-existing Pinned and Upcoming sections were dropped in the same pass rather than kept alongside. The remaining Smart filters (Upcoming, All Open, High Priority, Waiting, Completed, Archived) did **not** move here — they became a chip filter bar above the Tasks Table view instead (`features/tasks/table_view.py::SMART_FILTERS`), since Dashboard is deliberately narrow now, not a second home for every saved filter.
+## Endpoints
 
-`DashboardView.set_objects` no longer computes a `pinned` or `upcoming` list; `StatsStrip`'s four counts (open tasks/overdue/due today/active projects) are unchanged.
+`/` (view, `?edit=`, `?cal_year=`/`?cal_month=`), `/quick/add`,
+`/dashboard/customize`, `/dashboard/reset`, `/dashboard/widgets` (add),
+`/dashboard/widgets/preview`, and per-widget `/{uid}/edit`, `/{uid}/delete`,
+`/{uid}/move`, `/{uid}/reorder`, `/{uid}/stack-onto`, `/{uid}/unstack`.

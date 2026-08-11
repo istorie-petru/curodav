@@ -1,5 +1,5 @@
 """Phase 5 (label-space rework) acceptance tests -- see
-plans/label-space-rework.md §3 Phase 5's own acceptance criteria:
+features/architecture.md §3 Phase 5's own acceptance criteria:
 
   * `contacts.category` is gone entirely (no column, no create/edit form
     field, no filter dropdown, no `list_contact_categories`/`category`

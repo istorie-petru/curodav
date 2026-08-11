@@ -1,7 +1,7 @@
 """Settings: Published Lists (Phase 6, label-space rework) -- create/edit/
 delete a named boolean-filter-over-labels subset of the pool, materialized
 into a real Radicale collection and published as a subscribable CalDAV/
-CardDAV URL. See plans/label-space-rework.md §2/§3 Phase 6 and
+CardDAV URL. See features/architecture.md §2/§3 Phase 6 and
 src/published_lists.py for the filter evaluator + materializer this
 router drives.
 

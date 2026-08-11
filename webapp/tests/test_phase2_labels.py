@@ -1,5 +1,5 @@
 """Phase 2 (label-space rework) acceptance tests -- see
-plans/label-space-rework.md §3 Phase 2's own acceptance criteria and this
+features/architecture.md §3 Phase 2's own acceptance criteria and this
 phase's task spec, item 8:
 
   * rename propagates to object_labels and children's parent_name;
@@ -13,7 +13,7 @@ phase's task spec, item 8:
 2026-08-07: TestDatabasesFilterByLabel and
 test_databases_project_uid_backfilled_as_object_labels (which exercised
 the now-removed Databases feature's project-link-as-label behavior) are
-deleted -- see plans/label-space-rework.md's Grades/Databases removal
+deleted -- see features/architecture.md's Grades/Databases removal
 note. Everything else in this file covers habits/schedule_classes/label
 management, unaffected by that removal.
 """

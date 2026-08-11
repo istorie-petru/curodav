@@ -11,7 +11,7 @@ Two related changes, both covered here:
      entirely -- routers/databases.py, routers/grades.py, src/grades.py,
      src/formula_engine.py, every template, and the `databases`/
      `database_columns`/`database_rows`/`grades` tables are all gone, not
-     just unlinked. See plans/label-space-rework.md's Grades/Databases
+     just unlinked. See features/architecture.md's Grades/Databases
      removal note and db.py's own removal comments.
 
 This file replaces test_databases_router.py/test_databases_db.py/

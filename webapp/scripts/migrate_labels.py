@@ -5,7 +5,7 @@ tags_json, and (for a database file that still physically carries them,
 see db.py's Phase 1 comments) the old `calendars`/`task_lists`/
 `addressbooks` collection registries and `project_groups`/`projects`.
 
-See plans/label-space-rework.md §3 Phase 1 ("Migration script") and §6
+See features/architecture.md §3 Phase 1 ("Migration script") and §6
 ("Still open" / the UID-collision sanity check) for the full spec this
 implements.
 
@@ -205,7 +205,7 @@ def _ensure_label_color(conn: sqlite3.Connection, label_name: str, color: str | 
 
 def _mark_generate_space(conn: sqlite3.Connection, label_name: str) -> None:
     """Every label migrated from a `project_groups` row (a former Space)
-    gets `generate_space=1` -- see plans/label-space-rework.md §3 Phase 2
+    gets `generate_space=1` -- see features/architecture.md §3 Phase 2
     item 1. Doesn't touch color/icon/etc. -- upsert_label_config only
     updates the fields it's given, and only fills in defaults for the
     rest if the label has no row yet."""

@@ -12,7 +12,7 @@ Each standard-format export also double-checks that the synced objects
 survive an app-independent round-trip (ICS/VCF re-parse cleanly).
 
 2026-08-07: the Grades export (/export/grades.csv) is gone along with the
-rest of the Databases/Grades feature -- see plans/label-space-rework.md's
+rest of the Databases/Grades feature -- see features/architecture.md's
 removal note.
 
 2026-08-08: every db.list_tasks(conn) call here passes
@@ -182,8 +182,8 @@ def export_labels_json(conn=Depends(get_db)):
     routes (`/export/spaces.json` and `/export/tags.json`, which returned
     byte-identical payloads under different names) into this single one --
     keeping both was exactly the kind of compatibility-layer cruft this
-    app's own house rules rule out (see architecture.md's "no compatibility
-    layer" rule); there was never a real reason for two URLs."""
+    app's own house rules rule out (see features/architecture.md's "no
+    compatibility layer" rule); there was never a real reason for two URLs."""
     return _json_response(
         "labels.json",
         {"labels": db.list_labels(conn), "object_labels": _export_object_labels(conn)},

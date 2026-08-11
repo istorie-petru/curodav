@@ -1,5 +1,5 @@
 """Dashboard usability & functionality rework (2026-08-07,
-plans/dashboard-usability-rework.md, refined by direct follow-up
+features/dashboard.md, refined by direct follow-up
 instructions):
 
   1. Default dashboard reset-to-default, surfaced via Settings (Home) and

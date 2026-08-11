@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 SCHEMA_SQL = """
 -- Phase 1 (label-space rework, 2026-08-06): dropped href/etag/
 -- calendar_path/raw_ics -- base storage is plain SQL now, no Radicale
--- relationship at all (see plans/label-space-rework.md §1). Collection
+-- relationship at all (see features/architecture.md §1). Collection
 -- membership (which calendar an event used to live in) became an
 -- `object_labels` row via scripts/migrate_labels.py instead. Every other
 -- column stays -- still enough to serialize a valid VEVENT on demand
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS events (
 
 -- Phase 1: dropped href/etag/calendar_path/list_path/raw_ics -- see the
 -- `events` table comment above for the full rationale (same migration).
--- `completed_at` (2026-08-07, plans/widget-consolidation-design.md's
+-- `completed_at` (2026-08-07, plans/open.md's
 -- Streak widget): the one thing this table couldn't answer before --
 -- *which day* a plain (non-recurring) task was completed. `status`
 -- flipping to done/archived told you *that* it's done; `updated_at`
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 -- rework, 2026-08-07) dropped `category` too -- it was a free-text
 -- grouping field that duplicated what a label (object_labels) already
 -- does; grouping/filtering contacts is now 100% by label, same mechanism
--- as tasks/events. See plans/label-space-rework.md §3 Phase 5.
+-- as tasks/events. See features/architecture.md §3 Phase 5.
 CREATE TABLE IF NOT EXISTS contacts (
     uid TEXT PRIMARY KEY,
     full_name TEXT NOT NULL DEFAULT '',
@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
 
 -- Explicit event<->task relations (2026-08-09, "Relations", the webapp's
 -- associative-link replacement for desktop's links graph -- see
--- plans/label-space-rework.md Phase 8, which left it an accepted gap).
+-- features/architecture.md Phase 8, which left it an accepted gap).
 -- Unlike a subtask (a task->task structural parent link, tasks.parent_uid)
 -- this is a many-to-many graph link between two *different* object types:
 -- one event row + one task row, either direction. Same no-FK, natural-key
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS event_task_relations (
 CREATE INDEX IF NOT EXISTS idx_event_task_relations_task ON event_task_relations(task_uid);
 
 -- Phase 1 (label-space rework) -- the one join table labels use. Not an
--- entity with a lifecycle (see plans/label-space-rework.md §0.1): no
+-- entity with a lifecycle (see features/architecture.md §0.1): no
 -- surrogate id, `label_name` is the natural key, and "deleting" a label
 -- is just removing every row that names it. `object_type` is
 -- 'task'|'event'|'contact' for now; more types land in later phases.
@@ -208,7 +208,7 @@ CREATE INDEX IF NOT EXISTS idx_object_labels_object ON object_labels(object_type
 -- labels" purely because object_labels mentions it). Phase 2 adds the
 -- behavior columns: `generate_space` (1 = this label gets a Space page,
 -- aggregating direct object_labels membership only -- see
--- plans/label-space-rework.md §2/§5), `dashboard_preset_json` (reserved,
+-- features/architecture.md §2/§5), `dashboard_preset_json` (reserved,
 -- unused until a later phase). Every former `project_groups` row became a
 -- label_config row with generate_space=1; every former `projects` row
 -- became one with generate_space=0 and parent_name set to its former
@@ -293,7 +293,7 @@ CREATE TABLE IF NOT EXISTS schedule_classes (
 -- 2026-08-07: `grades` (the per-class assessment tracker) removed along
 -- with the rest of the Databases/Grades feature -- see the `databases`/
 -- `database_columns`/`database_rows` removal note further down and
--- plans/label-space-rework.md's Grades/Databases removal note. Grades
+-- features/architecture.md's Grades/Databases removal note. Grades
 -- was explicitly chosen to go away *with* Databases, not survive as its
 -- own thing, even though it had its own dedicated table (Phase 9) rather
 -- than living on the generic databases engine.
@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS schedule_settings (
 -- Phase 2 (label-space rework, 2026-08-06): `tags`/`tag_groups`/
 -- `project_groups`/`projects` are GONE -- every former row of each became
 -- an `object_labels`/`label_config` row via scripts/migrate_labels.py (see
--- plans/label-space-rework.md §2/§3 Phase 2). object_labels is now the
+-- features/architecture.md §2/§3 Phase 2). object_labels is now the
 -- sole assignment mechanism for tasks/events/contacts/habits; label_config
 -- carries color/icon/description/parent_name/generate_space for any label
 -- that needs them.
@@ -424,7 +424,7 @@ CREATE TABLE IF NOT EXISTS task_habit_settings (
 -- the familiar float sort key.
 -- Phase 2 (label-space rework): `space_uid`/`project_uid` collapse to one
 -- `label_name` column -- a Space page and a Project page are now the same
--- kind of page (a label's page, see plans/label-space-rework.md §2 item
+-- kind of page (a label's page, see features/architecture.md §2 item
 -- 4), so there's no need for two mutually-exclusive FK columns. NULL means
 -- Home; a set value is the label whose page this widget belongs to. Which
 -- *kind* of page that label renders (Space vs. plain label/"project" page)
@@ -456,7 +456,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 -- Settings-created, named boolean filter over labels for exactly one
 -- entity type (task/event/contact), materialized into a real Radicale
 -- collection and published as a subscribable CalDAV/CardDAV URL. See
--- plans/label-space-rework.md §2/§3 Phase 6 and src/published_lists.py
+-- features/architecture.md §2/§3 Phase 6 and src/published_lists.py
 -- for the materializer. `label_filter_json` holds a small structured
 -- expression, not a query language -- {"all": [...], "any": [...],
 -- "none": [...]} (AND of `all`, at least one of `any` if non-empty, NOT
@@ -779,7 +779,7 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
     `object_labels` at read time and attached under the same `tags` key
     every template/ical_rows.py/vcard_rows.py caller already reads, so
     none of those callers needed to change. See
-    plans/label-space-rework.md §2 item 2."""
+    features/architecture.md §2 item 2."""
     d["tags"] = list_labels_for_object(conn, object_type, d["uid"])
     return d
 
@@ -1432,7 +1432,7 @@ def list_schedule_class_types(conn: sqlite3.Connection) -> list[str]:
 # 2026-08-07: the Grades accessor functions (upsert_grade/get_grade/
 # list_grades/delete_grade/delete_grades_by_class) that used to live here
 # are gone along with the `grades` table -- see the SCHEMA_SQL comment
-# above and plans/label-space-rework.md's Grades/Databases removal note.
+# above and features/architecture.md's Grades/Databases removal note.
 
 
 def upsert_holiday(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -1520,7 +1520,7 @@ def save_task_habit_settings(conn: sqlite3.Connection, habit_label: str) -> None
 # Object labels (Phase 1, label-space rework) -- the one join table
 # labels use. `object_type` is 'task'|'event'|'contact' for now (more
 # types land in later phases). No surrogate id/lifecycle -- see
-# plans/label-space-rework.md §0.1: a label is just a name rows point
+# features/architecture.md §0.1: a label is just a name rows point
 # at, "deleting" one is just no row pointing at it anymore.
 # --------------------------------------------------------------------- #
 
@@ -1815,7 +1815,7 @@ def project_label_for(conn: sqlite3.Connection, object_type: str, object_id: str
     `project_uid`. Deliberately a *derived view* over the object's real
     `object_labels` rows, not a separately tracked field -- there is no
     "this label is special, it's THE project" category (see
-    plans/label-space-rework.md §0.1/§2: a label is a label, full stop).
+    features/architecture.md §0.1/§2: a label is a label, full stop).
     Used uniformly for schedule_class, habit, and database -- an earlier
     version of this rework gave habits/databases their own pseudo
     object_type (`f"{object_type}:project"`) to track this separately from
@@ -2099,7 +2099,7 @@ def habit_entries_by_date(
 # list_database_rows/next_row_position/delete_database_row/
 # set_database_row_value) that used to live here are all gone along with
 # the `databases`/`database_columns`/`database_rows` tables -- see the
-# SCHEMA_SQL comment above and plans/label-space-rework.md's Grades/
+# SCHEMA_SQL comment above and features/architecture.md's Grades/
 # Databases removal note. `project_label_for`/`set_object_project_label_
 # uniform` (above) are unaffected -- they're generic over `object_type`
 # and were never database-specific.

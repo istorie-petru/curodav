@@ -519,7 +519,7 @@ def create_task(
     }
     # Phase 1 (label-space rework): plain SQL write, no Radicale/bridge
     # call in this path anymore -- see db.py's Phase 1 comments and
-    # plans/label-space-rework.md §1.
+    # features/architecture.md §1.
     db.upsert_task(conn, row)
     # A subtask created from its parent's detail page (see task_detail.html's
     # quick-add form) should land back on that same parent, not the flat

@@ -1,5 +1,5 @@
 """Phase 1 (label-space rework) acceptance tests -- see
-plans/label-space-rework.md §3 Phase 1's own acceptance criteria:
+features/architecture.md §3 Phase 1's own acceptance criteria:
 
   * every task/event/contact create/edit path writes straight to SQL,
     no bridge/Radicale call anywhere in that path (routers/tasks.py,

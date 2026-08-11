@@ -1,5 +1,5 @@
 """Settings -- reworked 2026-08-08 into a real hub-and-children area instead
-of one long page (see plans/settings-rework.md's 2026-08-08 entry for the
+of one long page (see features/settings.md's 2026-08-08 entry for the
 full brainstorm/rationale; the 2026-08-07 pass this replaces got Settings
 to "four honest groups on one page," which was real progress but still one
 scrolling page mixing a dozen unrelated controls together).
@@ -15,7 +15,7 @@ thing a user thinks about, not because five is a tidy number --
                      start, time format.
   2. Appearance   -- how the app looks: theme.
   3. Labels       -- the app's one organizing concept (spaces/projects/tags
-                     collapsed into "labels", see plans/label-space-rework
+                     collapsed into "labels", see features/architecture
                      .md); links straight to the existing /labels manage
                      page rather than duplicating it under /settings/*.
   4. Published lists -- subscribable filtered calendars/lists; no tabbar

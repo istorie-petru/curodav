@@ -1,5 +1,5 @@
 """Phase 6 (label-space rework) acceptance tests -- see
-plans/label-space-rework.md §2/§3 Phase 6:
+features/architecture.md §2/§3 Phase 6:
 
   * `evaluate_label_filter` for all/any/none combinations, including the
     plan's own example (`University AND NOT Archived`);
@@ -135,7 +135,7 @@ class TestEvaluateLabelFilter:
         assert result == ["t1"]
 
     def test_plan_example_university_and_not_archived(self, conn):
-        # plans/label-space-rework.md §2: "University AND NOT Archived"
+        # features/architecture.md §2: "University AND NOT Archived"
         _make_task(conn, "t1", "Assignment 1", ["University"])
         _make_task(conn, "t2", "Old assignment", ["University", "Archived"])
         _make_task(conn, "t3", "Unrelated", ["Personal"])
