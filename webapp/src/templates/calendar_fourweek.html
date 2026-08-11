@@ -1,23 +1,23 @@
 {% extends "base.html" %}
-{% block title %}{{ month_name }} {{ year }} - Calendar{% endblock %}
+{% block title %}4-Week View - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
 {% import "_calendar_filters.html" as cf %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
-{% set calendar_filter_base_url = '/calendar?year=' ~ year ~ '&month=' ~ month %}
+{% set calendar_filter_base_url = '/calendar/fourweek?date_=' ~ anchor_iso %}
 <div class="toolbar top-app-bar toolbar-2row">
     <div class="toolbar-row">
-        <h1 class="sr-only">{{ month_name }} {{ year }}</h1>
+        <h1 class="sr-only">4-Week View</h1>
         <div class="segmented calendar-subnav">
-            <a class="seg-btn active" href="/calendar?year={{ year }}&month={{ month }}{{ _lq }}">Month</a>
-            <a class="seg-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
+            <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
+            <a class="seg-btn active" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
             <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
             <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
         </div>
         <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar?year={{ next_year }}&month={{ next_month }}{{ _lq }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
+        <a class="icon-btn" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+        <a class="icon-btn" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
         {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
         <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
     </div>
@@ -25,16 +25,15 @@
 
 {% include "_education_next_lectures.html" %}
 
-<!-- 2026-08-08: fits the viewport instead of pushing the page taller and
-     letting the whole page scroll -- see style.css's own comment on
-     .calendar-viewport/.month-viewport for the "slight resize" mechanics
-     (each week row flexes to share whatever height is left, day cells
-     drop their fixed-height floor). Desktop only, see that same comment. -->
-<div class="card calendar-viewport month-viewport">
-<!-- 2026-08-08: was hardcoded Mon..Sun -- now rotated by
-     routers/calendar.py's month_view to match whichever day "Week
-     starts on" (Settings > General) names, so this header always lines
-     up with weeks/_month_grid's own column order. -->
+<!-- 2026-08-11: the same Month-viewport shell as calendar_month.html
+     (fits the viewport, week rows flex to share the height, day cells drop
+     their fixed-height floor -- see style.css's .month-viewport comment) --
+     always exactly four week rows, and every day is in-window (no
+     .not-in-month cells at all: the window is a continuous 28 days and
+     never bleeds into surrounding weeks/months). `.fourweek-viewport`
+     just trims the height back from Month's 128vh (tuned for up to six
+     rows) so four rows don't stretch across a page-and-a-half. -->
+<div class="card calendar-viewport month-viewport fourweek-viewport">
 <div class="month-weekday-row">
     {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
 </div>
@@ -44,13 +43,6 @@
     <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
         <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
         <div class="month-day-bottom">
-            <!-- 2026-08-08: one flat list per day, all three types, no
-                 overlap -- all-day events as full-width colored rows
-                 (.month-all-day), timed events as quiet time+dot text,
-                 tasks as square+title text (routers/calendar.py's
-                 _month_grid tags each with its `kind`). Everything past
-                 MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
-                 below, which directs to the day view. -->
             {% for item in day.rows %}
                 {% if item.kind == "all_day" %}
                     <a class="month-all-day cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}" data-modal title="{{ item.event.title }}">{{ item.event.title }}</a>

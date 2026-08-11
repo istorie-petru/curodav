@@ -21,7 +21,6 @@ class Settings:
     contacts_collection: str
     db_path: Path
     sync_interval_seconds: int
-    searxng_base_url: str  # e.g. "http://127.0.0.1:8080" -- banner image search
 
 
 def load_settings() -> Settings:
@@ -40,5 +39,4 @@ def load_settings() -> Settings:
             )
         ),
         sync_interval_seconds=int(os.environ.get("CC_SYNC_INTERVAL", "60")),
-        searxng_base_url=os.environ.get("CC_SEARXNG_URL", "http://127.0.0.1:8080"),
     )

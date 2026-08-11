@@ -80,7 +80,6 @@ def radicale_settings(tmp_path: Path) -> Settings:
             contacts_collection="contacts",
             db_path=tmp_path / "cache.sqlite",
             sync_interval_seconds=9999,
-            searxng_base_url="http://127.0.0.1:8080",
         )
     finally:
         proc.terminate()

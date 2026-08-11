@@ -13,20 +13,36 @@
    is also rendered by the pages, since it's page-specific. #}
 {% if banner %}
 <div class="page-banner">
-    {% if banner.kind == 'upload' %}
-    {# Uploaded banners are served via /banners/image (routers/banners.py)
-       instead of being embedded inline as a base64 data URI -- embedding a
-       multi-MB blob directly in the HTML was what made pages with a banner
-       load at 100ms+/2MB+ while identical pages without one were ~7ms. The
-       separate request keeps the page small and cacheable, and the ?v=
-       (banner.version, a content hash) makes the immutable-cached URL
-       change when the banner does. #}
-    <img src="/banners/image?scope={{ banner_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" loading="lazy">
+    {# Any banner with a `version` (uploaded, or a legacy searched banner
+       that was downloaded and stored locally while the web-search feature
+       existed) is served via /banners/image (routers/banners.py) instead of
+       being embedded inline as a base64 data URI -- embedding a multi-MB
+       blob directly in the HTML was what made pages with a banner load at
+       100ms+/2MB+ while identical pages without one were ~7ms. The separate
+       request keeps the page small and cacheable, and the ?v= (a content
+       hash) makes the immutable-cached URL change when the image does.
+       Only a legacy hotlink-only searched banner (set before the local
+       download existed) has no version and keeps using its remote image_url.
+       fetchpriority="high" (2026-08-10) -- the banner is this page's hero,
+       the first image in the document, so the browser should fetch it as
+       early as it does the CSS/JS rather than deprioritizing it. This is
+       what closes the remaining perceived-load gap: the ~13ms HTML arrives
+       fast, but a *lazy* hero image was then fetched only after other
+       resources and painted late, which read as the banner popping in over
+       an already-drawn page. Eager + high priority makes the image travel
+       with the page instead. Decode stays at the browser default (async on
+       modern engines) so a multi-MB upload never blocks first paint. #}
+    {% if banner.version %}
+    <img src="/banners/image?scope={{ banner_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" fetchpriority="high">
     {% else %}
     {# referrerpolicy="no-referrer" keeps a hotlinked search image from
-       leaking the page URL to the host serving it; loading="lazy" because
-       a banner is below-the-fold on most devices. #}
-    <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer" loading="lazy">
+       leaking the page URL to the host serving it. #}
+    <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer" fetchpriority="high">
     {% endif %}
+    {# .is-loaded JS reveal (app.js) leaves the image at opacity 0 until it
+       decodes; with JS disabled that class never arrives, so this forces
+       the img visible for no-JS visitors (the noscript style is inert when
+       scripting is enabled). #}
+    <noscript><style>.page-banner img{opacity:1;}</style></noscript>
 </div>
 {% endif %}

@@ -45,9 +45,10 @@
   color-scheme:light;
 
   --accent:#007aff;--accent-hover:#0071e3;--accent-active:#0062cc;--accent-subtle:rgba(0,122,255,.12);--accent-subtle-strong:rgba(0,122,255,.2);
+  --accent-neutral:#efefef;--accent-neutral-hover:#e2e2e2;--accent-neutral-active:#d4d4d4;--accent-neutral-subtle:rgba(130,130,135,.1);--accent-neutral-subtle-strong:rgba(130,130,135,.18);
   --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
   --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
-  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#8e8e93;--fg-on-accent:#ffffff;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#8e8e93;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#2c2c2e;
   --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
   --control-bg:#ffffff;--control-bg-hover:#f5f5f7;--control-border:rgba(0,0,0,.14);
   --overlay-scrim:rgba(0,0,0,.35);--shadow-window:0 16px 44px rgba(0,0,0,.18);
@@ -126,7 +127,7 @@
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
   --text-caption:13px;--text-footnote:14px;--text-body:15px;--text-callout:15.5px;
-  --text-headline:17px;--text-title3:18px;--text-title2:21px;
+  --text-headline:17px;--text-title3:18px;--text-title2:21px;--text-title1:26px;
 
   --radius-control:12px;--radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-pill:999px;
 
@@ -176,11 +177,12 @@
   color-scheme:dark;
 
   --accent:#0a84ff;--accent-hover:#3396ff;--accent-active:#0a6fd6;--accent-subtle:rgba(10,132,255,.22);--accent-subtle-strong:rgba(10,132,255,.32);
+  --accent-neutral:#414141;--accent-neutral-hover:#4b4b4b;--accent-neutral-active:#3a3a3a;--accent-neutral-subtle:rgba(255,255,255,.08);--accent-neutral-subtle-strong:rgba(255,255,255,.14);
   --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
-  --bg-base:#1a1a1c;--bg-elevated:#2c2c2e;--bg-secondary:#2a2a2c;--bg-tertiary:#1c1c1e;--bg-sidebar:#222224;
-  --fg-primary:#f5f5f7;--fg-secondary:#a1a1a6;--fg-tertiary:#8e8e93;
+  --bg-base:#363636;--bg-elevated:#3e3e3e;--bg-secondary:#383838;--bg-tertiary:#303030;--bg-sidebar:#3b3b3b;
+  --fg-primary:#f5f5f7;--fg-secondary:#b0b0b6;--fg-tertiary:#a3a3a8;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#d1d1d6;
   --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
-  --control-bg:#333335;--control-bg-hover:#3a3a3c;--control-border:rgba(255,255,255,.16);
+  --control-bg:#414141;--control-bg-hover:#494949;--control-border:rgba(255,255,255,.14);
   --overlay-scrim:rgba(0,0,0,.55);--shadow-window:0 16px 44px rgba(0,0,0,.5);
 
   /* Previously *not* overridden at all -- every pill in the app (status,
@@ -239,7 +241,7 @@ body{
   margin:0; font-family:var(--font-system); color:var(--fg-primary); background:var(--bg-base);
   font-size:var(--text-body); -webkit-font-smoothing:antialiased;
 }
-a{color:var(--accent); text-decoration:none;}
+a{color:var(--fg-primary); text-decoration:none;}
 a:hover{text-decoration:underline;}
 h1{font-size:var(--text-title2); margin:0 0 14px;}
 h2{font-size:var(--text-headline); margin:20px 0 8px;}
@@ -254,7 +256,7 @@ h2{font-size:var(--text-headline); margin:20px 0 8px;}
    text inputs keep their own `:focus` ring below (section 3) since a
    ring on click *into* a field is expected there, unlike on a button. */
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
-  outline:2px solid var(--accent); outline-offset:2px;
+  outline:2px solid var(--accent-neutral); outline-offset:2px;
 }
 
 /* Visually-hidden but still in the accessibility tree/document outline --
@@ -275,6 +277,62 @@ button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
 }
 
 /* --------------------------------------------------------------------- */
+/* Page transitions (2026-08-10) -- two layered mechanisms for the same   */
+/* "navigating between pages shouldn't cut abruptly" goal, both pure CSS: */
+/*                                                                        */
+/*   1. @view-transition (cross-document View Transitions API) -- a       */
+/*      supporting browser (Chromium 126+, Firefox, Safari) crossfades    */
+/*      the whole outgoing page into the incoming one on every            */
+/*      navigation, fixed left rail included. The custom keyframes below  */
+/*      stretch the UA's default fade into a slightly longer, eased       */
+/*      crossfade with a gentle vertical rise (outgoing drifts up 8px     */
+/*      while fading to half, incoming rises 14px into place) so a nav    */
+/*      reads as the page moving rather than blinking. Browsers without   */
+/*      support just ignore the at-rule and navigate exactly as before.   */
+/*                                                                        */
+/*   2. main fade-in -- the fallback for browsers without View            */
+/*      Transitions (and the only mechanism a no-JS visitor gets, since   */
+/*      it's a plain CSS animation). Only the changing content column     */
+/*      fades in while the persistent rail stays solid, so a full-page    */
+/*      blank flash is never what the eye lands on. It is gated behind    */
+/*      `@supports not (view-transition-name: root)` so a VT-capable      */
+/*      browser never runs it: its snapshot is captured at first paint,   */
+/*      so a live-page fade would freeze the captured frame at low        */
+/*      opacity and "pop" to the real page when the transition ends --    */
+/*      in VT browsers the snapshot keyframes above ARE the transition,   */
+/*      and the live page just stays put beneath them. animation-fill-    */
+/*      mode: both keeps main invisible for the one frame before the      */
+/*      animation starts (no 1-frame flash of full-opacity content).      */
+/*      The section-2 global prefers-reduced-motion rule already          */
+/*      collapses main's animation; the VT fades need their own           */
+/*      kill-switch below because the universal selector does not match   */
+/*      ::view-transition-* pseudo-elements.                              */
+/* --------------------------------------------------------------------- */
+@view-transition{ navigation:auto; }
+@media (prefers-reduced-motion: no-preference){
+  ::view-transition-old(root){ animation:cc-vt-out 320ms var(--ease-standard) both; }
+  ::view-transition-new(root){ animation:cc-vt-in 320ms var(--ease-standard) both; }
+  @keyframes cc-vt-out{
+    from{ opacity:1; transform:translateY(0); }
+    to{ opacity:.5; transform:translateY(-8px); }
+  }
+  @keyframes cc-vt-in{
+    from{ opacity:0; transform:translateY(14px); }
+    to{ opacity:1; transform:none; }
+  }
+  @supports not (view-transition-name: root){
+    main{ animation:cc-page-in 200ms var(--ease-standard) both; }
+    @keyframes cc-page-in{
+      from{ opacity:0; }
+      to{ opacity:1; }
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce){
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*){ animation:none !important; }
+}
+
+/* --------------------------------------------------------------------- */
 /* 3. Form controls -- the one shared base every input/select/textarea in */
 /*    the app inherits from (see the file header comment above).         */
 /* --------------------------------------------------------------------- */
@@ -287,7 +345,7 @@ input, select, textarea{
 }
 input::placeholder, textarea::placeholder{color:var(--fg-tertiary); opacity:1;}
 input:focus, select:focus, textarea:focus{
-  outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle);
+  outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);
 }
 input:disabled, select:disabled, textarea:disabled{opacity:.5; cursor:not-allowed;}
 input:read-only{cursor:default;}
@@ -333,10 +391,10 @@ select{
    already set their own `border` explicitly, so they don't need it from
    here either. */
 input[type="checkbox"], input[type="radio"]{
-  width:16px; height:16px; margin:0; padding:0; accent-color:var(--accent); cursor:pointer;
+  width:16px; height:16px; margin:0; padding:0; accent-color:var(--accent-neutral); cursor:pointer;
 }
 input[type="range"]{
-  padding:0; background:none; border:none; accent-color:var(--accent); cursor:pointer;
+  padding:0; background:none; border:none; accent-color:var(--accent-neutral); cursor:pointer;
 }
 input[type="color"]{padding:2px; height:32px; cursor:pointer;}
 input[type="file"]{
@@ -364,7 +422,7 @@ label.file-btn{
 }
 label.file-btn:hover{background:var(--control-bg-hover); box-shadow:var(--elevation-1);}
 label.file-btn:focus-within{
-  outline:2px solid var(--accent); outline-offset:-2px;
+  outline:2px solid var(--accent-neutral); outline-offset:-2px;
 }
 /* Native date/time picker indicator glyphs are drawn by the browser, not
    this stylesheet -- `color-scheme` (set per-theme above) is what makes
@@ -417,7 +475,7 @@ button.btn:active::after, a.btn:active::after{opacity:.08;}
 button.btn.primary, a.btn.primary{
    background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:600;
    box-shadow:var(--elevation-1), 0 2px 8px var(--accent-subtle);
-}
+ }
 button.btn.primary:hover, a.btn.primary:hover{background:var(--accent-hover); box-shadow:var(--elevation-2);}
 button.btn.primary:active, a.btn.primary:active{background:var(--accent-active);}
 button.btn.primary::after, a.btn.primary::after{background:#fff;}
@@ -446,8 +504,8 @@ button.btn.danger.subtle, a.btn.danger.subtle{
 }
 button.btn.danger.subtle:hover, a.btn.danger.subtle:hover{background:var(--tag-red-bg);}
 /* MD3 tonal button -- accent-tinted fill without the full-weight primary look. */
-button.btn.tonal, a.btn.tonal{background:var(--accent-subtle); color:var(--accent); border-color:transparent;}
-button.btn.tonal:hover, a.btn.tonal:hover{background:var(--accent-subtle-strong);}
+button.btn.tonal, a.btn.tonal{background:var(--accent-neutral-subtle); color:var(--fg-primary); border-color:transparent;}
+button.btn.tonal:hover, a.btn.tonal:hover{background:var(--accent-neutral-subtle-strong);}
 /* MD3 outlined button -- a border-only button for secondary actions
     that need more visual weight than a ghost but less than a filled
     primary. Used in the customize modal for "Cancel" and destructive
@@ -479,7 +537,7 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
    needs an active/current-section indicator -- reuses .tab-btn.active's
    accent treatment rather than inventing a second "this is where I am"
    visual language. */
-.icon-btn.active{color:var(--accent); background:var(--accent-subtle);}
+.icon-btn.active{color:var(--fg-primary); background:var(--accent-neutral-subtle);}
 
 /* Loading feedback -- a generic `.is-loading` utility for any trigger
    (button, link, whole clickable row) mid-fetch: modal.js applies it to
@@ -562,12 +620,12 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .tab-btn:hover{color:var(--fg-primary); text-decoration:none;}
 .tab-btn:active{opacity:.7;}
 /* MD3 active indicator pill: a rounded rectangle behind the icon */
-.tab-btn.active{color:var(--accent); font-weight:600;}
+.tab-btn.active{color:var(--fg-primary); font-weight:600;}
 .tab-btn.active::before{
   content:''; position:absolute;
   top:2px; left:50%; transform:translateX(-50%);
   width:52px; height:28px; border-radius:14px;
-  background:var(--accent-subtle-strong); z-index:-1;
+  background:var(--accent-neutral-subtle-strong); z-index:-1;
   transition:background var(--dur-fast) var(--ease-standard);
 }
 
@@ -692,7 +750,7 @@ label.seg-btn[hidden]{display:none;}
 }
 .segmented-list .seg-btn:hover{box-shadow:var(--elevation-1);}
 .segmented-list label.seg-btn:has(.seg-radio:checked){
-  border-color:var(--accent); background:var(--accent-subtle); color:var(--fg-primary); box-shadow:none;
+  border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:none;
 }
 /* Merged task/event quick-add modal (2026-08-10, quick_add.html) -- only
    the active form panel is visible; static/quick_add.js toggles `.is-active`
@@ -978,7 +1036,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .settings-subnav-links a{
   display:inline-flex; align-items:center; gap:5px; font-size:var(--text-footnote); color:var(--fg-secondary);
 }
-.settings-subnav-links a:hover{color:var(--accent); text-decoration:none;}
+.settings-subnav-links a:hover{color:var(--fg-primary); text-decoration:none;}
 
 /* --------------------------------------------------------------------- */
 /* Tasks/Contacts filter row (tasks_list.html/tasks_board.html/          */
@@ -1042,12 +1100,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 .toolbar-filters-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
 .toolbar-filters-checkbox:checked ~ .toolbar-row .toolbar-filters-trigger{
-  color:var(--accent); background:var(--accent-subtle);
+  color:var(--fg-primary); background:var(--accent-neutral-subtle);
 }
 .toolbar-filters-trigger .icon{width:15px; height:15px;}
 .toolbar-filters-badge{
   position:absolute; top:-2px; right:-2px;
-  background:var(--accent); color:var(--fg-on-accent); border-radius:var(--radius-pill);
+  background:var(--accent-neutral); color:var(--fg-on-accent-neutral); border-radius:var(--radius-pill);
   min-width:14px; height:14px; padding:0 3px; font-size:9px; font-weight:700; line-height:14px; text-align:center;
 }
 .toolbar-filters-body{
@@ -1106,7 +1164,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
 }
 .filter-dropdown-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
-.filter-dropdown-trigger:focus-visible{outline:none; box-shadow:0 0 0 3px var(--accent-subtle);}
+.filter-dropdown-trigger:focus-visible{outline:none; box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
 .filter-dropdown-trigger .ms-summary{white-space:nowrap;}
 .filter-dropdown-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard);}
 .multiselect.is-open > .filter-dropdown-trigger .filter-caret{transform:rotate(180deg);}
@@ -1147,10 +1205,10 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    tasks_table.js) rather than a fixed value here. */
 .task-table td{white-space:nowrap;}
 /* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
-tr.is-selected{background:var(--accent-subtle);}
+tr.is-selected{background:var(--accent-neutral-subtle);}
 .bulk-actions-bar{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
-  background:var(--accent-subtle); border:1px solid var(--accent); border-radius:var(--radius-control);
+  background:var(--accent-neutral-subtle); border:1px solid var(--accent-neutral); border-radius:var(--radius-control);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
 }
 .bulk-count{font-weight:600; font-size:var(--text-footnote);}
@@ -1206,7 +1264,7 @@ tr.is-selected{background:var(--accent-subtle);}
 .kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
 .kanban-count{font-size:var(--text-caption); color:var(--fg-tertiary); font-weight:600;}
 .kanban-cards{display:flex; flex-direction:column; gap:var(--space-2); min-height:40px; border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);}
-.kanban-cards.drop-hover{background:var(--accent-subtle);}
+.kanban-cards.drop-hover{background:var(--accent-neutral-subtle);}
 .kanban-card{
   background:var(--bg-elevated); border:none; border-radius:var(--radius-control);
   padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); cursor:grab; display:flex; flex-direction:column; gap:var(--space-1);
@@ -1271,7 +1329,7 @@ tr.is-selected{background:var(--accent-subtle);}
 .contact-row-name{font-weight:600; color:var(--fg-primary);}
 .contact-row-sub{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .avatar-circle{
-  flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-subtle); color:var(--accent);
+  flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-neutral-subtle); color:var(--fg-primary);
   display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;
 }
 .avatar-large{width:52px; height:52px; font-size:20px;}
@@ -1396,9 +1454,9 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   transition:box-shadow var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 }
 .tile-option:hover{box-shadow:var(--elevation-1);}
-.tile-option:has(.tile-radio:checked){border-color:var(--accent); background:var(--accent-subtle); color:var(--fg-primary); box-shadow:var(--elevation-1);}
+.tile-option:has(.tile-radio:checked){border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:var(--elevation-1);}
 .tile-icon{color:var(--fg-secondary);}
-.tile-option:has(.tile-radio:checked) .tile-icon{color:var(--accent);}
+.tile-option:has(.tile-radio:checked) .tile-icon{color:var(--accent-neutral);}
 .tile-option-label{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
 
 /* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
@@ -1512,6 +1570,15 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   .month-viewport .month-weekday-row{flex:none;}
   .month-viewport .month-week-grid{flex:1 1 0; min-height:0;}
   .month-viewport .month-day-cell{min-height:0;}
+  /* 4-Week view (2026-08-11) -- same shrink-to-fit grid mechanics as
+     Month (.month-viewport above), but the grid is always exactly four
+     week rows, so it gets the shared 100vh budget rather than Month's
+     128vh (which is tuned for its up-to-six-week grid): four rows at
+     100vh leave each row a comparable height to a five-row Month while
+     keeping the whole grid on (roughly) one screen. Equal specificity
+     to .calendar-viewport.month-viewport above; this rule is later, so
+     it wins when a card carries both classes. */
+  .calendar-viewport.fourweek-viewport{height:calc(100vh - var(--calendar-chrome-h));}
 
   /* Week/Day: the time grid is a real fixed height (24 * one hour's own
      pixel height, the same spacing every other time-grid view in the app
@@ -1544,7 +1611,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-grid-head.week{grid-template-columns:repeat(7,1fr);}
 .time-grid-head.day{grid-template-columns:1fr;}
 .time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-footnote); font-weight:600; border-bottom:1px solid var(--separator);}
-.time-grid-head .thd.is-today{color:var(--accent);}
+.time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:700;}
 /* 2026-08-09 -- all-day strip between the day-of-week header and the hour
    grid on Week/Day, showing all-day events and due tasks per day. Same
    52px-gutter + column grid as .time-grid-body so its columns line up
@@ -1598,14 +1665,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* Drop-hover: the destination column lights up while dragging an event
    over it, so a cross-column move has a clear "it will land here" cue
    instead of just the block silently jumping between columns. */
-.time-col.drop-hover{background-color:var(--accent-subtle);}
+.time-col.drop-hover{background-color:var(--accent-neutral-subtle);}
 /* Hover/drag-create preview ghost (Schedule grid, static/schedule_grid.js)
    -- a faint outline showing where a click (or click-drag, for a custom
    length) would create a new class, same idea as the reference app's
    week-hover-ghost. */
 .schedule-ghost{
   position:absolute; left:3px; right:3px; border-radius:6px; pointer-events:none;
-  background:var(--accent-subtle); border:1.5px dashed var(--accent); z-index:2;
+  background:var(--accent-neutral-subtle); border:1.5px dashed var(--accent-neutral); z-index:2;
 }
 .time-event{
   position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
@@ -1620,7 +1687,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    (see calendar.js/schedule_grid.js), this is purely the visual match for
    that already-snapped position. */
 .time-event.dragging{
-  opacity:.95; box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent), 0 6px 14px rgba(0,0,0,.22);
+  opacity:.95; box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent-neutral), 0 6px 14px rgba(0,0,0,.22);
   z-index:30; cursor:grabbing;
 }
 .time-event .te-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -1748,14 +1815,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .month-day-cell:last-child{border-right:none;}
 .month-day-cell.not-in-month{opacity:.4;}
-.month-day-cell.is-today{background:var(--accent-subtle);}
 .month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
 .month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention
    `.mini-cal-day.is-today .mini-cal-day-num` already established for the
    dashboard mini calendar, reused verbatim rather than inventing a new
    "today" treatment. */
-.month-day-cell.is-today .month-day-num span{background:var(--accent); color:var(--fg-on-accent); font-weight:700;}
+.month-day-cell.is-today .month-day-num span{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:700; width:24px; height:24px;}
+[data-theme="dark"] .month-day-cell.is-today .month-day-num span{background:#494949;}
 .month-day-bottom{display:flex; flex-direction:column; gap:1px; overflow:hidden;}
 /* 2026-08-08 follow-up: a task and a single-day timed event (both
    `kind:"event"`/`kind:"task"` in routers/calendar.py's _month_grid)
@@ -1797,7 +1864,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    would also fade the day number and event chips inside it, not just
    show a tinted background) plus an accent ring so the selected range
    reads clearly against both light and dark themes. */
-.month-day-cell.is-selecting{background:var(--row-alt); box-shadow:inset 0 0 0 1px var(--accent);}
+.month-day-cell.is-selecting{background:var(--row-alt); box-shadow:inset 0 0 0 1px var(--accent-neutral);}
 
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,
    static/timeline.js. Everything absolutely positioned within one
@@ -1845,7 +1912,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   position:absolute; top:0; width:2px; background:var(--separator); cursor:col-resize; z-index:4;
   margin-left:-1px; touch-action:none;
 }
-.timeline-gutter-sep:hover, .timeline-gutter-sep.is-resizing{background:var(--accent); width:3px; margin-left:-1.5px;}
+.timeline-gutter-sep:hover, .timeline-gutter-sep.is-resizing{background:var(--accent-neutral); width:3px; margin-left:-1.5px;}
 
 .timeline-gutter-row{
   position:absolute; left:0; display:flex; align-items:center; padding:0 6px; box-sizing:border-box;
@@ -1890,10 +1957,10 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    border) unrelated to this app's actual accent color (blue by default).
    Same accent-ring-over-tinted-fill treatment Calendar month's own
    click-and-drag create/select highlight already uses
-   (.month-day-cell.is-selecting: var(--row-alt) fill + inset var(--accent)
+   (.month-day-cell.is-selecting: var(--row-alt) fill + inset var(--accent-neutral)
    ring) -- same gesture, same visual language, in both places now. */
 .timeline-create-ghost{
-  position:absolute; background:var(--accent-subtle); border:2px solid var(--accent); box-sizing:border-box; z-index:3;
+  position:absolute; background:var(--accent-neutral-subtle); border:2px solid var(--accent-neutral); box-sizing:border-box; z-index:3;
   pointer-events:none;
 }
 
@@ -1976,10 +2043,10 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .toast.is-in{opacity:1; transform:translateY(0) scale(1);}
 .toast-message{flex:1;}
 .toast-action{
-  flex:none; background:none; border:none; color:var(--accent-hover); font-weight:600; font-size:var(--text-footnote);
+  flex:none; background:none; border:none; color:var(--accent-neutral-hover); font-weight:600; font-size:var(--text-footnote);
   cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
 }
-[data-theme="dark"] .toast-action{color:#7bb8ff;}
+[data-theme="dark"] .toast-action{color:#b0b0b6;}
 .toast-action:hover{background:rgba(255,255,255,.1);}
 .toast-close{
   flex:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
@@ -2153,11 +2220,11 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .cropper-canvas{display:block; width:100%; height:100%;}
 .cropper-box{
-  position:absolute; border:2px solid var(--accent); box-shadow:0 0 0 1000px rgba(0,0,0,.45);
+  position:absolute; border:2px solid var(--accent-neutral); box-shadow:0 0 0 1000px rgba(0,0,0,.45);
   cursor:move; touch-action:none;
 }
 .cropper-box-handle{
-  position:absolute; width:12px; height:12px; background:var(--accent); border:2px solid var(--fg-on-accent);
+  position:absolute; width:12px; height:12px; background:var(--accent-neutral); border:2px solid var(--fg-on-accent-neutral);
   border-radius:50%; transform:translate(-50%, -50%);
 }
 .cropper-box-handle[data-handle="n"]{top:0; left:50%; cursor:ns-resize;}
@@ -2244,7 +2311,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   display:block; width:20px; height:20px; border-radius:50%; box-shadow:0 0 0 1px var(--border) inset;
   border:none; padding:0; cursor:pointer; -webkit-appearance:none; appearance:none;
 }
-.color-swatch-current.is-active{box-shadow:0 0 0 2px var(--accent);}
+.color-swatch-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral);}
 /* Only visible while actually inside the floating popover -- at its
    "home" location (right next to the trigger, in the un-opened markup)
    it stays display:none so it never occupies layout space there. */
@@ -2292,7 +2359,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-elevated);
   cursor:pointer; padding:0; color:var(--fg-primary);
 }
-.icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent); border-color:transparent;}
+.icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral); border-color:transparent;}
 .icon-picker .icon-dropdown{display:none;}
 .icon-popover{
   position:fixed; display:none; z-index:150; width:260px; max-height:320px; overflow-y:auto;
@@ -2327,7 +2394,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   border-radius:var(--radius-sm); cursor:pointer; border:2px solid transparent; color:var(--fg-primary);
 }
 .icon-swatch-label:hover{background:var(--row-alt);}
-.icon-swatch-label:has(.icon-swatch:checked){border-color:var(--accent); background:var(--tag-blue-bg);}
+.icon-swatch-label:has(.icon-swatch:checked){border-color:var(--accent-neutral); background:var(--tag-blue-bg);}
 .icon-swatch{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
 .icon-swatch-label.icon-swatch-none-label{color:var(--fg-tertiary);}
 
@@ -2340,7 +2407,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm);
   border:1px solid var(--border); cursor:pointer;
 }
-.merge-candidate-row:has(input:checked){border-color:var(--accent); background:var(--tag-blue-bg);}
+.merge-candidate-row:has(input:checked){border-color:var(--accent-neutral); background:var(--tag-blue-bg);}
 .merge-candidate-row input[type="radio"]{flex:none;}
 .calendar-list{margin-bottom:12px;}
 .calendar-new-form{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
@@ -2471,7 +2538,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* projects_manage.html/project_detail.html */
 .project-icon-input{max-width:64px; flex:none; text-align:center;}
 .project-open-link{flex:none; font-size:13px; color:var(--fg-tertiary); white-space:nowrap;}
-.project-open-link:hover{color:var(--accent);}
+.project-open-link:hover{color:var(--fg-primary);}
 .project-cover{
   width:100%; max-height:180px; object-fit:cover; border-radius:var(--radius-md);
   margin-bottom:12px; display:block;
@@ -2479,7 +2546,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .project-progress-bar{
   height:6px; border-radius:3px; background:var(--bg-secondary); overflow:hidden; margin:6px 0 2px;
 }
-.project-progress-fill{height:100%; background:var(--accent);}
+.project-progress-fill{height:100%; background:var(--accent-neutral);}
 .project-scope-section{margin-top:16px;}
 .project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
 
@@ -2500,10 +2567,10 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   display:block; background:var(--bg-secondary);
 }
 .heatmap-cell.level-0{background:var(--bg-secondary);}
-.heatmap-cell.level-1{background:var(--accent); opacity:.3;}
-.heatmap-cell.level-2{background:var(--accent); opacity:.55;}
-.heatmap-cell.level-3{background:var(--accent); opacity:.78;}
-.heatmap-cell.level-4{background:var(--accent); opacity:1;}
+.heatmap-cell.level-1{background:var(--accent-neutral); opacity:.3;}
+.heatmap-cell.level-2{background:var(--accent-neutral); opacity:.55;}
+.heatmap-cell.level-3{background:var(--accent-neutral); opacity:.78;}
+.heatmap-cell.level-4{background:var(--accent-neutral); opacity:1;}
 .heatmap-cell.level-future{background:transparent; cursor:default; visibility:hidden;}
 .heatmap-cell:hover:not(.level-future){box-shadow:0 0 0 1px var(--fg-primary) inset;}
 
@@ -2647,23 +2714,16 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    boundary and what it actually does obvious while dragging, rather
    than relying on a subtle border alone to communicate a gesture
    there's no other way to discover. */
-.widget-card.is-stack-target{box-shadow:0 0 0 2px var(--accent); background:var(--accent-subtle);}
+.widget-card.is-stack-target{box-shadow:0 0 0 2px var(--accent-neutral); background:var(--accent-neutral-subtle);}
 .widget-card.is-stack-target::before{
   content:"Drop to stack"; position:absolute; inset:0; z-index:5; pointer-events:none;
   display:flex; align-items:center; justify-content:center;
-  font-size:.9em; font-weight:600; color:var(--accent);
-  background:var(--accent-subtle); border-radius:var(--radius-md);
+  font-size:.9em; font-weight:600; color:var(--fg-primary);
+  background:var(--accent-neutral-subtle); border-radius:var(--radius-md);
 }
 .widget-stack{display:flex; flex-direction:column;}
 .widget-stack-header{margin-bottom:var(--space-2);}
 .widget-stack-item + .widget-stack-item{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
-/* "See more" (dashboard.html) -- desktop already has these destinations
-   one click away (topbar tab or Settings gear), so this only needs to
-   exist below the same mobile breakpoint everything else collapses at. */
-.dashboard-see-more{display:none;}
-@media (max-width:720px){
-  .dashboard-see-more{display:block;}
-}
 
 /* Mini Calendar widget (_widget_mini_month_calendar.html) -- a compact
    7-col grid, day numbers only, a small dot for "something's on this
@@ -2697,13 +2757,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .mini-cal-day:hover .mini-cal-day-num{background:var(--row-alt);}
 .mini-cal-day:hover{text-decoration:none;}
 .mini-cal-day.is-out{color:var(--fg-tertiary); opacity:.5;}
-.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent); color:var(--fg-on-accent); font-weight:700;}
+.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:700; width:32px; height:32px;}
+[data-theme="dark"] .mini-cal-day.is-today .mini-cal-day-num{background:#494949;}
 .mini-cal-day.has-activity .mini-cal-day-num::after{
   content:""; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%);
-  width:4px; height:4px; border-radius:50%; background:var(--accent);
+  width:4px; height:4px; border-radius:50%; background:var(--accent-neutral);
 }
-.mini-cal-day.is-today.has-activity .mini-cal-day-num::after{background:var(--fg-on-accent);}
-.mini-cal-day.is-today.has-activity::after{background:var(--fg-on-accent);}
+.mini-cal-day.is-today.has-activity .mini-cal-day-num::after{background:var(--fg-on-accent-neutral);}
+.mini-cal-day.is-today.has-activity::after{background:var(--fg-on-accent-neutral);}
 
 /* Calendar + Agenda widget (_widget_calendar_agenda.html) -- a mini month
    calendar on top + a compact 7-day agenda below it, designed to sit at
@@ -2714,14 +2775,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .cal-agenda-divider{height:1px; background:var(--separator); margin:var(--space-3) 0;}
 .cal-agenda-days{display:flex; flex-direction:column; gap:var(--space-1);}
 .cal-agenda-day{display:flex; flex-direction:column; gap:2px;}
-.cal-agenda-day.is-today .cal-agenda-day-label{color:var(--accent); font-weight:700;}
+.cal-agenda-day.is-today .cal-agenda-day-label{color:var(--fg-primary); font-weight:700;}
 .cal-agenda-day-label{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:1px;}
 .cal-agenda-item{
   display:flex; align-items:center; gap:4px; font-size:var(--text-caption);
   color:var(--fg-primary); text-decoration:none; padding:1px 0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.cal-agenda-item:hover{text-decoration:none; color:var(--accent);}
+.cal-agenda-item:hover{text-decoration:none; color:var(--fg-primary);}
 .cal-agenda-time{color:var(--fg-tertiary); font-variant-numeric:tabular-nums; min-width:30px;}
 
 /* Contact List widget (_widget_contact_list.html) -- compact contact
@@ -2816,7 +2877,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    display:flex; align-items:center; gap:6px; user-select:none;
    list-style:none; padding:8px 0;
 }
-.widget-add-config summary.widget-add-summary:hover{color:var(--accent);}
+.widget-add-config summary.widget-add-summary:hover{color:var(--fg-primary);}
 
 /* "Add a widget" header in the Customize modal's builder pane */
 .widget-add-header{
@@ -2847,7 +2908,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    background:var(--bg-secondary); border-color:var(--border-strong);
 }
 .widget-list-multiselect .multiselect-trigger:focus-visible{
-   outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle);
+   outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);
 }
 .widget-list-multiselect .ms-trigger .filter-caret{margin-left:auto;}
 .widget-list-multiselect .ms-panel{left:0; right:auto; width:100%; max-height:220px; overflow:auto;}
@@ -2875,7 +2936,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    cursor:pointer; font-size:13px; font-weight:600; color:var(--fg-secondary);
    padding:8px 10px; display:flex; align-items:center; gap:6px; user-select:none;
 }
-.widget-customize-existing > summary:hover{color:var(--accent);}
+.widget-customize-existing > summary:hover{color:var(--fg-primary);}
 .widget-customize-existing[open] > summary{border-bottom:1px solid var(--separator);}
 .widget-customize-existing .calendar-list{padding:0 10px;}
 .widget-customize-row{flex-wrap:wrap; gap:4px 6px; padding:var(--space-1) 0;}
@@ -2995,9 +3056,9 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .week-overview-day{
   border:1px solid var(--separator); border-radius:var(--radius-md); padding:6px; min-height:70px;
 }
-.week-overview-day.is-today{border-color:var(--accent);}
+.week-overview-day.is-today{border-color:var(--accent-neutral);}
 .week-overview-day-label{font-size:12px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px;}
-.week-overview-day.is-today .week-overview-day-label{color:var(--accent);}
+.week-overview-day.is-today .week-overview-day-label{color:var(--fg-primary); font-weight:700;}
 .week-overview-item{
   display:flex; align-items:center; gap:4px; font-size:13px; padding:2px 0;
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -3055,7 +3116,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    collection of unrelated screens. */
 .settings-group{margin-bottom:var(--space-5);}
 .settings-row{text-decoration:none; color:var(--fg); gap:var(--space-3);}
-.settings-row:hover{color:var(--accent);}
+.settings-row:hover{color:var(--fg-primary);}
 .settings-row-icon{color:var(--fg-tertiary); display:inline-flex;}
 .settings-row-name{font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .settings-row .tag-usage-count{flex:none;}
@@ -3071,18 +3132,20 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .settings-hub-row .settings-row-name{font-size:var(--text-headline); font-weight:600; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .settings-hub-row .settings-row-desc{color:var(--fg-tertiary); font-size:var(--text-footnote);}
 .settings-hub-row .settings-row-chevron{color:var(--fg-tertiary); flex:none;}
-.settings-hub-row:hover .settings-row-chevron{color:var(--accent);}
+.settings-hub-row:hover .settings-row-chevron{color:var(--fg-primary);}
 
 /* Settings breadcrumb (_settings_breadcrumb.html) -- one line, every
-   ancestor a link, current page plain text at the end. Distinct from the
+   ancestor a link, sitting tight above the page's own <h1> so the two
+   read as one header (the h1 is the current page's title; the trail
+   above is just "where you are inside Settings"). Distinct from the
    plain stacked .breadcrumb (label_detail.html's "< Labels" / "< Parent",
    one per line) since this is always a single trail rendered inline, not
    however many independent single-link rows a page happens to have. */
-.settings-breadcrumb{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.settings-breadcrumb{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 2px; font-size:var(--text-footnote); font-weight:600;}
 .settings-breadcrumb a{display:inline-flex; align-items:center; gap:2px; color:var(--fg-tertiary); text-decoration:none;}
-.settings-breadcrumb a:hover{color:var(--accent);}
+.settings-breadcrumb a:hover{color:var(--fg-primary);}
 .settings-breadcrumb .breadcrumb-sep{color:var(--fg-tertiary); opacity:.5;}
-.settings-breadcrumb .breadcrumb-current{color:var(--fg-primary); font-weight:500;}
+.settings-breadcrumb + h1{font-size:var(--text-title1);}
 
 /* Settings field row -- "Setting name [ control ]" on one line, the fast-
    editing shape every child page (General/Appearance/Widgets/Advanced)
@@ -3140,7 +3203,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .label-table .btn-sm{padding:3px 8px; font-size:var(--text-caption);}
 .label-table details > summary{list-style:none; width:fit-content;}
 .label-table details > summary::-webkit-details-marker{display:none;}
-.label-table details[open] summary{color:var(--accent);}
+.label-table details[open] summary{color:var(--fg-primary);}
 .label-table input[type="checkbox"]{width:15px; height:15px;}
 
 /* Small on-off switch (app preferences).
@@ -3157,9 +3220,9 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    content:""; position:absolute; width:16px; height:16px; left:3px; top:3px;
    border-radius:50%; background:var(--fg-primary); transition:transform .15s ease, background .15s ease;
 }
-.switch input:checked + .slider{background:var(--accent-subtle-strong);}
-.switch input:checked + .slider::before{transform:translateX(16px); background:var(--accent);}
-.switch input:focus-visible + .slider{box-shadow:0 0 0 3px var(--accent-subtle);}
+.switch input:checked + .slider{background:var(--accent-neutral-subtle-strong);}
+.switch input:checked + .slider::before{transform:translateX(16px); background:var(--accent-neutral);}
+.switch input:focus-visible + .slider{box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
 
 @media (max-width:720px){
   .settings-grid{grid-template-columns:1fr 1fr;}
@@ -3172,8 +3235,9 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* --------------------------------------------------------------------- */
 /* Dashboard page banner (_page_banner.html, 2026-08-09) -- Home and every
    label/Space/Project page can have a wide header image ("banner"/"cover")
-   chosen from the banner editor modal (routers/banners.py: search SearXNG
-   images, upload, or remove). Rendered at the very top of the page
+   chosen from the banner editor modal (routers/banners.py: upload or
+   remove; the SearXNG web-search picker was removed 2026-08-11). Rendered
+   at the very top of the page
    content, above the toolbar: a rounded box the image fills with
    object-fit:cover (non-matching images are center-cropped, never
    distorted -- the editor's own note tells the user the preferred ratio).
@@ -3278,44 +3342,6 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .banner-upload-btn{cursor:pointer;}
 .banner-upload-input{display:none;}
 .banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
-/* The "Search the web" section in its own card; results scroll inside the
-   card so a long result list never pushes the rest of the modal off
-   screen. */
-.banner-search-card{padding:var(--space-4);}
-.banner-editor-section{
-  font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
-  margin:var(--space-4) 0 var(--space-2); display:flex; align-items:center; gap:6px;
-}
-.banner-search-card .banner-editor-section{margin-top:0;}
-.banner-search-row{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
-.banner-search-row input[type="search"]{flex:1; min-width:0;}
-.banner-search-state{
-  padding:var(--space-4) var(--space-2); text-align:center;
-  color:var(--fg-tertiary); font-size:var(--text-callout);
-}
-/* Pinterest-style masonry wall (2026-08-09 follow-up): the results show
-   only the pictures -- no title/source text -- as bare rounded tiles that
-   keep each image's natural aspect ratio, laid out via CSS multi-column so
-   tiles stack vertically down each column. A fixed column-count (not
-   column-width) means the columns always fit the modal's width: no height
-   clamp and no overflow on this container either, so the wall grows as
-   tall as its content and the *modal body* (overflow-y:auto) provides the
-   vertical scrollbar -- long result lists never force a horizontal one. */
-.banner-results{
-  column-count:4; column-gap:var(--space-2);
-}
-.banner-results > form{break-inside:avoid; margin:0 0 var(--space-2);}
-.banner-result{
-  display:block; width:100%; margin:0; padding:0;
-  border:none; background:none; text-align:left; cursor:pointer;
-  border-radius:var(--radius-card); overflow:hidden;
-  transition:box-shadow var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
-}
-.banner-result:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
-/* color:transparent hides a broken image's alt text (the result title)
-   while bannerImgFallback() retries the full-size URL then drops the
-   tile -- the empty gap is a bad look for a "pictures only" wall. */
-.banner-result img{width:100%; height:auto; display:block; object-fit:cover; color:transparent;}
 
 /* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
    upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,
@@ -3323,7 +3349,3 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    side rather than nested (HTML forbids a form inside a form); everything
    stays on one tight row (no wrap). */
 .profile-photo-controls{display:flex; align-items:center; gap:var(--space-2);}
-
-@media (max-width:720px){
-  .banner-results{column-count:2;}
-}

@@ -85,7 +85,15 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import RedirectResponse
 
 from .. import db
-from ..deps import SHOW_LABEL_ICONS_KEY, TIME_FORMAT_KEY, WEEK_START_KEY, get_db, templates
+from ..deps import (
+    FOUR_WEEK_POSITION_KEY,
+    SHOW_LABEL_ICONS_KEY,
+    TIME_FORMAT_KEY,
+    WEEK_START_KEY,
+    _four_week_position_from_value,
+    get_db,
+    templates,
+)
 from .dashboard import DISPLAY_NAME_KEY
 from .export import export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
@@ -160,6 +168,15 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # test suite, not a hunch).
             "current_week_start": db.get_app_meta(conn, WEEK_START_KEY) or "monday",
             "current_time_format": db.get_app_meta(conn, TIME_FORMAT_KEY) or "24h",
+            # 2026-08-11 -- "4-Week view: current week" (see deps.py's
+            # FOUR_WEEK_POSITION_KEY): which of the four rows the Calendar
+            # 4-Week view's current week occupies. Read back through the
+            # same _four_week_position_from_value parse the calendar route
+            # itself uses, so "this setting shows 1/2/3/4" and "the view
+            # does what the setting says" can't disagree on a bad value.
+            "current_four_week_position": _four_week_position_from_value(
+                db.get_app_meta(conn, FOUR_WEEK_POSITION_KEY) or "1"
+            ),
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -242,6 +259,19 @@ def set_week_start(week_start: str = Form("monday"), conn=Depends(get_db)):
     unrecognized value) falls back to "monday", this app's original
     hardcoded behavior before this preference existed."""
     db.set_app_meta(conn, WEEK_START_KEY, "sunday" if week_start == "sunday" else "monday")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/four-week-position")
+def set_four_week_position(position: str = Form("1"), conn=Depends(get_db)):
+    """"4-Week view: current week" (2026-08-11) -- which of the four rows
+    of the Calendar 4-Week view the current week occupies. Only ever stores
+    one of the settings_ general page's own offered choices ("1".."4",
+    validated against the same fixed set deps.py's reader clamps to); an
+    unrecognized or tampered value falls back to "1" (first row) rather
+    than silently placing the current week somewhere the UI never offered.
+    Read back by routers/calendar.py's four_week_view."""
+    db.set_app_meta(conn, FOUR_WEEK_POSITION_KEY, position if position in ("1", "2", "3", "4") else "1")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

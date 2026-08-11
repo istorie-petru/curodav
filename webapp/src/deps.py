@@ -32,6 +32,15 @@ TIME_FORMAT_KEY = "display_time_format"
 # two above. Off by default ("", which is exactly an existing install's
 # state: nothing was ever written here), "1" when on.
 SHOW_LABEL_ICONS_KEY = "show_label_icons"
+# 2026-08-11 -- "4-Week view: current week" (Settings > General) -- which
+# row of the Calendar 4-Week view's four week rows the current week (the
+# week containing today, or the anchor date) occupies: "1".."4", default
+# "1" (current week on the first row -- what an existing install that has
+# never touched this sees, and the least surprising "the period I'm in
+# starts at the top" layout). Read by routers/calendar.py's four_week_view
+# via _four_week_position below; written by routers/settings.py's
+# set_four_week_position.
+FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
@@ -190,6 +199,28 @@ def _cached_app_meta(request: Request, key: str, default: str) -> str:
         value = default
     cache[key] = value
     return value
+
+
+def _four_week_position_from_value(value: str | None) -> int:
+    """Shared parse for the "4-Week view: current week" position
+    (Settings > General, 2026-08-11): "1".."4" -> 1..4, anything else
+    (unset, tampered, an old DB that never wrote it) -> 1, the default
+    (current week on the first row). Used by both _four_week_position
+    below (the per-request reader) and routers/settings.py (the setting's
+    own page context + POST validation), so the two can't drift on what a
+    bad value means."""
+    try:
+        pos = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return pos if 1 <= pos <= 4 else 1
+
+
+def _four_week_position(request: Request) -> int:
+    """Which of the four rows the Calendar 4-Week view's current week
+    occupies (1-4) -- read by routers/calendar.py's four_week_view to
+    compute where the 28-day window starts relative to the anchor week."""
+    return _four_week_position_from_value(_cached_app_meta(request, FOUR_WEEK_POSITION_KEY, "1"))
 
 
 def _week_start(request: Request) -> str:

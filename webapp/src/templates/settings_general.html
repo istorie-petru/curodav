@@ -60,6 +60,25 @@
             <label class="seg-btn"><input type="radio" name="week_start" value="sunday" class="seg-radio" {% if current_week_start == 'sunday' %}checked{% endif %} onchange="this.form.requestSubmit()"> Sunday</label>
         </div>
     </form>
+    <!-- 4-Week view: current week (2026-08-11) -- which of the four rows
+         the Calendar 4-Week view's current week occupies (the window of
+         28 continuous days always shows the current week, placed on the
+         chosen row; see routers/calendar.py's four_week_view). Same
+         autosubmit segmented pattern as Week starts on above. Four
+         choices, not two, but .segmented wraps (flex-wrap) so it still
+         fits a settings row. -->
+    <form class="settings-field-row" method="post" action="/settings/four-week-position">
+        <span class="settings-field-label">4-Week view: current week
+            <span class="settings-field-hint">Calendar's 4-Week view &mdash; which row holds the current week</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="4-Week view current week row">
+            <label class="seg-btn"><input type="radio" name="position" value="1" class="seg-radio" {% if current_four_week_position == 1 %}checked{% endif %} onchange="this.form.requestSubmit()"> First</label>
+            <label class="seg-btn"><input type="radio" name="position" value="2" class="seg-radio" {% if current_four_week_position == 2 %}checked{% endif %} onchange="this.form.requestSubmit()"> Second</label>
+            <label class="seg-btn"><input type="radio" name="position" value="3" class="seg-radio" {% if current_four_week_position == 3 %}checked{% endif %} onchange="this.form.requestSubmit()"> Third</label>
+            <label class="seg-btn"><input type="radio" name="position" value="4" class="seg-radio" {% if current_four_week_position == 4 %}checked{% endif %} onchange="this.form.requestSubmit()"> Fourth</label>
+        </div>
+    </form>
     <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
          in the app (deps.py's fmt_time/fmt_hour filters) plus the
          Calendar/Schedule drag-preview labels. Same autosubmit segmented

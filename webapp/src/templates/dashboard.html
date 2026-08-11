@@ -53,7 +53,7 @@
          since both are page-content edits. Opens the banner editor modal
          (routers/banners.py); "Add" vs "Change" labels by whether a banner
          is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}&amp;edit=1" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
          a label page's (label_detail.html): wipes Home's widgets back to
          the seeded default via /dashboard/reset. data-confirm-sheet is the
@@ -83,25 +83,6 @@
      routers/dashboard.py's widget_page_context. See _widget_workspace.html. -->
 {% include "_widget_workspace.html" %}
 
-<!-- "See more" -- mobile-only (see .dashboard-see-more's media query in
-     style.css). Desktop already has the full tabbar (Home/Calendar/Tasks/
-     Schedule/Contacts/Settings, 2026-08-07 nav rework) and the Settings
-     gear right next to the theme toggle, both always visible -- this
-     exists specifically because a narrow phone-width topbar can't fit
-     every tab plus these rarer destinations. Plain links, not another
-     modal/sheet -- these are infrequent destinations, a static list is
-     simpler than building yet another overlay for a handful of
-     rarely-tapped rows. Databases dropped from this list entirely
-     (2026-08-07) along with the feature itself -- see plans/
-     label-space-rework.md's Grades/Databases removal note. -->
-<div class="card dashboard-see-more">
-    <div class="section-label">See more</div>
-    <div class="settings-subnav-links">
-        <a href="/labels">{{ icon('folder', 'icon-sm') }} Projects</a>
-        <a href="/habits">{{ icon('activity', 'icon-sm') }} Habits</a>
-        <a href="/settings">{{ icon('settings', 'icon-sm') }} Settings</a>
-    </div>
-</div>
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ static_url('habit_checkin.js') }}"></script>

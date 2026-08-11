@@ -100,7 +100,10 @@
              sets active_tab="label" (see routers/labels.py) so only the
              Space's own rail link highlights, not this gear too. -->
         <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'habits', 'published_lists', 'export')) %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
-        <button class="tab-btn" id="btnTheme" aria-label="Toggle theme" title="Toggle theme">{{ icon('moon') }}<span>Theme</span></button>
+        {# The tabbar theme-toggle button was removed 2026-08-11 -- the only
+           theme control is Settings > Appearance's System/Light/Dark choice
+           (settings_appearance.html), keeping the topbar free of a second,
+           less capable way to change the same setting. #}
     </nav>
     <!-- 2026-08-07: the main-class block below lets a page opt out of the
          default 1120px-max-width centered column -- Calendar (Month/

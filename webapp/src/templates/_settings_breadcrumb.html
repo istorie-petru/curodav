@@ -14,5 +14,5 @@
      entered) without relying on browser history, which would break for
      anyone who deep-links straight into a child page. -->
 <nav class="breadcrumb settings-breadcrumb" aria-label="Settings">
-    {% for c in crumbs %}<a href="{{ c.url }}">{{ icon('chevron-left', 'icon-sm') if loop.last else '' }}{{ c.name }}</a><span class="breadcrumb-sep">/</span>{% endfor %}<span class="breadcrumb-current">{{ title }}</span>
+    {% for c in crumbs %}<a href="{{ c.url }}">{% if loop.first %}{{ icon('chevron-left', 'icon-sm') }}{% endif %}{{ c.name }}</a>{% if not loop.last %}<span class="breadcrumb-sep">/</span>{% endif %}{% endfor %}
 </nav>

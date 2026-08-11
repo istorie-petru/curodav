@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, grid_layout, recurrence_expand, schedule
-from ..deps import _week_start, get_db, templates
+from ..deps import _four_week_position, _week_start, get_db, templates
 from . import dashboard as dashboard_router
 
 # Month-view per-day list: how many rows (all-day colored rows + timed
@@ -56,6 +56,21 @@ def _week_bounds(d: date, week_start: str = "monday") -> tuple[date, date]:
     offset = (d.weekday() - first_weekday) % 7
     start = d - timedelta(days=offset)
     return start, start + timedelta(days=6)
+
+
+_WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _weekday_names(week_start: str) -> list[str]:
+    """The weekday header row (calendar_month.html / calendar_fourweek.html),
+    rotated to start on whichever day "Week starts on" (Settings > General,
+    deps.py's week_start()) names as day 0 so the header always matches the
+    actual column order _month_grid/_four_week_grid built above. Shared by
+    both views so the two can't drift on the rotation."""
+    names = list(_WEEKDAY_NAMES)
+    if week_start == "sunday":
+        names = names[6:] + names[:6]
+    return names
 
 
 def _tags_list(tags: str) -> list[str]:
@@ -244,23 +259,21 @@ def _event_date_range(e: dict) -> tuple[date, date] | None:
     return start_d, end_d
 
 
-def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
-    # 2026-08-08 rework: every day cell is a single flat list, no more
-    # lane-packed bars layered on top of a separate quiet-text list --
-    # that layering is exactly what let the colored all-day rows overlap
-    # the text events/tasks. Now all three types live in one list where
-    # each item is tagged with its `kind` so the template can render
-    # all-day events as colored rows, timed events as time+dot text, and
-    # tasks as square+title text, with no overlap between them.
-    # Everything past MONTH_MAX_VISIBLE_ITEMS folds into the "+N more"
-    # overflow link that directs to the day view.
+def _bucket_month_items(events: list[dict], tasks: list[dict]) -> tuple[dict, dict, dict]:
+    """Buckets events/tasks into per-date maps for the Month and 4-Week
+    grids -- the three dicts _month_grid used to build inline, extracted
+    so the new 4-Week view (_four_week_grid, 2026-08-11) builds identical
+    day cells from a continuous 28-day window without duplicating the
+    all-day/multi-day repeat-per-day + timed-sort logic. Returns
+    (all_day_by_date, timed_by_date, tasks_by_date).
+
+    Multi-day events (all-day or timed) repeat on every day they touch,
+    not just their start date -- same "repeated entry per day" behavior
+    Apple/Google use, and the fix for the original "event only showed on
+    its start day" bug this view's rework started from."""
     all_day_events = [e for e in events if _is_bar_worthy(e)]
     timed_events = [e for e in events if not _is_bar_worthy(e)]
 
-    # Multi-day events (all-day or timed) repeat on every day they touch,
-    # not just their start date -- same "repeated entry per day" behavior
-    # Apple/Google use, and the fix for the original "event only showed on
-    # its start day" bug this view's rework started from.
     all_day_by_date: dict[str, list[dict]] = {}
     for e in all_day_events:
         rng = _event_date_range(e)
@@ -291,43 +304,122 @@ def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], we
             continue
         tasks_by_date.setdefault(t["due_at"][:10], []).append(t)
 
+    return all_day_by_date, timed_by_date, tasks_by_date
+
+
+def _month_day_cells(
+    dates: list[date],
+    all_day_by_date: dict,
+    timed_by_date: dict,
+    tasks_by_date: dict,
+    today: date,
+    is_window_day,
+) -> list[dict]:
+    """Build one week's day cells -- the shared core of the Month and
+    4-Week grids (2026-08-11). `dates` is a single week's 7 days;
+    `is_window_day(date) -> bool` marks a cell in-window (Month:
+    day.month == month, which grays out the leading/trailing adjacent-month
+    days; 4-Week: always True, since its window is exactly 4 weeks and
+    never bleeds into surrounding weeks/months).
+
+    Each cell is ONE flat list of rows: all-day colored rows first, then
+    timed events by time, then tasks -- same visual priority the cell
+    shows top-to-bottom, and the count that feeds the "+N more" link. The
+    key is `rows`, NOT `items` -- a dict key named `items` would collide
+    with Python's own `dict.items` method in Jinja (a template's `day.items`
+    would resolve to the bound method and crash iterating over it)."""
+    week_days = []
+    for day in dates:
+        key = day.isoformat()
+        rows = []
+        for e in all_day_by_date.get(key, []):
+            rows.append({"kind": "all_day", "event": e})
+        for e in timed_by_date.get(key, []):
+            rows.append({"kind": "event", "event": e})
+        for t in tasks_by_date.get(key, []):
+            rows.append({"kind": "task", "task": t})
+        visible = rows[:MONTH_MAX_VISIBLE_ITEMS]
+        week_days.append(
+            {
+                "date": day,
+                "iso": key,
+                "in_month": is_window_day(day),
+                "is_today": day == today,
+                "rows": visible,
+                "overflow_count": len(rows) - len(visible),
+            }
+        )
+    return week_days
+
+
+def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
+    # 2026-08-08 rework: every day cell is a single flat list, no more
+    # lane-packed bars layered on top of a separate quiet-text list --
+    # that layering is exactly what let the colored all-day rows overlap
+    # the text events/tasks. Now all three types live in one list where
+    # each item is tagged with its `kind` so the template can render
+    # all-day events as colored rows, timed events as time+dot text, and
+    # tasks as square+title text, with no overlap between them.
+    # Everything past MONTH_MAX_VISIBLE_ITEMS folds into the "+N more"
+    # overflow link that directs to the day view. The per-day cell work
+    # lives in _bucket_month_items/_month_day_cells so the 4-Week view
+    # (_four_week_grid) can reuse it over a continuous 28-day window.
+    all_day_by_date, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
+
     # Python's calendar module: firstweekday=0 is Monday, 6 is Sunday --
     # same "Week starts on" preference _week_bounds above reads.
     cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
     today = date.today()
     weeks = []
     for week in cal.monthdatescalendar(year, month):
-        week_days = []
-        for day in week:
-            key = day.isoformat()
+        weeks.append(
+            {
+                "days": _month_day_cells(
+                    week, all_day_by_date, timed_by_date, tasks_by_date, today, lambda d: d.month == month
+                )
+            }
+        )
+    return weeks
 
-            # One flat list: all-day colored rows first, then timed events
-            # by time, then tasks -- same visual priority the cell shows
-            # top-to-bottom, and the count that feeds the "+N more" link.
-            # Key is `rows`, NOT `items` -- a dict key named `items` would
-            # collide with Python's own `dict.items` method in Jinja (the
-            # template's `day.items` would resolve to the bound method and
-            # crash iterating over it).
-            rows = []
-            for e in all_day_by_date.get(key, []):
-                rows.append({"kind": "all_day", "event": e})
-            for e in timed_by_date.get(key, []):
-                rows.append({"kind": "event", "event": e})
-            for t in tasks_by_date.get(key, []):
-                rows.append({"kind": "task", "task": t})
 
-            visible = rows[:MONTH_MAX_VISIBLE_ITEMS]
-            week_days.append(
-                {
-                    "date": day,
-                    "iso": key,
-                    "in_month": day.month == month,
-                    "is_today": day == today,
-                    "rows": visible,
-                    "overflow_count": len(rows) - len(visible),
-                }
-            )
-        weeks.append({"days": week_days})
+def _four_week_window(anchor: date, week_start: str, position: int) -> tuple[date, date]:
+    """(view_start, view_end) for the 4-Week view (2026-08-11): a
+    continuous 28-day window whose `position`-th week (1-4) is the anchor
+    week -- the week `anchor` falls in, per the "Week starts on"
+    preference. Position 1 puts the anchor week on the first row (the
+    window starts at the anchor week itself), position 2 on the second
+    (starts one week earlier), 3 on the third, 4 on the fourth -- i.e.
+    the window starts `(position - 1) * 7` days before the anchor week.
+    Extracted from four_week_view so the math is unit-testable independent
+    of request/settings plumbing."""
+    anchor_week_start, _ = _week_bounds(anchor, week_start)
+    view_start = anchor_week_start - timedelta(days=(position - 1) * 7)
+    return view_start, view_start + timedelta(days=27)
+
+
+def _four_week_grid(view_start: date, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
+    """4-Week view's day grid (2026-08-11) -- the Month grid's own day-cell
+    layout (_month_day_cells) laid out over a continuous 28-day window
+    instead of a calendar month: exactly four week rows, every cell always
+    in-window (no grayed-out .not-in-month adjacent-month days at all,
+    since the window never bleeds into surrounding weeks/months). `view_start`
+    is the window's first day (a week start, already shifted back by the
+    current-week-position preference -- see four_week_view below). Keeps
+    the same interaction surface as Month: each cell's data-date + DOM
+    order feed static/calendar_month.js's click-and-hold drag-to-create
+    unchanged."""
+    all_day_by_date, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
+    today = date.today()
+    weeks = []
+    for week_index in range(4):
+        dates = [view_start + timedelta(days=week_index * 7 + i) for i in range(7)]
+        weeks.append(
+            {
+                "days": _month_day_cells(
+                    dates, all_day_by_date, timed_by_date, tasks_by_date, today, lambda d: True
+                )
+            }
+        )
     return weeks
 
 
@@ -369,11 +461,10 @@ def month_view(
 
     # Weekday header row (calendar_month.html) -- 2026-08-08: was
     # hardcoded Mon..Sun; now rotated to start on whichever day "Week
-    # starts on" (Settings > General) names, so the header always
-    # matches the actual column order _month_grid just built above.
-    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    if week_start == "sunday":
-        weekday_names = weekday_names[6:] + weekday_names[:6]
+    # starts on" (Settings > General) preference names, so the header always
+    # matches the actual column order _month_grid just built above. Shared
+    # with the 4-Week view via _weekday_names (2026-08-11).
+    weekday_names = _weekday_names(week_start)
 
     return templates.TemplateResponse(
         "calendar_month.html",
@@ -391,6 +482,66 @@ def month_view(
             "prev_month": prev_month,
             "next_year": next_year,
             "next_month": next_month,
+            "event_label_names": db.list_event_label_names(conn),
+            "active_label": label or "",
+            "schedule_next_lectures": _group_education_next_lectures(conn, label),
+        },
+    )
+
+
+@router.get("/fourweek")
+def four_week_view(
+    request: Request,
+    date_: str | None = None,
+    label: str | None = None,
+    conn=Depends(get_db),
+):
+    """4-Week view (2026-08-11) -- Month's day-grid layout (_four_week_grid)
+    over a rolling, continuous 28-day window instead of calendar-month
+    boundaries. The anchor (default: today, like Month's year/month default)
+    falls in the anchor week; that week occupies whichever of the four rows
+    Settings > General's "4-Week view: current week" preference names
+    (deps.py's _four_week_position: 1-4), so the window starts
+    `(position - 1) * 7` days before the anchor week's start -- e.g.
+    position 1 shows [this week, +1, +2, +3], position 2 shows
+    [-1, this week, +1, +2]. Prev/next move the whole window by one week
+    at a time (the anchor shifts by 7 days, so the window slides by a week
+    while the anchor week keeps its configured row -- direct feedback
+    2026-08-11, "move by 1 week, not 4"); the `date_` param is the anchor
+    (a bare date inside whatever window is shown)."""
+    today = date.today()
+    anchor = date.fromisoformat(date_) if date_ else today
+    week_start = _week_start(request)
+    position = _four_week_position(request)
+    view_start, view_end = _four_week_window(anchor, week_start, position)
+
+    # Same `end` end-of-day-timestamp requirement as week_view below --
+    # db.list_events compares these as plain strings, and a bare end-date
+    # would silently exclude every timed event on the window's last day.
+    events = db.list_events(conn, start=view_start.isoformat(), end=view_end.isoformat() + "T23:59:59")
+    events = recurrence_expand.expand_events(events, view_start, view_end)
+    events = _apply_event_label_filter(events, label)
+    events = _annotate_calendar_colors(conn, events)
+
+    tasks = db.list_tasks(conn)
+    tasks = _apply_task_label_filter(tasks, label)
+
+    weeks = _four_week_grid(view_start, events, tasks, week_start)
+
+    return templates.TemplateResponse(
+        "calendar_fourweek.html",
+        {
+            "request": request,
+            "active_tab": "calendar",
+            "calendar_view": "fourweek",
+            "today_iso": today.isoformat(),
+            "weeks": weeks,
+            "weekday_names": _weekday_names(week_start),
+            "view_start": view_start,
+            "view_end": view_end,
+            "anchor_iso": anchor.isoformat(),
+            "prev_start": (view_start - timedelta(days=7)).isoformat(),
+            "next_start": (view_start + timedelta(days=7)).isoformat(),
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
             "schedule_next_lectures": _group_education_next_lectures(conn, label),

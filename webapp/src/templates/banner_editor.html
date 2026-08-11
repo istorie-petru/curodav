@@ -8,33 +8,29 @@
      lands here as a full page, while static/modal.js's data-modal strips
      everything but #modal-target and shows it as a wide dialog.
 
-     Layout (2026-08-09 follow-up): the minimalist "Upload image" control
-     sits at the very top of the modal, and "Search the web" lives in its
-     own .card with a scrollable results area -- no SFW toggle (always
-     strict, hardcoded server-side in src/searxng.py) and no image-type/
-     size dropdowns (always prefers high-res images) anymore.
+     The only way to set a banner is uploading a local image -- the
+     SearXNG "search the web" picker was removed 2026-08-11. Legacy
+     searched banners (kind="remote") set before that keep rendering and
+     show their Remove control here; this modal only carries the current
+     banner, the upload form, and the remove form.
 
-     Search form is `data-modal-get`, so submitting it re-fetches this
-     same URL with the new query and swaps the fragment in place --
-     modal.js's openModal runs the SearXNG search server-side via
-     routers/banners.py's editor route (which embeds the results below) --
-     no client-side rendering. Every mutating form (use-result / upload /
-     remove) is a plain POST that modal.js submits via fetch, then closes
-     and reloads the page. The upload form's hidden file input sits inside
-     its label, so a click on the button opens the picker, and the file's
-     onchange auto-submits the form on selection (same pattern as the
-     avatar upload in contact_form.html).
+     The upload form's hidden file input sits inside its label, so a
+     click on the button opens the picker, and the file's onchange
+     auto-submits the form on selection -- routed through static/app.js's
+     CCBannerUpload.onFile (2026-08-10), which resizes the picked image
+     in the browser first so the stored/served banner is a ~2400px
+     WebP/JPEG rather than the camera's multi-MB original; browsers
+     without that script still submit the original unchanged.
 
      Variables: scope (page key, "" = Home), page_url (where to return),
-     banner (current banner dict or None), query (current search text),
-     results/search_error (search state). -->
+     banner (current banner dict or None). -->
 <div id="modal-target">
     <div class="modal-header">
         <h1>{{ icon('image', 'icon-sm') }} Page banner</h1>
     </div>
     <div class="modal-body">
         <div class="banner-editor">
-            <!-- Preferred aspect ratio -- the one spec the upload tab
+            <!-- Preferred aspect ratio -- the one spec the upload control
                  needs to tell the user: on desktop the banner renders
                  object-fit: cover in a 5:1 box (3:1 on phones), so a
                  wide landscape image works best and a non-matching image
@@ -44,9 +40,12 @@
             {% if banner %}
             <div class="card banner-current">
                 <div class="settings-field-label">Current banner</div>
-                {% if banner.kind == 'upload' %}
-                {# Same served /banners/image URL as _page_banner.html -- never
-                   embed the base64 blob inline, that was the page-size leak. #}
+                {# Same served /banners/image URL as _page_banner.html when the
+                   banner has local bytes (version) -- never embed the base64
+                   blob inline, that was the page-size leak. Only a legacy
+                   hotlink-only searched banner (set before the web-search
+                   feature was removed) falls back to its remote URL. #}
+                {% if banner.version %}
                 <img src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
                 {% else %}
                 <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
@@ -59,7 +58,7 @@
             </div>
             {% endif %}
 
-            <!-- Upload -- minimalist, at the top: a single ghost button.
+            <!-- Upload -- minimalist: a single ghost button.
                  The file input is hidden inside its label (click the
                  button = open the picker), and onchange auto-submits on
                  selection, so the form POSTs the moment a file is chosen
@@ -69,47 +68,10 @@
                 <input type="hidden" name="page_url" value="{{ page_url }}">
                 <label class="btn ghost banner-upload-btn">
                     {{ icon('upload', 'icon-sm') }} Upload image
-                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload" onchange="this.form.requestSubmit()">
+                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload" onchange="window.CCBannerUpload ? CCBannerUpload.onFile(this) : this.form.requestSubmit()">
                 </label>
-                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; max 8MB</span>
+                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; auto-compressed to max 2400px &middot; 8MB cap</span>
             </form>
-
-            <!-- Search SearXNG -- its own card, results scroll inside it. -->
-            <div class="card banner-search-card">
-                <h2 class="banner-editor-section">{{ icon('search', 'icon-sm') }} Search the web</h2>
-                <form method="get" action="/banners/editor" data-modal-get class="banner-search-form">
-                    <input type="hidden" name="scope" value="{{ scope }}">
-                    <input type="hidden" name="page_url" value="{{ page_url }}">
-                    <input type="hidden" name="edit" value="1">
-                    <div class="banner-search-row">
-                        <input type="search" name="q" value="{{ query }}" placeholder="e.g. mountain landscape, abstract gradient" aria-label="Search for a banner image">
-                        <button type="submit" class="btn primary">{{ icon('search', 'icon-sm') }} Search</button>
-                    </div>
-                </form>
-
-                {% if search_error %}
-                <div class="banner-search-state">{{ search_error }}</div>
-                {% elif query %}
-                    {% if results %}
-                    <div class="banner-results">
-                        {% for r in results %}
-                        <form method="post" action="/banners/set">
-                            <input type="hidden" name="scope" value="{{ scope }}">
-                            <input type="hidden" name="page_url" value="{{ page_url }}">
-                            <input type="hidden" name="image_url" value="{{ r.img_src }}">
-                            <input type="hidden" name="source_url" value="{{ r.url }}">
-                            <input type="hidden" name="alt" value="{{ r.title }}">
-                            <button type="submit" class="banner-result" title="{{ r.title }} &mdash; use this as the banner">
-                                <img src="{{ r.thumbnail_src }}" data-full="{{ r.img_src }}" alt="{{ r.title }}" loading="lazy" referrerpolicy="no-referrer" onerror="bannerImgFallback(this)">
-                            </button>
-                        </form>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="banner-search-state">No results for &ldquo;{{ query }}&rdquo;. Try different words.</div>
-                    {% endif %}
-                {% endif %}
-            </div>
         </div>
     </div>
 </div>

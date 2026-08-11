@@ -1,45 +1,35 @@
 // Minimal progressive enhancement -- every CRUD action works as a plain
-// HTML form submit with no JS at all. This file adds: dark/light theme
-// toggle and a delete confirmation.
+// HTML form submit with no JS at all. This file adds: the Settings >
+// Appearance theme control and a delete confirmation.
 //
 // The theme itself is now applied by a blocking inline script in
 // base.html's <head>, before first paint -- doing it here (bottom of
 // <body>, after DOMContentLoaded) used to cause a flash of the wrong
 // theme on every load for anyone whose stored/OS preference was dark.
 // This block only has to stay in sync with whatever the head script
-// already applied: read `data-theme` off <html> (already correct) to set
-// the button's initial icon, and handle click-to-toggle.
+// already applied: read `data-theme` off <html> (already correct) to
+// render the active choice, and apply changes as the user picks them.
 
 (function () {
   const THEME_KEY = "commandCenterWeb.theme";
   const mql = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  // 2026-08-07 (Settings rework): was a single getElementById("btnTheme")
-  // bound to the one tabbar icon button -- Settings now has its own theme
-  // control too, so this needs to drive an arbitrary number of controls
-  // in sync instead of exactly one.
+  // 2026-08-11: the tabbar's #btnTheme icon button is gone (see
+  // base.html's removal note) -- Settings > Appearance's System/Light/Dark
+  // segmented choice is the only theme control left, so this block no
+  // longer has to keep a one-click flip button in sync with it.
   //
-  // 2026-08-08 redesign: the tabbar icon button is still a plain
-  // click-to-flip between explicit light/dark (unchanged), but Settings >
-  // Appearance's control is now a three-way System/Light/Dark segmented
-  // choice, not an on/off switch -- a switch can only ever represent two
-  // states, so "follow the OS" (the actual out-of-the-box behavior,
-  // computed once by base.html's inline <head> script from
-  // prefers-color-scheme whenever localStorage has nothing stored yet)
-  // became permanently unreachable the instant anyone touched the old
-  // switch even once. "System" isn't a third stored value -- it's the
-  // *absence* of a stored value, same meaning the inline head script
-  // already gives that absence; picking "System" here just clears the
-  // key instead of writing one, and a live prefers-color-scheme listener
-  // keeps the page in sync if the OS theme changes while "System" is
-  // active and the tab stays open.
-  const btnTheme = document.getElementById("btnTheme");
+  // The control is a three-way System/Light/Dark segmented choice, not an
+  // on/off switch -- a switch can only ever represent two states, so
+  // "follow the OS" (the actual out-of-the-box behavior, computed once by
+  // base.html's inline <head> script from prefers-color-scheme whenever
+  // localStorage has nothing stored yet) became permanently unreachable
+  // the instant anyone touched the old switch even once. "System" isn't a
+  // third stored value -- it's the *absence* of a stored value, same
+  // meaning the inline head script already gives that absence; picking
+  // "System" here just clears the key instead of writing one, and a live
+  // prefers-color-scheme listener keeps the page in sync if the OS theme
+  // changes while "System" is active and the tab stays open.
   const segmented = document.getElementById("themeSegmented");
-  // Same sprite reference base.html's {{ icon(...) }} global renders --
-  // see templates/_icons_sprite.html. Swapping which symbol id a plain
-  // <use> points at is cheaper than swapping DOM nodes and keeps this in
-  // lockstep with the icon library instead of a one-off emoji string.
-  const ICON_SUN = '<svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg>';
-  const ICON_MOON = '<svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>';
 
   function osPrefersDark() {
     return !!(mql && mql.matches);
@@ -58,13 +48,10 @@
 
   function render() {
     const choice = storedChoice();
-    const effective = effectiveTheme(choice);
-    if (effective === "dark") {
+    if (effectiveTheme(choice) === "dark") {
       document.documentElement.setAttribute("data-theme", "dark");
-      if (btnTheme) btnTheme.innerHTML = ICON_SUN;
     } else {
       document.documentElement.removeAttribute("data-theme");
-      if (btnTheme) btnTheme.innerHTML = ICON_MOON;
     }
     if (segmented) {
       segmented.querySelectorAll("[data-theme-choice]").forEach((btn) => {
@@ -86,14 +73,6 @@
     render();
   }
 
-  if (btnTheme) {
-    // Explicit click-to-flip -- always lands on a concrete light/dark,
-    // same as before; flipping away from "System" this way is a
-    // deliberate, understood tradeoff (the tabbar button has no room for
-    // a three-way choice), not a bug -- Settings > Appearance is where
-    // "back to System" lives.
-    btnTheme.addEventListener("click", () => setChoice(effectiveTheme(storedChoice()) === "dark" ? "light" : "dark"));
-  }
   if (segmented) {
     segmented.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-theme-choice]");
@@ -978,19 +957,51 @@ document.addEventListener("submit", (event) => {
 // There is no more .widget-resize-handle-vertical element and no more
 // /dashboard/widgets/{uid}/resize-height endpoint to POST to.
 
-// Banner search results (2026-08-09, banner_editor.html) -- broken-image
-// fallback: a result tile whose thumbnail fails to load retries once with
-// the full-size image (some engines' thumbnails are hotlink-blocked or
-// dead while the original still works), then drops the tile entirely if
-// that fails too, so the masonry wall never shows broken alt-text boxes.
-// Global (not an IIFE) because it's called from inline onerror attributes
-// on images that are swapped in after the modal fragment is fetched.
-function bannerImgFallback(img) {
-  const full = img.dataset.full;
-  if (full && !img.dataset.fallbackTried) {
-    img.dataset.fallbackTried = "1";
-    img.src = full;
-    return;
-  }
-  img.closest("form")?.remove();
-}
+// Banner upload auto-compression (2026-08-10, banner_editor.html) -- the
+// upload tab's file input calls this on change instead of submitting the
+// original file. A phone camera hands back a 4-8MB image that then gets
+// stored base64 in app_meta and served on every page load; this resizes it
+// in the browser before the form ever posts, so what reaches the server
+// (and later the network on every visit) is a ~2400px WebP/JPEG at a
+// fraction of the bytes. No-JS / unsupported browsers skip the resize and
+// submit the original -- the 8MB server cap is still the real guard, this
+// is a best-effort size reduction. Animated GIFs are deliberately left
+// alone (re-encoding them would flatten the animation into a static frame).
+window.CCBannerUpload = {
+  onFile(input) {
+    const form = input.form;
+    const file = input.files && input.files[0];
+    const bail = () => form && form.requestSubmit();
+    if (!file || !file.type.startsWith("image/") || file.type === "image/gif" || !window.DataTransfer) return bail();
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); bail(); };
+    img.onload = () => {
+      // Max long edge, matching the editor's own "about 2400x480px" guidance
+      // (2x for retina). Never upscales; small images stay untouched.
+      const MAX = 2400;
+      const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext("2d");
+      // White underneath transparent pixels (PNG) so the JPEG fallback
+      // doesn't turn transparency black; WebP keeps alpha when supported.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      const webp = canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+      const outType = webp ? "image/webp" : "image/jpeg";
+      canvas.toBlob((blob) => {
+        if (blob && blob.size < file.size) {
+          const dt = new DataTransfer();
+          dt.items.add(new File([blob], webp ? "banner.webp" : "banner.jpg", { type: outType }));
+          input.files = dt.files;
+        }
+        form && form.requestSubmit();
+      }, outType, 0.82);
+    };
+    img.src = url;
+  },
+};
