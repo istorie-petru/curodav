@@ -1,8 +1,8 @@
 # Plan: Label/Space rework (webapp) — entities collapse to Events/Tasks/Contacts
 
-**Status:** Open, not started · logged 2026-08-06, revised 2026-08-06 (v2 — global pool + label-as-view model, see §0). Source spec `update-architecture.md` (repo root) plus your 2026-08-06 follow-up notes.
+**Status:** ✅ Shipped (phases 1–9 verified, suite green) · logged 2026-08-06, revised 2026-08-06 (v2 — global pool + label-as-view model, see §0). This plan is the **current data-model authority** for the webapp — keep it. `architecture.md` (root) summarizes the shipped result.
 **Target codebase:** `webapp/` (FastAPI) only. `desktop/` is untouched until Phase 8.
-**Supersedes:** [`spaces-home-pipeline.md`](spaces-home-pipeline.md) and [`spaces-v2-university-material.md`](spaces-v2-university-material.md) in full, including that doc's §4 (two-addressbook contacts model — gone, see §3 Phase 5) and its 2026-08-02 correction locking University as hardcoded (reversed again here — flagged, not silently overridden).
+**Supersedes:** `spaces-home-pipeline.md` and `spaces-v2-university-material.md` in full (both deleted 2026-08-11), including that doc's §4 (two-addressbook contacts model — gone, see §3 Phase 5) and its 2026-08-02 correction locking University as hardcoded (reversed again here — flagged, not silently overridden).
 **House rule in force:** delete over extend, no compatibility layer.
 
 ---

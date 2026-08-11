@@ -1,6 +1,6 @@
 # Plan: Webapp usability pass + DAVx5 mobile rollout
 
-**Status:** Open, not started · logged 2026-08-02
+**Status:** Open (Phase B item 2 superseded, see note) · logged 2026-08-02
 **Feature areas:** [`../features/design-system.md`](../features/design-system.md), [`../features/tasks.md`](../features/tasks.md), [`../features/calendar.md`](../features/calendar.md), [`../features/dashboard.md`](../features/dashboard.md)
 **Supersedes/consumes:** this doc is the implementation schedule for two already-written analysis docs -- [`webapp-action-pipelines-audit.md`](webapp-action-pipelines-audit.md) (Phase A below) and [`webapp-ui-design-direction.md`](webapp-ui-design-direction.md) (Phase B below). Neither of those is duplicated here; read them for the *why*, this doc is the *what, in what order*. Once each phase ships, fold its outcome into `../features/` and delete or stub the corresponding source doc per [`README.md`](README.md)'s workflow.
 
@@ -37,16 +37,16 @@ Two of the five remain genuinely open, confirmed by reading the actual templates
 
 1. **Shared pagination + collapsible-section components -- still missing.** No `?page=`/`?limit=` convention or pager partial exists anywhere in `src/templates/`. `project_detail.html`'s Events section is the clearest example of the gap it was supposed to fix: it hardcodes `events[:20]` with a bare "...and N more" line, not a real "show more"/paginate control. Schedule table and a Database's row table still render everything unconditionally. Build one shared pattern (pager partial + a Jinja macro or include, not a per-page bespoke slice), apply to Tasks table first (highest traffic), then Schedule/Database/habit history.
 
-2. **Projects-as-widgets + Databases-ownership move -- still missing, and worth re-scoping now that Spaces (project *groups*) already got a widget system.** `_widget_workspace.html` (2026-08-02) gave the dashboard-widget machinery to a "Space" detail page (`routers/projects.py`'s `space_detail`) -- but an individual **project's own** detail page (`project_detail.html`) is still the original fixed-section layout (Task lists / Events / Contacts / Courses, hardcoded order, no reorder/hide, and critically **no Databases section at all** -- a database's only link to its project today is its own `project_uid` field, invisible on the project page itself). Two ways to close this, worth deciding rather than guessing:
+2. **Projects-as-widgets + Databases-ownership move — SUPERSEDED (2026-08-07).** The Databases half of this item is moot: the Command Center rework Phase 1 and the Label/Space rework Phase 9 removed the generic Databases feature entirely (`databases` tables + router + UI deleted; Grades are a dedicated module, not a database). The project-detail page likewise changed shape in the label rework. What remains live from this item is the general question of per-project dashboard customisation (option (a), the widget-workspace extension) — logged as a separate, larger follow-up. Original text for reference:
    - (a) extend `_widget_workspace.html` one level further, scoping it to a single project (`config.project_uid` already exists per-widget) the same way it was just extended from Home to Space; or
    - (b) keep `project_detail.html`'s simpler fixed-section layout but just add the missing Databases section to it, matching the existing Task lists/Events/Contacts pattern, and treat full widget-driven customization as a separate, larger follow-up.
    Recommend (b) first as a fast, low-risk fix to the concrete "Databases don't show up on their own project's page" gap, with (a) as the real fulfillment of the design doc's ask once there's time for a proper widget-system extension (this is a bigger change than it looks -- `_widget_workspace.html`'s docstring already shows it wasn't a small lift to extend from Home to Space, and doing it again per-project needs the same care).
 
-**Acceptance for the two remaining Phase B items:** live verification with a realistic-volume dataset (the source doc's whole premise was that low-volume placeholder data hid these problems before) -- an actual walkthrough or screenshots, not just "the template renders."
+**Acceptance for the one remaining Phase B item (pagination):** live verification with a realistic-volume dataset (the source doc's whole premise was that low-volume placeholder data hid these problems before) -- an actual walkthrough or screenshots, not just "the template renders."
 
 ### Open design question, unresolved either way
 
-The source doc also flagged "minimalist vs. gamified" (streaks/progress rings/celebrations) as needing a mood-board pass before touching shared CSS broadly. Neither remaining item above requires resolving that question first -- pagination and a Databases section are structural, not decorative -- so it's not blocking Phase B's two real gaps. Still open for whenever broader visual/CSS work (not scoped here) is picked up.
+The source doc also flagged "minimalist vs. gamified" (streaks/progress rings/celebrations) as needing a mood-board pass before touching shared CSS broadly. The remaining item (pagination) is structural, not decorative, so it doesn't require resolving that question first. Still open for whenever broader visual/CSS work (not scoped here) is picked up.
 
 ---
 
@@ -104,4 +104,4 @@ End-to-end live verification only -- a cert-validity check and an auth-rejection
 
 ## Sequencing across all three phases
 
-Phase A needs no further work -- it shipped before this plan was written. What's actually left is Phase B's two items (pagination/collapsible sections; a project's own Databases section, plus the larger project-widgets question) and Phase C in full (DAVx5/hosting). No dependency between the two -- B is templates/routers, C is infra config, disjoint files. Recommend the Databases-section fix (B, option b) first since it's the smallest, most concrete gap found in this pass; pagination next; C on its own timeline whenever the domain/server side of the hosting decision is ready to act on.
+Phase A needs no further work -- it shipped before this plan was written. What's actually left is Phase B's one item (pagination/collapsible sections) and Phase C in full (DAVx5/hosting). No dependency between the two -- B is templates/routers, C is infra config, disjoint files. (The Phase B "Databases section" item is superseded as of 2026-08-07 -- see the note on item 2 above; the per-project widget-workspace question it also raised is a separate, larger follow-up.)

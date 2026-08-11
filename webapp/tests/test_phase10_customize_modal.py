@@ -54,15 +54,18 @@ class TestCustomizeRoute:
         assert "Add widget" in body
         assert "Done" in body  # Done button closes the modal
 
-    def test_renders_empty_state_for_builder(self, conn):
-        # No widgets exist, but the builder form is always shown
+    def test_renders_builder_with_no_widgets(self, conn):
+        # No widgets exist, but the builder form is always shown -- the
+        # single "Add widget" button in the footer does the add-and-close
+        # (2026-08-07 rework: no more separate Done/cancel, no stay-open
+        # flow). "Customize dashboard" is the modal's only h1.
         req = _request()
         resp = dashboard_router.dashboard_customize(req, conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
+        assert "Customize dashboard" in body
         assert "Add widget" in body
-        assert "Done" in body
-        assert "Add a widget" in body  # builder header
+        assert body.count("<h1>") == 1
 
     def test_get_does_not_seed_or_mutate(self, conn):
         # The modal page is read-only presentation -- a bare GET must not
@@ -98,14 +101,37 @@ class TestCustomizeRoute:
 
 
 class TestCustomizeForms:
-    def test_builder_form_has_data_builder(self, conn):
-        # The Widget Builder form is marked data-builder so modal.js's
-        # generic form handler skips it -- CCWidgetBuilder.init owns the
-        # submit (keeps modal open, refreshes, shows confirmation).
+    def test_builder_form_is_single_button_no_stay_open(self, conn):
+        # 2026-08-07 rework: the form has no data-builder (no stay-open
+        # flow with an "Added to dashboard." Duplicate/Edit bar) -- it is a
+        # plain modal.js form whose single Add-widget submit closes the
+        # dialog on success. Asserting the removed machinery is gone keeps
+        # this from silently regressing back.
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
         assert 'id="widget-builder-form" method="post" action="/dashboard/widgets"' in body
-        assert 'data-builder' in body
         assert 'data-preview-url="/dashboard/widgets/preview"' in body
+        assert 'id="widget-builder-added"' not in body
+        assert 'data-builder-duplicate' not in body
+        assert 'data-builder-edit' not in body
+        # The stay-open confirmation bar's container is gone (its label only
+        # survives in the template's historical comment, which is fine).
+        assert 'class="widget-builder-added-bar"' not in body
+
+    def test_add_widget_button_in_footer_no_cancel(self, conn):
+        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
+        # Add widget is the footer's primary action, submitting the builder
+        # form; there is no separate Done/cancel button any more (2026-08-07).
+        assert 'id="widget-builder-form"' in body
+        assert "Add widget" in body
+        assert 'data-modal-cancel' not in body
+
+    def test_customize_modal_has_a_footer_with_add_widget(self, conn):
+        # 2026-08-07 rework: the modal now has a real modal-footer holding
+        # the single Add widget button (it used to keep buttons inline in
+        # the body). Assert the footer exists and is populated with it.
+        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
+        assert '<div class="modal-footer">' in body
+        assert 'form="widget-builder-form"' in body
 
     def test_builder_is_two_pane_with_always_live_preview(self, conn):
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
@@ -113,30 +139,6 @@ class TestCustomizeForms:
         assert 'class="widget-builder-config"' in body
         assert 'class="widget-builder-preview"' in body
         assert 'id="widget-preview-content"' in body
-
-    def test_builder_added_state_bar_with_duplicate_and_edit(self, conn):
-        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
-        assert 'id="widget-builder-added"' in body
-        assert "hidden" in body  # hidden until the first successful Add (JS)
-        assert 'data-builder-duplicate' in body
-        assert 'data-builder-edit' in body
-        assert "Added to dashboard." in body
-
-    def test_add_and_done_buttons_in_form(self, conn):
-        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
-        # Add widget and Done buttons are inside the builder form
-        assert "Add widget" in body
-        # Done is a cancel button that closes the modal
-        assert 'data-modal-cancel' in body
-        assert "Done" in body
-
-    def test_no_custom_modal_footer_content(self, conn):
-        # The customize modal has the same body structure as the widget edit
-        # modal -- no custom modal-footer content, buttons are inside the form body.
-        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
-        # The modal-footer div exists in base.html but customize doesn't populate it
-        # Check that our template doesn't output any modal-footer div with content
-        assert '<div class="modal-footer">' not in body
 
     def test_edit_form_button_not_in_builder(self, conn):
         # The customize modal is for adding widgets only -- no existing
@@ -162,24 +164,28 @@ class TestBuilderFieldsRework:
         assert body.count('name="source"') == len(dashboard_router.WIDGET_SOURCES)
         assert body.count('name="source" value="calendar_tasks" class="tile-radio" checked') == 1
 
-    def test_view_and_range_are_real_selects(self, conn):
-        # 2026-08-07 follow-up ("view, range, priority, reminders should be
-        # real drop downs") -- View/Range reverted from the segmented radio
-        # group back to plain `<select>`s; data-source/data-has-range/
-        # data-views now live on `<option>` elements instead of radios.
+    def test_view_and_range_are_single_select_multiselects(self, conn):
+        # 2026-08-08 follow-up: View/Range are the single-choice variant of
+        # the app's checkbox-dropdown (_widget_list_multiselect.html,
+        # ms_mode="single") -- real radio inputs inside a .multiselect, not
+        # native <select>s (whose open-list chrome is unstyleable).
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
-        assert '<select name="view" class="widget-view-select">' in body
-        assert '<select name="range" class="widget-range-select">' in body
+        assert '<div class="multiselect widget-list-multiselect widget-view-select"' in body
+        assert '<div class="multiselect widget-list-multiselect widget-range-select"' in body
+        assert '<select name="view"' not in body
+        assert '<select name="range"' not in body
         for key, spec in dashboard_router.WIDGET_VIEWS.items():
             has_range = "1" if spec["has_range"] else ""
             assert (
-                f'<option value="{key}" data-source="{spec["source"]}" '
-                f'data-has-range="{has_range}"'
+                f'<input type="radio" name="view" value="{key}"\n'
+                f'                       form="widget-builder-form"\n'
+                f'                       data-source="{spec["source"]}" data-has-range="{has_range}"'
             ) in body
         for key, spec in dashboard_router.WIDGET_RANGES.items():
+            assert f'<input type="radio" name="range" value="{key}"\n' in body
             # views is a set -- order isn't guaranteed, so just check the
             # option itself carries a data-views attribute.
-            assert f'<option value="{key}" data-views="' in body
+            assert f'data-views="' in body
 
     def test_limit_is_a_stepper_wrapping_a_real_number_input(self, conn):
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()

@@ -18,7 +18,7 @@ Switched via a segmented control in the toolbar:
 
 ## Multi-calendar
 
-Events belong to a named, color-coded calendar. Each has a visibility toggle (per-device, persisted locally). A legend panel lists calendars. **Not implemented:** external CalDAV calendar subscriptions (connecting to a remote server like Nextcloud/Radicale as an additional selectable list) — this is a real, substantial protocol-level feature, scoped separately in [`../plans/calendar-and-tasks-rework.md`](../plans/calendar-and-tasks-rework.md) §5, not attempted yet.
+Events belong to a named, color-coded calendar. Each has a visibility toggle (per-device, persisted locally). A legend panel lists calendars. **Not implemented:** external CalDAV calendar subscriptions (connecting to a remote server like Nextcloud/Radicale as an additional selectable list) — this is a real, substantial protocol-level feature, scoped separately in [`../plans/calendar-and-tasks-rework.md`](../plans/calendar-and-tasks-rework.md) §5 (deleted 2026-08-11), not attempted yet.
 
 ## Recurrence — implemented 2026-07-19
 

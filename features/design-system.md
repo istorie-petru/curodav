@@ -25,7 +25,7 @@ A design doc was provided ("ModernPlasma Productivity" — a macOS-styled refere
 
 **Settings restructured to match the design doc directly:** Preferences was a `QTabWidget` (General/Appearance/WebDAV/Syncthing/Calendar/Tags/About as tabs); the design doc's Settings screen is one scrolling page of titled `QGroupBox` sections, no tabs. Converted to match — see `settings.md`. This needed zero new QSS (`QGroupBox` renders its border/title/rounding from the active style already) and let the `settings-tabs::tab` rule above be deleted rather than just trimmed.
 
-Full remaining gap list (Tasks/Calendar mini-sidebars with colored dots, a real reusable segmented-control widget instead of ad hoc per-module toolbar buttons, the inspector as a slide-over panel rather than a permanently-docked side pane) is tracked in [`../plans/design-alignment.md`](../plans/design-alignment.md) rather than rushed — those are structural layout changes with wider blast radius, not QSS trims.
+Full remaining gap list (Tasks/Calendar mini-sidebars with colored dots, a real reusable segmented-control widget instead of ad hoc per-module toolbar buttons, the inspector as a slide-over panel rather than a permanently-docked side pane) was tracked in [`../plans/design-alignment.md`](../plans/design-alignment.md) (deleted 2026-08-11) rather than rushed — those are structural layout changes with wider blast radius, not QSS trims.
 
 ## What's still true / unchanged
 

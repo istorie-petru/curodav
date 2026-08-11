@@ -82,11 +82,14 @@ class TestTabbarContents:
 
     def test_dashboard_see_more_no_longer_links_databases_or_contacts(self, conn):
         # Contacts is a primary tab now (no longer needed in the mobile
-        # "See more" overflow list); Databases is gone outright.
+        # "See more" overflow list); Databases is gone outright. The old
+        # `dashboard-see-more` overflow list itself is gone too -- it was
+        # removed with the 2026-08-07 dashboard rework (the single "+" quick
+        # add + edit-mode buttons replaced the old page-actions bar).
         db.set_app_meta(conn, dashboard_router._MINI_CALENDAR_BACKFILL_KEY, "1")
         resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
         body = resp.body.decode()
-        assert "dashboard-see-more" in body
+        assert "dashboard-see-more" not in body
         assert 'href="/databases"' not in body
 
 

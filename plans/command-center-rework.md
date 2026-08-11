@@ -1,9 +1,13 @@
 # Command Center Rework — Space & Project-centric redesign
 
-**Status:** Authoritative plan for the webapp rework · logged 2026-08-03
+**Status:** ✅ Shipped · logged 2026-08-03 · superseded in part by
+`label-space-rework.md` (2026-08-06), which is the current data-model
+authority. Kept as the record of the M3/UI pass and the Phase 1–10 work
+listed below; `architecture.md` (root) is the current "how it works".
 **Scope:** The **webapp** (`webapp/`) only. The desktop client (`desktop/`) is out of
 scope and its docs are no longer tracked here.
-**Supersedes (all deleted 2026-08-03):** `spaces-home-pipeline.md`,
+**Supersedes (deleted 2026-08-11; the header's original "2026-08-03" date was
+aspirational — the physical deletion happened today):** `spaces-home-pipeline.md`,
 `spaces-v2-university-material.md`, `webapp-action-pipelines-audit.md`,
 `webapp-usability-and-davx5-rollout.md`, `tasks-ux-rework.md`,
 `calendar-and-tasks-rework.md`, `design-alignment.md`,
@@ -11,7 +15,11 @@ scope and its docs are no longer tracked here.
 desktop-focused `systems/` folder (`architecture.md`, `decisions-log.md`).
 Durable threads from those docs (mobile hosting, contact archiving, schedule
 parity) are folded into the relevant sections below; everything else is
-superseded by this document.
+superseded by this document. (Note: `webapp-action-pipelines-audit.md`,
+`webapp-usability-and-davx5-rollout.md`, and `expansion-deferred.md` were
+**kept**, not deleted — the audit reduced to a one-line pointer, the rollout
+plan retains genuinely-open Phase B/C items, and `expansion-deferred.md` is
+the deferred-features record.)
 
 This document is written to hash out the endpoint: what the app is *going to
 be*, what gets deleted, and the concrete phases to get there. It is intentionally

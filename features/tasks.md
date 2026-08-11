@@ -1,7 +1,7 @@
 # Feature: Tasks
 
 **Code:** `desktop/src/features/tasks/` (`widgets.py`, `table_view.py`, `timeline_view.py`, `subtask_tree.py`, `tag_autocomplete.py`)
-**Status:** Implemented, with a queued UX rework — see [`../plans/tasks-ux-rework.md`](../plans/tasks-ux-rework.md)
+**Status:** Implemented, with a queued UX rework — see [`../plans/tasks-ux-rework.md`](../plans/tasks-ux-rework.md) (deleted 2026-08-11, superseded by the webapp rework)
 
 ## Views
 
@@ -35,11 +35,11 @@ Inline input at the top of any task view (`features/shared/create.py` is the sha
 
 ## Task detail (inspector sidebar)
 
-Opens on click from most views (see `../plans/tasks-ux-rework.md` for the per-view click-to-open rules that are still being finalized). Shows: title, status dropdown, priority dropdown, due/start date pickers, project selector, tags (multi-select autocomplete), progress slider, markdown description, checklist editor, linked objects section, backlinks, activity history. Shared with every other object type — see `tags-and-linking.md`.
+Opens on click from most views (see `../plans/tasks-ux-rework.md`, deleted 2026-08-11, for the per-view click-to-open rules that were still being finalized). Shows: title, status dropdown, priority dropdown, due/start date pickers, project selector, tags (multi-select autocomplete), progress slider, markdown description, checklist editor, linked objects section, backlinks, activity history. Shared with every other object type — see `tags-and-linking.md`.
 
 ## Known gaps
 
-The active plan in [`../plans/tasks-ux-rework.md`](../plans/tasks-ux-rework.md) covers: inline project/progress editing in Table view, tag editing via right-click instead of a modal, repurposing the row checkbox as a bulk-select control, per-view column/column-visibility and kanban cover-image settings, removing Grouped and List views, consistent content margins, and per-view click-to-open-inspector rules.
+The (deleted 2026-08-11) plan in [`../plans/tasks-ux-rework.md`](../plans/tasks-ux-rework.md) covered: inline project/progress editing in Table view, tag editing via right-click instead of a modal, repurposing the row checkbox as a bulk-select control, per-view column/column-visibility and kanban cover-image settings, removing Grouped and List views, consistent content margins, and per-view click-to-open-inspector rules.
 
 **Verified bug (2026-07-17, still open, see [`../STRESS_TEST_2026-07-17.md`](../STRESS_TEST_2026-07-17.md)):** quick-add with only tokens and no plain text (e.g. `!1 @today`) creates a task literally titled `"!1 @today"` instead of leaving the title empty.
 
@@ -56,7 +56,7 @@ Requested: dropdown menus for cells, customizable columns, and no inspector acti
 - **Column visibility + order** — right-click any header for a menu of every column with a checkbox, plus "move left"/"move right" for the column you clicked. Persisted to `settings.json` under `tasks_table_columns` (`_load_column_order`/`_save_column_order` in `table_view.py`) — reused the existing `load_settings`/`save_settings` from `features/settings/widgets.py` rather than inventing a second settings file.
 - **Inspector activation removed** — double-click used to intercept and open the inspector; that handler is gone, so double-click now falls through to Qt's normal "start editing this cell" behavior. The row context menu's "Edit in inspector" entry was also removed, leaving Duplicate/Delete. `open_object_requested` stays on the class only because `TasksView` still connects it (harmless — it's simply never emitted from here).
 
-Not addressed in this pass: the checkbox-repurposed-as-bulk-select and tag-editing-via-right-click items from `../plans/tasks-ux-rework.md` are still open.
+Not addressed in this pass: the checkbox-repurposed-as-bulk-select and tag-editing-via-right-click items from `../plans/tasks-ux-rework.md` (deleted 2026-08-11) were still open.
 
 ## Timeline view reworked 2026-07-19 — project swimlanes
 
