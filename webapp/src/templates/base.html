@@ -6,7 +6,6 @@
     <title>{% block title %}Command Center{% endblock %}</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
-    <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
@@ -23,6 +22,21 @@
         var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
       })();
+      // Cross-document View Transitions support check (2026-08-11). The
+      // CSS `main`-fade fallback (style.css's page-transitions block) must
+      // only run in browsers that *don't* animate cross-document
+      // navigations itself. `@supports` can't test the @view-transition
+      // at-rule, and since Firefox 144 / Safari 18.0-18.1 support the
+      // `view-transition-name` property (same-document) but still lack
+      // cross-document transitions, the old `@supports not
+      // (view-transition-name: root)` guard alone now wrongly disables the
+      // fallback there too. The `pagereveal` event shipped in the same
+      // release as cross-document transitions (Chrome 126+, Safari 18.2+),
+      // so its absence is a reliable "this browser navigates instantly"
+      // signal. Inline + synchronous + in <head> so the class lands before
+      // first paint -- added later, the animation would start after a
+      // full-opacity frame and flash-then-fade.
+      if (!("pagereveal" in window)) document.documentElement.classList.add("no-cdt");
     </script>
 </head>
 <body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}">

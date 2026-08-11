@@ -281,52 +281,74 @@ button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
 /* "navigating between pages shouldn't cut abruptly" goal, both pure CSS: */
 /*                                                                        */
 /*   1. @view-transition (cross-document View Transitions API) -- a       */
-/*      supporting browser (Chromium 126+, Firefox, Safari) crossfades    */
-/*      the whole outgoing page into the incoming one on every            */
+/*      supporting browser (Chromium 126+, Safari 18.2+; Firefox is       */
+/*      still missing cross-document transitions -- see fallback #2)      */
+/*      crossfades the whole outgoing page into the incoming one on       */
 /*      navigation, fixed left rail included. The custom keyframes below  */
-/*      stretch the UA's default fade into a slightly longer, eased       */
-/*      crossfade with a gentle vertical rise (outgoing drifts up 8px     */
-/*      while fading to half, incoming rises 14px into place) so a nav    */
-/*      reads as the page moving rather than blinking. Browsers without   */
-/*      support just ignore the at-rule and navigate exactly as before.   */
+/*      replace the UA's default fade with a very short ~140ms ease-out   */
+/*      pure crossfade: an opacity dip only, no sliding, scaling, or      */
+/*      other movement -- tuned to soften the cut between pages without   */
+/*      ever registering as an animation. Browsers without support just   */
+/*      ignore the at-rule and navigate exactly as before.                */
 /*                                                                        */
-/*   2. main fade-in -- the fallback for browsers without View            */
-/*      Transitions (and the only mechanism a no-JS visitor gets, since   */
-/*      it's a plain CSS animation). Only the changing content column     */
-/*      fades in while the persistent rail stays solid, so a full-page    */
-/*      blank flash is never what the eye lands on. It is gated behind    */
-/*      `@supports not (view-transition-name: root)` so a VT-capable      */
-/*      browser never runs it: its snapshot is captured at first paint,   */
-/*      so a live-page fade would freeze the captured frame at low        */
-/*      opacity and "pop" to the real page when the transition ends --    */
-/*      in VT browsers the snapshot keyframes above ARE the transition,   */
-/*      and the live page just stays put beneath them. animation-fill-    */
-/*      mode: both keeps main invisible for the one frame before the      */
-/*      animation starts (no 1-frame flash of full-opacity content).      */
-/*      The section-2 global prefers-reduced-motion rule already          */
-/*      collapses main's animation; the VT fades need their own           */
+/*   2. main fade-in -- the fallback for browsers that navigate without   */
+/*      a View Transition (Firefox, Safari <18.2, and no-JS visitors in   */
+/*      property-supporting-but-no-cross-document browsers). Only the     */
+/*      changing content column fades in while the persistent rail stays  */
+/*      solid, so a full-page blank flash is never what the eye lands     */
+/*      on. It must NOT run in a cross-document-VT browser: its snapshot  */
+/*      is captured at first paint, so a live-page fade would freeze the  */
+/*      captured frame at low opacity and "pop" to the real page when     */
+/*      the transition ends -- in VT browsers the snapshot keyframes      */
+/*      above ARE the transition, and the live page just stays put        */
+/*      beneath them. Two gates keep that true:                             */
+/*        - `@supports not (view-transition-name: root)` excludes          */
+/*          browsers that know the property at all (Chrome, Safari 18+,   */
+/*          Firefox 144+). This alone now leaves Firefox 144+ /           */
+/*          Safari 18.0-18.1 with no animation (property known, cross-    */
+/*          document still missing), so base.html's <head> script adds a  */
+/*          `no-cdt` class to <html> when `pagereveal` is absent -- the   */
+/*          reliable signal for "no cross-document View Transitions" --   */
+/*          and the second rule below re-enables the fade there. No-JS    */
+/*          visitors in those browsers fall back to an instant            */
+/*          navigation; the older `@supports` rule still covers no-JS     */
+/*          browsers that lack the property entirely.                     */
+/*      animation-fill-mode: both keeps main invisible for the one frame  */
+/*      before the animation starts (no 1-frame flash of full-opacity     */
+/*      content). The section-2 global prefers-reduced-motion rule        */
+/*      already collapses main's animation; the VT fades need their own   */
 /*      kill-switch below because the universal selector does not match   */
 /*      ::view-transition-* pseudo-elements.                              */
 /* --------------------------------------------------------------------- */
 @view-transition{ navigation:auto; }
 @media (prefers-reduced-motion: no-preference){
-  ::view-transition-old(root){ animation:cc-vt-out 320ms var(--ease-standard) both; }
-  ::view-transition-new(root){ animation:cc-vt-in 320ms var(--ease-standard) both; }
+  ::view-transition-old(root){ animation:cc-vt-out 140ms ease-out both; }
+  ::view-transition-new(root){ animation:cc-vt-in 140ms ease-out both; }
   @keyframes cc-vt-out{
-    from{ opacity:1; transform:translateY(0); }
-    to{ opacity:.5; transform:translateY(-8px); }
+    from{ opacity:1; }
+    to{ opacity:0; }
   }
   @keyframes cc-vt-in{
-    from{ opacity:0; transform:translateY(14px); }
-    to{ opacity:1; transform:none; }
+    from{ opacity:0; }
+    to{ opacity:1; }
+  }
+  /* Shared fade-in keyframes, defined here at the media level -- NOT
+     inside the @supports block below. Keyframes declared inside a skipped
+     conditional rule (like a @supports whose condition is false) are never
+     registered, so the .no-cdt rule that lives outside @supports would
+     otherwise reference a nonexistent animation name in exactly the
+     browsers it exists for (Firefox 144+, Safari 18.0-18.1). */
+  @keyframes cc-page-in{
+    from{ opacity:0; }
+    to{ opacity:1; }
   }
   @supports not (view-transition-name: root){
-    main{ animation:cc-page-in 200ms var(--ease-standard) both; }
-    @keyframes cc-page-in{
-      from{ opacity:0; }
-      to{ opacity:1; }
-    }
+    main{ animation:cc-page-in 140ms ease-out both; }
   }
+  /* Property-supporting browsers that still lack cross-document View
+     Transitions (Firefox 144+, Safari 18.0-18.1) -- see the block comment
+     above; base.html adds .no-cdt to <html> when `pagereveal` is absent. */
+  html.no-cdt main{ animation:cc-page-in 140ms ease-out both; }
 }
 @media (prefers-reduced-motion: reduce){
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*){ animation:none !important; }
