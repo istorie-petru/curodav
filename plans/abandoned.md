@@ -5,13 +5,65 @@ accidentally re-proposed without re-litigating the reasons. If you want to
 revive anything here, write a focused plan with a trade-off table and argue from
 evidence; this file won't be re-opened by default. Current, shipped behavior is
 described in [`features/`](../features/README.md); open work is in
-[`open.md`](open.md).
+[`open.md`](open.md) (low priority) and [`open-priority.md`](open-priority.md)
+(the rework).
+
+## Versioning by phase
+
+The app is versioned by the phases it has gone through, not by semantic
+versioning:
+
+- A `0.x` version (`0.1` … `0.9`) was a **development phase** — one stage of the
+  build-up to the first release. Each minor bump started a new phase.
+- An `x.0` version (`1.0`, `2.0`, …) is a **full release**: stable, supported,
+  usable as an app. The current app is **1.0**, the first release.
+- Minor releases within a major version are numbered `x.1` … `x.9` (`1.1` …
+  `1.9`, then `2.1` … `2.9`, …). Each is a distinct feature release; the next
+  full release, **2.0**, is reached once all roadmap work is implemented.
+
+### Track record
+
+- **0.1 — the original build.** Flutter `app/` + FastAPI `server/` (Postgres):
+  calendar, tasks, contacts, schedule, and the rest of the core feature set in
+  one client–server pair. Superseded 2026-07-17.
+- **0.2 — the desktop replaces the pair.** The PySide6 `desktop/` becomes the
+  single client, carrying the object model, HLC per-field merge, and design
+  tokens ported forward from 0.1. The 2026-07-17 stress test runs against it
+  (where global search is confirmed broken). Superseded by its successor.
+- **0.3 — desktop consolidation.** The QML/QtQuick prototype tree is abandoned
+  2026-07-19; boards, tasks, calendar, projects, and notes are matured, and the
+  desktop-era feature docs (search, tags-and-linking, settings, sync-and-webdav)
+  are written out. Superseded by the webapp.
+- **0.4 — the webapp rises.** The FastAPI `webapp/` gains Kanban, subtasks, and
+  checklists at explicit request (2026-07-31), built on the plain
+  CalDAV/CardDAV model rather than desktop's object graph.
+- **0.5 — projects/tags rework, phases 1–8** (2026-08-01): data layer + tag
+  registry, projects as a nav destination, list→project linking, grouping and
+  archiving, habit tracking, databases with formulas, and the widget dashboard.
+- **0.6 — projects/tags rework, phases 9–11** (2026-08-01 → 2026-08-03): the
+  task-view rework, month-view drag-to-create, and the Timeline/Gantt port
+  complete the rework.
+- **0.7 — label-space rework** (2026-08-03 → 2026-08-07): collections give way
+  to the universal label model; the Material 3 style pass lands; Databases and
+  Grades are removed; `desktop/` is deleted as the rework's final phase and the
+  webapp becomes the sole client.
+- **0.8 — webapp polish** (2026-08-07 → 2026-08-11): the UI/UX rework, updated
+  colors, and the `features/` docs rewritten to describe the current webapp.
+- **0.9 — release prep** (2026-08-11 → 2026-08-12): internals cleared, the
+  roadmap prepared, and planning reorganized into `open.md` / `open-priority.md`.
+- **1.0 — the first release** (2026-08-12 → present): the current webapp as the
+  stable, supported, usable app.
+
+Open work in `open-priority.md` and `open.md` ships as the minor releases
+`1.1` … `1.9` (see [`roadmap.md`](roadmap.md)); once all of it is implemented,
+the next full release is **2.0**.
 
 ## The deleted desktop client (`desktop/`)
 
-The whole PySide6 app — `desktop/src/`, its `tests/`, everything — was deleted
-2026-08-07 as the final phase of the label-space rework (see `features/
-architecture.md`). `webapp/` (FastAPI) is the sole client. Everything `desktop/`
+The whole PySide6 app — `desktop/src/`, its `tests/`, everything — the **0.2**
+phase client — was deleted 2026-08-07 as the final phase of the label-space
+rework (see `features/architecture.md`). `webapp/` (FastAPI) is the sole client.
+Everything `desktop/`
 cared about had already been moved onto `webapp/`'s model first, so it was a
 pure subtraction, not a port. Before deleting, a dedicated audit checked every
 `features/*.md` doc and found these capabilities were genuinely **dropped with
@@ -32,7 +84,8 @@ no prior record of it being deliberate** — all four confirmed accepted
 Grades, hide the generic feature."
 
 **Earlier deleted codebases (for the record):** `app/` (Flutter/Dart) and
-`server/` (FastAPI + Postgres) were replaced by `desktop/` in 2026-07-17, and
+`server/` (FastAPI + Postgres) — the **0.1** phase — were replaced by
+`desktop/` (the **0.2** phase) in 2026-07-17, and
 `desktop/`'s own abandoned QML/QtQuick prototype tree was deleted 2026-07-19.
 Their object model, HLC conflict logic, and design tokens were ported forward
 before each deletion; nothing was lost that was still in use.
@@ -58,6 +111,15 @@ only in git history.
   `settings-rework.md`, `dashboard-usability-rework.md`,
   `webapp-action-pipelines-audit.md` — shipped plans; their outcomes are now
   described in [`features/`](../features/README.md).
+- `projects.md`, `schedule.md` — folded into
+  [`open-priority.md`](open-priority.md) 2026-08-12; the models both proposed
+  (project-enabled labels + work allocations, generalized recurrence) are
+  recorded there as open work, not shipped.
+- `details.md` — folded into [`open-priority.md`](open-priority.md) 2026-08-12
+  as the detailed spec for the project-enabled label stack and Schedule rework
+  (project lifecycle, work-allocation semantics, recurrence exceptions,
+  holiday calendars); its one low-priority piece (the optional project
+  check-in) lives in [`open.md`](open.md).
 - `expansion-deferred.md`, `systems/architecture.md`, `systems/decisions-log.md`
   — folded into this file below / the decision history.
 
