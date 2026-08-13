@@ -40,6 +40,7 @@
 {% set _lbl = active_label | default('') %}
 {% set _q = q | default('') %}
 {% set _has_sort = sort is defined %}
+{% set _gb = group_by | default('none') %}
 
 {% macro _switcher_qs() %}date_filter={{ _df }}&status_filter={{ _sf }}&importance_filter={{ _if }}&urgency_filter={{ _uf }}{% if _q %}&q={{ _q|urlencode }}{% endif %}{% if _lbl %}&label={{ _lbl|urlencode }}{% endif %}{% endmacro %}
 
@@ -47,7 +48,7 @@
     <div class="toolbar-row">
         <h1 class="sr-only">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
         <div class="segmented">
-            <a class="seg-btn {% if request.url.path == '/tasks' %}active{% endif %}" href="/tasks?{{ _switcher_qs() }}{% if _has_sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}">Table</a>
+            <a class="seg-btn {% if request.url.path == '/tasks' %}active{% endif %}" href="/tasks?{{ _switcher_qs() }}{% if _has_sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}{% if _gb != 'none' %}&group_by={{ _gb }}{% endif %}">Table</a>
             <a class="seg-btn {% if request.url.path == '/tasks/timeline' %}active{% endif %}" href="/tasks/timeline?{{ _switcher_qs() }}">Timeline</a>
             <a class="seg-btn {% if request.url.path == '/tasks/board' %}active{% endif %}" href="/tasks/board?{{ _switcher_qs() }}">Board</a>
             <!-- 2026-08-08 ("add habits page as a view on tasks") -- a 4th
@@ -114,6 +115,25 @@
         {% set fd_mode = 'single' %}
         {% set fd_form_id = 'tasks-filters-form' %}
         {% include '_filter_dropdown.html' %}
+
+        {% if _has_sort %}
+        <!-- 1.5 slice ("Tasks page as a table groupable by project",
+             plans/open-priority.md § Task model): Group by is Table-only
+             (gated on _has_sort, same signal the sort_link/segmented
+             switcher use to tell Table apart from Timeline/Board, which
+             have no grouping concept either) -- reuses this same
+             _filter_dropdown.html single-select pattern as every other
+             filter here, submitting into the shared #tasks-filters-form
+             so switching the toggle preserves every other active filter,
+             q, and sort/dir. -->
+        {% set fd_name = 'group_by' %}
+        {% set fd_label = 'Group by' %}
+        {% set fd_items = [{'value': 'none', 'name': 'None'}, {'value': 'project', 'name': 'Project'}] %}
+        {% set fd_selected = _gb %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'tasks-filters-form' %}
+        {% include '_filter_dropdown.html' %}
+        {% endif %}
         {% endif %}
         <a class="btn primary" href="{{ '/tasks/new' if request.url.path != '/tasks/habits' else '/tasks/new?habit=1' }}" data-modal data-fab title="{{ 'New habit task' if request.url.path == '/tasks/habits' else 'New task' }}">{{ icon('plus') }} New</a>
     </div>

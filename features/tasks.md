@@ -107,6 +107,78 @@ deferred:** wiring `_project_card`'s `progress` to real scheduled-work
 hours instead of task count, and hiding a completed task's future
 allocations from the active calendar — see `plans/STATE.md`.
 
+## Task model (1.5)
+
+**Single project per task (shipped 2026-08-13)** — a task may carry exactly
+one `is_project=1` label plus any number of ordinary labels; multiple project
+ownership at once is rejected (`open-priority.md` § Task model). Enforced at
+the single write boundary all label writes go through, `db.upsert_task`'s
+`tags` argument: if the resulting label set would include more than one
+project label, it raises `db.MultipleProjectLabelsError` *before* anything is
+written (no partial task-row-without-labels write). The task create/edit
+forms (`routers/tasks.py`'s `create_task`/`update_task`) and the Tasks page's
+bulk "Add label" action (`POST /tasks/bulk` action `"tag"`) all catch it and
+surface a plain 400 with the offending label names — the create/edit forms
+via `HTTPException(400, ...)` (same convention as this app's other
+plain-form validation errors, e.g. `routers/banners.py`'s upload checks);
+the bulk path applies per-uid (so tasks with no conflict in the same batch
+still get their label) and returns `{"ok": false, "error": ..., "failed":
+[...]}` at 400 listing which uids were rejected. No client-side prevention in
+the labels picker itself — `_widget_list_multiselect.html` is shared by
+tasks/events/contacts/habits and has no project-label concept, so adding
+mutual exclusion there would leak a task-only rule into unrelated pickers;
+server-side rejection with a clear message was the smaller, more consistent
+change. Enforcement is write-boundary only: a task that already carries two
+project labels from before this change (direct DB edit, restored backup)
+keeps them untouched until something next calls `upsert_task` with a new
+`tags` list for it — no migration strips existing data. See
+`tests/test_single_project_per_task.py`.
+
+**Table view groupable by project (shipped 2026-08-13)** — `GET /tasks`
+takes a `group_by` query param (`"none"` default/absent, `"project"`);
+absent/`"none"` renders exactly as before (fully backward-compatible with
+existing links/bookmarks). `group_by=project`
+(`routers/tasks.py::_group_tasks_by_project`) clusters the already-filtered,
+already-sorted task list under project-name headers, reusing
+`db.project_label_for` per task — the same "which label is the project"
+lookup the project detail page uses — rather than a second implementation.
+Named groups sort alphabetically (case-insensitive); tasks with no project
+label fall into a "No project" bucket rendered last. Grouping is applied
+independently to the open and completed splits (composes with the existing
+"completed stays visible, pushed below open, separated by a divider" rule,
+`tasks_list.html`) and after every other filter (date/status/importance/
+urgency/label/search) and after the active `sort`/`dir`, so within a group
+tasks keep the page's current sort order. The toggle lives in
+`_tasks_toolbar.html` as a "Group by" fancy dropdown (None/Project),
+Table-view only, following the same `_filter_dropdown.html` single-select
+pattern and shared `#tasks-filters-form` every other Tasks filter already
+uses, so switching it preserves every other active query param. Grouping
+only adds header `<tr>`s and splits rows across more `<tbody>` elements —
+row markup itself (`_task_row.html`) and `static/tasks_table.js`'s
+`tr[data-uid]`/`.row-select`/`select.pill-select` selectors are unchanged.
+See `tests/test_tasks_grouping.py`.
+
+**Deadline-vs-work-allocation distinction (shipped 2026-08-13)** — a task
+deadline (`due_at`, "the work must be completed by a particular time") and a
+work allocation (`db.task_work_hours`, "the user intends to spend a
+particular amount of time on it at a particular time") already existed as
+separate fields/mechanisms, but the global Tasks table and the project
+detail page's Tasks view (both rendering the shared `_task_row.html` macro)
+only showed "Due" — work-allocation status was invisible on the primary
+task-management surface unless the detail modal was opened. A "Scheduled"
+column was added next to "Due": `{completed}/{scheduled}h` (rounded to one
+decimal) when the task has at least one work allocation, an em-dash
+otherwise — plain text, not an editable input, and a distinct header label,
+so it can't be mistaken for the same kind of thing as the editable "Due"
+date cell. `db.task_work_hours_bulk(conn, task_uids)` computes it for every
+row on a page in one query (grouped by `task_uid`) instead of one
+`list_work_allocations_for_task` query per row — wired into both
+`routers/tasks.py::list_tasks` and `routers/projects.py::project_detail`,
+which attach each task's totals as `task["work_hours"]` before rendering.
+`db.task_work_hours` itself (single-task call sites: task detail/edit
+modals) is unchanged. See `tests/test_task_scheduled_column.py`. **This was
+1.5's last piece — 1.5 is now fully shipped.**
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`

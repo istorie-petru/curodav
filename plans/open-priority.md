@@ -282,7 +282,14 @@ Tasks are independent units of work; the parent-task/subtask hierarchy is
 removed (see the open conflict below). A task may belong to exactly **one**
 project label and may additionally carry any number of ordinary labels — never
 multiple projects at once, because multiple project ownership would make
-workload, progress, deadlines, and scheduling ambiguous. A task may exist
+workload, progress, deadlines, and scheduling ambiguous. **Shipped
+2026-08-13**: enforced at `db.upsert_task`'s `tags` argument
+(`db.MultipleProjectLabelsError` if it would give a task more than one
+`is_project=1` label at once) — the task create/edit forms and the Tasks
+page's bulk "Add label" action all surface this as a plain 400, not a silent
+overwrite; a pre-existing task with two project labels from before this
+change is left alone until something next writes new tags for it. See
+`features/tasks.md` § Task model, "Single project per task." A task may exist
 without a project and continue as an ordinary standalone to-do; in-project tasks
 are not structurally different, since the project provides context rather than
 changing the task's fundamental data model.
@@ -296,13 +303,32 @@ automatically become the deadline of every task belonging to it.
 The distinction between a task deadline and scheduled work is explicit: a
 deadline means the work must be completed by a particular time; a work
 allocation means the user intends to spend a particular amount of time on it at
-a particular time. These are separate concepts.
+a particular time. These are separate concepts. **Shipped 2026-08-13**: the
+two fields already existed independently (`due_at`, work allocations via
+`db.task_work_hours`), but the global Tasks table (and the project detail
+page's Tasks view, sharing the same `_task_row.html` macro) only ever showed
+"Due" — work-allocation status was invisible on the primary task-management
+surface. A "Scheduled" column (`{completed}/{scheduled}h`, or a dash when
+there's no allocation yet — a different label and plain-text styling from
+the editable "Due" date input, so the two can't be read as the same kind of
+thing) was added to both surfaces. `db.task_work_hours_bulk` computes it for
+a whole page in one query instead of one query per row.
 
 The Tasks page provides a database/table-style management interface in which
 tasks can be grouped by their project label, letting project work be viewed
 together without a separate project-specific task type or hierarchy. Completed
 tasks remain visible in project views, so the project retains a meaningful
-record of its work.
+record of its work. **Shipped 2026-08-13**: `GET /tasks?group_by=project`
+clusters the Table view's open/completed splits under project-name headers
+(`routers/tasks.py::_group_tasks_by_project`, reusing `db.project_label_for`
+— the same per-task "which label is the project" lookup the project detail
+page uses), a "No project" bucket sorted last after the named groups, a
+"Group by" toggle added to `_tasks_toolbar.html`. Composes with every
+existing filter and the active sort — grouping is applied after filtering
+and sorting, so a group's tasks keep the page's sort order. Default/absent
+`group_by` renders unchanged. See `features/tasks.md` § Task model, "Table
+view groupable by project." The deadline-vs-work-allocation distinction
+(above) shipped the same day — **this closes out 1.5 entirely.**
 
 The global Calendar remains focused on calendar management — viewing, creating,
 editing, moving, and organizing events, without project-specific allocation

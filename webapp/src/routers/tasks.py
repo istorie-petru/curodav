@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
@@ -298,6 +298,34 @@ _SORT_KEYS = {
 }
 
 
+def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
+    """1.5 slice ("Tasks page as a table groupable by project", see
+    plans/open-priority.md § Task model): cluster an already-filtered/
+    already-sorted task list under project headers, reusing
+    db.project_label_for -- the same "which of this task's labels, if any,
+    is the project" lookup the project detail page relies on -- rather
+    than reimplementing that logic. Named groups are sorted alphabetically
+    (case-insensitive); a task with no project label falls into a "No
+    project" bucket rendered last (deliberate choice, not required by the
+    spec: named projects are the primary organizing unit here, so they
+    lead). Within each group, task order is preserved exactly as passed in
+    -- callers sort *before* grouping so a group's own tasks keep the
+    page's active `sort`/`dir`."""
+    buckets: dict[str | None, list[dict]] = {}
+    order: list[str | None] = []
+    for t in tasks:
+        proj = db.project_label_for(conn, "task", t["uid"])
+        if proj not in buckets:
+            buckets[proj] = []
+            order.append(proj)
+        buckets[proj].append(t)
+    named = sorted((p for p in order if p is not None), key=str.lower)
+    groups = [{"name": p, "tasks": buckets[p]} for p in named]
+    if None in buckets:
+        groups.append({"name": None, "tasks": buckets[None]})
+    return groups
+
+
 @router.get("")
 def list_tasks(
     request: Request,
@@ -309,6 +337,7 @@ def list_tasks(
     q: str | None = None,
     sort: str = "due_at",
     dir: str = "asc",
+    group_by: str = "none",
     conn=Depends(get_db),
 ):
     _auto_archive_if_configured(conn)
@@ -340,12 +369,38 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
+    # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
+    # plans/open-priority.md § Task model): attach each visible task's
+    # scheduled/completed/remaining hours so _task_row.html can render a
+    # "Scheduled" column distinct from "Due" -- one batched query
+    # (db.task_work_hours_bulk) for the whole page instead of one query per
+    # row, since this list can be every task in the app.
+    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in tasks])
+    for t in tasks:
+        t["work_hours"] = _hours[t["uid"]]
+
+    # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
+    # opt-in via ?group_by=project (default "none" is exactly today's
+    # behavior, so a bookmarked/existing URL without the param is
+    # unaffected). Groups are built *after* the open/completed split and
+    # *after* sorting, so grouping composes with both the existing
+    # completed-stays-visible-but-separated rule and the active sort/dir
+    # instead of replacing either.
+    open_groups = None
+    completed_groups = None
+    if group_by == "project":
+        open_groups = _group_tasks_by_project(conn, open_tasks)
+        completed_groups = _group_tasks_by_project(conn, completed_tasks)
+
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
     ctx.update(
         {
             "open_tasks": open_tasks,
             "completed_tasks": completed_tasks,
+            "group_by": group_by,
+            "open_groups": open_groups,
+            "completed_groups": completed_groups,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
             "status_filters": STATUS_FILTERS,
@@ -630,7 +685,16 @@ def create_task(
     # Phase 1 (label-space rework): plain SQL write, no Radicale/bridge
     # call in this path anymore -- see db.py's Phase 1 comments and
     # features/architecture.md §1.
-    db.upsert_task(conn, row)
+    # 1.5 (single-project-per-task, § Task model): db.upsert_task rejects a
+    # `tags` list carrying more than one is_project=1 label -- surfaced here
+    # as a plain 400 with the offending label names, same "raise, don't
+    # silently 500" convention as this router's other Form-POST validation
+    # (routers/banners.py's upload-type/size checks are the closest existing
+    # precedent for a plain-form endpoint erroring this way).
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return RedirectResponse(url="/tasks", status_code=303)
 
 
@@ -708,6 +772,20 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         mode = payload.get("mode")  # "add" | "remove"
         if not tags_to_apply or mode not in ("add", "remove"):
             return JSONResponse({"error": "tags and mode ('add'/'remove') required"}, status_code=400)
+        # 1.5 (single-project-per-task): bulk "Add label" is a real path to
+        # putting a second project label on a task (tasks_list.html's
+        # bulk-actions-bar Labels picker offers every project label just
+        # like any other), so it needs the same db.upsert_task guard the
+        # single-task create/edit forms get. Applied per-uid rather than
+        # pre-validated as a batch since whether a given task ends up with
+        # two project labels depends on that task's own existing tags, not
+        # just the labels being added; tasks already updated earlier in the
+        # loop keep their change (partial application, matching how "delete"
+        # and "status" above have no all-or-nothing rollback either), and
+        # the response reports which uids were rejected so the client can
+        # surface a clear error instead of a silent partial success.
+        failed: list[dict[str, str]] = []
+        applied = 0
         for uid in uids:
             row = db.get_task(conn, uid)
             if row is None:
@@ -719,8 +797,30 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
                 tags.difference_update(tags_to_apply)
             row["tags"] = sorted(tags)
             row["updated_at"] = datetime.now(timezone.utc).isoformat()
-            db.upsert_task(conn, row)
-        return JSONResponse({"ok": True, "count": len(uids)})
+            try:
+                db.upsert_task(conn, row)
+            except db.MultipleProjectLabelsError as exc:
+                failed.append({"uid": uid, "title": row.get("title") or uid, "error": str(exc)})
+                continue
+            applied += 1
+        if failed:
+            # A plain 400 (not a 200/207 "partial success") even though
+            # `applied` tasks already got their change written -- the bulk
+            # picker's own JS (static/tasks_table.js's bulkPost) only ever
+            # branches on resp.ok, so a non-2xx is what actually surfaces the
+            # toast; the client reloads on success, so any already-applied
+            # rows are picked up correctly on the next bulk action or page
+            # load regardless of this response's status code.
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "count": applied,
+                    "error": f"{len(failed)} task(s) already have a project label and can't take a second one.",
+                    "failed": failed,
+                },
+                status_code=400,
+            )
+        return JSONResponse({"ok": True, "count": applied})
 
     return JSONResponse({"error": f"unknown action '{action}'"}, status_code=400)
 
@@ -841,7 +941,10 @@ def update_task(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    db.upsert_task(conn, row)
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return RedirectResponse(url="/tasks", status_code=303)
 
 

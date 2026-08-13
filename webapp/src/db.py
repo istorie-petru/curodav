@@ -953,9 +953,49 @@ _TASK_JSON_FIELDS: tuple[str, ...] = ()
 _TASK_DONE_STATUSES = ("done", "archived")
 
 
+class MultipleProjectLabelsError(ValueError):
+    """Raised by upsert_task when its `tags` would give a task more than one
+    is_project=1 label at once (1.5, § Task model: "never multiple projects
+    at once, because multiple project ownership would make workload,
+    progress, deadlines, and scheduling ambiguous"). Carries the offending
+    project label names so the caller (routers/tasks.py) can surface a
+    clear 400, the same "raise, don't silently corrupt or 500" pattern
+    db.find_overlapping_project's callers already follow for the sibling
+    "projects may not overlap" rule -- except here there's no confirm-anyway
+    escape hatch, since the rule has no legitimate override the way a
+    calendar overlap does.
+
+    Deliberately checked only at this write boundary (upsert_task's `tags`
+    argument), not as a stored CHECK constraint or a startup scan: a task
+    that already carries two project labels via a pre-1.5 data state (direct
+    DB edit, restored backup, etc.) is left exactly as-is until the next time
+    something calls upsert_task with a new tags list for it -- see
+    plans/open-priority.md § Task model and this rule's own test coverage in
+    test_single_project_per_task.py for the "don't silently corrupt existing
+    data" requirement."""
+
+    def __init__(self, project_names: list[str]):
+        self.project_names = list(project_names)
+        names = ", ".join(self.project_names)
+        super().__init__(f"A task may belong to only one project label at a time (got: {names}).")
+
+
+def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -> None:
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    selected = sorted({t for t in tags if t in project_names}, key=str.lower)
+    if len(selected) > 1:
+        raise MultipleProjectLabelsError(selected)
+
+
 def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
+    # Validated before anything is written (not just before set_object_labels
+    # further down) so a rejected label set never leaves a partial write --
+    # the task row's other columns and its labels are kept consistent by
+    # never touching either on a rejected call.
+    if tags is not None:
+        _reject_multiple_project_labels(conn, tags)
     # completed_at (2026-08-07, see the `tasks` CREATE TABLE comment) is
     # always auto-managed here, deliberately ignoring whatever value the
     # caller's dict happens to carry -- every existing caller builds its
@@ -1372,6 +1412,47 @@ def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]
         if a.get("end_at") and a["end_at"] <= now
     )
     return {"scheduled": scheduled, "completed": completed, "remaining": max(scheduled - completed, 0.0)}
+
+
+def task_work_hours_bulk(conn: sqlite3.Connection, task_uids: list[str]) -> dict[str, dict[str, float]]:
+    """Batch counterpart to `task_work_hours` above -- one query for every
+    task in `task_uids` instead of one `list_work_allocations_for_task`
+    query per task. Added for the 1.5 "deadline vs. work allocation"
+    surfacing slice (`plans/open-priority.md` § Task model): the global
+    Tasks table and the project detail Tasks view both render every visible
+    row's scheduled/completed hours, and calling the per-task function in a
+    template loop would be a straightforward N+1 (one row -> one query) on
+    any list beyond a handful of tasks. There was no existing "aggregate X
+    across many tasks in one query" precedent in this module to follow
+    (`_project_card`'s `progress` counts an already-fetched Python list, not
+    a SQL aggregate) -- this is the first one, and `task_work_hours` itself
+    is left untouched (same return shape, same semantics) so single-task
+    call sites (task detail/edit modals) are unaffected.
+
+    Returns a dict keyed by task_uid, every value the same
+    `{"scheduled", "completed", "remaining"}` shape `task_work_hours`
+    returns -- including a zero-filled entry for a task with no allocations
+    at all, so callers never need an `if task_uid in result` branch."""
+    result = {uid: {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0} for uid in task_uids}
+    if not task_uids:
+        return result
+    now = datetime.now(timezone.utc).isoformat()
+    placeholders = ",".join("?" for _ in task_uids)
+    rows = conn.execute(
+        f"SELECT r.task_uid AS task_uid, events.start_at AS start_at, events.end_at AS end_at "
+        f"FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
+        f"WHERE r.is_work_allocation = 1 AND r.task_uid IN ({placeholders})",
+        tuple(task_uids),
+    ).fetchall()
+    for row in rows:
+        uid = row["task_uid"]
+        hours = _hours_between(row["start_at"], row["end_at"])
+        result[uid]["scheduled"] += hours
+        if row["end_at"] and row["end_at"] <= now:
+            result[uid]["completed"] += hours
+    for uid, hours in result.items():
+        hours["remaining"] = max(hours["scheduled"] - hours["completed"], 0.0)
+    return result
 
 
 def sync_work_allocation_titles(conn: sqlite3.Connection, task_uid: str, title: str) -> None:
