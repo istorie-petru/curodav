@@ -144,10 +144,13 @@ def _csv_response(filename: str, header: list[str], rows: list[list[Any]]) -> Re
 @router.get("/tasks.csv")
 def export_tasks_csv(conn=Depends(get_db)):
     rows = [
-        [t["uid"], t["title"], t["status"], t["due_at"], t["priority"] or "", ", ".join(t.get("tags") or [])]
+        [
+            t["uid"], t["title"], t["status"], t["due_at"],
+            t["importance"] or "", t["urgency"] or "", ", ".join(t.get("tags") or []),
+        ]
         for t in db.list_tasks(conn, include_habit_tasks=True)
     ]
-    return _csv_response("tasks.csv", ["UID", "Title", "Status", "Due", "Priority", "Tags"], rows)
+    return _csv_response("tasks.csv", ["UID", "Title", "Status", "Due", "Importance", "Urgency", "Tags"], rows)
 
 
 @router.get("/contacts.csv")

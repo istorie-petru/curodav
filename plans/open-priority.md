@@ -10,8 +10,9 @@ offline-first sync. Low-priority or app-local features live in
 [`features/`](../features/README.md); what's been deliberately cut lives in
 [`abandoned.md`](abandoned.md).
 
-**Version:** the app is at **1.0**, the first full release (the webapp). This
-rework ships as minor releases `1.1` … `1.9` and is complete with the **2.0**
+**Version:** the app is at **1.1** (1.0 was the first full release; 1.1 —
+Virtual & derived states — shipped 2026-08-13). This
+rework ships as minor releases `1.2` … `1.9` and is complete with the **2.0**
 full release. The versioning scheme and full phase history (0.1 → 1.0) are in
 [`abandoned.md`](abandoned.md); the release-by-release order is in
 [`roadmap.md`](roadmap.md).
@@ -22,11 +23,13 @@ The sections below are grouped by feature, not presented as one coherent plan.
 This chapter proposes the dependency-driven order to implement them in. Each
 step is sized to ship on its own.
 
-1. **Virtual & derived states** — settle the temporal-state model (temporal
-   states are not labels), the shared aggregation service, and Importance /
-   Urgency, including their WebDAV representation. Every other surface (project
-   cards, Week, Today, Dashboard) reads their output, and the sync work builds
-   on the WebDAV mapping fixed here.
+1. ~~**Virtual & derived states**~~ — **shipped 2026-08-13** (see
+   `features/tasks.md` § Importance, Urgency, and the virtual states). Settled
+   the temporal-state model (temporal states are not labels), the shared
+   aggregation service, and Importance / Urgency, including their WebDAV
+   representation. Every other surface (project cards, Week, Today, Dashboard)
+   reads their output, and the sync work builds on the WebDAV mapping fixed
+   here.
 2. **Task model decision** — resolve the subtask-hierarchy vs. flat-tasks-plus-
    allocations conflict (see "Subtask model — the open conflict") before any
    task or scheduling code; the project stack and the Week view depend on the
@@ -44,63 +47,6 @@ step is sized to ship on its own.
 6. **Offline-first editing & synchronization** — the largest engineering item;
    its sync model must be written before any code. Can start in parallel with
    steps 3–5 once step 1's WebDAV mapping is fixed.
-
-## Virtual & derived states
-
-Three related decisions consolidated into one model: temporal/state views are
-not labels, one shared service computes them, and Importance/Urgency are the two
-semantic properties that feed the `Important` / `Urgent` states.
-
-**Status:** decisions recorded — no code. Step 1 of the build order.
-
-### System-derived views and virtual states (not labels)
-
-The application distinguishes user-created labels (manually assigned and managed
-by the user), behavioral system rules (configurable system features that affect
-behavior, e.g. Habit, Schedule), and derived system views. Temporal/state
-concepts — `Today`, `Tomorrow`, `This Week`, `This Month`, `Overdue`, `Urgent`,
-`Important` — are **not labels** in the data model or the UI label system. They
-are **virtual views / filters / navigation states** presenting dynamically
-computed subsets. They may be exposed the same way labels are (selectable chips,
-sidebar entries, quick filters), but they are query-driven projections, not
-assignable metadata. An entity appears in `Today` because its date falls within
-today's range, not because it was tagged. No duplicated state; no polluting the
-label system with derived information.
-
-Each system classification is derived from what it means:
-`Today` / `This Week` / `This Month` from dates; `Overdue` from deadlines and
-status; `Urgent` from configured project/label behavior plus time remaining.
-Derived classifications must never become stale, so nothing is stored that can
-be calculated reliably from current data. **Project behavior and other
-persistent label behaviors are the exception:** they are configuration belonging
-to the label and *are* stored.
-
-### Derived-state and aggregation service
-
-A shared application service calculates the temporal and planning aggregates
-multiple views use: task counts by state; completed / remaining / overdue work;
-estimated and scheduled task effort; calendar occupied / free time; conflicts;
-upcoming important or urgent entities. It feeds the Dashboard, Today, Week,
-Spaces, and the system filters rather than each page re-implementing the math.
-Values are normally calculated from source data; stored as persistent fields
-only if profiling demonstrates a genuine performance requirement. The resulting
-system states (`Today`, `This Week`, `Overdue`, `Important`, `Urgent`) are
-therefore virtual / derived in the UI.
-
-### Importance and urgency (replacing WebDAV priority)
-
-`Importance` and `Urgency` are explicit semantic properties that replace the
-existing WebDAV priority concept. They are system-level properties, not ordinary
-labels stored on entities; their resulting states surface through virtual system
-labels `Important` and `Urgent`. Labels can contribute rules: the `Exam` label
-may imply high importance; the `Conference` label may imply urgency when the
-event is within a configurable threshold (e.g. one week or one month). The
-resulting value is derived from all applicable sources — explicit user
-configuration, label-based rules, temporal state — using deterministic
-precedence rather than physically created chains of labels, e.g.
-`effective importance = max(explicit importance, label-derived importance)`.
-Represented consistently in WebDAV synchronization rather than a separate
-incompatible priority model.
 
 ## Project-enabled label stack
 

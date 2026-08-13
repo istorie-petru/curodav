@@ -23,7 +23,8 @@ class TestTaskRow:
             "description": "quarterly",
             "start_at": "2026-08-01",
             "due_at": "2026-08-10",
-            "priority": 2,
+            "importance": 3,
+            "urgency": 2,
             "status": "in_progress",
             "progress": 0.5,
             "tags": ["work", "urgent"],
@@ -38,7 +39,10 @@ class TestTaskRow:
         assert result["description"] == row["description"]
         assert result["start_at"] == row["start_at"]
         assert result["due_at"] == row["due_at"]
-        assert result["priority"] == row["priority"]
+        # 1.1: PRIORITY carries urgency (urgency-dominant export), so the
+        # urgency axis round-trips exactly; importance survives only in this
+        # app's own DB, not in iCal -- see ical_rows.py's recorded decision.
+        assert result["urgency"] == row["urgency"]
         assert result["status"] == row["status"]
         assert result["progress"] == row["progress"]
         assert set(result["tags"]) == set(row["tags"])

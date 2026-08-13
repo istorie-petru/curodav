@@ -53,6 +53,13 @@ versioning:
   roadmap prepared, and planning reorganized into `open.md` / `open-priority.md`.
 - **1.0 — the first release** (2026-08-12 → present): the current webapp as the
   stable, supported, usable app.
+- **1.1 — virtual & derived states** (2026-08-12 → 2026-08-13): Importance/
+  Urgency replace WebDAV priority (two 1–3 axes over `tasks`, effective values
+  derived in `src/derived_state.py`); `Today`/`Tomorrow`/`This Week`/`This
+  Month`/`Overdue`/`Important`/`Urgent` are query projections over those values,
+  not labels; one shared aggregation service feeds Dashboard and every filter;
+  WebDAV `PRIORITY` carries the combined axes (import maps back to urgency
+  only). Shipped: `open-priority.md` § Virtual & derived states removed.
 
 Open work in `open-priority.md` and `open.md` ships as the minor releases
 `1.1` … `1.9` (see [`roadmap.md`](roadmap.md)); once all of it is implemented,

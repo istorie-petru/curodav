@@ -1,9 +1,9 @@
 """Tests for Phase 9 of the projects/tags rework: independent date/status/
-priority filters replacing the old combined 'smart filter', completed
-tasks staying visible but separated, and start_at always defaulting to
-today on creation. No bridge/Radicale dependency for the pure filter
-logic; create_task needs a fake bridge (no live server) same pattern as
-test_project_linking.py."""
+importance/urgency filters replacing the old combined 'smart filter',
+completed tasks staying visible but separated, and start_at always
+defaulting to today on creation. No bridge/Radicale dependency for the
+pure filter logic; create_task needs a fake bridge (no live server) same
+pattern as test_project_linking.py."""
 
 from __future__ import annotations
 
@@ -26,10 +26,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _seed_task(conn, uid, due_at=None, status="active", priority=None):
+def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None):
     db.upsert_task(conn, {
         "uid": uid, "title": uid,
-        "description": "", "status": status, "due_at": due_at, "priority": priority,
+        "description": "", "status": status, "due_at": due_at,
+        "importance": importance, "urgency": urgency,
         "tags": [], "created_at": _now(),
     })
 
@@ -83,31 +84,45 @@ class TestStatusFilter:
         assert {t["uid"] for t in result} == {"b"}
 
 
-class TestPriorityFilter:
-    def test_all_passes_everything(self):
-        tasks = [{"priority": 1}, {"priority": None}]
-        assert len(tasks_router._apply_priority_filter(tasks, "all")) == 2
+class TestImportanceUrgencyFilters:
+    def test_importance_all_passes_everything(self):
+        tasks = [{"importance": 1}, {"importance": None}]
+        assert len(tasks_router._apply_importance_filter(tasks, "all")) == 2
 
-    def test_specific_priority(self):
-        tasks = [{"uid": "a", "priority": 1}, {"uid": "b", "priority": 2}]
-        result = tasks_router._apply_priority_filter(tasks, "1")
+    def test_urgency_all_passes_everything(self):
+        tasks = [{"urgency": 3}, {"urgency": None}]
+        assert len(tasks_router._apply_urgency_filter(tasks, "all")) == 2
+
+    def test_specific_importance(self):
+        tasks = [{"uid": "a", "importance": 1}, {"uid": "b", "importance": 2}]
+        result = tasks_router._apply_importance_filter(tasks, "1")
         assert {t["uid"] for t in result} == {"a"}
+
+    def test_specific_urgency(self):
+        tasks = [{"uid": "a", "urgency": 3}, {"uid": "b", "urgency": 1}]
+        result = tasks_router._apply_urgency_filter(tasks, "3")
+        assert {t["uid"] for t in result} == {"a"}
+
+    def test_importance_and_urgency_are_independent_axes(self):
+        tasks = [{"uid": "a", "importance": 3, "urgency": 1}, {"uid": "b", "importance": 1, "urgency": 3}]
+        assert {t["uid"] for t in tasks_router._apply_importance_filter(tasks, "3")} == {"a"}
+        assert {t["uid"] for t in tasks_router._apply_urgency_filter(tasks, "3")} == {"b"}
 
 
 class TestFiltersAreIndependentAndCombine:
-    def test_this_week_high_priority_waiting_combo(self, conn):
+    def test_this_week_high_importance_waiting_combo(self, conn):
         """The specific gap the rework closes: a combination the old
         single 'smart filter' preset list had no entry for at all."""
         today = date.today()
-        _seed_task(conn, "match", due_at=today.isoformat(), status="waiting", priority=1)
-        _seed_task(conn, "wrong_status", due_at=today.isoformat(), status="active", priority=1)
-        _seed_task(conn, "wrong_priority", due_at=today.isoformat(), status="waiting", priority=3)
-        _seed_task(conn, "wrong_date", due_at=(today + timedelta(days=10)).isoformat(), status="waiting", priority=1)
+        _seed_task(conn, "match", due_at=today.isoformat(), status="waiting", importance=3)
+        _seed_task(conn, "wrong_status", due_at=today.isoformat(), status="active", importance=3)
+        _seed_task(conn, "wrong_importance", due_at=today.isoformat(), status="waiting", importance=1)
+        _seed_task(conn, "wrong_date", due_at=(today + timedelta(days=10)).isoformat(), status="waiting", importance=3)
 
         tasks = db.list_tasks(conn)
         tasks = tasks_router._apply_date_filter(tasks, "this_week")
         tasks = tasks_router._apply_status_filter(tasks, "waiting")
-        tasks = tasks_router._apply_priority_filter(tasks, "1")
+        tasks = tasks_router._apply_importance_filter(tasks, "3")
         assert {t["uid"] for t in tasks} == {"match"}
 
 
@@ -167,7 +182,7 @@ class TestStartDateConfigurableAtCreation:
     # (this suite's other direct create_task() calls, task_detail.html's
     # subtask quick-add form) keeps the old "starts today" behavior.
     def test_create_task_defaults_to_today_when_start_at_omitted(self, conn):
-        tasks_router.create_task(title="Test", description="", due_at="", priority="", status="active",
+        tasks_router.create_task(title="Test", description="", due_at="", importance="", urgency="", status="active",
                                    tags="", recurrence="", parent_uid="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
@@ -175,7 +190,7 @@ class TestStartDateConfigurableAtCreation:
 
     def test_create_task_honors_an_explicit_start_at(self, conn):
         tasks_router.create_task(title="Test", description="", due_at="", start_at="2026-09-01",
-                                   priority="", status="active", tags="", recurrence="", parent_uid="",
+                                   importance="", urgency="", status="active", tags="", recurrence="", parent_uid="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
         assert task["start_at"] == "2026-09-01"

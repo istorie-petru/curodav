@@ -90,7 +90,7 @@ def _seed(conn):
         conn,
         {"uid": "t1",
          "title": "Ship export", "description": "", "start_at": None, "due_at": "2026-10-06",
-         "priority": 1, "status": "active", "progress": None, "tags_json": '["work"]',
+         "importance": 3, "urgency": 2, "status": "active", "progress": None, "tags_json": '["work"]',
          "parent_uid": None, "recurrence": None, "exdates_json": "[]",
          "created_at": _now(), "updated_at": _now()},
     )

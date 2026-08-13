@@ -1,6 +1,7 @@
 """Tests for schedule-class form input rework (Phases E and the 2026-08-08
-promotion to the app-wide single-select dropdown): task Priority and
-schedule class Day/Parity/Class type. Phase E first converted these from
+promotion to the app-wide single-select dropdown): task Importance/Urgency
+(1.1, the two axes replacing the old WebDAV priority) and schedule class
+Day/Parity/Class type. Phase E first converted these from
 plain `<select>`s into the `.segmented`/`.seg-btn` radio-styled control
 (widget builder View/Range); the 2026-08-08 follow-up replaced the class
 form's segmented controls and native `<select>`s with the shared
@@ -61,32 +62,41 @@ def _request(path="/"):
 
 
 # --------------------------------------------------------------------- #
-# Task Priority
+# Task Importance / Urgency
 # --------------------------------------------------------------------- #
 
 
-class TestTaskPrioritySegmented:
+class TestTaskImportanceUrgencySegmented:
     # 2026-08-08 follow-up ("rework Priority/Status/Recurrence to look the
-    # same as Range/View/Labels") -- Priority moved again, this time from
+    # same as Range/View/Labels") -- the field moved again, this time from
     # the plain `<select>` the 2026-08-07 pass above put it in, to the same
     # single-mode _widget_list_multiselect.html panel View/Range/Labels
-    # already share (see routers/tasks.py's PRIORITY_ITEMS). These tests
-    # now assert on that markup instead of `<option>`.
-    def test_new_task_form_renders_priority_multiselect(self, conn):
+    # already share (see routers/tasks.py's IMPORTANCE_ITEMS/URGENCY_ITEMS).
+    # 1.1 (virtual & derived states): the single Priority axis became two
+    # independent 1-3 axes -- Importance and Urgency. These tests assert on
+    # that markup instead of `<option>`.
+    def test_new_task_form_renders_importance_and_urgency_multiselects(self, conn):
         resp = tasks_router.new_task_form(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'data-ms-label="priority"' in body
-        assert 'name="priority" value=""' in body
-        assert 'name="priority" value="1"' in body
-        assert 'name="priority" value="4"' in body
+        assert 'data-ms-label="importance"' in body
+        assert 'name="importance" value=""' in body
+        assert 'name="importance" value="1"' in body
+        assert 'name="importance" value="3"' in body
+        assert 'data-ms-label="urgency"' in body
+        assert 'name="urgency" value=""' in body
+        assert 'name="urgency" value="1"' in body
+        assert 'name="urgency" value="3"' in body
+        # No trace of the old single priority axis.
+        assert 'name="priority"' not in body
 
-    def test_creating_a_task_with_each_priority_stores_the_right_int(self, conn):
-        for value in ["1", "2", "3", "4"]:
+    def test_creating_a_task_with_each_importance_and_urgency_stores_the_right_int(self, conn):
+        for value in ["1", "2", "3"]:
             tasks_router.create_task(
                 title=f"Task {value}",
                 description="",
                 due_at="",
-                priority=value,
+                importance=value,
+                urgency=value,
                 status="active",
                 tags="",
                 tags_labels=[],
@@ -95,18 +105,18 @@ class TestTaskPrioritySegmented:
                 conn=conn,
             )
         tasks = db.list_tasks(conn)
-        stored = {t["title"]: t["priority"] for t in tasks}
-        assert stored["Task 1"] == 1
-        assert stored["Task 2"] == 2
-        assert stored["Task 3"] == 3
-        assert stored["Task 4"] == 4
+        stored = {t["title"]: (t["importance"], t["urgency"]) for t in tasks}
+        assert stored["Task 1"] == (1, 1)
+        assert stored["Task 2"] == (2, 2)
+        assert stored["Task 3"] == (3, 3)
 
-    def test_creating_a_task_with_none_priority_stores_null(self, conn):
+    def test_creating_a_task_with_none_importance_or_urgency_stores_null(self, conn):
         tasks_router.create_task(
-            title="No priority",
+            title="No axes",
             description="",
             due_at="",
-            priority="",
+            importance="",
+            urgency="",
             status="active",
             tags="",
             tags_labels=[],
@@ -115,26 +125,46 @@ class TestTaskPrioritySegmented:
             conn=conn,
         )
         tasks = db.list_tasks(conn)
-        assert tasks[0]["priority"] is None
+        assert tasks[0]["importance"] is None
+        assert tasks[0]["urgency"] is None
 
-    def test_editing_a_task_preserves_its_priority_as_checked(self, conn):
+    def test_axes_are_stored_independently(self, conn):
+        tasks_router.create_task(
+            title="Mixed",
+            description="",
+            due_at="",
+            importance="3",
+            urgency="1",
+            status="active",
+            tags="",
+            tags_labels=[],
+            recurrence="",
+            parent_uid="",
+            conn=conn,
+        )
+        tasks = db.list_tasks(conn)
+        assert tasks[0]["importance"] == 3
+        assert tasks[0]["urgency"] == 1
+
+    def test_editing_a_task_preserves_its_importance_and_urgency_as_checked(self, conn):
         now = _now()
         db.upsert_task(
             conn,
             {
                 "uid": "t1", "title": "X", "description": "", "due_at": None, "start_at": None,
-                "priority": 2, "status": "active", "progress": 0, "tags": [], "parent_uid": None,
-                "recurrence": None, "created_at": now, "updated_at": now,
+                "importance": 3, "urgency": 2, "status": "active", "progress": 0, "tags": [],
+                "parent_uid": None, "recurrence": None, "created_at": now, "updated_at": now,
             },
         )
         resp = tasks_router.edit_task_form("t1", _request(), conn=conn)
         body = resp.body.decode()
-        assert 'name="priority" value="2"' in body
-        # radio, not <select>/<option> any more -- confirm it's actually
+        assert 'name="importance" value="3"' in body
+        assert 'name="urgency" value="2"' in body
+        # radio, not <select>/<option> any more -- confirm they're actually
         # checked, not just present in the options list.
-        import re
-
-        m = re.search(r'<input type="radio" name="priority" value="2"[^>]*>', body)
+        m = re.search(r'<input type="radio" name="importance" value="3"[^>]*>', body)
+        assert m and "checked" in m.group(0)
+        m = re.search(r'<input type="radio" name="urgency" value="2"[^>]*>', body)
         assert m and "checked" in m.group(0)
 
 

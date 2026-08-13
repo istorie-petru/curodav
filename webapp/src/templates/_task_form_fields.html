@@ -7,7 +7,8 @@
    The surrounding <form> (with its own action/id) lives in the parent
    template; this partial just fills it in. Parent must provide:
      task         -- the task being edited, or None for a new task
-     priority_items, status_items, tag_name_items -- multiselect items
+     importance_items, urgency_items, status_items, tag_name_items --
+                    multiselect items
      tag_names    -- (unused directly; tag_name_items is derived from it)
      today        -- ISO date for the Start date default
      habit_label  -- the habit label name (Daily target field's toggle)
@@ -39,18 +40,29 @@
             <label>Start date</label>
             <input type="date" name="start_at" value="{{ task.start_at[:10] if task and task.start_at else today }}">
         </div>
-        <!-- Priority/Status -- 2026-08-08 direct feedback ("rework the
-             drop down menus for priority, status, Recurrence to look the
-             same as ... range, view, labels") -- single-mode
+        <!-- Importance/Urgency/Status -- 2026-08-08 direct feedback
+             ("rework the drop down menus for priority, status, Recurrence
+             to look the same as ... range, view, labels") -- single-mode
              _widget_list_multiselect.html instead of a plain <select>,
              same component View/Range already use and for the same
              reason (a native <select>'s open dropdown is unstyleable
-             browser chrome, see that partial's own header comment). -->
-        {% set ms_name = 'priority' %}
+             browser chrome, see that partial's own header comment). 1.1
+             (virtual & derived states): the old single Priority field is
+             now two independent axes -- Importance and Urgency (each
+             1..3; 0/None = unset). -->
+        {% set ms_name = 'importance' %}
         {% set ms_mode = 'single' %}
-        {% set ms_label = 'Priority' %}
-        {% set ms_items = priority_items %}
-        {% set ms_selected = task.priority|string if task and task.priority else '' %}
+        {% set ms_label = 'Importance' %}
+        {% set ms_items = importance_items %}
+        {% set ms_selected = task.importance|string if task and task.importance else '' %}
+        {% set ms_wide = false %}
+        {% set ms_form_id = 'task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_name = 'urgency' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Urgency' %}
+        {% set ms_items = urgency_items %}
+        {% set ms_selected = task.urgency|string if task and task.urgency else '' %}
         {% set ms_wide = false %}
         {% set ms_form_id = 'task-form' %}
         {% include "_widget_list_multiselect.html" %}

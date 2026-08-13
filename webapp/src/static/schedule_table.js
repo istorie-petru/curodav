@@ -14,7 +14,7 @@
 //    posting, not just the one that changed.
 //  - Parity (`.pill-select`) POSTs only itself to
 //    /schedule/classes/{uid}/update-field, same shape as the Tasks table's
-//    status/priority pills.
+//    status/importance/urgency pills.
 //
 // Exposed as window.CCScheduleTable.init(root), not a bare top-level IIFE
 // -- the create/edit class form (schedule_class_form.html) still opens as

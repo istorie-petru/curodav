@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import db, derived_state
 from ..deps import get_db, templates
 
 router = APIRouter(tags=["dashboard"])
@@ -229,7 +229,10 @@ def _render_weekly_overview(conn, config: dict, nav: dict | None = None) -> dict
     by_day = []
     for d in days:
         iso = d.isoformat()
-        day_tasks = sorted([t for t in tasks if t["due_at"][:10] == iso], key=lambda t: t.get("priority") or 9)
+        day_tasks = sorted(
+            [t for t in tasks if t["due_at"][:10] == iso],
+            key=lambda t: (-(t.get("importance") or 0), -(t.get("urgency") or 0)),
+        )
         day_events = sorted([e for e in events if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
         by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today.isoformat(), "tasks": day_tasks, "events": day_events})
     return {"days": by_day}
@@ -276,33 +279,30 @@ def _render_overdue_tasks(conn, config: dict, nav: dict | None = None) -> dict:
 
 def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
     """At-a-glance stats strip (dashboard usability rework, 2026-08-07) --
-    three counts over the exact same open-tasks pool `_render_overdue_
-    tasks`/`_render_today_agenda`/`_render_weekly_overview` already query
-    (via `_filtered_tasks`, so this is correctly scoped to a label page
-    now that the `_effective_tags_filter` fix applies there too): Overdue
-    (due date before today), Due today, Due this week (today through
-    today+6 inclusive, same window `_render_weekly_overview`'s default
-    `range_days=7` uses). Every widget type here renders a *list*; this is
-    the one that renders a *number*, so "how am I doing" is answerable in
-    under two seconds without reading through any other widget's content.
+    counts over the exact same open-tasks pool `_render_overdue_tasks`/
+    `_render_today_agenda`/`_render_weekly_overview` already query (via
+    `_filtered_tasks`, so this is correctly scoped to a label page now that
+    the `_effective_tags_filter` fix applies there too): Overdue, Due
+    today, Due this week, plus (1.1) Important and Urgent. Every widget
+    type here renders a *list*; this is the one that renders a *number*, so
+    "how am I doing" is answerable in under two seconds without reading
+    through any other widget's content.
 
     Zero counts still render (not hidden/suppressed) -- confirming
     "nothing's overdue" is itself useful information for an at-a-glance
     widget, not an empty state to hide.
 
-    Each count links to the matching filtered Tasks view
-    (routers/tasks.py's DATE_FILTERS = ["all", "today", "this_week",
-    "overdue"]), with `&label={label_name}` appended when this widget is
-    scoped to a label page (Tasks' router already supports combining
-    date_filter and label simultaneously, 2026-08-07's Phase 9b toolbar
-    rework) -- so "3 overdue" is a real, already-filtered destination, not
-    just a number you have to go re-derive yourself."""
-    today = date.today()
-    week_end = today + timedelta(days=6)
+    The counts come from src/derived_state.py's shared aggregation service
+    (1.1, plans/open-priority.md § Virtual & derived states): ONE pass over
+    the scoped pool computing every per-state count through `count_by_state`
+    -- state names match routers/tasks.py's DATE_FILTERS, so "3 overdue" is
+    a real, already-filtered destination (`?date_filter=overdue`, plus
+    `&label={label_name}` when scoped to a label page), not a number you
+    have to go re-derive yourself, and the count and the filter view can
+    never disagree."""
     tasks = _filtered_tasks(conn, config)
-    overdue = [t for t in tasks if t.get("due_at") and t["due_at"][:10] < today.isoformat()]
-    due_today = [t for t in tasks if t.get("due_at") and t["due_at"][:10] == today.isoformat()]
-    due_week = [t for t in tasks if t.get("due_at") and today.isoformat() <= t["due_at"][:10] <= week_end.isoformat()]
+    label_rules = db.list_label_rules(conn)
+    counts = derived_state.count_by_state(tasks, label_rules)
 
     label_name = config.get("label_name")
 
@@ -313,12 +313,16 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
         return url
 
     return {
-        "overdue_count": len(overdue),
-        "today_count": len(due_today),
-        "week_count": len(due_week),
+        "overdue_count": counts["overdue"],
+        "today_count": counts["today"],
+        "week_count": counts["this_week"],
+        "important_count": counts["important"],
+        "urgent_count": counts["urgent"],
         "overdue_link": _tasks_link("overdue"),
         "today_link": _tasks_link("today"),
         "week_link": _tasks_link("this_week"),
+        "important_link": _tasks_link("important"),
+        "urgent_link": _tasks_link("urgent"),
     }
 
 
@@ -1300,7 +1304,7 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
     # event option lists are imported lazily from .tasks so this module
     # (which .tasks itself imports at load time) doesn't create a
     # circular import.
-    from .tasks import PRIORITY_ITEMS, STATUS_ITEMS, STATUSES
+    from .tasks import IMPORTANCE_ITEMS, URGENCY_ITEMS, STATUS_ITEMS, STATUSES
 
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
@@ -1313,7 +1317,8 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
             # passes; task is None, so the edit-only branches don't render.
             "task": None,
             "statuses": STATUSES,
-            "priority_items": PRIORITY_ITEMS,
+            "importance_items": IMPORTANCE_ITEMS,
+            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "parent_uid": None,
             "tag_names": tag_names,

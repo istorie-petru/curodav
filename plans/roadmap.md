@@ -5,9 +5,10 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.0** (the first full release). Minor releases are
-numbered `1.1` … `1.9`; once everything on this roadmap is implemented, the next
-full release is **2.0**. See the versioning rules in [`abandoned.md`](abandoned.md).
+**Version:** the app is at **1.1** (1.0 was the first full release; 1.1 —
+Virtual & derived states — shipped 2026-08-13). Minor releases are numbered
+`1.1` … `1.9`; once everything on this roadmap is implemented, the next full
+release is **2.0**. See the versioning rules in [`abandoned.md`](abandoned.md).
 
 ## The two tracks
 
@@ -23,7 +24,7 @@ never hold Track A up.
 
 | Release | Main work (Track A) | Side work (Track B) | Depends on |
 |---|---|---|---|
-| `1.1` | Virtual & derived states | Data health; Contacts parity | — |
+| `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
 | `1.2` | Task-model decision (subtask conflict) | Universal command surface | 1.1 |
 | `1.3` | Project-enabled labels + lifecycle | Widget consolidation | 1.2 |
 | `1.4` | Work allocations + project week calendar | Project check-in (optional) | 1.3 |
@@ -38,12 +39,13 @@ never hold Track A up.
 
 ### 1.1 — Model foundations
 
-Everything else reads the output of this release, so it goes first.
-**Virtual & derived states** (`open-priority.md` § Virtual & derived states):
-temporal states (`Today`, `Overdue`, …) are query projections, not labels; the
-shared aggregation service computes the counts and workload every surface needs;
-Importance/Urgency replace WebDAV priority. **Must also settle the WebDAV
-representation here** — the sync work in 1.8 builds on it.
+**SHIPPED 2026-08-13** — see `features/tasks.md` (§ Importance, Urgency, and
+the virtual states) and the now-removed § Virtual & derived states in
+`open-priority.md`. Everything else reads the output of this release, so it went
+first: temporal states (`Today`, `Overdue`, …) are query projections, not
+labels; the shared aggregation service computes the counts and workload every
+surface needs; Importance/Urgency replace WebDAV priority (with the WebDAV
+representation settled here — the sync work in 1.8 builds on it).
 
 Side work (independent): **Data health & maintenance** (verified backups — the
 prerequisite for trusting offline sync in 1.8) and **Contacts field parity**.

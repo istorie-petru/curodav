@@ -163,7 +163,7 @@ class TestCalDavBridgeLive:
             "uid": "task-1",
             "title": "Write report",
             "due_at": "2026-08-10",
-            "priority": 2,
+            "urgency": 2,
             "status": "active",
         }
         bridge.save_task_row(row)
