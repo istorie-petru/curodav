@@ -123,6 +123,13 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         return RedirectResponse(url="/projects", status_code=303)
     project = _project_card(conn, cfg)
     tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
+    # 1.5 slice (deadline-vs-work-allocation surfacing, see routers/
+    # tasks.py::list_tasks' matching comment): same batched
+    # db.task_work_hours_bulk call so this Tasks view's rows (the shared
+    # _task_row.html macro) get their "Scheduled" column without an N+1.
+    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in tasks])
+    for t in tasks:
+        t["work_hours"] = _hours[t["uid"]]
     open_tasks = [t for t in tasks if t.get("status") not in ("done", "archived")]
     completed_tasks = [t for t in tasks if t.get("status") in ("done", "archived")]
     ctx = tasks_router._task_context(request)

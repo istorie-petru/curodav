@@ -1414,6 +1414,47 @@ def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]
     return {"scheduled": scheduled, "completed": completed, "remaining": max(scheduled - completed, 0.0)}
 
 
+def task_work_hours_bulk(conn: sqlite3.Connection, task_uids: list[str]) -> dict[str, dict[str, float]]:
+    """Batch counterpart to `task_work_hours` above -- one query for every
+    task in `task_uids` instead of one `list_work_allocations_for_task`
+    query per task. Added for the 1.5 "deadline vs. work allocation"
+    surfacing slice (`plans/open-priority.md` § Task model): the global
+    Tasks table and the project detail Tasks view both render every visible
+    row's scheduled/completed hours, and calling the per-task function in a
+    template loop would be a straightforward N+1 (one row -> one query) on
+    any list beyond a handful of tasks. There was no existing "aggregate X
+    across many tasks in one query" precedent in this module to follow
+    (`_project_card`'s `progress` counts an already-fetched Python list, not
+    a SQL aggregate) -- this is the first one, and `task_work_hours` itself
+    is left untouched (same return shape, same semantics) so single-task
+    call sites (task detail/edit modals) are unaffected.
+
+    Returns a dict keyed by task_uid, every value the same
+    `{"scheduled", "completed", "remaining"}` shape `task_work_hours`
+    returns -- including a zero-filled entry for a task with no allocations
+    at all, so callers never need an `if task_uid in result` branch."""
+    result = {uid: {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0} for uid in task_uids}
+    if not task_uids:
+        return result
+    now = datetime.now(timezone.utc).isoformat()
+    placeholders = ",".join("?" for _ in task_uids)
+    rows = conn.execute(
+        f"SELECT r.task_uid AS task_uid, events.start_at AS start_at, events.end_at AS end_at "
+        f"FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
+        f"WHERE r.is_work_allocation = 1 AND r.task_uid IN ({placeholders})",
+        tuple(task_uids),
+    ).fetchall()
+    for row in rows:
+        uid = row["task_uid"]
+        hours = _hours_between(row["start_at"], row["end_at"])
+        result[uid]["scheduled"] += hours
+        if row["end_at"] and row["end_at"] <= now:
+            result[uid]["completed"] += hours
+    for uid, hours in result.items():
+        hours["remaining"] = max(hours["scheduled"] - hours["completed"], 0.0)
+    return result
+
+
 def sync_work_allocation_titles(conn: sqlite3.Connection, task_uid: str, title: str) -> None:
     """"Editing the task updates the representation of its associated work
     allocations where appropriate" -- called from upsert_task whenever a

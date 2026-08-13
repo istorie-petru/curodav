@@ -5,11 +5,12 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.4** (1.0 was the first full release; 1.1 —
+**Version:** the app is at **1.5** (1.0 was the first full release; 1.1 —
 Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
 Universal command surface side work — shipped 2026-08-13; 1.3 — project-
 enabled labels + lifecycle — shipped 2026-08-13; 1.4 — work allocations +
-project week calendar — shipped 2026-08-13). Minor releases are numbered
+project week calendar — shipped 2026-08-13; 1.5 — task management &
+grouping — shipped 2026-08-13). Minor releases are numbered
 `1.1` … `1.9`; once everything on this roadmap is implemented, the next
 full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
@@ -32,7 +33,7 @@ never hold Track A up.
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
 | `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
-| `1.5` | Task management & grouping | — | 1.3–1.4 |
+| `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | Schedule & recurrence rework | Configurable views + optional Schedule | 1.3 |
 | `1.7` | Information architecture & view surfaces | — | 1.1, 1.3, 1.4 + widgets |
 | `1.8` | Offline-first editing & synchronization | Pagination | 1.1 (WebDAV) + data health |
@@ -140,7 +141,13 @@ allocations from 1.4.
   project-name headers (`routers/tasks.py::_group_tasks_by_project`, reusing
   `db.project_label_for`), "No project" bucket sorted last, composes with
   every existing filter/sort; a "Group by" toggle in `_tasks_toolbar.html`.
-  Still open: the deadline-vs-work-allocation distinction.
+- ~~Deadline-vs-work-allocation distinction~~ **shipped 2026-08-13** — a
+  "Scheduled" column (`{completed}/{scheduled}h`, distinct label/styling
+  from "Due") added to the shared `_task_row.html` macro, so both the
+  global Tasks table and the project detail Tasks view surface work-
+  allocation status alongside the deadline instead of only the deadline.
+  `db.task_work_hours_bulk` added to compute it in one batched query per
+  page instead of one query per row. **1.5 is now fully shipped.**
 
 ### 1.6 — Scheduling
 

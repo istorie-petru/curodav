@@ -101,18 +101,31 @@ session, right before the final commit of that session.
   unchanged. See `features/tasks.md` § Task model, "Table view groupable by
   project", 10 new tests (`test_tasks_grouping.py`), full suite 1017
   passed.
-- **Next slice:** `1.5`'s one remaining piece (`roadmap.md`'s 1.5 row,
-  `open-priority.md` § Task model): the deadline-vs-work-allocation
-  distinction — a task deadline (work must be completed by a particular
-  time) is explicit and separate from a work allocation (the user intends
-  to spend a particular amount of time on it at a particular time); this
-  distinction isn't yet reflected anywhere in the UI/data model beyond the
-  two fields already existing independently. `open.md`'s Command palette
-  actions follow-up (1.2 side work) and 1.4's optional Project check-in
-  side work are both still fine smaller, self-contained slices instead,
-  whenever a session wants one.
-- **Do not start:** anything under `1.6`+ in `roadmap.md` until `1.5` is
-  done — `1.6`/`1.7` depend on it (see the Depends-on column).
+- **Shipped:** `1.5` slice — **deadline-vs-work-allocation distinction**,
+  complete (2026-08-13) — the two concepts already existed as separate
+  fields/mechanisms (`due_at` vs. `db.task_work_hours`), but the global
+  Tasks table and the project detail page's Tasks view (shared
+  `_task_row.html` macro) only ever showed "Due" — work-allocation status
+  was invisible on the primary task-management surface. Added a
+  "Scheduled" column (`{completed}/{scheduled}h`, plain text and a
+  distinct label from the editable "Due" date cell) to both. Added
+  `db.task_work_hours_bulk(conn, task_uids)` — one batched query per page
+  (grouped by `task_uid`) instead of an N+1 of `list_work_allocations_for_
+  task` calls, since no existing "aggregate X across many tasks" batch
+  precedent existed in `db.py` to reuse; `db.task_work_hours` itself is
+  unchanged. Wired into `routers/tasks.py::list_tasks` and
+  `routers/projects.py::project_detail`, both attaching `task["work_hours"]`
+  before rendering. See `features/tasks.md` § Task model, "Deadline-vs-
+  work-allocation distinction," 8 new tests (`test_task_scheduled_
+  column.py`), full suite 1025 passed. **1.5 is now fully shipped**
+  (`pyproject.toml` bumped to `1.5.0`).
+- **Next slice:** `1.6` — Schedule & recurrence rework (`roadmap.md`'s 1.6
+  row, `open-priority.md` § Schedule & recurrence rework): courses as
+  project labels + recurring events, generalized non-working-day policy,
+  named holiday calendars, manual occurrence exceptions, configurable
+  terminology. `open.md`'s Command palette actions follow-up (1.2 side
+  work) and 1.4's optional Project check-in side work are both still fine
+  smaller, self-contained slices instead, whenever a session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

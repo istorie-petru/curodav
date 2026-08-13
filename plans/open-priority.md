@@ -303,7 +303,16 @@ automatically become the deadline of every task belonging to it.
 The distinction between a task deadline and scheduled work is explicit: a
 deadline means the work must be completed by a particular time; a work
 allocation means the user intends to spend a particular amount of time on it at
-a particular time. These are separate concepts.
+a particular time. These are separate concepts. **Shipped 2026-08-13**: the
+two fields already existed independently (`due_at`, work allocations via
+`db.task_work_hours`), but the global Tasks table (and the project detail
+page's Tasks view, sharing the same `_task_row.html` macro) only ever showed
+"Due" — work-allocation status was invisible on the primary task-management
+surface. A "Scheduled" column (`{completed}/{scheduled}h`, or a dash when
+there's no allocation yet — a different label and plain-text styling from
+the editable "Due" date input, so the two can't be read as the same kind of
+thing) was added to both surfaces. `db.task_work_hours_bulk` computes it for
+a whole page in one query instead of one query per row.
 
 The Tasks page provides a database/table-style management interface in which
 tasks can be grouped by their project label, letting project work be viewed
@@ -318,8 +327,8 @@ page uses), a "No project" bucket sorted last after the named groups, a
 existing filter and the active sort — grouping is applied after filtering
 and sorting, so a group's tasks keep the page's sort order. Default/absent
 `group_by` renders unchanged. See `features/tasks.md` § Task model, "Table
-view groupable by project." Still open: the deadline-vs-work-allocation
-distinction below.
+view groupable by project." The deadline-vs-work-allocation distinction
+(above) shipped the same day — **this closes out 1.5 entirely.**
 
 The global Calendar remains focused on calendar management — viewing, creating,
 editing, moving, and organizing events, without project-specific allocation

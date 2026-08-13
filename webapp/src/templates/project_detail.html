@@ -36,6 +36,7 @@
             <th>Importance</th>
             <th>Urgency</th>
             <th>Due</th>
+            <th>Scheduled</th>
             <th>Labels</th>
             <th style="width:40px"></th>
         </tr>
@@ -45,7 +46,7 @@
     </tbody>
     {% if completed_tasks and open_tasks %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="7">Completed ({{ completed_tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="8">Completed ({{ completed_tasks|length }})</td></tr>
     </tbody>
     {% endif %}
     {% if completed_tasks %}

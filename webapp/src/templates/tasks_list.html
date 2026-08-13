@@ -82,6 +82,7 @@
             <th>{{ sort_link('importance', 'Importance') }}</th>
             <th>{{ sort_link('urgency', 'Urgency') }}</th>
             <th>{{ sort_link('due_at', 'Due') }}</th>
+            <th>Scheduled</th>
             <th>Labels</th>
             <th style="width:40px"></th>
         </tr>
@@ -124,7 +125,7 @@
     {% if group_by == 'project' %}
     {% for grp in open_groups %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="8">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
     </tbody>
     <tbody>
         {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
@@ -141,14 +142,14 @@
          header row (not just a CSS class) makes the boundary obvious even
          scrolling through a long table. -->
     <tbody>
-        <tr class="task-section-divider"><td colspan="8">Completed ({{ completed_tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="9">Completed ({{ completed_tasks|length }})</td></tr>
     </tbody>
     {% endif %}
     {% if completed_tasks %}
     {% if group_by == 'project' %}
     {% for grp in completed_groups %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="8">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
     </tbody>
     <tbody>
         {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}

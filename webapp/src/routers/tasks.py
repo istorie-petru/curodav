@@ -369,6 +369,16 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
+    # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
+    # plans/open-priority.md § Task model): attach each visible task's
+    # scheduled/completed/remaining hours so _task_row.html can render a
+    # "Scheduled" column distinct from "Due" -- one batched query
+    # (db.task_work_hours_bulk) for the whole page instead of one query per
+    # row, since this list can be every task in the app.
+    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in tasks])
+    for t in tasks:
+        t["work_hours"] = _hours[t["uid"]]
+
     # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
     # opt-in via ?group_by=project (default "none" is exactly today's
     # behavior, so a bookmarked/existing URL without the param is

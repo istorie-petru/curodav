@@ -156,8 +156,28 @@ uses, so switching it preserves every other active query param. Grouping
 only adds header `<tr>`s and splits rows across more `<tbody>` elements —
 row markup itself (`_task_row.html`) and `static/tasks_table.js`'s
 `tr[data-uid]`/`.row-select`/`select.pill-select` selectors are unchanged.
-See `tests/test_tasks_grouping.py`. Still open in 1.5: the
-deadline-vs-work-allocation distinction (`open-priority.md` § Task model).
+See `tests/test_tasks_grouping.py`.
+
+**Deadline-vs-work-allocation distinction (shipped 2026-08-13)** — a task
+deadline (`due_at`, "the work must be completed by a particular time") and a
+work allocation (`db.task_work_hours`, "the user intends to spend a
+particular amount of time on it at a particular time") already existed as
+separate fields/mechanisms, but the global Tasks table and the project
+detail page's Tasks view (both rendering the shared `_task_row.html` macro)
+only showed "Due" — work-allocation status was invisible on the primary
+task-management surface unless the detail modal was opened. A "Scheduled"
+column was added next to "Due": `{completed}/{scheduled}h` (rounded to one
+decimal) when the task has at least one work allocation, an em-dash
+otherwise — plain text, not an editable input, and a distinct header label,
+so it can't be mistaken for the same kind of thing as the editable "Due"
+date cell. `db.task_work_hours_bulk(conn, task_uids)` computes it for every
+row on a page in one query (grouped by `task_uid`) instead of one
+`list_work_allocations_for_task` query per row — wired into both
+`routers/tasks.py::list_tasks` and `routers/projects.py::project_detail`,
+which attach each task's totals as `task["work_hours"]` before rendering.
+`db.task_work_hours` itself (single-task call sites: task detail/edit
+modals) is unchanged. See `tests/test_task_scheduled_column.py`. **This was
+1.5's last piece — 1.5 is now fully shipped.**
 
 ## Search & the command surface
 

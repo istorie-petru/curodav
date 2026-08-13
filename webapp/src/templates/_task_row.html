@@ -52,6 +52,26 @@
     <td>
         <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
     </td>
+    {# "Scheduled" -- work-allocation hours, deliberately NOT styled like
+       the Due date cell above (plain text, not an editable input; a
+       different label) since the two are separate concepts (1.5,
+       plans/open-priority.md § Task model, "the distinction between a task
+       deadline and scheduled work is explicit"): Due is a deadline the
+       work must finish by, Scheduled is how much time is actually
+       allocated on the calendar toward it. `t.work_hours` is set by the
+       router (db.task_work_hours_bulk, a batched query -- see
+       routers/tasks.py::list_tasks / routers/projects.py::project_detail)
+       rather than computed here, so a caller that forgets to attach it
+       gets an empty cell instead of a per-row query -- `default` guards
+       that case defensively. #}
+    {% set _wh = t.work_hours | default({'scheduled': 0, 'completed': 0, 'remaining': 0}) %}
+    <td class="task-scheduled-cell">
+        {% if _wh.scheduled %}
+        <span title="{{ _wh.completed | round(1) }}h completed of {{ _wh.scheduled | round(1) }}h scheduled">{{ _wh.completed | round(1) }}/{{ _wh.scheduled | round(1) }}h</span>
+        {% else %}
+        <span class="text-muted">&mdash;</span>
+        {% endif %}
+    </td>
     <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}</td>
     <td style="text-align:right">
         <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}">
