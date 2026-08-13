@@ -109,7 +109,6 @@
         </td>
         <td>
             <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
-            {% if t.parent_uid %}<span class="cell-tag tag-gray" title="Subtask">{{ icon('corner-down-right', 'icon-sm') }} sub</span>{% endif %}
         </td>
         <td>
             <select class="pill-select pill-{{ status_colors[t.status] }}" data-uid="{{ t.uid }}" data-field="status">
@@ -143,18 +142,12 @@
                  plans/webapp-action-pipelines-audit.md) -- a plain task is
                  cheap to redo, so it gets real undo (delay-based, no
                  confirmation dialog at all) same as a dashboard widget.
-                 One with subtasks gets an explicit confirm sheet instead,
-                 since deleting it cascades and that's not something a
-                 5-second undo window is a good fit for. -->
-            {% if t.uid in parent_uids %}
-            <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-confirm-sheet="Delete &quot;{{ t.title }}&quot; and its subtasks? This cannot be undone.">
-                <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-            </form>
-            {% else %}
+                 (The subtask confirm-sheet variant this comment once
+                 contrasted against is gone -- 1.2 made tasks flat, so
+                 every delete is a single, independent task.) -->
             <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}">
                 <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
             </form>
-            {% endif %}
         </td>
     </tr>
     {% endmacro %}

@@ -1,64 +1,36 @@
-{# Relations card (2026-08-09) -- the merged successor to the old
-   Subtasks-only card. Direct feedback: "implement relations between events
-   and tasks, which exists in a similar fashion like the 'Subtasks'
-   feature... Actually 'Subtasks' is already very similar to this feature
-   so they should just be merged." So this one card holds both halves:
+{# Relations card (2026-08-09) -- the successor to the old Subtasks-only
+   card. Direct feedback: "implement relations between events and tasks,
+   which exists in a similar fashion like the 'Subtasks' feature...
+   Actually 'Subtasks' is already very similar to this feature so they
+   should just be merged." So this card originally held both halves:
 
-   - Subtasks -- unchanged, the parent/child task list that used to own
-     the whole card (see the old _task_subtasks.html): a .checklist of
-     rows with a done checkbox, plus the quick-add form that creates a
-     child task (parent_uid). This half is a task->task structural link.
-   - Related events -- the new cross-type half: an event and a task are
-     related when they carry at least one label in common, and the link is
-     stored in event_task_relations. The add row's <select> offers every
-     not-yet-linked event that already shares a label ("link an existing
-     event"), plus a "＋ New event…" sentinel that reveals a title input
+   - Subtasks -- the parent/child task list (tasks.parent_uid, a task->task
+     structural link). REMOVED 1.2 (task-model decision): tasks are flat and
+     independent; the parent/outcome aggregation is reproduced by a project
+     label plus its tasks, and multiple work sessions on one task are work
+     allocations (1.4), not child tasks.
+   - Related events -- the cross-type half: an event and a task are related
+     when they carry at least one label in common, and the link is stored
+     in event_task_relations. The add row's <select> offers every not-yet-
+     linked event that already shares a label ("link an existing event"),
+     plus a "＋ New event…" sentinel that reveals a title input
      (static/relations_picker.js) -- a new event inherits this task's
      labels server-side, which guarantees the shared-label rule. Each
      related row's ✕ unlinks (relations are associative, never cascade).
 
-   Both sub-add-forms are data-modal-keep-open: incremental edits, the
-   modal stays open and re-renders (modal.js's refreshModalContent).
-   Shared by task_detail.html (the full read-only view, header shown) and
+   The add form is data-modal-keep-open: incremental edits, the modal stays
+   open and re-renders (modal.js's refreshModalContent). Shared by
+   task_detail.html (the full read-only view, header shown) and
    task_form.html (the edit modal, same spot the old subtasks section sat;
-   no header there, just the compact lists + add rows, to fit the form). #}
-{% macro task_relations_section(task, subtasks, related_events, linkable_events, show_header=true) %}
+   no header there, just the compact list + add row, to fit the form). #}
+{% macro task_relations_section(task, related_events, linkable_events, show_header=true) %}
 {% set has_labels = (task.tags or []) | length > 0 %}
 {% if show_header %}
 <h2>
     Relations
-    <span class="checklist-progress">{{ subtasks|length + related_events|length }}</span>
+    {% if related_events %}<span class="checklist-progress">{{ related_events|length }}</span>{% endif %}
 </h2>
 {% endif %}
-<div class="relations-group">
-    <div class="relations-group-head">Subtasks
-        {% if subtasks %}<span class="checklist-progress">{{ subtasks|selectattr('status', 'in', ['done','archived'])|list|length }}/{{ subtasks|length }}</span>{% endif %}
-    </div>
-    {% if subtasks %}
-    <div class="checklist">
-        {% for st in subtasks %}
-        <div class="checklist-row {% if st.status in ('done', 'archived') %}is-done{% endif %}">
-            {% if st.status not in ('done', 'archived') %}
-            <form class="form-inline" method="post" action="/tasks/{{ st.uid }}/complete" data-modal-keep-open>
-                <button type="submit" class="checklist-check" title="Mark done">{{ icon('square') }}</button>
-            </form>
-            {% else %}
-            <span class="checklist-check is-done" style="cursor:default">{{ icon('check-square') }}</span>
-            {% endif %}
-            <a class="checklist-text" href="/tasks/{{ st.uid }}" data-modal>{{ st.title }}</a>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state" style="padding:10px 0">No subtasks yet.</div>
-    {% endif %}
-    <form method="post" action="/tasks" class="checklist-add-form" data-modal-keep-open>
-        <input type="hidden" name="parent_uid" value="{{ task.uid }}">
-        <input type="hidden" name="status" value="active">
-        <input type="text" name="title" placeholder="Add a subtask and press Enter" required>
-        <button type="submit" class="btn">Add</button>
-    </form>
-</div>
 <div class="relations-group">
     <div class="relations-group-head">Related events
         {% if related_events %}<span class="checklist-progress">{{ related_events|length }}</span>{% endif %}

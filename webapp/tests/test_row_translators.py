@@ -28,7 +28,6 @@ class TestTaskRow:
             "status": "in_progress",
             "progress": 0.5,
             "tags": ["work", "urgent"],
-            "parent_uid": "project-1",
             "recurrence": "FREQ=WEEKLY;BYDAY=MO,WE",
         }
         ics = task_row_to_ical(row)
@@ -46,7 +45,10 @@ class TestTaskRow:
         assert result["status"] == row["status"]
         assert result["progress"] == row["progress"]
         assert set(result["tags"]) == set(row["tags"])
-        assert result["parent_uid"] == row["parent_uid"]
+        # 1.2: parent_uid no longer round-trips -- subtasks were removed,
+        # so there's no RELATED-TO export/import (tasks are flat). The row
+        # built for translation never carries parent_uid at all now.
+        assert "parent_uid" not in result
         assert result["recurrence"] == row["recurrence"]
 
     def test_minimal_row(self):

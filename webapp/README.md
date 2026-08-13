@@ -4,6 +4,17 @@ Mobile/remote client: calendar, tasks, contacts, and a recurring class
 schedule, full CRUD, synced against a self-hosted Radicale (CalDAV/CardDAV)
 server.
 
+**Update 2026-08-13 (1.2, task-model decision):** subtasks are **removed
+outright** -- the open subtask-hierarchy vs. flat-tasks-plus-allocations
+conflict resolved as flat tasks + work allocations. `tasks.parent_uid` stays
+on disk for pre-1.2 data but is never written or read again; the parent's
+subtask list/quick-add, cascade delete, "sub" tags, and the iCal
+`RELATED-TO;RELTYPE=PARENT` round-trip are all gone, and the Relations card
+holds related events only. Parent/outcome aggregation is reproduced by a
+project label plus its tasks; multiple work sessions on one task become work
+allocations (a later release), not child tasks. This supersedes the
+"**Subtasks**" bullet of the 2026-07-31 update below.
+
 **Update 2026-07-31:** Tasks gained a Kanban board, subtasks, and
 checklists at explicit user request -- this reverses the "no project/
 board/tag-graph features by design" line that used to be here. The

@@ -101,7 +101,6 @@ class TestTaskImportanceUrgencySegmented:
                 tags="",
                 tags_labels=[],
                 recurrence="",
-                parent_uid="",
                 conn=conn,
             )
         tasks = db.list_tasks(conn)
@@ -121,7 +120,6 @@ class TestTaskImportanceUrgencySegmented:
             tags="",
             tags_labels=[],
             recurrence="",
-            parent_uid="",
             conn=conn,
         )
         tasks = db.list_tasks(conn)
@@ -139,7 +137,6 @@ class TestTaskImportanceUrgencySegmented:
             tags="",
             tags_labels=[],
             recurrence="",
-            parent_uid="",
             conn=conn,
         )
         tasks = db.list_tasks(conn)
@@ -153,7 +150,7 @@ class TestTaskImportanceUrgencySegmented:
             {
                 "uid": "t1", "title": "X", "description": "", "due_at": None, "start_at": None,
                 "importance": 3, "urgency": 2, "status": "active", "progress": 0, "tags": [],
-                "parent_uid": None, "recurrence": None, "created_at": now, "updated_at": now,
+                "recurrence": None, "created_at": now, "updated_at": now,
             },
         )
         resp = tasks_router.edit_task_form("t1", _request(), conn=conn)

@@ -64,7 +64,7 @@ class TestTaskCrudNeverTouchesBridge:
 
         assert "bridge" not in tasks_router.create_task.__code__.co_varnames
         tasks_router.create_task(title="Buy milk", description="", due_at="", importance="", urgency="", status="active",
-                                  tags="", recurrence="", parent_uid="", conn=conn)
+                                  tags="", recurrence="", conn=conn)
         row = db.list_tasks(conn)[0]
         assert row["title"] == "Buy milk"
         # No href/etag/calendar_path/list_path/raw_ics survive into the row.
@@ -138,7 +138,7 @@ class TestExplodingBridgeNeverInvoked:
 
         bridge = _ExplodingBridge()  # noqa: F841 -- deliberately unused, proves nothing needs it
         tasks_router.create_task(title="X", description="", due_at="", importance="", urgency="", status="active",
-                                  tags="", recurrence="", parent_uid="", conn=conn)
+                                  tags="", recurrence="", conn=conn)
         uid = db.list_tasks(conn)[0]["uid"]
         tasks_router.update_task(uid, title="Y", description="", due_at="", start_at="", importance="", urgency="",
                                   status="active", tags="", recurrence="", conn=conn)

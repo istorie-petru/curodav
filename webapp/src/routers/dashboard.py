@@ -1320,7 +1320,6 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
             "importance_items": IMPORTANCE_ITEMS,
             "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
-            "parent_uid": None,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "today": date.today().isoformat(),

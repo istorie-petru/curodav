@@ -323,21 +323,12 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
-    # Which of the rows on this page have their own subtasks -- app-wide,
-    # not just within the current filter/search (a subtask can easily not
-    # match whatever filter its parent does). Used only so the row's
-    # delete button can show an accurate "this also deletes N subtasks"
-    # confirmation (see tasks_list.html) instead of a generic one -- see
-    # plans/webapp-action-pipelines-audit.md's delete-confirmation finding.
-    parent_uids = {t["parent_uid"] for t in db.list_tasks(conn) if t.get("parent_uid")}
-
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
     ctx.update(
         {
             "open_tasks": open_tasks,
             "completed_tasks": completed_tasks,
-            "parent_uids": parent_uids,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
             "status_filters": STATUS_FILTERS,
@@ -501,7 +492,7 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_task_form(request: Request, parent_uid: str | None = None, habit: bool = False, conn=Depends(get_db)):
+def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
     # 2026-08-08 follow-up: Tasks > Habits' own "New" button (?habit=1)
     # renders a real, separate, stripped-down form now -- not task_form.html
     # with a field pre-checked -- direct feedback that a habit doesn't need
@@ -522,7 +513,6 @@ def new_task_form(request: Request, parent_uid: str | None = None, habit: bool =
                 "habit_label": habit_label,
             },
         )
-    parent = db.get_task(conn, parent_uid) if parent_uid else None
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "task_form.html",
@@ -534,7 +524,6 @@ def new_task_form(request: Request, parent_uid: str | None = None, habit: bool =
             "importance_items": IMPORTANCE_ITEMS,
             "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
-            "parent_uid": parent_uid,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             # 2026-08-08: Start date is a real field on the new-task form
@@ -559,7 +548,6 @@ def create_task(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
-    parent_uid: str = Form(""),
     target_per_day: str = Form("1"),
     conn=Depends(get_db),
 ):
@@ -594,16 +582,15 @@ def create_task(
         # 2026-08-08 direct feedback -- Start date is a real field on the
         # new-task form now too (task_form.html), not edit-only. Still
         # defaults to today if left blank (every caller that doesn't send
-        # start_at at all -- e.g. task_detail.html's subtask quick-add
-        # form, which only posts title/status/parent_uid -- keeps the old
-        # "starts today" behavior unchanged).
+        # start_at at all -- e.g. the relation picker's "＋ New task…" path
+        # in routers/calendar.py -- keeps the old "starts today" behavior
+        # unchanged).
         "start_at": start_at or date.today().isoformat(),
         "importance": int(importance) if importance else None,
         "urgency": int(urgency) if urgency else None,
         "status": status,
         "progress": _progress_for_status(status),
         "tags": _tags_list(tags),
-        "parent_uid": parent_uid or None,
         "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
         "target_per_day": target_per_day_value,
         "created_at": now,
@@ -613,12 +600,7 @@ def create_task(
     # call in this path anymore -- see db.py's Phase 1 comments and
     # features/architecture.md §1.
     db.upsert_task(conn, row)
-    # A subtask created from its parent's detail page (see task_detail.html's
-    # quick-add form) should land back on that same parent, not the flat
-    # /tasks list -- otherwise "add subtask" would feel like it navigated
-    # away rather than adding to what you were just looking at.
-    dest = f"/tasks/{parent_uid}" if parent_uid else "/tasks"
-    return RedirectResponse(url=dest, status_code=303)
+    return RedirectResponse(url="/tasks", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -653,16 +635,10 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         return JSONResponse({"error": "no tasks selected"}, status_code=400)
 
     if action == "delete":
-        # Same cascade-to-subtasks logic as the single-task delete_task
-        # below, just looped -- deliberately not deduped against uids that
-        # are themselves already in the selection (deleting a task twice,
-        # once directly and once as another selected task's subtask
-        # cascade, is a harmless no-op the second time: get_task/
-        # list_subtasks on an already-gone uid just returns nothing).
+        # Tasks are flat (1.2, task-model decision) -- no subtask cascade.
+        # The checklist-item cleanup below is kept for any rows a database
+        # from before the checklist/subtask removal still physically has.
         for uid in uids:
-            for child in db.list_subtasks(conn, uid):
-                db.delete_task(conn, child["uid"])
-                db.delete_checklist_items_for_task(conn, child["uid"])
             db.delete_task(conn, uid)
             db.delete_checklist_items_for_task(conn, uid)
         return JSONResponse({"ok": True, "count": len(uids)})
@@ -721,14 +697,6 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
 @router.get("/{uid}/edit")
 def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
     task = db.get_task(conn, uid)
-    # Same accurate-delete-confirmation reasoning as task_detail.html/
-    # tasks_list.html -- this form's own Delete button needs to know
-    # whether it's about to cascade too. db.list_subtasks (a direct,
-    # already-existing query) instead of the old ad hoc db.list_tasks()
-    # scan-and-filter -- also sidesteps db.list_tasks' default habit-task
-    # exclusion, which would otherwise silently undercount a habit-labeled
-    # subtask.
-    subtasks = db.list_subtasks(conn, uid) if task else []
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "task_form.html",
@@ -740,15 +708,8 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "importance_items": IMPORTANCE_ITEMS,
             "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
-            "parent_uid": None,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
-            "subtask_count": len(subtasks),
-            # 2026-08-08 ("add a way to add subtasks in place of
-            # [Recurrence]") -- the edit form shows the same compact
-            # subtasks list/add-row task_detail.html does now (see
-            # _task_relations.html), not just a count.
-            "subtasks": subtasks,
             # Relations card (2026-08-09) -- see _related_context above.
             **_related_context(conn, task),
             # Fallback only -- every task has a real start_at since
@@ -767,12 +728,9 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
 def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     task = db.get_task(conn, uid)
     ctx = _task_context(request)
-    parent = db.get_task(conn, task["parent_uid"]) if task and task.get("parent_uid") else None
     ctx.update(
         {
             "task": task,
-            "parent": parent,
-            "subtasks": db.list_subtasks(conn, uid) if task else [],
             # Relations card (2026-08-09) -- see _related_context above.
             **(_related_context(conn, task)),
         }
@@ -1027,16 +985,11 @@ def set_task_completion(
 
 @router.post("/{uid}/delete")
 def delete_task(uid: str, conn=Depends(get_db)):
-    # Cascade to subtasks -- a subtask with a parent_uid pointing at a task
-    # that no longer exists would be an orphan with no way to reach it from
-    # the UI (subtasks are only ever listed via their parent's detail page).
-    # Desktop doesn't cascade (its subtasks are independent objects you can
-    # still find via Table/Kanban/Timeline), but this app's only path to a
-    # subtask *is* its parent's detail page, so leaving them behind here
-    # would make them permanently unreachable rather than just "independent."
-    for child in db.list_subtasks(conn, uid):
-        db.delete_task(conn, child["uid"])
-        db.delete_checklist_items_for_task(conn, child["uid"])
+    # Tasks are flat (1.2, task-model decision) -- a task is an independent
+    # unit of work, so this deletes exactly the one task (plus its labels
+    # and relation links, via db.delete_task's own cleanup). The checklist-
+    # item cleanup below is kept for any rows a database from before the
+    # checklist/subtask removal still physically has.
     db.delete_task(conn, uid)
     db.delete_checklist_items_for_task(conn, uid)
     return RedirectResponse(url="/tasks", status_code=303)
@@ -1123,13 +1076,12 @@ def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_
 # --------------------------------------------------------------------- #
 # Checklist -- 2026-08-08 direct feedback ("merge checklists and subtasks
 # into one feature") -- the add/toggle/delete-single-item routes that used
-# to live here are gone; task_detail.html/task_form.html now show one
-# list, backed entirely by real subtasks (parent_uid tasks, already a
-# strictly more capable mechanism -- a subtask can carry its own due
-# date/importance/urgency/labels/subtasks of its own, a checklist item never
-# could). delete_checklist_items_for_task above is the one survivor
-# -- cascade cleanup for any checklist rows a database from before this
-# change still physically has (db.py's table itself is deliberately not
-# dropped, same "don't force-drop old data" convention as every other
-# removed-feature table in this app).
+# to live here are gone; task_detail.html/task_form.html showed one list,
+# backed entirely by real subtasks. The 1.2 task-model decision then
+# removed subtasks outright, so the merged list is gone entirely.
+# delete_checklist_items_for_task above is the one survivor -- cascade
+# cleanup for any checklist rows a database from before this change still
+# physically has (db.py's table itself is deliberately not dropped, same
+# "don't force-drop old data" convention as every other removed-feature
+# table in this app).
 # --------------------------------------------------------------------- #

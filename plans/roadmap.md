@@ -25,7 +25,7 @@ never hold Track A up.
 | Release | Main work (Track A) | Side work (Track B) | Depends on |
 |---|---|---|---|
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
-| `1.2` | Task-model decision (subtask conflict) | Universal command surface | 1.1 |
+| `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | Universal command surface | 1.1 |
 | `1.3` | Project-enabled labels + lifecycle | Widget consolidation | 1.2 |
 | `1.4` | Work allocations + project week calendar | Project check-in (optional) | 1.3 |
 | `1.5` | Task management & grouping | — | 1.3–1.4 |
@@ -53,8 +53,10 @@ prerequisite for trusting offline sync in 1.8) and **Contacts field parity**.
 ### 1.2 — Task model settled
 
 **Task-model decision** (`open-priority.md` § Subtask model — the open
-conflict): choose subtask-hierarchy vs. flat tasks + work allocations, and apply
-the schema change before any further task work. Small, but a hard gate for 1.3.
+conflict): **resolved 2026-08-13** — **flat tasks + work allocations**. The
+subtask hierarchy is removed outright; the schema change is applied (the old
+`tasks.parent_uid` column stays on disk, never written or read again) before any
+further task work. Small, but a hard gate for 1.3.
 
 Side work (independent): **Universal command surface** (search / picker /
 command palette) — self-contained, no model changes.

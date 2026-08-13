@@ -60,6 +60,15 @@ versioning:
   not labels; one shared aggregation service feeds Dashboard and every filter;
   WebDAV `PRIORITY` carries the combined axes (import maps back to urgency
   only). Shipped: `open-priority.md` § Virtual & derived states removed.
+- **1.2 — the task model decision** (2026-08-13 →): resolves the subtask
+  hierarchy vs. flat-tasks-plus-allocations conflict as **flat tasks + work
+  allocations** — subtasks are removed outright (the `tasks.parent_uid` column
+  stays on disk, never written or read again; the subtask cascade deletes, "sub"
+  tags, and iCal RELATED-TO subtask round-trip are gone; the Relations card
+  holds related events only). 0.4's "subtasks" and the earlier "task hierarchy &
+  contextual planning" decision are superseded. Shipped: `open-priority.md` §
+  Subtask model — the open conflict resolved. (Side work: universal command
+  surface.)
 
 Open work in `open-priority.md` and `open.md` ships as the minor releases
 `1.1` … `1.9` (see [`roadmap.md`](roadmap.md)); once all of it is implemented,

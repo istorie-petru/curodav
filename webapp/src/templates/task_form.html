@@ -27,13 +27,14 @@
      it") -- a real sibling <form> (task_relations_section's own add-row),
      not nested inside #task-form -- HTML doesn't allow nested forms, and
      task_detail.html's identical section already lives outside its own
-     page's main form for the same reason. Edit-only: a subtask needs a
-     real parent_uid (and a relation needs a real task uid) to attach to,
-     which a not-yet-saved new task doesn't have. 2026-08-09: the section
-     is now the merged Relations card (subtasks + related events). -->
+     page's main form for the same reason. Edit-only: a relation needs a
+     real task uid to attach to, which a not-yet-saved new task doesn't
+     have. 2026-08-09: the section is the merged Relations card (subtasks
+     + related events). 1.2: the subtasks half is removed -- tasks are
+     flat -- so the card now holds related events only. -->
 {% if task %}
-<div class="task-form-subtasks">
-    {{ task_relations_section(task, subtasks, related_events, linkable_events) }}
+<div class="relations-section">
+    {{ task_relations_section(task, related_events, linkable_events) }}
 </div>
 {% endif %}
 </div>
@@ -53,17 +54,9 @@
 {% set footer_back_label = 'Cancel' %}
 {% if task %}
 {% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% if subtask_count %}
-<!-- Consistent delete confirmation, 2026-08-01 -- see tasks_list.html's
-     identical split for the reasoning (undo for a plain task, an actual
-     confirm sheet -- not just a button label -- when it cascades). -->
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ task.title ~ '" and its ' ~ subtask_count ~ ' subtask' ~ ('s' if subtask_count != 1 else '') ~ '? This cannot be undone.' %}
-{% else %}
 {% set footer_delete_mode = 'undo' %}
 {% set footer_delete_label = task.title %}
 {% set footer_delete_redirect = '/tasks' %}
-{% endif %}
 {% endif %}
 {% set footer_primary_form = 'task-form' %}
 {% set footer_primary_label = 'Save' %}
