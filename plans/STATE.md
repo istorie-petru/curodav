@@ -25,6 +25,35 @@ session, right before the final commit of that session.
 - **Do not start:** anything under `1.4`+ in `roadmap.md` — it depends on the
   project stack (`1.3`) landing first.
 
+## Breadcrumbs for 1.3 (Project-enabled label stack)
+
+Written at the end of the 1.2 session so the 1.3 session can skip a full
+exploration pass. Read `open-priority.md` § Project-enabled label stack for
+the actual spec — this is only "where in the code," not "what to build."
+
+- **`label_config` table** — `webapp/src/db.py`, `CREATE TABLE` around line
+  250. Has `generate_space` (Space page toggle) but no bounded period or
+  lifecycle columns yet; 1.3 needs to add something like `is_project`,
+  `start_date`, `end_date`, `status` (Open/Pending/Pending Archiving/Archived)
+  here. Existing precedent for adding columns to this table: the
+  `_ensure_column` migration helper (`db.py` ~line 700).
+- **`project_label_for(conn, object_type, object_id)`** — `db.py` ~line 2126.
+  The current heuristic ("whichever attached label isn't a Space, chosen
+  alphabetically") that `open-priority.md`'s "Known open risks" flags as
+  interacting directly with this rework. 1.3 either resolves or deliberately
+  supersedes it once a label can be explicitly project-enabled instead of
+  inferred.
+- **`routers/labels.py`** — label management (`manage_labels`,
+  `label_detail`) lives here today; `label_detail.html`/`labels_manage.html`
+  are the templates. The project stack's dedicated sidebar page + Tasks view
+  + Week Calendar view (per the spec) are new surfaces, but the "a label can
+  carry extra behavior" plumbing (`_label_scope`, `set_label`) is the
+  existing pattern to extend rather than duplicate.
+- **Project cards' work-based progress** needs completed vs. scheduled work
+  per task — depends on the 1.1 aggregation service
+  (`webapp/src/derived_state.py`) for the counting pattern, even though work
+  allocations themselves aren't Slice 1.3's job (that's 1.4).
+
 ## How to run a session (slice discipline)
 
 1. Read this file. That's the whole session-start cost.
@@ -55,7 +84,7 @@ session, right before the final commit of that session.
 
 ```bash
 git status --short                                    # catch uncommitted WIP from a prior session
-cd webapp && PYTHONPATH=src ../.venv/bin/python -m pytest -q   # full suite, ~11s, 907+ tests
+cd webapp && PYTHONPATH=src ../.venv/bin/python -m pytest -q   # full suite, ~11s, 921+ tests
 ```
 
 Run both before assuming a clean starting point — WIP has been left
