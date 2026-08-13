@@ -99,10 +99,17 @@ edit/delete semantics.
 **Slice 1 shipped 2026-08-13** — the data model + semantics (allocations as
 linked events, hour aggregation, title-sync, delete-only-removes-the-block)
 plus a plain-form task-detail UI to schedule one; see `features/tasks.md` §
-Work allocations (1.4). **Still open**: the project week calendar itself
-(the drag-and-drop surface — no `/projects/{name}` page exists yet), the
-project-card hour-based progress swap, and hiding a completed task's future
-allocations from the active calendar. See `plans/STATE.md`'s breadcrumbs.
+Work allocations (1.4).
+
+**Slice 2 shipped 2026-08-14** — the project detail page (`GET
+/projects/{name}`) and its Tasks view (tasks filtered by the project's
+label, reusing the global Tasks page's row/inline-editing markup via a new
+shared `_task_row.html` macro); see `features/tasks.md` § Projects,
+"Project detail page + Tasks view". **Still open**: the Week Calendar view
+itself (the drag-and-drop scheduling surface — the detail page has no tab
+switcher yet since there's only one view), the project-card hour-based
+progress swap, and hiding a completed task's future allocations from the
+active calendar. See `plans/STATE.md`'s breadcrumbs.
 
 Side work (optional): **Project check-in** — a small post-stack addition.
 

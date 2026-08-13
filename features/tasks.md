@@ -169,11 +169,34 @@ task count, completed/remaining, nearest incomplete due date, and
 don't exist until 1.4, so there's no scheduled-work total to compute a real
 hour-based percentage from yet).
 
-**Deferred to 1.4/1.5** (not built): the project's own Tasks view + Week
-Calendar view, hour-based project-card progress, the global Tasks page's
-project grouping. A card's "Open" link goes to the label's existing
-generated page (`routers/labels.py`'s `label_detail`) in the meantime. Work
-allocations themselves (the underlying data model + a plain-form way to
-schedule one) shipped as 1.4's first slice — see "Work allocations (1.4)"
-above; the project-specific drag-and-drop calendar surface and the card
-progress swap are still open.
+**Project detail page + Tasks view (1.4 slice 2)** — `GET /projects/{name}`
+(`routers/projects.py::project_detail`) is the project's own page the spec
+calls for ("opening a project provides two principal views"); a card's
+"Open" link and title now go here instead of the label's generated page
+(`routers/labels.py`'s `label_detail`, which stays reachable directly but is
+no longer what a project links to). Ships the **Tasks view**: every task
+carrying the project's label, open/completed split same as the global Tasks
+page, with the identical interactive row — status/importance/urgency
+pill-selects and inline due date driven by `static/tasks_table.js`,
+delete-with-undo — extracted into a shared macro (`_task_row.html`, `{% from
+"_task_row.html" import task_row with context %}`) so both pages render the
+exact same markup instead of two copies. "+ New task" opens
+`/tasks/new?project=<name>`; `new_task_form` pre-checks that label on the
+form's chip multiselect (still removable) — including for a brand-new,
+empty project whose label has no `object_labels` rows yet, which
+`list_tag_names_in_use` alone wouldn't offer.
+
+No sort links or bulk-action bar on this table yet (the global Tasks page's
+`_tasks_toolbar.html` is tightly coupled to `/tasks*` routes/params — not
+reused here). No project-scoped filtering either; every project task shows.
+
+**Still open** (1.4 slice 3+): the **Week Calendar view** (the drag-and-drop
+scheduling surface — dragging a task onto a calendar block to create/resize/
+split a work allocation, ordinary events shown as subdued surrounding
+context); no Tasks/Week Calendar tab switcher exists yet since there's only
+one view to switch to. Hour-based project-card progress (`_project_card`'s
+`progress` is still completed/total task count — `db.task_work_hours` exists
+per-task since slice 1 but nothing aggregates it to project level). Hiding a
+completed task's future allocations from the active calendar (no calendar
+view renders work allocations specially yet). The global Tasks page's
+project grouping (1.5's job).

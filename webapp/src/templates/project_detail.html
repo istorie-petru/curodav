@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_task_row.html" import task_row with context %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<!-- Project detail page (1.4, plans/open-priority.md § Project pages &
+     views): "opening a project provides two principal views" -- this ships
+     the Tasks view. The Week Calendar view (the drag-and-drop scheduling
+     surface) is a later slice -- see plans/STATE.md's breadcrumbs -- so
+     there's no view-switcher here yet; adding one before a second view
+     exists would just be a dead tab. -->
+<div class="toolbar top-app-bar">
+    <a href="/projects" class="icon-btn" title="Back to Projects">{{ icon('chevron-left') }}</a>
+    <span class="cell-tag cal-{{ project.color }}">{% if project.icon %}{{ icon(project.icon, 'icon-sm') }} {% endif %}{{ project.name }}</span>
+    <span class="tag-usage-count" title="Lifecycle status">{{ project.status }}</span>
+    <div class="spacer"></div>
+    <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab title="New task">{{ icon('plus') }} New task</a>
+</div>
+<p class="settings-hint">
+    {{ project.start_date }} &ndash; {{ project.end_date }} &middot;
+    {{ project.completed_count }}/{{ project.task_count }} tasks completed &middot;
+    {{ project.progress }}% complete
+    {% if project.upcoming_deadline %} &middot; next due {{ project.upcoming_deadline[:10] }}{% endif %}
+</p>
+<div class="project-progress-bar"><div class="project-progress-fill" style="width:{{ project.progress }}%"></div></div>
+
+{% if open_tasks or completed_tasks %}
+<div class="card table-scroll">
+<table class="task-table" id="task-table">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Importance</th>
+            <th>Urgency</th>
+            <th>Due</th>
+            <th>Labels</th>
+            <th style="width:40px"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in open_tasks %}{{ task_row(t, show_select=false) }}{% endfor %}
+    </tbody>
+    {% if completed_tasks and open_tasks %}
+    <tbody>
+        <tr class="task-section-divider"><td colspan="7">Completed ({{ completed_tasks|length }})</td></tr>
+    </tbody>
+    {% endif %}
+    {% if completed_tasks %}
+    <tbody>
+        {% for t in completed_tasks %}{{ task_row(t, show_select=false) }}{% endfor %}
+    </tbody>
+    {% endif %}
+</table>
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('check-square') }}</div>
+    <div class="empty-state-title">No tasks yet</div>
+    <div class="empty-state-text">New tasks created here automatically carry the "{{ project.name }}" label.</div>
+    <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab>{{ icon('plus') }} New task</a>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

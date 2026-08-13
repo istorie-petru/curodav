@@ -93,7 +93,7 @@
             {% set ms_icon = 'tag' %}
             {% set ms_label = 'Labels' %}
             {% set ms_items = tag_name_items %}
-            {% set ms_selected = task.tags if task else [] %}
+            {% set ms_selected = task.tags if task else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}
             {% include "_widget_list_multiselect.html" %}

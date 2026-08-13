@@ -2,20 +2,21 @@
 Project-enabled label stack). A project is not a separate entity -- it's a
 label with `is_project=1` plus a bounded start/end period and a computed
 lifecycle (db.project_status). This router owns the dedicated Projects page
-(the primary interface the spec calls for) and the promote/demote/dates/
-archive actions that manage a label's Project behavior.
+(the primary interface the spec calls for), the promote/demote/dates/
+archive actions that manage a label's Project behavior, and (1.4) the
+project's own detail page.
 
-Scope note (1.3 vs 1.4/1.5): this slice ships the label + lifecycle + cards
-half of the spec. The project's own Tasks view / Week Calendar view and
-work allocations (`open-priority.md` § Work allocations, § Task & calendar
-semantics) are 1.4's job -- a project card here links out to the label's
-existing generated page (routers/labels.py's label_detail) for its task
-list in the meantime. Card progress is completed/total *task count*, not
-completed/total *scheduled work hours* -- work allocations (and therefore
-real hour-based progress) don't exist until 1.4; this is the interim
-"counting pattern" STATE.md's 1.3 breadcrumb calls for, reusing
-derived_state.py-style counting rather than inventing a second one 1.4
-would have to reconcile with.
+Scope note (1.3 vs 1.4/1.5): 1.3 shipped the label + lifecycle + cards half
+of the spec. 1.4 slice 2 (2026-08-14) added `project_detail` (`GET
+/projects/{name}`) -- the project's own page, currently just its Tasks
+view (§ Project pages & views: "opening a project provides two principal
+views"). The Week Calendar view (the drag-and-drop scheduling surface) is
+still open -- see plans/STATE.md's breadcrumbs. Card progress is still
+completed/total *task count*, not completed/total *scheduled work hours* --
+`db.task_work_hours` exists per-task (1.4 slice 1) but nothing aggregates it
+to project level yet; this is the interim "counting pattern" STATE.md's 1.3
+breadcrumb calls for, reusing derived_state.py-style counting rather than
+inventing a second one to reconcile later.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from fastapi.responses import RedirectResponse
 
 from .. import db
 from ..deps import get_db, templates
+from . import tasks as tasks_router
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -96,6 +98,37 @@ def list_projects(request: Request, conn=Depends(get_db)):
             "existing_labels": existing_labels,
         },
     )
+
+
+@router.get("/{name}")
+def project_detail(name: str, request: Request, conn=Depends(get_db)):
+    """The project's own page (1.4, `open-priority.md` § Project pages &
+    views): "opening a project provides two principal views" -- this ships
+    the first, the Tasks view. The Week Calendar view (the drag-and-drop
+    scheduling surface) is a later slice; see plans/STATE.md's breadcrumbs.
+
+    Tasks are filtered the same way `_project_card` counts them -- direct
+    `object_labels`-via-`tags` membership, no separate query layer (there's
+    no dedicated "tasks for a project" SQL helper; the label filter is
+    cheap enough as a plain Python pass, same idiom `_label_scope` in
+    routers/labels.py already uses for a label's generated page)."""
+    cfg = db.effective_label_config(conn, name)
+    if not cfg.get("is_project"):
+        return RedirectResponse(url="/projects", status_code=303)
+    project = _project_card(conn, cfg)
+    tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
+    open_tasks = [t for t in tasks if t.get("status") not in ("done", "archived")]
+    completed_tasks = [t for t in tasks if t.get("status") in ("done", "archived")]
+    ctx = tasks_router._task_context(request)
+    ctx.update(
+        {
+            "active_tab": "projects",
+            "project": project,
+            "open_tasks": open_tasks,
+            "completed_tasks": completed_tasks,
+        }
+    )
+    return templates.TemplateResponse("project_detail.html", ctx)
 
 
 def _redirect_with_conflict(name: str, start_date: str, end_date: str, conflict_name: str) -> RedirectResponse:

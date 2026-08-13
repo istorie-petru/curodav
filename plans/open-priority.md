@@ -122,6 +122,15 @@ be completed before the end date.
 
 ### Project pages & views
 
+**Tasks view shipped 2026-08-14 (1.4 slice 2)** — see `features/tasks.md` §
+Projects, "Project detail page + Tasks view": `GET /projects/{name}`, tasks
+filtered by the project's label, reusing the global Tasks page's row
+markup/inline editing. **Still open**: the Week Calendar view below (no
+`/projects/{name}/calendar` route or tab switcher yet), the visual layering
+of ordinary events vs. work allocations, and "create, edit... and organize"
+beyond what the reused row already offers (no project-scoped sort/filter/
+bulk actions).
+
 Projects receive a dedicated page in the main sidebar. This page is the primary
 interface for connecting project work with calendar time; task scheduling is
 deliberately **not** distributed through the global Calendar, which stays

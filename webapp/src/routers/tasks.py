@@ -509,7 +509,7 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
+def new_task_form(request: Request, habit: bool = False, project: str = "", conn=Depends(get_db)):
     # 2026-08-08 follow-up: Tasks > Habits' own "New" button (?habit=1)
     # renders a real, separate, stripped-down form now -- not task_form.html
     # with a field pre-checked -- direct feedback that a habit doesn't need
@@ -531,6 +531,14 @@ def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
             },
         )
     tag_names = db.list_tag_names_in_use(conn)
+    # `project` may be a freshly-promoted label with no object_labels rows
+    # yet (a brand-new, empty project's "+ New task" is exactly this case)
+    # -- list_tag_names_in_use only returns labels already *in use*, so the
+    # chip multiselect below would have nothing to pre-check without this.
+    # Same "offer it even though nothing points at it yet" idea as
+    # projects.html's promote-form datalist.
+    if project and project not in tag_names:
+        tag_names = sorted(tag_names + [project], key=str.lower)
     return templates.TemplateResponse(
         "task_form.html",
         {
@@ -549,6 +557,12 @@ def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
             # than starting blank.
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+            # 1.4 (Project pages & views: "newly created tasks automatically
+            # receive the project's label") -- the project detail page's "+
+            # New task" link opens this same form with ?project=<name>, which
+            # only pre-checks the label chip (still removable, same as any
+            # other prefill in this app) rather than silently forcing it.
+            "prefill_tags": [project] if project else [],
         },
     )
 
