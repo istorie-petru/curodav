@@ -250,6 +250,22 @@ def _related_context(conn, task: dict) -> dict:
     return {"related_events": related}
 
 
+def _work_allocation_context(conn, task: dict) -> dict:
+    """Context keys every task view modal needs for its Work sessions card
+    (1.4, plans/open-priority.md § Work allocations): the scheduled work
+    blocks for this task plus the scheduled/completed/remaining hour totals
+    they add up to. `None` task -> empty, same "templates never branch on
+    the object existing" convention as _related_context above."""
+    if task is None:
+        return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}}
+    allocations = db.list_work_allocations_for_task(conn, task["uid"])
+    allocations = calendar_router._annotate_calendar_colors(conn, allocations)
+    return {
+        "work_allocations": allocations,
+        "work_hours": db.task_work_hours(conn, task["uid"]),
+    }
+
+
 def _progress_for_status(status: str) -> float:
     """Same derived-progress mapping desktop uses (progress_for_status() in
     core/models/object.py) -- progress isn't independently editable here
@@ -493,7 +509,7 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
+def new_task_form(request: Request, habit: bool = False, project: str = "", conn=Depends(get_db)):
     # 2026-08-08 follow-up: Tasks > Habits' own "New" button (?habit=1)
     # renders a real, separate, stripped-down form now -- not task_form.html
     # with a field pre-checked -- direct feedback that a habit doesn't need
@@ -515,6 +531,14 @@ def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
             },
         )
     tag_names = db.list_tag_names_in_use(conn)
+    # `project` may be a freshly-promoted label with no object_labels rows
+    # yet (a brand-new, empty project's "+ New task" is exactly this case)
+    # -- list_tag_names_in_use only returns labels already *in use*, so the
+    # chip multiselect below would have nothing to pre-check without this.
+    # Same "offer it even though nothing points at it yet" idea as
+    # projects.html's promote-form datalist.
+    if project and project not in tag_names:
+        tag_names = sorted(tag_names + [project], key=str.lower)
     return templates.TemplateResponse(
         "task_form.html",
         {
@@ -533,6 +557,12 @@ def new_task_form(request: Request, habit: bool = False, conn=Depends(get_db)):
             # than starting blank.
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+            # 1.4 (Project pages & views: "newly created tasks automatically
+            # receive the project's label") -- the project detail page's "+
+            # New task" link opens this same form with ?project=<name>, which
+            # only pre-checks the label chip (still removable, same as any
+            # other prefill in this app) rather than silently forcing it.
+            "prefill_tags": [project] if project else [],
         },
     )
 
@@ -713,6 +743,8 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             # Relations card (2026-08-09) -- see _related_context above.
             **_related_context(conn, task),
+            # Work sessions card (1.4) -- see _work_allocation_context above.
+            **_work_allocation_context(conn, task),
             # Fallback only -- every task has a real start_at since
             # create_task always sets one now, this just covers a legacy
             # row from before that was true.
@@ -734,6 +766,8 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
             "task": task,
             # Relations card (2026-08-09) -- see _related_context above.
             **(_related_context(conn, task)),
+            # Work sessions card (1.4) -- see _work_allocation_context above.
+            **(_work_allocation_context(conn, task)),
         }
     )
     # Recurring-task completion history (heatmap + streaks), Phase 5 rework.
@@ -1071,6 +1105,42 @@ def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_
     event itself is left entirely alone (relations are associative, not
     ownership; no cascade, matching delete_event/delete_task's cleanup)."""
     db.remove_event_task_relation(conn, event_uid, uid)
+    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Work allocations -- 1.4, plans/open-priority.md § Work allocations, §
+# Task & calendar semantics. A work allocation is a calendar Event linked
+# to this task via event_task_relations.is_work_allocation=1 (db.py's
+# create_work_allocation) -- a scheduled block of work time, distinct from
+# an ordinary Relations-card link. This is the task-detail form entry point
+# for scheduling one directly (start/end datetime); the project's Week
+# Calendar view (not yet built) will be the drag-and-drop surface for the
+# same underlying operation.
+# --------------------------------------------------------------------- #
+
+
+@router.post("/{uid}/work-allocations")
+def add_work_allocation(
+    uid: str,
+    start_at: str = Form(...),
+    end_at: str = Form(...),
+    conn=Depends(get_db),
+):
+    task = db.get_task(conn, uid)
+    start_at = start_at.strip()
+    end_at = end_at.strip()
+    if task is not None and start_at and end_at and end_at > start_at:
+        db.create_work_allocation(conn, uid, start_at, end_at)
+    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+
+
+@router.post("/{uid}/work-allocations/remove")
+def remove_work_allocation(uid: str, event_uid: str = Form(...), conn=Depends(get_db)):
+    """"Deleting a work allocation removes only that scheduled block -- not
+    the task." db.delete_work_allocation is delete_event under a name that
+    states that at the call site; `uid` (the task) isn't touched."""
+    db.delete_work_allocation(conn, event_uid)
     return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 

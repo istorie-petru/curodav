@@ -15,53 +15,87 @@ session, right before the final commit of that session.
   `project_label_for`'s supersession (an explicit `is_project=1` label now
   wins over the old "first non-Space label" heuristic), and the dedicated
   `/projects` page (`routers/projects.py`) with promote/dates/demote/archive
-  actions and progress cards. See `features/tasks.md` § Projects. Not
-  shipped (deferred to 1.4/1.5, per spec): the project's own Tasks view +
-  Week Calendar view, work allocations, hour-based progress (cards use
-  completed/total task *count* as the interim proxy), and the global Tasks
-  page's project grouping. Side work (Widget consolidation + Streak + Next
-  Deadline) not started — optional, doesn't block 1.4+.
-- **Next slice:** `1.4` — Work allocations + project week calendar
-  (`open-priority.md` § Work allocations, § Task & calendar semantics). Adds
-  the calendar-event-linked-to-a-task model and the project's Week Calendar
-  view; unlocks real hour-based project-card progress (currently a
-  task-count proxy, see `db.projects.py`'s `_project_card`). `open.md`'s
-  Command palette actions follow-up is still a fine smaller slice instead,
-  whenever a session wants something self-contained.
-- **Do not start:** anything under `1.5`+ in `roadmap.md` — 1.5 depends on
-  1.4's work allocations landing first.
+  actions and progress cards. See `features/tasks.md` § Projects.
+- **Shipped:** `1.4` slice 1, complete (2026-08-13) — work allocations' data
+  model + semantics: `event_task_relations.is_work_allocation`,
+  `db.create_work_allocation`/`list_work_allocations_for_task`/
+  `task_work_hours`/`delete_work_allocation`/`work_allocation_task_uid`,
+  title-sync both directions (`upsert_task` -> allocation events; editing an
+  allocation event's title -> the task), and a plain-form "Work sessions"
+  card on the task detail/edit modals (`POST /tasks/{uid}/work-allocations`
+  [`/remove`]). See `features/tasks.md` § Work allocations (1.4). 20 new
+  tests (`test_work_allocations.py`).
+- **Shipped:** `1.4` slice 2, complete (2026-08-14) — the project detail
+  page: `GET /projects/{name}` (`routers/projects.py::project_detail`) and
+  its Tasks view (every task carrying the project's label, open/completed
+  split, the same interactive row — pill-selects, inline due date,
+  delete-with-undo — the global Tasks page uses, extracted into a shared
+  `_task_row.html` macro so neither page duplicates the markup). "+ New
+  task" opens `/tasks/new?project=<name>`, which now pre-checks that label
+  on the form even for a brand-new project with no tasks yet (a real gap
+  `list_tag_names_in_use` alone had — fixed in `new_task_form`). Project
+  cards' "Open" link now points here instead of `label_detail`. See
+  `features/tasks.md` § Projects, "Project detail page + Tasks view". 12
+  new tests (`test_project_detail.py`), full suite 980 passed.
+- **Shipped:** `1.4` slice 3, complete (2026-08-13) — the project's **Week
+  Calendar view**: `GET /projects/{name}/calendar`
+  (`routers/projects.py::project_calendar`), reusing the global Week grid's
+  own layout math (`grid_layout.layout_day`) rather than duplicating it. An
+  "Unscheduled tasks" list (open project tasks with no work allocation yet,
+  `{project} > {task} · {remaining}h` items using `db.task_work_hours`, not
+  `_task_row.html`) drags onto the grid to create a work allocation
+  (`create_allocation` -> `db.create_work_allocation`); existing blocks
+  drag to move/resize (`move_allocation`, a plain `start_at`/`end_at` edit)
+  or delete (`delete_allocation` -> `db.delete_work_allocation`, block
+  only, never the task). Ordinary events and other projects' allocations
+  render as subdued context (`.context-event`); this project's own
+  allocations are prominent (`.work-allocation`). Added a Tasks/Week
+  Calendar tab switcher to `project_detail.html`, following
+  `calendar_week.html`'s own `.segmented.calendar-subnav` precedent. This
+  was the last piece of "Project pages & views" and closes out 1.4's main
+  line — see `features/tasks.md` § Projects, "Week Calendar view". 15 new
+  tests (`test_project_calendar.py`), full suite 995 passed. **1.4 is now
+  fully shipped** (`pyproject.toml` bumped to `1.4.0`); still open and
+  deliberately deferred (doesn't block 1.5+): `_project_card`'s `progress`
+  wired to real `db.task_work_hours` totals (still the 1.3 task-count
+  proxy), and hiding a completed task's future allocations from the
+  calendar (`open-priority.md` § Task & calendar semantics' "future
+  allocations are hidden" rule).
+- **Next slice:** `1.5` — **Task management & grouping** (`roadmap.md`'s
+  1.5 row, depends on 1.3–1.4, both now shipped): read `open-priority.md`
+  § Task model for the actual spec before picking a slice out of it — the
+  global Tasks page as a table groupable by project, single-project-per-task,
+  and the deadline-vs-work-allocation distinction are the shape of that
+  work, but size one slice out of it rather than attempting it whole (see
+  this file's own session-workflow step 2). `open.md`'s Command palette
+  actions follow-up (1.2 side work) and 1.4's optional Project check-in
+  side work are both still fine smaller, self-contained slices instead,
+  whenever a session wants one.
+- **Do not start:** anything under `1.6`+ in `roadmap.md` until `1.5` is
+  done — `1.6`/`1.7` depend on it (see the Depends-on column).
 
-## Breadcrumbs for 1.4 (Work allocations + project week calendar)
+## Breadcrumbs for 1.4's two still-deferred items
 
-Written at the end of the 1.3 session so the 1.4 session can skip a full
-exploration pass. Read `open-priority.md` § Work allocations and § Task &
-calendar semantics for the actual spec — this is only "where in the code,"
-not "what to build."
+1.4's main line (work allocations + both project views) is fully shipped.
+Two small pieces were deliberately deferred throughout 1.4 (per
+`open-priority.md`'s own "still open" notes) and don't block 1.5 — pick
+either up as its own small, self-contained slice whenever convenient,
+not as part of a 1.5 slice:
 
-- **`label_config.is_project`/`start_date`/`end_date`/`archived_at`** —
-  `webapp/src/db.py`, columns added 1.3 (`CREATE TABLE` around line 254,
-  `_ensure_column` migrations ~line 700). `db.list_project_labels`,
-  `db.project_status`, `db.find_overlapping_project`, `db.archive_project`
-  are the 1.3-shipped helpers 1.4 builds on top of, not around.
-- **`routers/projects.py`** — the Projects page + promote/dates/demote/
-  archive actions (`/projects`). 1.4's Week Calendar view is a new sub-page
-  under this same router (e.g. `/projects/{name}/calendar`), not a
-  separate router — keep the "one router per surface family" pattern
-  `routers/labels.py`'s own docstring describes.
-- **`_project_card` in `routers/projects.py`** — `progress` is currently
-  completed/total *task count* (1.3's interim proxy, see its own docstring
-  note). 1.4 should replace this with real scheduled-work totals once work
-  allocations exist, per `open-priority.md`'s "Project progress is based on
-  work, not merely task count" rule — this is a known, deliberate stopgap,
-  not an oversight to preserve.
-- **Work allocations are Events, not a new table** — `open-priority.md` § Work
-  allocations: "A work allocation... is a calendar Event linked to that
-  task." Look at how `events` currently relates to `tasks`
-  (`event_task_relations`, `webapp/src/db.py`) before inventing a new
-  relationship — the existing Relations-card plumbing
-  (`features/tasks.md` § Relations) may already be most of what's needed,
-  possibly extended with a "this relation is a work allocation, not just a
-  reference" marker.
+- **`_project_card`'s `progress`** (`routers/projects.py`) — still
+  completed/total *task count* (1.3's interim proxy). `db.task_work_hours`
+  exists per-task (1.4 slice 1) and is now reachable for a real project's
+  tasks via the Week Calendar view (slice 3) — swap `progress` to
+  aggregate `task_work_hours` across a project's tasks, per
+  `open-priority.md`'s "Project progress is based on work, not merely task
+  count" rule.
+- **Hiding a completed task's future allocations** — `open-priority.md` §
+  Work allocations: "future allocations are hidden from the active
+  calendar" once a task completes, without deleting them. Not implemented
+  anywhere yet — needs a filter applied in `routers/projects.py::
+  project_calendar` (and any future calendar view that renders work
+  allocations), keyed off `db.work_allocation_task_uid` + the linked
+  task's `status`.
 
 ## How to run a session (slice discipline)
 

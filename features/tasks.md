@@ -73,6 +73,40 @@ candidate event on every page load; the overlay now asks
 `GET /api/search?for_task=<uid>` for exactly the page of shared-label,
 not-already-linked candidates it needs.
 
+## Work allocations (1.4)
+
+A work allocation is *not* a new object — it's an ordinary `event_task_relations`
+row with `is_work_allocation=1` (see `open-priority.md` § Work allocations, §
+Task & calendar semantics). `db.create_work_allocation(conn, task_uid,
+start_at, end_at)` creates a plain event titled after the task, inheriting its
+labels, linked with the flag set; `db.list_work_allocations_for_task`/
+`db.task_work_hours` read it back (`scheduled`/`completed`/`remaining` hours,
+computed from each block's actual start/end — no independent estimate field).
+`db.delete_work_allocation` is `delete_event` under a name that states the
+1.4 rule at the call site: removes the scheduled block, never the task.
+
+**Title semantics** — a work allocation's title is owned by its task, not
+independently editable: `upsert_task` calls `db.sync_work_allocation_titles`
+whenever it runs, pushing the task's current title onto every linked
+allocation event; editing a work-allocation event's own title
+(`routers/calendar.py`'s `update_event`) redirects the new value onto the
+task instead of writing it to the event, which then gets synced back onto
+every allocation of that task (including the one just edited) — so the
+task is the single source of truth for the text, never a name conflict
+between the two.
+
+**UI shipped:** a "Work sessions" card on the task detail/edit modals
+(`_task_work_allocations.html`, `POST /tasks/{uid}/work-allocations` +
+`/work-allocations/remove`) — a plain start/end datetime form, the
+functional (non-drag) way to schedule a block; and (1.4 slice 3) the
+project's own Week Calendar view (`GET /projects/{name}/calendar`) — the
+drag-and-drop surface the spec describes, dragging a task onto the grid to
+create an allocation, dragging/resizing an existing block to move it. See
+§ Projects' "Week Calendar view" below for the full shape. **Still open,
+deferred:** wiring `_project_card`'s `progress` to real scheduled-work
+hours instead of task count, and hiding a completed task's future
+allocations from the active calendar — see `plans/STATE.md`.
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`
@@ -135,7 +169,62 @@ task count, completed/remaining, nearest incomplete due date, and
 don't exist until 1.4, so there's no scheduled-work total to compute a real
 hour-based percentage from yet).
 
-**Deferred to 1.4/1.5** (not built): the project's own Tasks view + Week
-Calendar view, work allocations, hour-based progress, the global Tasks
-page's project grouping. A card's "Open" link goes to the label's existing
-generated page (`routers/labels.py`'s `label_detail`) in the meantime.
+**Project detail page + Tasks view (1.4 slice 2)** — `GET /projects/{name}`
+(`routers/projects.py::project_detail`) is the project's own page the spec
+calls for ("opening a project provides two principal views"); a card's
+"Open" link and title now go here instead of the label's generated page
+(`routers/labels.py`'s `label_detail`, which stays reachable directly but is
+no longer what a project links to). Ships the **Tasks view**: every task
+carrying the project's label, open/completed split same as the global Tasks
+page, with the identical interactive row — status/importance/urgency
+pill-selects and inline due date driven by `static/tasks_table.js`,
+delete-with-undo — extracted into a shared macro (`_task_row.html`, `{% from
+"_task_row.html" import task_row with context %}`) so both pages render the
+exact same markup instead of two copies. "+ New task" opens
+`/tasks/new?project=<name>`; `new_task_form` pre-checks that label on the
+form's chip multiselect (still removable) — including for a brand-new,
+empty project whose label has no `object_labels` rows yet, which
+`list_tag_names_in_use` alone wouldn't offer.
+
+No sort links or bulk-action bar on this table yet (the global Tasks page's
+`_tasks_toolbar.html` is tightly coupled to `/tasks*` routes/params — not
+reused here). No project-scoped filtering either; every project task shows.
+The project detail page now has a Tasks/Week Calendar tab switcher
+(`.segmented.calendar-subnav`, same plain-link pattern
+`calendar_week.html`'s own subnav uses) linking to the Week Calendar view
+below.
+
+**Week Calendar view (1.4 slice 3)** — `GET /projects/{name}/calendar`
+(`routers/projects.py::project_calendar`) is the project's scheduling
+surface: the current week's grid (reusing `grid_layout.layout_day`, the
+same function `routers/calendar.py::week_view` calls, rather than a second
+copy of that math), with an "Unscheduled tasks" list beside it (open
+project tasks with no work allocation yet, each item reading `{project} >
+{task} · {remaining}h` — the task's `db.task_work_hours` remaining total,
+not the shared `_task_row.html` macro). Dragging a list item onto the grid
+POSTs `task_uid`/`start_at`/`end_at` to `POST
+/projects/{name}/calendar/allocations` (`create_allocation`), which
+defensively re-checks the task actually carries this project's label
+before calling `db.create_work_allocation` — the same function the
+task-detail "Work sessions" card's plain form already calls, kept as an
+alongside fallback, not replaced. Dragging or resizing an existing block
+POSTs to `POST /projects/{name}/calendar/allocations/{event_uid}/move`
+(`move_allocation`) — a plain `start_at`/`end_at` edit via `db.upsert_event`,
+the same technique `routers/calendar.py::reschedule_event` already uses for
+the global grid's own drag, just a form-POST/redirect endpoint instead of
+that route's JSON/fetch contract, to match this page's other actions. Each
+block's delete button POSTs to `.../{event_uid}/delete`
+(`delete_allocation` -> `db.delete_work_allocation`) — removes only the
+scheduled block, never the task (§ Task & calendar semantics). Ordinary
+calendar events (and any other project's own work allocations) render as
+visually subdued context (`.context-event`, reduced opacity); only this
+project's own work allocations (`.work-allocation`) are prominent and
+interactive.
+
+**Still open, deferred** (doesn't block 1.5+): hour-based project-card
+progress (`_project_card`'s `progress` is still completed/total task
+count — `db.task_work_hours` exists per-task since slice 1 but nothing
+aggregates it to project level). Hiding a completed task's future
+allocations from the active calendar (the Week Calendar view now exists
+but doesn't filter for this yet). The global Tasks page's project grouping
+(1.5's job).

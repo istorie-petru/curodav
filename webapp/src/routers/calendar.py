@@ -845,11 +845,19 @@ def update_event(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     existing = db.get_event(conn, uid) or {}
+    # 1.4 (§ Task & calendar semantics): "changing the title of a
+    # work-allocation event changes the associated task rather than
+    # creating an independent event with a conflicting name." A
+    # work-allocation event's title is owned by its task -- write the new
+    # title there (upsert_task's title-sync then writes it back onto this
+    # event, and every other allocation of the same task) instead of onto
+    # this row directly.
+    work_task_uid = db.work_allocation_task_uid(conn, uid)
     row = dict(existing)
     row.update(
         {
             "uid": uid,
-            "title": title,
+            "title": existing.get("title", title) if work_task_uid else title,
             "description": description,
             "start_at": start_at,
             "end_at": end_at or None,
@@ -863,6 +871,13 @@ def update_event(
         }
     )
     db.upsert_event(conn, row)
+    if work_task_uid:
+        task = db.get_task(conn, work_task_uid)
+        if task and task.get("title") != title:
+            task_row = dict(task)
+            task_row["title"] = title
+            task_row["updated_at"] = datetime.now(timezone.utc).isoformat()
+            db.upsert_task(conn, task_row)
     return RedirectResponse(url="/calendar", status_code=303)
 
 

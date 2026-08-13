@@ -1,0 +1,62 @@
+{# Shared task-table row (extracted 2026-08-14, 1.4 Project pages & views'
+   Tasks view) -- originally a local macro inside tasks_list.html; the
+   project detail page's own Tasks view needed the exact same row (status/
+   importance/urgency pill-selects driven by static/tasks_table.js, the
+   inline due-date input, the delete-with-undo form) without duplicating
+   ~50 lines of markup, so it moved here and both pages `{% from
+   "_task_row.html" import task_row with context %}` -- `with context` so
+   the macro still reads `statuses`/`status_colors`/`status_labels`/
+   `importance_labels`/`importance_colors`/`urgency_labels`/
+   `urgency_colors` straight from whichever page's context provides them
+   (both tasks.py's `_task_context` and projects.py's project_detail route
+   supply the same keys), same as when this was an inline macro.
+
+   `show_select` (default true) gates the row-select checkbox column --
+   only the global Tasks page's bulk-actions bar (static/tasks_table.js)
+   uses it; the project detail page has no scoped bulk-action surface yet,
+   so it renders one column narrower rather than a dead checkbox nothing
+   reads. #}
+{% macro task_row(t, show_select=true) %}
+<tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
+    {% if show_select %}
+    <td>
+        <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}">
+    </td>
+    {% endif %}
+    <td>
+        <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+    </td>
+    <td>
+        <select class="pill-select pill-{{ status_colors[t.status] }}" data-uid="{{ t.uid }}" data-field="status">
+            {% for s in statuses %}
+            <option value="{{ s }}" data-color="{{ status_colors[s] }}" {% if t.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <select class="pill-select {% if t.importance %}pill-{{ importance_colors[t.importance] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="importance">
+            <option value="" data-color="gray" {% if not t.importance %}selected{% endif %}>&mdash;</option>
+            {% for v, label in importance_labels.items() %}
+            <option value="{{ v }}" data-color="{{ importance_colors[v] }}" {% if t.importance == v %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <select class="pill-select {% if t.urgency %}pill-{{ urgency_colors[t.urgency] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="urgency">
+            <option value="" data-color="gray" {% if not t.urgency %}selected{% endif %}>&mdash;</option>
+            {% for v, label in urgency_labels.items() %}
+            <option value="{{ v }}" data-color="{{ urgency_colors[v] }}" {% if t.urgency == v %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
+    </td>
+    <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}</td>
+    <td style="text-align:right">
+        <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}">
+            <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+        </form>
+    </td>
+</tr>
+{% endmacro %}

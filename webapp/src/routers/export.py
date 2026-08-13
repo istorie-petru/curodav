@@ -358,7 +358,9 @@ def _restore(conn, payload: dict[str, Any]) -> int:
     # after both pools are up. add_event_task_relation is idempotent, so a
     # backup with duplicate rows (or a re-restore) is harmless.
     for row in payload.get("event_task_relations", []):
-        db.add_event_task_relation(conn, row["event_uid"], row["task_uid"])
+        db.add_event_task_relation(
+            conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
+        )
     return count
 
 

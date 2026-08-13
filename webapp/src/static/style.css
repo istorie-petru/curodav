@@ -1717,6 +1717,46 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
 
+/* Project Week Calendar (1.4 slice 3, templates/project_calendar.html) --
+   ordinary calendar events render as visually subdued context ("reduced
+   opacity or a restrained hashed treatment", § Project pages & views) so
+   the project's own work allocations (.work-allocation, full-strength
+   .cal-* color) stay visually prominent by contrast. `pointer-events:none`
+   -- context events are read-only here, not draggable/clickable, since
+   this page's grid interactions are entirely about the project's own
+   allocations. */
+.time-event.context-event{
+  opacity:.35; cursor:default; pointer-events:none;
+}
+.time-event.work-allocation{
+  cursor:grab; padding-right:20px; /* room for the delete button's corner */
+}
+.time-event.work-allocation .te-name{text-decoration:none; color:inherit;}
+.time-event.work-allocation .work-allocation-delete{
+  position:absolute; top:1px; right:1px; margin:0;
+}
+.time-event.work-allocation .work-allocation-delete .icon-btn{
+  padding:2px; color:inherit; opacity:.85;
+}
+.time-event.work-allocation .work-allocation-delete .icon-btn:hover{opacity:1;}
+.allday-task.context-event{opacity:.5;}
+
+.project-calendar-layout{display:flex; gap:16px; align-items:flex-start;}
+.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto;}
+.project-calendar-grid{flex:1; min-width:0;}
+.unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
+.unscheduled-task-item{
+  display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px;
+  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab; font-size:13px;
+}
+.unscheduled-task-item:active{cursor:grabbing;}
+.project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
+
+@media (max-width:900px){
+  .project-calendar-layout{flex-direction:column;}
+  .project-calendar-unscheduled{width:100%; max-height:none;}
+}
+
 /* Calendar colors -- shared by month chips, week/day time-grid blocks,
    all-day chips, and the calendar-visibility multiselect. Fixed,
    user-choice hues -- a label/event/calendar stays its chosen hue in

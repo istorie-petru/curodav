@@ -44,7 +44,7 @@
 {% for p in projects %}
 <div class="card habit-card">
     <div class="habit-card-header">
-        <a href="/labels/{{ p.name }}" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px">
+        <a href="/projects/{{ p.name }}" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px">
             <span class="cell-tag cal-{{ p.color }}">{% if p.icon %}{{ icon(p.icon, 'icon-sm') }} {% endif %}{{ p.name }}</span>
         </a>
         <span class="tag-usage-count" title="Lifecycle status">{{ p.status }}</span>
@@ -59,7 +59,7 @@
     </p>
 
     <div class="label-actions">
-        <a href="/labels/{{ p.name }}" class="btn ghost">{{ icon('external-link', 'icon-sm') }} Open</a>
+        <a href="/projects/{{ p.name }}" class="btn ghost">{{ icon('external-link', 'icon-sm') }} Open</a>
         <form method="post" action="/projects/{{ p.name }}/dates" class="form-inline">
             <label class="settings-hint">Start <input type="date" name="start_date" value="{{ p.start_date }}"></label>
             <label class="settings-hint">End <input type="date" name="end_date" value="{{ p.end_date }}"></label>
