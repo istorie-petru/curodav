@@ -107,6 +107,33 @@ deferred:** wiring `_project_card`'s `progress` to real scheduled-work
 hours instead of task count, and hiding a completed task's future
 allocations from the active calendar — see `plans/STATE.md`.
 
+## Task model (1.5)
+
+**Single project per task (shipped 2026-08-13)** — a task may carry exactly
+one `is_project=1` label plus any number of ordinary labels; multiple project
+ownership at once is rejected (`open-priority.md` § Task model). Enforced at
+the single write boundary all label writes go through, `db.upsert_task`'s
+`tags` argument: if the resulting label set would include more than one
+project label, it raises `db.MultipleProjectLabelsError` *before* anything is
+written (no partial task-row-without-labels write). The task create/edit
+forms (`routers/tasks.py`'s `create_task`/`update_task`) and the Tasks page's
+bulk "Add label" action (`POST /tasks/bulk` action `"tag"`) all catch it and
+surface a plain 400 with the offending label names — the create/edit forms
+via `HTTPException(400, ...)` (same convention as this app's other
+plain-form validation errors, e.g. `routers/banners.py`'s upload checks);
+the bulk path applies per-uid (so tasks with no conflict in the same batch
+still get their label) and returns `{"ok": false, "error": ..., "failed":
+[...]}` at 400 listing which uids were rejected. No client-side prevention in
+the labels picker itself — `_widget_list_multiselect.html` is shared by
+tasks/events/contacts/habits and has no project-label concept, so adding
+mutual exclusion there would leak a task-only rule into unrelated pickers;
+server-side rejection with a clear message was the smaller, more consistent
+change. Enforcement is write-boundary only: a task that already carries two
+project labels from before this change (direct DB edit, restored backup)
+keeps them untouched until something next calls `upsert_task` with a new
+`tags` list for it — no migration strips existing data. See
+`tests/test_single_project_per_task.py`.
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`

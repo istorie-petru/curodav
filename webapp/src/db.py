@@ -953,9 +953,49 @@ _TASK_JSON_FIELDS: tuple[str, ...] = ()
 _TASK_DONE_STATUSES = ("done", "archived")
 
 
+class MultipleProjectLabelsError(ValueError):
+    """Raised by upsert_task when its `tags` would give a task more than one
+    is_project=1 label at once (1.5, § Task model: "never multiple projects
+    at once, because multiple project ownership would make workload,
+    progress, deadlines, and scheduling ambiguous"). Carries the offending
+    project label names so the caller (routers/tasks.py) can surface a
+    clear 400, the same "raise, don't silently corrupt or 500" pattern
+    db.find_overlapping_project's callers already follow for the sibling
+    "projects may not overlap" rule -- except here there's no confirm-anyway
+    escape hatch, since the rule has no legitimate override the way a
+    calendar overlap does.
+
+    Deliberately checked only at this write boundary (upsert_task's `tags`
+    argument), not as a stored CHECK constraint or a startup scan: a task
+    that already carries two project labels via a pre-1.5 data state (direct
+    DB edit, restored backup, etc.) is left exactly as-is until the next time
+    something calls upsert_task with a new tags list for it -- see
+    plans/open-priority.md § Task model and this rule's own test coverage in
+    test_single_project_per_task.py for the "don't silently corrupt existing
+    data" requirement."""
+
+    def __init__(self, project_names: list[str]):
+        self.project_names = list(project_names)
+        names = ", ".join(self.project_names)
+        super().__init__(f"A task may belong to only one project label at a time (got: {names}).")
+
+
+def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -> None:
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    selected = sorted({t for t in tags if t in project_names}, key=str.lower)
+    if len(selected) > 1:
+        raise MultipleProjectLabelsError(selected)
+
+
 def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
+    # Validated before anything is written (not just before set_object_labels
+    # further down) so a rejected label set never leaves a partial write --
+    # the task row's other columns and its labels are kept consistent by
+    # never touching either on a rejected call.
+    if tags is not None:
+        _reject_multiple_project_labels(conn, tags)
     # completed_at (2026-08-07, see the `tasks` CREATE TABLE comment) is
     # always auto-managed here, deliberately ignoring whatever value the
     # caller's dict happens to carry -- every existing caller builds its

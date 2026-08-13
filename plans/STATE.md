@@ -61,13 +61,30 @@ session, right before the final commit of that session.
   proxy), and hiding a completed task's future allocations from the
   calendar (`open-priority.md` § Task & calendar semantics' "future
   allocations are hidden" rule).
-- **Next slice:** `1.5` — **Task management & grouping** (`roadmap.md`'s
-  1.5 row, depends on 1.3–1.4, both now shipped): read `open-priority.md`
-  § Task model for the actual spec before picking a slice out of it — the
-  global Tasks page as a table groupable by project, single-project-per-task,
-  and the deadline-vs-work-allocation distinction are the shape of that
-  work, but size one slice out of it rather than attempting it whole (see
-  this file's own session-workflow step 2). `open.md`'s Command palette
+- **Shipped:** `1.5` slice — **single-project-per-task**, complete
+  (2026-08-13) — `db.upsert_task`'s `tags` argument now rejects a label set
+  carrying more than one `is_project=1` label at once
+  (`db.MultipleProjectLabelsError`, raised before anything is written, so a
+  rejected call leaves no partial write). Wired into the task create/edit
+  forms (`routers/tasks.py`'s `create_task`/`update_task`, surfaced as
+  `HTTPException(400, ...)`, same convention as this app's other plain-form
+  validation errors) and the Tasks page's bulk "Add label" action (`POST
+  /tasks/bulk`, applied per-uid so non-conflicting tasks in the same batch
+  still get their label, 400 with the rejected uids listed) — the three real
+  paths that could put a second project label on a task. No client-side
+  prevention in the labels picker itself (`_widget_list_multiselect.html` is
+  shared by tasks/events/contacts/habits with no project concept); rejecting
+  server-side with a clear message was the smaller, more consistent change.
+  Enforcement is write-boundary only — a pre-existing task with two project
+  labels (direct DB edit, restored backup) is left untouched until something
+  next writes new tags for it, confirmed by test. See `features/tasks.md`
+  § Task model, 12 new tests (`test_single_project_per_task.py`), full suite
+  1007 passed.
+- **Next slice:** `1.5`'s remaining pieces (`roadmap.md`'s 1.5 row,
+  `open-priority.md` § Task model): the global Tasks page as a table
+  groupable by project, and the deadline-vs-work-allocation distinction.
+  Size one slice out of these rather than attempting both at once (see this
+  file's own session-workflow step 2). `open.md`'s Command palette
   actions follow-up (1.2 side work) and 1.4's optional Project check-in
   side work are both still fine smaller, self-contained slices instead,
   whenever a session wants one.

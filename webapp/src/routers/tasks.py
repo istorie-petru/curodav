@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
@@ -630,7 +630,16 @@ def create_task(
     # Phase 1 (label-space rework): plain SQL write, no Radicale/bridge
     # call in this path anymore -- see db.py's Phase 1 comments and
     # features/architecture.md §1.
-    db.upsert_task(conn, row)
+    # 1.5 (single-project-per-task, § Task model): db.upsert_task rejects a
+    # `tags` list carrying more than one is_project=1 label -- surfaced here
+    # as a plain 400 with the offending label names, same "raise, don't
+    # silently 500" convention as this router's other Form-POST validation
+    # (routers/banners.py's upload-type/size checks are the closest existing
+    # precedent for a plain-form endpoint erroring this way).
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return RedirectResponse(url="/tasks", status_code=303)
 
 
@@ -708,6 +717,20 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         mode = payload.get("mode")  # "add" | "remove"
         if not tags_to_apply or mode not in ("add", "remove"):
             return JSONResponse({"error": "tags and mode ('add'/'remove') required"}, status_code=400)
+        # 1.5 (single-project-per-task): bulk "Add label" is a real path to
+        # putting a second project label on a task (tasks_list.html's
+        # bulk-actions-bar Labels picker offers every project label just
+        # like any other), so it needs the same db.upsert_task guard the
+        # single-task create/edit forms get. Applied per-uid rather than
+        # pre-validated as a batch since whether a given task ends up with
+        # two project labels depends on that task's own existing tags, not
+        # just the labels being added; tasks already updated earlier in the
+        # loop keep their change (partial application, matching how "delete"
+        # and "status" above have no all-or-nothing rollback either), and
+        # the response reports which uids were rejected so the client can
+        # surface a clear error instead of a silent partial success.
+        failed: list[dict[str, str]] = []
+        applied = 0
         for uid in uids:
             row = db.get_task(conn, uid)
             if row is None:
@@ -719,8 +742,30 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
                 tags.difference_update(tags_to_apply)
             row["tags"] = sorted(tags)
             row["updated_at"] = datetime.now(timezone.utc).isoformat()
-            db.upsert_task(conn, row)
-        return JSONResponse({"ok": True, "count": len(uids)})
+            try:
+                db.upsert_task(conn, row)
+            except db.MultipleProjectLabelsError as exc:
+                failed.append({"uid": uid, "title": row.get("title") or uid, "error": str(exc)})
+                continue
+            applied += 1
+        if failed:
+            # A plain 400 (not a 200/207 "partial success") even though
+            # `applied` tasks already got their change written -- the bulk
+            # picker's own JS (static/tasks_table.js's bulkPost) only ever
+            # branches on resp.ok, so a non-2xx is what actually surfaces the
+            # toast; the client reloads on success, so any already-applied
+            # rows are picked up correctly on the next bulk action or page
+            # load regardless of this response's status code.
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "count": applied,
+                    "error": f"{len(failed)} task(s) already have a project label and can't take a second one.",
+                    "failed": failed,
+                },
+                status_code=400,
+            )
+        return JSONResponse({"ok": True, "count": applied})
 
     return JSONResponse({"error": f"unknown action '{action}'"}, status_code=400)
 
@@ -841,7 +886,10 @@ def update_task(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    db.upsert_task(conn, row)
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return RedirectResponse(url="/tasks", status_code=303)
 
 

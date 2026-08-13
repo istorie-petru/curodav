@@ -282,7 +282,14 @@ Tasks are independent units of work; the parent-task/subtask hierarchy is
 removed (see the open conflict below). A task may belong to exactly **one**
 project label and may additionally carry any number of ordinary labels — never
 multiple projects at once, because multiple project ownership would make
-workload, progress, deadlines, and scheduling ambiguous. A task may exist
+workload, progress, deadlines, and scheduling ambiguous. **Shipped
+2026-08-13**: enforced at `db.upsert_task`'s `tags` argument
+(`db.MultipleProjectLabelsError` if it would give a task more than one
+`is_project=1` label at once) — the task create/edit forms and the Tasks
+page's bulk "Add label" action all surface this as a plain 400, not a silent
+overwrite; a pre-existing task with two project labels from before this
+change is left alone until something next writes new tags for it. See
+`features/tasks.md` § Task model, "Single project per task." A task may exist
 without a project and continue as an ordinary standalone to-do; in-project tasks
 are not structurally different, since the project provides context rather than
 changing the task's fundamental data model.

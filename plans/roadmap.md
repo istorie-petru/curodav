@@ -129,6 +129,13 @@ Tasks page as a table groupable by project, single-project-per-task, deadline
 vs. work-allocation distinction, completed tasks staying visible. Uses the
 allocations from 1.4.
 
+- ~~Single-project-per-task~~ **shipped 2026-08-13** — `db.upsert_task`
+  rejects a `tags` list carrying more than one `is_project=1` label
+  (`db.MultipleProjectLabelsError`), surfaced as a plain 400 from the task
+  create/edit forms and the bulk "Add label" action. Still open: the Tasks
+  page as a groupable-by-project table, and the deadline-vs-work-allocation
+  distinction.
+
 ### 1.6 — Scheduling
 
 **Schedule & recurrence rework** (`open-priority.md` § Schedule & recurrence
