@@ -134,6 +134,31 @@ keeps them untouched until something next calls `upsert_task` with a new
 `tags` list for it — no migration strips existing data. See
 `tests/test_single_project_per_task.py`.
 
+**Table view groupable by project (shipped 2026-08-13)** — `GET /tasks`
+takes a `group_by` query param (`"none"` default/absent, `"project"`);
+absent/`"none"` renders exactly as before (fully backward-compatible with
+existing links/bookmarks). `group_by=project`
+(`routers/tasks.py::_group_tasks_by_project`) clusters the already-filtered,
+already-sorted task list under project-name headers, reusing
+`db.project_label_for` per task — the same "which label is the project"
+lookup the project detail page uses — rather than a second implementation.
+Named groups sort alphabetically (case-insensitive); tasks with no project
+label fall into a "No project" bucket rendered last. Grouping is applied
+independently to the open and completed splits (composes with the existing
+"completed stays visible, pushed below open, separated by a divider" rule,
+`tasks_list.html`) and after every other filter (date/status/importance/
+urgency/label/search) and after the active `sort`/`dir`, so within a group
+tasks keep the page's current sort order. The toggle lives in
+`_tasks_toolbar.html` as a "Group by" fancy dropdown (None/Project),
+Table-view only, following the same `_filter_dropdown.html` single-select
+pattern and shared `#tasks-filters-form` every other Tasks filter already
+uses, so switching it preserves every other active query param. Grouping
+only adds header `<tr>`s and splits rows across more `<tbody>` elements —
+row markup itself (`_task_row.html`) and `static/tasks_table.js`'s
+`tr[data-uid]`/`.row-select`/`select.pill-select` selectors are unchanged.
+See `tests/test_tasks_grouping.py`. Still open in 1.5: the
+deadline-vs-work-allocation distinction (`open-priority.md` § Task model).
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`

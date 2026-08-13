@@ -298,6 +298,34 @@ _SORT_KEYS = {
 }
 
 
+def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
+    """1.5 slice ("Tasks page as a table groupable by project", see
+    plans/open-priority.md § Task model): cluster an already-filtered/
+    already-sorted task list under project headers, reusing
+    db.project_label_for -- the same "which of this task's labels, if any,
+    is the project" lookup the project detail page relies on -- rather
+    than reimplementing that logic. Named groups are sorted alphabetically
+    (case-insensitive); a task with no project label falls into a "No
+    project" bucket rendered last (deliberate choice, not required by the
+    spec: named projects are the primary organizing unit here, so they
+    lead). Within each group, task order is preserved exactly as passed in
+    -- callers sort *before* grouping so a group's own tasks keep the
+    page's active `sort`/`dir`."""
+    buckets: dict[str | None, list[dict]] = {}
+    order: list[str | None] = []
+    for t in tasks:
+        proj = db.project_label_for(conn, "task", t["uid"])
+        if proj not in buckets:
+            buckets[proj] = []
+            order.append(proj)
+        buckets[proj].append(t)
+    named = sorted((p for p in order if p is not None), key=str.lower)
+    groups = [{"name": p, "tasks": buckets[p]} for p in named]
+    if None in buckets:
+        groups.append({"name": None, "tasks": buckets[None]})
+    return groups
+
+
 @router.get("")
 def list_tasks(
     request: Request,
@@ -309,6 +337,7 @@ def list_tasks(
     q: str | None = None,
     sort: str = "due_at",
     dir: str = "asc",
+    group_by: str = "none",
     conn=Depends(get_db),
 ):
     _auto_archive_if_configured(conn)
@@ -340,12 +369,28 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
+    # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
+    # opt-in via ?group_by=project (default "none" is exactly today's
+    # behavior, so a bookmarked/existing URL without the param is
+    # unaffected). Groups are built *after* the open/completed split and
+    # *after* sorting, so grouping composes with both the existing
+    # completed-stays-visible-but-separated rule and the active sort/dir
+    # instead of replacing either.
+    open_groups = None
+    completed_groups = None
+    if group_by == "project":
+        open_groups = _group_tasks_by_project(conn, open_tasks)
+        completed_groups = _group_tasks_by_project(conn, completed_tasks)
+
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
     ctx.update(
         {
             "open_tasks": open_tasks,
             "completed_tasks": completed_tasks,
+            "group_by": group_by,
+            "open_groups": open_groups,
+            "completed_groups": completed_groups,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
             "status_filters": STATUS_FILTERS,

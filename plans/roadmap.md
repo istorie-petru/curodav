@@ -135,6 +135,12 @@ allocations from 1.4.
   create/edit forms and the bulk "Add label" action. Still open: the Tasks
   page as a groupable-by-project table, and the deadline-vs-work-allocation
   distinction.
+- ~~Tasks page as a table groupable by project~~ **shipped 2026-08-13** —
+  `GET /tasks?group_by=project` clusters the open/completed splits under
+  project-name headers (`routers/tasks.py::_group_tasks_by_project`, reusing
+  `db.project_label_for`), "No project" bucket sorted last, composes with
+  every existing filter/sort; a "Group by" toggle in `_tasks_toolbar.html`.
+  Still open: the deadline-vs-work-allocation distinction.
 
 ### 1.6 — Scheduling
 

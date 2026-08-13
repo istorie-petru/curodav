@@ -309,7 +309,17 @@ The Tasks page provides a database/table-style management interface in which
 tasks can be grouped by their project label, letting project work be viewed
 together without a separate project-specific task type or hierarchy. Completed
 tasks remain visible in project views, so the project retains a meaningful
-record of its work.
+record of its work. **Shipped 2026-08-13**: `GET /tasks?group_by=project`
+clusters the Table view's open/completed splits under project-name headers
+(`routers/tasks.py::_group_tasks_by_project`, reusing `db.project_label_for`
+— the same per-task "which label is the project" lookup the project detail
+page uses), a "No project" bucket sorted last after the named groups, a
+"Group by" toggle added to `_tasks_toolbar.html`. Composes with every
+existing filter and the active sort — grouping is applied after filtering
+and sorting, so a group's tasks keep the page's sort order. Default/absent
+`group_by` renders unchanged. See `features/tasks.md` § Task model, "Table
+view groupable by project." Still open: the deadline-vs-work-allocation
+distinction below.
 
 The global Calendar remains focused on calendar management — viewing, creating,
 editing, moving, and organizing events, without project-specific allocation

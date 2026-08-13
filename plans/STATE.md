@@ -80,11 +80,34 @@ session, right before the final commit of that session.
   next writes new tags for it, confirmed by test. See `features/tasks.md`
   § Task model, 12 new tests (`test_single_project_per_task.py`), full suite
   1007 passed.
-- **Next slice:** `1.5`'s remaining pieces (`roadmap.md`'s 1.5 row,
-  `open-priority.md` § Task model): the global Tasks page as a table
-  groupable by project, and the deadline-vs-work-allocation distinction.
-  Size one slice out of these rather than attempting both at once (see this
-  file's own session-workflow step 2). `open.md`'s Command palette
+- **Shipped:** `1.5` slice — **Tasks page groupable by project**, complete
+  (2026-08-13) — `GET /tasks` takes a `group_by` query param (`"none"`
+  default/absent, fully backward-compatible with existing links/bookmarks;
+  `"project"`). `group_by=project` clusters the Table view's open/completed
+  splits under project-name headers (`routers/tasks.py::
+  _group_tasks_by_project`, reusing `db.project_label_for` — the same
+  per-task "which label is the project" lookup the project detail page
+  uses), named groups sorted alphabetically, a "No project" bucket sorted
+  last. Composes with every existing date/status/importance/urgency/label/
+  search filter and the active `sort`/`dir` — grouping is applied after
+  both, so a group's tasks keep the page's sort order; the existing
+  completed-stays-visible-but-separated split is preserved, just grouped
+  independently on each side. A "Group by" toggle (None/Project) was added
+  to `_tasks_toolbar.html`, Table-view only, following the same
+  `_filter_dropdown.html` single-select pattern and shared
+  `#tasks-filters-form` every other Tasks filter already uses. Grouping
+  only adds header `<tr>`s and splits rows across more `<tbody>` elements —
+  `_task_row.html` markup and `static/tasks_table.js`'s selectors are
+  unchanged. See `features/tasks.md` § Task model, "Table view groupable by
+  project", 10 new tests (`test_tasks_grouping.py`), full suite 1017
+  passed.
+- **Next slice:** `1.5`'s one remaining piece (`roadmap.md`'s 1.5 row,
+  `open-priority.md` § Task model): the deadline-vs-work-allocation
+  distinction — a task deadline (work must be completed by a particular
+  time) is explicit and separate from a work allocation (the user intends
+  to spend a particular amount of time on it at a particular time); this
+  distinction isn't yet reflected anywhere in the UI/data model beyond the
+  two fields already existing independently. `open.md`'s Command palette
   actions follow-up (1.2 side work) and 1.4's optional Project check-in
   side work are both still fine smaller, self-contained slices instead,
   whenever a session wants one.
