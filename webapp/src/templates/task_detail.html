@@ -51,10 +51,16 @@
             <span class="detail-meta-label">Status</span>
             <span class="detail-meta-value"><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></span>
         </div>
-        {% if task.priority %}
+        {% if task.importance %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Priority</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ priority_colors[task.priority] }}">{{ priority_labels[task.priority] }}</span></span>
+            <span class="detail-meta-label">Importance</span>
+            <span class="detail-meta-value"><span class="cell-tag tag-{{ importance_colors[task.importance] }}">{{ importance_labels[task.importance] }}</span></span>
+        </div>
+        {% endif %}
+        {% if task.urgency %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Urgency</span>
+            <span class="detail-meta-value"><span class="cell-tag tag-{{ urgency_colors[task.urgency] }}">{{ urgency_labels[task.urgency] }}</span></span>
         </div>
         {% endif %}
         {% if task_list %}

@@ -100,6 +100,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT NOT NULL DEFAULT '',
     start_at TEXT,
     due_at TEXT,
+    -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
+    -- derived states): Importance/Urgency replace the old WebDAV `priority`
+    -- concept. Two explicit semantic axes, each 1..3 (higher = more
+    -- important/urgent); NULL = unset. Their effective values are derived
+    -- deterministically from explicit values + label rules + temporal state
+    -- (src/derived_state.py); the old `priority` column stays physically on
+    -- disk for pre-1.1 databases but is no longer referenced by app code.
+    importance INTEGER,
+    urgency INTEGER,
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
@@ -242,6 +251,18 @@ CREATE TABLE IF NOT EXISTS label_config (
     -- set_object_labels). Optional -- a label without one just uses its
     -- full name everywhere.
     abbreviation TEXT,
+    -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
+    -- derived states): label behavior rules feeding the Importance/Urgency
+    -- effective-value derivation. `importance` is the importance this label
+    -- implies for anything carrying it (1..3, NULL = no rule); `urgency_
+    -- threshold_days` makes this label imply urgency (level 3) once the
+    -- carrying entity's date falls within that many days ahead (NULL = no
+    -- rule). Persistent, stored configuration belonging to the label -- the
+    -- one category of derived-state input that is deliberately *not* a
+    -- query-time calculation (see that section's "Project behavior and
+    -- other persistent label behaviors are the exception").
+    importance INTEGER,
+    urgency_threshold_days INTEGER,
     created_at TEXT
 );
 
@@ -625,6 +646,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # Timeline a label-based grouping to replace it (see
     # routers/timeline.py).
     _ensure_column(conn, "tasks", "timeline_lane", "INTEGER")
+    # 1.1 (virtual & derived states) -- Importance/Urgency replace the old
+    # `priority` concept (see the `tasks` CREATE TABLE comment above). Same
+    # "column added after the table already existed on disk" situation as
+    # every other _ensure_column here; the old `priority` column stays
+    # physically present, unused.
+    _ensure_column(conn, "tasks", "importance", "INTEGER")
+    _ensure_column(conn, "tasks", "urgency", "INTEGER")
     # Streak widget (2026-08-07) -- see the `tasks` CREATE TABLE comment
     # above for the full rationale.
     _ensure_column(conn, "tasks", "completed_at", "TEXT")
@@ -663,6 +691,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # convention as every other column; an existing on-disk database that
     # never wrote one simply defaults to NULL (= no abbreviation).
     _ensure_column(conn, "label_config", "abbreviation", "TEXT")
+    # 1.1 (virtual & derived states) -- label behavior rules feeding the
+    # Importance/Urgency derivation (see the label_config CREATE TABLE
+    # comment above).
+    _ensure_column(conn, "label_config", "importance", "INTEGER")
+    _ensure_column(conn, "label_config", "urgency_threshold_days", "INTEGER")
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -906,7 +939,7 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # to carry it through.
     cols = [
         "uid", "title", "description",
-        "start_at", "due_at", "priority", "status", "progress",
+        "start_at", "due_at", "importance", "urgency", "status", "progress",
         "parent_uid", "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
     ]
@@ -1054,7 +1087,7 @@ def list_tasks(
             params.extend(excluded_uids)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY (due_at IS NULL), due_at ASC, priority ASC"
+    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
 
@@ -1094,7 +1127,7 @@ def list_subtasks(conn: sqlite3.Connection, parent_uid: str) -> list[dict[str, A
     which also doesn't recurse into grandchildren on the parent's own detail
     view (each subtask gets its own detail page for that)."""
     rows = conn.execute(
-        "SELECT * FROM tasks WHERE parent_uid = ? ORDER BY (due_at IS NULL), due_at ASC, priority ASC",
+        "SELECT * FROM tasks WHERE parent_uid = ? ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC",
         (parent_uid,),
     ).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
@@ -1139,11 +1172,12 @@ def list_event_task_relations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[dict[str, Any]]:
     """Every task currently linked to `event_uid`, ordered the same way
-    list_tasks orders (undated last, then due date, then priority) so a
-    Relations card's list reads like every other task list in the app."""
+    list_tasks orders (undated last, then due date, then importance/
+    urgency) so a Relations card's list reads like every other task list
+    in the app."""
     rows = conn.execute(
         "SELECT tasks.* FROM tasks JOIN event_task_relations r ON r.task_uid = tasks.uid "
-        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC, tasks.priority ASC",
+        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC, tasks.importance DESC, tasks.urgency DESC",
         (event_uid,),
     ).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
@@ -1638,6 +1672,8 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "generate_space": 0,
     "dashboard_preset_json": None,
     "abbreviation": None,
+    "importance": None,
+    "urgency_threshold_days": None,
     "created_at": None,
 }
 
@@ -1687,7 +1723,8 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     this file."""
     cols = (
         "name", "color", "icon", "description", "parent_name",
-        "generate_space", "dashboard_preset_json", "abbreviation", "created_at",
+        "generate_space", "dashboard_preset_json", "abbreviation",
+        "importance", "urgency_threshold_days", "created_at",
     )
     existing = get_label_config(conn, row["name"]) or {}
     data = dict(row)
@@ -1701,6 +1738,17 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         [data.get(c) for c in cols],
     )
     conn.commit()
+
+
+def list_label_rules(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    """{label name: effective label config} for every label -- the resolved
+    rules the `important`/`urgent` derived-state filters and the dashboard's
+    aggregation service feed to src/derived_state.py. Built once per view
+    (never per task) via list_labels, which already returns each label's
+    effective config filled with defaults, so an `Exam` label with
+    `importance=3` configured contributes that rule to every task carrying
+    it."""
+    return {cfg["name"]: cfg for cfg in list_labels(conn)}
 
 
 def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:

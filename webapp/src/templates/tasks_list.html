@@ -67,7 +67,7 @@
 </div>
 
 {% macro sort_link(key, label) %}
-<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&priority_filter={{ active_priority_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
+<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&importance_filter={{ active_importance_filter }}&urgency_filter={{ active_urgency_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
 {% endmacro %}
 
 {% if open_tasks or completed_tasks %}
@@ -78,7 +78,8 @@
             <th style="width:26px"></th>
             <th>{{ sort_link('title', 'Title') }}</th>
             <th>{{ sort_link('status', 'Status') }}</th>
-            <th>{{ sort_link('priority', 'Priority') }}</th>
+            <th>{{ sort_link('importance', 'Importance') }}</th>
+            <th>{{ sort_link('urgency', 'Urgency') }}</th>
             <th>{{ sort_link('due_at', 'Due') }}</th>
             <th>Labels</th>
             <th style="width:40px"></th>
@@ -118,10 +119,18 @@
             </select>
         </td>
         <td>
-            <select class="pill-select {% if t.priority %}pill-{{ priority_colors[t.priority] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="priority">
-                <option value="" data-color="gray" {% if not t.priority %}selected{% endif %}>&mdash;</option>
-                {% for p, label in priority_labels.items() %}
-                <option value="{{ p }}" data-color="{{ priority_colors[p] }}" {% if t.priority == p %}selected{% endif %}>{{ label }}</option>
+            <select class="pill-select {% if t.importance %}pill-{{ importance_colors[t.importance] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="importance">
+                <option value="" data-color="gray" {% if not t.importance %}selected{% endif %}>&mdash;</option>
+                {% for v, label in importance_labels.items() %}
+                <option value="{{ v }}" data-color="{{ importance_colors[v] }}" {% if t.importance == v %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <select class="pill-select {% if t.urgency %}pill-{{ urgency_colors[t.urgency] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="urgency">
+                <option value="" data-color="gray" {% if not t.urgency %}selected{% endif %}>&mdash;</option>
+                {% for v, label in urgency_labels.items() %}
+                <option value="{{ v }}" data-color="{{ urgency_colors[v] }}" {% if t.urgency == v %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
         </td>
@@ -158,7 +167,7 @@
          header row (not just a CSS class) makes the boundary obvious even
          scrolling through a long table. -->
     <tbody>
-        <tr class="task-section-divider"><td colspan="7">Completed ({{ completed_tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="8">Completed ({{ completed_tasks|length }})</td></tr>
     </tbody>
     {% endif %}
     {% if completed_tasks %}
@@ -171,7 +180,7 @@
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_priority_filter != 'all' or _apuid or _aguid %}
+    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_importance_filter != 'all' or active_urgency_filter != 'all' or _apuid or _aguid %}
     <div class="empty-state-title">No tasks match this filter</div>
     <div class="empty-state-text">Try a different label, or clear the search and filters above.</div>
     {% elif is_inbox %}

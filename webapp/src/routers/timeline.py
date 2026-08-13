@@ -30,15 +30,19 @@ from .labels import CAL_COLOR_FOREGROUND, CAL_COLOR_HEX
 from .tasks import (
     DATE_FILTER_LABELS,
     DATE_FILTERS,
-    PRIORITY_FILTER_LABELS,
-    PRIORITY_FILTERS,
+    IMPORTANCE_FILTER_LABELS,
+    IMPORTANCE_FILTERS,
     STATUS_FILTER_LABELS,
     STATUS_FILTERS,
-    _apply_date_filter,
-    _apply_label_filter,
-    _apply_priority_filter,
-    _apply_status_filter,
+    URGENCY_FILTER_LABELS,
+    URGENCY_FILTERS,
     _active_filter_count,
+    _apply_date_filter,
+    _apply_importance_filter,
+    _apply_label_filter,
+    _apply_status_filter,
+    _apply_urgency_filter,
+    _task_label_rules,
 )
 
 router = APIRouter(tags=["timeline"])
@@ -83,7 +87,8 @@ def _build_context(
     q: str | None = None,
     date_filter: str = "all",
     status_filter: str = "all",
-    priority_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
     label: str | None = None,
 ) -> dict:
     # Timeline's gutter is organized by *label*: assign_swimlanes groups
@@ -102,16 +107,18 @@ def _build_context(
     # for every other view.
     tasks = [t for t in db.list_tasks(conn, q=q) if t.get("due_at") and t["status"] != "archived"]
     # Phase 9b toolbar rework: Timeline gains the same date/status/
-    # priority/label filters Table/Board already have, reusing the exact
-    # same helpers rather than duplicating the filtering logic (see
-    # routers/tasks.py). Archived tasks are already excluded above by
+    # importance/urgency/label filters Table/Board already have, reusing
+    # the exact same helpers rather than duplicating the filtering logic
+    # (see routers/tasks.py). Archived tasks are already excluded above by
     # Timeline's own long-standing convention (a Gantt bar for something
     # already done/archived isn't useful), so picking `status_filter=
     # archived` here yields an empty timeline rather than reintroducing
     # them -- a deliberate, narrow edge case, not a bug.
-    tasks = _apply_date_filter(tasks, date_filter)
+    label_rules = _task_label_rules(conn)
+    tasks = _apply_date_filter(tasks, date_filter, label_rules)
     tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_priority_filter(tasks, priority_filter)
+    tasks = _apply_importance_filter(tasks, importance_filter)
+    tasks = _apply_urgency_filter(tasks, urgency_filter)
     tasks = _apply_label_filter(tasks, label)
 
     start, end = tl.compute_range(tasks)
@@ -246,12 +253,19 @@ def timeline_view(
     q: str | None = None,
     date_filter: str = "all",
     status_filter: str = "all",
-    priority_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
     label: str | None = None,
     conn=Depends(get_db),
 ):
     ctx = _build_context(
-        conn, q=q, date_filter=date_filter, status_filter=status_filter, priority_filter=priority_filter, label=label
+        conn,
+        q=q,
+        date_filter=date_filter,
+        status_filter=status_filter,
+        importance_filter=importance_filter,
+        urgency_filter=urgency_filter,
+        label=label,
     )
     ctx.update(
         {
@@ -262,14 +276,19 @@ def timeline_view(
             "date_filter_labels": DATE_FILTER_LABELS,
             "status_filters": STATUS_FILTERS,
             "status_filter_labels": STATUS_FILTER_LABELS,
-            "priority_filters": PRIORITY_FILTERS,
-            "priority_filter_labels": PRIORITY_FILTER_LABELS,
+            "importance_filters": IMPORTANCE_FILTERS,
+            "importance_filter_labels": IMPORTANCE_FILTER_LABELS,
+            "urgency_filters": URGENCY_FILTERS,
+            "urgency_filter_labels": URGENCY_FILTER_LABELS,
             "active_date_filter": date_filter,
             "active_status_filter": status_filter,
-            "active_priority_filter": priority_filter,
+            "active_importance_filter": importance_filter,
+            "active_urgency_filter": urgency_filter,
             "active_label": label or "",
             "task_label_names": db.list_task_label_names(conn),
-            "active_filter_count": _active_filter_count(date_filter, status_filter, priority_filter, label),
+            "active_filter_count": _active_filter_count(
+                date_filter, status_filter, importance_filter, urgency_filter, label
+            ),
         }
     )
     return templates.TemplateResponse("tasks_timeline.html", ctx)

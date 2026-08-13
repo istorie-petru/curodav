@@ -1,11 +1,11 @@
 // Inline editing for the Tasks table view (templates/tasks_list.html) --
-// status/priority render as native <select> elements styled to look like
-// colored pills (pill-select, see style.css), due date as a plain
-// <input type="date">. Changing any of them fires a single-field PATCH-ish
-// call to POST /tasks/{uid}/update-field (routers/tasks.py) instead of a
-// full form submit, so editing a row never re-navigates the page or loses
-// scroll position -- only the edited cell's own pill color updates in
-// place; everything else on the page is left alone.
+// status/importance/urgency render as native <select> elements styled to
+// look like colored pills (pill-select, see style.css), due date as a
+// plain <input type="date">. Changing any of them fires a single-field
+// PATCH-ish call to POST /tasks/{uid}/update-field (routers/tasks.py)
+// instead of a full form submit, so editing a row never re-navigates the
+// page or loses scroll position -- only the edited cell's own pill color
+// updates in place; everything else on the page is left alone.
 //
 // Deliberately does NOT reload the page on success (unlike modal.js's
 // create/edit forms) -- a full reload after every dropdown change would

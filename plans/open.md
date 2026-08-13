@@ -9,8 +9,9 @@ the new view surfaces, offline-first sync) lives in
 [`features/`](../features/README.md); what's been deliberately cut lives in
 [`abandoned.md`](abandoned.md).
 
-**Version:** the app is at **1.0**, the first full release (the webapp). The
-items here ship as `1.1` … `1.9` minor releases and don't block the rework in
+**Version:** the app is at **1.1** (1.0 was the first full release; 1.1 —
+Virtual & derived states — shipped 2026-08-13). The
+items here ship as `1.2` … `1.9` minor releases and don't block the rework in
 `open-priority.md`; the next full release is **2.0**. Versioning scheme and
 phase history (0.1 → 1.0): [`abandoned.md`](abandoned.md); release-by-release
 order: [`roadmap.md`](roadmap.md).

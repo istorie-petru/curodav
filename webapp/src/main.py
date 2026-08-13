@@ -88,8 +88,8 @@ def create_app() -> FastAPI:
     # next load until the cache expired. That staleness risk is the
     # actual reason full-page caching isn't the fix here, even though
     # these pages can get large (a Tasks table with ~15 rows -- each with
-    # its own inline status/priority <select> full of <option>s plus a
-    # handful of inline <svg> icons -- runs to ~75KB uncompressed,
+    # its own inline status/importance/urgency <select> full of <option>s
+    # plus a handful of inline <svg> icons -- runs to ~75KB uncompressed,
     # confirmed by measuring one directly).
     #
     # gzip is the right lever instead: it doesn't cache anything (every

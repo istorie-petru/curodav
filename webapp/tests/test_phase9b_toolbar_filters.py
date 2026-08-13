@@ -4,8 +4,8 @@ collapsible filters, auto-open when a filter is active) applied to Tasks
 (Table/Timeline/Board), Calendar (Month/Week/Day/Agenda), and Contacts.
 
 Covers:
-  1. Board/Timeline now respect date_filter/status_filter/priority_filter
-     (previously Table-only).
+  1. Board/Timeline now respect date_filter/status_filter/importance_filter/
+     urgency_filter (previously Table-only).
   2. The new Tasks label filter narrows results in all three views.
   3. The new Calendar event label filter narrows results in month + day
      views, including the task chips Day also shows.
@@ -58,7 +58,7 @@ def _request(path="/"):
     )
 
 
-def _seed_task(conn, uid, due_at=None, status="active", priority=None, tags=None):
+def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None, tags=None):
     db.upsert_task(
         conn,
         {
@@ -67,7 +67,8 @@ def _seed_task(conn, uid, due_at=None, status="active", priority=None, tags=None
             "description": "",
             "status": status,
             "due_at": due_at,
-            "priority": priority,
+            "importance": importance,
+            "urgency": urgency,
             "tags": tags or [],
             "created_at": _now(),
         },
@@ -127,12 +128,19 @@ class TestBoardTimelineFiltersRespected:
         assert columns["waiting"] == []
         assert [t["uid"] for t in columns["active"]] == ["a1"]
 
-    def test_board_respects_priority_filter(self, conn):
-        _seed_task(conn, "hi", status="active", priority=1)
-        _seed_task(conn, "lo", status="active", priority=4)
-        resp = tasks_router.board_view(_request("/tasks/board"), priority_filter="1", conn=conn)
+    def test_board_respects_importance_filter(self, conn):
+        _seed_task(conn, "hi", status="active", importance=3)
+        _seed_task(conn, "lo", status="active", importance=1)
+        resp = tasks_router.board_view(_request("/tasks/board"), importance_filter="3", conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"hi"}
+
+    def test_board_respects_urgency_filter(self, conn):
+        _seed_task(conn, "now", status="active", urgency=3)
+        _seed_task(conn, "later", status="active", urgency=1)
+        resp = tasks_router.board_view(_request("/tasks/board"), urgency_filter="3", conn=conn)
+        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
+        assert all_uids == {"now"}
 
     def test_board_respects_date_filter(self, conn):
         today = date.today()
@@ -142,13 +150,13 @@ class TestBoardTimelineFiltersRespected:
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"today_task"}
 
-    def test_timeline_respects_status_and_priority_filters(self, conn):
+    def test_timeline_respects_status_and_importance_filters(self, conn):
         today = date.today()
-        _seed_task(conn, "keep", status="active", priority=1, due_at=today.isoformat())
-        _seed_task(conn, "drop_status", status="waiting", priority=1, due_at=today.isoformat())
-        _seed_task(conn, "drop_priority", status="active", priority=4, due_at=today.isoformat())
+        _seed_task(conn, "keep", status="active", importance=3, due_at=today.isoformat())
+        _seed_task(conn, "drop_status", status="waiting", importance=3, due_at=today.isoformat())
+        _seed_task(conn, "drop_importance", status="active", importance=1, due_at=today.isoformat())
         resp = timeline_router.timeline_view(
-            _request("/tasks/timeline"), status_filter="active", priority_filter="1", conn=conn
+            _request("/tasks/timeline"), status_filter="active", importance_filter="3", conn=conn
         )
         bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
         assert bar_uids == {"keep"}
@@ -270,7 +278,8 @@ class TestContactsNoArchivedState:
 class TestActiveFilterShownInDropdown:
     """2026-08-08: Tasks' and Calendar's row-2 collapsible filter body is
     gone (feedback: "remove the filters details button and reintegrate
-    these drop down menus into the topbar") -- date/status/priority/label
+    these drop down menus into the topbar") -- date/status/importance/
+    urgency/label
     are inline "fancy dropdowns" (_filter_dropdown.html) in row 1, each a
     radio list that navigates on pick. The active filter is simply the
     checked radio (mirrored in the trigger's summary text), so there's no

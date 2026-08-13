@@ -889,9 +889,9 @@ def _create_related_task(conn, event: dict, title: str) -> str | None:
     "＋ New task…" path. Inherits the event's labels (guaranteeing the
     shared-label rule), starts today (the same default create_task applies
     when a task form leaves start_at blank), status active -- the user
-    edits due date/priority/labels later. Returns None (no task created)
-    when the event has no labels at all, since no shared-label link could
-    ever hold."""
+    edits due date/importance/urgency/labels later. Returns None (no task
+    created) when the event has no labels at all, since no shared-label
+    link could ever hold."""
     event_tags = event.get("tags") or []
     if not event_tags:
         return None
@@ -905,7 +905,8 @@ def _create_related_task(conn, event: dict, title: str) -> str | None:
         "description": "",
         "start_at": date.today().isoformat(),
         "due_at": None,
-        "priority": None,
+        "importance": None,
+        "urgency": None,
         "status": "active",
         "progress": 0.0,
         "parent_uid": None,

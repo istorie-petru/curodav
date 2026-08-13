@@ -16,25 +16,60 @@ from typing import Any
 
 from icalendar import Alarm, Event, Todo
 
-_PRIORITY_TO_ICAL = {1: 1, 2: 3, 3: 5, 4: 7}
+# --------------------------------------------------------------------- #
+# Importance/Urgency <-> iCal PRIORITY (1.1, plans/open-priority.md
+# § Virtual & derived states -- "Importance and urgency (replacing WebDAV
+# priority)").
+#
+# Recorded decision: PRIORITY is the single WebDAV channel for the two
+# semantic axes. Export combines Importance and Urgency into one PRIORITY
+# via a deterministic, urgency-dominant precedence table; import maps
+# PRIORITY back to explicit *urgency* only. That asymmetry is deliberate:
+# this app is the write-source for its own tasks, and foreign CalDAV
+# clients render PRIORITY (and may re-author it) without understanding the
+# app's importance axis -- so the urgency axis (the time-sensitive one a
+# calendar client's red-flag PRIORITY is actually about) round-trips
+# faithfully, importance is preserved in this app's own DB, and no
+# incompatible second model or made-up X- property is introduced. See the
+# phase spec slice 4.
+#
+# Export table (importance, urgency) -> PRIORITY, urgency dominant:
+#   urgency 3 -> 1    urgency 2 -> 3    urgency 1 -> 5
+#   urgency 0, importance 3 -> 2
+#   urgency 0, importance 2 -> 4
+#   urgency 0, importance 1 -> 6
+#   both 0 -> 0 (undefined)
+_URGENCY_TO_ICAL = {3: 1, 2: 3, 1: 5}
+_IMPORTANCE_ONLY_TO_ICAL = {3: 2, 2: 4, 1: 6}
 
 
-def _priority_to_ical(p: int | None) -> int:
-    if p is None:
-        return 0
-    return _PRIORITY_TO_ICAL.get(p, 5)
+def _priority_to_ical(importance: int | None, urgency: int | None) -> int:
+    """Importance/Urgency (1..3 each, 0/None = unset) -> one iCal PRIORITY
+    per the precedence table above. Urgency (the time-sensitive axis) wins
+    the lower/redder numbers; importance fills the between-values when
+    urgency is unset. Both unset -> 0 (undefined), matching iCalendar's own
+    meaning of PRIORITY 0 and the old code's behavior for a None priority."""
+    importance = int(importance or 0)
+    urgency = int(urgency or 0)
+    if urgency:
+        return _URGENCY_TO_ICAL[urgency]
+    if importance:
+        return _IMPORTANCE_ONLY_TO_ICAL[importance]
+    return 0
 
 
 def _priority_from_ical(v: int | None) -> int | None:
+    """iCal PRIORITY -> explicit urgency (1..3), per the recorded decision.
+    0/absent -> None (unset). Urgency-dominant export means a client that
+    re-writes PRIORITY changes the urgency axis; importance is untouched by
+    import either way."""
     if not v:
         return None
     if v <= 2:
-        return 1
-    if v <= 4:
-        return 2
-    if v <= 6:
         return 3
-    return 4
+    if v <= 5:
+        return 2
+    return 1
 
 
 _STATUS_TO_VTODO = {
@@ -146,7 +181,7 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
         todo.add("DTSTART", _parse_dt(row["start_at"]))
     if row.get("due_at"):
         todo.add("DUE", _parse_dt(row["due_at"]))
-    todo.add("PRIORITY", _priority_to_ical(row.get("priority")))
+    todo.add("PRIORITY", _priority_to_ical(row.get("importance"), row.get("urgency")))
     todo.add("STATUS", _STATUS_TO_VTODO.get(row.get("status", "active"), "NEEDS-ACTION"))
     if row.get("progress") is not None:
         todo.add("PERCENT-COMPLETE", round(row["progress"] * 100))
@@ -176,7 +211,7 @@ def ical_to_task_row(todo: Todo) -> dict[str, Any]:
         row["start_at"] = _dt_to_field(todo.get("DTSTART").dt)
     if "DUE" in todo:
         row["due_at"] = _dt_to_field(todo.get("DUE").dt)
-    row["priority"] = _priority_from_ical(
+    row["urgency"] = _priority_from_ical(
         int(todo.get("PRIORITY")) if "PRIORITY" in todo else None
     )
     row["status"] = _VTODO_TO_STATUS.get(str(todo.get("STATUS", "")), "active")

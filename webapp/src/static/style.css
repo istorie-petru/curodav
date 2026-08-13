@@ -1167,7 +1167,8 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 .multiselect-panel.is-open{display:block;}
 /* Compact toolbar "fancy dropdown" filter trigger (templates/_filter_dropdown
-   .html, used by the calendar label filter and the tasks date/status/priority
+   .html, used by the calendar label filter and the tasks date/status/
+   importance/urgency
    filters -- 2026-08-08 "reintegrate these drop down menus into the topbar"
    feedback that removed the old icon-only Filters button + collapsible
    body). Sits inline in .toolbar-row: a descriptor text + a count when
@@ -1218,7 +1219,8 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 .multiselect-manage:hover{background:var(--bg-secondary); text-decoration:none; color:var(--fg-primary);}
 
-/* Task table view (tasks_list.html/tasks_table.js) -- status/priority
+/* Task table view (tasks_list.html/tasks_table.js) -- status/importance/
+   urgency
    render as a native <select> disguised as a colored pill: the base
    `select` rule above already gives every dropdown appearance:none + the
    chevron; this only adds the tighter pill padding/font and removes the
