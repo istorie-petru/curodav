@@ -5,12 +5,13 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.3** (1.0 was the first full release; 1.1 —
+**Version:** the app is at **1.4** (1.0 was the first full release; 1.1 —
 Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
 Universal command surface side work — shipped 2026-08-13; 1.3 — project-
-enabled labels + lifecycle — shipped 2026-08-13). Minor releases are
-numbered `1.1` … `1.9`; once everything on this roadmap is implemented, the
-next full release is **2.0**. See the versioning rules in
+enabled labels + lifecycle — shipped 2026-08-13; 1.4 — work allocations +
+project week calendar — shipped 2026-08-13). Minor releases are numbered
+`1.1` … `1.9`; once everything on this roadmap is implemented, the next
+full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
 
 ## The two tracks
@@ -30,7 +31,7 @@ never hold Track A up.
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
 | `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
-| `1.4` | Work allocations + project week calendar | Project check-in (optional) | 1.3 |
+| `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | Task management & grouping | — | 1.3–1.4 |
 | `1.6` | Schedule & recurrence rework | Configurable views + optional Schedule | 1.3 |
 | `1.7` | Information architecture & view surfaces | — | 1.1, 1.3, 1.4 + widgets |
@@ -90,28 +91,36 @@ rework so the widget grid is already consolidated.
 
 ### 1.4 — Work & time
 
-**Work allocations + project week calendar** (`open-priority.md` § Work
-allocations, Task & calendar semantics): allocations as calendar events linked
-to tasks (a task's estimated work = the sum of its blocks), the project
-scheduling surface with draggable unscheduled tasks, and the task↔event
-edit/delete semantics.
+**SHIPPED 2026-08-13** — **Work allocations + project week calendar**
+(`open-priority.md` § Work allocations, Task & calendar semantics):
+allocations as calendar events linked to tasks (a task's estimated work =
+the sum of its blocks), the project scheduling surface with draggable
+unscheduled tasks, and the task↔event edit/delete semantics.
 
-**Slice 1 shipped 2026-08-13** — the data model + semantics (allocations as
-linked events, hour aggregation, title-sync, delete-only-removes-the-block)
-plus a plain-form task-detail UI to schedule one; see `features/tasks.md` §
-Work allocations (1.4).
+**Slice 1** — the data model + semantics (allocations as linked events,
+hour aggregation, title-sync, delete-only-removes-the-block) plus a
+plain-form task-detail UI to schedule one; see `features/tasks.md` § Work
+allocations (1.4).
 
-**Slice 2 shipped 2026-08-14** — the project detail page (`GET
-/projects/{name}`) and its Tasks view (tasks filtered by the project's
-label, reusing the global Tasks page's row/inline-editing markup via a new
-shared `_task_row.html` macro); see `features/tasks.md` § Projects,
-"Project detail page + Tasks view". **Still open**: the Week Calendar view
-itself (the drag-and-drop scheduling surface — the detail page has no tab
-switcher yet since there's only one view), the project-card hour-based
-progress swap, and hiding a completed task's future allocations from the
-active calendar. See `plans/STATE.md`'s breadcrumbs.
+**Slice 2** — the project detail page (`GET /projects/{name}`) and its
+Tasks view (tasks filtered by the project's label, reusing the global Tasks
+page's row/inline-editing markup via a new shared `_task_row.html` macro);
+see `features/tasks.md` § Projects, "Project detail page + Tasks view".
 
-Side work (optional): **Project check-in** — a small post-stack addition.
+**Slice 3** — the Week Calendar view (`GET /projects/{name}/calendar`): the
+drag-and-drop scheduling surface (unscheduled tasks list, drag-to-create/
+move/resize/delete a work allocation), reusing the global Week grid's own
+layout math (`grid_layout.layout_day`) rather than duplicating it, ordinary
+events shown as subdued context and the project's own allocations
+prominent, plus the Tasks/Week Calendar tab switcher on the project detail
+page. See `features/tasks.md` § Projects, "Week Calendar view". **Still
+open, deferred to a later slice** (doesn't block 1.5+): the project-card
+hour-based progress swap (`_project_card`'s `progress` is still
+completed/total *task count*) and hiding a completed task's future
+allocations from the active calendar — see `plans/STATE.md`.
+
+Side work (optional, not started — doesn't block 1.5+): **Project
+check-in** — a small post-stack addition.
 
 ### 1.5 — Task management
 

@@ -125,11 +125,26 @@ be completed before the end date.
 **Tasks view shipped 2026-08-14 (1.4 slice 2)** — see `features/tasks.md` §
 Projects, "Project detail page + Tasks view": `GET /projects/{name}`, tasks
 filtered by the project's label, reusing the global Tasks page's row
-markup/inline editing. **Still open**: the Week Calendar view below (no
-`/projects/{name}/calendar` route or tab switcher yet), the visual layering
-of ordinary events vs. work allocations, and "create, edit... and organize"
-beyond what the reused row already offers (no project-scoped sort/filter/
-bulk actions).
+markup/inline editing. **Still open**: "create, edit... and organize" beyond
+what the reused row already offers (no project-scoped sort/filter/bulk
+actions).
+
+**Week Calendar view shipped 2026-08-13 (1.4 slice 3)** — see
+`features/tasks.md` § Projects, "Week Calendar view": `GET
+/projects/{name}/calendar` (`routers/projects.py::project_calendar`), the
+Tasks/Week Calendar tab switcher on the project detail page, an
+"Unscheduled tasks" list (open project tasks with no work allocation yet,
+each item `{project} > {task} · {remaining}h`) that drags onto the week
+grid to create a work allocation (`create_allocation`), drag-to-move /
+drag-to-resize an existing block (`move_allocation`), and a delete
+affordance that only removes the block (`delete_allocation` ->
+`db.delete_work_allocation`). Ordinary calendar events render as visually
+subdued context (`.context-event`, reduced opacity); this project's own
+work allocations render at full color/prominence. **Still open, deferred**
+(doesn't block 1.5+): aggregating `task_work_hours` up to the project
+card's progress percentage, and hiding a completed task's future
+allocations from this calendar (§ Work allocations' "future allocations are
+hidden" rule) — see `plans/STATE.md`.
 
 Projects receive a dedicated page in the main sidebar. This page is the primary
 interface for connecting project work with calendar time; task scheduling is
@@ -187,15 +202,17 @@ remain visible and contribute to the project's historical record.
 `features/tasks.md` § Work allocations (1.4): `event_task_relations.
 is_work_allocation`, `db.create_work_allocation`/`list_work_allocations_for_task`/
 `task_work_hours`/`delete_work_allocation`, title-sync both directions, and a
-plain-form "Work sessions" card on the task detail/edit modals. **Still open**
-(next 1.4 slice): the project's own Week Calendar view described below (the
-drag-and-drop scheduling surface — the plain-form card is the interim
-substitute), aggregating `task_work_hours` up to project-card progress
-(`routers/projects.py`'s `_project_card` still uses the 1.3 task-count proxy),
-and hiding a completed task's future allocations from the active calendar
-(§ below's "future allocations are hidden" rule — not wired into any calendar
-view yet, since there is no project calendar view to hide them from until
-that lands).
+plain-form "Work sessions" card on the task detail/edit modals.
+
+**Week Calendar view (drag-and-drop scheduling surface) shipped 2026-08-13
+(1.4 slice 3)** — see § Project pages & views above. The plain-form
+"Work sessions" card stays alongside it as a fallback, not replaced.
+**Still open, deferred** (doesn't block 1.5+): aggregating `task_work_hours`
+up to project-card progress (`routers/projects.py`'s `_project_card` still
+uses the 1.3 task-count proxy), and hiding a completed task's future
+allocations from the active calendar (§ below's "future allocations are
+hidden" rule — the project calendar now exists but doesn't filter for this
+yet).
 
 Work allocation replaces the previous concept of subtasks being individually
 scheduled. A task does not become complex because it requires multiple work
@@ -234,10 +251,13 @@ history intact without letting obsolete work blocks occupy the schedule.
 ### Task & calendar semantics
 
 **Title-sync + delete-only-removes-the-block shipped 2026-08-13 (1.4 slice 1)**
-— see `features/tasks.md` § Work allocations (1.4). The remaining paragraph's
-"future allocations are hidden from the active calendar" rule is not wired up
-yet (no calendar view renders work allocations specially yet — see the note
-in § Work allocations above).
+— see `features/tasks.md` § Work allocations (1.4). The project's Week
+Calendar view (1.4 slice 3) is the first calendar view that renders work
+allocations specially (prominent vs. subdued ordinary events) and its
+delete affordance uses `db.delete_work_allocation`, matching this rule. The
+remaining paragraph's "future allocations are hidden from the active
+calendar" rule is still not wired up yet — see the note in § Work
+allocations above.
 
 A work allocation is an Event with a task relationship, and that relationship
 stays semantically meaningful when the event is edited:

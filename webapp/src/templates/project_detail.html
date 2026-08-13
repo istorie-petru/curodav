@@ -3,15 +3,18 @@
 {% block title %}{{ project.name }}{% endblock %}
 {% block content %}
 <!-- Project detail page (1.4, plans/open-priority.md § Project pages &
-     views): "opening a project provides two principal views" -- this ships
-     the Tasks view. The Week Calendar view (the drag-and-drop scheduling
-     surface) is a later slice -- see plans/STATE.md's breadcrumbs -- so
-     there's no view-switcher here yet; adding one before a second view
-     exists would just be a dead tab. -->
+     views): "opening a project provides two principal views" -- Tasks
+     (this page) and Week Calendar (1.4 slice 3, /projects/{name}/calendar).
+     Subnav follows calendar_week.html's own `.segmented.calendar-subnav`
+     precedent: plain links toggling sibling routes, no JS state machine. -->
 <div class="toolbar top-app-bar">
     <a href="/projects" class="icon-btn" title="Back to Projects">{{ icon('chevron-left') }}</a>
     <span class="cell-tag cal-{{ project.color }}">{% if project.icon %}{{ icon(project.icon, 'icon-sm') }} {% endif %}{{ project.name }}</span>
     <span class="tag-usage-count" title="Lifecycle status">{{ project.status }}</span>
+    <div class="segmented calendar-subnav">
+        <a class="seg-btn active" href="/projects/{{ project.name | urlencode }}">Tasks</a>
+        <a class="seg-btn" href="/projects/{{ project.name | urlencode }}/calendar">Week Calendar</a>
+    </div>
     <div class="spacer"></div>
     <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab title="New task">{{ icon('plus') }} New task</a>
 </div>
