@@ -2,18 +2,21 @@
    feature _task_relations.html renders for tasks ("a relation can link an
    event with existing/new tasks that both have at least one label in
    common"). An event and a task are related when they carry at least one
-   label in common, and the link is stored in event_task_relations. The
-   add row's <select> offers every not-yet-linked task that already shares
-   a label ("link an existing task"), plus a "＋ New task…" sentinel that
-   reveals a title input (static/relations_picker.js) -- a new task
-   inherits this event's labels server-side, which guarantees the shared-
-   label rule. Each row's ✕ unlinks (relations are associative, never
-   cascade). data-modal-keep-open: incremental edits keep the modal open
-   and re-render (modal.js's refreshModalContent). Shared by
-   event_detail.html (the read-only view) and event_form.html (the edit
-   modal). Events have no subtasks, so unlike the task card there's just
-   the one related-tasks list here. #}
-{% macro event_relations_section(event, related_tasks, linkable_tasks, show_header=true) %}
+   label in common, and the link is stored in event_task_relations. Each
+   row's ✕ unlinks (relations are associative, never cascade).
+   data-modal-keep-open: incremental edits keep the modal open and
+   re-render (modal.js's refreshModalContent). Shared by event_detail.html
+   (the read-only view) and event_form.html (the edit modal). Events have
+   no subtasks, so unlike the task card there's just the one related-tasks
+   list here.
+
+   1.2 side work (Universal command surface step 3): the add row is the
+   shared picker overlay (static/command_palette.js) in "relation mode",
+   the same replacement _task_relations.html's add row got -- see that
+   file's comment for the full rationale. `data-for-event` is this card's
+   half of the implicit-filter context the overlay sends to
+   `GET /api/search`. #}
+{% macro event_relations_section(event, related_tasks, show_header=true) %}
 {% set has_labels = (event.tags or []) | length > 0 %}
 {% if show_header %}
 <h2>
@@ -38,20 +41,18 @@
         </div>
         {% endfor %}
     </div>
-    {% elif not has_labels and not linkable_tasks %}
+    {% elif not has_labels %}
     <div class="empty-state" style="padding:10px 0">No related tasks yet.</div>
     {% endif %}
     {% if has_labels %}
-    <form method="post" action="/events/{{ event.uid }}/relations" class="checklist-add-form relations-add-form" data-modal-keep-open>
-        <select name="target_uid" class="relations-picker" title="Link an existing task, or create a new one">
-            <option value="" selected>Add a related task…</option>
-            {% for t in linkable_tasks %}
-            <option value="{{ t.uid }}">{{ t.title }}</option>
-            {% endfor %}
-            <option value="__new__">＋ New task…</option>
-        </select>
-        <input type="text" name="new_title" class="relations-new-title" placeholder="New task title" disabled>
-        <button type="submit" class="btn">Link</button>
+    <div class="checklist-add-form">
+        <button type="button" class="btn relations-picker-trigger" data-relations-picker
+                data-for-event="{{ event.uid }}" data-relations-endpoint="/events/{{ event.uid }}/relations"
+                data-relations-label="task">{{ icon('plus', 'icon-sm') }} Add a related task…</button>
+    </div>
+    <form method="post" action="/events/{{ event.uid }}/relations" class="relations-hidden-form" data-modal-keep-open hidden>
+        <input type="hidden" name="target_uid" value="">
+        <input type="hidden" name="new_title" value="">
     </form>
     {% else %}
     <div class="empty-state" style="padding:10px 0; font-size:var(--text-caption)">Add a label to this event to relate tasks.</div>

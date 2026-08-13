@@ -67,6 +67,7 @@ The repo's documentation is organized by state, not by history:
 
 | Doc | What it is |
 |---|---|
+| [`plans/STATE.md`](plans/STATE.md) | **Start here.** Current position on the roadmap, the next slice, and how to run a low-token session. Read only this at session start |
 | [`features/README.md`](features/README.md) | Tour of what you can do today; links each area to its technical doc |
 | [`features/architecture.md`](features/architecture.md) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
 | [`plans/roadmap.md`](plans/roadmap.md) | The single build order across all open work, phased by release |

@@ -177,12 +177,17 @@ class TestSharingLabelCandidates:
         assert got == {"t1"}
 
     def test_event_detail_picker_only_offers_shared_label_tasks(self, conn):
+        # 1.2 side work (Universal command surface step 3): the page no
+        # longer renders a candidate pool up front -- the picker overlay
+        # asks GET /api/search?for_event=<uid> for exactly the page it
+        # needs (see test_search_api.py's TestForEventFilter for the
+        # actual shared-label-and-not-already-linked filtering coverage).
+        # This test now only covers that the trigger carries the right
+        # implicit-filter context to drive that request.
         _seed_event(conn, "e1", tags=["Work"])
-        _seed_task(conn, "t1", tags=["Work"])
-        _seed_task(conn, "t2", tags=["Home"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert f'value="t1"' in body  # shared label -> offered
-        assert f'value="t2"' not in body  # no shared label -> not offered
+        assert 'data-for-event="e1"' in body
+        assert 'data-relations-picker' in body
 
 
 class TestEventRelationsCard:
@@ -209,7 +214,7 @@ class TestEventRelationsCard:
         _seed_task(conn, "t1", tags=["Work"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
         assert "Add a label to this event to relate tasks." in body
-        assert "relations-picker" not in body
+        assert "data-relations-picker" not in body
 
     def test_event_form_renders_relations_card_on_edit(self, conn):
         _seed_event(conn, "e1", tags=["Work"])
@@ -278,12 +283,14 @@ class TestTaskRelationsCard:
         assert body.count('class="detail-card') == 2
 
     def test_task_detail_picker_only_offers_shared_label_events(self, conn):
+        # See test_event_detail_picker_only_offers_shared_label_tasks above
+        # for why this no longer checks a rendered option pool -- the
+        # filtering itself is covered by test_search_api.py's
+        # TestForTaskFilter now that it happens via GET /api/search.
         _seed_task(conn, "t1", tags=["Work"])
-        _seed_event(conn, "e1", tags=["Work"])
-        _seed_event(conn, "e2", tags=["Home"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert f'value="e1"' in body
-        assert f'value="e2"' not in body
+        assert 'data-for-task="t1"' in body
+        assert 'data-relations-picker' in body
 
     def test_task_form_renders_merged_card_on_edit(self, conn):
         _seed_task(conn, "t1", tags=["Work"])

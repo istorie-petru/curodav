@@ -42,6 +42,7 @@
             <th>Color</th>
             <th>Icon</th>
             <th style="text-align:center">Space</th>
+            <th style="text-align:center">Project</th>
             <th style="width:1%"></th>
         </tr>
     </thead>
@@ -53,7 +54,7 @@
      grouped by parent) and collide. -->
 {% set outer_index = loop.index0 %}
 <tbody data-label-group>
-    <tr class="task-section-divider" data-label-group-header><td colspan="6">{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</td></tr>
+    <tr class="task-section-divider" data-label-group-header><td colspan="7">{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</td></tr>
     {% for l in group_labels %}
     <!-- `label_index` captured immediately on entering this loop, before
          any of the nested per-color/per-icon/per-module loops below
@@ -148,6 +149,22 @@
              "Projects" on its own page. -->
         <td style="text-align:center">
             <input type="checkbox" name="generate_space" value="1" title="Generate a Space page" {% if l.generate_space %}checked{% endif %} onchange="this.form.requestSubmit()" form="label-set-{{ outer_index }}-{{ label_index }}">
+        </td>
+        <!-- Project (1.3, Project-enabled label stack) -- unlike Space,
+             turning this on isn't a bare checkbox: a project needs a
+             start/end period the moment it's created (§ Project period:
+             "a project has exactly one start date and one end date"), so
+             promoting/demoting lives on the dedicated /projects page
+             (routers/projects.py's promote/demote), which can collect
+             those dates and check the overlap rule. This cell is a
+             read-only status link into that flow, not a second place that
+             writes is_project. -->
+        <td style="text-align:center">
+            {% if l.is_project %}
+            <a href="/projects" class="icon-btn" title="Project ({{ l.start_date }} to {{ l.end_date }}) -- manage on the Projects page">{{ icon('folder', 'icon-sm') }}</a>
+            {% else %}
+            <a href="/projects" class="icon-btn" title="Not a project -- promote it on the Projects page">{{ icon('folder-plus', 'icon-sm') }}</a>
+            {% endif %}
         </td>
         <!-- Open/Merge/Remove, one line (2026-08-08 follow-up) -- each of
              the three lived in its own <form>, and `.label-cell-inline`

@@ -4,6 +4,20 @@ Mobile/remote client: calendar, tasks, contacts, and a recurring class
 schedule, full CRUD, synced against a self-hosted Radicale (CalDAV/CardDAV)
 server.
 
+**Update 2026-08-13 (1.2 side work, Universal command surface):** one shared
+picker overlay now backs both global search/navigation and the Relations
+cards' add-row. `Ctrl-K`/`Cmd-K` (or the tabbar's Search entry, or `/search`
+directly) searches tasks/events/contacts by title/description/label
+(`db.search_entities`, `routers/search.py`'s `GET /api/search`) and opens
+whichever result you pick. The Relations cards' old `<select>` (which
+pre-rendered every not-yet-linked, shared-label candidate on every page
+render -- `linkable_events`/`linkable_tasks`) is gone; "Add a related
+event/task…" now opens the same overlay pre-scoped to that task/event, which
+asks the API for exactly the candidates it needs instead. Still open:
+context-dependent command actions (create/complete/delete/label from the
+palette) -- today the overlay searches and navigates, not yet a full command
+palette.
+
 **Update 2026-08-13 (1.2, task-model decision):** subtasks are **removed
 outright** -- the open subtask-hierarchy vs. flat-tasks-plus-allocations
 conflict resolved as flat tasks + work allocations. `tasks.parent_uid` stays

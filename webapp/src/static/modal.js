@@ -264,9 +264,10 @@
     if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
     if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
-    // Relations cards' add-row "＋ New…" title reveal -- same re-init
-    // reasoning (innerHTML-injected content never runs <script> tags).
-    if (window.CCRelationPicker) window.CCRelationPicker.init(body);
+    // Relations cards' add-row picker (1.2 side work, static/
+    // command_palette.js) needs no re-init call here -- its entry points
+    // are document-level delegated listeners, which already cover content
+    // injected via this innerHTML swap without a wireContent() hook.
     // Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
     // tab switch between the two create-forms + retargeting the footer
     // Save button's `form` attribute. Same re-init reasoning.
