@@ -5,9 +5,10 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.2** (1.0 was the first full release; 1.1 —
+**Version:** the app is at **1.3** (1.0 was the first full release; 1.1 —
 Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
-Universal command surface side work — shipped 2026-08-13). Minor releases are
+Universal command surface side work — shipped 2026-08-13; 1.3 — project-
+enabled labels + lifecycle — shipped 2026-08-13). Minor releases are
 numbered `1.1` … `1.9`; once everything on this roadmap is implemented, the
 next full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
@@ -28,7 +29,7 @@ never hold Track A up.
 |---|---|---|---|
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
-| `1.3` | Project-enabled labels + lifecycle | Widget consolidation | 1.2 |
+| `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
 | `1.4` | Work allocations + project week calendar | Project check-in (optional) | 1.3 |
 | `1.5` | Task management & grouping | — | 1.3–1.4 |
 | `1.6` | Schedule & recurrence rework | Configurable views + optional Schedule | 1.3 |
@@ -69,12 +70,23 @@ tracked as an optional follow-up in `open.md` § Command palette actions.
 
 ### 1.3 — The project stack
 
-Projects become labels with Project behavior: a bounded start/end period, the
-Open → Pending → Pending Archiving → Archived lifecycle, and project cards with
-work-based progress. (`open-priority.md` § Project-enabled label stack.)
+**SHIPPED 2026-08-13** — projects are labels with Project behavior:
+`label_config.is_project` + a bounded `start_date`/`end_date`, the
+Open → Pending → Pending Archiving → Archived lifecycle (computed at read
+time — only `archived_at` is stored, the user's explicit confirmation — see
+`db.project_status`), the overlap rule (`db.find_overlapping_project`), and
+a dedicated `/projects` page with progress cards. `project_label_for`'s old
+"any non-Space label is the project" heuristic is superseded (an explicit
+`is_project=1` label now wins; the heuristic is only a fallback for data
+that predates 1.3). See `features/tasks.md` § Projects for the shipped
+shape. Card progress is completed/total *task count*, not hours — real
+work-based (hour) progress needs 1.4's work allocations, which don't exist
+yet; the project's own Tasks/Week Calendar views are 1.4's job too, not
+this release's.
 
-Side work: **Widget consolidation + Streak + Next Deadline** — must land before
-1.7's Dashboard rework so the widget grid is already consolidated.
+Side work (not started, optional, doesn't block 1.4+): **Widget
+consolidation + Streak + Next Deadline** — must land before 1.7's Dashboard
+rework so the widget grid is already consolidated.
 
 ### 1.4 — Work & time
 

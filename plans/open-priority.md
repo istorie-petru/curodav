@@ -52,10 +52,17 @@ step is sized to ship on its own.
 
 ## Project-enabled label stack
 
-**Status:** full planning model exists (was `plans/projects.md` and
-`plans/details.md`, folded in here) — no code. The subtask decision it was
-blocked on is resolved (1.2, flat tasks + work allocations); implementation
-proceeds on the chosen model.
+**Status:** **1.3 shipped 2026-08-13** — the label + lifecycle + cards half
+of this section (is_project/start_date/end_date/archived_at on
+label_config, the computed Open/Pending/Pending Archiving/Archived
+lifecycle, the overlap rule, project_label_for's supersession, and the
+dedicated `/projects` page) is implemented; see `features/tasks.md` §
+Projects for the shipped shape and `plans/roadmap.md`'s 1.3 subsection for
+what's explicitly deferred. **Still open, for 1.4/1.5:** the project's own
+Tasks view + Week Calendar view (§ Project pages & views), work allocations
+(§ Work allocations, § Task & calendar semantics), and the global Tasks
+page's project grouping (§ Task model) — the rest of this section's spec
+below is still the reference for those slices, not yet built.
 
 ### Projects are labels, not a stored thing
 

@@ -50,7 +50,7 @@ import json
 import logging
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -277,6 +277,24 @@ CREATE TABLE IF NOT EXISTS label_config (
     -- other persistent label behaviors are the exception").
     importance INTEGER,
     urgency_threshold_days INTEGER,
+    -- 1.3 (Project-enabled label stack, plans/open-priority.md § Project-
+    -- enabled label stack): a project is not a separate entity, it's a
+    -- label with `is_project=1` plus a bounded period (`start_date`/
+    -- `end_date`, ISO 'YYYY-MM-DD') and a lifecycle. Unlike
+    -- generate_space (a display toggle), is_project changes what the
+    -- label *means* -- see project_label_for's 1.3 note for how this
+    -- supersedes the old "any non-Space label is the project" heuristic.
+    -- `archived_at` is the one persisted lifecycle fact (the user's
+    -- explicit confirmation that the project is finished, per the "end
+    -- date does not silently archive it" rule) -- Open/Pending/Pending
+    -- Archiving are all computed at read time from archived_at + task
+    -- completion + end_date, see project_status() below, not stored,
+    -- because they're derived from data that changes underneath the
+    -- label (tasks completing) the same way Importance/Urgency are.
+    is_project INTEGER NOT NULL DEFAULT 0,
+    start_date TEXT,
+    end_date TEXT,
+    archived_at TEXT,
     created_at TEXT
 );
 
@@ -709,6 +727,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # comment above).
     _ensure_column(conn, "label_config", "importance", "INTEGER")
     _ensure_column(conn, "label_config", "urgency_threshold_days", "INTEGER")
+    # 1.3 (Project-enabled label stack) -- see the label_config CREATE
+    # TABLE comment above for the model.
+    _ensure_column(conn, "label_config", "is_project", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "label_config", "start_date", "TEXT")
+    _ensure_column(conn, "label_config", "end_date", "TEXT")
+    _ensure_column(conn, "label_config", "archived_at", "TEXT")
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -1941,6 +1965,10 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "abbreviation": None,
     "importance": None,
     "urgency_threshold_days": None,
+    "is_project": 0,
+    "start_date": None,
+    "end_date": None,
+    "archived_at": None,
     "created_at": None,
 }
 
@@ -1975,6 +2003,7 @@ def _effective_label_config(row: dict[str, Any] | None, name: str) -> dict[str, 
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         cfg.setdefault(key, default)
     cfg["generate_space"] = bool(cfg.get("generate_space"))
+    cfg["is_project"] = bool(cfg.get("is_project"))
     # `uid` mirrors `name` -- a label has no surrogate id (its name IS its
     # identity, see the label_config table comment), but templates that
     # used to render a project/space's `.uid` in a link/form field (e.g.
@@ -1991,12 +2020,16 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     cols = (
         "name", "color", "icon", "description", "parent_name",
         "generate_space", "dashboard_preset_json", "abbreviation",
-        "importance", "urgency_threshold_days", "created_at",
+        "importance", "urgency_threshold_days",
+        "is_project", "start_date", "end_date", "archived_at",
+        "created_at",
     )
     existing = get_label_config(conn, row["name"]) or {}
     data = dict(row)
     if "generate_space" in data:
         data["generate_space"] = 1 if data["generate_space"] else 0
+    if "is_project" in data:
+        data["is_project"] = 1 if data["is_project"] else 0
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
     conn.execute(
@@ -2048,6 +2081,87 @@ def list_space_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [effective_label_config(conn, r["name"]) for r in rows]
 
 
+def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every label with is_project=1 -- the Projects page's own listing
+    (routers/projects.py). Independent of generate_space: a project can
+    also be a Space (or not), the two toggles are orthogonal (§ Project-
+    enabled label stack: "the label stays usable across the rest of the
+    application")."""
+    rows = conn.execute(
+        "SELECT * FROM label_config WHERE is_project = 1 ORDER BY name COLLATE NOCASE"
+    ).fetchall()
+    return [effective_label_config(conn, r["name"]) for r in rows]
+
+
+def find_overlapping_project(
+    conn: sqlite3.Connection, name: str, start_date: str | None, end_date: str | None
+) -> dict[str, Any] | None:
+    """The first other non-archived project whose [start_date, end_date]
+    period overlaps this one's, or None. Backs the "projects may not
+    overlap another project" rule (§ Project-enabled label stack) -- the
+    UI must warn and require the user to resolve the conflict rather than
+    silently accept it (see routers/projects.py's create/edit handlers).
+    A project missing either date has no bounded period yet, so it can't
+    overlap anything; an Archived project is closed history, not part of
+    "the same project context" going forward, so it's excluded."""
+    if not start_date or not end_date:
+        return None
+    for cfg in list_project_labels(conn):
+        if cfg["name"] == name or cfg.get("archived_at"):
+            continue
+        other_start, other_end = cfg.get("start_date"), cfg.get("end_date")
+        if not other_start or not other_end:
+            continue
+        if start_date <= other_end and other_start <= end_date:
+            return cfg
+    return None
+
+
+def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
+    """Computed lifecycle state -- Open / Pending / Pending Archiving /
+    Archived (§ Project lifecycle). Only `archived_at` is stored (the
+    user's explicit confirmation); the other three states are derived at
+    read time from task completion + end_date, same "computed, not
+    stored" treatment as Importance/Urgency, because both inputs change
+    underneath the label without the label itself being edited.
+
+    - Archived: `archived_at` is set (explicit user confirmation only --
+      neither the end date passing nor every task completing gets here by
+      itself).
+    - Open: at least one incomplete task, or no tasks at all (a project
+      with no work yet hasn't reached a completion point to leave Open
+      from).
+    - Pending: every task is completed (and there's at least one), but
+      today is still before the project's end date -- completed early,
+      not yet at its deadline.
+    - Pending Archiving: every task is completed and today is on/after
+      the end date (or there's no end date) -- ready for the user to
+      confirm closure.
+    """
+    if cfg.get("archived_at"):
+        return "Archived"
+    tasks = [t for t in list_tasks(conn) if cfg["name"] in (t.get("tags") or [])]
+    # ("done", "archived") mirrors routers/tasks.py's DONE_STATUSES --
+    # duplicated here rather than imported to avoid a routers -> db ->
+    # routers import cycle (db.py has no dependency on routers/*).
+    if not tasks or any(t.get("status") not in ("done", "archived") for t in tasks):
+        return "Open"
+    end_date = cfg.get("end_date")
+    if today is None:
+        today = date.today()
+    if end_date and today < date.fromisoformat(end_date):
+        return "Pending"
+    return "Pending Archiving"
+
+
+def archive_project(conn: sqlite3.Connection, name: str) -> None:
+    """The explicit user confirmation that closes a project (Pending
+    Archiving -> Archived). Never automatic -- see project_status."""
+    conn.execute(
+        "UPDATE label_config SET archived_at = ? WHERE name = ?",
+        (datetime.now(timezone.utc).isoformat(), name),
+    )
+    conn.commit()
 
 
 def list_child_labels(conn: sqlite3.Connection, parent_name: str) -> list[dict[str, Any]]:
@@ -2124,23 +2238,36 @@ def clear_label(conn: sqlite3.Connection, name: str) -> None:
 
 
 def project_label_for(conn: sqlite3.Connection, object_type: str, object_id: str) -> str | None:
-    """The one label treated as "the project" for this object -- the
-    attached label whose config has generate_space=0 (a course/list label,
-    not a Space), mirroring how these tables used to carry exactly one
-    `project_uid`. Deliberately a *derived view* over the object's real
-    `object_labels` rows, not a separately tracked field -- there is no
-    "this label is special, it's THE project" category (see
-    features/architecture.md §0.1/§2: a label is a label, full stop).
-    Used uniformly for schedule_class, habit, and database -- an earlier
-    version of this rework gave habits/databases their own pseudo
-    object_type (`f"{object_type}:project"`) to track this separately from
-    real tags; that was a mistake (it made a habit's project invisible to
-    any label page's aggregation, and reintroduced exactly the "project is
-    a special kind of label" distinction this rework exists to remove) and
-    was corrected 2026-08-06 -- see set_object_project_label_uniform below
-    for the corresponding write path."""
-    for name in sorted(list_labels_for_object(conn, object_type, object_id), key=str.lower):
-        cfg = get_label_config(conn, name)
+    """The one label treated as "the project" for this object. Deliberately
+    a *derived view* over the object's real `object_labels` rows, not a
+    separately tracked field -- there is no "this label is special, it's
+    THE project" category (see features/architecture.md §0.1/§2: a label
+    is a label, full stop). Used uniformly for schedule_class, habit, and
+    database -- an earlier version of this rework gave habits/databases
+    their own pseudo object_type (`f"{object_type}:project"`) to track
+    this separately from real tags; that was a mistake (it made a habit's
+    project invisible to any label page's aggregation, and reintroduced
+    exactly the "project is a special kind of label" distinction this
+    rework exists to remove) and was corrected 2026-08-06 -- see
+    set_object_project_label_uniform below for the corresponding write
+    path.
+
+    1.3 (Project-enabled label stack) supersedes the old heuristic here:
+    a label explicitly marked is_project=1 now wins outright, since a
+    label can finally say "I'm the project" instead of it being inferred.
+    Falls back to the pre-1.3 heuristic (the attached label whose config
+    has generate_space=0 -- a course/list label, not a Space) only when
+    nothing attached is explicitly project-enabled, so data written before
+    1.3 (nothing has is_project=1 yet) keeps behaving exactly as before
+    until the user actually promotes a label to a project."""
+    names = sorted(list_labels_for_object(conn, object_type, object_id), key=str.lower)
+    configs = {name: get_label_config(conn, name) for name in names}
+    for name in names:
+        cfg = configs.get(name)
+        if cfg and cfg.get("is_project"):
+            return name
+    for name in names:
+        cfg = configs.get(name)
         if not (cfg and cfg.get("generate_space")):
             return name
     return None

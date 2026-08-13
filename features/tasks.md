@@ -98,3 +98,44 @@ navigates today; it isn't a full command palette yet.
 
 `TASK_AUTO_ARCHIVE_DAYS_KEY` ("Never"/7/14/30/90), lazy `_auto_archive_if_configured`
 DELETE on each Table visit.
+
+## Projects (1.3)
+
+`routers/projects.py` (`/projects`) — a project is a label with
+`label_config.is_project=1` plus `start_date`/`end_date`; no separate
+entity (see [`open-priority.md`](open-priority.md) § Project-enabled label
+stack). Promote (`POST /projects/promote`, name + dates — existing or
+brand-new label), edit dates (`POST /projects/{name}/dates`), demote
+(`POST /projects/{name}/demote` — clears `is_project`/dates/`archived_at`,
+label + membership untouched), archive (`POST /projects/{name}/archive` —
+the only way `archived_at` gets set). `labels_manage.html`'s Project column
+links here rather than writing `is_project` itself, since promoting needs
+dates up front.
+
+**Lifecycle** (`db.project_status`) — Open / Pending / Pending Archiving /
+Archived, computed at read time (only `archived_at` is stored): Open = any
+incomplete task or zero tasks; Pending = every task done, today before
+`end_date`; Pending Archiving = every task done, today on/after `end_date`
+(or no `end_date`); Archived = `archived_at` set (explicit confirm only —
+neither the end date passing nor task completion archives by itself).
+
+**Overlap** (`db.find_overlapping_project`) — two non-Archived projects may
+not share an overlapping `[start_date, end_date]`; promote/dates redirects
+back with `?overlap=<name>` and a "save anyway" confirm (`confirm_overlap`)
+instead of silently accepting the conflict.
+
+**`project_label_for` supersession** — an attached `is_project=1` label now
+wins outright; falls back to the pre-1.3 "first non-Space label,
+alphabetical" heuristic only when nothing attached is explicitly
+project-enabled (data written before 1.3).
+
+**Cards** (`/projects`, `_project_card`) — status, `start_date`/`end_date`,
+task count, completed/remaining, nearest incomplete due date, and
+`progress` = completed/total *task count* (not hours — work allocations
+don't exist until 1.4, so there's no scheduled-work total to compute a real
+hour-based percentage from yet).
+
+**Deferred to 1.4/1.5** (not built): the project's own Tasks view + Week
+Calendar view, work allocations, hour-based progress, the global Tasks
+page's project grouping. A card's "Open" link goes to the label's existing
+generated page (`routers/labels.py`'s `label_detail`) in the meantime.

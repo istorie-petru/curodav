@@ -8,51 +8,60 @@ session, right before the final commit of that session.
 
 ## Right now
 
-- **Shipped:** `1.2`, complete (2026-08-13) — task model settled: flat tasks
-  + work allocations, subtask hierarchy removed. Side work: Universal command
-  surface steps 1–4 and 6 all landed — `db.search_entities` query layer,
-  `GET /api/search` + `/search` page, Ctrl-K/Cmd-K overlay
-  (`static/command_palette.js`), and the Relations-card picker wiring (the
-  old `linkable_events`/`linkable_tasks` `<select>` pools are gone). See
-  `features/tasks.md` § Search & the command surface. Not shipped: step 5's
-  fuller scope (command-palette *actions* — create/complete/delete/label from
-  the overlay) — tracked as an optional follow-up in `open.md` § Command
-  palette actions, not a blocker for anything.
-- **Next slice:** `1.3` — Project-enabled label stack (`open-priority.md` §
-  Project-enabled label stack). It's the hard gate for 1.4–1.7 — start here
-  next. `open.md`'s Command palette actions follow-up is a fine smaller slice
-  instead, whenever a session wants something self-contained.
-- **Do not start:** anything under `1.4`+ in `roadmap.md` — it depends on the
-  project stack (`1.3`) landing first.
+- **Shipped:** `1.3`, complete (2026-08-13) — project-enabled label stack:
+  `label_config.is_project` + `start_date`/`end_date`/`archived_at`, the
+  computed Open/Pending/Pending Archiving/Archived lifecycle
+  (`db.project_status`), the overlap rule (`db.find_overlapping_project`),
+  `project_label_for`'s supersession (an explicit `is_project=1` label now
+  wins over the old "first non-Space label" heuristic), and the dedicated
+  `/projects` page (`routers/projects.py`) with promote/dates/demote/archive
+  actions and progress cards. See `features/tasks.md` § Projects. Not
+  shipped (deferred to 1.4/1.5, per spec): the project's own Tasks view +
+  Week Calendar view, work allocations, hour-based progress (cards use
+  completed/total task *count* as the interim proxy), and the global Tasks
+  page's project grouping. Side work (Widget consolidation + Streak + Next
+  Deadline) not started — optional, doesn't block 1.4+.
+- **Next slice:** `1.4` — Work allocations + project week calendar
+  (`open-priority.md` § Work allocations, § Task & calendar semantics). Adds
+  the calendar-event-linked-to-a-task model and the project's Week Calendar
+  view; unlocks real hour-based project-card progress (currently a
+  task-count proxy, see `db.projects.py`'s `_project_card`). `open.md`'s
+  Command palette actions follow-up is still a fine smaller slice instead,
+  whenever a session wants something self-contained.
+- **Do not start:** anything under `1.5`+ in `roadmap.md` — 1.5 depends on
+  1.4's work allocations landing first.
 
-## Breadcrumbs for 1.3 (Project-enabled label stack)
+## Breadcrumbs for 1.4 (Work allocations + project week calendar)
 
-Written at the end of the 1.2 session so the 1.3 session can skip a full
-exploration pass. Read `open-priority.md` § Project-enabled label stack for
-the actual spec — this is only "where in the code," not "what to build."
+Written at the end of the 1.3 session so the 1.4 session can skip a full
+exploration pass. Read `open-priority.md` § Work allocations and § Task &
+calendar semantics for the actual spec — this is only "where in the code,"
+not "what to build."
 
-- **`label_config` table** — `webapp/src/db.py`, `CREATE TABLE` around line
-  250. Has `generate_space` (Space page toggle) but no bounded period or
-  lifecycle columns yet; 1.3 needs to add something like `is_project`,
-  `start_date`, `end_date`, `status` (Open/Pending/Pending Archiving/Archived)
-  here. Existing precedent for adding columns to this table: the
-  `_ensure_column` migration helper (`db.py` ~line 700).
-- **`project_label_for(conn, object_type, object_id)`** — `db.py` ~line 2126.
-  The current heuristic ("whichever attached label isn't a Space, chosen
-  alphabetically") that `open-priority.md`'s "Known open risks" flags as
-  interacting directly with this rework. 1.3 either resolves or deliberately
-  supersedes it once a label can be explicitly project-enabled instead of
-  inferred.
-- **`routers/labels.py`** — label management (`manage_labels`,
-  `label_detail`) lives here today; `label_detail.html`/`labels_manage.html`
-  are the templates. The project stack's dedicated sidebar page + Tasks view
-  + Week Calendar view (per the spec) are new surfaces, but the "a label can
-  carry extra behavior" plumbing (`_label_scope`, `set_label`) is the
-  existing pattern to extend rather than duplicate.
-- **Project cards' work-based progress** needs completed vs. scheduled work
-  per task — depends on the 1.1 aggregation service
-  (`webapp/src/derived_state.py`) for the counting pattern, even though work
-  allocations themselves aren't Slice 1.3's job (that's 1.4).
+- **`label_config.is_project`/`start_date`/`end_date`/`archived_at`** —
+  `webapp/src/db.py`, columns added 1.3 (`CREATE TABLE` around line 254,
+  `_ensure_column` migrations ~line 700). `db.list_project_labels`,
+  `db.project_status`, `db.find_overlapping_project`, `db.archive_project`
+  are the 1.3-shipped helpers 1.4 builds on top of, not around.
+- **`routers/projects.py`** — the Projects page + promote/dates/demote/
+  archive actions (`/projects`). 1.4's Week Calendar view is a new sub-page
+  under this same router (e.g. `/projects/{name}/calendar`), not a
+  separate router — keep the "one router per surface family" pattern
+  `routers/labels.py`'s own docstring describes.
+- **`_project_card` in `routers/projects.py`** — `progress` is currently
+  completed/total *task count* (1.3's interim proxy, see its own docstring
+  note). 1.4 should replace this with real scheduled-work totals once work
+  allocations exist, per `open-priority.md`'s "Project progress is based on
+  work, not merely task count" rule — this is a known, deliberate stopgap,
+  not an oversight to preserve.
+- **Work allocations are Events, not a new table** — `open-priority.md` § Work
+  allocations: "A work allocation... is a calendar Event linked to that
+  task." Look at how `events` currently relates to `tasks`
+  (`event_task_relations`, `webapp/src/db.py`) before inventing a new
+  relationship — the existing Relations-card plumbing
+  (`features/tasks.md` § Relations) may already be most of what's needed,
+  possibly extended with a "this relation is a work allocation, not just a
+  reference" marker.
 
 ## How to run a session (slice discipline)
 

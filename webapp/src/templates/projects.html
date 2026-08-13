@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="toolbar top-app-bar">
+    <h1>Projects</h1>
+    <div class="spacer"></div>
+</div>
+<p class="settings-hint">A project is a label with Project behavior on: a bounded start/end period, a lifecycle (Open &rarr; Pending &rarr; Pending Archiving &rarr; Archived), and progress cards below. The label stays usable everywhere else -- combine it with any other label, same as before.</p>
+
+<!-- Promote-a-label form -- always visible, not gated behind a separate
+     "New project" page, since promoting is the only creation path (§
+     Projects are labels, not a stored thing: there is no project entity
+     to create independently of a label). Overlap warning renders above it
+     when the last submit hit § Project period's "may not overlap"
+     rule. -->
+{% if overlap_name and pending %}
+<div class="card" style="border-color:var(--accent-warning, #b58900)">
+    <p><strong>{{ icon('activity', 'icon-sm') }} "{{ pending.name }}" ({{ pending.start_date }} &ndash; {{ pending.end_date }}) overlaps the existing project "{{ overlap_name }}".</strong></p>
+    <p class="settings-hint">Projects can't share an overlapping period. Resolve the conflict (change one project's dates) or confirm you want them to overlap anyway.</p>
+    <form method="post" action="/projects/promote" class="form-inline">
+        <input type="hidden" name="name" value="{{ pending.name }}">
+        <input type="hidden" name="start_date" value="{{ pending.start_date }}">
+        <input type="hidden" name="end_date" value="{{ pending.end_date }}">
+        <input type="hidden" name="confirm_overlap" value="1">
+        <button type="submit" class="btn ghost">Save anyway</button>
+        <a href="/projects" class="btn ghost">Cancel</a>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <form method="post" action="/projects/promote" class="form-inline" style="flex-wrap:wrap; gap:8px">
+        <input type="text" name="name" list="project-label-names" placeholder="Label name (existing or new)" required style="flex:1; min-width:180px">
+        <datalist id="project-label-names">
+            {% for l in existing_labels %}<option value="{{ l }}">{% endfor %}
+        </datalist>
+        <label class="settings-hint">Start <input type="date" name="start_date" required></label>
+        <label class="settings-hint">End <input type="date" name="end_date" required></label>
+        <button type="submit" class="btn primary">{{ icon('plus', 'icon-sm') }} Make it a project</button>
+    </form>
+</div>
+
+{% if projects %}
+{% for p in projects %}
+<div class="card habit-card">
+    <div class="habit-card-header">
+        <a href="/labels/{{ p.name }}" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px">
+            <span class="cell-tag cal-{{ p.color }}">{% if p.icon %}{{ icon(p.icon, 'icon-sm') }} {% endif %}{{ p.name }}</span>
+        </a>
+        <span class="tag-usage-count" title="Lifecycle status">{{ p.status }}</span>
+        <div class="spacer"></div>
+        <span class="settings-hint">{{ p.start_date }} &ndash; {{ p.end_date }}</span>
+    </div>
+
+    <div class="project-progress-bar"><div class="project-progress-fill" style="width:{{ p.progress }}%"></div></div>
+    <p class="settings-hint">
+        {{ p.completed_count }}/{{ p.task_count }} tasks completed &middot; {{ p.remaining_count }} remaining &middot; {{ p.progress }}% complete
+        {% if p.upcoming_deadline %} &middot; next due {{ p.upcoming_deadline[:10] }}{% endif %}
+    </p>
+
+    <div class="label-actions">
+        <a href="/labels/{{ p.name }}" class="btn ghost">{{ icon('external-link', 'icon-sm') }} Open</a>
+        <form method="post" action="/projects/{{ p.name }}/dates" class="form-inline">
+            <label class="settings-hint">Start <input type="date" name="start_date" value="{{ p.start_date }}"></label>
+            <label class="settings-hint">End <input type="date" name="end_date" value="{{ p.end_date }}"></label>
+            <button type="submit" class="icon-btn" title="Save dates">{{ icon('check-square', 'icon-sm') }}</button>
+        </form>
+        {% if p.status == "Pending Archiving" %}
+        <form method="post" action="/projects/{{ p.name }}/archive" data-confirm-sheet="Archive &quot;{{ p.name }}&quot;? This confirms the project is finished -- the label and its history stay intact.">
+            <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/projects/{{ p.name }}/demote" data-confirm-sheet="Remove Project behavior from &quot;{{ p.name }}&quot;? The label and everything tagged with it stay exactly as they are -- only the project period/lifecycle/cards go away.">
+            <button type="submit" class="icon-btn" title="Demote back to a plain label">{{ icon('x', 'icon-sm') }}</button>
+        </form>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('folder') }}</div>
+    <div class="empty-state-title">No projects yet</div>
+    <div class="empty-state-text">Promote a label above to give it a bounded period, a lifecycle, and progress tracking.</div>
+</div>
+{% endif %}
+{% endblock %}
