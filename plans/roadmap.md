@@ -5,10 +5,12 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.1** (1.0 was the first full release; 1.1 —
-Virtual & derived states — shipped 2026-08-13). Minor releases are numbered
-`1.1` … `1.9`; once everything on this roadmap is implemented, the next full
-release is **2.0**. See the versioning rules in [`abandoned.md`](abandoned.md).
+**Version:** the app is at **1.2** (1.0 was the first full release; 1.1 —
+Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
+Universal command surface side work — shipped 2026-08-13). Minor releases are
+numbered `1.1` … `1.9`; once everything on this roadmap is implemented, the
+next full release is **2.0**. See the versioning rules in
+[`abandoned.md`](abandoned.md).
 
 ## The two tracks
 
@@ -25,7 +27,7 @@ never hold Track A up.
 | Release | Main work (Track A) | Side work (Track B) | Depends on |
 |---|---|---|---|
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
-| `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | Universal command surface | 1.1 |
+| `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
 | `1.3` | Project-enabled labels + lifecycle | Widget consolidation | 1.2 |
 | `1.4` | Work allocations + project week calendar | Project check-in (optional) | 1.3 |
 | `1.5` | Task management & grouping | — | 1.3–1.4 |
@@ -59,7 +61,11 @@ subtask hierarchy is removed outright; the schema change is applied (the old
 further task work. Small, but a hard gate for 1.3.
 
 Side work (independent): **Universal command surface** (search / picker /
-command palette) — self-contained, no model changes.
+command palette) — **shipped 2026-08-13**: `db.search_entities` query layer,
+`GET /api/search` + `/search`, Ctrl-K/Cmd-K, and the Relations-card picker
+(`features/tasks.md` § Search & the command surface). Command-palette
+*actions* (create/complete/delete/label from the overlay) didn't ship —
+tracked as an optional follow-up in `open.md` § Command palette actions.
 
 ### 1.3 — The project stack
 

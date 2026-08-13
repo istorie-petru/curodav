@@ -103,6 +103,12 @@
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>
+        <!-- Universal command surface (1.2 side work) -- Ctrl-K/Cmd-K opens
+             the same overlay from anywhere; this tab is the discoverable,
+             clickable entry point plus a real /search fallback for no-JS
+             (command_palette.js preventDefaults the click and opens the
+             overlay instead of navigating when JS is available). -->
+        <a href="/search" data-tab="search" data-command-palette-open class="tab-btn {% if active_tab == 'search' %}active{% endif %}">{{ icon('command') }}<span>Search</span></a>
         <!-- 2026-08-08 Settings redesign: the gear now has to stay lit for
              every page inside the Settings area, not just the hub itself
              -- the hub's six children (settings_general/appearance/data/
@@ -190,6 +196,25 @@
      and moves it back to its original spot on close. -->
 <div class="multiselect-portal" id="multiselect-portal"></div>
 
+<!-- Universal command surface (1.2 side work, plans/open.md § Universal
+     command surface) -- shared picker overlay for global search/
+     navigation (Ctrl-K/Cmd-K, /search, the tabbar's Search entry) and the
+     Relations cards' "add related X" flow (static/command_palette.js).
+     A portal like #modal-overlay/#color-popover above, for the same
+     reason: it must render on top of an already-open modal, since a
+     relations-picker trigger lives inside modal-body. -->
+<div class="command-palette-overlay" id="command-palette-overlay">
+    <div class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-label="Search">
+        <div class="command-palette-input-row">
+            {{ icon('command') }}
+            <input type="text" id="command-palette-input" class="command-palette-input"
+                   placeholder="Search tasks, events, contacts…" autocomplete="off">
+            <button type="button" class="icon-btn" id="command-palette-close" aria-label="Close">{{ icon('x') }}</button>
+        </div>
+        <div class="command-palette-results" id="command-palette-results"></div>
+    </div>
+</div>
+
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
@@ -234,12 +259,16 @@
      calls CCHabitFieldToggle.init(body) against the freshly-injected
      content. -->
  <script src="{{ static_url('task_habit_field_toggle.js') }}"></script>
-<!-- Relations cards' add-row "＋ New…" title reveal (_task_relations.html/
-     _event_relations.html, 2026-08-09) -- loaded globally for the same
-     reason as the scripts above: those cards are normally injected into
-     the modal via innerHTML, so modal.js's wireContent() calls
-     CCRelationPicker.init(body) against the freshly-injected content. -->
-<script src="{{ static_url('relations_picker.js') }}"></script>
+<!-- Universal command surface (1.2 side work) -- global Ctrl-K/Cmd-K search
+     plus the Relations cards' "add related X" picker
+     (_task_relations.html/_event_relations.html, replacing the old
+     relations_picker.js's <select>-reveal behavior 2026-08-13). Loaded
+     globally: its entry points are document-level delegated listeners
+     (see the file's own header comment), so unlike most of the
+     modal-injected-content scripts above it needs no wireContent()
+     re-init hook -- delegation already covers content injected via
+     modal.js's innerHTML swap. -->
+<script src="{{ static_url('command_palette.js') }}"></script>
 <!-- Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
      loaded globally for the same reason as the scripts above: quick_add.html
      is normally injected into the modal via innerHTML (which never runs

@@ -66,6 +66,34 @@ outright** — tasks are flat (`parent_uid` no longer written or read, no cascad
 delete, no iCal RELATED-TO round-trip), so the card now holds related events
 only.
 
+The "Add a related event…" row is the shared picker overlay (1.2 side work,
+`static/command_palette.js`), not a `<select>` — see "Search & the command
+surface" below. It replaced the old inline dropdown that pre-rendered every
+candidate event on every page load; the overlay now asks
+`GET /api/search?for_task=<uid>` for exactly the page of shared-label,
+not-already-linked candidates it needs.
+
+## Search & the command surface
+
+`Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`
+directly opens one shared picker overlay backed by `db.search_entities` (a
+single query layer over tasks, events, and contacts — free-text over
+title/description/labels, plus type and label filters) and its HTTP surface,
+`routers/search.py`'s `GET /api/search`. Picking a result opens it (the same
+`data-modal` mechanism every entity link already uses); picking a Tasks/
+Events/Contacts entry with no query yet navigates there directly. The same
+overlay, opened with an implicit `for_task`/`for_event` filter instead, is
+the Relations card's picker described above — one implementation for both
+invocation modes, not two independent search UIs.
+
+**What's shipped:** the query layer, `/api/search`, `/search`, Ctrl-K,
+navigate-to-result, and the Relations picker wiring (`plans/open.md`'s
+Universal command surface steps 1–4 and 6). **Not yet built:** context-
+dependent commands/actions beyond navigation — creating, completing,
+deleting, or labeling an entity directly from the palette, with destructive-
+action confirmation (step 5's fuller scope). The overlay searches and
+navigates today; it isn't a full command palette yet.
+
 ## Auto-archive
 
 `TASK_AUTO_ARCHIVE_DAYS_KEY` ("Never"/7/14/30/90), lazy `_auto_archive_if_configured`

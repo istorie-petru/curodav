@@ -1,0 +1,36 @@
+{# Standalone search entry point (1.2 side work, Universal command surface
+   step 4) -- a bookmarkable, no-JS-required page over the same
+   `search_entities` query layer Ctrl-K uses. Once loaded, static/
+   command_palette.js takes over: typing here live-queries /api/search the
+   same way the overlay does, so this page and Ctrl-K share one client
+   implementation rather than two independent search UIs. data-command-
+   palette-page marks the results list command_palette.js should render
+   into; data-command-palette-input marks the field driving it. #}
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="toolbar top-app-bar">
+    <h1>Search</h1>
+</div>
+<form class="search-page-form" data-command-palette-page action="/search" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search tasks, events, contacts..."
+           class="search-page-input" data-command-palette-input autofocus autocomplete="off">
+</form>
+<div class="checklist search-page-results" data-command-palette-results>
+    {% if not q %}
+    <div class="empty-state" style="padding:24px 0">Type to search across tasks, events, and contacts.</div>
+    {% elif not results %}
+    <div class="empty-state" style="padding:24px 0">No results for "{{ q }}".</div>
+    {% else %}
+    {% for r in results %}
+    <div class="checklist-row search-result-row" data-type="{{ r.type }}" data-uid="{{ r.uid }}">
+        {{ icon('check-square' if r.type == 'task' else ('calendar' if r.type == 'event' else 'user'), 'icon-sm') }}
+        <a class="checklist-text" href="{{ '/tasks/' if r.type == 'task' else ('/events/' if r.type == 'event' else '/contacts/') }}{{ r.uid }}" data-modal>
+            {{ r.title }}
+            <span class="search-result-subtitle">{{ r.subtitle }}</span>
+        </a>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

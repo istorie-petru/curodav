@@ -229,24 +229,25 @@ def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
 
 
 def _related_context(conn, task: dict) -> dict:
-    """Context keys every task view modal needs for its Relations card:
-    the events already linked to this task, plus the not-yet-linked events
-    sharing at least one label (the "link an existing event" picker pool).
-    `None` task -> empty lists, so templates never branch on the object
-    existing."""
+    """Context keys every task view modal needs for its Relations card: the
+    events already linked to this task. `None` task -> empty list, so
+    templates never branch on the object existing.
+
+    1.2 side work (Universal command surface step 3): this used to also
+    precompute `linkable_events` -- every not-yet-linked event sharing a
+    label with this task, the old `<select>`'s entire option pool. The
+    picker overlay (static/command_palette.js) now asks `GET /api/search
+    ?for_task=<uid>` for exactly the page of candidates it needs instead,
+    so there's nothing left to precompute here."""
     if task is None:
-        return {"related_events": [], "linkable_events": []}
+        return {"related_events": []}
     related = db.related_events_for_task(conn, task["uid"])
     # Events fetched via db don't carry calendar_color (only the calendar
     # views' _annotate_calendar_colors sets it) -- annotate so the card's
     # identity dots follow each event's first-label color like everywhere
     # else in the app.
     related = calendar_router._annotate_calendar_colors(conn, related)
-    linked = {e["uid"] for e in related}
-    linkable = [
-        e for e in db.list_events_sharing_labels(conn, task.get("tags") or []) if e["uid"] not in linked
-    ]
-    return {"related_events": related, "linkable_events": linkable}
+    return {"related_events": related}
 
 
 def _progress_for_status(status: str) -> float:

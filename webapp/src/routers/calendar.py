@@ -99,12 +99,17 @@ def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
 
 def _related_context(conn, event: dict | None) -> dict:
     """Context keys every event view modal needs for its Relations card:
-    the tasks already linked to this event, plus the not-yet-linked tasks
-    sharing at least one label (the "link an existing task" picker pool).
-    `None` event -> empty lists, so templates never branch on the object
-    existing."""
+    the tasks already linked to this event. `None` event -> empty list, so
+    templates never branch on the object existing.
+
+    1.2 side work (Universal command surface step 3): this used to also
+    precompute `linkable_tasks` -- every not-yet-linked task sharing a
+    label with this event, the old `<select>`'s entire option pool. The
+    picker overlay (static/command_palette.js) now asks `GET /api/search
+    ?for_event=<uid>` for exactly the page of candidates it needs instead,
+    so there's nothing left to precompute here."""
     if event is None:
-        return {"related_tasks": [], "linkable_tasks": []}
+        return {"related_tasks": []}
     related = db.related_tasks_for_event(conn, event["uid"])
     # The event card's relation rows use a status-colored identity dot, the
     # same mapping task views render task status with (routers/tasks.py's
@@ -113,11 +118,7 @@ def _related_context(conn, event: dict | None) -> dict:
     # table-driven lookup that never changes on its own).
     for t in related:
         t["status_color"] = _TASK_STATUS_DOT_COLORS.get(t["status"], "blue")
-    linked = {t["uid"] for t in related}
-    linkable = [
-        t for t in db.list_tasks_sharing_labels(conn, event.get("tags") or []) if t["uid"] not in linked
-    ]
-    return {"related_tasks": related, "linkable_tasks": linkable}
+    return {"related_tasks": related}
 
 
 def _group_education_next_lectures(conn, label: str | None) -> list[dict]:

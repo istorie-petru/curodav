@@ -8,15 +8,20 @@ session, right before the final commit of that session.
 
 ## Right now
 
-- **Shipped:** `1.2` (commit `94ef7f5`, 2026-08-13) — task model settled: flat
-  tasks + work allocations, subtask hierarchy removed. Side work landed with
-  it: Universal command surface **step 1 only** — `search_entities()` query
-  layer in `webapp/src/db.py` + `webapp/tests/test_search_entities.py`.
-- **Next slice:** `1.3` — Project-enabled label stack, OR Universal command
-  surface step 2 (reusable picker UI, wires into Relations). Both are
-  unblocked. Recommend starting `1.3` (it's the hard gate for 1.4–1.7); do
-  command-surface step 2 as a side-work slice whenever a session wants a
-  smaller, self-contained task.
+- **Shipped:** `1.2`, complete (2026-08-13) — task model settled: flat tasks
+  + work allocations, subtask hierarchy removed. Side work: Universal command
+  surface steps 1–4 and 6 all landed — `db.search_entities` query layer,
+  `GET /api/search` + `/search` page, Ctrl-K/Cmd-K overlay
+  (`static/command_palette.js`), and the Relations-card picker wiring (the
+  old `linkable_events`/`linkable_tasks` `<select>` pools are gone). See
+  `features/tasks.md` § Search & the command surface. Not shipped: step 5's
+  fuller scope (command-palette *actions* — create/complete/delete/label from
+  the overlay) — tracked as an optional follow-up in `open.md` § Command
+  palette actions, not a blocker for anything.
+- **Next slice:** `1.3` — Project-enabled label stack (`open-priority.md` §
+  Project-enabled label stack). It's the hard gate for 1.4–1.7 — start here
+  next. `open.md`'s Command palette actions follow-up is a fine smaller slice
+  instead, whenever a session wants something self-contained.
 - **Do not start:** anything under `1.4`+ in `roadmap.md` — it depends on the
   project stack (`1.3`) landing first.
 

@@ -1328,18 +1328,17 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .checklist-add-form input[type="text"]{flex:1;}
 
 /* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
-   -- the merged Subtasks+relations detail card. Two stacked sub-groups
-   (Subtasks / Related events|tasks), each its own caption head + checklist
-   + add row, so the merged card still reads like two clearly-labelled
-   lists rather than one undifferentiated blob. The add row's <select> is
-   the "link an existing object" picker; the sibling title input (revealed
-   by static/relations_picker.js only when "＋ New…" is chosen) is the
-   "create a new object" path. */
+   -- the merged Subtasks+relations detail card; 1.2 removed the Subtasks
+   half (tasks are flat), so this is now just the Related events|tasks
+   group: a caption head + checklist + add row. The add row (1.2 side
+   work, Universal command surface step 3) is a trigger button that opens
+   the shared picker overlay (static/command_palette.js) instead of the
+   old `<select>` -- see .relations-picker-trigger below and
+   _task_relations.html's comment. */
 .relations-group{border-top:1px solid var(--separator); padding-top:var(--space-3); margin-top:var(--space-3);}
 .relations-group:first-child{border-top:none; padding-top:0; margin-top:0;}
 .relations-group-head{display:flex; align-items:baseline; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:4px; text-transform:uppercase; letter-spacing:.4px;}
-.relations-add-form .relations-picker{flex:1; min-width:0;}
-.relations-add-form .relations-new-title{flex:1; min-width:0;}
+.relations-picker-trigger{display:inline-flex; align-items:center; gap:6px;}
 
 /* Contacts list (contacts_list.html) */
 .contact-list{display:flex; flex-direction:column;}
@@ -2212,6 +2211,67 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    flex:none;
 }
 .modal-footer .spacer{flex:1;}
+
+/* --------------------------------------------------------------------- */
+/* Universal command surface (1.2 side work, static/command_palette.js)  */
+/* -- one shared picker overlay for global search/navigation (Ctrl-K/    */
+/* Cmd-K, /search) and the Relations cards' "add related X" flow. Same   */
+/* "second overlay layered above the regular .modal-overlay" pattern     */
+/* .cropper-overlay below already established, same z-index -- a         */
+/* relations-picker trigger lives inside modal-body, so this has to      */
+/* render above an already-open modal, not inside it.                    */
+/* --------------------------------------------------------------------- */
+.command-palette-overlay{
+  position:fixed; inset:0; z-index:200; background:var(--overlay-scrim);
+  display:flex; align-items:flex-start; justify-content:center; padding:12vh var(--space-5) var(--space-5);
+  opacity:0; visibility:hidden;
+  transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
+}
+.command-palette-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
+body.command-palette-open{overflow:hidden;}
+.command-palette{
+  width:560px; max-width:100%; max-height:min(60vh, 480px);
+  background:var(--surface-container-high); border-radius:var(--radius-lg); box-shadow:var(--elevation-3);
+  display:flex; flex-direction:column; overflow:hidden;
+  transform:translateY(-6px) scale(.98);
+  transition:transform var(--dur-normal) var(--ease-standard);
+}
+.command-palette-overlay.is-open .command-palette{transform:translateY(0) scale(1);}
+.command-palette-input-row{
+  display:flex; align-items:center; gap:var(--space-2);
+  padding:var(--space-3) var(--space-4);
+  border-bottom:1px solid var(--separator);
+  flex:none;
+}
+.command-palette-input-row > .icon{color:var(--fg-tertiary); flex:none;}
+.command-palette-input{
+  flex:1; min-width:0; border:none; background:transparent; font-size:var(--text-body);
+  color:var(--fg-primary); padding:6px 0;
+}
+.command-palette-input:focus{outline:none;}
+.command-palette-results{overflow-y:auto; flex:1; padding:var(--space-2);}
+.command-palette-row{
+  display:flex; align-items:center; gap:var(--space-3); width:100%;
+  padding:var(--space-2) var(--space-3); border:none; background:transparent; border-radius:var(--radius-control);
+  cursor:pointer; text-align:left; color:var(--fg-primary);
+}
+.command-palette-row .icon{color:var(--fg-tertiary); flex:none;}
+.command-palette-row:hover, .command-palette-row.is-active{background:var(--bg-secondary);}
+.command-palette-row-text{display:flex; flex-direction:column; min-width:0;}
+.command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.command-palette-row-subtitle{font-size:var(--text-caption); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-footnote); text-align:center;}
+
+/* Standalone /search page (search.html) -- the same result-row language
+   as .command-palette-row above, laid over the app's ordinary .checklist
+   card styling (search.html's results list is a plain .checklist) rather
+   than duplicating it. */
+.search-page-form{margin-bottom:var(--space-4);}
+.search-page-input{
+  width:100%; padding:var(--space-3) var(--space-4); border-radius:var(--radius-control);
+  border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-body);
+}
+.search-result-subtitle{display:block; font-size:var(--text-caption); color:var(--fg-tertiary);}
 
 /* --------------------------------------------------------------------- */
 /* Photo crop/resize/rotate editor (static/avatar_cropper.js,            */

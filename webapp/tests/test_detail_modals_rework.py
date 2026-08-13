@@ -207,12 +207,11 @@ class TestDetailCardAndMetaGrid:
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert body.count('class="detail-card') == 2
-        # The relations add/completed forms are still wired for in-place
-        # refresh (data-modal-keep-open) inside the modal.
-        assert 'class="detail-card' in body
-        # The relations add/completed forms are still wired for in-place
-        # refresh (data-modal-keep-open) inside the modal.
-        assert 'class="checklist-add-form relations-add-form"' in body
+        # The relations picker trigger + its hidden submit form (1.2 side
+        # work: replaces the old inline <select> add-row) are still wired
+        # for in-place refresh (data-modal-keep-open) inside the modal.
+        assert "data-relations-picker" in body
+        assert 'class="relations-hidden-form"' in body
         assert "data-modal-keep-open" in body
 
 

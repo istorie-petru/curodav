@@ -1,6 +1,6 @@
 [project]
 name = "command-center-web"
-version = "1.1.0"
+version = "1.2.0"
 description = "Mobile/remote PWA client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server. Update 2026-08: local-only projects/tags (see src/db.py) were folded into the universal label/object_labels model (see features/architecture.md); a generic cross-type link/board graph was never carried over from the now-deleted desktop app (features/architecture.md Phase 8) -- accepted gap, not planned."
 requires-python = ">=3.12"
 dependencies = [
