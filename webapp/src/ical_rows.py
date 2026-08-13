@@ -187,8 +187,11 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
         todo.add("PERCENT-COMPLETE", round(row["progress"] * 100))
     if row.get("tags"):
         todo.add("CATEGORIES", list(row["tags"]))
-    if row.get("parent_uid"):
-        todo.add("RELATED-TO", row["parent_uid"], parameters={"RELTYPE": "PARENT"})
+    # 1.2 (task-model decision): the parent-task/subtask hierarchy is
+    # removed -- tasks are flat, so there is no RELATED-TO;RELTYPE=PARENT
+    # on export anymore. (The old `tasks.parent_uid` column stays
+    # physically on disk, unused; a pre-1.2 VTODO that still carries a
+    # RELATED-TO is simply ignored on import below.)
     if row.get("recurrence"):
         anchor = row.get("start_at") or row.get("due_at") or ""
         is_datetime = len(anchor) > 10
@@ -221,13 +224,8 @@ def ical_to_task_row(todo: Todo) -> dict[str, Any]:
         cats = todo.get("CATEGORIES")
         cats_list = cats.cats if hasattr(cats, "cats") else cats
         row["tags"] = [str(c) for c in cats_list]
-    related = todo.get("RELATED-TO")
-    if related is not None:
-        items = related if isinstance(related, list) else [related]
-        for rel in items:
-            params = getattr(rel, "params", {}) or {}
-            if params.get("RELTYPE", "PARENT") == "PARENT":
-                row["parent_uid"] = str(rel)
+    # 1.2: RELATED-TO;RELTYPE=PARENT (subtask links) is deliberately not
+    # parsed back -- tasks are flat now. See the export-side comment above.
     if "RRULE" in todo:
         row["recurrence"] = todo.get("RRULE").to_ical().decode()
     return row

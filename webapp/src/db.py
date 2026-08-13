@@ -26,10 +26,11 @@ round-trips through CalDAV, and a checklist made here won't show up if the
 same task is opened from another CalDAV client. Kanban (routers/tasks.py's
 board view) needed no new table at all -- it's just VTODO STATUS grouped
 into columns, the same `tasks.status` column the table view already reads.
-Subtasks likewise needed no new table -- `tasks.parent_uid` already existed
-and round-trips via RELATED-TO;RELTYPE=PARENT (ical_rows.py), so a subtask
-created here is a real, portable VTODO on any other CalDAV client, just
-without this app's own nested-list presentation.
+Subtasks existed via `tasks.parent_uid` (round-tripping through
+RELATED-TO;RELTYPE=PARENT in ical_rows.py) until the 1.2 task-model
+decision removed the hierarchy entirely -- tasks are flat and independent
+(see the `tasks` CREATE TABLE comment), so nothing here round-trips a
+parent relationship anymore.
 
 `tags`/`tag_groups`/`projects`/`project_groups` (added 2026-08-01) are
 local-only for the same reason as `task_checklist_items` above -- no
@@ -112,6 +113,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
+    -- 1.2 (task model, plans/open-priority.md § Subtask model -- the open
+    -- conflict, resolved): the parent-task/subtask hierarchy is removed;
+    -- tasks are flat, independent units of work (the outcome/parent
+    -- aggregation is reproduced by a project label plus its tasks, and
+    -- multiple work sessions on one task are work allocations in 1.4, not
+    -- child tasks). The old `parent_uid` column stays physically on disk
+    -- for pre-1.2 databases but is no longer referenced by app code --
+    -- same "never force-drop old data" convention as the old `priority`
+    -- column above. The idx_tasks_parent index was likewise removed from
+    -- SCHEMA_SQL for new databases (an existing database keeps its own).
     parent_uid TEXT,
     recurrence TEXT,
     exdates_json TEXT NOT NULL DEFAULT '[]',
@@ -171,16 +182,19 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
 -- Explicit event<->task relations (2026-08-09, "Relations", the webapp's
 -- associative-link replacement for desktop's links graph -- see
 -- features/architecture.md Phase 8, which left it an accepted gap).
--- Unlike a subtask (a task->task structural parent link, tasks.parent_uid)
--- this is a many-to-many graph link between two *different* object types:
+-- This is a many-to-many graph link between two *different* object types:
 -- one event row + one task row, either direction. Same no-FK, natural-key
 -- convention as object_labels: the composite PK *is* the link, "deleting"
 -- is a plain DELETE, and stale rows are cleaned up by delete_event/
--- delete_task's cascades below. A relation is only ever created when the
--- two objects share at least one label (the UI filters its link picker to
--- candidates that already do, and the routers re-check defensively) --
--- "both have at least one label in common" is the definition of related
--- here, and the label overlap is what the Relations cards render under.
+-- delete_task's cascades below. (The 1.2 task-model decision removed the
+-- task->task structural parent link -- `tasks.parent_uid`, which this
+-- comment used to contrast against -- but the cross-type relation here is
+-- a separate mechanism and is unaffected.) A relation is only ever created
+-- when the two objects share at least one label (the UI filters its link
+-- picker to candidates that already do, and the routers re-check
+-- defensively) -- "both have at least one label in common" is the
+-- definition of related here, and the label overlap is what the Relations
+-- cards render under.
 CREATE TABLE IF NOT EXISTS event_task_relations (
     event_uid TEXT NOT NULL,
     task_uid TEXT NOT NULL,
@@ -269,7 +283,6 @@ CREATE TABLE IF NOT EXISTS label_config (
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at);
-CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_uid);
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(full_name);
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
 
@@ -940,9 +953,13 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     cols = [
         "uid", "title", "description",
         "start_at", "due_at", "importance", "urgency", "status", "progress",
-        "parent_uid", "recurrence", "completed_at", "created_at", "updated_at",
+        "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
     ]
+    # parent_uid is deliberately absent from this list (1.2, task-model
+    # decision): subtasks are removed, tasks are flat. The column stays
+    # physically on disk for pre-1.2 databases but is never written or read
+    # by app code -- same convention as the old `priority` column above.
     # target_per_day (2026-08-08, habit-labeled tasks) falls back to 1 --
     # same "NOT NULL DEFAULT 1" the column itself has -- for any caller
     # that builds its row without ever mentioning it (most: complete_task/
@@ -1122,17 +1139,6 @@ def set_task_timeline_lane(conn: sqlite3.Connection, uid: str, lane: int | None)
     conn.commit()
 
 
-def list_subtasks(conn: sqlite3.Connection, parent_uid: str) -> list[dict[str, Any]]:
-    """Direct children only (one level) -- matches desktop's subtask tree,
-    which also doesn't recurse into grandchildren on the parent's own detail
-    view (each subtask gets its own detail page for that)."""
-    rows = conn.execute(
-        "SELECT * FROM tasks WHERE parent_uid = ? ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC",
-        (parent_uid,),
-    ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
-
-
 # --------------------------------------------------------------------- #
 # Event<->task relations -- 2026-08-09 ("Relations", associative graph
 # links between events and tasks, the webapp's answer to desktop's old
@@ -1236,25 +1242,286 @@ def list_events_sharing_labels(conn: sqlite3.Connection, label_names: list[str])
 
 
 # --------------------------------------------------------------------- #
+# search_entities -- 1.2 (universal command surface, see plans/open.md §
+# Universal command surface). One shared query layer for the search /
+# picker / command palette component: finds tasks, events, and contacts by
+# name -- plus working filters -- and is the single source of truth every
+# future invocation mode (Ctrl-K global search, the relation picker, the
+# per-view search boxes) delegates to instead of each view's own q=
+# handling. Fuzzy free-text over the meaningful indexed metadata (titles,
+# descriptions, labels, contact fields); explicit filters AND together;
+# multi-select labels are any-match (one shared label suffices), matching
+# the app's established label-membership convention.
+# --------------------------------------------------------------------- #
+
+
+def search_entities(
+    conn: sqlite3.Connection,
+    q: str | None = None,
+    types: list[str] | None = None,
+    labels: list[str] | None = None,
+    task_status: str | None = None,
+    task_due_on: str | None = None,
+    event_start: str | None = None,
+    event_end: str | None = None,
+    exclude_uids: dict[str, set[str]] | None = None,
+    include_habit_tasks: bool = False,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Search across tasks, events, and contacts.
+
+    Explicit filters (AND together):
+      - `q`        -- free-text, case-insensitive substring across the
+                      meaningful metadata: task title/description/labels;
+                      event title/description/labels; contact name/org/
+                      phone/email/labels. (Fuzzy = SQL LIKE, the same
+                      mechanism list_tasks/list_contacts already use -- no
+                      index, appropriate at personal-scale volumes.)
+      - `types`    -- subset of ("task", "event", "contact"); None/empty
+                      means all three.
+      - `labels`   -- multi-select label filter, any-match (a result needs
+                      just one of the chosen labels), case-sensitive on the
+                      stored object_labels name like every other label
+                      query here.
+      - `task_status`  -- tasks only: exact status match.
+      - `task_due_on`  -- tasks only: due on this exact ISO date (the
+                      picker's "due date" filter).
+      - `event_start`/`event_end` -- events only: start_at within this
+                      ISO-date range.
+
+    Implicit (applied by the caller, see the spec's "implicit" list):
+      - `exclude_uids`     -- {type: {uid, ...}} of already-linked items to
+                      drop ("not-already-linked" for the relation picker).
+      - `include_habit_tasks` -- False hides habit-labeled tasks, the same
+                      default list_tasks applies everywhere.
+
+    Returns a flat list of result dicts, one per hit, ordered by type
+    (tasks, events, contacts) and then by that type's natural order; each
+    carries a `type` tag plus a compact title/subtitle/tags surface for the
+    picker plus the full row under `entity`:
+      {"type": ..., "uid": ..., "title": ..., "subtitle": ..., "tags": [...], "entity": {...}}
+    """
+    wanted = set(types or ())
+    # Implicit type restriction (the spec's "type" implicit filter): a
+    # type-specific filter like task_status/due only ever applies to that
+    # type, so supplying one narrows the search to it even when `types`
+    # wasn't passed -- the same way the relation picker pre-sets its type.
+    if task_status or task_due_on:
+        wanted = {"task"} if not wanted else wanted & {"task"}
+    if event_start or event_end:
+        wanted = {"event"} if not wanted else wanted & {"event"}
+    result: list[dict[str, Any]] = []
+    exclude = exclude_uids or {}
+
+    if not wanted or "task" in wanted:
+        result.extend(_search_tasks(conn, q, labels, task_status, task_due_on, exclude.get("task", set()), include_habit_tasks))
+    if not wanted or "event" in wanted:
+        result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set())))
+    if not wanted or "contact" in wanted:
+        result.extend(_search_contacts(conn, q, labels, exclude.get("contact", set())))
+
+    if limit is not None:
+        result = result[:limit]
+    return result
+
+
+def _search_tasks(
+    conn: sqlite3.Connection,
+    q: str | None,
+    labels: list[str] | None,
+    task_status: str | None,
+    task_due_on: str | None,
+    excluded: set[str],
+    include_habit_tasks: bool,
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM tasks"
+    params: list[str] = []
+    clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        # Labels match through object_labels membership so "find a task with
+        # a label called X" and "find a task whose title is X" are one box.
+        clauses.append(
+            "(title LIKE ? OR description LIKE ? OR uid IN (SELECT object_id FROM object_labels "
+            "WHERE object_type = 'task' AND label_name LIKE ?))"
+        )
+        params.extend([like, like, like])
+    if task_status:
+        clauses.append("status = ?")
+        params.append(task_status)
+    if task_due_on:
+        clauses.append("due_at = ?")
+        params.append(task_due_on)
+    if labels:
+        placeholders = ", ".join("?" for _ in labels)
+        clauses.append(
+            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'task' AND label_name IN ({placeholders}))"
+        )
+        params.extend(labels)
+    if excluded:
+        placeholders = ", ".join("?" for _ in excluded)
+        clauses.append(f"uid NOT IN ({placeholders})")
+        params.extend(excluded)
+    if not include_habit_tasks:
+        habit_label = get_task_habit_settings(conn)["habit_label"]
+        excluded_uids = list_object_ids_for_label(conn, "task", habit_label)
+        if excluded_uids:
+            placeholders = ", ".join("?" for _ in excluded_uids)
+            clauses.append(f"uid NOT IN ({placeholders})")
+            params.extend(excluded_uids)
+
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
+    rows = conn.execute(query, params).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = _attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS))
+        out.append(
+            {
+                "type": "task",
+                "uid": d["uid"],
+                "title": d["title"],
+                "subtitle": f"Due {d['due_at'][:10]}" if d.get("due_at") else "No due date",
+                "tags": d["tags"],
+                "entity": d,
+            }
+        )
+    return out
+
+
+def _search_events(
+    conn: sqlite3.Connection,
+    q: str | None,
+    labels: list[str] | None,
+    event_start: str | None,
+    event_end: str | None,
+    excluded: set[str],
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM events"
+    params: list[str] = []
+    clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(title LIKE ? OR description LIKE ? OR uid IN (SELECT object_id FROM object_labels "
+            "WHERE object_type = 'event' AND label_name LIKE ?))"
+        )
+        params.extend([like, like, like])
+    if event_start:
+        clauses.append("end_at IS NULL OR end_at >= ?")
+        params.append(event_start)
+    if event_end:
+        # Same end-of-day normalization every calendar view applies when
+        # passing a bare date range to list_events (e.g. routers/calendar.py
+        # appends "T23:59:59"), so "on this day" includes that day's events.
+        clauses.append("start_at <= ?")
+        params.append(event_end + "T23:59:59" if "T" not in event_end else event_end)
+    if labels:
+        placeholders = ", ".join("?" for _ in labels)
+        clauses.append(
+            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'event' AND label_name IN ({placeholders}))"
+        )
+        params.extend(labels)
+    if excluded:
+        placeholders = ", ".join("?" for _ in excluded)
+        clauses.append(f"uid NOT IN ({placeholders})")
+        params.extend(excluded)
+
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY start_at ASC"
+    rows = conn.execute(query, params).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = _attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS))
+        start = d.get("start_at") or ""
+        subtitle = f"{start[:10]} {start[11:16]}" if start else "No start time"
+        out.append(
+            {
+                "type": "event",
+                "uid": d["uid"],
+                "title": d["title"],
+                "subtitle": subtitle,
+                "tags": d["tags"],
+                "entity": d,
+            }
+        )
+    return out
+
+
+def _search_contacts(
+    conn: sqlite3.Connection,
+    q: str | None,
+    labels: list[str] | None,
+    excluded: set[str],
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM contacts"
+    params: list[str] = []
+    clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(full_name LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
+            "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?))"
+        )
+        params.extend([like, like, like, like, like])
+    if labels:
+        placeholders = ", ".join("?" for _ in labels)
+        clauses.append(
+            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'contact' AND label_name IN ({placeholders}))"
+        )
+        params.extend(labels)
+    if excluded:
+        placeholders = ", ".join("?" for _ in excluded)
+        clauses.append(f"uid NOT IN ({placeholders})")
+        params.extend(excluded)
+
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY full_name COLLATE NOCASE"
+    rows = conn.execute(query, params).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))
+        subtitle = d.get("org") or d.get("email") or d.get("phone") or ""
+        out.append(
+            {
+                "type": "contact",
+                "uid": d["uid"],
+                "title": d["full_name"],
+                "subtitle": subtitle,
+                "tags": d["tags"],
+                "entity": d,
+            }
+        )
+    return out
+
+
+# --------------------------------------------------------------------- #
 # Task checklist items -- 2026-08-08: checklists and subtasks merged into
-# one feature (task_detail.html/task_form.html now show a single list,
-# backed entirely by real subtasks -- see routers/tasks.py's own comment
-# above its now-removed checklist routes). list_checklist_items/
-# add_checklist_item/toggle_checklist_item/delete_checklist_item are gone;
-# delete_checklist_items_for_task survives as cascade cleanup for any
-# checklist rows a database from before this change still physically has
-# -- the table itself is deliberately not dropped, same "don't force-drop
-# old data" convention as every other removed-feature table in this file.
+# one feature (task_detail.html/task_form.html showed a single list,
+# backed entirely by real subtasks). The 1.2 task-model decision then
+# removed subtasks outright, so the merged list is gone entirely.
+# list_checklist_items/add_checklist_item/toggle_checklist_item/
+# delete_checklist_item are gone; delete_checklist_items_for_task survives
+# as cascade cleanup for any checklist rows a database from before this
+# change still physically has -- the table itself is deliberately not
+# dropped, same "don't force-drop old data" convention as every other
+# removed-feature table in this file.
 # --------------------------------------------------------------------- #
 
 
 def delete_checklist_items_for_task(conn: sqlite3.Connection, task_uid: str) -> None:
-    """Called when a task is deleted -- see routers/tasks.py's delete_task,
-    which also cascades to subtasks. Without this, a re-created task that
-    happened to reuse the same uid (never actually possible, uids are
-    uuid4) is the only scenario that'd resurrect stale rows, but it's cheap
-    correctness hygiene regardless -- an orphaned checklist row pointing at
-    a task_uid that no longer exists in `tasks` serves no purpose."""
+    """Called when a task is deleted -- see routers/tasks.py's delete_task.
+    Without this, a re-created task that happened to reuse the same uid
+    (never actually possible, uids are uuid4) is the only scenario that'd
+    resurrect stale rows, but it's cheap correctness hygiene regardless --
+    an orphaned checklist row pointing at a task_uid that no longer exists
+    in `tasks` serves no purpose."""
     conn.execute("DELETE FROM task_checklist_items WHERE task_uid = ?", (task_uid,))
     conn.commit()
 

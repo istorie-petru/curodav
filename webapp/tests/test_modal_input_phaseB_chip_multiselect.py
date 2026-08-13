@@ -124,7 +124,7 @@ class TestCreateWithTwoLabelsStoresBoth:
     def test_create_task_with_two_labels(self, conn):
         tasks_router.create_task(
             title="Water plants", description="", due_at="", importance="", urgency="", status="active",
-            tags="", tags_labels=["Home", "Chores"], recurrence="", parent_uid="", conn=conn,
+            tags="", tags_labels=["Home", "Chores"], recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Water plants")
         assert sorted(task["tags"]) == ["Chores", "Home"]
@@ -268,7 +268,7 @@ class TestDirectCallsWithoutTagsLabelsStillWork:
     def test_create_task_without_tags_labels_kwarg(self, conn):
         tasks_router.create_task(
             title="Plain", description="", due_at="", importance="", urgency="", status="active",
-            tags="Legacy", recurrence="", parent_uid="", conn=conn,
+            tags="Legacy", recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Plain")
         assert task["tags"] == ["Legacy"]

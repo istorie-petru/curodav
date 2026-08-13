@@ -91,7 +91,7 @@ def _seed(conn):
         {"uid": "t1",
          "title": "Ship export", "description": "", "start_at": None, "due_at": "2026-10-06",
          "importance": 3, "urgency": 2, "status": "active", "progress": None, "tags_json": '["work"]',
-         "parent_uid": None, "recurrence": None, "exdates_json": "[]",
+         "recurrence": None, "exdates_json": "[]",
          "created_at": _now(), "updated_at": _now()},
     )
     db.upsert_contact(

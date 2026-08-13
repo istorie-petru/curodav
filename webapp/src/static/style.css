@@ -3068,12 +3068,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    task_habit_field_toggle.js toggles this the same way, same convention
    as the widget-builder's own is-hidden fields above. */
 .habit-target-field.is-hidden{display:none;}
-/* Subtasks-in-place-of-Recurrence (2026-08-08, task_form.html) -- sits
-   below #task-form as a sibling section (a real <form> can't nest inside
-   another), so it needs its own top spacing/divider instead of inheriting
-   .field-grid's row gap the way Recurrence used to. */
-.task-form-subtasks{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
-.task-form-subtasks h2{margin:0 0 var(--space-2); font-size:var(--text-headline);}
+/* Relations card in task_form.html / event_form.html (2026-08-08) --
+   sits below #task-form as a sibling section (a real <form> can't nest
+   inside another), so it needs its own top spacing/divider instead of
+   inheriting .field-grid's row gap the way Recurrence used to. The 1.2
+   task-model decision dropped the subtasks half, so the class that began
+   life as .task-form-subtasks is now named for what it actually holds. */
+.relations-section{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
+.relations-section h2{margin:0 0 var(--space-2); font-size:var(--text-headline);}
 .widget-save-status.is-error{color:var(--danger);}
 
 .week-overview-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}

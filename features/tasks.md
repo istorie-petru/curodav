@@ -12,8 +12,8 @@ is derived from status (`_progress_for_status`).
   (title/due/importance/urgency/status); inline pill-selects for
   status/importance/urgency + date cell → `POST /tasks/{uid}/update-field`
   (JSON, single field, no reload); bulk-actions bar (checkbox select → `POST
-  /tasks/bulk` with `delete`/`status`/`tag` add-remove); subtask-aware delete
-  confirmation.
+  /tasks/bulk` with `delete`/`status`/`tag` add-remove). Every task delete is
+  the undo path — tasks are flat (1.2), so no delete cascades.
 - **Board** (`/tasks/board`) — kanban columns per status (archived excluded),
   pointer-event drag-drop (`DRAG_THRESHOLD=6`), optimistic move via the same
   `update-field` endpoint. Cards carry both axes as pills.
@@ -56,12 +56,15 @@ longest streaks on the detail page. Endpoints: `POST /tasks/{uid}/complete`,
 `/tasks/{uid}/completion/{date}/toggle`, `POST /tasks/{uid}/completions`
 (explicit value).
 
-## Subtasks & relations
+## Relations (task ↔ event)
 
-Checklist and subtasks merged (2026-08-08) into one "Relations" card — real
-subtasks (`parent_uid`) with inline quick-add; cascade delete to subtasks.
 Task ↔ event links via `event_task_relations` (shared-label rule),
-`_task_relations.html`; "+ New event…" inherits task labels.
+`_task_relations.html`; "+ New event…" inherits task labels. The card was the
+merged Checklist+Subtasks card (2026-08-08), then gained the Related events
+half (2026-08-09); the **1.2 task-model decision removed the subtasks half
+outright** — tasks are flat (`parent_uid` no longer written or read, no cascade
+delete, no iCal RELATED-TO round-trip), so the card now holds related events
+only.
 
 ## Auto-archive
 

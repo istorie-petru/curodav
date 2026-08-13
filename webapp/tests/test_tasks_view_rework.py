@@ -179,18 +179,18 @@ class TestStartDateConfigurableAtCreation:
     # shows Start date on the new-task form too, and routers/tasks.py's
     # create_task accepts it. Still defaults to today when left blank/not
     # sent at all, so every pre-existing caller that doesn't pass start_at
-    # (this suite's other direct create_task() calls, task_detail.html's
-    # subtask quick-add form) keeps the old "starts today" behavior.
+    # (this suite's other direct create_task() calls) keeps the old
+    # "starts today" behavior.
     def test_create_task_defaults_to_today_when_start_at_omitted(self, conn):
         tasks_router.create_task(title="Test", description="", due_at="", importance="", urgency="", status="active",
-                                   tags="", recurrence="", parent_uid="",
+                                   tags="", recurrence="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
         assert task["start_at"] == date.today().isoformat()
 
     def test_create_task_honors_an_explicit_start_at(self, conn):
         tasks_router.create_task(title="Test", description="", due_at="", start_at="2026-09-01",
-                                   importance="", urgency="", status="active", tags="", recurrence="", parent_uid="",
+                                   importance="", urgency="", status="active", tags="", recurrence="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
         assert task["start_at"] == "2026-09-01"

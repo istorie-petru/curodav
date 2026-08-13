@@ -12,12 +12,9 @@
      tag_names    -- (unused directly; tag_name_items is derived from it)
      today        -- ISO date for the Start date default
      habit_label  -- the habit label name (Daily target field's toggle)
-     parent_uid   -- for the subtask-quick-add hidden field (None/absent
-                     on quick_add, so that input simply doesn't render)
    ms_form_id is set inside the partial (it's always this form's own id),
    and carries into the included _widget_list_multiselect.html instances. #}
     {% set ms_form_id = 'task-form' %}
-    {% if parent_uid %}<input type="hidden" name="parent_uid" value="{{ parent_uid }}">{% endif %}
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
@@ -104,9 +101,9 @@
         <!-- 2026-08-08 follow-up ("both tasks and event should have
              recurrence") -- back after a brief removal the same day
              ("remove recurrence-input... add a way to add subtasks in
-             place of it"); Subtasks stayed where it landed (below the
-             form, see the sibling section after </form>) rather than
-             losing Recurrence a second time -- there's room for both.
+             place of it"); the subtasks section stayed where it landed
+             (below the form) as the Relations card, which 1.2 reduced to
+             related events only -- Recurrence wasn't lost a second time.
              static/recurrence_picker.js turns this into a preset
              dropdown instead of typed-out RRULE syntax; its own custom-
              value field now lives inside that same dropdown's panel

@@ -47,7 +47,7 @@
      relation needs a real event uid to attach to, which a not-yet-saved
      new event doesn't have. Mirrors task_form.html's task_relations_section. -->
 {% if event %}
-<div class="task-form-subtasks">
+<div class="relations-section">
     {{ event_relations_section(event, related_tasks, linkable_tasks) }}
 </div>
 {% endif %}
@@ -67,8 +67,8 @@
 {% set footer_back_label = 'Cancel' %}
 {% if event %}
 <!-- Consistent delete confirmation, 2026-08-01 -- an event has no
-     cascade concerns at all (unlike a task with subtasks), so it's
-     always the undo path, no confirm sheet needed. A standalone <form>
+     cascade concerns at all, so it's always the undo path, no confirm
+     sheet needed. A standalone <form>
      (not tied to event-form) -- app.js's document-level `data-delete-undo`
      handler picks up its submit regardless of where in the document it
      lives, so this doesn't need any of modal.js's own per-form wiring. -->

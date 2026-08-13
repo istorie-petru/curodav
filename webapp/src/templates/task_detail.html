@@ -18,15 +18,16 @@
      field-grid already uses -- "you could copy the add widget"), and the
      separate Checklist + Subtasks cards merged into one (see
      _task_relations.html; 2026-08-09 that same card gained the Related
-     events half, so the "Subtasks" title became "Relations").
+     events half, so the "Subtasks" title became "Relations"; 1.2 removed
+     the Subtasks half outright -- tasks are flat now).
 
      2026-08-08 visual rework (all three detail modals at once -- events,
      tasks, contacts -- one cohesive stroke): header = identity (a dot in
-     the task's status color + the large bold title, with a "Subtask of"
-     line when nested), body = the meta grid and the checklist inside
-     elevated tonal .detail-cards (the first one's left border follows
-     the status color), footer = a quiet "Done" back-link, a demoted
-     Delete text-link, and the primary Edit action taking center stage.
+     the task's status color + the large bold title), body = the meta grid
+     and the relations list inside elevated tonal .detail-cards (the first
+     one's left border follows the status color), footer = a quiet "Done"
+     back-link, a demoted Delete text-link, and the primary Edit action
+     taking center stage.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -40,7 +41,6 @@
     <span class="detail-identity-dot cal-{{ status_colors[task.status] }}"></span>
     <div class="detail-heading-text">
         <h1 class="detail-title">{{ task.title }}</h1>
-        {% if parent %}<div class="detail-heading-sub">Subtask of <a href="/tasks/{{ parent.uid }}" data-modal>{{ parent.title }}</a></div>{% endif %}
     </div>
 </div>
 
@@ -103,7 +103,7 @@
 </div>
 
      <div class="detail-card detail-section-gap">
-    {{ task_relations_section(task, subtasks, related_events, linkable_events) }}
+    {{ task_relations_section(task, related_events, linkable_events) }}
 </div>
 
 </div>
@@ -111,14 +111,9 @@
 {% set footer_back_url = '/tasks' %}
 {% set footer_back_label = 'Done' %}
 {% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% if subtasks %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ task.title ~ '" and its ' ~ subtasks|length ~ ' subtask' ~ ('s' if subtasks|length != 1 else '') ~ '? This cannot be undone.' %}
-{% else %}
 {% set footer_delete_mode = 'undo' %}
 {% set footer_delete_label = task.title %}
 {% set footer_delete_redirect = '/tasks' %}
-{% endif %}
 {% set footer_primary_href = '/tasks/' ~ task.uid ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}

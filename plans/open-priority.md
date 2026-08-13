@@ -30,10 +30,12 @@ step is sized to ship on its own.
    representation. Every other surface (project cards, Week, Today, Dashboard)
    reads their output, and the sync work builds on the WebDAV mapping fixed
    here.
-2. **Task model decision** — resolve the subtask-hierarchy vs. flat-tasks-plus-
-   allocations conflict (see "Subtask model — the open conflict") before any
-   task or scheduling code; the project stack and the Week view depend on the
-   chosen model.
+2. ~~**Task model decision**~~ — **resolved 2026-08-13** (part of release 1.2).
+   Chose **flat tasks + work allocations**: the parent-task/subtask hierarchy is
+   removed outright (the old `tasks.parent_uid` column stays on disk but is never
+   written or read). Work allocation replaces subtasks being individually
+   scheduled, and outcome/parent aggregation is reproduced by a project label
+   plus its tasks. The project stack and the Week view build on this model.
 3. **Project-enabled label stack** — projects as labels with a bounded period
    and lifecycle, project pages (cards, tasks view, week calendar), work
    allocations, and the task/calendar semantics. The core of the rework.
@@ -51,8 +53,9 @@ step is sized to ship on its own.
 ## Project-enabled label stack
 
 **Status:** full planning model exists (was `plans/projects.md` and
-`plans/details.md`, folded in here) — no code. Implementation waits on the
-subtask decision (see below).
+`plans/details.md`, folded in here) — no code. The subtask decision it was
+blocked on is resolved (1.2, flat tasks + work allocations); implementation
+proceeds on the chosen model.
 
 ### Projects are labels, not a stored thing
 
@@ -252,22 +255,24 @@ Project page is the deliberate meeting point between the two systems: it
 provides the context of a project, the work belonging to it, and the calendar
 space in which that work can be scheduled.
 
-### Subtask model — the open conflict
+### Subtask model — resolved (1.2): flat tasks + work allocations
 
-The model here removes the parent/subtask hierarchy: tasks are flat and
-individually scheduled via work allocations, and a task belongs to at most one
-project. The shipped app today has real subtasks (`parent_uid`), and an earlier
-recorded decision ("task hierarchy & contextual planning") proposed keeping
-lightweight subtasks — the parent represents the outcome, subtasks the concrete
-units of work — with the parent aggregating estimated/scheduled/completed/
-remaining work from its descendants.
+The conflict is settled — **subtasks do not exist**. Tasks are flat and
+independent units of work, scheduled individually via work allocations, and a
+task belongs to at most one project. The shipped app's real subtasks
+(`tasks.parent_uid`) and the earlier recorded decision ("task hierarchy &
+contextual planning") that proposed keeping lightweight subtasks — the parent
+representing the outcome, subtasks the concrete units of work, with the parent
+aggregating estimated/scheduled/completed/remaining work from its descendants —
+are both superseded.
 
-The two sides agree on the schedulable-unit principle: scheduled work is a
-calendar event linked to a task (a work allocation), and the outcome/parent
-aggregation can be reproduced with a project label plus its tasks. The open
-question is only whether subtasks exist at all. This spec and the project stack
-say **no**; the earlier decision says **yes**. Pick one before implementation,
-or state the hybrid explicitly (subtasks as grouping only inside a project).
+The two sides agreed on the schedulable-unit principle (scheduled work is a
+calendar event linked to a task — a work allocation), and outcome/parent
+aggregation is reproduced by a project label plus its tasks. Release 1.2 removed
+the subtask hierarchy outright: `parent_uid` is no longer written or read by any
+app code (the column stays physically on disk for pre-1.2 data), the subtask
+cascade deletes and "sub" tags are gone, iCal RELATED-TO export/import for
+subtask links is removed, and the Relations card holds related events only.
 
 ## Schedule & recurrence rework
 
@@ -487,10 +492,6 @@ valid.**
 
 ## Known open risks
 
-- **Subtask-model conflict**: the model here removes subtasks (flat tasks +
-  work allocations), but the shipped app has real subtasks (`parent_uid`) and an
-  earlier decision proposed keeping a lightweight hierarchy. Pick one before
-  implementation (see "Subtask model — the open conflict").
 - **`project_label_for` heuristic** (`db.py`): a schedule class/habit picks
   "the project" as whichever attached label isn't a Space, chosen alphabetically
   when more than one non-Space label qualifies. Low risk at current usage; flag

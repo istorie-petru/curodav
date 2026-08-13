@@ -909,7 +909,6 @@ def _create_related_task(conn, event: dict, title: str) -> str | None:
         "urgency": None,
         "status": "active",
         "progress": 0.0,
-        "parent_uid": None,
         "recurrence": None,
         "tags": event_tags,
         "target_per_day": 1.0,

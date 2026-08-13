@@ -160,13 +160,14 @@ class TestIdentityMark:
         assert 'class="detail-identity-dot cal-orange"' in body
         assert 'class="detail-title"' in body
 
-    def test_task_with_parent_shows_subtask_subtitle(self, conn):
+    def test_task_detail_has_no_subtask_identity(self, conn):
+        # 1.2: tasks are flat -- the old "Subtask of" heading (which pointed
+        # back at tasks.parent_uid) is gone entirely, even for rows that
+        # still carry a parent_uid on disk from before the removal.
         _seed_task(conn, "t1")
-        _seed_task(conn, "t2", parent_uid="t1", description="")
-        body = tasks_router.task_detail("t2", _request("/tasks/t2"), conn=conn).body.decode()
-        assert "Subtask of" in body
-        assert '/tasks/t1' in body
-        assert 'class="detail-heading-sub"' in body
+        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
+        assert "Subtask of" not in body
+        assert 'class="detail-heading-sub"' not in body
 
     def test_contact_header_shows_avatar_and_org(self, conn):
         _seed_contact(conn, "c1", full_name="Ada Lovelace", org="Analytical Engines")
@@ -202,13 +203,16 @@ class TestDetailCardAndMetaGrid:
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
 
-    def test_task_subtasks_still_in_their_own_detail_card(self, conn):
-        _seed_task(conn, "t1")
+    def test_task_relations_card_is_a_second_detail_card(self, conn):
+        _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert body.count('class="detail-card') == 2
-        # The checklist add/completed forms are still wired for in-place
+        # The relations add/completed forms are still wired for in-place
         # refresh (data-modal-keep-open) inside the modal.
-        assert 'class="checklist-add-form"' in body
+        assert 'class="detail-card' in body
+        # The relations add/completed forms are still wired for in-place
+        # refresh (data-modal-keep-open) inside the modal.
+        assert 'class="checklist-add-form relations-add-form"' in body
         assert "data-modal-keep-open" in body
 
 
@@ -243,14 +247,15 @@ class TestFooterActions:
         assert _index(body, 'class="btn primary"') > footer_pos
         assert 'data-delete-undo-redirect="/tasks"' in body
 
-    def test_task_with_subtasks_keeps_confirm_sheet_delete(self, conn):
+    def test_task_delete_is_always_the_undo_path(self, conn):
+        # 1.2: no more subtask cascade, so a task delete never needs the
+        # confirm sheet -- every task delete is a single, independent task
+        # on the undo path.
         _seed_task(conn, "t1")
-        _seed_task(conn, "t2", parent_uid="t1", description="")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
-        assert "data-confirm-sheet" in body
-        assert _index(body, "data-confirm-sheet") > footer_pos
+        assert "data-confirm-sheet" not in body
         assert _index(body, 'class="detail-delete-link"') > footer_pos
 
     def test_contact_delete_demoted_and_edit_primary(self, conn):

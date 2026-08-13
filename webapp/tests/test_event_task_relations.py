@@ -262,16 +262,15 @@ class TestEventRelationsCard:
 
 
 class TestTaskRelationsCard:
-    def test_task_detail_merged_card_shows_subtasks_and_related_events(self, conn):
+    def test_task_detail_card_shows_related_events_only(self, conn):
         _seed_task(conn, "t1", tags=["Work"])
-        _seed_task(conn, "t2", tags=[], parent_uid="t1")  # subtask
         _seed_event(conn, "e1", tags=["Work"])
         db.add_event_task_relation(conn, "e1", "t1")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert "Relations" in body
-        assert "Subtasks" in body  # the sub-heading, still one card
         assert "Related events" in body
-        assert "/tasks/t2" in body  # subtask link
+        # 1.2: tasks are flat -- no subtask group-head in the Relations card.
+        assert '>Subtasks</div>' not in body
         assert "/events/e1" in body  # related event link
         assert "/tasks/t1/relations/remove" in body
         assert "/tasks/t1/relations" in body
