@@ -206,7 +206,9 @@ class TestDetailCardAndMetaGrid:
     def test_task_relations_card_is_a_second_detail_card(self, conn):
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert body.count('class="detail-card') == 2
+        # meta + Relations + Work sessions (1.4, plans/open-priority.md §
+        # Work allocations) -- three detail cards now.
+        assert body.count('class="detail-card') == 3
         # The relations picker trigger + its hidden submit form (1.2 side
         # work: replaces the old inline <select> add-row) are still wired
         # for in-place refresh (data-modal-keep-open) inside the modal.

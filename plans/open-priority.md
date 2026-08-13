@@ -174,6 +174,20 @@ remain visible and contribute to the project's historical record.
 
 ### Work allocations
 
+**Data model + task-detail UI shipped 2026-08-13 (1.4 slice 1)** — see
+`features/tasks.md` § Work allocations (1.4): `event_task_relations.
+is_work_allocation`, `db.create_work_allocation`/`list_work_allocations_for_task`/
+`task_work_hours`/`delete_work_allocation`, title-sync both directions, and a
+plain-form "Work sessions" card on the task detail/edit modals. **Still open**
+(next 1.4 slice): the project's own Week Calendar view described below (the
+drag-and-drop scheduling surface — the plain-form card is the interim
+substitute), aggregating `task_work_hours` up to project-card progress
+(`routers/projects.py`'s `_project_card` still uses the 1.3 task-count proxy),
+and hiding a completed task's future allocations from the active calendar
+(§ below's "future allocations are hidden" rule — not wired into any calendar
+view yet, since there is no project calendar view to hide them from until
+that lands).
+
 Work allocation replaces the previous concept of subtasks being individually
 scheduled. A task does not become complex because it requires multiple work
 sessions; it can have any number of work allocations — zero, one, or many.
@@ -209,6 +223,12 @@ calendar because the work no longer needs to be performed, keeping the task's
 history intact without letting obsolete work blocks occupy the schedule.
 
 ### Task & calendar semantics
+
+**Title-sync + delete-only-removes-the-block shipped 2026-08-13 (1.4 slice 1)**
+— see `features/tasks.md` § Work allocations (1.4). The remaining paragraph's
+"future allocations are hidden from the active calendar" rule is not wired up
+yet (no calendar view renders work allocations specially yet — see the note
+in § Work allocations above).
 
 A work allocation is an Event with a task relationship, and that relationship
 stays semantically meaningful when the event is edited:

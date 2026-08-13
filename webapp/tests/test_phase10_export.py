@@ -245,7 +245,8 @@ class TestImportRestore:
 
         data = json.loads(export_router.export_data_json(conn=conn).body)
         assert data["event_task_relations"] == [{"event_uid": "e9", "task_uid": "t9",
-                                                 "created_at": data["event_task_relations"][0]["created_at"]}]
+                                                 "created_at": data["event_task_relations"][0]["created_at"],
+                                                 "is_work_allocation": 0}]
 
         payload = {
             "events": data["events"], "tasks": data["tasks"], "contacts": [],

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_task_relations.html" import task_relations_section %}
+{% from "_task_work_allocations.html" import task_work_allocations_section %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js. Task
@@ -104,6 +105,10 @@
 
      <div class="detail-card detail-section-gap">
     {{ task_relations_section(task, related_events) }}
+</div>
+
+     <div class="detail-card detail-section-gap">
+    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>
 
 </div>

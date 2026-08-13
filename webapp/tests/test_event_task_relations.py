@@ -279,8 +279,8 @@ class TestTaskRelationsCard:
         assert "/events/e1" in body  # related event link
         assert "/tasks/t1/relations/remove" in body
         assert "/tasks/t1/relations" in body
-        # Still exactly two detail cards: meta + Relations.
-        assert body.count('class="detail-card') == 2
+        # meta + Relations + Work sessions (1.4) -- three detail cards.
+        assert body.count('class="detail-card') == 3
 
     def test_task_detail_picker_only_offers_shared_label_events(self, conn):
         # See test_event_detail_picker_only_offers_shared_label_tasks above

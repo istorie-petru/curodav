@@ -73,6 +73,40 @@ candidate event on every page load; the overlay now asks
 `GET /api/search?for_task=<uid>` for exactly the page of shared-label,
 not-already-linked candidates it needs.
 
+## Work allocations (1.4)
+
+A work allocation is *not* a new object — it's an ordinary `event_task_relations`
+row with `is_work_allocation=1` (see `open-priority.md` § Work allocations, §
+Task & calendar semantics). `db.create_work_allocation(conn, task_uid,
+start_at, end_at)` creates a plain event titled after the task, inheriting its
+labels, linked with the flag set; `db.list_work_allocations_for_task`/
+`db.task_work_hours` read it back (`scheduled`/`completed`/`remaining` hours,
+computed from each block's actual start/end — no independent estimate field).
+`db.delete_work_allocation` is `delete_event` under a name that states the
+1.4 rule at the call site: removes the scheduled block, never the task.
+
+**Title semantics** — a work allocation's title is owned by its task, not
+independently editable: `upsert_task` calls `db.sync_work_allocation_titles`
+whenever it runs, pushing the task's current title onto every linked
+allocation event; editing a work-allocation event's own title
+(`routers/calendar.py`'s `update_event`) redirects the new value onto the
+task instead of writing it to the event, which then gets synced back onto
+every allocation of that task (including the one just edited) — so the
+task is the single source of truth for the text, never a name conflict
+between the two.
+
+**UI shipped so far:** a "Work sessions" card on the task detail/edit modals
+(`_task_work_allocations.html`, `POST /tasks/{uid}/work-allocations` +
+`/work-allocations/remove`) — a plain start/end datetime form, the
+functional (non-drag) way to schedule a block today. **Not yet built:** the
+project's Week Calendar view (the drag-and-drop surface the spec describes —
+dragging a task onto a calendar block to create/resize/split an allocation),
+and wiring `_project_card`'s `progress` to real scheduled-work hours instead
+of task count (`db.task_work_hours` exists per-task; nothing yet aggregates
+it to project level or hides a completed task's future allocations from the
+active calendar — both explicitly deferred to the slice that builds the
+calendar view, per `plans/STATE.md`'s 1.4 breadcrumbs).
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`
@@ -136,6 +170,10 @@ don't exist until 1.4, so there's no scheduled-work total to compute a real
 hour-based percentage from yet).
 
 **Deferred to 1.4/1.5** (not built): the project's own Tasks view + Week
-Calendar view, work allocations, hour-based progress, the global Tasks
-page's project grouping. A card's "Open" link goes to the label's existing
-generated page (`routers/labels.py`'s `label_detail`) in the meantime.
+Calendar view, hour-based project-card progress, the global Tasks page's
+project grouping. A card's "Open" link goes to the label's existing
+generated page (`routers/labels.py`'s `label_detail`) in the meantime. Work
+allocations themselves (the underlying data model + a plain-form way to
+schedule one) shipped as 1.4's first slice — see "Work allocations (1.4)"
+above; the project-specific drag-and-drop calendar surface and the card
+progress swap are still open.

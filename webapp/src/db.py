@@ -195,10 +195,23 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
 -- defensively) -- "both have at least one label in common" is the
 -- definition of related here, and the label overlap is what the Relations
 -- cards render under.
+-- 1.4 (Work allocations, plans/open-priority.md § Work allocations): a work
+-- allocation is *not* a new table -- it's an ordinary event_task_relations
+-- row with `is_work_allocation=1`. "A work allocation... is a calendar
+-- Event linked to that task, not a different kind of calendar object" --
+-- the marker exists only so code can tell "this link is scheduled work
+-- time" apart from an ordinary Relations-card link (same event, same task,
+-- same table; the flag is the only difference). A relation can only ever
+-- be one or the other for a given event/task pair since the PK is still
+-- (event_uid, task_uid) -- no dual-purpose row needed, and none of the
+-- ordinary-relation rules above (label-overlap requirement, associative
+-- unlink) apply to a work-allocation row, which is created directly by
+-- db.create_work_allocation, not the Relations picker.
 CREATE TABLE IF NOT EXISTS event_task_relations (
     event_uid TEXT NOT NULL,
     task_uid TEXT NOT NULL,
     created_at TEXT,
+    is_work_allocation INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (event_uid, task_uid)
 );
 
@@ -754,6 +767,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # function.
     _ensure_column(conn, "tasks", "target_per_day", "REAL NOT NULL DEFAULT 1")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
+    # 1.4 (Work allocations) -- see the event_task_relations CREATE TABLE
+    # comment above for the model.
+    _ensure_column(conn, "event_task_relations", "is_work_allocation", "INTEGER NOT NULL DEFAULT 0")
     # 2026-08-08: self-heal contacts already corrupted by the vcard_rows.py
     # bug fixed the same day -- a CardDAV-synced contact with an empty
     # ORG/TEL/EMAIL line got the literal string "None" stored instead of a
@@ -1000,6 +1016,15 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     )
     if tags is not None:
         set_object_labels(conn, "task", data["uid"], tags)
+    # 1.4 (Work allocations, § Task & calendar semantics): "editing the task
+    # updates the representation of its associated work allocations where
+    # appropriate" -- keep every linked work-allocation event's title equal
+    # to the task's current title. Cheap no-op when the task has none (the
+    # UPDATE's subquery matches zero rows) and idempotent when the title
+    # didn't actually change, so this runs unconditionally rather than
+    # diffing old vs. new title first.
+    if data.get("title") is not None:
+        sync_work_allocation_titles(conn, data["uid"], data["title"])
     conn.commit()
 
 
@@ -1175,15 +1200,23 @@ def set_task_timeline_lane(conn: sqlite3.Connection, uid: str, lane: int | None)
 # --------------------------------------------------------------------- #
 
 
-def add_event_task_relation(conn: sqlite3.Connection, event_uid: str, task_uid: str) -> None:
+def add_event_task_relation(
+    conn: sqlite3.Connection, event_uid: str, task_uid: str, is_work_allocation: int = 0
+) -> None:
     """Idempotent link insert (composite PK means a duplicate is a no-op) --
     the caller is responsible for the "must share a label" rule (the UI's
     picker enforces it, the routers re-check it defensively); the DB itself
     doesn't -- same "constraint lives in the app layer" convention as every
-    other table in this file."""
+    other table in this file. `is_work_allocation` defaults to 0 (an
+    ordinary Relations-card link, this function's original purpose) --
+    routers/export.py's restore path is the one caller that passes a
+    backed-up row's real value through, so a work allocation round-trips
+    through a JSON backup as one instead of silently downgrading to a plain
+    relation."""
     conn.execute(
-        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at) VALUES (?, ?, ?)",
-        (event_uid, task_uid, datetime.now(timezone.utc).isoformat()),
+        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
+        "VALUES (?, ?, ?, ?)",
+        (event_uid, task_uid, datetime.now(timezone.utc).isoformat(), int(is_work_allocation)),
     )
     conn.commit()
 
@@ -1221,6 +1254,138 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
         (task_uid,),
     ).fetchall()
     return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+
+
+# --------------------------------------------------------------------- #
+# Work allocations (1.4, plans/open-priority.md § Work allocations, §
+# Task & calendar semantics)
+#
+# "A work allocation... is a calendar Event linked to that task, not a
+# different kind of calendar object." Concretely: an ordinary `events` row,
+# plus an `event_task_relations` row with `is_work_allocation=1` (see that
+# table's CREATE TABLE comment). The functions below are the only place
+# that flag is set or read -- everything else in this file treats a
+# work-allocation row exactly like the events/relations it already is.
+# --------------------------------------------------------------------- #
+
+
+def create_work_allocation(
+    conn: sqlite3.Connection, task_uid: str, start_at: str, end_at: str
+) -> str:
+    """Schedule a block of work on `task_uid`: a plain event titled after
+    the task (kept in sync by upsert_task, see below) and inheriting the
+    task's labels, linked back with `is_work_allocation=1`. Returns the new
+    event's uid. Placing a task into "as many [calendar periods] as
+    necessary keeps every allocation associated with the same task" -- so
+    this is called once per block; calling it again for the same task just
+    creates another independent event/relation pair, exactly as the spec
+    describes for a task split across multiple sessions."""
+    import uuid
+
+    task = get_task(conn, task_uid)
+    if task is None:
+        raise ValueError(f"no such task: {task_uid}")
+    now = datetime.now(timezone.utc).isoformat()
+    event_uid = str(uuid.uuid4())
+    upsert_event(
+        conn,
+        {
+            "uid": event_uid,
+            "title": task["title"],
+            "description": "",
+            "start_at": start_at,
+            "end_at": end_at,
+            "all_day": False,
+            "status": "active",
+            "tags": task.get("tags") or [],
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
+        "VALUES (?, ?, ?, 1)",
+        (event_uid, task_uid, now),
+    )
+    conn.commit()
+    return event_uid
+
+
+def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
+    """Every scheduled work block for `task_uid`, ordered by start time --
+    the work-allocation-only counterpart to related_events_for_task above
+    (which returns ordinary Relations-card links too)."""
+    rows = conn.execute(
+        "SELECT events.* FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
+        "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.start_at ASC",
+        (task_uid,),
+    ).fetchall()
+    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+
+
+def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | None:
+    """If `event_uid` is a work-allocation event, its task's uid; otherwise
+    None. Used to redirect a title edit on the event back onto the task --
+    see routers/calendar.py's update_event."""
+    row = conn.execute(
+        "SELECT task_uid FROM event_task_relations WHERE event_uid = ? AND is_work_allocation = 1",
+        (event_uid,),
+    ).fetchone()
+    return row["task_uid"] if row else None
+
+
+def delete_work_allocation(conn: sqlite3.Connection, event_uid: str) -> None:
+    """"Deleting a work allocation removes only that scheduled block -- not
+    the task. The user is removing planned working time, not the underlying
+    work." delete_event already only ever cascades the event's own rows
+    (object_labels, event_task_relations WHERE event_uid=...), never
+    touches `tasks` -- so this is delete_event under a name that states the
+    1.4 semantics explicitly at the call site."""
+    delete_event(conn, event_uid)
+
+
+def _hours_between(start_at: str | None, end_at: str | None) -> float:
+    if not start_at or not end_at:
+        return 0.0
+    try:
+        start = datetime.fromisoformat(start_at)
+        end = datetime.fromisoformat(end_at)
+    except ValueError:
+        return 0.0
+    return max((end - start).total_seconds() / 3600.0, 0.0)
+
+
+def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]:
+    """"The estimated work of a task is calculated from its actual calendar
+    allocations... Total planned work is therefore the sum of the task's
+    work blocks" -- `scheduled` is that sum; `completed` is the portion
+    already in the past ("the application retains enough information to
+    distinguish scheduled work from completed work"). A work-allocation
+    event has no independent "done" flag -- whether the work happened is
+    read off the clock, same as any other calendar event."""
+    now = datetime.now(timezone.utc).isoformat()
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
+    completed = sum(
+        _hours_between(a.get("start_at"), a.get("end_at"))
+        for a in allocations
+        if a.get("end_at") and a["end_at"] <= now
+    )
+    return {"scheduled": scheduled, "completed": completed, "remaining": max(scheduled - completed, 0.0)}
+
+
+def sync_work_allocation_titles(conn: sqlite3.Connection, task_uid: str, title: str) -> None:
+    """"Editing the task updates the representation of its associated work
+    allocations where appropriate" -- called from upsert_task whenever a
+    task's title changes, so every linked work-allocation event's title
+    stays the task's title rather than drifting into an independent name.
+    Ordinary Relations-linked events (is_work_allocation=0) are untouched --
+    only a work allocation's title is owned by its task."""
+    conn.execute(
+        "UPDATE events SET title = ?, updated_at = ? WHERE uid IN ("
+        "SELECT event_uid FROM event_task_relations WHERE task_uid = ? AND is_work_allocation = 1)",
+        (title, datetime.now(timezone.utc).isoformat(), task_uid),
+    )
 
 
 def list_tasks_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) -> list[dict[str, Any]]:

@@ -96,6 +96,14 @@ to tasks (a task's estimated work = the sum of its blocks), the project
 scheduling surface with draggable unscheduled tasks, and the task↔event
 edit/delete semantics.
 
+**Slice 1 shipped 2026-08-13** — the data model + semantics (allocations as
+linked events, hour aggregation, title-sync, delete-only-removes-the-block)
+plus a plain-form task-detail UI to schedule one; see `features/tasks.md` §
+Work allocations (1.4). **Still open**: the project week calendar itself
+(the drag-and-drop surface — no `/projects/{name}` page exists yet), the
+project-card hour-based progress swap, and hiding a completed task's future
+allocations from the active calendar. See `plans/STATE.md`'s breadcrumbs.
+
 Side work (optional): **Project check-in** — a small post-stack addition.
 
 ### 1.5 — Task management
