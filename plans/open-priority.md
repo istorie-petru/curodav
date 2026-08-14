@@ -356,13 +356,12 @@ app code (the column stays physically on disk for pre-1.2 data), the subtask
 cascade deletes and "sub" tags are gone, iCal RELATED-TO export/import for
 subtask links is removed, and the Relations card holds related events only.
 
-## Schedule & recurrence rework
+## ~~Schedule & recurrence rework~~ — fully shipped 2026-08-14
 
-**Status:** "Classes as project labels + recurring events", "Generalized
-recurrence and the non-working-day policy", and "Manual recurrence
-exceptions" all shipped 2026-08-14 (`plans/STATE.md`'s 1.6 entries,
-`features/schedule.md` + `features/calendar.md`'s Recurrence section). Only
-"Configurable terminology" below is still full planning model, no code.
+**Status:** all four subsections shipped 2026-08-14 (`plans/STATE.md`'s 1.6
+entries, `features/schedule.md` + `features/calendar.md`'s Recurrence
+section). `pyproject.toml` bumped to `1.6.0`. Kept below as the reference
+spec for what shipped.
 
 ### ~~Classes as project labels + recurring events~~ — shipped 2026-08-14
 
@@ -441,7 +440,7 @@ overrides.
 editing" risk — implemented as `event_occurrence_overrides`, see
 `features/calendar.md`'s Recurrence section.)
 
-### Configurable terminology
+### ~~Configurable terminology~~ — shipped 2026-08-14
 
 The recurring-event editor provides a configurable terminology mode in Settings.
 The underlying data model uses neutral semantic names — `holiday_calendar`,

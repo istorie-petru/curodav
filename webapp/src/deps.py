@@ -41,6 +41,16 @@ SHOW_LABEL_ICONS_KEY = "show_label_icons"
 # via _four_week_position below; written by routers/settings.py's
 # set_four_week_position.
 FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
+# 1.6 ("Configurable terminology", open-priority.md § Schedule &
+# recurrence rework): "standard" (default) or "playful" -- which set of
+# labels the recurrence editor's holiday-calendar/weekend-exclusion
+# controls use. Presentation-layer only, per the spec: "the database,
+# APIs, synchronization logic, and internal documentation keep neutral
+# terminology" -- the underlying fields (holiday_calendar/exclude_
+# saturday/exclude_sunday) never change name or meaning; only their
+# on-screen label does. Same memoized app_meta pattern as every other
+# display preference here.
+RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
 
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
@@ -258,6 +268,18 @@ def _show_label_icons(request: Request) -> bool:
 
 
 templates.env.globals["show_label_icons"] = _show_label_icons
+
+
+def _recurrence_terminology(request: Request) -> str:
+    """"standard" (default) or "playful" -- see RECURRENCE_TERMINOLOGY_KEY
+    above. Read by _event_form_fields.html/schedule_classes.html/schedule_
+    class_form.html to pick which label set the holiday-calendar/weekend-
+    exclusion controls display; never read by any router or db.py
+    accessor, since the fields themselves are unaffected."""
+    return _cached_app_meta(request, RECURRENCE_TERMINOLOGY_KEY, "standard")
+
+
+templates.env.globals["recurrence_terminology"] = _recurrence_terminology
 
 
 def _label_icon(request: Request, label: str) -> str:

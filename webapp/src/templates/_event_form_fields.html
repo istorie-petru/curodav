@@ -96,8 +96,14 @@
              (recurrence_expand.expand_events), never materialized into a
              stored EXDATE. Only meaningful once Recurrence above is set;
              harmless (silently unused) otherwise. -->
+        <!-- 1.6 ("Configurable terminology"): the field names/values below
+             (holiday_calendar/exclude_saturday/exclude_sunday) never
+             change -- only the on-screen label does, per Settings >
+             General's "Recurrence terminology" toggle
+             (deps.py's recurrence_terminology() global). -->
+        {% set _playful = recurrence_terminology(request) == 'playful' %}
         <div class="field">
-            <label>Holiday calendar</label>
+            <label>{{ 'Respects Labor Laws' if _playful else 'Holiday calendar' }}</label>
             <input type="text" name="holiday_calendar" list="holiday-calendar-names"
                    placeholder="(none)"
                    value="{{ event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' }}">
@@ -109,10 +115,10 @@
         </div>
         <div class="field field-toggle">
             <input type="checkbox" id="exclude_saturday" name="exclude_saturday" value="1" {% if event and event.exclude_saturday %}checked{% endif %}>
-            <label for="exclude_saturday">Exclude Saturday</label>
+            <label for="exclude_saturday">{{ 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday' }}</label>
         </div>
         <div class="field field-toggle">
             <input type="checkbox" id="exclude_sunday" name="exclude_sunday" value="1" {% if event and event.exclude_sunday %}checked{% endif %}>
-            <label for="exclude_sunday">Exclude Sunday</label>
+            <label for="exclude_sunday">{{ 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday' }}</label>
         </div>
     </div>

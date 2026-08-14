@@ -48,9 +48,15 @@ immediately with **no regenerate step**, unlike a semester-date or
 holiday-calendar-name change (still `_regenerate_all`, since those change the
 event's own start_at/recurrence/holiday_calendar fields).
 
-Still open: "manual recurrence exceptions" and "configurable terminology"
-items from `plans/open-priority.md`'s Schedule & recurrence rework section,
-tracked in `plans/STATE.md`.
+**Manual recurrence exceptions and configurable terminology** (1.6, shipped
+2026-08-14) are both generic Calendar/recurrence features, not Schedule-
+specific — see `features/calendar.md`'s Recurrence section for the full
+model (`event_occurrence_overrides`, the "This occurrence" card, and the
+Settings > General terminology toggle). Schedule's own Settings panel's
+"Holiday calendar" field respects that same toggle (`schedule_classes.html`).
+
+**1.6 (Schedule & recurrence rework) is now fully shipped** — see
+`plans/roadmap.md`'s 1.6 row.
 
 ## Classes page (`/schedule`)
 

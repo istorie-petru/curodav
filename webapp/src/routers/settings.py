@@ -87,6 +87,7 @@ from fastapi.responses import RedirectResponse
 from .. import db
 from ..deps import (
     FOUR_WEEK_POSITION_KEY,
+    RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
     TIME_FORMAT_KEY,
     WEEK_START_KEY,
@@ -177,6 +178,10 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "current_four_week_position": _four_week_position_from_value(
                 db.get_app_meta(conn, FOUR_WEEK_POSITION_KEY) or "1"
             ),
+            # 1.6 ("Configurable terminology") -- "standard" or "playful"
+            # labels on the recurrence editor's holiday-calendar/weekend
+            # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
+            "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -272,6 +277,20 @@ def set_four_week_position(position: str = Form("1"), conn=Depends(get_db)):
     than silently placing the current week somewhere the UI never offered.
     Read back by routers/calendar.py's four_week_view."""
     db.set_app_meta(conn, FOUR_WEEK_POSITION_KEY, position if position in ("1", "2", "3", "4") else "1")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/recurrence-terminology")
+def set_recurrence_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
+    """1.6 ("Configurable terminology") -- "standard" or "playful" labels
+    on the recurrence editor's holiday-calendar/weekend controls. Only
+    ever stores one of the two offered choices; anything else falls back
+    to "standard", same "unrecognized value -> the default, not silently
+    picking something the UI never offered" convention as set_week_start/
+    set_four_week_position above. Presentation-layer only -- the
+    underlying holiday_calendar/exclude_saturday/exclude_sunday fields on
+    events and schedule_settings never change name or meaning."""
+    db.set_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

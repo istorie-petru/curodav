@@ -191,17 +191,31 @@ session, right before the final commit of that session.
   Recurrence section. Full suite 1078 passed (new
   `test_manual_recurrence_exceptions.py`, extended
   `test_recurrence_expand.py`).
-- **Next slice:** `1.6` continues — Configurable terminology
-  (`open-priority.md` § Schedule & recurrence rework, "Configurable
-  terminology"), the last open 1.6 subsection: a Settings toggle between
-  the underlying neutral field names (`holiday_calendar`,
-  `exclude_saturday`, `exclude_sunday`) and an optional playful
-  presentation-layer mode ("Respects Labor Laws", "Marx Weekend") on the
-  recurrence editor — database/APIs/sync stay neutral either way. Once
-  this ships, **1.6 is fully shipped** and `pyproject.toml` should be
-  bumped. `open.md`'s Command palette actions follow-up (1.2 side work)
-  and 1.4's optional Project check-in side work are both still fine
-  smaller, self-contained slices instead, whenever a session wants one.
+- **Shipped:** `1.6` slice — **Configurable terminology**, complete
+  (2026-08-14) — Settings > General's "Recurrence terminology" toggle
+  (`standard`/`playful`, `deps.py`'s `RECURRENCE_TERMINOLOGY_KEY`,
+  app_meta-backed, same memoized-per-request pattern as `week_start`/
+  `time_format`; `POST /settings/recurrence-terminology`). Presentation-
+  layer only, per spec: the underlying `holiday_calendar`/
+  `exclude_saturday`/`exclude_sunday` field names and semantics never
+  change, only the on-screen label
+  (`_event_form_fields.html`/`schedule_classes.html`, gated by the new
+  `recurrence_terminology()` Jinja global) — "Holiday calendar" / "Exclude
+  Saturday" / "Exclude Sunday" (standard) vs. "Respects Labor Laws" /
+  "Marx Weekend: Saturday" / "Marx Weekend: Sunday" (playful). See
+  `features/calendar.md`'s Recurrence section. Full suite 1088 passed (new
+  `test_recurrence_terminology.py`). **1.6 is now fully shipped**
+  (`pyproject.toml` bumped to `1.6.0`).
+- **Next slice:** `1.7` — Information architecture & view surfaces
+  (`roadmap.md`'s 1.7 row, `open-priority.md` § Information architecture &
+  view surfaces): Dashboard (orientation), Today (execution), Week
+  (planning), Spaces (context), built on the aggregation service (1.1), the
+  project stack (1.3), and work allocations (1.4), with the consolidated
+  widget grid (1.3). `open.md`'s Command palette actions follow-up (1.2
+  side work), 1.4's optional Project check-in side work, and 1.6's
+  optional "Configurable views + optional Schedule module" side work are
+  all still fine smaller, self-contained slices instead, whenever a
+  session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

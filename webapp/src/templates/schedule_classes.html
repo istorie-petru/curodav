@@ -325,7 +325,8 @@
             <input type="text" name="schedule_label" value="{{ settings.schedule_label or 'Schedule' }}" placeholder="Schedule">
         </div>
         <div class="field">
-            <label>Holiday calendar</label>
+            <!-- 1.6 ("Configurable terminology") -- see _event_form_fields.html's own comment. -->
+            <label>{{ 'Respects Labor Laws' if recurrence_terminology(request) == 'playful' else 'Holiday calendar' }}</label>
             <input type="text" name="holiday_calendar" list="holiday-calendar-names" value="{{ settings.holiday_calendar or 'Default' }}" placeholder="Default">
         </div>
     </form>

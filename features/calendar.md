@@ -69,6 +69,21 @@ subsection; a recurring row (`recurrence IS NOT NULL`) is now always a query
 candidate, and `expand_events` is what actually decides whether it produces
 anything in the window.
 
+**Configurable terminology** (1.6, shipped 2026-08-14): Settings > General's
+"Recurrence terminology" toggle (`standard`/`playful`, app_meta-backed via
+`deps.py`'s `RECURRENCE_TERMINOLOGY_KEY`/`recurrence_terminology()` Jinja
+global, same pattern as Week starts on/Time format) swaps only the *on-screen
+label* of the holiday-calendar/weekend controls on `_event_form_fields.html`
+and `schedule_classes.html`'s Settings panel — "Holiday calendar" / "Exclude
+Saturday" / "Exclude Sunday" (standard) vs. "Respects Labor Laws" / "Marx
+Weekend: Saturday" / "Marx Weekend: Sunday" (playful). The underlying
+`holiday_calendar`/`exclude_saturday`/`exclude_sunday` field names, form
+field `name=` attributes, database columns, and API shape never change —
+presentation-layer only, per `open-priority.md`'s own framing.
+
+**1.6 (Schedule & recurrence rework) is now fully shipped** — see
+`plans/roadmap.md`'s 1.6 row and `features/schedule.md`.
+
 ## Interactions
 
 - **Drag to move / resize** on Week/Day (15-min snap) → `POST /events/{uid}/reschedule`
