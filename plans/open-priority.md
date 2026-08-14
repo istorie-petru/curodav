@@ -1106,8 +1106,41 @@ of it:
    `/static/offline_write.js` (bumped to `cc-shell-v3`). 8 new tests
    extending `test_pwa_shell.py`'s structural-check convention, full suite
    1285 passed.
-6. **Sync engine** — the push/pull loop (§8), retry/backoff (§5), the status
-   indicator, wiring slices 1–5 together end to end.
+6. **Sync engine** — **shipped 2026-08-14.** `static/offline_sync_client.js`
+   grew a push half alongside its existing pull half: `pushOnce()` sends
+   every op still in the outbox (`offline_db.js`'s `getOutboxOps`, already
+   HLC-ordered) to `POST /api/sync/push`, then removes every acknowledged
+   `op_id` from the outbox via a new `offline_db.js::removeOutboxOps` —
+   acknowledging drops the op immediately rather than modeling a separate
+   "acknowledged but retained" state (§2 explicitly allows either). `syncNow()`
+   is §8's own ordering rule (push, then pull, always in that order) wrapping
+   both halves. §5's retry policy: exponential backoff with jitter capped at
+   30s (`scheduleRetry`/`attempt`), reset to the base delay on the browser's
+   `online` event or any successful round; a local write (`offline_write.js`'s
+   `submitOp`) now calls the new `requestSync()` immediately after queuing,
+   rather than waiting for the next periodic retry, if the device is already
+   online. Status is deliberately *not* a stored state machine — new
+   `getStatus()` computes `offline`/`synchronizing`/`pending`/`synced` fresh
+   every time from live `{navigator.onLine, in-flight, outbox size}`, so it
+   can never drift from what's actually true, and dispatches
+   `cc-offline-status-change` whenever it might have changed. New
+   `static/offline_status.js` is the small indicator itself (`ofline-first-
+   pwa.md`'s own line) — a pure renderer with no IndexedDB/network calls of
+   its own, listening only for that event; hidden entirely in the `synced`
+   state ("successful background sync stays unobtrusive, while errors are
+   visible") and shown as a small top-right pill otherwise. `data_health.py`'s
+   `health_summary`'s `sync` field, a fixed `{"configured": false}` placeholder
+   since slice 1, now reflects real `sync_devices` rows via a new
+   `db.list_sync_devices` — Settings > Data health finally flips to
+   "Configured" once any device has actually synced, per §9's own note that
+   this was the point of leaving the placeholder's shape unchanged all along.
+   `sw.js`'s precache list gained `offline_status.js` (bumped to
+   `cc-shell-v4`). Verified two ways: `test_pwa_shell.py`'s structural checks
+   (8 new tests) plus a one-off Node + fake-indexeddb smoke script (same
+   pattern as slices 4-5's, not added to the pytest suite) with a faked
+   `fetch` exercising a full push-drains-the-outbox / failed-push-keeps-the-
+   op / recovery-drains-it-again / offline-skips-the-network-entirely
+   sequence end to end. Full suite 1293 passed.
 7. **Tombstone GC** — the retention horizon (§4) and the forced-full-resync
    path for a stale cursor.
 

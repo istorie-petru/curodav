@@ -342,15 +342,36 @@ def entity_stats(conn: sqlite3.Connection) -> dict[str, int]:
     return export_context(conn)
 
 
+def _sync_summary(conn: sqlite3.Connection) -> dict[str, Any]:
+    """1.8 slice 6 -- the sync engine (routers/sync_api.py, driven client-
+    side by static/offline_sync_client.js) is now real, so this is no
+    longer the fixed `{"configured": False}` placeholder slices 1-5 left
+    here. "Configured" means at least one device has ever pushed or
+    pulled -- a fresh install with no PWA client installed anywhere still
+    correctly reports unconfigured, since `sync_devices` stays empty until
+    that happens."""
+    from . import db
+
+    devices = db.list_sync_devices(conn)
+    if not devices:
+        return {"configured": False, "detail": "No device has synced yet.", "device_count": 0, "last_seen_at": None}
+    return {
+        "configured": True,
+        "detail": f"{len(devices)} device{'s' if len(devices) != 1 else ''} synced, most recently {devices[0]['last_seen_at']}.",
+        "device_count": len(devices),
+        "last_seen_at": devices[0]["last_seen_at"],
+    }
+
+
 def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -> dict[str, Any]:
     """Everything Settings > Data health's page needs in one call --
     open.md's own list: "database integrity/status; last successful
     backup; last backup verification; synchronization status ...; storage
-    usage; relevant entity statistics." Sync status is a fixed
-    not-yet-available placeholder -- 1.8 (offline-first editing &
-    synchronization) hasn't shipped any sync engine yet for this to report
-    on; the field exists now so the page's shape doesn't change once it
-    does."""
+    usage; relevant entity statistics." Sync status reflects `sync_devices`
+    directly (see `_sync_summary`) now that 1.8 slice 6 has shipped a real
+    sync engine -- slices 1-5 left this as a fixed not-yet-available
+    placeholder so this function's own shape wouldn't need to change once
+    it did."""
     backups = list_backups(backups_dir)
     latest = backups[0] if backups else None
     latest_verified = next((b for b in backups if b["verification"] is not None), None)
@@ -358,7 +379,7 @@ def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -
         "integrity": check_integrity(conn),
         "latest_backup": latest,
         "latest_verified_backup": latest_verified,
-        "sync": {"configured": False, "detail": "Not configured -- offline sync ships in 1.8."},
+        "sync": _sync_summary(conn),
         "storage": storage_stats(db_path, backups_dir),
         "entities": entity_stats(conn),
         "backups": backups,

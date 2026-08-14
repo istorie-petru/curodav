@@ -3561,3 +3561,26 @@ body.command-palette-open{overflow:hidden;}
 .offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
 .offline-add-task-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
 .offline-add-task-form input[type="text"]{flex:1;}
+
+/* Sync status pill (offline_status.js, 1.8 slice 6) -- ofline-first-
+   pwa.md's "small status indicator." Hidden by default/when synced (only
+   `.is-visible` shows it -- successful background sync stays unobtrusive,
+   per §8); global, not /offline-specific, since a retry can be stuck
+   failing no matter which page is open. Top-right corner, same fixed-
+   overlay convention as .toast-stack/.fab but a small pill rather than a
+   stack, since there's ever only one of these at a time. */
+.sync-status-pill{
+  display:none; position:fixed; top:var(--space-3); right:var(--space-3); z-index:210;
+  align-items:center; gap:6px; background:var(--bg-elevated); border:1px solid var(--separator);
+  border-radius:var(--radius-pill); padding:5px 12px; font-size:var(--text-caption);
+  color:var(--fg-secondary); box-shadow:var(--elevation-2);
+}
+.sync-status-pill.is-visible{display:flex;}
+.sync-status-dot{width:7px; height:7px; border-radius:50%; background:var(--fg-tertiary); flex:none;}
+.sync-status-pill.is-offline .sync-status-dot{background:var(--warning);}
+.sync-status-pill.is-pending .sync-status-dot{background:var(--warning);}
+.sync-status-pill.is-synchronizing .sync-status-dot{background:var(--accent); animation:sync-status-pulse 1s ease-in-out infinite;}
+@keyframes sync-status-pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+@media (max-width:720px){
+  .sync-status-pill{top:auto; bottom:calc(72px + env(safe-area-inset-bottom, 0px)); right:var(--space-3);}
+}

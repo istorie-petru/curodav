@@ -3690,6 +3690,30 @@ def touch_sync_device(
     )
 
 
+def list_sync_devices(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """1.8 slice 6 -- every device that has ever pushed or pulled, most
+    recently seen first. `data_health.health_summary`'s own "sync" field
+    was a fixed `{"configured": False}` placeholder through slice 5
+    (open.md's own note: "the field exists now so the page's shape doesn't
+    change once it does") -- this is what that placeholder needed once a
+    real sync engine (routers/sync_api.py, called by static/offline_sync_
+    client.js) actually exists to populate `sync_devices` rows."""
+    rows = conn.execute(
+        "SELECT device_id, last_pushed_physical, last_pushed_logical, last_pushed_device_id, "
+        "last_pulled_physical, last_pulled_logical, last_pulled_device_id, last_seen_at "
+        "FROM sync_devices ORDER BY last_seen_at DESC"
+    ).fetchall()
+    return [
+        {
+            "device_id": row[0],
+            "last_pushed_hlc": (row[1], row[2], row[3]) if row[1] is not None else None,
+            "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
+            "last_seen_at": row[7],
+        }
+        for row in rows
+    ]
+
+
 # --------------------------------------------------------------------- #
 # 1.8 slice 2 -- sync_conflicts (§§7b/c, 9). See the table's own CREATE
 # TABLE comment for what it's for. Plain CRUD helpers only -- the actual

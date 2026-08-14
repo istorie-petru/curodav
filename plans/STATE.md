@@ -796,23 +796,65 @@ session, right before the final commit of that session.
   `create`/`field_set` too, not just `delete`). `sw.js` precache bumped to
   `cc-shell-v3`. 8 new tests extending `test_pwa_shell.py`, full suite 1285
   passed.
-- **Next slice:** `1.8` slice 6 — **Sync engine** (`open-priority.md` §
-  Offline-first editing & synchronization §11, slice 6). The push half of
-  §8's protocol (client-side, flushing `offline_db.js`'s `outbox` against
-  `POST /api/sync/push`), §5's retry/backoff with jitter (immediate retry
-  on the browser's `online` event, periodic background retry while
-  nominally online but failing), and the status indicator
-  (`ofline-first-pwa.md`'s offline/synchronizing/pending/synchronized
-  states, driven off outbox size + in-flight push/pull state). This is
-  what actually wires slices 1-5 together end to end — until this ships,
-  an offline write is durable locally but never leaves the device. Still
-  browser-dependent, same pytest-convention constraint as slices 3-5; the
-  Node + fake-indexeddb smoke-test pattern is worth reusing again for the
-  push/retry logic. `open.md`'s Command palette actions follow-up (1.2
-  side work), 1.4's optional Project check-in side work, and 1.6's
-  optional "Configurable views + optional Schedule module" side work are
-  all still fine smaller, self-contained slices instead, whenever a
-  session wants a break from the sync-engine/PWA work.
+- **Shipped:** `1.8` slice 6 — **Sync engine**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  6. `static/offline_sync_client.js` grew a push half alongside its
+  existing pull half: `pushOnce()` sends every outbox op (already HLC-
+  ordered by `offline_db.js`'s `getOutboxOps`) to `POST /api/sync/push`,
+  then acknowledges via a new `offline_db.js::removeOutboxOps` — an
+  acknowledged op is dropped immediately rather than kept in a separate
+  "acknowledged but retained" state, one of §2's two explicitly-allowed
+  options. `syncNow()` wraps both halves in §8's own push-then-pull order.
+  §5's retry policy: exponential backoff with jitter capped at 30s, reset
+  on the browser's `online` event or any successful round; a local write
+  (`offline_write.js`'s `submitOp`) now calls new `requestSync()`
+  immediately after queuing rather than waiting for the next periodic
+  retry. Status is computed live, never stored — new `getStatus()` derives
+  `offline`/`synchronizing`/`pending`/`synced` fresh from `{navigator.
+  onLine, in-flight, outbox size}` every time, dispatching
+  `cc-offline-status-change` whenever it might have changed, so it can
+  never drift from what's actually true. New `static/offline_status.js` is
+  the small indicator itself (`ofline-first-pwa.md`'s own line) — a pure
+  renderer, no IndexedDB/network calls of its own — hidden entirely in the
+  `synced` state ("successful background sync stays unobtrusive, while
+  errors are visible") and a small top-right pill otherwise.
+  `data_health.py`'s Data health "sync" field, a fixed
+  `{"configured": false}` placeholder since slice 1, now reflects real
+  `sync_devices` rows via new `db.list_sync_devices` — flips to
+  "Configured" once any device has actually synced. `sw.js` precache
+  bumped to `cc-shell-v4`. Verified two ways: `test_pwa_shell.py`'s
+  structural checks (8 new tests) plus a one-off Node + fake-indexeddb
+  smoke script (not added to pytest) with a faked `fetch` exercising push-
+  drains-outbox / failed-push-keeps-the-op / recovery-drains-it-again /
+  offline-skips-the-network end to end — caught and fixed a real Node-
+  specific gotcha along the way (Node 21+'s built-in read-only `navigator`
+  global silently no-ops a plain reassignment; needed `Object.
+  defineProperty` instead). Full suite 1293 passed. This wires slices 1-5
+  together end to end — an offline write now actually leaves the device
+  once one comes back online.
+- **Next slice:** `1.8` slice 7 — **Tombstone GC** (`open-priority.md` §
+  Offline-first editing & synchronization §11, slice 7). The §4 retention
+  horizon (default 90 days, `offline_sync.py`'s existing `RETENTION_DAYS`
+  constant already used by `pull()`'s staleness check) and the actual
+  physical purge job it currently has nothing to do — `field_versions`/
+  `sync_applied_ops` rows (and fully-tombstoned entity rows themselves,
+  per §4) older than the horizon get deleted for real, not just treated as
+  stale by a comparison. Needs a trigger (a scheduled/background job, or a
+  lazy check on some existing request path — this app has no cron
+  infrastructure yet outside `scripts/`, worth checking what
+  `scripts/data_health.py`'s own CLI convention already establishes before
+  inventing a new one) and a decision on whether purge only runs server-
+  side (client mirrors just accumulate forever, harmless for a single-user
+  local IndexedDB store) or needs a client-side counterpart too. This is
+  the last slice of 1.8's own 7-slice breakdown — closing it out completes
+  1.8 (bump `pyproject.toml`), pending a final pass confirming the
+  acceptance line (§11: "no field silently lost... restoring from an old
+  client cursor never resurrects a tombstoned row past the GC horizon").
+  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
+  optional Project check-in side work, and 1.6's optional "Configurable
+  views + optional Schedule module" side work are all still fine smaller,
+  self-contained slices instead, whenever a session wants a break from the
+  sync-engine/PWA work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

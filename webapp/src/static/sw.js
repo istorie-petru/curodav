@@ -15,7 +15,7 @@
 // CACHE_NAME is bumped whenever this file's own precache list changes --
 // activate's cleanup below deletes any previous cc-shell-* cache, so an
 // old shell version never lingers once a new one has installed.
-const CACHE_NAME = "cc-shell-v3";
+const CACHE_NAME = "cc-shell-v4";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -44,6 +44,7 @@ const SHELL_ASSETS = [
   // harmless no-ops with no network).
   "/static/offline_db.js",
   "/static/offline_sync_client.js",
+  "/static/offline_status.js",
   "/static/offline_write.js",
   "/static/offline_shell.js",
   "/static/favicon-16.png",

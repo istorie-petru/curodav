@@ -256,8 +256,20 @@ IndexedDB store and applied optimistically to the mirror through the same
 per-field-HLC path a pull already uses) + `offline_db.js`'s own new §3 HLC
 clock (`nextHlc`/`mergeHlc`) + `/offline`'s task list gaining an "add a
 task" form and per-row complete/delete controls. Still no sync engine —
-queued ops just accumulate until slice 6. Next: slice 6 (sync engine: push,
-retry/backoff, status indicator).
+queued ops just accumulate until slice 6. **Slice 6 (sync engine) shipped
+2026-08-14** — `offline_sync_client.js` grew a push half (`pushOnce`,
+draining the outbox against `POST /api/sync/push`, acking via
+`removeOutboxOps`) alongside its existing pull half, wrapped by `syncNow()`
+in §8's push-then-pull order, plus §5's exponential backoff/jitter retry
+(capped 30s, reset on the `online` event or a successful round) and a
+local write triggering an immediate sync attempt when already online. New
+`static/offline_status.js` renders the small offline/synchronizing/
+pending/synced indicator off a `cc-offline-status-change` event the engine
+dispatches — status is computed live, never stored, so it can't drift.
+`data_health.py`'s Data health "sync" field flips from a fixed placeholder
+to real `sync_devices` state via new `db.list_sync_devices`. This closes
+the sync engine that wires slices 1-5 together end to end; **1.8 is not
+yet fully shipped** — slice 7 (tombstone GC) remains.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

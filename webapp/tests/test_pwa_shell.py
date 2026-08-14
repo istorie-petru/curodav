@@ -183,13 +183,13 @@ class TestLocalReadPath:
         # overwrite -- the whole reason field_hlc is a separate store.
         assert "isNewer" in script
 
-    def test_offline_sync_client_pulls_and_never_pushes(self):
+    def test_offline_sync_client_pulls_only_as_of_slice_4(self):
+        # Historical marker for slice 4's own scope, at the point this test
+        # was written -- offline_sync_client.js has since grown a push half
+        # too (slice 6, see TestSyncEngine below). Kept as a pull-specific
+        # smoke check rather than deleted outright.
         script = (_STATIC_DIR / "offline_sync_client.js").read_text()
         assert "/api/sync/pull" in script
-        # Slice 5 adds the outbox/push path -- this slice must not call
-        # push at all yet, since there is nothing of this device's own to
-        # send (no local writes exist).
-        assert "/api/sync/push" not in script
         assert "full_resync" in script
         assert "window.CCOfflineSync" in script
 
@@ -268,17 +268,94 @@ class TestLocalWritePath:
         # only exist on /offline's own markup -- loading it globally would
         # be dead weight on every other page, unlike offline_db.js/
         # offline_sync_client.js which genuinely need to run everywhere to
-        # keep the mirror warm.
+        # keep the mirror warm. base.html's own comment block may still
+        # *mention* the filename in prose (explaining why it's excluded),
+        # so this checks for an actual <script src> tag, not a bare
+        # substring match.
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert "offline_write.js" not in html
+        assert "static_url('offline_write.js')" not in html
 
     def test_precache_list_includes_the_write_path_script(self):
         script = (_STATIC_DIR / "sw.js").read_text()
         assert "/static/offline_write.js" in script
 
     def test_shell_cache_name_was_bumped_for_the_new_precached_script(self):
+        # cc-shell-v3 was slice 5's own bump (adding offline_write.js);
+        # slice 6 adds offline_status.js on top and bumps again.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v3"' in script
+        assert 'CACHE_NAME = "cc-shell-v4"' in script
+
+
+class TestSyncEngine:
+    """1.8 slice 6 -- "Sync engine" (open-priority.md §11 slice 6): the
+    push half of §8's protocol, §5's retry/backoff, and the status
+    indicator. Same structural-check level as every other class here --
+    the actual push/retry/backoff behavior needs a real browser or a
+    Node + fake-indexeddb smoke run (this slice's own, not part of this
+    suite, same pattern slices 4-5 already established) to exercise for
+    real."""
+
+    def test_offline_sync_client_now_pushes_before_pulling(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "/api/sync/push" in script
+        assert "/api/sync/pull" in script
+        assert script.index("pushOnce()") < script.index("pullOnce()")
+
+    def test_offline_sync_client_acks_pushed_ops_via_removeOutboxOps(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "removeOutboxOps" in script
+
+    def test_offline_sync_client_has_backoff_with_a_cap_and_jitter(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "MAX_RETRY_MS" in script
+        assert "jitter" in script
+        assert 'addEventListener("online"' in script
+        assert 'addEventListener("offline"' in script
+
+    def test_offline_sync_client_exposes_status_for_the_indicator(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "getStatus" in script
+        assert "requestSync" in script
+        assert "cc-offline-status-change" in script
+
+    def test_offline_write_requests_a_sync_after_queuing_a_write(self):
+        # A local write shouldn't have to wait for the next periodic retry
+        # if the device is already online.
+        script = (_STATIC_DIR / "offline_write.js").read_text()
+        assert "CCOfflineSync" in script
+        assert "requestSync" in script
+
+    def test_offline_status_renders_from_events_not_direct_state(self):
+        script = (_STATIC_DIR / "offline_status.js").read_text()
+        assert "cc-offline-status-change" in script
+        # Renderer only -- no IndexedDB or network calls of its own.
+        assert "indexedDB.open" not in script
+        assert "fetch(" not in script
+
+    def test_offline_status_script_loaded_globally_and_precached(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
+        assert "offline_status.js" in html
+        script = (_STATIC_DIR / "sw.js").read_text()
+        assert "/static/offline_status.js" in script
+
+    def test_data_health_sync_summary_reflects_real_sync_devices(self, tmp_path):
+        # open-priority.md §9: the fixed {"configured": False} placeholder
+        # data_health.py carried through slices 1-5 is what slice 6 was
+        # always meant to flip once a real sync engine exists to populate
+        # sync_devices.
+        from src import data_health, db
+
+        with db.connect(tmp_path / "cache.sqlite") as conn:
+            backups_dir = tmp_path / "backups"
+            summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
+            assert summary["sync"]["configured"] is False
+            assert summary["sync"]["device_count"] == 0
+
+            db.touch_sync_device(conn, "device-a", last_pushed_hlc=(1000, 0, "device-a"))
+            summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
+            assert summary["sync"]["configured"] is True
+            assert summary["sync"]["device_count"] == 1
+            assert summary["sync"]["last_seen_at"] is not None
 
 
 class TestRouterWiring:

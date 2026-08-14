@@ -56,6 +56,14 @@
     // offline_shell.js already listens for it to re-render, so a local
     // write refreshes the visible list with no separate signal needed.
     document.dispatchEvent(new CustomEvent("cc-offline-sync-complete"));
+    // 1.8 slice 6 -- a fresh write shouldn't have to wait for the next
+    // periodic retry if the device is already online right now; this is
+    // the "local write queued" trigger alongside page-load and the
+    // browser's 'online' event (offline_sync_client.js's own
+    // requestSync doc comment). A no-op object when slice 6 hasn't loaded
+    // for some reason (defensive, shouldn't happen in practice since both
+    // scripts load together) rather than throwing.
+    if (window.CCOfflineSync) window.CCOfflineSync.requestSync();
     return op;
   }
 

@@ -246,9 +246,17 @@
     return getAll("contacts");
   }
 
-  // §2's outbox -- append-only from a local write's point of view (this
-  // slice never mutates or removes a queued op; slice 6's push loop is the
-  // first thing that will, once an op is acknowledged). The store's own
+  // §2's outbox -- append-only from a local write's point of view through
+  // slice 5 (that slice never mutated or removed a queued op). Slice 6's
+  // push loop (offline_sync_client.js) is the first thing that does,
+  // via `removeOutboxOps` below, once the server has acknowledged an op
+  // (§2: "an op, once written, is never mutated, only marked
+  // 'acknowledged' once the server confirms it (or dropped after a
+  // bounded retention once acknowledged, to keep the local store
+  // small)" -- this slice takes the simpler of those two options and
+  // drops an acknowledged op immediately rather than modeling a separate
+  // acknowledged-but-retained state, since nothing else in this app ever
+  // reads outbox history after a push has confirmed it). The store's own
   // keyPath is `op_id` (a random UUID, per §2), which is *not* insertion-
   // ordered, so `getOutboxOps` explicitly sorts on each op's own top-level
   // `hlc` (offline_write.js stamps one on every op it builds, including
@@ -284,6 +292,15 @@
     return await reqToPromise(tx(db, "outbox", "readonly").objectStore("outbox").count());
   }
 
+  async function removeOutboxOps(opIds) {
+    if (!opIds || opIds.length === 0) return;
+    const db = await openDb();
+    const store = tx(db, "outbox", "readwrite").objectStore("outbox");
+    for (const opId of opIds) {
+      await reqToPromise(store.delete(opId));
+    }
+  }
+
   window.CCOfflineDB = {
     open: openDb,
     getDeviceId,
@@ -300,5 +317,6 @@
     enqueueOp,
     getOutboxOps,
     getOutboxCount,
+    removeOutboxOps,
   };
 })();
