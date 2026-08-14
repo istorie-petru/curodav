@@ -467,6 +467,15 @@ def month_view(
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
+    # Timetabled tasks (work-allocation events, scheduled from a project's
+    # Week/Timetable planning grids) are scheduling placeholders, not
+    # ordinary events -- they're deliberately prominent on the Week grid
+    # (see week_view's own docstring) but would just be noise duplicating
+    # the task's own due-date chip here, so Month excludes them entirely
+    # rather than rendering them as a third kind of item.
+    allocation_uids = db.work_allocation_event_uids(conn)
+    events = [e for e in events if e["uid"] not in allocation_uids]
+
     # Phase 9b toolbar rework: the dead Space/Project dropdowns
     # (project_uid/group_uid) are gone -- `label` is the one real filter
     # now, applied to both events and the all-day task chips this page

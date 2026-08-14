@@ -9,6 +9,20 @@ label, and an event's color is its first (alphabetical) label's color
 
 - **Month** (`/calendar`) — one flat per-day list: all-day colored rows → timed
   events → tasks; `MONTH_MAX_VISIBLE_ITEMS=4` then "+N more" → Day view.
+  Timetabled tasks (work-allocation events) are excluded entirely
+  (`db.work_allocation_event_uids`, filtered before `_month_grid` runs) —
+  they'd just duplicate the task's own due-date chip; Week is where they're
+  meant to be prominent. Non-recurring event chips (all-day and timed) are
+  **draggable to a different day cell** (`static/calendar_month_drag.js`,
+  alongside the existing click-and-hold drag-to-*create* script) — reuses
+  `POST /events/{uid}/reschedule`, shifting the event's start/end by the
+  whole-day delta between origin and drop cell, time-of-day untouched. A
+  recurring event's chip renders with no `data-uid` at all, so it's not
+  draggable (dragging one occurrence would reschedule the whole series) —
+  click still opens it normally. On drop the page reloads (a Month move can
+  shift an item across two cells' own overflow-count/"+N more" state, which
+  only a fresh render keeps consistent, unlike the Week grid's single-block
+  optimistic move).
 - **4-Week** (`/calendar/fourweek`) — a continuous 28-day window whose current
   week sits in a configurable row 1–4 (Settings → General); prev/next move one
   week.

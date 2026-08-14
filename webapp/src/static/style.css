@@ -2049,6 +2049,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    reads clearly against both light and dark themes. */
 .month-day-cell.is-selecting{background:var(--row-alt); box-shadow:inset 0 0 0 1px var(--accent-neutral);}
 
+/* Month-view drag-to-move an existing event chip onto a different day cell
+   (static/calendar_month_drag.js) -- same visual vocabulary as the
+   Week/Day grid's own .time-col.drop-hover, so "this cell is the drop
+   target" reads consistently across every calendar view. */
+.month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle);}
+.month-event-item.dragging{opacity:.5; cursor:grabbing;}
+
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,
    static/timeline.js. Everything absolutely positioned within one
    scrollable canvas, matching desktop's architecture verbatim (a single

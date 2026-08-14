@@ -1124,6 +1124,56 @@ session, right before the final commit of that session.
   `test_week_planning.py`/`test_project_calendar.py`, each had one
   `'href="/tasks/t1"' in body` assertion -- now asserts that href is GONE
   and the title renders as a plain `<span>`). Full suite 1320 passed.
+- **Shipped:** side work — **Month view: events draggable to move, timetabled
+  tasks hidden**, complete (2026-08-15), direct feedback ("in calendar, month
+  view, events should be able to be moved via mouse. Timetabled tasks should
+  not be visible in the calendar view"). Two independent changes to
+  `routers/calendar.py::month_view`/`templates/calendar_month.html`:
+  - **Timetabled tasks (work-allocation events) excluded from Month** — new
+    `db.work_allocation_event_uids(conn)` (one bulk query, the N+1-avoiding
+    counterpart to `db.work_allocation_task_uid`) filters `month_view`'s
+    `events` list before `_month_grid` ever sees it, so a scheduled work
+    block never renders as a third kind of Month item duplicating the task's
+    own due-date chip. Week/Timetable is untouched (work allocations stay
+    deliberately prominent there, per `week_view`'s own docstring) — this is
+    Month-only, since that's the surface the feedback named.
+  - **Drag-to-move an event chip between day cells** — new
+    `static/calendar_month_drag.js`, loaded alongside the existing
+    click-and-hold drag-to-*create* script (`calendar_month.js`, unchanged).
+    Reuses the Week/Day grid's own `POST /events/{uid}/reschedule` JSON
+    endpoint (`static/calendar.js`) rather than adding a new route — Month
+    has no time axis, so a drop only ever shifts the event's existing
+    start/end timestamps by the whole-day delta between the origin and
+    target cell, time-of-day untouched. `calendar_month.html`'s all-day and
+    timed "event" kind chips (not task chips) gained a shared
+    `.month-event-item` class plus `data-uid`/`data-start`/`data-end`/
+    `data-all-day` — but only when the event is non-recurring: a recurring
+    event's chip renders with no `data-uid` at all, so the drag script never
+    attaches to it (only the whole `events` row exists to reschedule, and
+    shifting it would move the entire series, not the one occurrence being
+    dragged — same footgun manual-recurrence-exceptions exists to avoid
+    elsewhere; a click still opens a recurring chip normally, only the drag
+    affordance is withheld). Click-vs-drag disambiguation mirrors
+    `calendar.js`'s own `CLICK_THRESHOLD_PX` pattern so a plain click still
+    navigates via the chip's `href`. On a successful drop the page does a
+    full reload (not an optimistic DOM patch) — unlike the Week grid's
+    single block's top/left, a Month move can shift an item between two
+    cells' own `rows`/overflow-count/`"+N more"` lists, which only a fresh
+    server render keeps consistent. New `.month-day-cell.drop-hover`/
+    `.month-event-item.dragging` CSS, same vocabulary as the Week grid's own
+    `.time-col.drop-hover`/`.time-event.dragging`.
+  4-Week view (`calendar_fourweek.html`) has its own separate markup and was
+  not touched — still shows work-allocation events and has no drag-to-move,
+  since the feedback named Month specifically. 21 existing tests
+  (`test_calendar_month_bars.py`/`test_calendar_month_quickcreate.py`)
+  still pass unchanged; no new tests added (drag interactions need a real
+  browser, same "structural JS-source checks only" ceiling as the app's
+  other pointer-drag scripts — no assertion gap opened here that other
+  Month tests weren't already leaving). Full suite 1316 passed, 4 pre-existing
+  failures in `test_today.py` confirmed unrelated (reproduce identically on
+  the pre-slice commit via `git stash`; a UTC-vs-local `date.today()` /
+  test-module-import-time date mismatch in this sandbox, not caused by this
+  slice).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

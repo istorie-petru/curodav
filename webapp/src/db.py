@@ -1694,6 +1694,15 @@ def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | 
     return row["task_uid"] if row else None
 
 
+def work_allocation_event_uids(conn: sqlite3.Connection) -> set[str]:
+    """Every event uid that is a work-allocation block, in one query -- the
+    bulk counterpart to work_allocation_task_uid, for a page (e.g. Month)
+    that needs to exclude every work-allocation event from a list it
+    already fetched via db.list_events, without an N+1 per-event lookup."""
+    rows = conn.execute("SELECT event_uid FROM event_task_relations WHERE is_work_allocation = 1").fetchall()
+    return {row["event_uid"] for row in rows}
+
+
 def delete_work_allocation(conn: sqlite3.Connection, event_uid: str) -> None:
     """"Deleting a work allocation removes only that scheduled block -- not
     the task. The user is removing planned working time, not the underlying
