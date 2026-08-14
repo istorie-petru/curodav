@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_task_relations.html" import task_relations_section %}
-{% from "_task_work_allocations.html" import task_work_allocations_section %}
+{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js. Task

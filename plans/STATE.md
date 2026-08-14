@@ -1233,6 +1233,61 @@ session, right before the final commit of that session.
   Month renders no hatching), plus `test_phase8_settings_hub.py`'s hub-URL
   set updated for the new category. Full suite 1340 passed (same 4
   pre-existing unrelated `test_today.py` failures as the slice above).
+- **Shipped:** side work — **Week/Day never opens scrolled to a Sleep hour
+  + fixed a real 12h/24h bug in the Work sessions card**, complete
+  (2026-08-15), direct follow-up feedback on the slice above ("the calendar
+  week view should never start at an hour that is marked as sleep... if
+  sleep from 00-06 AM, the week/day views should start from 6 AM, not 12
+  AM. Also, the app should respect the user choice of date preference 12
+  or 24 hours").
+  - **Initial scroll** — `static/time_blocks.js` (already loaded on
+    `calendar_week.html`/`calendar_day.html`) now also runs, once per page
+    load, over every visible `.time-col[data-date]`'s own date; if ANY of
+    them has a Sleep block covering midnight (`start_min <= 0 <
+    end_min`), it sets `.time-grid-wrap.scrollTop` past the LATEST such
+    block's end time (measuring `.time-grid-body`'s real rendered offset —
+    it sits below the sticky `.time-grid-top` header in normal flow — plus
+    its own half-hour top padding, rather than assuming a fixed header
+    height). Leisure blocks never affect this — only Sleep, and only a
+    block that actually covers minute 0, per the feedback's own example. A
+    no-op (grid opens at the top exactly as before) when no configured
+    Sleep block covers midnight on any visible day. No server-side change
+    needed — reuses the same `cc-time-blocks` JSON payload the scheduling
+    warning (slice above) already reads.
+  - **12h/24h audit turned up one real, unrelated bug**, fixed alongside:
+    `_task_work_allocations.html`'s "Work sessions" card (task detail/edit
+    modals) was slicing the raw stored ISO string directly
+    (`wa.start_at[:16]`/`wa.end_at[11:16]`) instead of going through
+    `deps.py`'s `fmt_time` filter — the one place in the app that still
+    showed a session's time in bare 24h regardless of the "24-hour time"
+    Settings > General preference. Fixing the field alone wasn't enough:
+    `task_detail.html`/`task_form.html` import that card as a Jinja macro
+    across a file boundary (`{% from "_task_work_allocations.html" import
+    task_work_allocations_section %}`), and a macro imported that way does
+    NOT inherit the caller's template context (so `fmt_time`'s
+    `@pass_context` read of `request` silently saw `None` and fell back to
+    its 24h default) unless imported `with context` — both import lines
+    needed that added, the same fix `_unscheduled_task_item.html`'s own
+    import already used for the identical reason. Confirmed live via a
+    synthetic-request smoke test before writing the fix (empirically, not
+    from reading the filter's source alone) — the bug reproduced exactly
+    as described, and the fix's before/after were both verified against a
+    real `request.app.state.settings.db_path`-backed Request, not a bare
+    one (a bare `Request({...})` with no `.app` at all silently falls back
+    to the 24h default through a *different* path — `_cached_app_meta`'s
+    own broad except — which would have hidden this bug's real cause
+    during manual testing). No other `fmt_time`/`fmt_hour` call site had
+    this problem — checked every template using either filter; the rest
+    are either not macros or already `{% include %}`d (context-inheriting
+    by default, unlike `{% from %}` import).
+  9 new tests: 4 structural JS-source checks in `test_settings_time_
+  blocks.py` (`TestSleepAwareInitialScroll` — no browser in this test
+  environment to assert a real scrollTop, same ceiling
+  `test_pwa_shell.py`'s own pointer-drag script tests already accept), 5 in
+  `test_display_prefs_settings.py` (`TestFmtTimeFilterInWorkSessionsCard`
+  — 24h default, 12h when set, and that `task_form.html`'s edit view
+  respects it too). Full suite 1347 passed (same 4 pre-existing unrelated
+  `test_today.py` failures).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

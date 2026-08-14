@@ -115,7 +115,16 @@ normally, but a shared `static/time_blocks.js` (loaded only on
 toast ("Heads up: this overlaps Sleep Time...") alongside the save. Month
 has no time-of-day axis at all, so neither the hatching nor the warning
 apply there. Config lives in Settings > Sleep & Leisure Time
-(`features/settings.md`).
+(`features/settings.md`). **Initial scroll never opens on a Sleep hour**
+(direct follow-up feedback) — the same `time_blocks.js` script also runs,
+once per page load, over every visible day column's own date (Week: up to
+7, Day: 1); if any of them has a Sleep block covering midnight
+(`start_min <= 0 < end_min`), the grid's `.time-grid-wrap` scrolls down
+past the LATEST such block's end time before the user ever sees it (e.g.
+Sleep 00:00–05:59 → the grid opens already scrolled to 6 AM, not
+midnight). Leisure blocks never affect this. A no-op — grid opens at the
+top exactly as before — when no configured Sleep block covers midnight on
+any visible day.
 
 **Unscheduled-work panel (2026-08-14)** — each panel item (shared
 `_unscheduled_task_item.html` partial, same on Week, `/week`, and the
