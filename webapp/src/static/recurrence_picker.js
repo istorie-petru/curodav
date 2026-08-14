@@ -1,23 +1,23 @@
 // Progressive enhancement for `<input class="recurrence-input" name="recurrence">`
 // (task_form.html/event_form.html/habit_task_form.html's Recurrence field)
 // into a preset picker ("Does not repeat"/"Daily"/"Weekly"/"Monthly"/
-// "Yearly"/a custom RRULE) instead of asking the user to type raw RRULE
-// syntax directly -- direct feedback: "the modal window should prioritize
-// drop down menus and other input methods, not just text input."
+// "Yearly", each with an "Ends" sub-choice) instead of asking the user to
+// type raw RRULE syntax directly -- direct feedback: "the modal window
+// should prioritize drop down menus and other input methods, not just text
+// input."
 //
-// 2026-08-08 follow-up ("integrate the dropdown menu with the text input
-// one") -- the custom-RRULE escape hatch used to be a second element
-// entirely: a raw text input that appeared/disappeared *below* the
-// dropdown depending on which radio was checked. Reworked into the same
-// "one extra row at the bottom of the same panel" shape
-// reminders_picker.js's own "Other minutes" row already uses (which
-// itself follows _widget_list_multiselect.html's "+ New label" row) --
-// there is only ever one visible control now (the dropdown), with the
-// custom-value text field living *inside* its panel as the last option
-// instead of a second, separately-positioned element. Typing into that
-// field is itself what selects "Custom" -- no separate radio click
-// needed first, same "typing is the action" affordance the "+ New label"
-// row already has.
+// 2026-08-14 follow-up ("remove the custom option for recurring") -- the
+// free-text "Custom RRULE" escape hatch (a text input living inside the
+// dropdown panel as its own row) was removed entirely; the five fixed
+// presets plus their end-condition are now the only thing this UI can
+// produce. An existing value that doesn't match one of the five presets
+// (e.g. a hand-authored `BYDAY=...` rule, or anything Schedule/an API
+// caller wrote directly) is left with **no preset radio checked** and its
+// raw text shown read-only as the trigger's summary -- `sync()` only ever
+// overwrites the hidden input's value once a preset radio is actually
+// checked, so simply opening and closing this form can never silently
+// clobber a recurrence rule this picker doesn't understand. Selecting any
+// preset does replace it, same as picking a different preset always has.
 //
 // The underlying real `<input name="recurrence">` is permanently hidden
 // (not conditionally shown/hidden the way it used to be) and keeps its
@@ -119,11 +119,9 @@
     });
 
     // "Ends" sub-panel -- only meaningful once a real preset (not "Does
-    // not repeat", not Custom -- Custom already manages its own UNTIL/
-    // COUNT as free text) is selected. Direct feedback: recurrence needs
-    // a way to stop besides "forever" or hand-typing UNTIL=/COUNT= into
-    // the Custom field -- "Never" (no suffix), "On date" (UNTIL=, the
-    // app's existing dashed-date convention -- see parseValue's own
+    // not repeat") is selected. Direct feedback: recurrence needs a way to
+    // stop besides "forever" -- "Never" (no suffix), "On date" (UNTIL=,
+    // the app's existing dashed-date convention -- see parseValue's own
     // comment above), or "After N occurrences" (COUNT=).
     const endsDivider = document.createElement("div");
     endsDivider.className = "multiselect-divider";
@@ -187,29 +185,6 @@
     }
 
     panel.appendChild(endsGroup);
-
-    // Custom RRULE row -- integrated into the panel itself (see file
-    // header comment) instead of a second element below the dropdown.
-    // Its own radio is visually part of the row but never needs a
-    // separate click: focusing or typing into the text field selects it
-    // automatically (see the "focus"/"input" listeners below).
-    const customRow = document.createElement("label");
-    customRow.className = "multiselect-option multiselect-new-option";
-    const customRadio = document.createElement("input");
-    customRadio.type = "radio";
-    customRadio.name = radioName;
-    customRadio.value = "__custom__";
-    customRow.appendChild(customRadio);
-    const customInput = document.createElement("input");
-    customInput.type = "text";
-    customInput.className = "multiselect-new-input recurrence-custom-input";
-    customInput.placeholder = "Custom (e.g. FREQ=WEEKLY;BYDAY=MO,WE)";
-    if (!matched && currentValue) {
-      customRadio.checked = true;
-      customInput.value = currentValue;
-    }
-    customRow.appendChild(customInput);
-    panel.appendChild(customRow);
     wrap.appendChild(panel);
 
     input.setAttribute("autocomplete", "off");
@@ -228,14 +203,16 @@
     }
 
     function updateSummary() {
-      if (customRadio.checked) {
-        summary.textContent = customInput.value.trim() ? customInput.value.trim() : "Custom";
+      const checked = checkedPreset();
+      if (!checked) {
+        // No preset matches the existing value (see file header comment)
+        // -- shown read-only, never rewritten until a preset is picked.
+        summary.textContent = currentValue || "Does not repeat";
         return;
       }
-      const checked = checkedPreset();
-      const preset = checked && PRESETS.find((p) => p.value === checked.value);
-      let text = preset ? preset.label : "Does not repeat";
-      if (preset && preset.value) {
+      const preset = PRESETS.find((p) => p.value === checked.value);
+      let text = preset.label;
+      if (preset.value) {
         if (untilRadio.checked && untilInput.value) {
           text += " until " + untilInput.value;
         } else if (countRadio.checked && countInput.value) {
@@ -246,13 +223,14 @@
     }
 
     function sync() {
-      if (customRadio.checked) {
-        input.value = customInput.value.trim();
-      } else {
-        const base = (checkedPreset() || {}).value || "";
-        input.value = base ? base + endsSuffix() : "";
+      const checked = checkedPreset();
+      if (checked) {
+        input.value = checked.value ? checked.value + endsSuffix() : "";
       }
-      endsGroup.hidden = customRadio.checked || !(checkedPreset() || {}).value;
+      // else: nothing checked (unmatched existing value) -- leave the
+      // hidden input's value untouched until the user actually picks a
+      // preset.
+      endsGroup.hidden = !checked || !checked.value;
       updateSummary();
     }
     sync();
@@ -273,14 +251,6 @@
     });
     countInput.addEventListener("input", () => {
       countRadio.checked = true;
-      sync();
-    });
-    customInput.addEventListener("focus", () => {
-      customRadio.checked = true;
-      sync();
-    });
-    customInput.addEventListener("input", () => {
-      customRadio.checked = true;
       sync();
     });
   }

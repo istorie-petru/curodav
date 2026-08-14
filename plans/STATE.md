@@ -906,6 +906,19 @@ session, right before the final commit of that session.
   Recurrence section. 3 new tests (2 in `test_recurrence_expand.py`, 1
   structural check in `test_modal_footer_and_inputs.py`), full suite 1312
   passed.
+- **Removed:** side work — **Custom RRULE option removed from the recurrence
+  picker**, complete (2026-08-14) — direct follow-up ("remove the custom
+  option for recurring"). `recurrence_picker.js`'s free-text "Custom RRULE"
+  row is gone; the five fixed presets (Does not repeat/Daily/Weekly/Monthly/
+  Yearly) plus the "Ends" sub-choice from the slice above are now the only
+  thing the picker can produce. An existing value that doesn't match one of
+  the five presets is left with no preset radio checked and shown read-only
+  as the trigger summary — `sync()` never overwrites the hidden input until
+  a preset is actually picked, so this can't silently clobber a rule the
+  picker doesn't model just by opening/closing the form. See
+  `features/calendar.md`'s Recurrence section. Full suite 1312 passed (no
+  new tests — pure removal, existing structural/server-pass-through tests
+  already cover the remaining shape).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

@@ -90,6 +90,19 @@ this app's expansion library, see this section's own note above) resolves it
 for free, same as `UNTIL=`; see `test_recurrence_expand.py`'s
 `test_count_recurrence_*` tests.
 
+**Custom RRULE option removed** (side work, shipped 2026-08-14): direct
+follow-up ("remove the custom option for recurring") — the free-text
+"Custom RRULE" row is gone from `recurrence_picker.js`; the five fixed
+presets (Does not repeat/Daily/Weekly/Monthly/Yearly) plus their Ends
+sub-choice are now the only thing the picker UI can produce. An existing
+recurrence value that doesn't match one of the five presets (e.g. a
+hand-authored `BYDAY=...` rule, or anything written directly via the API or
+Schedule) is left with **no preset radio checked** and shown read-only as
+the trigger's summary text — `sync()` only overwrites the hidden input once
+a preset is actually selected, so opening and closing the form can never
+silently clobber a rule this picker doesn't model. Selecting any preset does
+replace it, same as switching between any two presets always has.
+
 **Non-working-day policy** (1.6, "Generalized recurrence and the non-working-
 day policy"): any recurring event can set `holiday_calendar` (a named,
 reusable holiday calendar — `db.list_holiday_calendar_names`/
