@@ -1,7 +1,7 @@
 # Settings
 
 `routers/settings.py` — a hub-and-children layout (rework 2026-08-08). The hub
-page (`settings_index.html`) has six categories:
+page (`settings_index.html`) has seven categories:
 
 - **General** (`/settings/general`) — display name (drives the Home greeting),
   week start (Mon/Sun), 24h vs 12h time, "4-Week view: current week" position,
@@ -29,6 +29,37 @@ page (`settings_index.html`) has six categories:
   settings (semester dates etc.), which stay on `/schedule` itself; see
   this router's own "2026-08-14 follow-up" docstring note for the full
   reasoning.
+- **Data health** (`/settings/data-health`, 2026-08-14, `plans/open.md` §
+  Data health & maintenance — the verified-backups precondition 1.8's offline
+  sync is gated on) — Status card (database integrity via `PRAGMA
+  integrity_check`, last successful backup, last backup verification,
+  synchronization — a fixed "Not configured — offline sync ships in 1.8"
+  placeholder pre-1.8), Storage & entities (DB size, backups dir size/count,
+  task/event/contact counts, `data_health.entity_stats` reuses
+  `export_context`), Maintenance actions (Backup now, Verify latest, Check
+  integrity, Compact & reindex — `REINDEX` + `VACUUM`), and a Backups table
+  (every `backup-*.json` under the configured `backup_dir`, newest first,
+  per-row Verify/Restore). `src/data_health.py` holds every operation as a
+  plain function taking `conn`/paths, no HTTP dependency — both this page's
+  routes and `scripts/data_health.py` (the CLI: `status`/`backup`/`list`/
+  `verify`/`restore`/`integrity-check`/`repair`) call the same functions, so
+  there is exactly one implementation of each ("GUI and CLI use the same
+  underlying maintenance services", per `open.md`). A backup's payload is
+  the identical dict `routers/export.py`'s `build_backup_payload` produces
+  (factored out of `export_data_json` so the on-demand data.json download
+  and these server-side backups can never drift). Verification checks JSON
+  structure, every required top-level key, that each collection is a list,
+  and that every task/event/contact row carries a `uid` — the result caches
+  as a `<file>.verify.json` sidecar next to the backup (not in the app
+  database: a backup + its sidecar travel together, and the list is always
+  recomputed by scanning `backup_dir`, never stored). Restore always takes a
+  fresh safety-snapshot backup of the *current* state first ("preserve a
+  recoverable backup of the current state where practical", `open.md`) and
+  aborts without touching the database if the target fails verification.
+  This is deliberately separate from Advanced's existing "Export & backup"
+  section below — that's an on-demand *download* the person keeps
+  themselves; Data health backups are server-side, verifiable, and
+  restorable without leaving the app.
 - **Published lists** — link to `/published-lists`.
 - **Advanced** (`/settings/advanced`) — reset Home widget layout (links to
   `POST /dashboard/reset`), Export & backup inlined (standard formats + JSON

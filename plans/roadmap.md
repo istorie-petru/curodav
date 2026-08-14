@@ -29,14 +29,14 @@ never hold Track A up.
 
 | Release | Main work (Track A) | Side work (Track B) | Depends on |
 |---|---|---|---|
-| `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
+| `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | ~~Data health~~ **shipped 2026-08-14**; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
 | `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14** | Configurable views + optional Schedule (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | Offline-first editing & synchronization | Pagination | 1.1 (WebDAV) + data health |
+| `1.8` | Offline-first editing & synchronization | Pagination | 1.1 (WebDAV) + ~~data health~~ (shipped) |
 | `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
 | `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
 
@@ -52,8 +52,9 @@ labels; the shared aggregation service computes the counts and workload every
 surface needs; Importance/Urgency replace WebDAV priority (with the WebDAV
 representation settled here — the sync work in 1.8 builds on it).
 
-Side work (independent): **Data health & maintenance** (verified backups — the
-prerequisite for trusting offline sync in 1.8) and **Contacts field parity**.
+Side work (independent): ~~**Data health & maintenance**~~ (verified backups —
+the prerequisite for trusting offline sync in 1.8 — **shipped 2026-08-14**,
+see `features/settings.md`) and **Contacts field parity**.
 
 ### 1.2 — Task model settled
 
@@ -222,7 +223,10 @@ University module) and closed out without new code. See `plans/STATE.md`'s
 editing & synchronization) — the largest engineering item. Its sync model
 (identifiers, tombstones, conflict resolution, work-allocation conflict
 semantics) must be written before code. It starts on the WebDAV mapping from 1.1
-and is trusted only once verified backups (data health, 1.1) exist.
+and is trusted only once verified backups exist — **data health shipped
+2026-08-14** (Settings > Data health, `src/data_health.py`,
+`scripts/data_health.py`), so this precondition is now met; the sync model
+itself is still undesigned (next up).
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

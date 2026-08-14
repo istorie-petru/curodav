@@ -94,10 +94,12 @@ from __future__ import annotations
 import base64
 import uuid
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import data_health, db
 from ..deps import (
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
@@ -126,6 +128,7 @@ HUB_CATEGORIES = [
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
+    {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
     {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
@@ -461,6 +464,96 @@ async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db))
 def delete_holiday(uid: str, conn=Depends(get_db)):
     db.delete_holiday(conn, uid)
     return RedirectResponse(url="/settings/holidays", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Data health (`plans/open.md` § Data health & maintenance) -- server-side,
+# actively-verified backups plus database integrity/repair. The 1.8
+# (offline-first editing & synchronization) precondition: "trusted only
+# once verified backups exist" (plans/STATE.md). Every route here is a
+# thin wrapper around src/data_health.py's plain functions -- the same
+# functions scripts/data_health.py calls -- so the GUI and CLI genuinely
+# share one implementation instead of two copies that could drift
+# (open.md's own requirement). This is deliberately NOT folded into
+# Advanced's existing "Export & backup" section: that section is an
+# on-demand *download* a person triggers and keeps themselves; Data health
+# is server-side, verifiable, and restorable without ever leaving the app.
+# --------------------------------------------------------------------- #
+
+_DATA_HEALTH_CRUMB = _ROOT_CRUMB
+
+
+def _backups_dir(request: Request) -> Path:
+    return request.app.state.settings.backup_dir
+
+
+@router.get("/settings/data-health")
+def settings_data_health(request: Request, conn=Depends(get_db)):
+    backups_dir = _backups_dir(request)
+    summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
+    return templates.TemplateResponse(
+        "settings_data_health.html",
+        {
+            "request": request,
+            "active_tab": "settings_data_health",
+            "crumbs": _DATA_HEALTH_CRUMB,
+            "title": "Data health",
+            **summary,
+        },
+    )
+
+
+@router.post("/settings/data-health/backup")
+def data_health_backup(request: Request, conn=Depends(get_db)):
+    path = data_health.create_backup(conn, _backups_dir(request))
+    return RedirectResponse(url=f"/settings/data-health?note=Backup+created+({path.name}).", status_code=303)
+
+
+@router.post("/settings/data-health/verify")
+def data_health_verify(request: Request, filename: str = Form(""), conn=Depends(get_db)):
+    backups_dir = _backups_dir(request)
+    target = backups_dir / filename if filename else None
+    if target is None or not target.exists():
+        latest = data_health.latest_backup(backups_dir)
+        target = Path(latest["path"]) if latest else None
+    if target is None:
+        return RedirectResponse(url="/settings/data-health?error=No+backup+to+verify+yet.", status_code=303)
+    result = data_health.verify_backup(target)
+    note = "Backup+verified+OK." if result.ok else f"Verification+found+{len(result.errors)}+problem(s)."
+    return RedirectResponse(url=f"/settings/data-health?{'note' if result.ok else 'error'}={note}", status_code=303)
+
+
+@router.post("/settings/data-health/restore")
+def data_health_restore(request: Request, filename: str = Form(...), conn=Depends(get_db)):
+    """Restores one of the server-stored backups listed on the page (by
+    filename, never a client-supplied path) -- restoring an *uploaded*
+    file is the existing /export/import/json flow (Settings > Advanced),
+    unchanged. Always takes a pre-restore safety snapshot first (see
+    data_health.restore_backup's own docstring)."""
+    backups_dir = _backups_dir(request)
+    target = backups_dir / filename
+    if ".." in filename or "/" in filename or not target.resolve().is_relative_to(backups_dir.resolve()):
+        raise HTTPException(400, "Invalid backup filename.")
+    result = data_health.restore_backup(conn, target, backups_dir=backups_dir)
+    if not result["ok"]:
+        return RedirectResponse(url="/settings/data-health?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
+    return RedirectResponse(
+        url=f"/settings/data-health?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
+        status_code=303,
+    )
+
+
+@router.post("/settings/data-health/integrity-check")
+def data_health_integrity_check(conn=Depends(get_db)):
+    result = data_health.check_integrity(conn)
+    note = "Database+integrity%3A+OK." if result["ok"] else "Database+integrity+check+found+problems+-+see+detail."
+    return RedirectResponse(url=f"/settings/data-health?{'note' if result['ok'] else 'error'}={note}", status_code=303)
+
+
+@router.post("/settings/data-health/repair")
+def data_health_repair(request: Request, conn=Depends(get_db)):
+    result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
+    return RedirectResponse(url="/settings/data-health?note=Compacted+and+reindexed+the+database.", status_code=303)
 
 
 # --------------------------------------------------------------------- #

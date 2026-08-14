@@ -550,23 +550,60 @@ session, right before the final commit of that session.
   has dated sessions; new count-decrements-on-placement assertions); one new
   `test_work_allocations.py` test (`test_remove_latest_never_touches_a_
   dated_session`). Full suite 1205 passed.
+- **Shipped:** side work — **Data health & maintenance**, complete
+  (2026-08-14) — 1.8's precondition ("trusted only once verified backups
+  exist"). New Settings > Data health hub category (`/settings/data-health`,
+  `routers/settings.py`): database integrity (`PRAGMA integrity_check`),
+  last successful backup, last backup verification, a fixed "sync not
+  configured — ships in 1.8" placeholder, storage usage, entity stats, and a
+  Backups table (per-row Verify/Restore). Every operation lives as a plain
+  function in new `src/data_health.py` (`create_backup`/`list_backups`/
+  `verify_backup`/`restore_backup`/`check_integrity`/`compact_and_reindex`/
+  `storage_stats`/`entity_stats`/`health_summary`) — both the Settings routes
+  and new `scripts/data_health.py` (CLI: `status`/`backup`/`list`/`verify`/
+  `restore`/`integrity-check`/`repair`) call the same functions, satisfying
+  open.md's "GUI and CLI use the same underlying maintenance services"
+  requirement directly, not by convention. A backup is the identical payload
+  `routers/export.py`'s `build_backup_payload` produces (factored out of
+  `export_data_json` so the on-demand data.json download and these
+  server-side backups share one definition); verification (JSON structure,
+  required top-level keys, list-shaped collections, every task/event/contact
+  row has a `uid`) caches its result as a `<file>.verify.json` filesystem
+  sidecar next to the backup, not in the app database — no schema change,
+  and a backup + its sidecar travel together. Restore always takes a fresh
+  safety-snapshot backup of the current state first and aborts untouched if
+  the target fails verification — "preserve a recoverable backup of the
+  current state where practical" (open.md). Backup filenames carry
+  microsecond precision plus a collision-retry loop, found necessary when a
+  restore's own safety-snapshot landed in the same wall-clock second as the
+  backup being restored from and silently overwrote it before it could be
+  read — caught by a same-session test, not in the wild. `config.py` gained
+  `backup_dir` (env `CC_BACKUP_DIR`, default `db_path.parent / "backups"`) on
+  the `Settings` dataclass — the one call site outside `load_settings()` that
+  constructs `Settings` directly (`test_caldav_bridge_live.py`, a live-server
+  fixture) needed updating for the new required field. See
+  `features/settings.md`, `plans/open.md`/`plans/roadmap.md`'s 1.1 side-work
+  rows marked shipped. 26 new tests (`test_data_health.py`), full suite 1231
+  passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
-  synchronization). The largest engineering item on the roadmap — its status
-  is still "decision recorded, no code." Per the spec's own instruction, the
-  sync model (entity identifiers, local change tracking, ordering,
-  deletion/tombstones, retries, idempotency, conflict detection and
-  resolution — explicitly *not* casual "last write wins," since that can
-  silently destroy offline changes) must be designed and written down before
-  any implementation starts; treat "write the sync model" as its own slice,
-  separate from and before any code-writing slice, rather than scoping both
-  in one session. It builds on 1.1's WebDAV mapping and is meant to start
-  only once verified backups exist (data health, 1.1) — check that
-  precondition still holds before beginning. `open.md`'s Command palette
-  actions follow-up (1.2 side work), 1.4's optional Project check-in side
-  work, and 1.6's optional "Configurable views + optional Schedule module"
-  side work are all still fine smaller, self-contained slices instead,
-  whenever a session wants a break from the sync work.
+  synchronization). The largest engineering item on the roadmap. Its
+  precondition (verified backups) is now met — see the Data health entry
+  just above — but its own status is still "decision recorded, no code" for
+  the sync model itself. Per the spec's own instruction, the sync model
+  (entity identifiers, local change tracking, ordering, deletion/tombstones,
+  retries, idempotency, conflict detection and resolution — explicitly *not*
+  casual "last write wins," since that can silently destroy offline changes)
+  must be designed and written down before any implementation starts; treat
+  "write the sync model" as its own slice, separate from and before any
+  code-writing slice, rather than scoping both in one session. It builds on
+  1.1's WebDAV mapping. Prior art to read first: the HLC per-field merge
+  decision preserved in `abandoned.md`'s "Decision history" section.
+  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
+  optional Project check-in side work, and 1.6's optional "Configurable
+  views + optional Schedule module" side work are all still fine smaller,
+  self-contained slices instead, whenever a session wants a break from the
+  sync-model design work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

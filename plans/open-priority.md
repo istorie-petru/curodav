@@ -580,7 +580,10 @@ management logic.
 ## Offline-first editing & synchronization
 
 **Status:** decision recorded — no code. The sync model must be written before
-implementation (see below).
+implementation (see below). Its precondition — verified backups (Data health &
+maintenance, `open.md`) — **shipped 2026-08-14**; still blocked on the sync
+model design itself, which is its own slice, separate from and before any
+implementation code (`plans/STATE.md`).
 
 The application supports creating, editing, scheduling, and completing entries
 while offline; connectivity is not a prerequisite for normal operation. Local

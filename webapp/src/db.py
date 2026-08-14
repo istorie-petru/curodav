@@ -1216,7 +1216,8 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # this" check would need. The one path that genuinely needs to set a
     # specific historical `completed_at` (a JSON backup restore) does so
     # with its own explicit UPDATE after calling this function, not by
-    # fighting this auto-detection -- see routers/export.py's `_restore`.
+    # fighting this auto-detection -- see routers/export.py's
+    # `restore_backup_payload`.
     existing_status = conn.execute("SELECT status FROM tasks WHERE uid = ?", (data.get("uid"),)).fetchone()
     was_done = bool(existing_status and existing_status["status"] in _TASK_DONE_STATUSES)
     now_done = data.get("status") in _TASK_DONE_STATUSES

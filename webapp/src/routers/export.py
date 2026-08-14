@@ -219,36 +219,44 @@ def export_schedule_json(conn=Depends(get_db)):
     )
 
 
-@router.get("/data.json")
-def export_data_json(conn=Depends(get_db)):
-    """Full backup: every synced object (minus the rebuildable Schedule
-    mirror -- schedule.json covers the source) plus all local-only data.
-    This is the restore-able round-trip; the standard-format exports above
-    are for handing data to other apps, this one is for backing up this
-    app's whole world.
+def build_backup_payload(conn) -> dict[str, Any]:
+    """The full-backup dict -- every synced object (minus the rebuildable
+    Schedule mirror -- schedule.json covers the source) plus all local-only
+    data. Factored out of export_data_json (below) so it has exactly one
+    definition: the download route wraps it as a JSON response,
+    `src/data_health.py`'s create_backup writes the identical dict straight
+    to a file on disk -- Data Health's server-side backups and this route's
+    on-demand download are the same bytes, never two payload-building code
+    paths that could quietly drift apart.
 
     2026-08-07: no more "grades" key -- the `grades` table (and the rest
     of Databases/Grades) is removed entirely, not just excluded from the
     backup."""
-    return _json_response(
-        "data.json",
-        {
-            "exported_at": _now(),
-            "events": db.list_events(conn),
-            "tasks": db.list_tasks(conn, include_habit_tasks=True),
-            "contacts": db.list_contacts(conn),
-            "labels": db.list_labels(conn),
-            "object_labels": _export_object_labels(conn),
-            # 1.6: no more "schedule_classes" key -- a class is a real
-            # event now, already covered by the "events" key above.
-            "schedule_holidays": db.list_holidays(conn),
-            "schedule_settings": db.get_schedule_settings(conn),
-            "task_completions": db.list_task_completions(conn),
-            # 2026-08-09 Relations -- deliberate user-made links, same
-            # local-only-data backup treatment as task_completions.
-            "event_task_relations": db.list_event_task_relations(conn),
-        },
-    )
+    return {
+        "exported_at": _now(),
+        "events": db.list_events(conn),
+        "tasks": db.list_tasks(conn, include_habit_tasks=True),
+        "contacts": db.list_contacts(conn),
+        "labels": db.list_labels(conn),
+        "object_labels": _export_object_labels(conn),
+        # 1.6: no more "schedule_classes" key -- a class is a real
+        # event now, already covered by the "events" key above.
+        "schedule_holidays": db.list_holidays(conn),
+        "schedule_settings": db.get_schedule_settings(conn),
+        "task_completions": db.list_task_completions(conn),
+        # 2026-08-09 Relations -- deliberate user-made links, same
+        # local-only-data backup treatment as task_completions.
+        "event_task_relations": db.list_event_task_relations(conn),
+    }
+
+
+@router.get("/data.json")
+def export_data_json(conn=Depends(get_db)):
+    """Full backup download -- the restore-able round-trip; the standard-
+    format exports above are for handing data to other apps, this one is
+    for backing up this app's whole world. See build_backup_payload above
+    for the actual payload shape."""
+    return _json_response("data.json", build_backup_payload(conn))
 
 
 # --------------------------------------------------------------------- #
@@ -318,11 +326,17 @@ def import_json(file: UploadFile, conn=Depends(get_db)):
     dropped the bridge from this path along with everything else in base
     CRUD (see db.py's Phase 1 comments)."""
     payload = json.loads(file.file.read().decode("utf-8"))
-    _restore(conn, payload)
+    restore_backup_payload(conn, payload)
     return _redirect_with_note("/export", "Backup restored.")
 
 
-def _restore(conn, payload: dict[str, Any]) -> int:
+def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
+    """Upserts every row in a build_backup_payload-shaped dict back into
+    the live pool. Public (renamed from `_restore`) so `src/data_health.py`
+    -- the server-side backup/restore/verify service used by both Settings
+    > Data health and scripts/data_health.py -- shares this one restore
+    path instead of re-implementing it; import_json (above) is now a thin
+    wrapper around it."""
     count = 0
     for row in payload.get("events", []):
         db.upsert_event(conn, row)

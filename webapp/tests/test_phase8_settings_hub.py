@@ -119,6 +119,7 @@ class TestSettingsHub:
             "/settings/appearance",
             "/labels",
             "/settings/holidays",
+            "/settings/data-health",
             "/published-lists",
             "/settings/advanced",
         }
