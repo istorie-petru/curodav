@@ -85,11 +85,11 @@ def _request_with_radicale(path):
 
 
 class TestSettingsHub:
-    def test_renders_the_five_categories(self, conn):
+    def test_renders_the_hub_categories(self, conn):
         resp = settings_router.settings_index(_request(), conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
-        for name in ("General", "Appearance", "Labels", "Published lists", "Advanced"):
+        for name in ("General", "Appearance", "Labels", "Holidays", "Published lists", "Advanced"):
             assert name in body
         # Habits is not a hub category (2026-08-08 follow-up #3): it's
         # reached from Tasks > Habits, so a hub shortcut would duplicate
@@ -118,6 +118,7 @@ class TestSettingsHub:
             "/settings/general",
             "/settings/appearance",
             "/labels",
+            "/settings/holidays",
             "/published-lists",
             "/settings/advanced",
         }

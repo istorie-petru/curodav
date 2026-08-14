@@ -302,7 +302,11 @@ def classes_view(
             "dir": dir,
             "parities": PARITIES,
             "days": schedule_logic.DAYS,
-            "holidays": db.list_holidays(conn),
+            # Holiday *management* (add/edit/delete individual dates) moved
+            # to Settings > Holidays (2026-08-14, routers/settings.py) --
+            # this page keeps only the names, to populate the Settings
+            # panel's own "which calendar do my classes respect" datalist
+            # below.
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
             "settings": settings,
         },
@@ -525,35 +529,6 @@ def toggle_enrolled(uid: str, conn=Depends(get_db)):
 @router.post("/classes/{uid}/delete")
 def delete_class(uid: str, conn=Depends(get_db)):
     db.delete_event(conn, uid)
-    return RedirectResponse(url="/schedule", status_code=303)
-
-
-@router.post("/holidays")
-def create_holiday(
-    calendar_name: str = Form("Default"),
-    label: str = Form(""),
-    date_from: str = Form(...),
-    date_to: str = Form(...),
-    conn=Depends(get_db),
-):
-    # 1.6: no more _regenerate_all(conn) call here -- a class event only
-    # ever stores *which* holiday calendar it references
-    # (holiday_calendar), never the dates themselves; those are looked up
-    # fresh on every read (recurrence_expand.expand_events), so adding a
-    # holiday takes effect immediately without touching any event row.
-    db.upsert_holiday(
-        conn,
-        {
-            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
-            "label": label, "date_from": date_from, "date_to": date_to,
-        },
-    )
-    return RedirectResponse(url="/schedule", status_code=303)
-
-
-@router.post("/holidays/{uid}/delete")
-def delete_holiday(uid: str, conn=Depends(get_db)):
-    db.delete_holiday(conn, uid)
     return RedirectResponse(url="/schedule", status_code=303)
 
 

@@ -71,6 +71,18 @@ categories that are actually useful"):
     when the contextual shortcut provides a real usability advantage";
     a settings mirror nobody asked for isn't one.
 
+2026-08-14 follow-up: Holidays is the one exception to the "Schedule stays
+contextual-only" rule directly above, and deliberately so -- a named
+holiday calendar isn't a Schedule *setting* (a single field like semester
+dates), it's a reusable, named list of date ranges any recurring event
+anywhere in the app can reference (1.6), the same "Labels" shape as the
+existing Labels hub category rather than a per-page config field. It moved
+from Schedule's Table view into its own `/settings/holidays` hub category,
+built as a Tasks-table-style grid. Schedule's own <details> Settings panel
+still keeps its `holiday_calendar` field (which named calendar the
+semester's classes respect) -- only the calendars' contents moved, not the
+picker that chooses among them.
+
 Every child page shares one back-navigation shape (_settings_breadcrumb
 .html): "Settings" (or "Settings / Data") as a link, current page as plain
 text -- Back always returns one level up inside Settings, never out to
@@ -80,9 +92,10 @@ whatever page was open before Settings was entered (redesign brief item 3).
 from __future__ import annotations
 
 import base64
+import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db
 from ..deps import (
@@ -111,6 +124,7 @@ HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
+    {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
     {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
@@ -118,6 +132,12 @@ HUB_CATEGORIES = [
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
 _ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced"}]
+
+# Which schedule_holidays fields the Holidays table's inline edit
+# (static/settings_holidays.js) is allowed to touch -- same allowlist
+# convention as routers/tasks.py's _UPDATABLE_FIELDS / routers/schedule.py's
+# update_class_field, so a crafted request can't write an arbitrary column.
+_HOLIDAY_UPDATABLE_FIELDS = {"calendar_name", "label", "date_from", "date_to"}
 
 # "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
 # of choices, not a free-typed number: a handful of sane presets is
@@ -336,6 +356,96 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
     turned on."""
     db.set_app_meta(conn, SHOW_LABEL_ICONS_KEY, "1" if show == "1" else "")
     return RedirectResponse(url="/settings/appearance", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Holidays -- moved here from Schedule's own Table view (2026-08-14), per
+# direct feedback: a holiday calendar is a reusable, named resource that
+# any recurring event can reference (1.6, "Generalized non-working-day
+# policy + named holiday calendars"), not something specific to Schedule
+# blocks -- the same "Labels get their own page, not a Tasks-only widget"
+# reasoning that already applies elsewhere in this Settings hub. Rendered
+# as a Tasks-table-style grid (id="holiday-table", inline-editable cells
+# via static/settings_holidays.js's update-field call, same shape as
+# static/tasks_table.js) rather than the old compact add-form-plus-plain-
+# table pair, so editing an existing holiday's dates no longer requires
+# delete-and-re-add. Schedule's own Settings panel (routers/schedule.py's
+# save_settings) still picks *which* named calendar a semester's classes
+# respect via `holiday_calendar` -- only the calendars' own contents (the
+# individual date ranges) moved.
+# --------------------------------------------------------------------- #
+
+_HOLIDAYS_CRUMB = _ROOT_CRUMB
+
+
+@router.get("/settings/holidays")
+def settings_holidays(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_holidays.html",
+        {
+            "request": request,
+            "active_tab": "settings_holidays",
+            "crumbs": _HOLIDAYS_CRUMB,
+            "title": "Holidays",
+            "holidays": db.list_holidays(conn),
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+        },
+    )
+
+
+@router.post("/settings/holidays")
+def create_holiday(
+    calendar_name: str = Form("Default"),
+    label: str = Form(""),
+    date_from: str = Form(...),
+    date_to: str = Form(...),
+    conn=Depends(get_db),
+):
+    # No _regenerate_all(conn) call needed -- a recurring event only ever
+    # stores *which* holiday calendar it references (holiday_calendar),
+    # never the dates themselves; those are looked up fresh on every read
+    # (recurrence_expand.expand_events), so adding a holiday takes effect
+    # immediately without touching any event row. Same behavior as the old
+    # /schedule/holidays route this replaces.
+    db.upsert_holiday(
+        conn,
+        {
+            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
+            "label": label, "date_from": date_from, "date_to": date_to,
+        },
+    )
+    return RedirectResponse(url="/settings/holidays", status_code=303)
+
+
+@router.post("/settings/holidays/{uid}/update-field")
+async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db)):
+    """Single-field inline edit for the Holidays table -- mirrors
+    routers/tasks.py's/routers/schedule.py's identical update-field
+    endpoints. Merges the one changed field onto the existing row and
+    round-trips through upsert_holiday (there's no separate "update"
+    helper in db.py -- a holiday's uid never changes, so upsert-by-uid
+    already is the update)."""
+    payload = await request.json()
+    field = payload.get("field")
+    value = payload.get("value")
+    if field not in _HOLIDAY_UPDATABLE_FIELDS:
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    holiday = db.get_holiday(conn, uid)
+    if holiday is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if field in ("date_from", "date_to") and not str(value).strip():
+        return JSONResponse({"error": "date cannot be empty"}, status_code=400)
+    holiday[field] = value.strip() if field == "calendar_name" else value
+    if field == "calendar_name" and not holiday[field]:
+        holiday[field] = "Default"
+    db.upsert_holiday(conn, holiday)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/settings/holidays/{uid}/delete")
+def delete_holiday(uid: str, conn=Depends(get_db)):
+    db.delete_holiday(conn, uid)
+    return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
 # --------------------------------------------------------------------- #

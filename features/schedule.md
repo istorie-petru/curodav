@@ -94,22 +94,27 @@ event (open-ended recurrence, anchored on today) rather than no record at
 all — `schedule.build_class_event_row` never returns `None`; it just can't
 generate real bounded occurrences yet.
 
-## Holidays & settings
+## Settings (and where Holidays went)
 
-Both are `<details>` on the same page:
+A `<details>` on the schedule page:
 
-- **Holidays**: create + delete (`POST /holidays`, `/holidays/{uid}/delete`).
-  1.6: each holiday now names a `calendar_name` (text field + datalist of
-  calendars already in use, default `'Default'`) — adding/removing one no
-  longer regenerates any class event (see above); it's just a row in
-  `schedule_holidays`.
 - **Settings**: semester start/end, credits needed, reminder minutes, event
   label, **holiday calendar** (`POST /schedule/settings`) — renaming the
   event label re-tags every existing class event from the old name to the
   new one; changing semester dates or the holiday calendar both still
   regenerate every class event's `start_at`/`recurrence`/`holiday_calendar`
   (`routers/schedule.py::_regenerate_all`), since those are the event's own
-  fields, not a read-time lookup.
+  fields, not a read-time lookup. The `holiday_calendar` field is still
+  here — this is where a semester's classes pick *which* named calendar
+  they respect — but it links out to `/settings/holidays` for managing the
+  calendars' own contents.
+- **Holidays**: moved to `GET /settings/holidays` (2026-08-14,
+  `routers/settings.py::settings_holidays`) — see `features/settings.md`.
+  A named holiday calendar is a reusable resource any recurring Calendar
+  event or Schedule block can reference, not a Schedule-only setting, so it
+  no longer lives on this page. `schedule.py` only keeps
+  `db.list_holiday_calendar_names` around, to populate the Settings panel's
+  own `holiday_calendar` datalist above.
 
 Shared logic in `schedule.py`: `DAYS`, `first_occurrence`, `event_day`,
 `event_parity`, `next_occurrence_for_event`, `next_label`,

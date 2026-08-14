@@ -298,6 +298,38 @@ session, right before the final commit of that session.
   as on any calendar view, not on the scheduling grid. See
   `features/calendar.md`. 14 new tests (`test_calendar_timetable.py`), full
   suite 1130 passed.
+- **Shipped:** side work — **Holidays moved into Settings**, complete
+  (2026-08-14) — a named holiday calendar is a reusable resource any
+  recurring event can reference (1.6), not a Schedule-only setting, so it
+  moved off `schedule_classes.html`'s compact `<details>` panel into its
+  own `GET /settings/holidays` hub category (`routers/settings.py::
+  settings_holidays`), the same "Labels get their own page" shape already
+  established for Labels. Rendered as a Tasks-table-style grid
+  (`settings_holidays.html`, `id="holiday-table"`, columns Title/Calendar/
+  Start date/End date) with inline editing — new `POST /settings/holidays/
+  {uid}/update-field` (`static/settings_holidays.js`, mirrors `static/
+  tasks_table.js`'s pattern) — where the old panel only ever supported add/
+  delete. The Calendar column uses `_widget_list_multiselect.html` in
+  `single`+`allow_new` mode (pick an existing named calendar or type a new
+  one) instead of the old free-text-plus-datalist input, both on the "add
+  holiday" row and per-existing-row reassignment; per-row instances are
+  named `calendar_name__{uid}` so the holiday's uid travels with the
+  change event via the input's own `name` rather than a DOM-position
+  lookup, which would break once `app.js` portals an open panel out to
+  `#multiselect-portal`. `create_holiday`/`delete_holiday` moved from
+  `routers/schedule.py` (`/schedule/holidays...`) to `routers/settings.py`
+  (`/settings/holidays...`); new `db.get_holiday` added alongside the
+  existing `upsert_holiday`/`delete_holiday`/`list_holidays*` (no separate
+  "update" helper needed — a holiday's uid never changes, so upsert-by-uid
+  already is the update). Schedule's own `<details>` Settings panel keeps
+  its `holiday_calendar` field (which named calendar the semester's
+  classes respect) and now links out to `/settings/holidays` to manage the
+  calendars' own contents. See `routers/settings.py`'s "2026-08-14
+  follow-up" docstring note for the full "why Holidays is the one
+  exception to Schedule-settings-stay-contextual" reasoning. 16 new tests
+  (`test_settings_holidays.py`), `test_holiday_calendars.py`/
+  `test_phase8_settings_hub.py` updated for the moved routes/new hub
+  category, full suite 1145 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

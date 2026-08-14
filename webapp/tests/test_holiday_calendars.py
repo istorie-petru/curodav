@@ -17,6 +17,7 @@ import pytest
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import schedule as schedule_router
+from src.routers import settings as settings_router
 
 
 @pytest.fixture()
@@ -160,7 +161,7 @@ class TestScheduleUsesTheGeneralizedMechanism:
         )
         event_before = db.list_schedule_class_events(conn)[0]
 
-        schedule_router.create_holiday(calendar_name="University", label="Break", date_from="2026-09-14", date_to="2026-09-16", conn=conn)
+        settings_router.create_holiday(calendar_name="University", label="Break", date_from="2026-09-14", date_to="2026-09-16", conn=conn)
 
         # The event row itself is untouched (no _regenerate_all call
         # anymore) -- same recurrence/exdates as before the holiday.

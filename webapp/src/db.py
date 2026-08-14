@@ -2196,6 +2196,11 @@ def upsert_holiday(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     conn.commit()
 
 
+def get_holiday(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM schedule_holidays WHERE uid = ?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
 def delete_holiday(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM schedule_holidays WHERE uid = ?", (uid,))
     conn.commit()
