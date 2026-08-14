@@ -504,6 +504,28 @@ no separate Today data model.
 
 ### Week — planning
 
+**Shipped 2026-08-14 (1.7 slice 2)** — see `features/week.md`: `GET /week`
+(`routers/week.py::week_view`), a `/week` tabbar entry. Reuses the same
+week-grid geometry (`grid_layout.layout_day`) `routers/calendar.py::
+week_view` and `routers/projects.py::project_calendar` already render —
+this is a third *purpose* over that geometry (global planning, vs. event
+management and one project's own scheduling, respectively), not a third
+implementation of it. Unscheduled work (every open task with no allocation
+yet, across every project or none, sorted by due date) is listed beside the
+grid and drags onto it (`POST /week/allocations`) to create a work
+allocation; existing blocks drag to move/resize
+(`POST /week/allocations/{event_uid}/move`) or delete
+(`POST /week/allocations/{event_uid}/delete`, block only, never the task) —
+the same three-endpoint shape `routers/projects.py`'s own trio uses, minus
+the "must belong to this project" scoping, and the same client-side drag/
+resize script (`static/project_calendar.js`) reused verbatim. Every work
+allocation renders prominently regardless of task/project (unlike the
+project-scoped calendar, which only prominents one project's own); ordinary
+events render as subdued context; due-today tasks show as chips on their
+day. **Not implemented**: a computed "available time" number — same
+"open grid space visually communicates availability" interpretation
+`project_calendar` already established for this identical spec language.
+
 Answers **"How should I allocate my time over the coming week?"** Shows calendar
 commitments together with schedulable task/subtask work, due dates, remaining
 estimated effort, and available time. Unscheduled work is visible and draggable

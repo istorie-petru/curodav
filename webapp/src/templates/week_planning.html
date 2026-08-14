@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Week Planning{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
+{% block content %}
+<!-- Week (planning), 1.7 slice 2 (plans/open-priority.md § Information
+     architecture & view surfaces' "Week -- planning" bullet): "How should I
+     allocate my time over the coming week?" Reuses the exact grid markup/
+     CSS classes routers/projects.py::project_calendar's own template
+     (project_calendar.html) already established -- .project-calendar-*
+     class names kept as-is here (not renamed to .week-*) specifically so
+     static/project_calendar.js's drag/move/resize logic (generic class
+     selectors, reads its own config from window.PROJECT_CALENDAR) works on
+     this page completely unmodified, just pointed at /week/allocations
+     instead of /projects/{name}/calendar/allocations. -->
+<div class="toolbar top-app-bar">
+    <h1 class="sr-only">Week Planning</h1>
+    <div class="spacer"></div>
+    <a class="icon-btn" href="/week?date_={{ prev_week }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+    <a class="icon-btn" href="/week?date_={{ next_week }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+</div>
+<p class="settings-hint">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }} &middot; every scheduled work block is shown in full color; ordinary events are subdued context.</p>
+
+<div class="project-calendar-layout">
+    <aside class="card project-calendar-unscheduled">
+        <h2>Unscheduled work</h2>
+        {% if unscheduled_tasks %}
+        <div class="unscheduled-task-list">
+            {% for item in unscheduled_tasks %}
+            <div class="unscheduled-task-item" draggable="true" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
+                {{ icon('move', 'icon-sm') }}
+                <span>{% if item.project %}{{ item.project }} &gt; {% endif %}{{ item.task.title }}{% if item.task.due_at %} &middot; due {{ item.task.due_at[:10] }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:10px 0">No unscheduled work -- every open task already has scheduled work.</div>
+        {% endif %}
+    </aside>
+
+    <div class="card calendar-viewport project-calendar-grid">
+    <div class="time-grid-wrap">
+    <div class="time-grid-top">
+    <div class="time-grid-head week">
+        {% for day in days %}
+        <div class="thd {% if day.is_today %}is-today{% endif %}">{{ day.date.strftime('%a %d') }}</div>
+        {% endfor %}
+    </div>
+    <div class="time-grid-allday week">
+        <div class="allday-gutter">All day</div>
+        <div class="allday-cols week">
+            {% for day in days %}
+            <div class="allday-col">
+                {% for e in day.all_day %}
+                <span class="allday-task {% if not e.is_allocation %}context-event{% endif %}" title="{{ e.title }}">
+                    <span class="color-dot cal-{{ e.calendar_color }}"></span>
+                    {{ e.title }}
+                </span>
+                {% endfor %}
+                {% for t in day.due_tasks %}
+                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="Due {{ t.due_at[:10] }}">{{ icon('flag', 'icon-sm') }} {{ t.title }}</a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    </div>
+    <div class="time-grid-body" style="--hr-h:{{ px_per_hour }}px; height:calc(25 * var(--hr-h));">
+        <div class="time-gutter">
+            {% for h in hours %}
+            <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ h | fmt_hour }}</div>
+            {% endfor %}
+        </div>
+        <div class="time-cols week">
+            {% for day in days %}
+            <div class="time-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
+                {% for e in day.timed %}
+                {% if e.is_allocation %}
+                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                     style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
+                    <a class="te-name" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>
+                    <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
+                    <form class="work-allocation-delete" method="post" action="/week/allocations/{{ e.uid }}/delete">
+                        <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
+                        <button type="submit" class="icon-btn" title="Remove this scheduled block (keeps the task)">{{ icon('x', 'icon-sm') }}</button>
+                    </form>
+                    <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
+                </div>
+                {% else %}
+                <div class="time-event context-event cal-{{ e.calendar_color }}"
+                     style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;" title="{{ e.title }}">
+                    <span class="te-name">{{ e.title }}</span>
+                    <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // Reusing static/project_calendar.js verbatim (see this template's own
+  // top comment) -- same window.PROJECT_CALENDAR config contract, just
+  // pointed at this page's own global /week/allocations endpoints instead
+  // of one project's /projects/{name}/calendar/allocations.
+  window.PROJECT_CALENDAR = {
+    createUrl: "/week/allocations",
+    moveUrlBase: "/week/allocations/",
+    weekDate: "{{ monday.isoformat() }}",
+  };
+</script>
+<script src="{{ static_url('project_calendar.js') }}"></script>
+{% endblock %}

@@ -224,25 +224,49 @@ session, right before the final commit of that session.
   CSS (mirrors `.habit-task-grid`'s two-column-collapsing-to-one shape). See
   `features/today.md`, 12 new tests (`test_today.py`), full suite 1100
   passed.
-- **Next slice:** `1.7` — Week (planning) or Spaces (context)
-  (`roadmap.md`'s 1.7 row, `open-priority.md` § Information architecture &
-  view surfaces): Today (execution) is now shipped (see above). Week answers
-  "how should I allocate my time over the coming week" — calendar
-  commitments together with schedulable task/subtask work, due dates,
-  remaining estimated effort, and available time, with unscheduled work
-  draggable onto open calendar intervals (distinct from the existing global
-  Week Calendar and from a single project's own Week Calendar view, 1.4
-  slice 3 — this is the cross-project planning surface). Spaces answers
-  "what belongs to this area of my life" — contextual projections generated
-  from labels, extended by specialized modules (a University Space exposing
-  courses/schedule/professors/credits/assignments on top of generic
-  calendar/task/contact functionality); Space *pages* already exist
+- **Shipped:** `1.7` slice 2 — **Week (planning)**, complete (2026-08-14) —
+  `GET /week` (`routers/week.py::week_view`), a `/week` tabbar entry after
+  Calendar (`{{ icon('clock') }}`). Reuses the same week-grid geometry
+  (`grid_layout.layout_day`) `routers/calendar.py::week_view` and
+  `routers/projects.py::project_calendar` already render — a third
+  *purpose* over that geometry (cross-project planning), not a third
+  implementation. Unscheduled work (every open task with no allocation yet,
+  across every project or none, sorted by due date, each showing its
+  project label via `db.project_label_for`) lists beside the grid and drags
+  onto it (`POST /week/allocations`) to create a work allocation; existing
+  blocks drag to move/resize (`POST /week/allocations/{event_uid}/move`) or
+  delete (`POST /week/allocations/{event_uid}/delete`, block only) — same
+  three-endpoint shape as `routers/projects.py`'s own trio, minus the "must
+  belong to this project" re-check, and the same `static/
+  project_calendar.js` drag/resize script reused verbatim (its own
+  `window.PROJECT_CALENDAR` config, just pointed at `/week/allocations`).
+  Every work allocation renders prominently regardless of task/project
+  (unlike the project-scoped calendar); due-today tasks show as chips per
+  day (`day.due_tasks`, open tasks only). New `week_planning.html` reuses
+  `project_calendar.html`'s own `.project-calendar-*` CSS classes verbatim
+  — no new CSS needed. **Not implemented**: a computed "available time"
+  number (open grid space visually communicates it instead, same
+  interpretation `project_calendar` already established). See
+  `features/week.md`, 16 new tests (`test_week_planning.py`), full suite
+  1116 passed.
+- **Next slice:** `1.7` — Spaces (context) (`roadmap.md`'s 1.7 row,
+  `open-priority.md` § Information architecture & view surfaces): Today
+  (execution) and Week (planning) are now shipped (see above). Spaces
+  answers "what belongs to this area of my life" — contextual projections
+  generated from labels, extended by specialized modules (a University
+  Space exposing courses/schedule/professors/credits/assignments on top of
+  generic calendar/task/contact functionality); Space *pages* already exist
   (`routers/labels.py`'s generated label pages, `sidebar_spaces()`) — check
   what's still actually missing against the spec before assuming this is a
-  from-scratch build. Dashboard (orientation) itself already exists as the
-  widget-grid home page (`routers/dashboard.py`) — 1.7 doesn't require a
-  rebuild there unless a future session finds a real gap against the
-  "orientation, not a second management interface" framing.
+  from-scratch build; it may be mostly-done already, or the remaining gap
+  may just be the "extended by specialized modules" half (the University
+  module is the one concrete example in the spec — check whether it exists
+  yet). Dashboard (orientation) itself already exists as the widget-grid
+  home page (`routers/dashboard.py`) — 1.7 doesn't require a rebuild there
+  unless a future session finds a real gap against the "orientation, not a
+  second management interface" framing. Once Spaces ships, 1.7 as a whole
+  is done — bump `pyproject.toml` and close out the roadmap row the same
+  way 1.4/1.5/1.6 were closed.
   `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
   optional Project check-in side work, and 1.6's optional "Configurable
   views + optional Schedule module" side work are all still fine smaller,

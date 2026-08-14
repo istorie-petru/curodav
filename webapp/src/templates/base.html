@@ -85,6 +85,12 @@
              routers/today.py. -->
         <a href="/today" data-tab="today" class="tab-btn {% if active_tab == 'today' %}active{% endif %}">{{ icon('sun') }}<span>Today</span></a>
         <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
+        <!-- Week (planning), 1.7 slice 2 -- a third fixed destination:
+             cross-project "how should I spend the week" scheduling surface,
+             distinct from Calendar's own Week view (event management) and
+             from a single project's own Week Calendar (that project's own
+             work only). See routers/week.py. -->
+        <a href="/week" data-tab="week" class="tab-btn {% if active_tab == 'week' %}active{% endif %}">{{ icon('clock') }}<span>Week</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
         <!-- 1.3 (Project-enabled label stack) -- restores Projects as a
              primary tabbar destination (the 2026-08-01 Phase B nav rework
