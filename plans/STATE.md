@@ -206,16 +206,88 @@ session, right before the final commit of that session.
   `features/calendar.md`'s Recurrence section. Full suite 1088 passed (new
   `test_recurrence_terminology.py`). **1.6 is now fully shipped**
   (`pyproject.toml` bumped to `1.6.0`).
-- **Next slice:** `1.7` — Information architecture & view surfaces
-  (`roadmap.md`'s 1.7 row, `open-priority.md` § Information architecture &
-  view surfaces): Dashboard (orientation), Today (execution), Week
-  (planning), Spaces (context), built on the aggregation service (1.1), the
-  project stack (1.3), and work allocations (1.4), with the consolidated
-  widget grid (1.3). `open.md`'s Command palette actions follow-up (1.2
-  side work), 1.4's optional Project check-in side work, and 1.6's
-  optional "Configurable views + optional Schedule module" side work are
-  all still fine smaller, self-contained slices instead, whenever a
-  session wants one.
+- **Shipped:** `1.7` slice 1 — **Today (execution)**, complete
+  (2026-08-14) — `GET /today` (`routers/today.py::today_view`), a `/today`
+  tabbar entry right after Home (`{{ icon('sun') }}`). An at-a-glance stats
+  strip (overdue / due today / events today / scheduled hours today, reusing
+  `_widget_at_a_glance.html`'s own CSS classes), a Due & overdue list, a
+  Today's schedule list splitting today's ordinary calendar events from
+  today's scheduled task work (work-allocation events, via the same
+  `db.work_allocation_task_uid` per-event lookup
+  `routers/projects.py::project_calendar` already uses), and an Important &
+  urgent list (open tasks whose `derived_state.virtual_states` includes
+  `important`/`urgent`, excluding anything already shown in Due & overdue —
+  no task appears twice). No separate Today data model — everything reads
+  straight off `db.list_events`/`list_tasks` plus the shared aggregation
+  service (1.1, `src/derived_state.py`) each request, same as the spec's own
+  "no separate Today data model" line. New `.today-grid`/`.today-grid-full`
+  CSS (mirrors `.habit-task-grid`'s two-column-collapsing-to-one shape). See
+  `features/today.md`, 12 new tests (`test_today.py`), full suite 1100
+  passed.
+- **Shipped:** `1.7` slice 2 — **Week (planning)**, complete (2026-08-14) —
+  `GET /week` (`routers/week.py::week_view`), a `/week` tabbar entry after
+  Calendar (`{{ icon('clock') }}`). Reuses the same week-grid geometry
+  (`grid_layout.layout_day`) `routers/calendar.py::week_view` and
+  `routers/projects.py::project_calendar` already render — a third
+  *purpose* over that geometry (cross-project planning), not a third
+  implementation. Unscheduled work (every open task with no allocation yet,
+  across every project or none, sorted by due date, each showing its
+  project label via `db.project_label_for`) lists beside the grid and drags
+  onto it (`POST /week/allocations`) to create a work allocation; existing
+  blocks drag to move/resize (`POST /week/allocations/{event_uid}/move`) or
+  delete (`POST /week/allocations/{event_uid}/delete`, block only) — same
+  three-endpoint shape as `routers/projects.py`'s own trio, minus the "must
+  belong to this project" re-check, and the same `static/
+  project_calendar.js` drag/resize script reused verbatim (its own
+  `window.PROJECT_CALENDAR` config, just pointed at `/week/allocations`).
+  Every work allocation renders prominently regardless of task/project
+  (unlike the project-scoped calendar); due-today tasks show as chips per
+  day (`day.due_tasks`, open tasks only). New `week_planning.html` reuses
+  `project_calendar.html`'s own `.project-calendar-*` CSS classes verbatim
+  — no new CSS needed. **Not implemented**: a computed "available time"
+  number (open grid space visually communicates it instead, same
+  interpretation `project_calendar` already established). See
+  `features/week.md`, 16 new tests (`test_week_planning.py`), full suite
+  1116 passed.
+- **Shipped:** `1.7` slice 3 — **Spaces (context), confirmed complete**,
+  closing 1.7, complete (2026-08-14) — checked Spaces against
+  `open-priority.md`'s spec ("what belongs to this area of my life,"
+  contextual projections generated from labels, extended by specialized
+  modules) before writing any code, per this file's own standing
+  instruction to verify rather than assume a from-scratch build. Found it
+  already fully built (2026-08-08, predating 1.7): `routers/labels.py`'s
+  generated label page (`generate_space=1` -> a Space, direct
+  `object_labels` membership only) and nav rail list
+  (`deps.py::_sidebar_spaces`), the shared widget grid folding in child
+  labels' content (`routers/dashboard.py::widget_page_context`), and the
+  University module (`_project_university_section.html` — course info incl.
+  credits, professor mailto links, next-lecture badges, and a Homework
+  table) — the spec's own concrete "courses, schedule, professors, credits,
+  assignments" example, already rendering whenever a Space's data exists.
+  Dashboard (orientation) was likewise already the existing widget-grid home
+  page, no rebuild needed. No code changes; closed out via docs only —
+  `plans/open-priority.md` and `plans/roadmap.md`'s 1.7 sections marked
+  shipped, `features/labels.md` got a short closing cross-reference. See
+  `tests/test_phase2_labels.py` for existing coverage (`generate_space`,
+  `is_space` context, University-scoped classes). **1.7 is now fully
+  shipped** (`pyproject.toml` bumped to `1.7.0`).
+- **Next slice:** `1.8` — Offline-first editing & synchronization
+  (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
+  synchronization). The largest engineering item on the roadmap — its status
+  is still "decision recorded, no code." Per the spec's own instruction, the
+  sync model (entity identifiers, local change tracking, ordering,
+  deletion/tombstones, retries, idempotency, conflict detection and
+  resolution — explicitly *not* casual "last write wins," since that can
+  silently destroy offline changes) must be designed and written down before
+  any implementation starts; treat "write the sync model" as its own slice,
+  separate from and before any code-writing slice, rather than scoping both
+  in one session. It builds on 1.1's WebDAV mapping and is meant to start
+  only once verified backups exist (data health, 1.1) — check that
+  precondition still holds before beginning. `open.md`'s Command palette
+  actions follow-up (1.2 side work), 1.4's optional Project check-in side
+  work, and 1.6's optional "Configurable views + optional Schedule module"
+  side work are all still fine smaller, self-contained slices instead,
+  whenever a session wants a break from the sync work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

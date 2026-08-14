@@ -2725,6 +2725,16 @@ body.command-palette-open{overflow:hidden;}
 @media (max-width:720px){
   .habit-task-grid{grid-template-columns:1fr;}
 }
+/* Today (1.7, "Today -- execution") -- same two-column-collapsing-to-one
+   grid shape as .habit-task-grid above (this page's own Due&Overdue /
+   Today's schedule cards side by side), plus .today-grid-full for the
+   Important & urgent card, which always spans both columns regardless of
+   viewport since it's a single list, not a paired comparison. */
+.today-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-4); margin-bottom:var(--space-4);}
+.today-grid-full{grid-column:1/-1;}
+@media (max-width:720px){
+  .today-grid{grid-template-columns:1fr;}
+}
 /* "View full year" expand toggle (2026-08-08 direct feedback) -- CSS
    Grid's `grid-column` (which line an item starts/ends on) is a discrete
    placement property, not a continuously-interpolatable one, so browsers
