@@ -418,10 +418,10 @@ class TestPanelInfoAndSessionStepper:
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")
         resp = tasks_router.remove_latest_work_allocation(
-            "t1", next="/calendar/timetable?date_=2026-08-17", conn=conn
+            "t1", next="/calendar/week?date_=2026-08-17", conn=conn
         )
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/calendar/timetable?date_=2026-08-17"
+        assert resp.headers["location"] == "/calendar/week?date_=2026-08-17"
         assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
 
 

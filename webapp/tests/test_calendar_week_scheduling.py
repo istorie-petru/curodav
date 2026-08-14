@@ -1,14 +1,17 @@
-"""Acceptance tests for the Calendar page's "Timetable" sub-view
-(`routers/calendar.py::timetable_view`, `GET /calendar/timetable`): the
-global Week (planning) surface (1.7, routers/week.py::week_view) folded into
-the main Calendar page. A real week grid with the same mouse actions as
-week_view (ordinary events draggable, drag-to-create on empty space) PLUS the
-/ week scheduling affordances -- the "Unscheduled work" sidebar that drags
-onto the grid to create a work allocation, and every scheduled work-allocation
-block rendered prominently with its own move/resize/delete (block only). The
-create/move/delete allocation endpoints mirror routers/week.py's trio but
-redirect back to /calendar/timetable. Same direct-router-call convention as
-test_week_planning.py."""
+"""Acceptance tests for the merged Week view's scheduling affordances
+(`routers/calendar.py::week_view`, `GET /calendar/week`): the former
+standalone "Timetable" sub-view (1.7/1.9) folded directly into Week (1.9 side
+work, direct feedback: "merge the calendar's week view with the timetable
+view"). One grid, both capabilities at once -- ordinary events stay fully
+interactive (drag-to-move/resize, drag-to-create on empty space, both via
+static/calendar.js) AND every work-allocation event renders prominently with
+its own move/resize/delete (block only) via static/project_calendar.js, plus
+the "Unscheduled work" sidebar (now collapsible) that drags a task onto the
+grid to schedule it. The create/move/delete allocation endpoints live at
+/calendar/week/allocations... and redirect back to /calendar/week. Same
+direct-router-call convention as test_week_planning.py. Formerly
+test_calendar_timetable.py, testing the since-removed timetable_view/
+calendar_timetable.html."""
 
 from __future__ import annotations
 
@@ -39,7 +42,7 @@ def _request(query_string=b""):
         {
             "type": "http",
             "method": "GET",
-            "path": "/calendar/timetable",
+            "path": "/calendar/week",
             "query_string": query_string,
             "scheme": "http",
             "server": ("testserver", 80),
@@ -65,22 +68,25 @@ def _project(conn, name):
     )
 
 
-class TestTimetableViewRoute:
+class TestWeekViewRoute:
     def test_renders_grid_and_unscheduled_panel(self, conn):
-        body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert "Unscheduled work" in body
         assert "project-calendar-col" in body
-        assert "calendar-create-col" not in body
+        # Merged view keeps the ordinary Week grid's own create-on-drag
+        # affordance alongside the scheduling one (the old Timetable
+        # sub-view deliberately excluded this).
+        assert "calendar-create-col" in body
 
     def test_open_task_with_no_allocation_is_unscheduled(self, conn):
         _task(conn, "t1", title="Research")
-        body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert "Research" in body
 
     def test_task_with_allocation_drops_off_unscheduled_list(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "unscheduled-task-item" not in body
@@ -91,7 +97,7 @@ class TestTimetableViewRoute:
         the drag-source panel until the session is placed onto a slot."""
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "unscheduled-task-item" in body
@@ -99,7 +105,7 @@ class TestTimetableViewRoute:
 
     def test_completed_task_never_appears_unscheduled(self, conn):
         _task(conn, "t1", title="Done thing", status="done")
-        body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert "Done thing" not in body
 
     def test_unscheduled_task_shows_its_project_pill(self, conn):
@@ -107,7 +113,7 @@ class TestTimetableViewRoute:
         before the task title, not a `Project > Task` prefix."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
-        body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert 'class="unscheduled-project-pill"' in body
         assert "Conference XYZ" in body
         assert "&gt; Research" not in body
@@ -119,11 +125,11 @@ class TestTimetableViewRoute:
         `.time-event:not(.work-allocation)`)."""
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "work-allocation" in body
-        assert "/calendar/timetable/allocations" in body
+        assert "/calendar/week/allocations" in body
 
     def test_scheduled_block_links_to_its_task_view(self, conn):
         """A scheduled work block is one target for the task it belongs to:
@@ -134,20 +140,20 @@ class TestTimetableViewRoute:
         targets the allocation endpoint."""
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'data-task-uid="t1"' in body
         assert 'href="/tasks/t1"' in body
         assert 'href="/tasks/t1/edit"' not in body
         assert 'taskUrlBase: "/tasks/"' in body
-        assert "/calendar/timetable/allocations/" in body
+        assert "/calendar/week/allocations/" in body
 
-    def test_ordinary_event_renders_as_subdued_context_like_week(self, conn):
-        """The Timetable is the Week (planning) surface -- same as
-        week_planning.html, ordinary events render as subdued .context-event
-        blocks (the scheduling grid's context), not draggable calendar
-        events; only work allocations are prominent/draggable."""
+    def test_ordinary_event_renders_fully_interactive_not_subdued(self, conn):
+        """The merged Week view is the ordinary Calendar grid FIRST -- an
+        ordinary event stays a plain, fully interactive `.time-event`
+        (draggable/clickable via calendar.js), unlike the old Timetable
+        sub-view where it was a read-only `.context-event`."""
         db.upsert_event(
             conn,
             {
@@ -157,11 +163,12 @@ class TestTimetableViewRoute:
                 "created_at": _now(), "updated_at": _now(),
             },
         )
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
-        assert "context-event" in body
+        assert "context-event" not in body
         assert "Ordinary meeting" in body
+        assert 'href="/events/e-plain"' in body
 
     def test_label_filter_applies_to_events(self, conn):
         db.upsert_event(
@@ -182,34 +189,60 @@ class TestTimetableViewRoute:
                 "created_at": _now(), "updated_at": _now(),
             },
         )
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}&label=work".encode()), date_=_MONDAY, label="work", conn=conn
         ).body.decode()
         assert "Blue meeting" in body
         assert "Personal thing" not in body
 
+    def test_unscheduled_panel_has_collapse_toggle_button(self, conn):
+        """Direct feedback: "make the Unscheduled work block collapsible via
+        a sidebar button." -- static/unscheduled_panel_toggle.js drives it,
+        state is per-device (localStorage), no server involvement."""
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert 'id="unscheduled-panel-toggle"' in body
+        assert 'id="unscheduled-panel-body"' in body
+        assert "unscheduled_panel_toggle.js" in body
 
-class TestCreateTimetableAllocation:
+    def test_no_separate_timetable_link_in_subnav(self, conn):
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert ">Timetable<" not in body
+        assert "/calendar/timetable" not in body
+
+
+class TestTimetableRedirect:
+    def test_old_timetable_link_redirects_to_week(self, conn):
+        resp = calendar_router.timetable_view_redirect()
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/calendar/week"
+
+    def test_redirect_preserves_date_and_label(self, conn):
+        resp = calendar_router.timetable_view_redirect(date_=_MONDAY, label="work")
+        assert resp.status_code == 303
+        assert resp.headers["location"] == f"/calendar/week?date_={_MONDAY}&label=work"
+
+
+class TestCreateWeekAllocation:
     def test_dragging_any_open_task_creates_an_allocation(self, conn):
         _task(conn, "t1", title="Research")
-        resp = calendar_router.create_timetable_allocation(
+        resp = calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
         )
         assert resp.status_code == 303
-        assert resp.headers["location"] == f"/calendar/timetable?date_={_MONDAY}"
+        assert resp.headers["location"] == f"/calendar/week?date_={_MONDAY}"
         assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
 
     def test_no_project_membership_check(self, conn):
         _project(conn, "Some Project")
         _task(conn, "t1", title="Unaffiliated task")
-        calendar_router.create_timetable_allocation(
+        calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
         )
         assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
 
     def test_completed_task_is_rejected(self, conn):
         _task(conn, "t1", title="Done", status="done")
-        calendar_router.create_timetable_allocation(
+        calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
         )
         assert db.list_work_allocations_for_task(conn, "t1") == []
@@ -221,7 +254,7 @@ class TestCreateTimetableAllocation:
         multiplied."""
         _task(conn, "t1", title="Research")
         undated_uid = db.create_work_allocation(conn, "t1")
-        calendar_router.create_timetable_allocation(
+        calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
         )
         allocations = db.list_work_allocations_for_task(conn, "t1")
@@ -231,16 +264,16 @@ class TestCreateTimetableAllocation:
         assert allocations[0]["end_at"] == f"{_MONDAY}T18:00:00"
 
 
-class TestMoveTimetableAllocation:
+class TestMoveWeekAllocation:
     def test_move_changes_start_and_end(self, conn):
         _task(conn, "t1", title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         tuesday = (datetime.fromisoformat(_MONDAY) + timedelta(days=1)).date().isoformat()
-        resp = calendar_router.move_timetable_allocation(
+        resp = calendar_router.move_week_allocation(
             event_uid, start_at=f"{tuesday}T09:00:00", end_at=f"{tuesday}T11:30:00", date_=_MONDAY, conn=conn
         )
         assert resp.status_code == 303
-        assert resp.headers["location"] == f"/calendar/timetable?date_={_MONDAY}"
+        assert resp.headers["location"] == f"/calendar/week?date_={_MONDAY}"
         event = db.get_event(conn, event_uid)
         assert event["start_at"] == f"{tuesday}T09:00:00"
         assert event["end_at"] == f"{tuesday}T11:30:00"
@@ -255,23 +288,23 @@ class TestMoveTimetableAllocation:
                 "created_at": _now(), "updated_at": _now(),
             },
         )
-        calendar_router.move_timetable_allocation(
+        calendar_router.move_week_allocation(
             "e-plain", start_at=f"{_MONDAY}T14:00:00", end_at=f"{_MONDAY}T15:00:00", date_=_MONDAY, conn=conn
         )
         event = db.get_event(conn, "e-plain")
         assert event["start_at"] == f"{_MONDAY}T12:00:00"
 
 
-class TestDeleteTimetableAllocation:
+class TestDeleteWeekAllocation:
     def test_delete_unschedules_the_block_not_the_task(self, conn):
         """"Delete" on a block doesn't delete the session -- it clears its
         start/end back to undated, so the task's session count never drops
         just from unscheduling; the task itself is never deleted either."""
         _task(conn, "t1", title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        resp = calendar_router.delete_timetable_allocation(event_uid, date_=_MONDAY, conn=conn)
+        resp = calendar_router.delete_week_allocation(event_uid, date_=_MONDAY, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == f"/calendar/timetable?date_={_MONDAY}"
+        assert resp.headers["location"] == f"/calendar/week?date_={_MONDAY}"
         assert db.get_task(conn, "t1") is not None
         remaining = db.list_work_allocations_for_task(conn, "t1")
         assert [wa["uid"] for wa in remaining] == [event_uid]
@@ -279,19 +312,11 @@ class TestDeleteTimetableAllocation:
         assert remaining[0]["end_at"] is None
 
     def test_delete_leaves_the_tasks_other_sessions_untouched(self, conn):
-        """Went through two earlier same-day (2026-08-14) designs, both
-        wrong: first this collapsed ALL of a task's sessions down to one
-        undated placeholder on any single unschedule ("the session count
-        doesn't hold as a guide"); the fix for that then hard-deleted just
-        the one session, which visibly dropped a single-session task's count
-        to zero on unschedule. Unscheduling one of three sessions must leave
-        the other two exactly as they were AND leave the unscheduled one
-        still present, just undated -- the count never changes."""
         _task(conn, "t1", title="Research")
         for day in ("2026-08-17", "2026-08-18", "2026-08-19"):
             db.create_work_allocation(conn, "t1", f"{day}T16:00:00", f"{day}T18:00:00")
         event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
-        calendar_router.delete_timetable_allocation(event_uids[0], date_=_MONDAY, conn=conn)
+        calendar_router.delete_week_allocation(event_uids[0], date_=_MONDAY, conn=conn)
         remaining = db.list_work_allocations_for_task(conn, "t1")
         assert [wa["uid"] for wa in remaining] == event_uids
         by_uid = {wa["uid"]: wa for wa in remaining}
@@ -301,16 +326,15 @@ class TestDeleteTimetableAllocation:
 
 
 class TestUnscheduledPanelStepper:
-    """"Unscheduled work" panel rework on the Timetable view: per-item
-    stepper shows sessions still needing placement (`undated_count`), not
-    the task's total session count -- see test_week_planning.py's own
-    TestUnscheduledPanelStepper docstring for the direct feedback behind
-    this (2026-08-14, "the counter doesn't update from 2 to 1")."""
+    """"Unscheduled work" panel: per-item stepper shows sessions still
+    needing placement (`undated_count`), not the task's total session
+    count -- see test_week_planning.py's own TestUnscheduledPanelStepper
+    docstring for the direct feedback behind this."""
 
     def test_item_shows_plus_and_minus_buttons_at_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'data-task-uid="t1"' in body
@@ -321,7 +345,7 @@ class TestUnscheduledPanelStepper:
     def test_minus_button_hidden_with_no_undated_sessions(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "/tasks/t1/work-allocations/remove-latest" not in body
@@ -330,15 +354,15 @@ class TestUnscheduledPanelStepper:
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
 
-        calendar_router.create_timetable_allocation(
+        calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T17:00:00", date_=_MONDAY, conn=conn
         )
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
@@ -347,16 +371,16 @@ class TestUnscheduledPanelStepper:
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "/tasks/t1/work-allocations/remove-latest" in body
-        assert 'value="/calendar/timetable?date_=' in body  # +/− return here
+        assert 'value="/calendar/week?date_=' in body  # +/− return here
 
     def test_card_is_one_line_without_hours(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "unscheduled-count" in body
@@ -366,7 +390,7 @@ class TestUnscheduledPanelStepper:
 
     def test_item_has_no_native_draggable_attribute(self, conn):
         _task(conn, "t1", title="Research")
-        body = calendar_router.timetable_view(
+        body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'draggable="true"' not in body

@@ -88,9 +88,12 @@ class TestViewportCssHooks:
         assert 'class="card calendar-viewport month-viewport"' in body
 
     def test_week_view_has_viewport_class(self, conn):
+        # 1.9 side work: Week merged with the former Timetable sub-view, so
+        # the grid card now also carries `.project-calendar-grid` (the
+        # scheduling-surface class) alongside `.calendar-viewport`.
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
-        assert 'class="card calendar-viewport"' in body
+        assert 'class="card calendar-viewport project-calendar-grid"' in body
 
     def test_day_view_has_single_viewport_class(self, conn):
         today_iso = date.today().isoformat()

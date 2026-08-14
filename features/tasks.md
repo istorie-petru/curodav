@@ -116,7 +116,7 @@ date at all (`db.create_work_allocation(conn, task_uid)` with neither
 is an **undated session placeholder** (an event with NULL `start_at`/
 `end_at`; `events.start_at` is nullable, so no schema change): it has no
 slot yet, so the task stays on the planning grids' "Unscheduled work"
-panel (the Timetable sub-view, `/week`, the project Week Calendar) until
+panel (Calendar's Week view, `/week`, the project Week Calendar) until
 the session is placed. Dragging the task onto a grid slot **places the
 task's oldest undated session** — `db.first_undated_work_allocation_for_
 task` + `db.set_work_allocation_times` in all three create endpoints
@@ -132,8 +132,8 @@ leak out as DTSTART-less VEVENTs.
 
 **Unscheduled-work panel rework (2026-08-14):** each planning grid's
 "Unscheduled work" sidebar item is now a shared partial
-(`_unscheduled_task_item.html`, imported `with context` by the Timetable
-sub-view, `/week`, and the project Week Calendar) showing, per task:
+(`_unscheduled_task_item.html`, imported `with context` by Calendar's Week
+view, `/week`, and the project Week Calendar) showing, per task:
 - a **scheduled/total hours x/y** next to the title —
   `db.work_allocation_panel_info`: `scheduled_hours` is the sum of dated
   session durations (same number as `task_work_hours.scheduled`),

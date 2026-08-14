@@ -14,58 +14,66 @@ label, and an event's color is its first (alphabetical) label's color
   week.
 - **Week** (`/calendar/week`) — single-pane 24-hour grid, fits viewport and
   scrolls internally (`grid_layout.py` overlap packing), all-day strip + task
-  chips.
+  chips. **Merged with the former "Timetable" sub-view** (1.9 side work,
+  2026-08-14, direct feedback: "merge the calendar's week view with the
+  timetable view") — ONE grid now carries both capabilities at once, not two
+  separate pages:
+  - Ordinary calendar events stay fully interactive, exactly as before the
+    merge: draggable/resizable (`static/calendar.js`, `POST
+    /events/{uid}/reschedule`), clickable to open, and empty grid space still
+    drag-creates a new event (`.calendar-create-col`).
+  - Every work-allocation event (a task's scheduled work session) renders
+    prominently as a draggable `.work-allocation` block
+    (`static/project_calendar.js`, form-POST move/resize/delete, block only,
+    never the task, endpoints under `/calendar/week/allocations...`)
+    alongside an "Unscheduled work" sidebar that drags a task onto the grid
+    to create/place a session. A task stays on the panel as long as any of
+    its work sessions is still **undated** (the task modal's Work sessions
+    "+" button adds one with no date yet), and dragging such a task onto a
+    slot **places that session** (the oldest undated one) rather than
+    creating another block, exactly as `/week` and the project Week Calendar
+    do (see `features/tasks.md` § Work allocations). A plain click anywhere
+    on a scheduled block's body (not a drag, not the delete button, not the
+    resize handle) opens the block's task **view modal** via
+    `project_calendar.js` interaction 4 (`taskUrlBase` config, same
+    destination as the block's own title link) — same behavior the sibling
+    planning grids (`/week`, the project Week Calendar) have.
+  - Grid columns carry BOTH `.calendar-create-col` (calendar.js) and
+    `.project-calendar-col` (project_calendar.js) so both scripts'
+    interactions coexist; `calendar.js`'s own `.time-event` selector
+    excludes `.work-allocation` (`:not(.work-allocation)`) so the two
+    scripts never double-attach a pointerdown handler to the same block, and
+    `style.css`'s planning-surface cursor override
+    (`.project-calendar-col{cursor:default}`, which kills the "click-drag to
+    create" cursor on the *planning-only* grids `/week`/the project Week
+    Calendar) is scoped with `:not(.calendar-create-col)` so Week keeps the
+    create-drag cursor.
+  - The "Unscheduled work" sidebar is **collapsible** — a header button
+    (`static/unscheduled_panel_toggle.js`) collapses it to a narrow rail,
+    state persisted per-device (`localStorage`, no server involvement).
+  - `GET /calendar/timetable` and the old `/calendar/timetable/allocations`
+    endpoint trio are gone; `/calendar/timetable` redirects to
+    `/calendar/week` (any old bookmark still lands somewhere real).
 - **Day** (`/calendar/day/{date}`) — same grid for one day; `/calendar/agenda`
   redirects here (the old agenda page was merged then removed).
-- **Timetable** (`/calendar/timetable`) — the Week (planning) surface
-  (`/week`, see `features/week.md`) copied into the Calendar page as a
-  fifth sub-view, exactly how `/week` renders it: columns
-  `.time-col.project-calendar-col`, work allocations prominent and
-  draggable (`.work-allocation`, form-POST move/resize/delete, block only
-  never the task), ordinary calendar events subdued context
-  (`.context-event`). An "Unscheduled work" sidebar   drags onto the grid to
-  create a work allocation (`POST /calendar/timetable/allocations`), and a
-  scheduled block dragged back onto the panel is unscheduled (deleted,
-  task kept). A task stays on the panel as long as any of its work
-  sessions is still **undated** — the task modal's Work sessions "+" button
-  adds a session with no date yet (`db.create_work_allocation` with neither
-  start nor end), and dragging such a task onto a slot **places that
-  session** (the oldest undated one) rather than creating another block,
-  exactly as `/week` and the project Week Calendar do (see
-  `features/tasks.md` § Work allocations). A plain click anywhere on a
-  scheduled block's body (not a drag, not the delete button, not the
-  resize handle) opens the block's task **view modal** — not the edit
-  form — via `project_calendar.js` interaction 4 (`taskUrlBase` config,
-  same destination as the block's own title link). The same whole-block-
-  click and task-view title apply on the sibling planning grids (`/week`
-  and the project Week Calendar), which also override the shared
-  `.time-col`
-  `cursor:copy` (the Calendar grid's drag-to-create affordance) to plain
-  `default` via `.project-calendar-col` — empty-space drag on a planning
-  grid isn't a create gesture, so the misleading "add" mouse is gone there.
-  Only `static/project_calendar.js` runs, reused verbatim with a
-  `window.PROJECT_CALENDAR` config pointed at the timetable's own
-  endpoints. Adding normal calendar events is done via the page's calendar
-  chrome (the New button, or the Week/Day views), not on the scheduling
-  grid. The standalone `/week` page and tab remain for backwards
-  compatibility.
 
-  **Unscheduled-work panel (2026-08-14)** — each panel item (shared
-  `_unscheduled_task_item.html` partial, same on `/week` and the project
-  Week Calendar) now shows a **scheduled/total hours x/y** next to the task
-  title and a **−/count/+ session stepper** ("+" adds an undated session
-  placeholder via `POST /tasks/{uid}/work-allocations`; "−" removes the most
-  recently added one via `/remove-latest`, hidden at count 1). **Unschedule
-  now collapses** — dragging a block back onto the panel (or its ✕) deletes
-  *all* the task's sessions and leaves exactly one undated one
-  (`db.collapse_task_work_allocations`), so the task returns to the panel at
-  a count of one. The create drag is **pointer-based** (a ghost follows the
-  cursor, the grid auto-scrolls near its top/bottom edge), replacing the old
-  native HTML5 drag-and-drop, and block move/resize gained pointercancel
-  revert + scroll-aware positioning. See `features/tasks.md` § Work
-  allocations.
+**Unscheduled-work panel (2026-08-14)** — each panel item (shared
+`_unscheduled_task_item.html` partial, same on Week, `/week`, and the
+project Week Calendar) shows a **−/count/+ session stepper** ("+" adds an
+undated session placeholder via `POST /tasks/{uid}/work-allocations`; "−"
+removes the most recently added undated one via `/remove-latest`, hidden at
+zero undated sessions) — the count reflects sessions still needing
+placement, not the task's total session count. **Unschedule doesn't delete**
+— dragging a block back onto the panel (or its ✕) clears that ONE session's
+start/end back to undated (`db.unschedule_work_allocation`), so the task's
+overall session count never changes just from scheduling/unscheduling a
+block. The create drag is **pointer-based** (a ghost follows the cursor, the
+grid auto-scrolls near its top/bottom edge), and block move/resize has
+pointercancel revert + scroll-aware positioning. See `features/tasks.md` §
+Work allocations.
 
-A segmented subnav switches views while preserving the label filter.
+A segmented subnav (Month/4-Week/Week/Day) switches views while preserving
+the label filter.
 
 ## Recurrence
 

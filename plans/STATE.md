@@ -1011,6 +1011,54 @@ session, right before the final commit of that session.
   three already-covered fields; `test_holiday_calendars.py`/
   `test_recurrence_terminology.py`/`test_modal_footer_and_inputs.py` still
   assert the same field names/round-trip).
+- **Shipped:** side work — **Calendar Week + Timetable merged, "Unscheduled
+  work" sidebar made collapsible**, complete (2026-08-14), direct feedback
+  ("merge the calendar's week view with the timetable view. make the
+  Unscheduled work block collapsible via a sidebar button"). The separate
+  "Timetable" sub-view (side work, 2026-08-14 earlier the same day) is gone
+  as its own page -- `routers/calendar.py::week_view` (`GET /calendar/week`)
+  now renders ONE grid with both capabilities at once: ordinary events stay
+  fully interactive (drag-to-move/resize, drag-to-create on empty space, via
+  `static/calendar.js`) AND every work-allocation event renders prominently
+  as a draggable `.work-allocation` block (`static/project_calendar.js`)
+  alongside the "Unscheduled work" sidebar that drags a task onto the grid
+  to schedule it. `templates/calendar_timetable.html` deleted;
+  `calendar_week.html` absorbed its grid/sidebar markup — grid columns now
+  carry BOTH `.calendar-create-col` and `.project-calendar-col`, so both
+  scripts' interactions coexist on the same page. Two real conflicts this
+  surfaced and fixed:
+  - `calendar.js`'s own `.time-event` selector would have double-attached a
+    pointerdown handler to every `.work-allocation` block (which
+    `project_calendar.js` already owns) -- changed to
+    `.time-event:not(.work-allocation)`.
+  - `style.css`'s `.project-calendar-col{cursor:default}` (written to kill
+    the Calendar grid's "click-drag to create" cursor on the planning-only
+    surfaces) would have silently killed it here too, where drag-to-create
+    is still a real gesture -- scoped to
+    `.project-calendar-col:not(.calendar-create-col)`.
+  `GET /calendar/timetable` and the old `/calendar/timetable/allocations...`
+  trio are gone; the page redirects to `/calendar/week` (any bookmark still
+  lands somewhere real) and the allocation endpoints moved to
+  `/calendar/week/allocations...` (`create_week_allocation`/
+  `move_week_allocation`/`delete_week_allocation`). Every calendar
+  template's subnav (`calendar_month.html`/`_fourweek.html`/`_day.html`)
+  dropped its separate "Timetable" entry -- Month/4-Week/Week/Day, four
+  tabs, not five.
+  New `static/unscheduled_panel_toggle.js`: a header button
+  (`#unscheduled-panel-toggle`, `{{ icon('sidebar', ...) }}`) collapses/
+  expands the sidebar to a narrow rail, state persisted per-device
+  (`localStorage`, same category as `timeline.js`'s gutter-width
+  preference) -- no server state, nothing to sync.
+  `tests/test_calendar_timetable.py` deleted; replaced by
+  `tests/test_calendar_week_scheduling.py` (29 tests, testing the merged
+  `week_view`/`create_week_allocation`/`move_week_allocation`/
+  `delete_week_allocation`/`timetable_view_redirect`, plus new coverage for
+  the collapse toggle button, the redirect, and that ordinary events stay
+  fully interactive instead of subdued `.context-event` context). One
+  existing assertion updated for the real, deliberate class-list change
+  (`test_calendar_viewport_layout.py`'s exact-match now expects
+  `"card calendar-viewport project-calendar-grid"`). Full suite 1317
+  passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

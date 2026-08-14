@@ -1784,8 +1784,18 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    rather than collapsing to its content width (flex-start was making it sit
    as a narrow strip beside the full-width sidebar). */
 .project-calendar-layout{display:flex; gap:16px; align-items:stretch;}
-.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto;}
+.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto; transition:width var(--dur-fast) var(--ease-standard);}
 .project-calendar-grid{flex:1; min-width:0;}
+/* Collapsible "Unscheduled work" sidebar (1.9 side work,
+   static/unscheduled_panel_toggle.js) -- header (title + toggle button)
+   always visible; collapsed shrinks the panel to a narrow rail holding just
+   the toggle, same idea as a collapsed nav rail elsewhere in the app. */
+.unscheduled-panel-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.unscheduled-panel-head h2{margin:0;}
+.project-calendar-unscheduled.collapsed{width:auto; overflow:visible;}
+.project-calendar-unscheduled.collapsed .unscheduled-panel-head h2,
+.project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
+.project-calendar-unscheduled.collapsed #unscheduled-panel-toggle svg{transform:rotate(180deg);}
 .unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial on the planning grids). ONE line (2026-08-14 design): a project
@@ -1825,13 +1835,16 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   box-shadow:0 6px 16px rgba(0,0,0,.18);
 }
 .project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
-/* The planning grids (project_calendar.html, week_planning.html,
-   calendar_timetable.html) reuse .time-col, whose cursor:copy is the
-   Calendar grid's "click-drag to create an event" affordance (calendar.js)
-   -- wrong on the planning surfaces, where empty-space drag isn't a create
-   gesture at all (only dropping an unscheduled task onto a column is, and
-   that task row itself already carries the grab cursor). */
-.project-calendar-col{cursor:default;}
+/* The planning-only grids (project_calendar.html, week_planning.html) reuse
+   .time-col, whose cursor:copy is the Calendar grid's "click-drag to create
+   an event" affordance (calendar.js) -- wrong there, where empty-space drag
+   isn't a create gesture at all (only dropping an unscheduled task onto a
+   column is, and that task row itself already carries the grab cursor).
+   :not(.calendar-create-col) excludes the merged Week view (1.9 side work,
+   templates/calendar_week.html), whose columns carry BOTH classes -- that
+   page's empty-space drag IS a real create gesture (calendar.js is loaded
+   there too), so it keeps the copy cursor. */
+.project-calendar-col:not(.calendar-create-col){cursor:default;}
 /* Drag-a-scheduled-block-onto-the-panel-to-unschedule-it (project_calendar.js
    interaction 3): the unscheduled-work panel lights up while a dragged block
    is over it, the same visual vocabulary as a column's .drop-hover, so the

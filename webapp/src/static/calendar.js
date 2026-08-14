@@ -185,7 +185,13 @@
     });
   }
 
-  document.querySelectorAll(".time-event").forEach(setupEvent);
+  // :not(.work-allocation) -- on the merged Week view (1.9 side work,
+  // templates/calendar_week.html) static/project_calendar.js also runs on
+  // this page and owns every `.work-allocation` block's own pointerdown
+  // (move/resize/delete-to-unschedule, plus click-to-open-task). Without
+  // this exclusion both scripts would attach a competing pointerdown
+  // handler to the same element.
+  document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
 
   // ---------------------------------------------------------------- //
   // Hover-preview + click / click-drag-release to CREATE a new event on
