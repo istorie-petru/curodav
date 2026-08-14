@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from src import db
+from src.routers import calendar as calendar_router
 from src.routers import dashboard as dashboard_router
 
 
@@ -184,6 +185,40 @@ class TestNewWidgetsAddableThroughBuilder:
             source, view, range_ = dashboard_router._selection_from_widget({"type": wtype, "config": {}})
             resolved_type, resolved_range = dashboard_router._resolve_selection(source, view, range_)
             assert resolved_type == wtype
+
+
+class TestTodayAndWeekRetiredAsRedirects:
+    def test_today_redirects_to_dashboard(self):
+        resp = dashboard_router.today_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/"
+
+    def test_week_redirects_to_calendar_week(self):
+        resp = calendar_router.week_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/calendar/week"
+
+    def test_week_redirect_preserves_date(self):
+        resp = calendar_router.week_redirect(date_="2026-08-17")
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/calendar/week?date_=2026-08-17"
+
+    def test_today_and_week_no_longer_have_a_tabbar_entry(self):
+        import pathlib
+        base = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates" / "base.html"
+        source = base.read_text()
+        assert 'data-tab="today"' not in source
+        assert 'data-tab="week"' not in source
+        # The redirects themselves must still exist somewhere real, just
+        # not as a tabbar destination any more.
+        assert 'href="/today"' not in source
+        assert 'href="/week"' not in source
+
+    def test_today_and_week_routers_are_gone(self):
+        import pathlib
+        routers_dir = pathlib.Path(__file__).resolve().parents[1] / "src" / "routers"
+        assert not (routers_dir / "today.py").exists()
+        assert not (routers_dir / "week.py").exists()
 
 
 class TestUpcomingEventsDoubleLineFix:

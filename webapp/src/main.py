@@ -116,11 +116,15 @@ def create_app() -> FastAPI:
     # features/architecture.md's Grades/Databases removal note and
     # db.py's own removal comments on the `databases`/`database_columns`/
     # `database_rows`/`grades` tables.
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, pwa, schedule, search, settings, sync_api, tasks, timeline, today, week
+    # routers/today.py and routers/week.py are gone (1.9 side work,
+    # "Today"/"Week" folded into the Dashboard's widget registry and the
+    # merged /calendar/week respectively -- see routers/dashboard.py::
+    # today_redirect and routers/calendar.py::week_redirect for the
+    # bookmark-preserving redirects that replaced them, same precedent as
+    # the earlier /calendar/timetable retirement).
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, pwa, schedule, search, settings, sync_api, tasks, timeline
 
     app.include_router(dashboard.router)
-    app.include_router(today.router)
-    app.include_router(week.router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
     # src/offline_sync.py). No PWA client calls this yet (§11 slices 3+);

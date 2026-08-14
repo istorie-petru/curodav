@@ -87,18 +87,24 @@
          (routers/contacts.py), unchanged by this rework. -->
     <nav class="tabbar" role="navigation" aria-label="Main">
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <!-- Today (1.7, "Today -- execution") -- a second, narrower fixed
-             destination right after Home: "What am I dealing with now?",
-             distinct from Home's broader orientation view. See
-             routers/today.py. -->
-        <a href="/today" data-tab="today" class="tab-btn {% if active_tab == 'today' %}active{% endif %}">{{ icon('sun') }}<span>Today</span></a>
+        {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
+           were retired as standalone tabs (1.9 side work) -- their own
+           content was folded into the Dashboard's widget registry
+           (important_urgent/scheduled_work_today widget types, see
+           routers/dashboard.py) and the merged Calendar Week view
+           respectively, following the same fold-then-redirect precedent
+           already set for the calendar sub-view retirement (see
+           plans/STATE.md's "Calendar Week + Timetable merged" entry). Both
+           old paths still redirect (any bookmark still lands somewhere
+           real) -- see routers/dashboard.py::today_redirect and
+           routers/calendar.py::week_redirect -- they just no longer have
+           their own tabbar entry. Using a Jinja comment, not an HTML
+           comment, here deliberately: an HTML `<!-- -->` still renders into
+           the response body, which would leave the literal old sub-view
+           path text discoverable in every page's markup -- exactly the
+           string test_calendar_week_scheduling.py's own
+           test_no_separate_timetable_link_in_subnav asserts is gone. #}
         <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
-        <!-- Week (planning), 1.7 slice 2 -- a third fixed destination:
-             cross-project "how should I spend the week" scheduling surface,
-             distinct from Calendar's own Week view (event management) and
-             from a single project's own Week Calendar (that project's own
-             work only). See routers/week.py. -->
-        <a href="/week" data-tab="week" class="tab-btn {% if active_tab == 'week' %}active{% endif %}">{{ icon('clock') }}<span>Week</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
         <!-- 1.3 (Project-enabled label stack) -- restores Projects as a
              primary tabbar destination (the 2026-08-01 Phase B nav rework

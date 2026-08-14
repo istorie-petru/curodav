@@ -779,6 +779,26 @@ def week_view(
     )
 
 
+@events_router.get("/week")
+def week_redirect(date_: str | None = None):
+    """The former standalone /week page ("Week -- planning", 1.7 slice 2,
+    routers/week.py) is retired (1.9 side work) -- its cross-project
+    scheduling surface (Unscheduled work sidebar, drag-drop, the grid
+    itself) is now identically present at /calendar/week (see this file's
+    own week_view docstring: the "Calendar Week + Timetable merged" side
+    work already folded Timetable's planning capability into the ordinary
+    Week grid, confirmed by reading both routers/templates directly before
+    this retirement, not assumed). Registered on `events_router` (this
+    module's unprefixed router) rather than `router` (prefix="/calendar")
+    since the redirect's own path has to be the bare "/week", not
+    "/calendar/week" -- same "any bookmark still lands somewhere real"
+    precedent `timetable_view_redirect` right below already set."""
+    url = "/calendar/week"
+    if date_:
+        url += f"?date_={date_}"
+    return RedirectResponse(url=url, status_code=302)
+
+
 @router.get("/timetable")
 def timetable_view_redirect(date_: str | None = None, label: str | None = None):
     """The former standalone "Timetable" sub-view is now just Week (see

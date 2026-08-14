@@ -1450,6 +1450,21 @@ def dashboard_view(
     return templates.TemplateResponse("dashboard.html", ctx)
 
 
+@router.get("/today")
+def today_redirect():
+    """The standalone /today page (1.7 slice 1, "Today -- execution") is
+    retired (1.9 side work) -- its two sections that no existing Dashboard
+    widget covered (Important & urgent, Scheduled work hours today) are now
+    the important_urgent/scheduled_work_today widget types above; everything
+    else it showed (Due & overdue, today's calendar events) already had a
+    direct Dashboard equivalent (today_agenda). Kept as a redirect rather
+    than a bare 404, same "any bookmark still lands somewhere real"
+    precedent `routers/calendar.py::week_redirect`/`timetable_view_redirect`
+    already established for the analogous /calendar/timetable retirement --
+    see plans/STATE.md."""
+    return RedirectResponse(url="/", status_code=302)
+
+
 @router.get("/quick/add")
 def quick_add_form(request: Request, conn=Depends(get_db)):
     # Merged task/event quick-add (2026-08-10) -- the dashboard's and
