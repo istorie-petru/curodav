@@ -249,28 +249,45 @@ session, right before the final commit of that session.
   interpretation `project_calendar` already established). See
   `features/week.md`, 16 new tests (`test_week_planning.py`), full suite
   1116 passed.
-- **Next slice:** `1.7` — Spaces (context) (`roadmap.md`'s 1.7 row,
-  `open-priority.md` § Information architecture & view surfaces): Today
-  (execution) and Week (planning) are now shipped (see above). Spaces
-  answers "what belongs to this area of my life" — contextual projections
-  generated from labels, extended by specialized modules (a University
-  Space exposing courses/schedule/professors/credits/assignments on top of
-  generic calendar/task/contact functionality); Space *pages* already exist
-  (`routers/labels.py`'s generated label pages, `sidebar_spaces()`) — check
-  what's still actually missing against the spec before assuming this is a
-  from-scratch build; it may be mostly-done already, or the remaining gap
-  may just be the "extended by specialized modules" half (the University
-  module is the one concrete example in the spec — check whether it exists
-  yet). Dashboard (orientation) itself already exists as the widget-grid
-  home page (`routers/dashboard.py`) — 1.7 doesn't require a rebuild there
-  unless a future session finds a real gap against the "orientation, not a
-  second management interface" framing. Once Spaces ships, 1.7 as a whole
-  is done — bump `pyproject.toml` and close out the roadmap row the same
-  way 1.4/1.5/1.6 were closed.
-  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
-  optional Project check-in side work, and 1.6's optional "Configurable
-  views + optional Schedule module" side work are all still fine smaller,
-  self-contained slices instead, whenever a session wants one.
+- **Shipped:** `1.7` slice 3 — **Spaces (context), confirmed complete**,
+  closing 1.7, complete (2026-08-14) — checked Spaces against
+  `open-priority.md`'s spec ("what belongs to this area of my life,"
+  contextual projections generated from labels, extended by specialized
+  modules) before writing any code, per this file's own standing
+  instruction to verify rather than assume a from-scratch build. Found it
+  already fully built (2026-08-08, predating 1.7): `routers/labels.py`'s
+  generated label page (`generate_space=1` -> a Space, direct
+  `object_labels` membership only) and nav rail list
+  (`deps.py::_sidebar_spaces`), the shared widget grid folding in child
+  labels' content (`routers/dashboard.py::widget_page_context`), and the
+  University module (`_project_university_section.html` — course info incl.
+  credits, professor mailto links, next-lecture badges, and a Homework
+  table) — the spec's own concrete "courses, schedule, professors, credits,
+  assignments" example, already rendering whenever a Space's data exists.
+  Dashboard (orientation) was likewise already the existing widget-grid home
+  page, no rebuild needed. No code changes; closed out via docs only —
+  `plans/open-priority.md` and `plans/roadmap.md`'s 1.7 sections marked
+  shipped, `features/labels.md` got a short closing cross-reference. See
+  `tests/test_phase2_labels.py` for existing coverage (`generate_space`,
+  `is_space` context, University-scoped classes). **1.7 is now fully
+  shipped** (`pyproject.toml` bumped to `1.7.0`).
+- **Next slice:** `1.8` — Offline-first editing & synchronization
+  (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
+  synchronization). The largest engineering item on the roadmap — its status
+  is still "decision recorded, no code." Per the spec's own instruction, the
+  sync model (entity identifiers, local change tracking, ordering,
+  deletion/tombstones, retries, idempotency, conflict detection and
+  resolution — explicitly *not* casual "last write wins," since that can
+  silently destroy offline changes) must be designed and written down before
+  any implementation starts; treat "write the sync model" as its own slice,
+  separate from and before any code-writing slice, rather than scoping both
+  in one session. It builds on 1.1's WebDAV mapping and is meant to start
+  only once verified backups exist (data health, 1.1) — check that
+  precondition still holds before beginning. `open.md`'s Command palette
+  actions follow-up (1.2 side work), 1.4's optional Project check-in side
+  work, and 1.6's optional "Configurable views + optional Schedule module"
+  side work are all still fine smaller, self-contained slices instead,
+  whenever a session wants a break from the sync work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -463,7 +463,7 @@ project systems as every other event. The specialized Schedule interface
 remains because manually creating dozens of recurring class events would be
 absurd, but the resulting data follows the application's general event model.
 
-## Information architecture & view surfaces
+## ~~Information architecture & view surfaces~~ — fully shipped 2026-08-14
 
 The application deliberately distributes information across views according to
 the question each view answers, rather than letting the Dashboard become a
@@ -472,10 +472,23 @@ for orientation, Today for execution, Week for planning, Spaces for context, and
 Calendar/Tasks/Contacts for direct management. Views are projections of shared
 entity data, not independent representations with duplicated state.
 
-**Status:** decisions recorded — no code. Step 5 of the build order; consumes
-the aggregation service and work allocations.
+**Status:** all four "new surface" pieces accounted for as of 2026-08-14
+(`plans/STATE.md`'s 1.7 entries). Today and Week were built fresh this release
+(slices 1–2); Dashboard (the existing widget-grid Home,
+`routers/dashboard.py`) and Spaces (the existing generated label pages,
+`routers/labels.py` + `deps.py::sidebar_spaces`) turned out to already satisfy
+this section's spec from earlier phases — confirmed against the spec below
+rather than rebuilt, per this section's own closing slice. `pyproject.toml`
+bumped to `1.7.0`. Kept below as the reference spec for what shipped.
 
 ### Dashboard — orientation
+
+**Confirmed 2026-08-14** — pre-existing, not rebuilt for 1.7: `routers/
+dashboard.py`'s widget-grid Home already answers this brief (widgets
+prioritizing current/upcoming info, important/urgent items, workload, over
+exposing every feature). Reused as-is, per this section's own "Dashboard
+itself already exists... doesn't require a rebuild unless a future session
+finds a real gap" note.
 
 Answers **"What's happening in my life?"** A concise overview of the current
 situation aggregated from existing entities and system states — not a second
@@ -483,7 +496,7 @@ management interface. Widgets prioritize current and upcoming information,
 important/urgent items, and high-level workload over exposing every feature at
 once.
 
-### Today — execution
+### ~~Today — execution~~ — shipped 2026-08-14
 
 **Shipped 2026-08-14 (1.7 slice 1)** — see `features/today.md`: `GET /today`
 (`routers/today.py::today_view`), a `/today` tabbar entry right after Home.
@@ -502,7 +515,7 @@ day combining today's calendar events, scheduled task work, due/overdue tasks,
 important upcoming items, and relevant workload. Generated from existing data —
 no separate Today data model.
 
-### Week — planning
+### ~~Week — planning~~ — shipped 2026-08-14
 
 **Shipped 2026-08-14 (1.7 slice 2)** — see `features/week.md`: `GET /week`
 (`routers/week.py::week_view`), a `/week` tabbar entry. Reuses the same
@@ -532,7 +545,23 @@ estimated effort, and available time. Unscheduled work is visible and draggable
 onto available calendar intervals. A planning surface, not merely another
 calendar layout.
 
-### Spaces — context
+### ~~Spaces — context~~ — confirmed shipped 2026-08-14 (built earlier)
+
+**Confirmed 2026-08-14, closing 1.7** — this surface was already fully built
+before 1.7 started (the `generate_space` label flag and its generated page
+landed 2026-08-08), so this slice was verification against the spec below,
+not new code: `routers/labels.py::label_detail` + `_label_scope` (a
+`generate_space=1` label's page — direct `object_labels` membership only,
+never transitive through `parent_name`), the nav rail's own Spaces list
+(`deps.py::_sidebar_spaces`, `db.list_space_labels`, every Space shown
+automatically), the shared widget grid scoped to the label (folding in child
+labels' names too, `routers/dashboard.py`'s `widget_page_context`), and the
+University module (`_project_university_section.html` — course info with
+schedule/room/credits, professor mailto links via `professor_contacts`,
+"Next lecture" badges, and a Homework table off tasks tagged `Homework`) that
+renders whenever a Space's classes/homework actually exist, no separate
+`enabled_modules` gate. See `features/labels.md` § Generated page, tested by
+`tests/test_phase2_labels.py`.
 
 Answers **"What belongs to this area of my life?"** Spaces remain contextual
 projections generated from labels and extended by specialized modules — not a

@@ -34,3 +34,14 @@ there's no `enabled_modules`-style gate anymore (removed 2026-08-08).
 Creating a schedule class auto-provisions a label named after the course (blue,
 book-open icon, `is_project=1`) under the inferred Space label
 (`routers/schedule.py::_auto_provision_course_label`).
+
+## Spaces close out 1.7 (2026-08-14)
+
+This generated page (a `generate_space=1` label) is the "Spaces — context"
+surface from `plans/open-priority.md`'s Information architecture & view
+surfaces section, and the University module above (Course info + Homework) is
+that section's "University module adds courses, schedule, professors,
+credits, and assignments" line — both were already built (2026-08-08) before
+1.7 started, and were confirmed against the spec rather than rebuilt when 1.7
+closed. Answers "what belongs to this area of my life?" the same way
+`features/today.md`/`features/week.md` answer their own release's question.
