@@ -358,10 +358,14 @@ subtask links is removed, and the Relations card holds related events only.
 
 ## Schedule & recurrence rework
 
-**Status:** full planning model exists (was `plans/schedule.md` and
-`plans/details.md`, folded in here) — no code. Builds on the project stack.
+**Status:** "Classes as project labels + recurring events" shipped
+2026-08-14 (`plans/STATE.md`'s 1.6 entry, `features/schedule.md`). The other
+three subsections below (generalized non-working-day policy + named holiday
+calendars, manual recurrence exceptions, configurable terminology) are still
+full planning model, no code — builds on the shipped subsection, not the
+project stack directly.
 
-### Classes as project labels + recurring events
+### ~~Classes as project labels + recurring events~~ — shipped 2026-08-14
 
 The existing Schedule system is reworked around the application's general event
 and label model rather than remaining a separate conceptual entity. A university

@@ -19,6 +19,7 @@ from starlette.requests import Request
 from src import db, schedule
 from src.routers import calendar as calendar_router
 from src.routers import labels as labels_router
+from src.routers import schedule as schedule_router
 
 
 @pytest.fixture()
@@ -50,7 +51,13 @@ def _request(path="/calendar"):
 def _seed_education(conn, space_uid="edu"):
     """A Space label (generate_space=1) + one course label under it +
     schedule settings spanning today + one enrolled class carrying both
-    labels directly. Returns the class."""
+    labels directly. Returns the class event's uid. 1.6: a class is a real
+    recurring event now (see schedule_router's module docstring) -- goes
+    through the real create_class router path, tagged with the course
+    label CS101 (already existing, so create_class doesn't auto-provision
+    a second one) and then the Space label directly (auto-provision-only
+    behavior, so added by hand here to match the old direct-tagging
+    setup)."""
     db.upsert_label_config(conn, {"name": space_uid, "generate_space": 1, "color": "blue", "created_at": _now()})
     db.upsert_label_config(conn, {"name": "CS101", "parent_name": space_uid, "color": "blue", "created_at": _now()})
     db.save_schedule_settings(
@@ -62,35 +69,20 @@ def _seed_education(conn, space_uid="edu"):
             "reminder_minutes": 15,
         },
     )
-    cls_uid = "c1"
-    db.upsert_schedule_class(
-        conn,
-        {
-            "uid": cls_uid,
-            "day": "Wednesday",
-            "start_time": "10:00",
-            "end_time": "12:00",
-            "name": "Algorithms",
-            "acronym": "ALG",
-            "class_type": "Course",
-            "professor": "Dr. X",
-            "room": "204",
-            "credits": 6,
-            "parity": "all",
-            "enrolled": 1,
-            "created_at": _now(),
-            "updated_at": _now(),
-        },
+    schedule_router.create_class(
+        day="Wednesday", start_time="10:00", end_time="12:00", name="Algorithms",
+        acronym="ALG", class_type_select="Course", class_type_other="",
+        professor_select="__new__", professor_new="Dr. X",
+        room="204", credits="6", parity="all", enrolled="on", project_uid="CS101", conn=conn,
     )
-    db.set_schedule_class_project(conn, cls_uid, "CS101")
-    db.add_object_label(conn, "schedule_class", cls_uid, space_uid)
+    cls_uid = db.list_schedule_class_events(conn)[0]["uid"]
+    db.add_object_label(conn, "event", cls_uid, space_uid)
     return cls_uid
 
 
 def _expected_next(cls_uid, conn):
-    cls = db.get_schedule_class(conn, cls_uid)
-    settings = db.get_schedule_settings(conn)
-    return schedule.next_occurrence(cls, settings, [], date.today())
+    event = db.get_event(conn, cls_uid)
+    return schedule.next_occurrence_for_event(event, date.today())
 
 
 class TestEducationCalendarBadges:
@@ -127,17 +119,11 @@ class TestEducationCalendarBadges:
         # A plain (non-Space, generate_space=0) label with the same class
         # setup -- no education-module flag means no badges.
         db.upsert_label_config(conn, {"name": "Side", "generate_space": 0, "color": "blue", "created_at": _now()})
-        cls_uid = "c1"
-        db.upsert_schedule_class(
-            conn,
-            {
-                "uid": cls_uid, "day": "Wednesday", "start_time": "10:00", "end_time": "12:00",
-                "name": "Algorithms", "acronym": "ALG", "class_type": "Course", "professor": "",
-                "room": "", "credits": 6, "parity": "all", "enrolled": 1,
-                "created_at": _now(), "updated_at": _now(),
-            },
+        schedule_router.create_class(
+            day="Wednesday", start_time="10:00", end_time="12:00", name="Algorithms",
+            acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
+            room="", credits="6", parity="all", enrolled="on", project_uid="Side", conn=conn,
         )
-        db.set_schedule_class_project(conn, cls_uid, "Side")
         resp = calendar_router.month_view(_request(), label="Side", conn=conn)
         assert resp.context["schedule_next_lectures"] == []
 

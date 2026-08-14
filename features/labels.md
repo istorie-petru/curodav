@@ -23,12 +23,14 @@ One page for both cases via `_label_scope`:
 - a plain label is a **project-style page**.
 
 Both render the shared widget grid (`_widget_workspace.html`, scoped to the
-label), plus page-specific sections: Course info (linked schedule classes +
-professor mailto) and Homework table (`_project_university_section.html`),
-"Next lecture" badges, and its own banner. `enabled_modules` (schedule/grades/
-homework/tasks/events/contacts) gates which sections render; the widget grid is
-never gated by it.
+label), plus page-specific sections: Course info (this label's own recurring
+class-meeting events + professor mailto — see `features/schedule.md`, 1.6
+turned these from a dedicated `schedule_classes` query into
+`db.list_schedule_class_events` + `routers/schedule.py::_class_row`) and
+Homework table (`_project_university_section.html`), "Next lecture" badges,
+and its own banner. Every section just renders whenever it has matching data;
+there's no `enabled_modules`-style gate anymore (removed 2026-08-08).
 
 Creating a schedule class auto-provisions a label named after the course (blue,
-book-open icon) under the inferred Space label
-(`_auto_provision_university_project`).
+book-open icon, `is_project=1`) under the inferred Space label
+(`routers/schedule.py::_auto_provision_course_label`).

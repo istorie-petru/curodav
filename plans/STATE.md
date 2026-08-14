@@ -119,13 +119,37 @@ session, right before the final commit of that session.
   work-allocation distinction," 8 new tests (`test_task_scheduled_
   column.py`), full suite 1025 passed. **1.5 is now fully shipped**
   (`pyproject.toml` bumped to `1.5.0`).
-- **Next slice:** `1.6` — Schedule & recurrence rework (`roadmap.md`'s 1.6
-  row, `open-priority.md` § Schedule & recurrence rework): courses as
-  project labels + recurring events, generalized non-working-day policy,
-  named holiday calendars, manual occurrence exceptions, configurable
-  terminology. `open.md`'s Command palette actions follow-up (1.2 side
-  work) and 1.4's optional Project check-in side work are both still fine
-  smaller, self-contained slices instead, whenever a session wants one.
+- **Shipped:** `1.6` slice — **Classes as project labels + recurring
+  events**, complete (2026-08-14) — `schedule_classes` dropped from
+  `SCHEMA_SQL` entirely (`db.py`'s removal note); a class meeting (lecture,
+  seminar, ...) is now a real recurring `events` row tagged with the
+  per-install Schedule system label plus its course's `is_project=1`
+  label, instead of a separate mirrored-from entity. `label_config` gained
+  four sparse course-only fields (`course_acronym`/`course_type`/
+  `course_credits`/`course_professor_contact_uid` — the facts that
+  describe a course, not any one meeting, and have no VEVENT property to
+  round-trip through); day/parity are derived from the event's own
+  `start_at`/`recurrence` (`schedule.event_day`/`event_parity`), never
+  stored. `routers/schedule.py` rewritten to read/write real events
+  end-to-end; `schedule_classes.html`/`schedule_class_form.html` needed no
+  template changes at all (`_class_row` builds the same enriched shape the
+  old schedule_classes row used to be). `scripts/migrate_schedule_
+  classes_to_events.py` (idempotent, `--dry-run`) converts any pre-1.6
+  database's existing rows. See `features/schedule.md`. Full suite 1042
+  passed (new `test_migrate_schedule_classes_to_events.py`, a rewritten
+  `test_schedule.py`, and several other test files updated off the
+  removed `db.upsert_schedule_class` test-seeding helper).
+- **Next slice:** `1.6` continues — Generalized non-working-day policy +
+  named holiday calendars (`open-priority.md` § Schedule & recurrence
+  rework, "Generalized recurrence and the non-working-day policy"):
+  replace the flat `schedule_holidays` date-range list with named,
+  reusable calendars (e.g. `Romania`/`University`/`Personal`) a recurring
+  event references, plus independent `exclude_saturday`/`exclude_sunday`
+  constraints — foundational for the still-open "manual recurrence
+  exceptions" and "configurable terminology" subsections after it.
+  `open.md`'s Command palette actions follow-up (1.2 side work) and 1.4's
+  optional Project check-in side work are both still fine smaller,
+  self-contained slices instead, whenever a session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -204,7 +204,11 @@ def export_schedule_json(conn=Depends(get_db)):
         "schedule.json",
         {
             "settings": db.get_schedule_settings(conn),
-            "classes": db.list_schedule_classes(conn),
+            # 1.6: a class is a real recurring event now (tagged with the
+            # Schedule system label) -- db.list_schedule_class_events reads
+            # exactly those, in place of the old dedicated schedule_classes
+            # table this key used to be a straight dump of.
+            "classes": db.list_schedule_class_events(conn),
             "holidays": db.list_holidays(conn),
         },
     )
@@ -230,7 +234,8 @@ def export_data_json(conn=Depends(get_db)):
             "contacts": db.list_contacts(conn),
             "labels": db.list_labels(conn),
             "object_labels": _export_object_labels(conn),
-            "schedule_classes": db.list_schedule_classes(conn),
+            # 1.6: no more "schedule_classes" key -- a class is a real
+            # event now, already covered by the "events" key above.
             "schedule_holidays": db.list_holidays(conn),
             "schedule_settings": db.get_schedule_settings(conn),
             "task_completions": db.list_task_completions(conn),
@@ -341,8 +346,13 @@ def _restore(conn, payload: dict[str, Any]) -> int:
         db.upsert_label_config(conn, row)
     for row in payload.get("object_labels", []):
         db.add_object_label(conn, row["object_type"], row["object_id"], row["label_name"])
-    for row in payload.get("schedule_classes", []):
-        db.upsert_schedule_class(conn, row)
+    # 1.6 (Schedule & recurrence rework): no more `payload.get(
+    # "schedule_classes", [])` restore loop -- a class is a real event now
+    # (already restored by the "events" loop above), and db.upsert_
+    # schedule_class no longer exists. A backup file from before this
+    # rework that still carries a "schedule_classes" key simply has that
+    # key ignored on restore now, same "old key silently ignored" treatment
+    # every other removed feature gets here (see the "grades" note below).
     for row in payload.get("schedule_holidays", []):
         db.upsert_holiday(conn, row)
     settings = payload.get("schedule_settings")

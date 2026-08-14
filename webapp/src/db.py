@@ -308,6 +308,23 @@ CREATE TABLE IF NOT EXISTS label_config (
     start_date TEXT,
     end_date TEXT,
     archived_at TEXT,
+    -- 1.6 (Schedule & recurrence rework, plans/open-priority.md § Schedule
+    -- & recurrence rework, "Classes as project labels + recurring
+    -- events"): a university course no longer gets its own `schedule_
+    -- classes` entity -- it's a project-enabled label whose recurring
+    -- lectures/seminars/etc. are ordinary recurring `events` tagged with
+    -- it (see schedule.py/routers/schedule.py). The four fields that
+    -- genuinely describe the *course* rather than any one meeting
+    -- (acronym, type, credits, instructor) round-trip through no VEVENT
+    -- property, so per §1.4's rule they live here as sparse label config
+    -- -- the same place start_date/end_date/is_project already put
+    -- 1.3's project-level facts -- not on `events`. Meaningless (and
+    -- simply unset) for a label that isn't a course; a course is just
+    -- "a project label someone happened to fill these in for."
+    course_acronym TEXT,
+    course_type TEXT,
+    course_credits REAL,
+    course_professor_contact_uid TEXT,
     created_at TEXT
 );
 
@@ -317,43 +334,22 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(full_name);
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
 
--- Schedule ("repeat endlessly between dates, excepting certain dates" --
--- university/school timetables). Local-only: there's no standard CalDAV
--- object type for a recurring-class-with-parity-and-credits, so this is
--- the authoritative structured store. Each class additionally gets
--- mirrored one-way into `events` (and Radicale) as a plain VEVENT with an
--- RRULE + computed EXDATEs, purely so it shows up in any calendar client
--- (including this app's own Calendar tab) -- that mirrored event is a
--- courtesy export, never parsed back into these columns. See schedule.py.
-CREATE TABLE IF NOT EXISTS schedule_classes (
-    uid TEXT PRIMARY KEY,
-    day TEXT NOT NULL,              -- 'Monday'..'Sunday'
-    start_time TEXT NOT NULL,       -- 'HH:MM'
-    end_time TEXT NOT NULL,         -- 'HH:MM'
-    name TEXT NOT NULL DEFAULT '',
-    acronym TEXT,
-    class_type TEXT,
-    professor TEXT,
-    -- Added 2026-07-31: optional link to a real contact (contacts.uid).
-    -- `professor` stays a plain display-name column (still what
-    -- class_to_event_row folds into the mirrored VEVENT's description --
-    -- see schedule.py) rather than being replaced by a join, so a class
-    -- whose linked contact is later deleted doesn't lose the professor's
-    -- name, just the link. See routers/schedule.py's `_resolve_professor`
-    -- for how a class gets linked: picking an existing contact from the
-    -- dropdown links straight to it; typing a name that doesn't match any
-    -- contact creates a new, mostly-empty one and links to that instead
-    -- -- either way there's always a real contacts.uid on the other end
-    -- once `professor` is non-empty, not just a free-text string.
-    professor_contact_uid TEXT,
-    room TEXT,
-    credits REAL NOT NULL DEFAULT 0,
-    parity TEXT NOT NULL DEFAULT 'all',  -- 'all' | 'odd' | 'even'
-    enrolled INTEGER NOT NULL DEFAULT 1,
-    event_uid TEXT,                 -- uid of the mirrored VEVENT in `events`
-    created_at TEXT,
-    updated_at TEXT
-);
+-- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` is
+-- GONE from a brand-new database's schema -- a university class is no
+-- longer its own entity mirrored one-way into `events`; it's a real
+-- recurring `event`, tagged with its course's project-enabled label
+-- (`is_project=1`), full stop. See schedule.py/routers/schedule.py for the
+-- generation logic and label_config's `course_*` columns above for the
+-- four course-level facts (acronym/type/credits/professor) that used to
+-- live on this table's rows -- those describe the course, not any one
+-- meeting, so they moved to the course's own label_config row instead of
+-- becoming made-up `events` columns (§1.4's "no made-up X- properties"
+-- rule). An existing cache.sqlite from before this migration still
+-- physically has this table and its rows on disk (never force-dropped,
+-- same "don't touch old data automatically" convention as every other
+-- table removal in this file) -- nothing in this module's own code
+-- reads/writes it anymore; see scripts/migrate_schedule_classes_to_events.py
+-- for the one-time conversion of any pre-1.6 rows into real events.
 
 -- 2026-08-07: `grades` (the per-class assessment tracker) removed along
 -- with the rest of the Databases/Grades feature -- see the `databases`/
@@ -562,6 +558,13 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: st
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coldef}")
 
 
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
 def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[str, ...]) -> None:
     """Fix for a real bug (found 2026-08-07 via a live crash report, not a
     test -- the test suite always connects to a brand-new tmp_path
@@ -668,16 +671,23 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
     # Schedule class -> contact link, same "column added after the table
-    # already existed on disk" situation as the others above.
-    _ensure_column(conn, "schedule_classes", "professor_contact_uid", "TEXT")
+    # already existed on disk" situation as the others above. Guarded on
+    # table existence (unlike every other _ensure_column call here) because
+    # 1.6 dropped `schedule_classes` from SCHEMA_SQL entirely -- a brand-new
+    # database never has this table, and _ensure_column's own ALTER TABLE
+    # would error against a table that doesn't exist. Only a pre-1.6
+    # cache.sqlite that still physically carries the table (see that
+    # table's own removal note above) needs this.
+    if _table_exists(conn, "schedule_classes"):
+        _ensure_column(conn, "schedule_classes", "professor_contact_uid", "TEXT")
     # Phase 2 (label-space rework): schedule_classes.project_uid is GONE --
     # a class's optional project link is now an object_labels row
-    # (object_type='schedule_class', see set_schedule_class_project/
-    # get_schedule_class_project below). Existing databases from before
-    # this migration still physically carry the column (never force-
-    # dropped, same "don't touch old data automatically" convention as
-    # every other Phase 1/2 column removal in this file) -- nothing in
-    # this module's own code reads/writes it anymore.
+    # (object_type='schedule_class', see scripts/migrate_schedule_classes_
+    # to_events.py). Existing databases from before this migration still
+    # physically carry the column (never force-dropped, same "don't touch
+    # old data automatically" convention as every other Phase 1/2 column
+    # removal in this file) -- nothing in this module's own code reads/
+    # writes it anymore.
     # Timeline view (Phase 11) -- see timeline_layout.py's module
     # docstring for the full rationale. `timeline_lane` is a task's
     # explicit, user-dragged manual row placement (desktop:
@@ -746,6 +756,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "label_config", "start_date", "TEXT")
     _ensure_column(conn, "label_config", "end_date", "TEXT")
     _ensure_column(conn, "label_config", "archived_at", "TEXT")
+    # 1.6 (Schedule & recurrence rework) -- see the label_config CREATE
+    # TABLE comment above for why these four course-only facts live here
+    # rather than on `events`.
+    _ensure_column(conn, "label_config", "course_acronym", "TEXT")
+    _ensure_column(conn, "label_config", "course_type", "TEXT")
+    _ensure_column(conn, "label_config", "course_credits", "REAL")
+    _ensure_column(conn, "label_config", "course_professor_contact_uid", "TEXT")
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -1144,7 +1161,11 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
     itself without manual cleanup there."""
     tables = [
         "events", "tasks", "contacts", "task_checklist_items",
-        "event_task_relations", "object_labels", "label_config", "schedule_classes",
+        "event_task_relations", "object_labels", "label_config",
+        # 1.6: schedule_classes dropped from SCHEMA_SQL (see its removal
+        # note above) -- a brand-new database never has this table, so it's
+        # no longer in this list. schedule_holidays/schedule_settings stay;
+        # 1.6 didn't touch either (see plans/STATE.md's next-slice note).
         "schedule_holidays", "schedule_settings", "habits",
         "habit_entries", "task_completions", "dashboard_widgets",
         "published_lists", "app_meta",
@@ -1920,84 +1941,50 @@ def find_contact_by_name(conn: sqlite3.Connection, full_name: str) -> dict[str, 
 
 
 # --------------------------------------------------------------------- #
-# Schedule (classes / holidays / settings) -- local-only, see schema note
+# Schedule (class events / holidays / settings) -- see the SCHEMA_SQL
+# removal note above `schedule_classes` used to live at: 1.6 (Schedule &
+# recurrence rework) turned a class into a real recurring `events` row
+# tagged with the per-install Schedule system label
+# (`schedule_settings.schedule_label`) plus its course's project label,
+# instead of its own local-only entity. There is no more schedule_classes
+# table for a new database, so there's no more dedicated CRUD here either
+# -- a class event is created/read/updated/deleted via the ordinary
+# upsert_event/get_event/delete_event above, same as any other event.
+# list_schedule_class_events below is the one addition: the query a class
+# needs that a plain event doesn't (find every event carrying the
+# Schedule label, optionally narrowed to one course).
 # --------------------------------------------------------------------- #
 
-_SCHEDULE_DAY_ORDER = "CASE day WHEN 'Monday' THEN 0 WHEN 'Tuesday' THEN 1 WHEN 'Wednesday' THEN 2 WHEN 'Thursday' THEN 3 WHEN 'Friday' THEN 4 WHEN 'Saturday' THEN 5 WHEN 'Sunday' THEN 6 ELSE 7 END"
 
-
-def upsert_schedule_class(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
-    cols = [
-        "uid", "day", "start_time", "end_time", "name", "acronym",
-        "class_type", "professor", "professor_contact_uid", "room", "credits", "parity", "enrolled",
-        "event_uid", "created_at", "updated_at",
-    ]
-    data = dict(row)
-    data["enrolled"] = 1 if data.get("enrolled", True) else 0
-    values = [data.get(c) for c in cols]
-    placeholders = ", ".join("?" for _ in cols)
-    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
-    conn.execute(
-        f"INSERT INTO schedule_classes ({', '.join(cols)}) VALUES ({placeholders}) "
-        f"ON CONFLICT(uid) DO UPDATE SET {updates}",
-        values,
-    )
-    conn.commit()
-
-
-def set_schedule_class_project(conn: sqlite3.Connection, uid: str, project_uid: str | None) -> None:
-    """Phase 2 (label-space rework): a class's optional project link is now
-    an `object_labels` row (object_type='schedule_class') instead of its
-    own `project_uid` column -- `project_uid` here is a label name, kept
-    as the parameter name so every caller (routers/schedule.py) needed no
-    renaming. Thin wrapper over set_object_project_label_uniform (habit/
-    database share the exact same logic as of 2026-08-06)."""
-    set_object_project_label_uniform(conn, "schedule_class", uid, project_uid)
-
-
-def delete_schedule_class(conn: sqlite3.Connection, uid: str) -> None:
-    conn.execute("DELETE FROM schedule_classes WHERE uid = ?", (uid,))
-    conn.execute("DELETE FROM object_labels WHERE object_type = 'schedule_class' AND object_id = ?", (uid,))
-    conn.commit()
-
-
-def _schedule_class_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
-    d["enrolled"] = bool(d["enrolled"])
-    d["tags"] = list_labels_for_object(conn, "schedule_class", d["uid"])
-    d["project_uid"] = project_label_for(conn, "schedule_class", d["uid"])
-    return d
-
-
-def get_schedule_class(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM schedule_classes WHERE uid = ?", (uid,)).fetchone()
-    return _schedule_class_row_to_dict(conn, row) if row is not None else None
-
-
-def list_schedule_classes(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def list_course_types(conn: sqlite3.Connection) -> list[str]:
+    """Distinct `course_type` values already used across this user's own
+    course labels (label_config.course_type -- see that table's CREATE
+    comment) -- powers the class form's Type field dropdown, which
+    otherwise has no fixed vocabulary of its own. Same "query what's
+    actually been typed before" idiom the pre-1.6 `list_schedule_class_
+    types` used, just reading label_config instead of schedule_classes."""
     rows = conn.execute(
-        f"SELECT * FROM schedule_classes ORDER BY {_SCHEDULE_DAY_ORDER}, start_time"
+        "SELECT DISTINCT course_type FROM label_config "
+        "WHERE course_type IS NOT NULL AND course_type != '' "
+        "ORDER BY course_type COLLATE NOCASE"
     ).fetchall()
-    return [_schedule_class_row_to_dict(conn, r) for r in rows]
+    return [r["course_type"] for r in rows]
 
 
-def list_schedule_class_types(conn: sqlite3.Connection) -> list[str]:
-    """Distinct `class_type` values already used across this user's own
-    classes (2026-08-07, modal-input-design Phase E) -- powers the Class
-    type field's segmented control on schedule_class_form.html, which
-    otherwise has no fixed vocabulary of its own (unlike Priority/Day/
-    Parity): this queries what's actually been typed before instead of
-    hardcoding a guess at what a school calls "Course"/"Seminar"/"Lab".
-    Ordered alphabetically (COLLATE NOCASE, same as the label-name lists
-    above) rather than by frequency -- simpler, stable across edits, and
-    matches how every other "list of existing values" picker in this app
-    (labels, tags) is already ordered."""
-    rows = conn.execute(
-        "SELECT DISTINCT class_type FROM schedule_classes "
-        "WHERE class_type IS NOT NULL AND class_type != '' "
-        "ORDER BY class_type COLLATE NOCASE"
-    ).fetchall()
-    return [r["class_type"] for r in rows]
+def list_schedule_class_events(
+    conn: sqlite3.Connection, course_label: str | None = None
+) -> list[dict[str, Any]]:
+    """Every real recurring event that's a class meeting -- carries the
+    per-install Schedule system label (default 'Schedule'). Optionally
+    narrowed to one course's own meetings. Plain Python filter over
+    list_events (each row already carries its tags via _attach_tags), same
+    idiom routers/labels.py's `_label_scope` already uses for a label's
+    generated page."""
+    schedule_label = get_schedule_settings(conn).get("schedule_label") or "Schedule"
+    events = [e for e in list_events(conn) if schedule_label in (e.get("tags") or [])]
+    if course_label:
+        events = [e for e in events if course_label in (e.get("tags") or [])]
+    return events
 
 
 # 2026-08-07: the Grades accessor functions (upsert_grade/get_grade/
@@ -2215,6 +2202,10 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "start_date": None,
     "end_date": None,
     "archived_at": None,
+    "course_acronym": None,
+    "course_type": None,
+    "course_credits": None,
+    "course_professor_contact_uid": None,
     "created_at": None,
 }
 
@@ -2268,6 +2259,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         "generate_space", "dashboard_preset_json", "abbreviation",
         "importance", "urgency_threshold_days",
         "is_project", "start_date", "end_date", "archived_at",
+        "course_acronym", "course_type", "course_credits", "course_professor_contact_uid",
         "created_at",
     )
     existing = get_label_config(conn, row["name"]) or {}

@@ -1,10 +1,11 @@
 """Unit tests for schedule.py's recurrence/exdate/conflict logic -- no
-network needed. See test_caldav_bridge_live.py for the pattern used to
-test the live Radicale integration side; the Schedule feature's live path
-(class -> mirrored VEVENT -> Radicale) is exercised manually in the
-smoke test described in the PR/commit notes, not duplicated here since
-routers/schedule.py's `_regenerate_class_event` is a thin wrapper around
-already-tested `class_to_event_row` + already-tested `caldav_bridge`.
+network needed. 1.6 (Schedule & recurrence rework) replaced class_to_
+event_row (schedule_classes row -> mirrored VEVENT) with build_class_
+event_row (day/time/parity/title/room fields -> the class meeting's own
+real recurring event -- there's no separate class entity anymore, see
+schedule.py's module docstring). Router-level behavior (a class event's
+course label, label_config course_* fields, tag wiring) is exercised in
+test_schedule_router.py instead of here.
 """
 
 from __future__ import annotations
@@ -12,13 +13,16 @@ from __future__ import annotations
 from datetime import date
 
 from src.schedule import (
-    class_to_event_row,
+    build_class_event_row,
     compute_conflicts,
     compute_excluded,
-    credits_summary,
+    event_day,
+    event_parity,
     first_occurrence,
     generate_occurrences,
     iso_week_parity,
+    next_label,
+    next_occurrence_for_event,
 )
 
 
@@ -60,96 +64,147 @@ class TestComputeExcluded:
         assert compute_excluded(occs, []) == []
 
 
-class TestClassToEventRow:
-    BASE_CLASS = {
+class TestBuildClassEventRow:
+    BASE_FIELDS = {
         "uid": "c1",
-        "event_uid": None,
         "day": "Tuesday",
         "start_time": "10:00",
         "end_time": "12:00",
-        "name": "Algorithms",
-        "acronym": "ALG",
-        "class_type": "Course",
-        "professor": "Dr. X",
+        "title": "Algorithms",
         "room": "204",
-        "credits": 6,
         "parity": "all",
         "enrolled": True,
     }
 
-    def test_returns_none_without_semester_dates(self):
-        assert class_to_event_row(self.BASE_CLASS, {}, []) is None
+    def test_no_semester_dates_still_returns_a_row_anchored_on_today(self):
+        # 1.6: there's no separate schedule_classes row anymore, so a class
+        # entered before semester dates are configured still needs
+        # somewhere to live -- an open-ended (no UNTIL), today-anchored
+        # event rather than None.
+        row = build_class_event_row(self.BASE_FIELDS, {}, [], today=date(2026, 9, 1))
+        assert row["uid"] == "c1"
+        assert row["start_at"] == "2026-09-01T10:00:00"
+        assert "UNTIL" not in row["recurrence"]
+        assert row["exdates"] == []
 
     def test_builds_row_with_rrule_and_exdates(self):
-        settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22", "reminder_minutes": 15}
+        settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22"}
         holidays = [{"label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"}]
-        row = class_to_event_row(self.BASE_CLASS, settings, holidays)
+        row = build_class_event_row(self.BASE_FIELDS, settings, holidays)
 
         assert row["uid"] == "c1"
         assert row["start_at"] == "2026-09-01T10:00:00"
         assert row["end_at"] == "2026-09-01T12:00:00"
         assert row["location"] == "204"
-        assert "Professor: Dr. X" in row["description"]
+        assert row["title"] == "Algorithms"
         assert row["exdates"] == ["2026-09-15T10:00:00"]
         assert row["recurrence"] == "FREQ=WEEKLY;UNTIL=2026-09-22"
-        # 2026-08-08: the tag is a real per-install setting now
-        # (schedule_label, default "Schedule"), not a hardcoded literal --
-        # this settings dict doesn't set one, so class_to_event_row falls
-        # back to the same default get_schedule_settings would return.
-        assert row["tags"] == ["Schedule"]
-
-    def test_schedule_label_setting_is_used_as_the_tag(self):
-        settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22", "schedule_label": "University"}
-        row = class_to_event_row(self.BASE_CLASS, settings, [])
-        assert row["tags"] == ["University"]
 
     def test_odd_even_parity_adds_interval(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-12-20"}
-        row = class_to_event_row(dict(self.BASE_CLASS, parity="odd"), settings, [])
+        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings, [])
         assert "INTERVAL=2" in row["recurrence"]
 
     def test_disenrolled_class_maps_to_archived_status(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-12-20"}
-        row = class_to_event_row(dict(self.BASE_CLASS, enrolled=False), settings, [])
+        row = build_class_event_row(dict(self.BASE_FIELDS, enrolled=False), settings, [])
         assert row["status"] == "archived"
 
-    def test_semester_too_short_for_parity_returns_none(self):
-        # Semester ends before the first 'odd'-parity Tuesday would land.
+    def test_semester_too_short_for_parity_excludes_the_only_occurrence(self):
+        # Semester ends before the first 'odd'-parity Tuesday would land --
+        # the meeting itself still exists (editable/reschedulable), just
+        # with its one placeholder occurrence excluded outright.
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-02"}
-        row = class_to_event_row(dict(self.BASE_CLASS, parity="odd"), settings, [])
-        assert row is None
+        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings, [])
+        assert row["start_at"] in row["exdates"]
 
 
-class TestConflictsAndCredits:
-    def _cls(self, **overrides):
-        base = dict(
-            uid="x", day="Tuesday", start_time="10:00", end_time="12:00",
-            parity="all", enrolled=True, credits=6,
-        )
-        base.update(overrides)
-        return base
+class TestDeriveDayAndParity:
+    def test_event_day_reads_start_at_weekday(self):
+        event = {"start_at": "2026-09-01T10:00:00"}  # Tuesday
+        assert event_day(event) == "Tuesday"
+
+    def test_event_day_none_without_start_at(self):
+        assert event_day({}) is None
+
+    def test_event_parity_all_for_plain_weekly_rule(self):
+        event = {"start_at": "2026-09-01T10:00:00", "recurrence": "FREQ=WEEKLY;UNTIL=2026-12-01"}
+        assert event_parity(event) == "all"
+
+    def test_event_parity_derived_from_interval_and_anchor_week(self):
+        # 2026-09-01 is ISO week 36 (even)
+        event = {"start_at": "2026-09-01T10:00:00", "recurrence": "FREQ=WEEKLY;INTERVAL=2;UNTIL=2026-12-01"}
+        assert event_parity(event) == "even"
+
+
+class TestNextOccurrenceForEvent:
+    def test_finds_next_occurrence_honoring_rrule_and_exdate(self):
+        event = {
+            "uid": "c1",
+            "title": "Algorithms",
+            "description": "",
+            "start_at": "2026-09-01T10:00:00",
+            "end_at": "2026-09-01T12:00:00",
+            "all_day": False,
+            "recurrence": "FREQ=WEEKLY;UNTIL=2026-09-22",
+            "exdates": ["2026-09-08T10:00:00"],
+        }
+        nxt = next_occurrence_for_event(event, today=date(2026, 9, 2))
+        assert nxt == date(2026, 9, 15)  # 9/8 excluded
+
+    def test_none_past_the_last_occurrence(self):
+        event = {
+            "uid": "c1",
+            "title": "Algorithms",
+            "description": "",
+            "start_at": "2026-09-01T10:00:00",
+            "end_at": "2026-09-01T12:00:00",
+            "all_day": False,
+            "recurrence": "FREQ=WEEKLY;UNTIL=2026-09-01",
+            "exdates": [],
+        }
+        assert next_occurrence_for_event(event, today=date(2026, 9, 2)) is None
+
+
+class TestNextLabel:
+    def test_today_tomorrow_and_relative(self):
+        today = date(2026, 9, 1)
+        assert next_label(date(2026, 9, 1), today) == "today"
+        assert next_label(date(2026, 9, 2), today) == "tomorrow"
+        assert next_label(date(2026, 9, 5), today) == "in 4 days"
+
+
+class TestConflicts:
+    def _event(self, uid, day="Tuesday", start="10:00", end="12:00", parity="all", status="active"):
+        anchor = {"Monday": "08-31", "Tuesday": "09-01"}.get(day, "09-01")
+        return {
+            "uid": uid,
+            "title": uid,
+            "description": "",
+            "start_at": f"2026-{anchor}T{start}:00",
+            "end_at": f"2026-{anchor}T{end}:00",
+            "all_day": False,
+            "status": status,
+            "recurrence": "FREQ=WEEKLY" if parity == "all" else "FREQ=WEEKLY;INTERVAL=2",
+            "exdates": [],
+        }
 
     def test_overlapping_same_parity_conflicts(self):
-        a = self._cls(uid="a", start_time="10:00", end_time="12:00")
-        b = self._cls(uid="b", start_time="11:00", end_time="13:00")
+        a = self._event("a", start="10:00", end="12:00")
+        b = self._event("b", start="11:00", end="13:00")
         assert len(compute_conflicts([a, b])) == 1
 
     def test_non_overlapping_times_no_conflict(self):
-        a = self._cls(uid="a", start_time="10:00", end_time="12:00")
-        b = self._cls(uid="b", start_time="12:00", end_time="14:00")
+        a = self._event("a", start="10:00", end="12:00")
+        b = self._event("b", start="12:00", end="14:00")
         assert compute_conflicts([a, b]) == []
 
-    def test_alternating_odd_even_never_conflicts(self):
-        a = self._cls(uid="a", parity="odd")
-        b = self._cls(uid="b", parity="even")
+    def test_different_days_no_conflict(self):
+        a = self._event("a", day="Monday")
+        b = self._event("b", day="Tuesday")
         assert compute_conflicts([a, b]) == []
 
     def test_disenrolled_classes_excluded_from_conflicts(self):
-        a = self._cls(uid="a", enrolled=False)
-        b = self._cls(uid="b")
+        a = self._event("a", status="archived")
+        b = self._event("b")
         assert compute_conflicts([a, b]) == []
-
-    def test_credits_summary_only_counts_enrolled(self):
-        a = self._cls(uid="a", credits=6, enrolled=True)
-        b = self._cls(uid="b", credits=4, enrolled=False)
-        assert credits_summary([a, b]) == 6

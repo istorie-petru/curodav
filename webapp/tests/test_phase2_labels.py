@@ -288,7 +288,8 @@ class TestScheduleClassesFilterByLabel:
             acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
             room="204", credits="6", parity="all", enrolled="on", project_uid="CS101", conn=conn,
         )
-        cls = next(c for c in db.list_schedule_classes(conn) if c["name"] == "Algorithms")
+        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
+        cls = schedule_router._class_row(conn, event)
         assert cls["project_uid"] == "CS101"
         assert "CS101" in cls["tags"]
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
@@ -300,21 +301,20 @@ class TestScheduleClassesFilterByLabel:
         # nested under it AND the class itself should carry the Space
         # label directly too (direct assignment only, §2/§5).
         db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        existing_uid = "existing-class"
-        db.upsert_schedule_class(conn, {
-            "uid": existing_uid, "day": "Tuesday", "start_time": "08:00", "end_time": "09:30",
-            "name": "Existing", "credits": 0, "parity": "all", "enrolled": True,
-            "created_at": _now(), "updated_at": _now(),
-        })
-        db.set_schedule_class_project(conn, existing_uid, "Existing")
-        db.add_object_label(conn, "schedule_class", existing_uid, "University")
+        schedule_router.create_class(
+            day="Tuesday", start_time="08:00", end_time="09:30", name="Existing",
+            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
+            room="", credits="0", parity="all", enrolled="on", project_uid="", conn=conn,
+        )
+        db.add_object_label(conn, "event", db.list_schedule_class_events(conn)[0]["uid"], "University")
 
         schedule_router.create_class(
             day="Wednesday", start_time="10:00", end_time="11:30", name="Algorithms",
             acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
             room="", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
         )
-        cls = next(c for c in db.list_schedule_classes(conn) if c["name"] == "Algorithms")
+        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
+        cls = schedule_router._class_row(conn, event)
         assert "University" in cls["tags"]
         assert db.get_label_config(conn, "Algorithms")["parent_name"] == "University"
 
@@ -359,6 +359,16 @@ class TestMigrationExtensions:
         assert "CS101" in db.get_habit(conn, "h1")["tags"]
 
     def test_schedule_classes_project_uid_backfilled_as_a_real_tag(self, conn):
+        # 1.6 dropped `schedule_classes` from SCHEMA_SQL entirely (see
+        # db.py's removal note) -- this test simulates a genuinely pre-1.6
+        # database that still physically has the table on disk, which
+        # migrate_labels.py's _PROJECT_LINKED_SOURCES still knows how to
+        # read (that legacy migration path is unaffected by 1.6; it's
+        # about *labels*, not about how a class is represented today).
+        conn.execute(
+            "CREATE TABLE schedule_classes (uid TEXT PRIMARY KEY, day TEXT, start_time TEXT, "
+            "end_time TEXT, name TEXT, credits REAL, parity TEXT, enrolled INTEGER, created_at TEXT, updated_at TEXT)"
+        )
         conn.execute("CREATE TABLE project_groups (uid TEXT PRIMARY KEY, name TEXT, color TEXT, created_at TEXT)")
         conn.execute("CREATE TABLE projects (uid TEXT PRIMARY KEY, name TEXT, description TEXT, color TEXT, group_uid TEXT, created_at TEXT, updated_at TEXT)")
         conn.execute("INSERT INTO projects VALUES ('p1', 'CS101', '', 'blue', NULL, ?, ?)", (_now(), _now()))

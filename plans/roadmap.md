@@ -156,6 +156,19 @@ rework): courses become project labels + recurring events; generalized
 non-working-day policy, named holiday calendars, manual occurrence exceptions,
 and configurable terminology.
 
+- ~~Classes as project labels + recurring events~~ **shipped 2026-08-14** —
+  `schedule_classes` dropped from `SCHEMA_SQL` entirely; a class meeting is a
+  real recurring `events` row tagged with the Schedule system label + its
+  course's `is_project=1` label. Course-only facts (acronym/type/credits/
+  professor) moved to that label's own `label_config` row
+  (`course_acronym`/`course_type`/`course_credits`/
+  `course_professor_contact_uid`); day/parity are derived from the event's
+  own `start_at`/`recurrence`, never stored. `scripts/migrate_schedule_
+  classes_to_events.py` converts any pre-1.6 database. See
+  `features/schedule.md`. Still open: generalized non-working-day policy +
+  named holiday calendars, manual occurrence exceptions, configurable
+  terminology.
+
 Side work: **Configurable views + optional Schedule module** — best landed now
 that the reworked views are stable, since it toggles them.
 

@@ -3,8 +3,9 @@ entirely and the Space/Project-management half of the old
 `routers/projects.py`. See `features/architecture.md` §0/§2/§3 Phase 2
 for the full model: a label is not an entity with a lifecycle (no
 create/delete workflow, no cascading-delete concerns) -- it's a name that
-tasks/events/contacts/habits/schedule_classes point at via the one
-`object_labels` join table. Any color/icon/behavior config is a thin,
+tasks/events/contacts/habits point at via the one `object_labels` join
+table (1.6 dropped schedule_classes from that list -- a class is a real
+event now, see schedule.py's module docstring). Any color/icon/behavior config is a thin,
 optional dict keyed by the label's name (`label_config`), not a row other
 tables hold a hard foreign key into.
 
@@ -49,6 +50,7 @@ from fastapi.responses import RedirectResponse
 from .. import db, schedule
 from ..deps import get_db, templates
 from . import dashboard as dashboard_router
+from . import schedule as schedule_router
 from .tasks import STATUS_COLORS, STATUS_LABELS
 
 router = APIRouter(prefix="/labels", tags=["labels"])
@@ -287,18 +289,27 @@ def set_label(
 
 
 def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact/schedule_class directly tagged with `name`
-    -- the "centralizes all tasks, events, contacts, classes" behavior the
-    old project/space detail pages had, now driven off object_labels
-    instead of project_uid/task_lists/calendars/addressbooks.
+    """Every task/event/contact/class directly tagged with `name` -- the
+    "centralizes all tasks, events, contacts, classes" behavior the old
+    project/space detail pages had, now driven off object_labels instead
+    of project_uid/task_lists/calendars/addressbooks.
 
     2026-08-07: no more `databases` key here -- the Databases feature (and
     Grades, which was built on it) is removed entirely, not just
-    unlinked. See _project_university_section.html's own removal note."""
+    unlinked. See _project_university_section.html's own removal note.
+
+    1.6 (Schedule & recurrence rework): `classes` is no longer a dedicated
+    schedule_classes query -- a class is a real recurring event tagged with
+    both the Schedule system label and this course label
+    (db.list_schedule_class_events), enriched into the same day/acronym/
+    professor/credits/parity shape routers/schedule.py's Table view uses
+    (schedule_router._class_row) so _project_university_section.html and
+    schedule.next_occurrence needed no changes at all."""
     tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
     events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
     contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
-    classes = [c for c in db.list_schedule_classes(conn) if name in (c.get("tags") or [])]
+    class_events = db.list_schedule_class_events(conn, course_label=name)
+    classes = [schedule_router._class_row(conn, e) for e in class_events]
 
     return {
         "tasks": tasks,
@@ -369,12 +380,15 @@ def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(g
                 professor_contacts[puid] = contact
     ctx["professor_contacts"] = professor_contacts
 
-    settings = db.get_schedule_settings(conn)
-    holidays = db.list_holidays(conn)
+    # 1.6: next-occurrence is read straight off each class's own recurring
+    # event (RRULE + EXDATE), not re-derived from settings/holidays --
+    # schedule.next_occurrence_for_event reuses the same recurrence_expand
+    # machinery the Calendar tab itself expands with.
     next_lecture: dict[str, dict] = {}
     today = date.today()
     for cl in scope["classes"]:
-        next_date = schedule.next_occurrence(cl, settings, holidays, today)
+        event = db.get_event(conn, cl["uid"])
+        next_date = schedule.next_occurrence_for_event(event, today) if event else None
         if next_date:
             next_lecture[cl["uid"]] = {"date": next_date, "label": _next_label(next_date, today)}
     ctx["class_next_lecture"] = next_lecture

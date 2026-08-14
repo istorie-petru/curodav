@@ -11,7 +11,7 @@
     <div class="education-next-lectures-row">
         {% for b in schedule_next_lectures %}
         <span class="cell-tag cal-{{ b.class.color or 'blue' }}">
-            {{ b.class.acronym or b.class.name }}
+            {{ b.class.acronym or b.class.title }}
             <span class="education-next-label">{{ b.label }}</span>
             <span class="education-next-date">{{ b.date.strftime('%a %b %d') }}</span>
         </span>
