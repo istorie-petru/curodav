@@ -1063,9 +1063,49 @@ of it:
    local writes anywhere (slice 5) — this slice is read-only, same
    boundary as `ofline-first-pwa.md`'s "viewing... should be executed
    locally" without yet covering "creating and editing."
-5. **Local write path + outbox** — offline create/edit/delete queues as ops
-   (§2) instead of failing; still no sync engine, so pending changes just
-   accumulate.
+5. **Local write path + outbox** — **shipped 2026-08-14.** New
+   `static/offline_write.js`: offline create/complete/delete on a task now
+   queues a real §2 op (`createTask`/`updateTaskField`/`deleteTask`) into a
+   new IndexedDB `outbox` store (`offline_db.js`'s `enqueueOp`/
+   `getOutboxOps`/`getOutboxCount`) instead of failing, and applies it
+   immediately to the local mirror through the exact same per-field-HLC-
+   wins path a pull already uses (`applyChanges`) -- an optimistic,
+   same-device write can never lose to itself, since a freshly minted HLC
+   is always newer than anything already stored for that field.
+   `offline_db.js` also gained this device's own §3 HLC clock -- nothing
+   through slice 4 ever needed to *mint* an HLC, only apply server-supplied
+   ones from pull(): `nextHlc()` (bump the logical counter within the same
+   millisecond, else reset against the new physical time) and `mergeHlc()`
+   (the receive-side half, called by `offline_sync_client.js` after every
+   pull so a write minted afterward always sorts strictly after everything
+   just observed from the server). `create` stamps every field with one
+   shared HLC per §2's own "stamped with one HLC" line; a `field_set`
+   shares its HLC with the `updated_at` write that rides along with it.
+   Deliberately scoped to tasks only (create/mark-complete/delete) --
+   events/contacts get no offline write UI yet, matching this slice's own
+   "extends local-read coverage" framing rather than rebuilding every
+   entity type's write surface at once. `/offline`'s task list
+   (`offline_shell.js`) gained an inline "add a task" form and per-row
+   complete/delete buttons (reusing `.checklist-check`/`.checklist-delete`,
+   the same interactive-row classes `task_detail.html`'s own checklist
+   widget already established, rather than a new style), plus an honest
+   "N local changes saved on this device, waiting for sync support" note
+   driven straight off the outbox count -- no claim that anything syncs
+   yet, since slice 6 is what will. A device that has never completed a
+   pull can now still create its very first task offline (slice 4's
+   render-nothing-until-`lastSynced` gate was removed for the task
+   section; only the events list, still read-only, keeps that gate since
+   there's no offline way to create one). Found and fixed a real bug via a
+   one-off Node + fake-indexeddb smoke script (same pattern as slice 4's,
+   not added to the pytest suite): `getOutboxOps()`'s plain
+   `objectStore.getAll()` returned ops in IndexedDB's default key-order
+   (the store's keyPath is a random `op_id` UUID), not the order they were
+   queued -- fixed by sorting explicitly on each op's own top-level `hlc`
+   (also newly stamped onto `create`/`field_set` ops, not just `delete`,
+   for exactly this reason). `sw.js`'s precache list gained
+   `/static/offline_write.js` (bumped to `cc-shell-v3`). 8 new tests
+   extending `test_pwa_shell.py`'s structural-check convention, full suite
+   1285 passed.
 6. **Sync engine** — the push/pull loop (§8), retry/backoff (§5), the status
    indicator, wiring slices 1–5 together end to end.
 7. **Tombstone GC** — the retention horizon (§4) and the forced-full-resync

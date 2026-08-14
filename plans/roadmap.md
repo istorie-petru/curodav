@@ -249,7 +249,15 @@ offline_shell.js` (renders `/offline`'s `#offline-local-data` straight from
 the mirror, no network call of its own). Still read-only — no local writes
 or push yet (slice 5). Verified both by `test_pwa_shell.py`'s structural
 checks and a one-off Node + fake-indexeddb smoke run of the real merge logic
-(not added to the pytest suite). Next: slice 5 (local write path + outbox).
+(not added to the pytest suite). **Slice 5 (local write path + outbox)
+shipped 2026-08-14** — `static/offline_write.js` (create/complete/delete a
+task offline, each queued as a §2 op into `offline_db.js`'s new `outbox`
+IndexedDB store and applied optimistically to the mirror through the same
+per-field-HLC path a pull already uses) + `offline_db.js`'s own new §3 HLC
+clock (`nextHlc`/`mergeHlc`) + `/offline`'s task list gaining an "add a
+task" form and per-row complete/delete controls. Still no sync engine —
+queued ops just accumulate until slice 6. Next: slice 6 (sync engine: push,
+retry/backoff, status indicator).
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

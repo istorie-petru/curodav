@@ -1,35 +1,42 @@
-// 1.8 slice 4 -- the client-side local data layer (plans/open-priority.md
-// § Offline-first editing & synchronization §11 slice 4; §2's "IndexedDB
-// on the client" outbox/mirror role). This slice only builds the *read*
-// side of that role: a per-field-HLC-tracked mirror of tasks/events/
-// contacts, kept warm by offline_sync_client.js's pull loop. No outbox,
-// no local writes yet -- that's slice 5.
+// 1.8 slices 4-5 -- the client-side local data layer (plans/open-priority.md
+// § Offline-first editing & synchronization §11). Slice 4 built the *read*
+// side: a per-field-HLC-tracked mirror of tasks/events/contacts, kept warm
+// by offline_sync_client.js's pull loop. Slice 5 adds the other half of
+// §2's "IndexedDB on the client" role -- an append-only `outbox` store for
+// ops a local write produces, plus this device's own §3 HLC clock (nothing
+// through slice 4 ever needed to *mint* an HLC, only apply server-supplied
+// ones). Still no sync engine wired up (slice 6) -- outbox ops just
+// accumulate here until then.
 //
-// Schema (IndexedDB database "cc-offline", version 1):
+// Schema (IndexedDB database "cc-offline", version 2):
 //   tasks/events/contacts   -- keyPath "uid", one row per entity, fields
-//                               written incrementally as pull() delivers
-//                               them (never a whole-row replace).
+//                               written incrementally as pull()/local
+//                               writes deliver them (never a whole-row
+//                               replace).
 //   field_hlc               -- keyPath "key" ("entityType:entityUid:field"),
 //                               the client's own copy of §6's per-field HLC
-//                               shadow store, so a pull can never regress a
-//                               field to an older value if changes ever
-//                               arrive out of order (today they don't --
-//                               offline_sync.pull() already returns them in
-//                               ascending HLC order -- but comparing rather
-//                               than blindly overwriting costs nothing and
-//                               is what slice 5's own local writes will
-//                               need this store to already do correctly).
-//   meta                    -- keyPath "key", a small handful of singleton
-//                               rows: device_id, cursor (the pull cursor,
-//                               §8), last_synced_at.
+//                               shadow store, so a pull (or a local write)
+//                               can never regress a field to an older value
+//                               if changes ever arrive out of order.
+//   outbox                  -- keyPath "op_id", one row per §2 operation
+//                               record a local write has queued, oldest-
+//                               first by insertion order (§5: "ops sync in
+//                               per-entity chronological order," which push
+//                               -- slice 6 -- will re-sort by HLC anyway).
+//   meta                    -- keyPath "key", singleton rows: device_id,
+//                               cursor (the pull cursor, §8),
+//                               last_synced_at, hlc_clock (this device's own
+//                               (physical_time_ms, logical_counter) pair --
+//                               device_id itself lives under its own key
+//                               and is appended to form the full triple).
 //
 // Deliberately entity-shape-agnostic: this file never hardcodes a task's
 // or event's field list (routers/../offline_sync.py's _ENTITY_FIELDS
 // whitelist is the server's own concern) -- it just writes whatever
-// field_name/value pairs pull() sends into the matching row.
+// field_name/value pairs a change/op sends into the matching row.
 (function () {
   const DB_NAME = "cc-offline";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const ENTITY_STORES = { task: "tasks", event: "events", contact: "contacts" };
 
   let dbPromise = null;
@@ -45,6 +52,10 @@
         if (!db.objectStoreNames.contains("contacts")) db.createObjectStore("contacts", { keyPath: "uid" });
         if (!db.objectStoreNames.contains("field_hlc")) db.createObjectStore("field_hlc", { keyPath: "key" });
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
+        // Slice 5 -- added on top of a slice-4 (version 1) database via
+        // IndexedDB's own version-upgrade path, so a device that already
+        // has a local mirror keeps it; only the new store is created.
+        if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath: "op_id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -101,6 +112,60 @@
 
   async function setLastSyncedAt(isoString) {
     await setMeta("last_synced_at", isoString);
+  }
+
+  // §3's HLC clock, client-side half. Nothing through slice 4 ever minted
+  // its own HLC (only applied server-supplied ones from pull()) -- a local
+  // write is the first thing on this device that needs to. `nextHlc()` is
+  // the "generate a write's own HLC" rule: bump the logical counter within
+  // the same millisecond (or when the wall clock hasn't advanced past the
+  // last-used physical time), otherwise reset it against the new physical
+  // time -- the same rule `mergeHlc` below applies for HLCs *received* from
+  // the server, per §3's "merged (max + increment) on every operation they
+  // observe from the other side."
+  async function nextHlc() {
+    const db = await openDb();
+    const store = tx(db, "meta", "readwrite").objectStore("meta");
+    const row = await reqToPromise(store.get("hlc_clock"));
+    const now = Date.now();
+    let physical = now;
+    let logical = 0;
+    if (row && row.value && row.value[0] >= physical) {
+      physical = row.value[0];
+      logical = row.value[1] + 1;
+    }
+    await reqToPromise(store.put({ key: "hlc_clock", value: [physical, logical] }));
+    const deviceId = await getDeviceId();
+    return [physical, logical, deviceId];
+  }
+
+  // The receive-side half of §3's merge rule: advance this device's own
+  // clock past an HLC it has just observed from the server (a pull), so a
+  // subsequent local write's HLC is guaranteed to sort after everything
+  // this device has seen -- the standard HLC synchronization algorithm
+  // (physical = max of both sides and the wall clock; logical resets to 0
+  // only if the wall clock strictly exceeded both prior physical times,
+  // otherwise increments past whichever tied for the max).
+  async function mergeHlc(remoteHlc) {
+    if (!remoteHlc) return;
+    const db = await openDb();
+    const store = tx(db, "meta", "readwrite").objectStore("meta");
+    const row = await reqToPromise(store.get("hlc_clock"));
+    const [localPhysical, localLogical] = row && row.value ? row.value : [0, 0];
+    const [remotePhysical, remoteLogical] = remoteHlc;
+    const now = Date.now();
+    const newPhysical = Math.max(localPhysical, remotePhysical, now);
+    let newLogical;
+    if (newPhysical === localPhysical && newPhysical === remotePhysical) {
+      newLogical = Math.max(localLogical, remoteLogical) + 1;
+    } else if (newPhysical === localPhysical) {
+      newLogical = localLogical + 1;
+    } else if (newPhysical === remotePhysical) {
+      newLogical = remoteLogical + 1;
+    } else {
+      newLogical = 0;
+    }
+    await reqToPromise(store.put({ key: "hlc_clock", value: [newPhysical, newLogical] }));
   }
 
   // Lexicographic HLC compare, the same total order §3 defines server-side
@@ -181,6 +246,44 @@
     return getAll("contacts");
   }
 
+  // §2's outbox -- append-only from a local write's point of view (this
+  // slice never mutates or removes a queued op; slice 6's push loop is the
+  // first thing that will, once an op is acknowledged). The store's own
+  // keyPath is `op_id` (a random UUID, per §2), which is *not* insertion-
+  // ordered, so `getOutboxOps` explicitly sorts on each op's own top-level
+  // `hlc` (offline_write.js stamps one on every op it builds, including
+  // create/field_set -- §5's own "ops sync in per-entity chronological
+  // (HLC) order" rule, applied here too rather than inventing a separate
+  // insertion-order field). A real ordering bug this slice's own smoke
+  // test caught: two ops enqueued back-to-back came back in plain UUID
+  // key order, not the order they were written, before this sort existed.
+  async function enqueueOp(op) {
+    const db = await openDb();
+    await reqToPromise(tx(db, "outbox", "readwrite").objectStore("outbox").put(op));
+  }
+
+  function _opHlcTuple(op) {
+    const h = op.hlc;
+    return h ? [h.physical, h.logical, h.device_id] : [0, 0, ""];
+  }
+
+  async function getOutboxOps() {
+    const db = await openDb();
+    const rows = await reqToPromise(tx(db, "outbox", "readonly").objectStore("outbox").getAll());
+    return rows.sort((a, b) => {
+      const ta = _opHlcTuple(a);
+      const tb = _opHlcTuple(b);
+      if (ta[0] !== tb[0]) return ta[0] - tb[0];
+      if (ta[1] !== tb[1]) return ta[1] - tb[1];
+      return ta[2] < tb[2] ? -1 : ta[2] > tb[2] ? 1 : 0;
+    });
+  }
+
+  async function getOutboxCount() {
+    const db = await openDb();
+    return await reqToPromise(tx(db, "outbox", "readonly").objectStore("outbox").count());
+  }
+
   window.CCOfflineDB = {
     open: openDb,
     getDeviceId,
@@ -188,9 +291,14 @@
     setCursor,
     getLastSyncedAt,
     setLastSyncedAt,
+    nextHlc,
+    mergeHlc,
     applyChanges,
     getAllTasks,
     getAllEvents,
     getAllContacts,
+    enqueueOp,
+    getOutboxOps,
+    getOutboxCount,
   };
 })();

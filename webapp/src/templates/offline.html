@@ -8,14 +8,17 @@
    *looks* like itself.
 
    1.8 slice 4 -- #offline-local-data below is where offline_shell.js
-   renders a read-only list straight from the local IndexedDB mirror
-   (offline_db.js, kept warm by offline_sync_client.js's pull loop running
-   globally on every online page visit -- see base.html). The static
-   empty-state markup underneath stays as the honest fallback for a device
-   that has genuinely never synced yet (fresh install, or the very first
-   pull hasn't landed) -- offline_shell.js leaves it untouched in that
-   case rather than replacing it with an equally-empty list. Still no
-   local *writes* (slice 5) -- this page is read-only. #}
+   renders a list straight from the local IndexedDB mirror (offline_db.js,
+   kept warm by offline_sync_client.js's pull loop running globally on
+   every online page visit -- see base.html). The static empty-state
+   markup underneath stays as the honest fallback for a device that has
+   genuinely never had anything local to show.
+
+   1.8 slice 5 -- the task list rendered into #offline-local-data now
+   includes an "add a task" form and per-row complete/delete controls
+   (offline_write.js), so this page works for creating/editing/deleting
+   even on a device that has never been online. Events are still read-only
+   (offline_write.js's own scope note). #}
 {% extends "base.html" %}
 {% block title %}Offline{% endblock %}
 {% block content %}
@@ -30,5 +33,6 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<script src="{{ static_url('offline_write.js') }}"></script>
 <script src="{{ static_url('offline_shell.js') }}"></script>
 {% endblock %}

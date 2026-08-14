@@ -3554,3 +3554,10 @@ body.command-palette-open{overflow:hidden;}
    static/offline_shell.js, 1.8 slice 4). */
 .offline-synced-at{font-size:var(--text-footnote); color:var(--fg-tertiary); margin-bottom:var(--space-4);}
 .offline-section-title{font-size:var(--text-headline); font-weight:600; margin:var(--space-5) 0 var(--space-2);}
+/* Offline shell's local *write* path (offline_write.js, 1.8 slice 5) --
+   the outbox pending-changes note and the inline "add a task" form, both
+   entirely client-rendered by offline_shell.js so they get no server-side
+   template counterpart. */
+.offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
+.offline-add-task-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
+.offline-add-task-form input[type="text"]{flex:1;}

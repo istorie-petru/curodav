@@ -767,26 +767,52 @@ session, right before the final commit of that session.
   logic end to end: newer-HLC writes apply, older-HLC writes are
   rejected, a `deleted_at` write removes the row from `getAllTasks`, and
   `device_id`/cursor round-trip correctly through IndexedDB.
-- **Next slice:** `1.8` slice 5 — **Local write path + outbox**
-  (`open-priority.md` § Offline-first editing & synchronization §11,
-  slice 5). Offline create/edit/delete on `/offline` (or wherever this
-  slice extends local-read coverage to) queue as ops (§2's operation-log
-  shape, `op_id`/`entity_type`/`entity_uid`/`op_type`/`fields`/
-  `device_id`/`hlc`) into a new IndexedDB `outbox` store instead of
-  failing — still no sync engine wired up (slice 6), so pending ops just
-  accumulate locally until then. Needs its own client-side HLC clock
-  (§3: `(physical_time_ms, logical_counter, device_id)`, merged forward
-  on every server response the same way the server merges forward on
-  every op it receives) — nothing in slices 1-4 built a client HLC clock
-  yet, since slice 4 only ever *applied* server-supplied HLCs, never
-  minted its own. Also still browser-dependent, same pytest-convention
-  constraint as slices 3-4; the Node + fake-indexeddb smoke-test pattern
-  from slice 4 is worth reusing for the outbox's own merge/apply logic.
-  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
-  optional Project check-in side work, and 1.6's optional "Configurable
-  views + optional Schedule module" side work are all still fine
-  smaller, self-contained slices instead, whenever a session wants a
-  break from the sync-engine/PWA work.
+- **Shipped:** `1.8` slice 5 — **Local write path + outbox**, complete
+  (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 5. New `static/offline_write.js`: offline
+  create/complete/delete on a task queues a real §2 op into a new
+  IndexedDB `outbox` store (`offline_db.js`'s `enqueueOp`/`getOutboxOps`/
+  `getOutboxCount`) and applies it immediately to the local mirror through
+  the same per-field-HLC-wins path a pull already uses (`applyChanges`) —
+  a same-device optimistic write can never lose to itself. `offline_db.js`
+  gained this device's own §3 HLC clock (`nextHlc`/`mergeHlc` — nothing
+  through slice 4 ever minted its own HLC, only applied server-supplied
+  ones); `offline_sync_client.js` now merges the clock forward after every
+  pull. `create` stamps every field with one shared HLC per §2; a
+  `field_set` shares its HLC with the `updated_at` write riding along with
+  it. Deliberately scoped to tasks only (create/complete/delete) — events/
+  contacts get no offline write UI yet. `/offline`'s task list
+  (`offline_shell.js`) gained an inline "add a task" form and per-row
+  complete/delete buttons (reusing `.checklist-check`/`.checklist-delete`)
+  plus an outbox-count-driven "N local changes saved, waiting for sync
+  support" note — no claim that anything syncs yet (slice 6). A device
+  that's never completed a pull can now create its very first task offline
+  (slice 4's render-nothing-until-`lastSynced` gate removed for the task
+  section only). Found and fixed a real bug via a one-off Node +
+  fake-indexeddb smoke script (slice 4's pattern, not added to pytest):
+  `getOutboxOps()`'s plain `getAll()` returned ops in IndexedDB's default
+  key-order (a random `op_id` UUID keyPath), not queued order — fixed by
+  sorting on each op's own top-level `hlc` (now stamped onto
+  `create`/`field_set` too, not just `delete`). `sw.js` precache bumped to
+  `cc-shell-v3`. 8 new tests extending `test_pwa_shell.py`, full suite 1285
+  passed.
+- **Next slice:** `1.8` slice 6 — **Sync engine** (`open-priority.md` §
+  Offline-first editing & synchronization §11, slice 6). The push half of
+  §8's protocol (client-side, flushing `offline_db.js`'s `outbox` against
+  `POST /api/sync/push`), §5's retry/backoff with jitter (immediate retry
+  on the browser's `online` event, periodic background retry while
+  nominally online but failing), and the status indicator
+  (`ofline-first-pwa.md`'s offline/synchronizing/pending/synchronized
+  states, driven off outbox size + in-flight push/pull state). This is
+  what actually wires slices 1-5 together end to end — until this ships,
+  an offline write is durable locally but never leaves the device. Still
+  browser-dependent, same pytest-convention constraint as slices 3-5; the
+  Node + fake-indexeddb smoke-test pattern is worth reusing again for the
+  push/retry logic. `open.md`'s Command palette actions follow-up (1.2
+  side work), 1.4's optional Project check-in side work, and 1.6's
+  optional "Configurable views + optional Schedule module" side work are
+  all still fine smaller, self-contained slices instead, whenever a
+  session wants a break from the sync-engine/PWA work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -1,17 +1,19 @@
-// 1.8 slice 4 -- the pull half of §8's sync protocol, run client-side.
+// 1.8 slices 4-5 -- the pull half of §8's sync protocol, run client-side.
 // Loaded globally (base.html) so the local IndexedDB mirror (offline_db.js)
 // stays warm from every ordinary online page visit, not just when the
 // offline shell is open -- the whole point of a local read path is that
 // the data is already there *before* the network drops.
 //
-// Deliberately push-free and retry-free: slice 5 adds the local write
-// path/outbox (so there's nothing of this device's own to push yet), and
-// slice 6 adds real retry/backoff plus the status indicator (ofline-first-
-// pwa.md's offline/synchronizing/pending/synchronized states). This is a
-// single best-effort pull per trigger -- silent no-op on failure, since
-// "the network is down" is an entirely expected reason for it to fail and
-// there is nothing here yet for a failure to jeopardize (no pending writes
-// to lose).
+// Slice 5 added a local outbox (offline_write.js/offline_db.js's own
+// `enqueueOp`), but this file is still deliberately push-free and
+// retry-free: there is no sync *engine* yet to decide when/how to flush
+// the outbox against the server (that's slice 6, along with real
+// retry/backoff and the status indicator -- ofline-first-pwa.md's
+// offline/synchronizing/pending/synchronized states). This is a single
+// best-effort pull per trigger -- silent no-op on failure, since "the
+// network is down" is an entirely expected reason for it to fail and there
+// is nothing here yet for a pull failure to jeopardize (pending writes sit
+// safely in the outbox regardless of whether a pull succeeds).
 (function () {
   async function fetchPull(cursor) {
     let response;
@@ -49,6 +51,11 @@
     }
 
     await window.CCOfflineDB.applyChanges(body.changes);
+    // §3's receive-side merge rule: advance this device's own HLC clock
+    // past the newest thing it just observed from the server, so any
+    // local write minted after this pull (offline_write.js's `nextHlc()`)
+    // is guaranteed to sort strictly after everything just pulled in.
+    if (body.cursor) await window.CCOfflineDB.mergeHlc(body.cursor);
     if (body.cursor) await window.CCOfflineDB.setCursor(body.cursor);
     await window.CCOfflineDB.setLastSyncedAt(new Date().toISOString());
     document.dispatchEvent(new CustomEvent("cc-offline-sync-complete"));

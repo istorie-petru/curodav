@@ -1,4 +1,4 @@
-"""1.8 slices 3-4 -- the PWA shell (plans/open-priority.md § Offline-first
+"""1.8 slices 3-5 -- the PWA shell (plans/open-priority.md § Offline-first
 editing & synchronization §11).
 
 Slice 3: manifest, service worker, offline app-shell caching -- "can the
@@ -10,9 +10,17 @@ by the same per-field HLC rule offline_sync.py's own field_versions table
 uses server-side) and static/offline_sync_client.js (§8's pull half,
 run client-side, loaded globally so the mirror is warm before the network
 actually drops). templates/offline.html's #offline-local-data now renders
-straight from that mirror via static/offline_shell.js. Still no local
-*writes* anywhere (slice 5) -- push, retry/backoff, and the status
-indicator are slices 5-6.
+straight from that mirror via static/offline_shell.js.
+
+Slice 5: the local *write* path -- static/offline_write.js
+(create/edit/delete a task offline, each queued as a §2 op into
+offline_db.js's new `outbox` IndexedDB store and applied optimistically to
+the mirror through the same per-field-HLC path a pull already uses).
+offline_db.js also gained this device's own §3 HLC clock (`nextHlc`/
+`mergeHlc`) -- nothing before this slice ever needed to *mint* an HLC, only
+apply server-supplied ones. Still no sync *engine* -- push, retry/backoff,
+and the status indicator are slice 6; queued ops just accumulate in the
+outbox until then.
 
 Neither a real service worker nor real IndexedDB can be exercised by this
 app's usual pytest/router-function-call convention (there's no browser
@@ -208,6 +216,69 @@ class TestLocalReadPath:
         script = (_STATIC_DIR / "sw.js").read_text()
         for asset in ("/static/offline_db.js", "/static/offline_sync_client.js", "/static/offline_shell.js"):
             assert asset in script
+
+
+class TestLocalWritePath:
+    """1.8 slice 5 -- "Local write path + outbox" (open-priority.md §11
+    slice 5). Same "read the JS source, assert the shape" level of
+    confidence as TestLocalReadPath above -- no real browser/IndexedDB
+    here. The actual outbox/HLC merge logic is exercised end-to-end by a
+    one-off Node + fake-indexeddb smoke script (not part of this suite,
+    same as slice 4's own smoke run) that caught a real ordering bug during
+    development: getOutboxOps() must sort explicitly (by each op's own
+    HLC), since IndexedDB's default key-order iteration over a random-UUID
+    keyPath is not insertion order."""
+
+    def test_offline_db_gained_the_hlc_clock_and_outbox(self):
+        script = (_STATIC_DIR / "offline_db.js").read_text()
+        assert '"outbox"' in script
+        for export in ("nextHlc", "mergeHlc", "enqueueOp", "getOutboxOps", "getOutboxCount"):
+            assert export in script
+
+    def test_offline_write_defines_create_edit_delete_for_tasks(self):
+        script = (_STATIC_DIR / "offline_write.js").read_text()
+        for export in ("createTask", "updateTaskField", "deleteTask"):
+            assert export in script
+        assert "window.CCOfflineWrite" in script
+        # Every op this file builds must go through the outbox, not just
+        # straight to the mirror -- that's the whole point of the slice
+        # ("queue as ops instead of failing," not "write straight through").
+        assert "enqueueOp" in script
+        # Still no network call anywhere in the write path itself (push is
+        # slice 6) -- a local write must succeed with zero connectivity.
+        assert "fetch(" not in script
+
+    def test_offline_write_never_pushes(self):
+        script = (_STATIC_DIR / "offline_write.js").read_text()
+        assert "/api/sync/push" not in script
+
+    def test_offline_shell_wires_up_the_write_ui(self):
+        script = (_STATIC_DIR / "offline_shell.js").read_text()
+        assert "CCOfflineWrite.createTask" in script
+        assert "CCOfflineWrite.updateTaskField" in script
+        assert "CCOfflineWrite.deleteTask" in script
+
+    def test_offline_html_loads_the_write_script(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert "offline_write.js" in html
+        assert "offline_shell.js" in html
+
+    def test_base_html_does_not_load_the_write_script_globally(self):
+        # offline_write.js's UI hooks (the add-task form, per-row buttons)
+        # only exist on /offline's own markup -- loading it globally would
+        # be dead weight on every other page, unlike offline_db.js/
+        # offline_sync_client.js which genuinely need to run everywhere to
+        # keep the mirror warm.
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
+        assert "offline_write.js" not in html
+
+    def test_precache_list_includes_the_write_path_script(self):
+        script = (_STATIC_DIR / "sw.js").read_text()
+        assert "/static/offline_write.js" in script
+
+    def test_shell_cache_name_was_bumped_for_the_new_precached_script(self):
+        script = (_STATIC_DIR / "sw.js").read_text()
+        assert 'CACHE_NAME = "cc-shell-v3"' in script
 
 
 class TestRouterWiring:
