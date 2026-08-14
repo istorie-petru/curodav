@@ -932,6 +932,38 @@ session, right before the final commit of that session.
   section. 1 new structural test
   (`test_recurrence_picker_js_ends_is_a_separate_dropdown`), full suite 1313
   passed.
+- **Shipped:** side work — **event holiday fields: recurring-only + real
+  dropdown**, complete (2026-08-14) — two direct follow-ups on
+  `_event_form_fields.html`'s Holiday calendar / Exclude Saturday / Exclude
+  Sunday fields ("make the holiday selector for events to appear only if
+  the event is recurring" + "make the menu a drop down where the use does
+  not need to type, but only select the calendar"):
+  - Each field now carries a shared `holiday-field` class and starts
+    `hidden` unless the event already has a `recurrence` value (server-
+    rendered, so a recurring event's fields are visible on first paint with
+    no JS-dependent flash); `static/recurrence_picker.js`'s existing
+    `sync()` (already the single place that knows whether the current
+    preset is "Does not repeat" or a real recurring one) now also toggles
+    `hidden` on every `.holiday-field` sibling it finds inside the same
+    `.field-grid` on every preset change. Kept as three separate grid items
+    rather than one wrapping container, so `.field-grid`'s two-column
+    layout is unaffected. `task_form.html`/`habit_task_form.html` share the
+    same picker but have no `.holiday-field` siblings, so this is a no-op
+    there.
+  - `holiday_calendar` changed from a free-text input + `<datalist>`
+    (type-to-filter, but still typeable) to a plain `<select>` populated
+    from `db.list_holiday_calendar_names` (already passed into every
+    caller of this partial) — the event form now only ever offers a
+    calendar that actually exists; creating a new named calendar stays a
+    Settings > Holidays action. Server-side handling (`routers/
+    calendar.py`/`dashboard.py`'s create/update) needed no change — an
+    empty `<select>` value round-trips as `""`/`None` exactly like the old
+    empty text input did.
+  No new tests (pure presentation change to an already-covered code path —
+  `test_holiday_calendars.py`/`test_recurrence_terminology.py`/
+  `test_modal_footer_and_inputs.py` still assert `name="holiday_calendar"`
+  and the create/update round-trip, which the `<select>` still satisfies).
+  Full suite 1313 passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

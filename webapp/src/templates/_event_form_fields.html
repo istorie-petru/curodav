@@ -94,30 +94,47 @@
              weekend exclusion are independent constraints (an event can
              combine either, both, or neither), applied at read time
              (recurrence_expand.expand_events), never materialized into a
-             stored EXDATE. Only meaningful once Recurrence above is set;
-             harmless (silently unused) otherwise. -->
+             stored EXDATE. Only meaningful once Recurrence above is set --
+             so each of the three fields below carries a shared
+             `holiday-field` class (kept as separate .field/.field-toggle
+             grid items rather than wrapped in one container div, so
+             .field-grid's two-column layout -- Holiday calendar in one
+             column, the Saturday/Sunday toggles filling in around it --
+             is unaffected) and starts `hidden` unless the event is already
+             recurring (so a recurring event's holiday fields are visible on
+             first paint, no JS-dependent flash).
+             static/recurrence_picker.js's sync() toggles `hidden` on every
+             `.holiday-field` as the user changes the Recurrence preset
+             above -- direct feedback: "make the holiday selector for events
+             to appear only if the event is recurring." -->
         <!-- 1.6 ("Configurable terminology"): the field names/values below
              (holiday_calendar/exclude_saturday/exclude_sunday) never
              change -- only the on-screen label does, per Settings >
              General's "Recurrence terminology" toggle
              (deps.py's recurrence_terminology() global). -->
         {% set _playful = recurrence_terminology(request) == 'playful' %}
-        <div class="field">
+        {% set _recurring = event and event.recurrence not in (None, 'None', 'Nothing', '') %}
+        <div class="field holiday-field" {% if not _recurring %}hidden{% endif %}>
             <label>{{ 'Respects Labor Laws' if _playful else 'Holiday calendar' }}</label>
-            <input type="text" name="holiday_calendar" list="holiday-calendar-names"
-                   placeholder="(none)"
-                   value="{{ event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' }}">
-            <datalist id="holiday-calendar-names">
+            <!-- Plain <select>, not the old free-text-plus-datalist input --
+                 direct feedback ("make the menu a drop down where the use
+                 does not need to type, but only select the calendar"). Only
+                 ever offers calendars that already exist (managed at
+                 Settings > Holidays, see settings_holidays.html) -- creating
+                 a brand-new named calendar isn't something an event form
+                 needs to do. -->
+            <select name="holiday_calendar">
+                <option value="">(none)</option>
                 {% for name in holiday_calendar_names|default([]) %}
-                <option value="{{ name }}">
+                <option value="{{ name }}" {% if event and event.holiday_calendar == name %}selected{% endif %}>{{ name }}</option>
                 {% endfor %}
-            </datalist>
+            </select>
         </div>
-        <div class="field field-toggle">
+        <div class="field field-toggle holiday-field" {% if not _recurring %}hidden{% endif %}>
             <input type="checkbox" id="exclude_saturday" name="exclude_saturday" value="1" {% if event and event.exclude_saturday %}checked{% endif %}>
             <label for="exclude_saturday">{{ 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday' }}</label>
         </div>
-        <div class="field field-toggle">
+        <div class="field field-toggle holiday-field" {% if not _recurring %}hidden{% endif %}>
             <input type="checkbox" id="exclude_sunday" name="exclude_sunday" value="1" {% if event and event.exclude_sunday %}checked{% endif %}>
             <label for="exclude_sunday">{{ 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday' }}</label>
         </div>

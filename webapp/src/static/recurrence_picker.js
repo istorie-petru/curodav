@@ -214,8 +214,22 @@
     originalParent.insertBefore(endsWrap, input);
     wrap.appendChild(input);
 
+    // Holiday calendar / exclude Saturday / exclude Sunday (event forms
+    // only -- _event_form_fields.html's `.holiday-field`s) only mean
+    // anything once this event actually repeats -- direct feedback ("make
+    // the holiday selector for events to appear only if the event is
+    // recurring"). task_form.html/habit_task_form.html's recurrence field
+    // has no such siblings, so this is just an empty NodeList there.
+    const fieldGrid = originalParent.closest(".field-grid") || originalParent.parentNode;
+    const holidayFields = fieldGrid ? fieldGrid.querySelectorAll(".holiday-field") : [];
+
     function checkedPreset() {
       return radios.find((r) => r.checked);
+    }
+
+    function isRecurring() {
+      const checked = checkedPreset();
+      return checked ? !!checked.value : !!currentValue;
     }
 
     function endsSuffix() {
@@ -254,6 +268,7 @@
       // hidden input's value untouched until the user actually picks a
       // preset.
       endsWrap.hidden = !checked || !checked.value;
+      holidayFields.forEach((el) => { el.hidden = !isRecurring(); });
       updateSummary();
       updateEndsSummary();
     }
