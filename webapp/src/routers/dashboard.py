@@ -35,6 +35,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _hours_between(start_at: str | None, end_at: str | None) -> float:
+    """Local copy of db._hours_between's trivial duration math -- same
+    "not worth exposing db's private helper across module boundaries for
+    one two-line calculation" reasoning routers/today.py's own copy used
+    (that module is retired -- 1.9 side work, "Today folded into the
+    Dashboard" -- this is where the calculation now lives)."""
+    if not start_at or not end_at:
+        return 0.0
+    try:
+        start = datetime.fromisoformat(start_at)
+        end = datetime.fromisoformat(end_at)
+    except ValueError:
+        return 0.0
+    return max((end - start).total_seconds() / 3600.0, 0.0)
+
+
 def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
@@ -535,6 +551,105 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     return {"rows": rows}
 
 
+def _render_important_urgent(conn, config: dict, nav: dict | None = None) -> dict:
+    """Important & Urgent -- open tasks whose derived_state.virtual_states
+    includes "important"/"urgent" that aren't already overdue or due today
+    (1.9 side work, porting routers/today.py's own "Important & urgent, not
+    due today" section into the Dashboard's widget registry ahead of that
+    page's retirement -- see plans/STATE.md). Reuses the exact same shared
+    aggregation service (src/derived_state.py) /today already used, so this
+    widget can never disagree with what /tasks?date_filter=important/urgent
+    shows. Scoped like every other widget via `_filtered_tasks` (a Space/
+    Project page's Important & Urgent widget only considers that page's own
+    tasks), which /today itself never needed since it was always a whole-app
+    view."""
+    today = date.today()
+    today_iso = today.isoformat()
+    tasks = _filtered_tasks(conn, config)
+    overdue_or_due_today = {
+        t["uid"] for t in tasks if t.get("due_at") and t["due_at"][:10] <= today_iso
+    }
+    label_rules = db.list_label_rules(conn)
+    # "rows", not "items" -- data is a plain dict, and Jinja's attribute-then-
+    # item lookup (`data.items`) would silently resolve to dict.items (the
+    # builtin method) instead of this key, since attribute lookup is tried
+    # first. Found live while rendering this exact widget the first time.
+    rows = []
+    for t in tasks:
+        if t["uid"] in overdue_or_due_today:
+            continue
+        states = derived_state.virtual_states(t, label_rules, today)
+        if "important" in states or "urgent" in states:
+            rows.append((t, states))
+    rows.sort(
+        key=lambda pair: (
+            -derived_state.effective_importance(pair[0], label_rules),
+            -derived_state.effective_urgency(pair[0], label_rules, today),
+            pair[0].get("due_at") or "9999-99-99",
+        )
+    )
+    limit = int(config.get("limit") or 8)
+    return {"rows": rows[:limit]}
+
+
+def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) -> dict:
+    """Scheduled Work Hours Today -- today's work-allocation sessions plus a
+    completed/total hours readout (1.9 side work, porting routers/today.py's
+    own "scheduled hours today" computation, the other piece /today had that
+    no existing widget covered -- see plans/STATE.md). Scoped like every
+    other widget via `_filtered_events`."""
+    today_iso = date.today().isoformat()
+    events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{today_iso}T23:59:59")
+    events = [e for e in events if e.get("start_at") and e["start_at"][:10] == today_iso]
+    sessions = []
+    total_hours = 0.0
+    for e in events:
+        task_uid = db.work_allocation_task_uid(conn, e["uid"])
+        if not task_uid:
+            continue
+        task = db.get_task(conn, task_uid)
+        hours = _hours_between(e.get("start_at"), e.get("end_at"))
+        sessions.append({"event": e, "task": task, "hours": hours})
+        total_hours += hours
+    sessions.sort(key=lambda w: w["event"].get("start_at") or "")
+    return {"sessions": sessions, "total_hours": round(total_hours, 1), "today": today_iso}
+
+
+def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
+    """Quick Links -- a visual tile grid of every Space (generate_space=1)
+    and every open (non-archived) project (is_project=1), each linking to
+    its own page. The Dashboard's "more visual, less data-heavy" side work
+    (1.9): the app has no separate "pinned"/"favorite" concept (label_config
+    dropped `pinned` outright, see db.py's own SCHEMA_SQL comment) -- a
+    curated-by-nature set of "every Space + every open project" is the v1,
+    per plans/STATE.md's own note, no new schema needed. Uses each label's
+    own `icon`/`color` (label_config.icon, the same `icon()` Jinja helper
+    and `--cal-bg-<hue>` vars every other colored tile in this app already
+    uses -- filled_cards/project_preview) rather than inventing a new visual
+    language. Home-only (excluded on Space/Project pages, same as
+    filled_cards/project_preview -- see _SCOPE_EXCLUDED_TYPES): "every Space
+    + every project" is meaningless once you're already inside one of them."""
+    # "tiles", not "items" -- see _render_important_urgent's own comment on
+    # why a plain dict key named "items" is unsafe with Jinja's attribute
+    # lookup.
+    tiles = []
+    for lbl in db.list_space_labels(conn):
+        tiles.append({
+            "name": lbl["name"], "href": f"/labels/{lbl['name']}",
+            "icon": lbl.get("icon") or "layers", "color": lbl.get("color") or "blue",
+            "kind": "Space",
+        })
+    for lbl in db.list_project_labels(conn):
+        if lbl.get("archived_at"):
+            continue
+        tiles.append({
+            "name": lbl["name"], "href": f"/projects/{lbl['name']}",
+            "icon": lbl.get("icon") or "folder", "color": lbl.get("color") or "blue",
+            "kind": "Project",
+        })
+    return {"tiles": tiles}
+
+
 # Grid width -- there used to be a manual width picker/drag-resize here
 # (a "half"/"full" flag on WIDGET_TYPES, then from 2026-08-01 a per-
 # widget-instance override living in config["width"], picked from the
@@ -690,6 +805,27 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": set(),
         "default_width": "full",
     },
+    "important_urgent": {
+        "label": "Important & Urgent",
+        "template": "_widget_important_urgent.html",
+        "render": _render_important_urgent,
+        "uses": {"tasks"},
+        "default_width": "half",
+    },
+    "scheduled_work_today": {
+        "label": "Scheduled Work Hours Today",
+        "template": "_widget_scheduled_work_today.html",
+        "render": _render_scheduled_work_today,
+        "uses": {"events"},
+        "default_width": "third",
+    },
+    "quick_links": {
+        "label": "Quick Links",
+        "template": "_widget_quick_links.html",
+        "render": _render_quick_links,
+        "uses": set(),
+        "default_width": "full",
+    },
 }
 
 # --------------------------------------------------------------------- #
@@ -733,6 +869,11 @@ WIDGET_SOURCES: dict[str, dict] = {
     # picker option.
     "habits": {"label": "Habits", "icon": "activity"},
     "contacts": {"label": "Contacts", "icon": "users"},
+    # "quick_links" (1.9 side work) -- its own source rather than folded
+    # under "calendar_tasks", since it reads label_config directly (no
+    # tasks/events at all, same "uses: set()" shape project_preview/
+    # filled_cards already have) -- see _render_quick_links.
+    "quick_links": {"label": "Quick Links", "icon": "link"},
 }
 
 # Which views exist per source, and which of those views take a Range.
@@ -747,6 +888,14 @@ WIDGET_VIEWS: dict[str, dict] = {
     "checklist": {"label": "Checklist", "source": "habits", "has_range": False},
     "calendar_agenda_view": {"label": "Calendar + Agenda", "source": "calendar_tasks", "has_range": False},
     "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False},
+    # 1.9 side work -- porting /today's two sections into the Dashboard
+    # registry (see _render_important_urgent/_render_scheduled_work_today)
+    # and a new visual "Quick Links" tile grid (see _render_quick_links),
+    # each offered through the same Source/View picker every other widget
+    # type is, not just registered in WIDGET_TYPES with no way to add one.
+    "important_urgent_view": {"label": "Important & urgent", "source": "calendar_tasks", "has_range": False},
+    "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
+    "quick_links_view": {"label": "Quick links (tiles)", "source": "quick_links", "has_range": False},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
@@ -780,6 +929,9 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, int | None]] = {
     ("checklist", None): ("habit_checkin", None),
     ("calendar_agenda_view", None): ("calendar_agenda", None),
     ("contact_list_view", None): ("contact_list", None),
+    ("important_urgent_view", None): ("important_urgent", None),
+    ("scheduled_work_view", None): ("scheduled_work_today", None),
+    ("quick_links_view", None): ("quick_links", None),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
@@ -816,6 +968,9 @@ _TYPE_TO_SELECTION: dict[tuple[str, int | None], tuple[str, str, str | None]] = 
     ("habit_checkin", None): ("habits", "checklist", None),
     ("calendar_agenda", None): ("calendar_tasks", "calendar_agenda_view", None),
     ("contact_list", None): ("contacts", "contact_list_view", None),
+    ("important_urgent", None): ("calendar_tasks", "important_urgent_view", None),
+    ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
+    ("quick_links", None): ("quick_links", "quick_links_view", None),
 }
 
 
@@ -878,8 +1033,8 @@ def _selection_from_widget(widget: dict) -> tuple[str, str, str | None]:
 # --------------------------------------------------------------------- #
 
 _SCOPE_EXCLUDED_TYPES: dict[str, set[str]] = {
-    "space": {"filled_cards"},
-    "project": {"filled_cards", "project_preview"},
+    "space": {"filled_cards", "quick_links"},
+    "project": {"filled_cards", "project_preview", "quick_links"},
 }
 
 

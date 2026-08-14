@@ -1,0 +1,24 @@
+<!-- Data: {sessions: [{event, task, hours}, ...], total_hours, today} -- see
+     routers/dashboard.py::_render_scheduled_work_today. Today's scheduled
+     work-allocation sessions plus a completed-hours total (ported from the
+     retired /today page's own "scheduled hours today" stat + schedule list,
+     1.9 side work -- see plans/STATE.md). -->
+<div class="at-a-glance-row">
+    <div class="at-a-glance-stat">
+        <div class="at-a-glance-number">{{ data.total_hours }}h</div>
+        <div class="widget-section-label">Scheduled today</div>
+    </div>
+</div>
+{% if data.sessions %}
+<table>
+    {% for w in data.sessions %}
+    <tr>
+        <td class="text-muted" style="width:60px">{{ w.event.start_at | fmt_time }}</td>
+        <td>{% if w.task %}<a href="/tasks/{{ w.task.uid }}" data-modal>{{ w.task.title }}</a>{% else %}{{ w.event.title }}{% endif %}</td>
+        <td style="text-align:right"><span class="cell-tag tag-blue">{{ "%.1f"|format(w.hours) }}h</span></td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">No work scheduled today.</div>
+{% endif %}

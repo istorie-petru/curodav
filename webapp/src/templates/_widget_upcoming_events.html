@@ -3,7 +3,7 @@
 <table>
     {% for e in data.events %}
     <tr>
-        <td class="text-muted" style="width:110px">{{ e.start_at[:10] }}{% if not e.all_day %} {{ e.start_at | fmt_time }}{% endif %}</td>
+        <td class="text-muted" style="width:150px; white-space:nowrap">{{ e.start_at[:10] }}{% if not e.all_day %} {{ e.start_at | fmt_time }}{% endif %}</td>
         <td><a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a></td>
     </tr>
     {% endfor %}

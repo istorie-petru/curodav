@@ -1,0 +1,22 @@
+<!-- Data: {tiles: [{name, href, icon, color, kind}, ...]} -- see
+     routers/dashboard.py::_render_quick_links. A visual tile grid linking
+     to every Space and every open project, reusing filled_cards' own
+     Material-You-style filled square (.filled-cards-grid/.filled-card,
+     .cal-<color> hue) with each label's own icon (label_config.icon) on
+     top instead of a description -- no new visual language introduced. -->
+{% if data.tiles %}
+<div class="filled-cards-grid">
+    {% for item in data.tiles %}
+    {% set color_class = 'cal-' + (item.color if item.color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
+    <a class="filled-card {{ color_class }}" href="{{ item.href }}">
+        <div class="filled-card-content">
+            {{ icon(item.icon, 'icon-lg') }}
+            <div class="filled-card-title">{{ item.name }}</div>
+            <div class="filled-card-meta">{{ item.kind }}</div>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No Spaces or projects yet -- add one from Settings.</div>
+{% endif %}
