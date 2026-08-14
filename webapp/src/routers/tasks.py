@@ -1267,12 +1267,12 @@ def add_work_allocation(
 @router.post("/{uid}/work-allocations/remove-latest")
 def remove_latest_work_allocation(uid: str, next: str = Form(""), conn=Depends(get_db)):
     """The planning grids' "Unscheduled work" panel "−" button -- remove the
-    task's most recently added work session (the last in
-    `list_work_allocations_for_task`'s creation order), so it undoes the
-    panel's own "+". Never removes below zero sessions and never touches the
-    task; going from one session to none stays the task modal's Work
-    sessions card per-row remove. `next`, when present, is the planning page
-    to return to (same-origin path only, see `_safe_next`)."""
+    task's most recently added UNDATED work session, so it undoes the
+    panel's own "+" without ever touching an already-scheduled block (see
+    `db.remove_latest_work_allocation`'s own docstring). No-ops if the task
+    has no undated sessions left to remove, even if it has dated ones; never
+    touches the task. `next`, when present, is the planning page to return
+    to (same-origin path only, see `_safe_next`)."""
     db.remove_latest_work_allocation(conn, uid)
     return RedirectResponse(url=_safe_next(next) or f"/tasks/{uid}", status_code=303)
 

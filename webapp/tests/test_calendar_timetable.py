@@ -301,10 +301,13 @@ class TestDeleteTimetableAllocation:
 
 
 class TestUnscheduledPanelStepper:
-    """1.9 "unscheduled work" panel rework on the Timetable view: per-item
-    session count with −/+ buttons and a scheduled/total hours readout."""
+    """"Unscheduled work" panel rework on the Timetable view: per-item
+    stepper shows sessions still needing placement (`undated_count`), not
+    the task's total session count -- see test_week_planning.py's own
+    TestUnscheduledPanelStepper docstring for the direct feedback behind
+    this (2026-08-14, "the counter doesn't update from 2 to 1")."""
 
-    def test_item_shows_plus_button_and_count_not_minus_at_one(self, conn):
+    def test_item_shows_plus_and_minus_buttons_at_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
         body = calendar_router.timetable_view(
@@ -313,9 +316,34 @@ class TestUnscheduledPanelStepper:
         assert 'data-task-uid="t1"' in body
         assert "unscheduled-count" in body
         assert "/tasks/t1/work-allocations" in body  # the "+" form action
-        assert "/tasks/t1/work-allocations/remove-latest" not in body  # − hidden at count 1
+        assert "/tasks/t1/work-allocations/remove-latest" in body  # − shown: 1 undated to remove
 
-    def test_minus_button_renders_at_more_than_one_session(self, conn):
+    def test_minus_button_hidden_with_no_undated_sessions(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert "/tasks/t1/work-allocations/remove-latest" not in body
+
+    def test_count_reflects_sessions_still_needing_placement(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
+
+        calendar_router.create_timetable_allocation(
+            task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T17:00:00", date_=_MONDAY, conn=conn
+        )
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
+
+    def test_minus_button_renders_at_more_than_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")

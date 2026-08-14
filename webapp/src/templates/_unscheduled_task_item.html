@@ -9,13 +9,24 @@
      - the drag source for dropping the task onto a grid (project_calendar.js
        interaction 1 -- POINTER-based drag, so the item deliberately carries
        no native `draggable` attribute)
-     - a session count between − and + buttons: "+" adds an undated session
-       placeholder (POST /tasks/{uid}/work-allocations), "−" removes the most
-       recently added one (POST /tasks/{uid}/work-allocations/remove-latest).
-       The − button is hidden at count 1 (the panel never removes the last
-       session -- a task can have no timeblock, that's the plain unscheduled
-       state and the task modal's Work sessions card reaches 0); the count
-       is the number the buttons sit next to.
+     - a stepper between − and +, showing `item.sessions.undated_count` --
+       sessions STILL NEEDING PLACEMENT, not the task's total session count
+       (`item.sessions.count`, unused by this macro). Placing a session on a
+       grid (or unscheduling one back off it) already moves it in/out of
+       this number automatically, since it's just "how many of this task's
+       sessions have no start/end yet" -- direct feedback (2026-08-14, same
+       day as the two "session count" fixes above): dropping one of a
+       task's sessions onto the grid didn't move the panel's number at all
+       when it showed the total, which read as "the counter doesn't
+       update". "+" adds an undated session placeholder (POST /tasks/{uid}/
+       work-allocations), incrementing this count; "−" removes the most
+       recently added UNDATED one (POST /tasks/{uid}/work-allocations/
+       remove-latest, `db.remove_latest_work_allocation` -- never touches an
+       already-scheduled session) and is hidden at 0 (nothing left to
+       remove). Reaching 0 remaining is a normal, common state (everything
+       is placed), not a floor the panel avoids -- unlike the task's overall
+       session *count*, which the task modal's Work sessions card still
+       manages independently.
    Both forms carry `next_url` (a same-origin path, see the tasks router's
    `_safe_next`) so the POST reloads the grid it was used from.
    Import with `with context` -- the macro body calls the `icon` global. #}
@@ -26,13 +37,13 @@
     {% endif %}
     <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
     <span class="unscheduled-stepper">
-        {% if item.sessions.count > 1 %}
+        {% if item.sessions.undated_count > 0 %}
         <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
             <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added work session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
+            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
         </form>
         {% endif %}
-        <span class="unscheduled-count" title="Work sessions">{{ item.sessions.count }}</span>
+        <span class="unscheduled-count" title="Sessions still needing placement">{{ item.sessions.undated_count }}</span>
         <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
             <input type="hidden" name="next" value="{{ next_url }}">
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this task onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>

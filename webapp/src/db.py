@@ -1710,19 +1710,25 @@ def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[
 
 
 def remove_latest_work_allocation(conn: sqlite3.Connection, task_uid: str) -> str | None:
-    """Remove the task's most recently added work session -- the last in
-    `list_work_allocations_for_task`'s creation order, the one the planning
-    grids' "Unscheduled work" panel "−" button should undo first (it undoes
-    the last "+" or the last placed block). Returns the removed event's uid,
-    or None if the task has no work sessions to remove (also None for a
-    task that doesn't exist -- get_task guard, same as
-    create_work_allocation). The task itself is never touched."""
+    """Remove the task's most recently added UNDATED work session -- the
+    last still-undated one in `list_work_allocations_for_task`'s creation
+    order, the "Unscheduled work" panel "−" button's undo of its own "+".
+    Deliberately ignores dated (already-scheduled) sessions even if one of
+    those is more recently created -- the panel's count is now "sessions
+    still needing placement" (`work_allocation_panel_info`'s
+    `undated_count`), so "−" must only ever touch that same pool; it must
+    never silently delete an already-scheduled calendar block just because
+    it happened to be the most recent thing created. Returns the removed
+    event's uid, or None if the task has no undated sessions to remove
+    (also None for a task that doesn't exist -- get_task guard, same as
+    create_work_allocation). The task itself, and every dated session, are
+    never touched."""
     if get_task(conn, task_uid) is None:
         return None
-    allocations = list_work_allocations_for_task(conn, task_uid)
-    if not allocations:
+    undated = [wa for wa in list_work_allocations_for_task(conn, task_uid) if not wa.get("start_at")]
+    if not undated:
         return None
-    uid = allocations[-1]["uid"]
+    uid = undated[-1]["uid"]
     delete_event(conn, uid)
     return uid
 

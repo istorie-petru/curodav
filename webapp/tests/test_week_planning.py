@@ -283,21 +283,51 @@ class TestDeleteAllocation:
 
 
 class TestUnscheduledPanelStepper:
-    """1.9 "unscheduled work" panel rework: each panel item shows its session
-    count with −/+ buttons and a scheduled/total hours readout; the − button
-    only renders at count > 1 (the panel never removes the last session --
-    going to zero is the task modal's Work sessions card)."""
+    """"Unscheduled work" panel rework: each panel item shows its
+    still-needing-placement session count (`undated_count`, not the task's
+    total session count) with −/+ buttons. Direct feedback (2026-08-14):
+    dropping one of a task's sessions onto the grid didn't move this number
+    when it showed the total -- it must count DOWN as sessions get placed,
+    and the − button must be available whenever there's an undated session
+    to remove, including down to exactly one (reaching 0 remaining is a
+    normal state, not a floor the panel avoids)."""
 
-    def test_item_shows_plus_button_and_count_not_minus_at_one(self, conn):
+    def test_item_shows_plus_and_minus_buttons_at_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
         body = week_router.week_view(_request(), conn=conn).body.decode()
         assert 'data-task-uid="t1"' in body
         assert "unscheduled-count" in body
         assert "/tasks/t1/work-allocations" in body  # the "+" form action
-        assert "/tasks/t1/work-allocations/remove-latest" not in body  # − hidden at count 1
+        assert "/tasks/t1/work-allocations/remove-latest" in body  # − shown: 1 undated to remove
 
-    def test_minus_button_renders_at_more_than_one_session(self, conn):
+    def test_minus_button_hidden_with_no_undated_sessions(self, conn):
+        """A task with only DATED (already-scheduled) sessions has nothing
+        left for the panel's "−" to remove -- it must never appear as a way
+        to delete a scheduled block."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        body = week_router.week_view(_request(), conn=conn).body.decode()
+        assert "/tasks/t1/work-allocations/remove-latest" not in body
+
+    def test_count_reflects_sessions_still_needing_placement(self, conn):
+        """The displayed number is undated_count, not the task's total
+        session count -- placing one of two sessions on the grid must move
+        it from 2 to 1, not leave it stuck at 2."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        body = week_router.week_view(_request(), conn=conn).body.decode()
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
+
+        event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        week_router.create_allocation(
+            task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T17:00:00", date_=_MONDAY, conn=conn
+        )
+        body = week_router.week_view(_request(), conn=conn).body.decode()
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
+
+    def test_minus_button_renders_at_more_than_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")

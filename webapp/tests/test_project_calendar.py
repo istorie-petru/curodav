@@ -361,10 +361,13 @@ class TestDeleteAllocation:
 
 
 class TestUnscheduledPanelStepper:
-    """1.9 "unscheduled work" panel rework on the project Week Calendar:
-    per-item session count with −/+ buttons on a ONE-LINE card (2026-08-14):
-    a project pill (icon + name) then the task title on the left, the
-    session count on the right -- no hours readout, no due date, no grip."""
+    """"Unscheduled work" panel rework on the project Week Calendar: a
+    ONE-LINE card (2026-08-14) -- a project pill (icon + name) then the task
+    title on the left, a stepper on the right showing sessions still
+    needing placement (`undated_count`, not the task's total session
+    count -- see test_week_planning.py's own TestUnscheduledPanelStepper
+    docstring for the direct feedback behind this, 2026-08-14, "the counter
+    doesn't update from 2 to 1"). No hours readout, no due date, no grip."""
 
     def _view(self, conn):
         return projects_router.project_calendar(
@@ -374,7 +377,7 @@ class TestUnscheduledPanelStepper:
             conn=conn,
         ).body.decode()
 
-    def test_item_shows_plus_button_and_count_not_minus_at_one(self, conn):
+    def test_item_shows_plus_and_minus_buttons_at_one_undated_session(self, conn):
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
@@ -382,9 +385,31 @@ class TestUnscheduledPanelStepper:
         assert 'data-task-uid="t1"' in body
         assert "unscheduled-count" in body
         assert "/tasks/t1/work-allocations" in body  # the "+" form action
-        assert "/tasks/t1/work-allocations/remove-latest" not in body  # − hidden at count 1
+        assert "/tasks/t1/work-allocations/remove-latest" in body  # − shown: 1 undated to remove
 
-    def test_minus_button_renders_at_more_than_one_session(self, conn):
+    def test_minus_button_hidden_with_no_undated_sessions(self, conn):
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        body = self._view(conn)
+        assert "/tasks/t1/work-allocations/remove-latest" not in body
+
+    def test_count_reflects_sessions_still_needing_placement(self, conn):
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        body = self._view(conn)
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
+
+        projects_router.create_allocation(
+            "Conference XYZ", task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T17:00:00",
+            date_=_MONDAY, conn=conn,
+        )
+        body = self._view(conn)
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
+
+    def test_minus_button_renders_at_more_than_one_undated_session(self, conn):
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         db.create_work_allocation(conn, "t1")

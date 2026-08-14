@@ -515,6 +515,41 @@ session, right before the final commit of that session.
   unscheduled session survives (undated) and the other sessions are
   untouched; 2 now-pointless `db.collapse_task_work_allocations` unit tests
   removed from `test_work_allocations.py`. Full suite 1198 passed.
+- **Fixed:** side work — **the "Unscheduled work" panel's number now counts
+  down as sessions get placed**, complete (2026-08-14), immediate follow-up
+  feedback on the fix directly above ("i have two work sessions. why after
+  droping one, the counter... doesn't update from 2 to 1"). Root cause: the
+  panel displayed `item.sessions.count` — the task's TOTAL session count —
+  which by design (confirmed with the user earlier the same day, "the count
+  ... keeps acting as an accurate running total of planned sessions") never
+  changes just from scheduling one of them. That's correct for "how much
+  work did I plan," but the user's actual mental model for this specific
+  number was "how many sessions still need placing" — asked directly via
+  AskUserQuestion given two prior same-day pivots already, confirmed:
+  "sessions still needing placement." `_unscheduled_task_item.html` now
+  shows `item.sessions.undated_count` instead (the field already existed on
+  `db.work_allocation_panel_info`, just wasn't the one rendered) — this
+  automatically counts down as sessions are placed and back up when
+  unscheduled, no router changes needed for the display itself. The "−"
+  stepper button visibility changed from `count > 1` to `undated_count > 0`
+  (available whenever there's an unplaced session to remove, including down
+  to exactly one — reaching 0 remaining is now a normal state, not a floor
+  the panel avoids). `db.remove_latest_work_allocation` (the "−" button's
+  handler) changed to only ever consider undated sessions when picking
+  "most recently added" — it used to pick the literal last-created session
+  regardless of scheduled state, which could have silently deleted an
+  already-scheduled block if that happened to be more recent than any
+  undated one; now it's guaranteed to only ever touch the same pool the
+  displayed number represents. Verified live again (headless Chromium,
+  a task with 2 undated sessions): counter read 2, dropped one onto the
+  grid, counter read 1. Updated `_unscheduled_task_item.html`'s and
+  `features/tasks.md`'s stepper documentation off the old "total count"
+  wording. `TestUnscheduledPanelStepper` rewritten across `test_week_
+  planning.py`/`test_calendar_timetable.py`/`test_project_calendar.py` (−
+  now shown at exactly 1 undated session, hidden only at 0 even if the task
+  has dated sessions; new count-decrements-on-placement assertions); one new
+  `test_work_allocations.py` test (`test_remove_latest_never_touches_a_
+  dated_session`). Full suite 1205 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

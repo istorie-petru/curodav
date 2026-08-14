@@ -378,6 +378,24 @@ class TestPanelInfoAndSessionStepper:
         assert db.remove_latest_work_allocation(conn, "t1") is None
         assert db.remove_latest_work_allocation(conn, "ghost") is None
 
+    def test_remove_latest_never_touches_a_dated_session(self, conn):
+        """Direct feedback (2026-08-14): the panel's number is "sessions
+        still needing placement" (undated_count), so its "−" must only ever
+        remove undated sessions -- even one created AFTER an already-
+        scheduled block (i.e. more recent in creation order) must be picked
+        over it. With no undated sessions left, "−" is a no-op even though
+        the task still has dated ones."""
+        _seed_task(conn, "t1")
+        dated = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        undated = db.create_work_allocation(conn, "t1")  # created after `dated`
+        removed = db.remove_latest_work_allocation(conn, "t1")
+        assert removed == undated
+        remaining = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        assert remaining == [dated]
+        # Nothing left to remove -- the dated session is never touched.
+        assert db.remove_latest_work_allocation(conn, "t1") is None
+        assert [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")] == [dated]
+
     def test_add_work_allocation_route_returns_to_next_path(self, conn):
         _seed_task(conn, "t1")
         resp = tasks_router.add_work_allocation(

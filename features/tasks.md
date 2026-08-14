@@ -142,11 +142,20 @@ sub-view, `/week`, and the project Week Calendar) showing, per task:
   "hours on the calendar out of hours planned", e.g. `2/3h`;
 - a **−/count/+ session stepper**: "+" posts `POST /tasks/{uid}/work-
   allocations` (adds an undated placeholder), "−" posts `POST /tasks/{uid}/
-  work-allocations/remove-latest` (removes the most recently added session,
-  `db.remove_latest_work_allocation`) and **only renders at count > 1** —
-  the panel never removes the last session, so "a task can have no
-  timeblock" remains the plain zero-session unscheduled state (reachable via
-  the task modal's Work sessions card). Both forms carry a same-origin
+  work-allocations/remove-latest` (removes the most recently added UNDATED
+  session, `db.remove_latest_work_allocation` — never an already-scheduled
+  one) and **renders whenever `undated_count > 0`**. The number itself is
+  `undated_count` — sessions still needing placement — NOT the task's total
+  session count (`count`); direct feedback (2026-08-14, same day as the
+  fixes above) was that dropping one of a task's sessions onto the grid
+  didn't move the panel's number when it showed the total ("the counter
+  doesn't update from 2 to 1"). Placing a session (or unscheduling one back
+  off the grid) automatically moves it in/out of this number, since it's
+  just "how many of this task's sessions have no start/end yet." Reaching 0
+  remaining is a normal state (everything's placed), not a floor the panel
+  avoids — that's a change from the count's old semantics, where the panel
+  deliberately never let you reach zero *total* sessions (that's still the
+  task modal's Work sessions card's job). Both forms carry a same-origin
   `next` path (validated by `tasks.py::_safe_next` against open-redirect
   payloads) so the reload lands back on the grid they were used from.
 - **Unschedule never changes the task's session count** — the three delete
