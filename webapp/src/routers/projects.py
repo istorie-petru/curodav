@@ -321,12 +321,14 @@ def move_allocation(
 
 @router.post("/{name}/calendar/allocations/{event_uid}/delete")
 def delete_allocation(name: str, event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
-    """Unschedule a block -- deletes ONLY this one scheduled session; the
-    task's other sessions (dated or still-undated) and the task itself are
-    untouched. Same fixed semantics as routers/week.py::delete_allocation --
-    see that function's docstring for why this no longer collapses the
-    task's whole session count to one."""
-    db.delete_work_allocation(conn, event_uid)
+    """Unschedule a block -- clears this ONE session back to undated
+    (`db.unschedule_work_allocation`) instead of deleting it; the task's
+    total session count never changes just from unscheduling. Same fixed
+    semantics as routers/week.py::delete_allocation -- see that function's
+    docstring for the two earlier same-day designs this replaced (collapse-
+    to-one, then a hard delete, both wrong)."""
+    if not db.unschedule_work_allocation(conn, event_uid):
+        db.delete_work_allocation(conn, event_uid)
     return _calendar_redirect(name, date_)
 
 

@@ -1644,6 +1644,35 @@ def set_work_allocation_times(conn: sqlite3.Connection, event_uid: str, start_at
     return True
 
 
+def unschedule_work_allocation(conn: sqlite3.Connection, event_uid: str) -> bool:
+    """The inverse of `set_work_allocation_times`: clear an existing work-
+    allocation session's start/end back to undated instead of deleting the
+    session outright. This is what "unschedule" means for the planning
+    grids' block interactions (drag a block back onto the "Unscheduled
+    work" panel, or its own delete button) -- the block comes off the
+    calendar, but the session itself is still there, now back on the panel
+    as an unplaced session, exactly like a "+"-added placeholder. 2026-08-14:
+    this used to fully `delete_work_allocation` the block, which silently
+    shrank the task's total session count by one every time a block was
+    unscheduled -- surprising when the point of unscheduling is "I'll place
+    this later," not "I don't need this session anymore" (that's what the
+    panel's own "−" stepper, or the task's Work sessions card, are for).
+    Only a real work allocation may be unscheduled (`work_allocation_
+    task_uid` guard, same idiom `set_work_allocation_times` uses); returns
+    False if it isn't one or the event doesn't exist."""
+    if not work_allocation_task_uid(conn, event_uid):
+        return False
+    existing = get_event(conn, event_uid)
+    if existing is None:
+        return False
+    row = dict(existing)
+    row["start_at"] = None
+    row["end_at"] = None
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upsert_event(conn, row)
+    return True
+
+
 def _hours_between(start_at: str | None, end_at: str | None) -> float:
     if not start_at or not end_at:
         return 0.0

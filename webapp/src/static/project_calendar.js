@@ -33,10 +33,11 @@
 //    (a CSS selector for the unscheduled panel) to enable it; while the
 //    drag is over that panel the block highlights it, and releasing there
 //    submits the delete form instead of the move form. Releasing anywhere
-//    else keeps the normal move/resize behavior. The delete endpoint
-//    removes ONLY this one session -- the task's other sessions (dated or
-//    still-undated) are untouched, so the reload shows the task back on
-//    the panel at whatever count it already had, minus this one.
+//    else keeps the normal move/resize behavior. The "delete" endpoint
+//    doesn't actually delete the session -- it clears this ONE session's
+//    start/end back to undated (`db.unschedule_work_allocation`), so the
+//    reload shows the task back on the panel at the SAME session count it
+//    already had (just one more of them now undated), never fewer.
 // 4. (Optional, config-driven) A plain click on a `.work-allocation`
 //    block's own body (not its title link, not the delete button, not a
 //    drag, not the resize handle) opens the block's task VIEW modal -- so
@@ -364,10 +365,10 @@
         return;
       }
 
-      // Released over the unscheduled-work panel -> delete this one block
-      // (the task's other sessions are untouched, so the reload shows the
-      // task back in the "Unscheduled work" list at whatever count it
-      // already had, minus this one).
+      // Released over the unscheduled-work panel -> unschedule this one
+      // block (clears its start/end back to undated, doesn't delete it --
+      // see routers/*.py's delete_allocation), so the reload shows the task
+      // back in the "Unscheduled work" list at the SAME session count.
       if (wasOverUnscheduled && cfg.deleteUrlBase) {
         submitForm(cfg.deleteUrlBase + el.dataset.uid + "/delete", {
           date_: cfg.weekDate,

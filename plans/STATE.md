@@ -473,39 +473,48 @@ session, right before the final commit of that session.
   and to cover the project-icon pill (`test_project_calendar.py`/
   `test_week_planning.py`/`test_calendar_timetable.py`), full suite 1199
   passed.
-- **Fixed:** side work — **unscheduling a block no longer wipes a task's
-  other work sessions**, complete (2026-08-14), reported directly against
+- **Fixed:** side work — **unscheduling a block no longer changes a task's
+  session count at all**, complete (2026-08-14), reported directly against
   the Timetable ("deleting/drag-drop doesn't work at all... doesn't hold the
   number of work sessions to be a guide"). Reproduced live (headless
   Chromium against a real seeded app instance, not just reading code) before
-  changing anything: a task with 3 sessions (1 scheduled + 2 still-undated)
-  lost ALL of them, collapsing to exactly 1 undated placeholder, the moment
-  *any one* scheduled block was deleted/unscheduled -- `db.
-  collapse_task_work_allocations`, called unconditionally by all three
-  planning grids' delete endpoints (`routers/week.py`, `routers/calendar.py`
-  ::`delete_timetable_allocation`, `routers/projects.py`). That was the
-  earlier same-day "Unschedule now collapses" side work's own deliberate
-  design (§ above), built from feedback that day -- confirmed with the user
-  before reversing it, since this reverts a very recent explicit decision.
-  Root cause fixed: all three endpoints now call the already-existing
-  `db.delete_work_allocation` (== `delete_event`, "removes only that
-  scheduled block") directly, no task_uid branch, no collapse; `db.
-  collapse_task_work_allocations` deleted outright (dead code once nothing
-  called it, and leaving it around risked a future "fix" wiring it back in).
-  Separately confirmed but NOT changed: the block's ✕ button posts a form
-  whose action contains "/delete", so `app.js`'s generic delete-confirmation
-  fallback intercepts it and requires a second click on a small popover --
-  functions correctly once you click through it (verified live), just easy
-  to miss on a first click; left as-is since the fallback is now accurate
-  ("cannot be undone" is true again post-fix) and is the same pattern used
-  elsewhere in the app. Updated the three delete-button tooltips (`week_
-  planning.html`/`calendar_timetable.html`/`project_calendar.html`) and
-  `project_calendar.js`'s header comment off the old "collapses to one"
-  wording. 3 tests changed to assert only-the-one-session-is-removed
-  (`test_week_planning.py`/`test_calendar_timetable.py`/
-  `test_project_calendar.py`'s `TestDeleteAllocation`), 2 now-pointless
-  `db.collapse_task_work_allocations` unit tests removed from `test_work_
-  allocations.py`, full suite 1198 passed.
+  changing anything, and again after each fix attempt -- went through three
+  designs the same day:
+  1. Original ("Unschedule now collapses" side work, earlier the same day):
+     any single block delete/unschedule collapsed ALL of the task's
+     sessions to exactly one undated placeholder (`db.
+     collapse_task_work_allocations`, called unconditionally by all three
+     planning grids' delete endpoints). A task with 3 sessions (1 scheduled
+     + 2 still-undated) lost the other 2 the moment just one was
+     unscheduled -- confirmed live, and confirmed with the user this was
+     the actual bug before reversing a very recent explicit decision.
+  2. First fix: swapped in `db.delete_work_allocation` (a real, permanent
+     delete of just the one session) -- fixed the "wipes other sessions"
+     part, but now a single-session task's count visibly dropped to 0 the
+     instant its only block was unscheduled, since "unschedule" isn't "I
+     don't need this session anymore." User caught this immediately
+     ("why when i drag a work time block onto unschedule, i says 0
+     sessions").
+  3. Final fix: new `db.unschedule_work_allocation` clears the one
+     session's start/end back to undated (mirrors the already-existing
+     `set_work_allocation_times`) instead of deleting anything -- the
+     task's session count never changes just from scheduling/unscheduling a
+     block; only the panel's own −/+ stepper (or the task's Work sessions
+     card) adds/removes sessions. `db.collapse_task_work_allocations`
+     deleted outright (dead code, and leaving it around risked a future
+     "fix" reintroducing #1). Since unscheduling is no longer destructive,
+     the block's delete-button form got `data-confirmed="1"` so it skips
+     `app.js`'s generic delete-confirmation popover and submits instantly,
+     matching the drag-onto-panel gesture's already-immediate behavior.
+  Updated the three delete-button tooltips (`week_planning.html`/
+  `calendar_timetable.html`/`project_calendar.html`),
+  `project_calendar.js`'s header comment, and `features/tasks.md`'s two
+  references, off the stale wording each round. Tests in
+  `test_week_planning.py`/`test_calendar_timetable.py`/
+  `test_project_calendar.py`'s `TestDeleteAllocation` now assert the
+  unscheduled session survives (undated) and the other sessions are
+  untouched; 2 now-pointless `db.collapse_task_work_allocations` unit tests
+  removed from `test_work_allocations.py`. Full suite 1198 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

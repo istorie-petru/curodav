@@ -92,9 +92,16 @@
                      style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                     <a class="te-name" href="/tasks/{{ e.task_uid }}" data-modal>{{ e.title }}</a>
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
-                    <form class="work-allocation-delete" method="post" action="/calendar/timetable/allocations/{{ e.uid }}/delete">
+                    {# data-confirmed: this no longer deletes the session (see
+                       routers/calendar.py::delete_timetable_allocation) -- it
+                       unschedules it back to an undated placeholder, which
+                       isn't destructive, so it skips app.js's generic
+                       "action contains /delete -> confirm sheet" fallback
+                       and submits immediately, same as the drag-onto-panel
+                       gesture already does. #}
+                    <form class="work-allocation-delete" method="post" action="/calendar/timetable/allocations/{{ e.uid }}/delete" data-confirmed="1">
                         <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
-                        <button type="submit" class="icon-btn" title="Delete this session (only this one -- the task's other sessions are unaffected)">{{ icon('x', 'icon-sm') }}</button>
+                        <button type="submit" class="icon-btn" title="Unschedule this session (it stays on the task, unplaced, on Unscheduled work)">{{ icon('x', 'icon-sm') }}</button>
                     </form>
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>

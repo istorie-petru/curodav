@@ -149,15 +149,23 @@ sub-view, `/week`, and the project Week Calendar) showing, per task:
   the task modal's Work sessions card). Both forms carry a same-origin
   `next` path (validated by `tasks.py::_safe_next` against open-redirect
   payloads) so the reload lands back on the grid they were used from.
-- **Unschedule removes only the one block** — the three delete endpoints
-  (`db.delete_work_allocation`) delete just the session being unscheduled;
-  the task's other sessions, dated or still-undated, are untouched, and the
-  task itself is never deleted. (2026-08-14: briefly collapsed *every*
-  session down to one undated placeholder instead — `db.
-  collapse_task_work_allocations` — until direct feedback the same day
-  flagged that as silently discarding a task's other planned sessions on
-  any single unschedule, "the session count doesn't hold as a guide";
-  reverted, and the now-dead collapse helper was deleted.)
+- **Unschedule never changes the task's session count** — the three delete
+  endpoints (`db.unschedule_work_allocation`) clear ONLY the one session's
+  start/end back to undated instead of deleting it; the task's other
+  sessions are untouched and the session count stays exactly what it was.
+  (2026-08-14, two earlier designs the same day, both wrong: first this
+  collapsed *every* session down to one undated placeholder on any single
+  unschedule — `db.collapse_task_work_allocations`, since deleted — until
+  direct feedback flagged that as silently discarding a task's other
+  planned sessions, "the session count doesn't hold as a guide"; the first
+  fix for that then hard-deleted just the one session via `db.
+  delete_work_allocation`, which visibly dropped a single-session task's
+  count to zero the moment its only block was unscheduled — also wrong,
+  since unscheduling isn't "I don't need this session anymore," that's what
+  the panel's own −/+ stepper or the task's Work sessions card are for.)
+  The block's delete button and the drag-onto-panel gesture both skip the
+  generic delete-confirmation popover now too (`data-confirmed="1"` on the
+  form) since neither is destructive anymore.
 - **Pointer-based drag** (static/project_calendar.js interaction 1) replaces
   native HTML5 drag-and-drop: a fixed ghost clone follows the cursor, the
   hovered column lights up, and the grid auto-scrolls near its top/bottom
@@ -351,9 +359,9 @@ the same technique `routers/calendar.py::reschedule_event` already uses for
 the global grid's own drag, just a form-POST/redirect endpoint instead of
 that route's JSON/fetch contract, to match this page's other actions. Each
 block's delete button POSTs to `.../{event_uid}/delete`
-(`delete_allocation` -> `db.delete_work_allocation`) — removes only that one
-session; the task's other sessions and the task itself are untouched.
-Ordinary
+(`delete_allocation` -> `db.unschedule_work_allocation`) — clears only that
+one session's start/end back to undated; the task's other sessions, the
+task itself, and the task's total session count are all untouched. Ordinary
 calendar events (and any other project's own work allocations) render as
 visually subdued context (`.context-event`, reduced opacity); only this
 project's own work allocations (`.work-allocation`) are prominent and

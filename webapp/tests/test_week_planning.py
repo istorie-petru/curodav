@@ -246,33 +246,40 @@ class TestMoveAllocation:
 
 
 class TestDeleteAllocation:
-    def test_delete_removes_only_the_block_not_the_task(self, conn):
-        """Deleting a block removes only that one session; a task with no
-        other sessions is left at zero (still discoverable on the panel via
-        its count=0 state), and the task itself is never deleted."""
+    def test_delete_unschedules_the_block_not_the_task(self, conn):
+        """"Delete" on a block doesn't delete the session -- it clears its
+        start/end back to undated, so the task's session COUNT never drops
+        just from unscheduling; the task itself is never deleted either."""
         _task(conn, "t1", title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         resp = week_router.delete_allocation(event_uid, date_=_MONDAY, conn=conn)
         assert resp.status_code == 303
-        assert db.get_event(conn, event_uid) is None
         assert db.get_task(conn, "t1") is not None
-        assert db.list_work_allocations_for_task(conn, "t1") == []
+        remaining = db.list_work_allocations_for_task(conn, "t1")
+        assert [wa["uid"] for wa in remaining] == [event_uid]
+        assert remaining[0]["start_at"] is None
+        assert remaining[0]["end_at"] is None
 
     def test_delete_leaves_the_tasks_other_sessions_untouched(self, conn):
-        """Fixed 2026-08-14 direct feedback: removing one scheduled block
-        used to collapse ALL of a task's sessions down to a single undated
-        placeholder, silently discarding the others -- "the session count
-        doesn't hold as a guide". Deleting one of three sessions must leave
-        the other two exactly as they were."""
+        """Went through two earlier same-day (2026-08-14) designs, both
+        wrong: first this collapsed ALL of a task's sessions down to one
+        undated placeholder on any single unschedule ("the session count
+        doesn't hold as a guide"); the fix for that then hard-deleted just
+        the one session, which visibly dropped a single-session task's count
+        to zero on unschedule. Unscheduling one of three sessions must leave
+        the other two exactly as they were AND leave the unscheduled one
+        still present, just undated -- the count never changes."""
         _task(conn, "t1", title="Research")
         for day in ("2026-08-17", "2026-08-18", "2026-08-19"):
             db.create_work_allocation(conn, "t1", f"{day}T16:00:00", f"{day}T18:00:00")
         event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
         week_router.delete_allocation(event_uids[0], date_=_MONDAY, conn=conn)
         remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert [wa["uid"] for wa in remaining] == event_uids[1:]
-        assert db.get_event(conn, event_uids[0]) is None
-        assert all(db.get_event(conn, uid) is not None for uid in event_uids[1:])
+        assert [wa["uid"] for wa in remaining] == event_uids
+        by_uid = {wa["uid"]: wa for wa in remaining}
+        assert by_uid[event_uids[0]]["start_at"] is None
+        assert by_uid[event_uids[1]]["start_at"] is not None
+        assert by_uid[event_uids[2]]["start_at"] is not None
 
 
 class TestUnscheduledPanelStepper:
