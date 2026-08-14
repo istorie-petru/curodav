@@ -107,7 +107,10 @@ def week_view(request: Request, date_: str | None = None, conn=Depends(get_db)):
     # "already-allocated tasks drop off the list entirely" rule
     # project_calendar's own unscheduled_tasks uses, just not scoped to one
     # project's label. Sorted by due date (earliest/most time-pressured
-    # first), no-due-date tasks last.
+    # first), no-due-date tasks last. Each item carries its
+    # db.work_allocation_panel_info summary (session count + scheduled/total
+    # hours) for the stepper and x/y readout the shared
+    # _unscheduled_task_item.html partial renders.
     unscheduled_tasks = []
     for t in open_tasks:
         # Unscheduled = no work session at all, OR any session still has no
@@ -115,12 +118,11 @@ def week_view(request: Request, date_: str | None = None, conn=Depends(get_db)):
         # card awaiting placement on a grid -- see db.create_work_allocation's
         # undated form). Only a task whose every session is dated has nothing
         # left to place, so only those drop off the panel.
-        allocations = db.list_work_allocations_for_task(conn, t["uid"])
-        if allocations and all(a.get("start_at") for a in allocations):
+        info = db.work_allocation_panel_info(conn, t["uid"])
+        if info["count"] and not info["undated_count"]:
             continue
-        project = db.project_label_for(conn, "task", t["uid"])
-        hours = db.task_work_hours(conn, t["uid"])
-        unscheduled_tasks.append({"task": t, "project": project, "hours": hours})
+        project = db.project_label_config_for(conn, "task", t["uid"])
+        unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     return templates.TemplateResponse(
@@ -136,6 +138,7 @@ def week_view(request: Request, date_: str | None = None, conn=Depends(get_db)):
             "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
             "next_week": (week_start_date + timedelta(days=7)).isoformat(),
             "unscheduled_tasks": unscheduled_tasks,
+            "unscheduled_next": f"/week?date_={week_start_date.isoformat()}",
         },
     )
 
@@ -200,8 +203,17 @@ def move_allocation(
 
 @router.post("/allocations/{event_uid}/delete")
 def delete_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
-    """Removes only the scheduled block, never the task -- db.delete_work_
-    allocation is delete_event under a name that states that explicitly at
-    the call site, same as routers/projects.py::delete_allocation."""
-    db.delete_work_allocation(conn, event_uid)
+    """Unschedule a block -- the scheduled block is deleted and the task is
+    left with exactly one work session: an undated placeholder back on the
+    "Unscheduled work" panel (db.collapse_task_work_allocations). This is
+    the 1.9 semantics for the unschedule gesture (drag the block back onto
+    the panel, or use its delete button) -- "when unscheduling a task it is
+    deleted and only one work session remains"; session *management* now
+    lives on the panel's +/− stepper and the task's Work sessions card. A
+    non-allocation event (no task to collapse) is still just deleted."""
+    task_uid = db.work_allocation_task_uid(conn, event_uid)
+    if task_uid:
+        db.collapse_task_work_allocations(conn, task_uid)
+    else:
+        db.delete_work_allocation(conn, event_uid)
     return _week_redirect(date_)

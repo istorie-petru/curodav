@@ -723,7 +723,10 @@ def timetable_view(
     # Unscheduled work (the drag source): every open task with no work
     # allocation yet, across every project or none -- same rule as
     # routers/week.py::week_view, sorted by due date (earliest first,
-    # no-due-date tasks last).
+    # no-due-date tasks last). Each item carries its
+    # db.work_allocation_panel_info summary (session count + scheduled/total
+    # hours) for the stepper and x/y readout the shared
+    # _unscheduled_task_item.html partial renders.
     unscheduled_tasks = []
     for t in open_tasks:
         # Unscheduled = no work session at all, OR any session still has no
@@ -731,12 +734,11 @@ def timetable_view(
         # card awaiting placement on a grid -- see db.create_work_allocation's
         # undated form). Only a task whose every session is dated has nothing
         # left to place, so only those drop off the panel.
-        allocations = db.list_work_allocations_for_task(conn, t["uid"])
-        if allocations and all(a.get("start_at") for a in allocations):
+        info = db.work_allocation_panel_info(conn, t["uid"])
+        if info["count"] and not info["undated_count"]:
             continue
-        project = db.project_label_for(conn, "task", t["uid"])
-        hours = db.task_work_hours(conn, t["uid"])
-        unscheduled_tasks.append({"task": t, "project": project, "hours": hours})
+        project = db.project_label_config_for(conn, "task", t["uid"])
+        unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     return templates.TemplateResponse(
@@ -754,6 +756,7 @@ def timetable_view(
             "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
             "next_week": (week_start_date + timedelta(days=7)).isoformat(),
             "unscheduled_tasks": unscheduled_tasks,
+            "unscheduled_next": f"/calendar/timetable?date_={week_start_date.isoformat()}",
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
             "schedule_next_lectures": _group_education_next_lectures(conn, label),
@@ -824,9 +827,17 @@ def move_timetable_allocation(
 
 @router.post("/timetable/allocations/{event_uid}/delete")
 def delete_timetable_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
-    """Removes only the scheduled block, never the task -- db.delete_work_
-    allocation, same as routers/week.py::delete_allocation."""
-    db.delete_work_allocation(conn, event_uid)
+    """Unschedule a block -- the scheduled block is deleted and the task is
+    left with exactly one work session: an undated placeholder back on the
+    "Unscheduled work" panel (db.collapse_task_work_allocations). Same 1.9
+    semantics as routers/week.py::delete_allocation -- "when unscheduling a
+    task it is deleted and only one work session remains". A non-allocation
+    event (no task to collapse) is still just deleted."""
+    task_uid = db.work_allocation_task_uid(conn, event_uid)
+    if task_uid:
+        db.collapse_task_work_allocations(conn, task_uid)
+    else:
+        db.delete_work_allocation(conn, event_uid)
     return _timetable_redirect(date_)
 
 

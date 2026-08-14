@@ -48,10 +48,10 @@ def _request(path="/projects", query_string=b""):
     )
 
 
-def _project(conn, name, start_date="2026-08-01", end_date="2026-09-01"):
+def _project(conn, name, start_date="2026-08-01", end_date="2026-09-01", icon=None):
     db.upsert_label_config(
         conn,
-        {"name": name, "is_project": 1, "start_date": start_date, "end_date": end_date, "created_at": _now()},
+        {"name": name, "is_project": 1, "start_date": start_date, "end_date": end_date, "icon": icon, "created_at": _now()},
     )
 
 
@@ -88,7 +88,9 @@ class TestProjectCalendarRoute:
             _request("/projects/Conference XYZ/calendar"),
             conn=conn,
         ).body.decode()
-        assert "Conference XYZ &gt; Research" in body or "Conference XYZ > Research" in body
+        assert 'class="unscheduled-project-pill"' in body
+        assert "Conference XYZ" in body
+        assert "Research" in body
 
     def test_task_with_an_allocation_drops_off_the_unscheduled_list(self, conn):
         _project(conn, "Conference XYZ")
@@ -100,8 +102,7 @@ class TestProjectCalendarRoute:
             date_=_MONDAY,
             conn=conn,
         ).body.decode()
-        assert "Conference XYZ &gt; Research" not in body
-        assert "Conference XYZ > Research" not in body
+        assert 'class="unscheduled-task-item" data-task-uid="t1"' not in body  # the panel item is gone entirely
 
     def test_completed_task_never_appears_unscheduled(self, conn):
         _project(conn, "Conference XYZ")
@@ -124,7 +125,8 @@ class TestProjectCalendarRoute:
         assert "work-allocation" in body
         assert "Research" in body
         assert 'data-task-uid="t1"' in body
-        assert 'href="/tasks/t1/edit"' in body
+        assert 'href="/tasks/t1"' in body
+        assert 'href="/tasks/t1/edit"' not in body
 
     def test_ordinary_event_and_other_projects_allocation_render_as_subdued_context(self, conn):
         _project(conn, "Conference XYZ")
@@ -304,6 +306,10 @@ class TestMoveAllocation:
 
 class TestDeleteAllocation:
     def test_delete_removes_only_the_block_not_the_task(self, conn):
+        """1.9 unschedule semantics: deleting a block leaves the task with
+        exactly ONE work session -- an undated placeholder back on this
+        page's panel (collapse_task_work_allocations) -- not zero, and the
+        task itself is never deleted."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
@@ -312,7 +318,24 @@ class TestDeleteAllocation:
         assert resp.headers["location"] == f"/projects/Conference%20XYZ/calendar?date_={_MONDAY}"
         assert db.get_event(conn, event_uid) is None
         assert db.get_task(conn, "t1") is not None
-        assert db.list_work_allocations_for_task(conn, "t1") == []
+        remaining = db.list_work_allocations_for_task(conn, "t1")
+        assert len(remaining) == 1
+        assert remaining[0]["start_at"] is None  # the one remaining session is undated
+
+    def test_delete_collapses_multiple_sessions_to_one_undated(self, conn):
+        """A task with several scheduled blocks unscheduled via any one of
+        them loses ALL its dated blocks and keeps exactly one undated
+        session (the panel stepper then manages the count)."""
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        for day in ("2026-08-17", "2026-08-18", "2026-08-19"):
+            db.create_work_allocation(conn, "t1", f"{day}T16:00:00", f"{day}T18:00:00")
+        event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        projects_router.delete_allocation("Conference XYZ", event_uids[1], date_=_MONDAY, conn=conn)
+        remaining = db.list_work_allocations_for_task(conn, "t1")
+        assert len(remaining) == 1
+        assert remaining[0]["start_at"] is None
+        assert all(db.get_event(conn, uid) is None for uid in event_uids)
 
     def test_deleted_allocations_task_becomes_unscheduled_again(self, conn):
         _project(conn, "Conference XYZ")
@@ -325,4 +348,58 @@ class TestDeleteAllocation:
             date_=_MONDAY,
             conn=conn,
         ).body.decode()
-        assert "Conference XYZ &gt; Research" in body or "Conference XYZ > Research" in body
+        assert 'class="unscheduled-project-pill"' in body
+        assert "Conference XYZ" in body
+        assert "Research" in body
+
+
+class TestUnscheduledPanelStepper:
+    """1.9 "unscheduled work" panel rework on the project Week Calendar:
+    per-item session count with −/+ buttons on a ONE-LINE card (2026-08-14):
+    a project pill (icon + name) then the task title on the left, the
+    session count on the right -- no hours readout, no due date, no grip."""
+
+    def _view(self, conn):
+        return projects_router.project_calendar(
+            "Conference XYZ",
+            _request("/projects/Conference XYZ/calendar", query_string=f"date_={_MONDAY}".encode()),
+            date_=_MONDAY,
+            conn=conn,
+        ).body.decode()
+
+    def test_item_shows_plus_button_and_count_not_minus_at_one(self, conn):
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")  # one undated session
+        body = self._view(conn)
+        assert 'data-task-uid="t1"' in body
+        assert "unscheduled-count" in body
+        assert "/tasks/t1/work-allocations" in body  # the "+" form action
+        assert "/tasks/t1/work-allocations/remove-latest" not in body  # − hidden at count 1
+
+    def test_minus_button_renders_at_more_than_one_session(self, conn):
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        body = self._view(conn)
+        assert "/tasks/t1/work-allocations/remove-latest" in body
+        assert 'value="/projects/Conference%20XYZ/calendar?date_=' in body  # +/− return here
+
+    def test_card_is_one_line_without_hours(self, conn):
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = self._view(conn)
+        assert "unscheduled-count" in body
+        assert "unscheduled-hours" not in body
+        assert "unscheduled-grip" not in body
+        assert "unscheduled-task-body" not in body
+        assert "&middot; due" not in body
+
+    def test_project_pill_carries_the_projects_icon(self, conn):
+        _project(conn, "Conference XYZ", icon="folder")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        body = self._view(conn)
+        assert 'href="#icon-folder"' in body
+        assert "Conference XYZ" in body

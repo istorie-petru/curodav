@@ -23,7 +23,7 @@ label, and an event's color is its first (alphabetical) label's color
   `.time-col.project-calendar-col`, work allocations prominent and
   draggable (`.work-allocation`, form-POST move/resize/delete, block only
   never the task), ordinary calendar events subdued context
-  (`.context-event`). An "Unscheduled work" sidebar drags onto the grid to
+  (`.context-event`). An "Unscheduled work" sidebar   drags onto the grid to
   create a work allocation (`POST /calendar/timetable/allocations`), and a
   scheduled block dragged back onto the panel is unscheduled (deleted,
   task kept). A task stays on the panel as long as any of its work
@@ -33,13 +33,13 @@ label, and an event's color is its first (alphabetical) label's color
   session** (the oldest undated one) rather than creating another block,
   exactly as `/week` and the project Week Calendar do (see
   `features/tasks.md` § Work allocations). A plain click anywhere on a
-  scheduled block's body (not a
-  drag, not the delete button, not the resize handle) opens its task's
-  edit view — where more work sessions can be added — via
-  `project_calendar.js` interaction 4 (`taskEditUrlBase` config, same
-  destination as the block's own title link). The same whole-block-click
-  and task-view title apply on the sibling planning grids (`/week` and the
-  project Week Calendar), which also override the shared `.time-col`
+  scheduled block's body (not a drag, not the delete button, not the
+  resize handle) opens the block's task **view modal** — not the edit
+  form — via `project_calendar.js` interaction 4 (`taskUrlBase` config,
+  same destination as the block's own title link). The same whole-block-
+  click and task-view title apply on the sibling planning grids (`/week`
+  and the project Week Calendar), which also override the shared
+  `.time-col`
   `cursor:copy` (the Calendar grid's drag-to-create affordance) to plain
   `default` via `.project-calendar-col` — empty-space drag on a planning
   grid isn't a create gesture, so the misleading "add" mouse is gone there.
@@ -49,6 +49,21 @@ label, and an event's color is its first (alphabetical) label's color
   chrome (the New button, or the Week/Day views), not on the scheduling
   grid. The standalone `/week` page and tab remain for backwards
   compatibility.
+
+  **Unscheduled-work panel (2026-08-14)** — each panel item (shared
+  `_unscheduled_task_item.html` partial, same on `/week` and the project
+  Week Calendar) now shows a **scheduled/total hours x/y** next to the task
+  title and a **−/count/+ session stepper** ("+" adds an undated session
+  placeholder via `POST /tasks/{uid}/work-allocations`; "−" removes the most
+  recently added one via `/remove-latest`, hidden at count 1). **Unschedule
+  now collapses** — dragging a block back onto the panel (or its ✕) deletes
+  *all* the task's sessions and leaves exactly one undated one
+  (`db.collapse_task_work_allocations`), so the task returns to the panel at
+  a count of one. The create drag is **pointer-based** (a ghost follows the
+  cursor, the grid auto-scrolls near its top/bottom edge), replacing the old
+  native HTML5 drag-and-drop, and block move/resize gained pointercancel
+  revert + scroll-aware positioning. See `features/tasks.md` § Work
+  allocations.
 
 A segmented subnav switches views while preserving the label filter.
 

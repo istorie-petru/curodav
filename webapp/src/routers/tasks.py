@@ -1223,28 +1223,58 @@ def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_
 # --------------------------------------------------------------------- #
 
 
+def _safe_next(next_url: str) -> str | None:
+    """A same-origin relative path safe for a RedirectResponse after a
+    work-session action -- rejects open-redirect payloads (schemes,
+    "//host", and so on) that a client-submitted `next` field could carry.
+    The planning grids' "Unscheduled work" panel steppers pass one (the page
+    to return to); the task modal's Work sessions card leaves it empty and
+    falls back to /tasks/{uid}. The isinstance guard also covers direct
+    router calls in tests that omit `next` (its Form default object)."""
+    if isinstance(next_url, str) and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return None
+
+
 @router.post("/{uid}/work-allocations")
 def add_work_allocation(
     uid: str,
     start_at: str = Form(""),
     end_at: str = Form(""),
+    next: str = Form(""),
     conn=Depends(get_db),
 ):
-    """The Work sessions card's "+" button -- add a work session with NO
-    date at all. A session added this way is an unscheduled placeholder
-    (no start/end), so the task stays on the planning grids' "Unscheduled
-    work" panel and is placed onto a real slot by dragging it there (the
-    create endpoints' place-the-oldest-undated-session behavior). The old
-    start/end datetime inputs are gone from the modal but still honored
-    here if a caller posts them: a valid pair schedules the session
-    directly, a malformed pair is rejected the same as before (no-op)."""
+    """The Work sessions card's "+" button and the planning panels' "+" --
+    add a work session with NO date at all. A session added this way is an
+    unscheduled placeholder (no start/end), so the task stays on the
+    planning grids' "Unscheduled work" panel and is placed onto a real slot
+    by dragging it there (the create endpoints'
+    place-the-oldest-undated-session behavior). The old start/end datetime
+    inputs are gone from the modal but still honored here if a caller posts
+    them: a valid pair schedules the session directly, a malformed pair is
+    rejected the same as before (no-op). The panel posts a same-origin
+    `next` path to reload on the grid it was used from; the modal leaves it
+    empty and returns to the task."""
     task = db.get_task(conn, uid)
     if task is not None:
         if start_at and end_at and end_at > start_at:
             db.create_work_allocation(conn, uid, start_at, end_at)
         elif not (start_at or end_at):
             db.create_work_allocation(conn, uid)  # undated session placeholder
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+    return RedirectResponse(url=_safe_next(next) or f"/tasks/{uid}", status_code=303)
+
+
+@router.post("/{uid}/work-allocations/remove-latest")
+def remove_latest_work_allocation(uid: str, next: str = Form(""), conn=Depends(get_db)):
+    """The planning grids' "Unscheduled work" panel "−" button -- remove the
+    task's most recently added work session (the last in
+    `list_work_allocations_for_task`'s creation order), so it undoes the
+    panel's own "+". Never removes below zero sessions and never touches the
+    task; going from one session to none stays the task modal's Work
+    sessions card per-row remove. `next`, when present, is the planning page
+    to return to (same-origin path only, see `_safe_next`)."""
+    db.remove_latest_work_allocation(conn, uid)
+    return RedirectResponse(url=_safe_next(next) or f"/tasks/{uid}", status_code=303)
 
 
 @router.post("/{uid}/work-allocations/remove")

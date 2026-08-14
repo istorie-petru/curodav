@@ -47,9 +47,11 @@
      relation needs a real event uid to attach to, which a not-yet-saved
      new event doesn't have. Mirrors task_form.html's task_relations_section. -->
 {% if event %}
+{% if show_relations_card(request) %}
 <div class="relations-section">
     {{ event_relations_section(event, related_tasks) }}
 </div>
+{% endif %}
 {% endif %}
 </div>
 {% if event %}

@@ -102,6 +102,7 @@ from ..deps import (
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
+    SHOW_RELATIONS_CARD_KEY,
     TIME_FORMAT_KEY,
     WEEK_START_KEY,
     _four_week_position_from_value,
@@ -341,8 +342,22 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # forced on the General page for the exact same reason (see
             # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
+            "current_show_relations_card": db.get_app_meta(conn, SHOW_RELATIONS_CARD_KEY) != "0",
         },
     )
+
+
+@router.post("/settings/relations-card")
+def set_relations_card(show: str = Form("1"), conn=Depends(get_db)):
+    """"Show the Relations card" (Settings > Appearance, 2026-08-14) --
+    whether the Relations card renders on task/event detail and edit modals
+    (_task_relations.html/_event_relations.html). Read back via deps.py's
+    show_relations_card() Jinja global. Default on -- an install that's
+    never touched this stores nothing, which reads as "1" (shown), so the
+    card behaves exactly as it did before the setting existed; "0" hides
+    it."""
+    db.set_app_meta(conn, SHOW_RELATIONS_CARD_KEY, "1" if show == "1" else "0")
+    return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 @router.post("/settings/label-icons")

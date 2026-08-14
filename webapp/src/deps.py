@@ -51,6 +51,14 @@ FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # on-screen label does. Same memoized app_meta pattern as every other
 # display preference here.
 RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
+# 2026-08-14 -- "Show the Relations card" (Settings > Appearance) -- whether
+# the Relations card renders on task/event detail and edit modals (the merged
+# Relations/subtasks card, _task_relations.html/_event_relations.html). Same
+# memoized app_meta pattern as the others; the default is ON ("1" -- an
+# install that's never touched this stores nothing, which reads as the
+# default and shows the card, matching the behavior that predates the
+# setting), "0" hides it.
+SHOW_RELATIONS_CARD_KEY = "show_relations_card"
 
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
@@ -280,6 +288,19 @@ def _recurrence_terminology(request: Request) -> str:
 
 
 templates.env.globals["recurrence_terminology"] = _recurrence_terminology
+
+
+def _show_relations_card(request: Request) -> bool:
+    """Whether the Relations card renders on task/event detail and edit
+    modals (Settings > Appearance's "Show the Relations card", 2026-08-14).
+    Reads the app_meta flag via the same per-request-memoized helper as
+    week_start()/time_format(). On by default -- an install that has never
+    touched this stores nothing, which reads as the default "1" and shows
+    the card exactly as it always has; "0" hides it."""
+    return _cached_app_meta(request, SHOW_RELATIONS_CARD_KEY, "1") == "1"
+
+
+templates.env.globals["show_relations_card"] = _show_relations_card
 
 
 def _label_icon(request: Request, label: str) -> str:

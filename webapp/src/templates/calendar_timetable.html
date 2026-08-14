@@ -3,6 +3,7 @@
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
 {% import "_calendar_filters.html" as cf %}
+{% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar/timetable?date_=' ~ monday.isoformat() %}
@@ -41,10 +42,7 @@
         {% if unscheduled_tasks %}
         <div class="unscheduled-task-list">
             {% for item in unscheduled_tasks %}
-            <div class="unscheduled-task-item" draggable="true" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
-                {{ icon('move', 'icon-sm') }}
-                <span>{% if item.project %}{{ item.project }} &gt; {% endif %}{{ item.task.title }}{% if item.task.due_at %} &middot; due {{ item.task.due_at[:10] }}{% endif %}</span>
-            </div>
+            {{ unscheduled_task_item(item, unscheduled_next) }}
             {% endfor %}
         </div>
         {% else %}
@@ -92,11 +90,11 @@
                 {% if e.is_allocation %}
                 <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
-                    <a class="te-name" href="/tasks/{{ e.task_uid }}/edit" data-modal>{{ e.title }}</a>
+                    <a class="te-name" href="/tasks/{{ e.task_uid }}" data-modal>{{ e.title }}</a>
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
                     <form class="work-allocation-delete" method="post" action="/calendar/timetable/allocations/{{ e.uid }}/delete">
                         <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
-                        <button type="submit" class="icon-btn" title="Remove this scheduled block (keeps the task)">{{ icon('x', 'icon-sm') }}</button>
+                        <button type="submit" class="icon-btn" title="Unschedule this block (the task returns to Unscheduled work with one session)">{{ icon('x', 'icon-sm') }}</button>
                     </form>
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
@@ -126,15 +124,15 @@
   // Calendar page's Timetable view) instead of to /week. deleteUrlBase +
   // unscheduleDropSelector additionally enable dragging a scheduled block
   // back onto the panel to unschedule it (project_calendar.js interaction 3).
-  // taskEditUrlBase makes a plain click on a scheduled block's body open
-  // its task's edit view (where more work sessions can be added) -- the
-  // same destination the block's title link already carries.
+  // taskUrlBase makes a plain click on a scheduled block's body open its
+  // task's view modal -- the same destination the block's title link
+  // already carries (project_calendar.js interaction 4).
   window.PROJECT_CALENDAR = {
     createUrl: "/calendar/timetable/allocations",
     moveUrlBase: "/calendar/timetable/allocations/",
     deleteUrlBase: "/calendar/timetable/allocations/",
     unscheduleDropSelector: ".project-calendar-unscheduled",
-    taskEditUrlBase: "/tasks/",
+    taskUrlBase: "/tasks/",
     weekDate: "{{ monday.isoformat() }}",
   };
 </script>

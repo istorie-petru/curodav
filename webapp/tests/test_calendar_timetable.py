@@ -102,11 +102,15 @@ class TestTimetableViewRoute:
         body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
         assert "Done thing" not in body
 
-    def test_unscheduled_task_shows_its_project_label(self, conn):
+    def test_unscheduled_task_shows_its_project_pill(self, conn):
+        """1.9 one-line card: the project renders as a pill (icon + name)
+        before the task title, not a `Project > Task` prefix."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
-        assert "Conference XYZ &gt; Research" in body or "Conference XYZ > Research" in body
+        assert 'class="unscheduled-project-pill"' in body
+        assert "Conference XYZ" in body
+        assert "&gt; Research" not in body
 
     def test_work_allocation_renders_prominent_and_owned_by_project_calendar_js(self, conn):
         """A scheduled block is a .work-allocation (project_calendar.js's
@@ -123,19 +127,20 @@ class TestTimetableViewRoute:
 
     def test_scheduled_block_links_to_its_task_view(self, conn):
         """A scheduled work block is one target for the task it belongs to:
-        its title links to the task's edit view (where more work sessions
-        can be added), the block carries the task uid as data-task-uid so a
-        click anywhere on the block body reaches the same view
-        (project_calendar.js interaction 4, taskEditUrlBase config), and the
-        delete form still targets the allocation endpoint."""
+        its title links to the task's view modal (not the edit form), the
+        block carries the task uid as data-task-uid so a click anywhere on
+        the block body reaches the same view (project_calendar.js
+        interaction 4, taskUrlBase config), and the delete form still
+        targets the allocation endpoint."""
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         body = calendar_router.timetable_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'data-task-uid="t1"' in body
-        assert 'href="/tasks/t1/edit"' in body
-        assert 'taskEditUrlBase: "/tasks/"' in body
+        assert 'href="/tasks/t1"' in body
+        assert 'href="/tasks/t1/edit"' not in body
+        assert 'taskUrlBase: "/tasks/"' in body
         assert "/calendar/timetable/allocations/" in body
 
     def test_ordinary_event_renders_as_subdued_context_like_week(self, conn):
@@ -259,6 +264,9 @@ class TestMoveTimetableAllocation:
 
 class TestDeleteTimetableAllocation:
     def test_delete_removes_only_the_block_not_the_task(self, conn):
+        """1.9 unschedule semantics: deleting a block leaves the task with
+        exactly ONE work session -- an undated placeholder back on the
+        panel -- not zero, and the task itself is never deleted."""
         _task(conn, "t1", title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         resp = calendar_router.delete_timetable_allocation(event_uid, date_=_MONDAY, conn=conn)
@@ -266,3 +274,50 @@ class TestDeleteTimetableAllocation:
         assert resp.headers["location"] == f"/calendar/timetable?date_={_MONDAY}"
         assert db.get_event(conn, event_uid) is None
         assert db.get_task(conn, "t1") is not None
+        remaining = db.list_work_allocations_for_task(conn, "t1")
+        assert len(remaining) == 1
+        assert remaining[0]["start_at"] is None
+
+
+class TestUnscheduledPanelStepper:
+    """1.9 "unscheduled work" panel rework on the Timetable view: per-item
+    session count with −/+ buttons and a scheduled/total hours readout."""
+
+    def test_item_shows_plus_button_and_count_not_minus_at_one(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")  # one undated session
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert 'data-task-uid="t1"' in body
+        assert "unscheduled-count" in body
+        assert "/tasks/t1/work-allocations" in body  # the "+" form action
+        assert "/tasks/t1/work-allocations/remove-latest" not in body  # − hidden at count 1
+
+    def test_minus_button_renders_at_more_than_one_session(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert "/tasks/t1/work-allocations/remove-latest" in body
+        assert 'value="/calendar/timetable?date_=' in body  # +/− return here
+
+    def test_card_is_one_line_without_hours(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert "unscheduled-count" in body
+        assert "unscheduled-hours" not in body
+        assert "unscheduled-grip" not in body
+        assert "unscheduled-task-body" not in body
+
+    def test_item_has_no_native_draggable_attribute(self, conn):
+        _task(conn, "t1", title="Research")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert 'draggable="true"' not in body

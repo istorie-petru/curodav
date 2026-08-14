@@ -1713,7 +1713,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event{
   position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
   font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
-  cursor:grab; touch-action:none; z-index:3;
+  cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; z-index:3;
 }
 .time-event:hover{text-decoration:none; filter:brightness(1.08);}
 /* While actively dragging, the block should look locked to the grid it's
@@ -1765,11 +1765,43 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto;}
 .project-calendar-grid{flex:1; min-width:0;}
 .unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
+/* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
+   partial on the planning grids). ONE line (2026-08-14 design): a project
+   pill (icon + name) then the task title on the left, the session-count
+   stepper on the right -- no hours readout, no due date, no grip. This is a
+   POINTER-based drag source (not native HTML5 DnD -- see project_calendar.js
+   interaction 1), so it needs touch-action:none + user-select:none for
+   reliable pointermove on touch and to keep a drag from also selecting text. */
 .unscheduled-task-item{
-  display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px;
-  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab; font-size:13px;
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px;
+  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
+  font-size:13px; touch-action:none; user-select:none; -webkit-user-select:none;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
+.unscheduled-task-item.item-dragging{opacity:.5;}
+.unscheduled-project-pill{
+  flex:none; display:inline-flex; align-items:center; gap:4px; max-width:130px;
+  padding:2px 9px; border-radius:999px; background:var(--accent-neutral-subtle);
+  color:var(--fg-primary); font-size:11px; font-weight:600; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.unscheduled-project-pill .icon{flex:none;}
+.unscheduled-task-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.unscheduled-stepper{flex:none; display:flex; align-items:center; gap:2px;}
+.unscheduled-stepper form{margin:0;}
+.unscheduled-step-btn{width:20px; height:20px;}
+.unscheduled-count{min-width:18px; text-align:center; font-size:12px; font-weight:600; color:var(--fg-secondary);}
+/* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
+   pointer-following copy of the source item while dragging -- hidden until
+   the gesture passes the drag threshold, so a plain click isn't mistaken
+   for a drop. pointer-events:none keeps the pointermove stream flowing to
+   the drag handlers on document. */
+.drag-ghost{
+  position:fixed; z-index:1000; pointer-events:none; opacity:.85; display:none;
+  width:220px; max-width:80vw;
+  background:var(--bg-elevated); border:1px solid var(--accent); border-radius:8px;
+  box-shadow:0 6px 16px rgba(0,0,0,.18);
+}
 .project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
 /* The planning grids (project_calendar.html, week_planning.html,
    calendar_timetable.html) reuse .time-col, whose cursor:copy is the

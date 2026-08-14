@@ -1,0 +1,42 @@
+{# Shared "Unscheduled work" panel item -- the planning grids
+   (project_calendar.html, week_planning.html, calendar_timetable.html) all
+   render the same per-task row, so the card shape lives here instead of
+   being triplicated. One line (2026-08-14 design): a project pill (the
+   project's icon + name, `item.project` is the label's effective config --
+   backend-provided name AND icon) on the left, the task title next to it
+   (truncating), and the session count on the right.
+   Each row is:
+     - the drag source for dropping the task onto a grid (project_calendar.js
+       interaction 1 -- POINTER-based drag, so the item deliberately carries
+       no native `draggable` attribute)
+     - a session count between − and + buttons: "+" adds an undated session
+       placeholder (POST /tasks/{uid}/work-allocations), "−" removes the most
+       recently added one (POST /tasks/{uid}/work-allocations/remove-latest).
+       The − button is hidden at count 1 (the panel never removes the last
+       session -- a task can have no timeblock, that's the plain unscheduled
+       state and the task modal's Work sessions card reaches 0); the count
+       is the number the buttons sit next to.
+   Both forms carry `next_url` (a same-origin path, see the tasks router's
+   `_safe_next`) so the POST reloads the grid it was used from.
+   Import with `with context` -- the macro body calls the `icon` global. #}
+{% macro unscheduled_task_item(item, next_url) %}
+<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
+    {% if item.project %}
+    <span class="unscheduled-project-pill" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
+    {% endif %}
+    <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
+    <span class="unscheduled-stepper">
+        {% if item.sessions.count > 1 %}
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added work session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
+        </form>
+        {% endif %}
+        <span class="unscheduled-count" title="Work sessions">{{ item.sessions.count }}</span>
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this task onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
+        </form>
+    </span>
+</div>
+{% endmacro %}

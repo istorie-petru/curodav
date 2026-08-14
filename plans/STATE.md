@@ -373,6 +373,106 @@ session, right before the final commit of that session.
   `test_calendar_timetable.py`/`test_project_calendar.py`/
   `test_phase10_export.py`/`test_phase6_published_lists.py`, full suite
   1161 passed.
+- **Shipped:** side work — **block click opens task view + Relations card
+  toggle**, complete (2026-08-14) — two direct-feedback refinements:
+  - Clicking a scheduled work block on a planning grid (its body via
+    `project_calendar.js` interaction 4, or its title link) now opens the
+    block's task **view modal** (`/tasks/{uid}`) instead of the edit form
+    (`/tasks/{uid}/edit`) — the config is renamed from `taskEditUrlBase`
+    to `taskUrlBase` (it no longer appends `/edit`) across the Timetable
+    sub-view, `/week`, and the project Week Calendar, with tests updated
+    to assert the `/edit` href is gone.
+  - Settings > Appearance gained a "Show the Relations card" toggle
+    (`deps.py`'s `show_relations_card()` Jinja global, `SHOW_RELATIONS_
+    CARD_KEY` app_meta, default **on** — an install that's never touched
+    it stores nothing and shows the card exactly as it always has; `"0"`
+    hides it). The card (`_task_relations.html`/`_event_relations.html`)
+    is now gated at all four of its homes — task detail, task edit, event
+    detail, event edit — via `{% if show_relations_card(request) %}`,
+    presentation-layer only (the underlying relations data and all their
+    endpoints are untouched; the sibling Work sessions card still renders
+    when Relations is hidden). 12 new tests
+    (`test_display_prefs_settings.py`'s TestShowRelationsCard/
+    TestShowRelationsCardInRenderedPages/TestSettingsAppearanceRelationsCard),
+    full suite 1173 passed.
+- **Shipped:** side work — **"Unscheduled work" panel: session stepper +
+  scheduled/total hours + collapse-on-unschedule + pointer-based drag**,
+  complete (2026-08-14) — the planning grids' (Timetable, `/week`, project
+  Week Calendar) unscheduled-work panel reworked:
+  - Each panel item is now a shared partial
+    (`_unscheduled_task_item.html`, imported `with context` by all three
+    templates — replacing the triplicated old markup) showing the task
+    title with a **scheduled/total hours x/y readout** next to it
+    (`db.work_allocation_panel_info`: `scheduled_hours` = sum of dated
+    session durations, `total_hours` = that plus one default hour per
+    undated session, so an unplaced placeholder reads "hours on the
+    calendar out of hours planned"), plus a **−/count/+ session stepper**:
+    "+" adds an undated session placeholder (`POST
+    /tasks/{uid}/work-allocations`), "−" removes the most recently added
+    one (`POST /tasks/{uid}/work-allocations/remove-latest`,
+    `db.remove_latest_work_allocation`) and is **hidden at count 1** (the
+    panel never removes the last session — reaching zero is the task modal's
+    Work sessions card; "a task can have no timeblock" stays the plain
+    unscheduled state). Both forms post a same-origin `next` path (validated
+    by `tasks.py`'s `_safe_next`, open-redirect-safe) so the reload returns
+    to the grid they were used from.
+  - **Unschedule now collapses**: the three delete endpoints
+    (`week.py::delete_allocation`, `calendar.py::delete_timetable_
+    allocation`, `projects.py::delete_allocation`) no longer delete just the
+    one block — they delete **all** of the task's work sessions and leave
+    exactly **one undated session** behind
+    (`db.collapse_task_work_allocations`), so the task returns to the panel
+    at a count of one ("when unscheduling a task it is deleted and only one
+    work session remains"); the block's ✕ tooltip says so.
+  - **Pointer-based drag** (static/project_calendar.js interaction 1): the
+    old native HTML5 drag-and-drop is replaced by the same
+    pointerdown/pointermove/pointerup model the block move/resize already
+    used — a fixed ghost clone follows the cursor (`drag-ghost`), the hovered
+    column lights up, and the grid **auto-scrolls near its top/bottom edge**
+    so any time is reachable; block move/resize got pointercancel handling
+    (revert-and-submit-nothing), scroll-aware positioning
+    (`origTop + dy + scrollDelta` keeps a moved block glued to the pointer
+    through an auto-scroll), and the resize-handle click now correctly skips
+    the task-view modal (a latent `mode`-already-nulled bug fixed). Panel
+    items carry no native `draggable` attribute anymore. New `icon-minus`
+    sprite symbol and `.unscheduled-*`/`.drag-ghost` CSS. See
+    `features/tasks.md` § Work allocations. ~24 new tests
+    (`test_work_allocations.py`'s TestPanelInfoAndSessionStepper, and
+    stepper/collapse classes in `test_week_planning.py`/
+    `test_calendar_timetable.py`/`test_project_calendar.py`), full suite
+    1197 passed.
+- **Shipped:** side work — **"Unscheduled work" panel: one-line card +
+  project icons**, complete (2026-08-14) — direct follow-up feedback on the
+  panel item above: collapse it to strictly one line — a project pill
+  (icon + name) and the task title on the left, the session-count stepper
+  on the right — and drop the scheduled/total hours readout and due date
+  entirely (`_unscheduled_task_item.html` trimmed; the `item.sessions`
+  dict built by `week.py`/`projects.py`/`calendar.py::timetable_view` still
+  carries `scheduled_hours`/`total_hours` from `db.work_allocation_
+  panel_info`, just unused by the template now — left in rather than
+  stripped from the return shape, since nothing else about that summary
+  changed). "Add icons to projects" was backend-only, as asked: `label_
+  config.icon` already existed (the general per-label icon field behind
+  Settings > Appearance's "Show icons next to labels", 2026-08-09) — new
+  `db.project_label_config_for(conn, object_type, object_id)` wraps
+  `project_label_for` + `effective_label_config` so the panel gets the
+  project's full config (name + icon, defaults filled in) in one call
+  instead of just a name string; no icon-picker or other client work was
+  needed since labels already have one. New `.unscheduled-project-pill`
+  CSS (rounded pill, icon + name, ellipsis-truncated). Caught and fixed a
+  real bug while integrating this: an editor merge had silently dropped
+  the `@router.post("/settings/label-icons")` decorator during the
+  Relations-card-toggle slice above, off the tail end of `set_relations_
+  card` — the route was gone from the app (`set_label_icons` was still a
+  plain function, never registered) even though every existing test still
+  passed, since this app's settings tests call router functions directly
+  rather than through the ASGI app; confirmed the fix by listing `router.
+  routes` directly, not just re-running pytest. See `features/tasks.md` §
+  Work allocations and `features/week.md`. Tests trimmed to assert the
+  hours readout and due date are gone (`"unscheduled-hours" not in body`)
+  and to cover the project-icon pill (`test_project_calendar.py`/
+  `test_week_planning.py`/`test_calendar_timetable.py`), full suite 1199
+  passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

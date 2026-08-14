@@ -1655,6 +1655,66 @@ def _hours_between(start_at: str | None, end_at: str | None) -> float:
     return max((end - start).total_seconds() / 3600.0, 0.0)
 
 
+def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[str, Any]:
+    """Summary the planning grids' "Unscheduled work" panel needs for one
+    task (week_view/timetable_view/project_calendar build the same item
+    shape): session count plus the scheduled/total hours shown next to the
+    title. `scheduled_hours` is the sum of dated session durations (the
+    same number db.task_work_hours reports as `scheduled`); `total_hours`
+    adds one default hour per undated session -- an undated session has no
+    duration yet, so its planned contribution counts as the default 1-hour
+    block it becomes when placed on a grid (project_calendar.js's
+    DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
+    out of hours planned". `undated_count` is the number of sessions still
+    awaiting placement -- the panel's "still unscheduled" rule
+    (`count > 0 and undated_count == 0` drops a task off the list) needs
+    it, and it's what separates the panel summary from task_work_hours."""
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
+    undated = sum(1 for a in allocations if not a.get("start_at"))
+    return {
+        "count": len(allocations),
+        "scheduled_hours": scheduled,
+        "total_hours": scheduled + undated,
+        "undated_count": undated,
+    }
+
+
+def remove_latest_work_allocation(conn: sqlite3.Connection, task_uid: str) -> str | None:
+    """Remove the task's most recently added work session -- the last in
+    `list_work_allocations_for_task`'s creation order, the one the planning
+    grids' "Unscheduled work" panel "−" button should undo first (it undoes
+    the last "+" or the last placed block). Returns the removed event's uid,
+    or None if the task has no work sessions to remove (also None for a
+    task that doesn't exist -- get_task guard, same as
+    create_work_allocation). The task itself is never touched."""
+    if get_task(conn, task_uid) is None:
+        return None
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    if not allocations:
+        return None
+    uid = allocations[-1]["uid"]
+    delete_event(conn, uid)
+    return uid
+
+
+def collapse_task_work_allocations(conn: sqlite3.Connection, task_uid: str) -> None:
+    """Unschedule a task: delete every work session and leave exactly one
+    undated session placeholder behind. This is what the planning grids'
+    "unschedule" gesture (drag a block back onto the panel, or use a block's
+    delete button) means -- the scheduled block(s) are gone and the task
+    returns to the "Unscheduled work" panel as a single unplaced session
+    ("when unscheduling a task it is deleted and only one work session
+    remains"; session *management* is the panel's +/− stepper and the task
+    modal's Work sessions card). A task with no sessions is left untouched
+    (nothing to collapse); the task itself is never deleted."""
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    for wa in allocations:
+        delete_event(conn, wa["uid"])
+    if allocations:
+        create_work_allocation(conn, task_uid)
+
+
 def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]:
     """"The estimated work of a task is calculated from its actual calendar
     allocations... Total planned work is therefore the sum of the task's
@@ -2786,6 +2846,23 @@ def project_label_for(conn: sqlite3.Connection, object_type: str, object_id: str
         if not (cfg and cfg.get("generate_space")):
             return name
     return None
+
+
+def project_label_config_for(
+    conn: sqlite3.Connection, object_type: str, object_id: str
+) -> dict[str, Any] | None:
+    """The project label's *effective config* (every default filled in, so
+    `name`/`icon`/`color` are all present) for an object, or None if it has
+    no project label. Thin wrapper over `project_label_for` +
+    `effective_label_config` so a planning grid's "Unscheduled work" panel
+    can render the project pill (icon + name, 2026-08-14) without
+    re-deriving the lookup at each of its three call sites. The returned
+    dict is the label's config, not a name string -- callers that only
+    needed the name (the older panel items) can read `["name"]` off it."""
+    name = project_label_for(conn, object_type, object_id)
+    if name is None:
+        return None
+    return effective_label_config(conn, name)
 
 
 def set_object_project_label_uniform(conn: sqlite3.Connection, object_type: str, object_id: str, label_name: str | None) -> None:
