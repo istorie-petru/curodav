@@ -275,6 +275,19 @@
     // preview, but the drag-to-create gesture below still works
     // identically once pressed) and the live drag-update while `creating`.
     col.addEventListener("pointermove", (e) => {
+      // On the merged Week view (1.9 side work) these columns also carry
+      // `.project-calendar-col` -- static/project_calendar.js sets
+      // `window.__ccGridDragActive` while it owns an active drag (an
+      // unscheduled task being dragged onto the grid, or an existing block
+      // being moved/resized). Without this check, this hover-preview
+      // ghost -- always 30 minutes tall, this file's own click-to-create
+      // default -- rendered on top of that drag and looked like the drop
+      // would create a 30-minute block, when the actual result is always
+      // DEFAULT_BLOCK_MINUTES (60) -- direct feedback, confirmed live.
+      if (window.__ccGridDragActive) {
+        ghost.style.display = "none";
+        return;
+      }
       if (e.target !== col) {
         if (!creating) ghost.style.display = "none";
         return;
@@ -297,7 +310,7 @@
     });
 
     col.addEventListener("pointerdown", (e) => {
-      if (e.target !== col || e.button !== 0) return;
+      if (window.__ccGridDragActive || e.target !== col || e.button !== 0) return;
       creating = true;
       createStartPx = snapCreate(offsetY(e));
       showGhost(createStartPx, CREATE_SNAP_PX);

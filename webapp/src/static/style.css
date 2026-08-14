@@ -1755,11 +1755,12 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* Project Week Calendar (1.4 slice 3, templates/project_calendar.html) --
    ordinary calendar events render as visually subdued context ("reduced
    opacity or a restrained hashed treatment", § Project pages & views) so
-   the project's own work allocations (.work-allocation, full-strength
-   .cal-* color) stay visually prominent by contrast. `pointer-events:none`
-   -- context events are read-only here, not draggable/clickable, since
-   this page's grid interactions are entirely about the project's own
-   allocations. */
+   the project's own work allocations (.work-allocation -- a thick colored
+   border, not a solid fill, see the `.time-event.work-allocation` override
+   further down this file) stay visually prominent by contrast.
+   `pointer-events:none` -- context events are read-only here, not
+   draggable/clickable, since this page's grid interactions are entirely
+   about the project's own allocations. */
 .time-event.context-event{
   opacity:.35; cursor:default; pointer-events:none;
 }
@@ -1888,6 +1889,26 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .cal-brown{background:var(--cal-bg-brown); color:var(--cal-fg-brown);}
 .cal-gray{background:var(--cal-bg-gray); color:var(--cal-fg-gray);}
 .cal-slate{background:var(--cal-bg-slate); color:var(--cal-fg-slate);}
+
+/* Work-allocation blocks (1.9 side work, direct feedback: "timetable tasks
+   time allocation should never be colored, only a thick colored border") --
+   the plain `.cal-*` swatch rules above still WIN the solid-fill background
+   on every other `.time-event` (ordinary calendar events keep their full
+   color, unchanged); this rule has to come AFTER them in source order (same
+   `.time-event.work-allocation.cal-*` specificity as `.cal-*` alone would
+   tie -- being later is what makes it win) to override that fill down to a
+   thick colored border instead, on every hue at once via `--wa-border`
+   rather than one override rule per `.cal-*` class. `templates/
+   calendar_week.html`/`week_planning.html`/`project_calendar.html`/
+   `calendar_timetable.html`(gone)/`project_calendar.html` set
+   `--wa-border: var(--cal-bg-<hue>)` inline (the same vivid hue variable
+   the fill used to read) alongside the class. */
+.time-event.work-allocation{
+  background:var(--bg-elevated);
+  border:3px solid var(--wa-border, var(--accent-neutral));
+  color:var(--fg-primary);
+}
+.time-event.work-allocation .te-time{opacity:.7;}
 
 /* Filled cards widget (Material You) -- uses the same cal-* color palette
    but with slightly desaturated/muted variants for a softer Material You

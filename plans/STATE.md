@@ -1059,6 +1059,44 @@ session, right before the final commit of that session.
   (`test_calendar_viewport_layout.py`'s exact-match now expects
   `"card calendar-viewport project-calendar-grid"`). Full suite 1317
   passed.
+- **Fixed:** side work — **merged Week view: work-allocation blocks are
+  border-only (no fill), and the scheduling-drag ghost matched its real
+  1-hour outcome**, complete (2026-08-14), immediate follow-up feedback on
+  the merge above. Two independent fixes:
+  - **Styling** ("timetable tasks time allocation should never be colored,
+    only a thick colored border") — `.time-event.work-allocation` no longer
+    inherits its `.cal-<hue>` class's solid background fill; a new override
+    rule (placed AFTER the `.cal-*` swatch block in `style.css` so it wins
+    the same-specificity cascade) gives it `background:var(--bg-elevated)`
+    and a `3px solid` border instead, colored via a `--wa-border` CSS custom
+    property each template now sets inline (`var(--cal-bg-<hue>)`, the same
+    vivid hue variable the fill used to read) -- `calendar_week.html`,
+    `week_planning.html`, and `project_calendar.html` (every template that
+    renders a `.work-allocation` block) all updated.
+  - **Drag-preview/outcome mismatch** ("shows 30 minute event but after
+    dropping it is 1 hour... should always be 1 hour") — root cause,
+    confirmed live: `calendar.js`'s own click-to-create hover-preview ghost
+    (always 30 minutes tall, its own default) was ALSO rendering while
+    dragging a task from the Unscheduled work panel, because the merged
+    grid's columns now carry `.calendar-create-col` (calendar.js's trigger
+    class) in addition to `.project-calendar-col` -- something that could
+    never happen before the merge, since calendar.js was never loaded
+    alongside project_calendar.js on the same page. Fixed with a shared
+    `window.__ccGridDragActive` flag: `project_calendar.js` sets it true for
+    the duration of ANY of its own drags (the task-panel drag, and block
+    move/resize, for the same reason) and false when the drag ends;
+    `calendar.js`'s hover-preview pointermove/pointerdown handlers check it
+    first and stand down entirely while set. `project_calendar.js`'s
+    task-panel drag (interaction 1) also gained its own accurate
+    replacement: a real grid-anchored `slotGhost` (reusing calendar.js's own
+    `.schedule-ghost` look), always exactly `DEFAULT_BLOCK_MINUTES` (60)
+    tall at the snapped drop position inside the hovered column -- computed
+    with the identical snap math `end()` uses to actually create the
+    allocation, so the preview and the outcome can never disagree again.
+  New `TestGridDragConflictFix` in `test_calendar_week_scheduling.py` (3
+  structural JS-source tests, same convention as `test_pwa_shell.py`'s own
+  JS structural checks -- no browser in this test environment). Full suite
+  1320 passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

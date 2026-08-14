@@ -16,6 +16,7 @@ calendar_timetable.html."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from starlette.requests import Request
@@ -24,6 +25,7 @@ from src import db
 from src.routers import calendar as calendar_router
 
 _MONDAY = "2026-08-17"  # a real Monday
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
 
 
 @pytest.fixture()
@@ -394,3 +396,34 @@ class TestUnscheduledPanelStepper:
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'draggable="true"' not in body
+
+
+class TestGridDragConflictFix:
+    """Direct feedback, confirmed live (2026-08-14): dragging a task from the
+    Unscheduled work panel onto the merged Week grid showed a 30-minute-tall
+    hover ghost mid-drag (calendar.js's own click-to-create preview, now also
+    running on this page since the grid columns carry `.calendar-create-col`
+    too) even though the drop always creates a 60-minute (DEFAULT_BLOCK_
+    MINUTES) work allocation -- the preview and the outcome disagreed.
+    Structural source checks only (no browser in this test environment,
+    same convention as test_pwa_shell.py's own JS structural checks) --
+    `window.__ccGridDragActive` is set by every project_calendar.js drag
+    (task-panel drag, block move/resize) and checked by calendar.js's own
+    hover-preview before it shows/updates its ghost, and project_calendar.js
+    now renders its OWN properly-sized (DEFAULT_BLOCK_MINUTES-tall) slot
+    preview inside the hovered column instead."""
+
+    def test_calendar_js_checks_the_suppression_flag(self):
+        script = (_STATIC_DIR / "calendar.js").read_text()
+        assert "window.__ccGridDragActive" in script
+
+    def test_project_calendar_js_sets_the_flag_on_every_drag_start(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert script.count("window.__ccGridDragActive = true") >= 2  # task-panel drag + block move/resize
+        assert "window.__ccGridDragActive = false" in script
+
+    def test_project_calendar_js_renders_a_real_sized_slot_preview(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert "slotGhost" in script
+        assert "DEFAULT_BLOCK_MINUTES" in script
+        assert 'slotGhost.className = "schedule-ghost"' in script

@@ -51,6 +51,19 @@ label, and an event's color is its first (alphabetical) label's color
   - The "Unscheduled work" sidebar is **collapsible** — a header button
     (`static/unscheduled_panel_toggle.js`) collapses it to a narrow rail,
     state persisted per-device (`localStorage`, no server involvement).
+  - A `.work-allocation` block is a **thick colored border, never a solid
+    fill** (direct feedback, immediate follow-up) — its `.cal-<hue>` class
+    no longer paints the background; a `style.css` override (after the
+    `.cal-*` swatch block, so it wins) gives it `background:var(--bg-
+    elevated)` and `border:3px solid var(--wa-border)`, `--wa-border` set
+    inline per block to the hue's own `var(--cal-bg-<hue>)`.
+  - The task-panel drag's preview always shows the real drop size —
+    `window.__ccGridDragActive` (set by every `project_calendar.js` drag)
+    tells `calendar.js`'s own 30-minute hover-preview ghost to stand down
+    while a scheduling drag is in progress (it would otherwise also render,
+    since these columns carry `.calendar-create-col` too), and
+    `project_calendar.js` shows its own grid-anchored preview sized to
+    exactly `DEFAULT_BLOCK_MINUTES` (60) at the snapped drop position.
   - `GET /calendar/timetable` and the old `/calendar/timetable/allocations`
     endpoint trio are gone; `/calendar/timetable` redirects to
     `/calendar/week` (any old bookmark still lands somewhere real).
