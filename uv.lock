@@ -151,12 +151,12 @@ wheels = [
 
 [[package]]
 name = "command-center"
-version = "1.1.0"
+version = "1.5.0"
 source = { virtual = "." }
 
 [[package]]
 name = "command-center-web"
-version = "1.1.0"
+version = "1.3.0"
 source = { virtual = "webapp" }
 dependencies = [
     { name = "caldav" },

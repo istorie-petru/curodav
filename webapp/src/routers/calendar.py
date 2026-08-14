@@ -126,14 +126,21 @@ def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
     filtered calendar. Phase 2 (label-space rework) dropped project_groups'
     `kind='education'` column -- there's no dedicated "education space"
     flag anymore, so this now just checks whether the filtered Space
-    (a generate_space=1 label) has any schedule classes among its child
-    labels' members at all; any other filter renders no badges. Phase 9b
-    toolbar rework: the calendar's filter is now a plain event label
-    filter (`label`, see month_view/week_view/day_view/agenda_view below),
-    not a dedicated Space/Project picker -- this still works unchanged
-    since a Space is just a label like any other, `label` here plays the
-    same role `group_uid` used to. Each entry: {"class": <schedule class
-    row>, "date": <next date>, "label": "today"|"tomorrow"|"in N days"}."""
+    (a generate_space=1 label) has any class events among its child
+    labels' members at all; any other filter renders no badges. 1.6
+    (Schedule & recurrence rework): a "class" is now a real recurring
+    event carrying the Schedule system label plus a course label
+    (db.list_schedule_class_events), not its own schedule_classes row --
+    each entry's "class" key is that event dict now, and the next
+    occurrence is read straight off the event's own RRULE/EXDATE
+    (schedule.next_occurrence_for_event) instead of being re-derived from
+    settings/holidays. Phase 9b toolbar rework: the calendar's filter is a
+    plain event label filter (`label`, see month_view/week_view/day_view/
+    agenda_view below), not a dedicated Space/Project picker -- this still
+    works unchanged since a Space is just a label like any other, `label`
+    here plays the same role `group_uid` used to. Each entry: {"class":
+    <event row>, "date": <next date>, "label": "today"|"tomorrow"|"in N
+    days"}."""
     from datetime import date as _date
 
     if not label:
@@ -142,17 +149,26 @@ def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
     if not cfg or not cfg.get("generate_space"):
         return []
     child_names = {c["name"] for c in db.list_child_labels(conn, label)}
-    classes = [c for c in db.list_schedule_classes(conn) if child_names & set(c.get("tags") or [])]
+    classes = [
+        c for c in db.list_schedule_class_events(conn) if child_names & set(c.get("tags") or [])
+    ]
     if not classes:
         return []
-    settings = db.get_schedule_settings(conn)
-    holidays = db.list_holidays(conn)
     today = _date.today()
+    holiday_calendars = db.list_holidays_by_calendar(conn)
     badges = []
     for cl in classes:
-        nxt = schedule.next_occurrence(cl, settings, holidays, today)
-        if nxt:
-            badges.append({"class": cl, "date": nxt, "label": schedule.next_label(nxt, today)})
+        nxt = schedule.next_occurrence_for_event(cl, today, holiday_calendars=holiday_calendars)
+        if not nxt:
+            continue
+        # The badge's acronym is the course's own label_config.course_acronym
+        # now (see db.py's label_config CREATE TABLE comment) -- an event
+        # itself has no acronym field, only its title.
+        course_name = db.project_label_for(conn, "event", cl["uid"])
+        course_cfg = db.get_label_config(conn, course_name) if course_name else None
+        cl = dict(cl)
+        cl["acronym"] = (course_cfg or {}).get("course_acronym")
+        badges.append({"class": cl, "date": nxt, "label": schedule.next_label(nxt, today)})
     return badges
 
 
@@ -443,7 +459,7 @@ def month_view(
     grid_start = date(year, month, 1) - timedelta(days=6)
     grid_end = date(year, month, 28) + timedelta(days=13)
     events = db.list_events(conn, start=grid_start.isoformat(), end=grid_end.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, grid_start, grid_end)
+    events = recurrence_expand.expand_events(events, grid_start, grid_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -520,7 +536,7 @@ def four_week_view(
     # db.list_events compares these as plain strings, and a bare end-date
     # would silently exclude every timed event on the window's last day.
     events = db.list_events(conn, start=view_start.isoformat(), end=view_end.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, view_start, view_end)
+    events = recurrence_expand.expand_events(events, view_start, view_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -565,7 +581,7 @@ def week_view(
     # *after* "2026-09-02" lexicographically, so a bare end-date would
     # silently exclude every timed event on the range's last calendar day.
     events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, week_start_date, week_end_date)
+    events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -646,7 +662,7 @@ def day_view(
     here."""
     d = date.fromisoformat(day)
     events = db.list_events(conn, start=day, end=day + "T23:59:59")
-    events = recurrence_expand.expand_events(events, d, d)
+    events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -741,6 +757,7 @@ def new_event_form(
             "prefill_all_day": prefill_all_day,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -758,6 +775,9 @@ def create_event(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -775,6 +795,11 @@ def create_event(
         "tags": _tags_list(tags),
         "recurrence": _clean_field(recurrence),
         "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
+        # 1.6 ("Generalized recurrence and the non-working-day policy") --
+        # see _event_form_fields.html's own comment on these three fields.
+        "holiday_calendar": _clean_field(holiday_calendar),
+        "exclude_saturday": bool(exclude_saturday),
+        "exclude_sunday": bool(exclude_sunday),
         "created_at": now,
         "updated_at": now,
     }
@@ -783,7 +808,7 @@ def create_event(
 
 
 @events_router.get("/events/{uid}")
-def event_detail(uid: str, request: Request, conn=Depends(get_db)):
+def event_detail(uid: str, request: Request, occurrence_date: str | None = None, conn=Depends(get_db)):
     """2026-08-08 direct feedback ("add for events a way like for tasks to
     only view the event before editing it") -- events previously had no
     read-only view at all, every event link (Calendar's own Month/Week/
@@ -793,16 +818,32 @@ def event_detail(uid: str, request: Request, conn=Depends(get_db)):
     real page" pattern), a compact meta grid, an Edit button leading to
     the real edit form, Delete at the bottom -- see event_detail.html.
     /events/{uid}/edit itself is unchanged, still reachable directly (a
-    bookmark, or this page's own Edit button)."""
+    bookmark, or this page's own Edit button).
+
+    1.6 ("Manual recurrence exceptions"): `occurrence_date` (the RECURRENCE-
+    ID every expanded occurrence carries, see ical_rows.py's
+    ical_to_event_row) identifies which specific occurrence the user
+    clicked, when it's a recurring event -- calendar_month/week/day.html
+    append it to every occurrence's own link. Its presence gates the "This
+    occurrence" card (event_detail.html) offering Cancel/Move/Restore for
+    just that one instance, never the whole series."""
     event = db.get_event(conn, uid)
     if event:
         _annotate_calendar_colors(conn, [event])
+    occurrence_override = None
+    if occurrence_date and event and event.get("recurrence"):
+        occurrence_override = next(
+            (o for o in db.list_event_occurrence_overrides(conn, uid) if o["occurrence_date"] == occurrence_date),
+            None,
+        )
     return templates.TemplateResponse(
         "event_detail.html",
         {
             "request": request,
             "active_tab": "calendar",
             "event": event,
+            "occurrence_date": occurrence_date,
+            "occurrence_override": occurrence_override,
             # Relations card (2026-08-09) -- see _related_context above.
             **_related_context(conn, event),
         },
@@ -821,6 +862,7 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "event": event,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
             # Relations card (2026-08-09) -- see _related_context above.
             **_related_context(conn, event),
         },
@@ -841,6 +883,9 @@ def update_event(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -867,6 +912,9 @@ def update_event(
             "tags": _tags_list(tags),
             "recurrence": _clean_field(recurrence),
             "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
+            "holiday_calendar": _clean_field(holiday_calendar),
+            "exclude_saturday": bool(exclude_saturday),
+            "exclude_sunday": bool(exclude_sunday),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -885,6 +933,58 @@ def update_event(
 def delete_event(uid: str, conn=Depends(get_db)):
     db.delete_event(conn, uid)
     return RedirectResponse(url="/calendar", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Manual recurrence exceptions (1.6, "Manual recurrence exceptions") -- a
+# specific occurrence of a recurring event can be cancelled or moved
+# without touching the master's own recurrence rule (db.py's
+# event_occurrence_overrides CREATE TABLE comment has the full model).
+# Reached from event_detail.html's "This occurrence" card, itself only
+# shown when the page was opened with ?occurrence_date=... (calendar_
+# month/week/day.html append it to every occurrence's own link).
+# --------------------------------------------------------------------- #
+
+
+@events_router.post("/events/{uid}/occurrences/cancel")
+def cancel_occurrence(uid: str, occurrence_date: str = Form(...), conn=Depends(get_db)):
+    now = datetime.now(timezone.utc).isoformat()
+    db.upsert_event_occurrence_override(
+        conn,
+        {"master_uid": uid, "occurrence_date": occurrence_date, "cancelled": True, "created_at": now, "updated_at": now},
+    )
+    return RedirectResponse(url="/calendar", status_code=303)
+
+
+@events_router.post("/events/{uid}/occurrences/move")
+def move_occurrence(
+    uid: str,
+    occurrence_date: str = Form(...),
+    start_at: str = Form(...),
+    end_at: str = Form(""),
+    title: str = Form(""),
+    location: str = Form(""),
+    conn=Depends(get_db),
+):
+    now = datetime.now(timezone.utc).isoformat()
+    db.upsert_event_occurrence_override(
+        conn,
+        {
+            "master_uid": uid, "occurrence_date": occurrence_date, "cancelled": False,
+            "start_at": start_at, "end_at": end_at or None,
+            "title": _clean_field(title), "location": _clean_field(location),
+            "created_at": now, "updated_at": now,
+        },
+    )
+    return RedirectResponse(url=f"/events/{uid}?occurrence_date={start_at}", status_code=303)
+
+
+@events_router.post("/events/{uid}/occurrences/restore")
+def restore_occurrence(uid: str, occurrence_date: str = Form(...), conn=Depends(get_db)):
+    """Undoes a cancel or a move -- the occurrence goes back to whatever
+    the recurrence rule alone generates."""
+    db.delete_event_occurrence_override(conn, uid, occurrence_date)
+    return RedirectResponse(url=f"/events/{uid}?occurrence_date={occurrence_date}", status_code=303)
 
 
 # --------------------------------------------------------------------- #

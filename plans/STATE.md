@@ -119,13 +119,103 @@ session, right before the final commit of that session.
   work-allocation distinction," 8 new tests (`test_task_scheduled_
   column.py`), full suite 1025 passed. **1.5 is now fully shipped**
   (`pyproject.toml` bumped to `1.5.0`).
-- **Next slice:** `1.6` — Schedule & recurrence rework (`roadmap.md`'s 1.6
-  row, `open-priority.md` § Schedule & recurrence rework): courses as
-  project labels + recurring events, generalized non-working-day policy,
-  named holiday calendars, manual occurrence exceptions, configurable
-  terminology. `open.md`'s Command palette actions follow-up (1.2 side
-  work) and 1.4's optional Project check-in side work are both still fine
-  smaller, self-contained slices instead, whenever a session wants one.
+- **Shipped:** `1.6` slice — **Classes as project labels + recurring
+  events**, complete (2026-08-14) — `schedule_classes` dropped from
+  `SCHEMA_SQL` entirely (`db.py`'s removal note); a class meeting (lecture,
+  seminar, ...) is now a real recurring `events` row tagged with the
+  per-install Schedule system label plus its course's `is_project=1`
+  label, instead of a separate mirrored-from entity. `label_config` gained
+  four sparse course-only fields (`course_acronym`/`course_type`/
+  `course_credits`/`course_professor_contact_uid` — the facts that
+  describe a course, not any one meeting, and have no VEVENT property to
+  round-trip through); day/parity are derived from the event's own
+  `start_at`/`recurrence` (`schedule.event_day`/`event_parity`), never
+  stored. `routers/schedule.py` rewritten to read/write real events
+  end-to-end; `schedule_classes.html`/`schedule_class_form.html` needed no
+  template changes at all (`_class_row` builds the same enriched shape the
+  old schedule_classes row used to be). `scripts/migrate_schedule_
+  classes_to_events.py` (idempotent, `--dry-run`) converts any pre-1.6
+  database's existing rows. See `features/schedule.md`. Full suite 1042
+  passed (new `test_migrate_schedule_classes_to_events.py`, a rewritten
+  `test_schedule.py`, and several other test files updated off the
+  removed `db.upsert_schedule_class` test-seeding helper).
+- **Shipped:** `1.6` slice — **Generalized non-working-day policy + named
+  holiday calendars**, complete (2026-08-14) — `schedule_holidays` rows
+  belong to a named, reusable `calendar_name` now (default `'Default'` for
+  every pre-1.6 holiday, so nothing already-configured changes behavior);
+  `db.list_holiday_calendar_names`/`list_holidays_by_calendar` read it back.
+  Any recurring `events` row — not just a Schedule class — can set
+  `holiday_calendar`/`exclude_saturday`/`exclude_sunday` (three independent
+  constraints, per `open-priority.md`'s "a public holiday and a weekend are
+  deliberately different kinds of constraints" rule), applied at *read*
+  time by `recurrence_expand.expand_events`'s new `holiday_calendars` param
+  (every one of its 6 call sites now passes `db.list_holidays_by_calendar
+  (conn)`), never materialized into `exdates_json` — a holiday add/remove
+  takes effect immediately, no regenerate step. `_event_form_fields.html`
+  exposes all three on the ordinary Calendar event form. Schedule's own
+  class events switched from per-write EXDATE-stuffing
+  (`compute_excluded`/`generate_occurrences`, both deleted) to just
+  carrying `schedule_settings.holiday_calendar` (new field, default
+  `'Default'`) — `schedule.build_class_event_row` no longer takes a
+  `holidays` list at all. See `features/calendar.md`'s Recurrence section
+  and `features/schedule.md`. Full suite 1056 passed (new
+  `test_holiday_calendars.py`, extended `test_recurrence_expand.py`/
+  `test_schedule.py`).
+- **Shipped:** `1.6` slice — **Manual recurrence exceptions**, complete
+  (2026-08-14) — new `event_occurrence_overrides` table (deterministic
+  `master_uid::occurrence_date` key) distinguishes the recurrence rule
+  (`events.recurrence`), the generated occurrences (computed, never
+  stored), and manual per-occurrence overrides, resolving "the
+  recurring-event single-occurrence editing" risk. A cancelled occurrence
+  folds into the master's own EXDATE list at expand time; a moved/modified
+  one becomes a second real VEVENT sharing the master's UID with a
+  RECURRENCE-ID (`ical_rows.py`'s new `recurrence_id` support,
+  `recurrence_expand.py`'s `_build_override_component`/`overrides_by_
+  master` param) — the standard RFC 5545 override, which
+  `recurring_ical_events` (already this app's expansion library) resolves
+  for free, confirmed empirically before committing to the design. Every
+  expanded occurrence now carries its own original slot as
+  `occurrence_date` (the RECURRENCE-ID the library tags every occurrence
+  with, not just overridden ones — `ical_to_event_row`), which
+  calendar_month/week/fourweek/day.html append to each occurrence's link
+  (`?occurrence_date=...`) so `event_detail.html`'s new "This occurrence"
+  card (Cancel / Move / Restore — `POST /events/{uid}/occurrences/
+  cancel|move|restore`) always targets the right instance. Found and fixed
+  a real pre-existing bug in `db.list_events` along the way: a recurring
+  row's own literal `start_at`/`end_at` (its first occurrence only) wrongly
+  excluded the whole row from a date-range query once the window fell far
+  enough past that anchor, regardless of whether the RRULE would still
+  generate real occurrences inside it — nothing had ever caught this
+  because no prior test queried a week more than ~one occurrence-length
+  past a recurring event's own creation date. See `features/calendar.md`'s
+  Recurrence section. Full suite 1078 passed (new
+  `test_manual_recurrence_exceptions.py`, extended
+  `test_recurrence_expand.py`).
+- **Shipped:** `1.6` slice — **Configurable terminology**, complete
+  (2026-08-14) — Settings > General's "Recurrence terminology" toggle
+  (`standard`/`playful`, `deps.py`'s `RECURRENCE_TERMINOLOGY_KEY`,
+  app_meta-backed, same memoized-per-request pattern as `week_start`/
+  `time_format`; `POST /settings/recurrence-terminology`). Presentation-
+  layer only, per spec: the underlying `holiday_calendar`/
+  `exclude_saturday`/`exclude_sunday` field names and semantics never
+  change, only the on-screen label
+  (`_event_form_fields.html`/`schedule_classes.html`, gated by the new
+  `recurrence_terminology()` Jinja global) — "Holiday calendar" / "Exclude
+  Saturday" / "Exclude Sunday" (standard) vs. "Respects Labor Laws" /
+  "Marx Weekend: Saturday" / "Marx Weekend: Sunday" (playful). See
+  `features/calendar.md`'s Recurrence section. Full suite 1088 passed (new
+  `test_recurrence_terminology.py`). **1.6 is now fully shipped**
+  (`pyproject.toml` bumped to `1.6.0`).
+- **Next slice:** `1.7` — Information architecture & view surfaces
+  (`roadmap.md`'s 1.7 row, `open-priority.md` § Information architecture &
+  view surfaces): Dashboard (orientation), Today (execution), Week
+  (planning), Spaces (context), built on the aggregation service (1.1), the
+  project stack (1.3), and work allocations (1.4), with the consolidated
+  widget grid (1.3). `open.md`'s Command palette actions follow-up (1.2
+  side work), 1.4's optional Project check-in side work, and 1.6's
+  optional "Configurable views + optional Schedule module" side work are
+  all still fine smaller, self-contained slices instead, whenever a
+  session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

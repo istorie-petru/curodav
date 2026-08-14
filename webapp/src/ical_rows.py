@@ -261,8 +261,23 @@ def event_row_to_ical(row: dict[str, Any]) -> bytes:
         event.add("URL", row["meeting_url"])
     if row.get("tags"):
         event.add("CATEGORIES", list(row["tags"]))
+    # 1.6 ("Manual recurrence exceptions"): a moved/modified single
+    # occurrence is a second VEVENT sharing the master's UID, with a
+    # RECURRENCE-ID identifying which original occurrence it replaces --
+    # the standard RFC 5545 override mechanism, which recurring_ical_events
+    # (already this app's expansion library) resolves for free: it
+    # substitutes this component's own DTSTART/DTEND/SUMMARY/LOCATION in
+    # place of the master's generated occurrence at that slot. An override
+    # instance carries no RRULE of its own (see recurrence_expand.py's
+    # `_build_override_component`, the only caller that ever sets this key
+    # -- a master row from db.py never has one).
+    if row.get("recurrence_id"):
+        recurrence_id = _parse_dt(row["recurrence_id"])
+        if row.get("all_day") and isinstance(recurrence_id, datetime):
+            recurrence_id = recurrence_id.date()
+        event.add("RECURRENCE-ID", recurrence_id)
     exdate_values: list[date | datetime] = []
-    if row.get("recurrence"):
+    if row.get("recurrence") and not row.get("recurrence_id"):
         rrule_str, embedded_exdates = _normalize_rrule(row["recurrence"], start_is_datetime)
         try:
             event.add("RRULE", rrule_str)
@@ -295,6 +310,16 @@ def ical_to_event_row(event: Event) -> dict[str, Any]:
         row["all_day"] = not isinstance(dtstart, datetime)
     if "DTEND" in event:
         row["end_at"] = _dt_to_field(event.get("DTEND").dt)
+    # 1.6 ("Manual recurrence exceptions"): recurring_ical_events tags
+    # every expanded occurrence (plain-generated or override-substituted)
+    # with a RECURRENCE-ID equal to its own *original* (unmodified) slot --
+    # exposed here as `occurrence_date` so a caller can always identify
+    # "which occurrence is this" for cancel/move, even after it's already
+    # been moved once (its `start_at` no longer matches). Absent on a
+    # non-expanded row (a plain get_event/list_events read never goes
+    # through recurring_ical_events).
+    if "RECURRENCE-ID" in event:
+        row["occurrence_date"] = _dt_to_field(event.get("RECURRENCE-ID").dt)
     row["status"] = _VEVENT_TO_STATUS.get(str(event.get("STATUS", "")), "active")
     if "LOCATION" in event:
         row["location"] = str(event.get("LOCATION"))

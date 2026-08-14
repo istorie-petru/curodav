@@ -356,12 +356,14 @@ app code (the column stays physically on disk for pre-1.2 data), the subtask
 cascade deletes and "sub" tags are gone, iCal RELATED-TO export/import for
 subtask links is removed, and the Relations card holds related events only.
 
-## Schedule & recurrence rework
+## ~~Schedule & recurrence rework~~ — fully shipped 2026-08-14
 
-**Status:** full planning model exists (was `plans/schedule.md` and
-`plans/details.md`, folded in here) — no code. Builds on the project stack.
+**Status:** all four subsections shipped 2026-08-14 (`plans/STATE.md`'s 1.6
+entries, `features/schedule.md` + `features/calendar.md`'s Recurrence
+section). `pyproject.toml` bumped to `1.6.0`. Kept below as the reference
+spec for what shipped.
 
-### Classes as project labels + recurring events
+### ~~Classes as project labels + recurring events~~ — shipped 2026-08-14
 
 The existing Schedule system is reworked around the application's general event
 and label model rather than remaining a separate conceptual entity. A university
@@ -386,7 +388,7 @@ events, but the resulting events belong to the same calendar, label, relation,
 and project systems as everything else; the project becomes the context in which
 the entire course is understood.
 
-### Generalized recurrence and the non-working-day policy
+### ~~Generalized recurrence and the non-working-day policy~~ — shipped 2026-08-14
 
 The recurrence system is generalized so that any recurring event can specify how
 it behaves on non-working days. The system does not encode university-specific
@@ -423,7 +425,7 @@ Exclude Sunday: On/Off
 The exact interface can be simplified where appropriate, but the underlying data
 should retain these as independent constraints.
 
-### Manual recurrence exceptions
+### ~~Manual recurrence exceptions~~ — shipped 2026-08-14
 
 Recurring events must support manual exceptions and overrides. A specific
 occurrence can be cancelled, moved, or otherwise modified without destroying the
@@ -435,9 +437,10 @@ the recurrence rule, the generated occurrences, and the manual exceptions or
 overrides.
 
 (This is the model that resolves the "recurring-event single-occurrence
-editing" risk — now specified, not yet implemented.)
+editing" risk — implemented as `event_occurrence_overrides`, see
+`features/calendar.md`'s Recurrence section.)
 
-### Configurable terminology
+### ~~Configurable terminology~~ — shipped 2026-08-14
 
 The recurring-event editor provides a configurable terminology mode in Settings.
 The underlying data model uses neutral semantic names — `holiday_calendar`,

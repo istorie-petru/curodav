@@ -89,6 +89,56 @@
 <div class="detail-card detail-section-gap">
     {{ event_relations_section(event, related_tasks) }}
 </div>
+
+<!-- 1.6 ("Manual recurrence exceptions") -- only rendered when this page
+     was opened for a specific occurrence (?occurrence_date=..., appended
+     by calendar_month/week/day.html to every recurring occurrence's own
+     link) and the event is actually recurring. The recurrence rule itself
+     (event.recurrence, shown in the meta grid above) is never touched by
+     any of these three actions -- see db.py's event_occurrence_overrides
+     CREATE TABLE comment for the model. -->
+{% if occurrence_date and event.recurrence %}
+<div class="detail-card detail-section-gap">
+    <h2>{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
+    <p class="text-muted-secondary" style="font-size:var(--text-caption)">
+        {{ occurrence_date[:10] }} — changes here affect only this one
+        occurrence, not the whole recurring series.
+    </p>
+    {% if occurrence_override %}
+        {% if occurrence_override.cancelled %}
+        <p class="cell-tag tag-orange">Cancelled</p>
+        {% else %}
+        <p class="cell-tag tag-blue">
+            Moved to {{ occurrence_override.start_at[:10] }} {{ occurrence_override.start_at | fmt_time }}
+        </p>
+        {% endif %}
+        <form method="post" action="/events/{{ event.uid }}/occurrences/restore">
+            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+            <button type="submit" class="btn ghost btn-sm">{{ icon('rotate-ccw', 'icon-sm') }} Restore to series</button>
+        </form>
+    {% else %}
+        <form method="post" action="/events/{{ event.uid }}/occurrences/cancel" class="form-inline">
+            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+            <button type="submit" class="btn ghost btn-sm">{{ icon('x-circle', 'icon-sm') }} Cancel this occurrence</button>
+        </form>
+        <details style="margin-top:8px">
+            <summary class="btn ghost btn-sm" style="display:inline-block; cursor:pointer">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
+            <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid" style="margin-top:8px">
+                <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+                <div class="field">
+                    <label>New start</label>
+                    <input type="datetime-local" name="start_at" value="{{ occurrence_date[:16] }}" required>
+                </div>
+                <div class="field">
+                    <label>New end</label>
+                    <input type="datetime-local" name="end_at">
+                </div>
+                <button type="submit" class="btn primary btn-sm">Move</button>
+            </form>
+        </details>
+    {% endif %}
+</div>
+{% endif %}
 </div>
 
 {% set footer_back_url = '/calendar' %}

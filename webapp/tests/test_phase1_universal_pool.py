@@ -87,6 +87,7 @@ class TestEventCrudNeverTouchesBridge:
         calendar_router.create_event(
             title="Standup", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="", recurrence="", reminders="",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         row = db.list_events(conn)[0]

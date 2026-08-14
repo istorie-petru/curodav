@@ -79,6 +79,22 @@
             <label class="seg-btn"><input type="radio" name="position" value="4" class="seg-radio" {% if current_four_week_position == 4 %}checked{% endif %} onchange="this.form.requestSubmit()"> Fourth</label>
         </div>
     </form>
+    <!-- Recurrence terminology (1.6, "Configurable terminology") -- which
+         label set the recurrence editor's holiday-calendar/weekend
+         controls use (_event_form_fields.html, schedule_classes.html).
+         Presentation-layer only, same autosubmit segmented pattern as
+         Week starts on above -- the underlying holiday_calendar/exclude_
+         saturday/exclude_sunday fields never change name or meaning. -->
+    <form class="settings-field-row" method="post" action="/settings/recurrence-terminology">
+        <span class="settings-field-label">Recurrence terminology
+            <span class="settings-field-hint">Labels on the event form's holiday/weekend fields</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Recurrence terminology">
+            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_recurrence_terminology == 'standard' %}checked{% endif %} onchange="this.form.requestSubmit()"> Standard</label>
+            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_recurrence_terminology == 'playful' %}checked{% endif %} onchange="this.form.requestSubmit()"> Playful</label>
+        </div>
+    </form>
     <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
          in the app (deps.py's fmt_time/fmt_hour filters) plus the
          Calendar/Schedule drag-preview labels. Same autosubmit segmented

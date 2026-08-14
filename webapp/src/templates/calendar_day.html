@@ -41,7 +41,7 @@
     <div class="allday-cols day">
         <div class="allday-col">
             {% for e in all_day %}
-            <a class="allday-task" href="/events/{{ e.uid }}" data-modal title="{{ e.title }}">
+            <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                 <span class="color-dot cal-{{ e.calendar_color }}"></span>
                 {{ e.title }}
             </a>
@@ -63,7 +63,7 @@
         <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
             {% for e in timed %}
             <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
-               href="/events/{{ e.uid }}" data-modal
+               href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                 <span class="te-name">{{ e.title }}</span>
                 <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>

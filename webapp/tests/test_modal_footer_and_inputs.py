@@ -120,20 +120,22 @@ def _seed_habit(conn, uid, **overrides):
 
 
 def _seed_class(conn, uid, **overrides):
-    row = {
-        "uid": uid,
-        "day": "Monday",
-        "start_time": "09:00",
-        "end_time": "10:00",
-        "name": uid,
-        "credits": 0,
-        "parity": "all",
-        "created_at": _now(),
-        "updated_at": _now(),
+    """1.6: a class is a real recurring event now (see schedule_router's
+    module docstring) -- goes through the actual create_class router
+    function (day/parity default to Monday/all) rather than a removed
+    db.upsert_schedule_class call, then the resulting event's uid is
+    looked up by title (create_class always mints its own uuid, it
+    doesn't take a caller-supplied uid)."""
+    fields = {
+        "day": "Monday", "start_time": "09:00", "end_time": "10:00",
+        "name": uid, "acronym": "", "class_type_select": "", "class_type_other": "",
+        "professor_select": "", "professor_new": "", "room": "", "credits": "0",
+        "parity": "all", "enrolled": "on", "project_uid": "",
     }
-    row.update(overrides)
-    db.upsert_schedule_class(conn, row)
-    return db.get_schedule_class(conn, uid)
+    fields.update(overrides)
+    schedule_router.create_class(conn=conn, **fields)
+    event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == uid)
+    return schedule_router._class_row(conn, event)
 
 
 def _index(body: str, needle: str) -> int:
@@ -196,8 +198,8 @@ class TestModalHeaderBodyFooterSections:
         self._assert_sections(resp.body.decode())
 
     def test_schedule_class_form_edit(self, conn):
-        _seed_class(conn, "cl1")
-        resp = schedule_router.edit_class_form("cl1", _request("/schedule/classes/cl1/edit"), conn=conn)
+        cls = _seed_class(conn, "cl1")
+        resp = schedule_router.edit_class_form(cls["uid"], _request(f"/schedule/classes/{cls['uid']}/edit"), conn=conn)
         self._assert_sections(resp.body.decode())
 
 
@@ -402,6 +404,7 @@ class TestSubmissionUnaffectedByPickerUI:
             all_day="", location="", meeting_url="", tags="",
             recurrence="FREQ=WEEKLY",
             reminders="0, 10, 1440",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         events = db.list_events(conn, start="2026-01-01", end="2026-12-31")
@@ -417,6 +420,7 @@ class TestSubmissionUnaffectedByPickerUI:
             all_day="", location="", meeting_url="", tags="",
             recurrence="FREQ=MONTHLY;BYMONTHDAY=1",
             reminders="5, 60",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         updated = db.get_event(conn, "e1")
@@ -445,6 +449,7 @@ class TestSubmissionUnaffectedByPickerUI:
         calendar_router.create_event(
             title="One-off", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="", recurrence="", reminders="",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         events = [e for e in db.list_events(conn, start="2026-01-01", end="2026-12-31") if e["title"] == "One-off"]

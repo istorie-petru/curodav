@@ -133,7 +133,7 @@ class TestCreateWithTwoLabelsStoresBoth:
         calendar_router.create_event(
             title="Standup", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="", tags_labels=["Work", "Daily"],
-            recurrence="", reminders="", conn=conn,
+            recurrence="", reminders="", holiday_calendar="", exclude_saturday="", exclude_sunday="", conn=conn,
         )
         events = [e for e in db.list_events(conn, start="2026-01-01", end="2026-12-31") if e["title"] == "Standup"]
         assert sorted(events[0]["tags"]) == ["Daily", "Work"]
@@ -169,7 +169,7 @@ class TestEditAddOrRemoveLabel:
         calendar_router.update_event(
             uid="e1", title="e1", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="", tags_labels=["New"],
-            recurrence="", reminders="", conn=conn,
+            recurrence="", reminders="", holiday_calendar="", exclude_saturday="", exclude_sunday="", conn=conn,
         )
         assert db.get_event(conn, "e1")["tags"] == ["New"]
 

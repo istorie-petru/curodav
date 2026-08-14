@@ -194,3 +194,45 @@ class TestLegacyNotNullRelaxed:
                 "all_day": 0, "created_at": _now(), "updated_at": _now(),
             })
             assert db.get_event(conn, "e1") is not None
+
+
+class TestLegacyScheduleClassesTableSurvivesInitSchema:
+    """1.6 dropped `schedule_classes` from SCHEMA_SQL (see db.py's removal
+    note) -- init_schema must not crash against a pre-1.6 database that
+    still physically has the table (professor_contact_uid missing, the
+    exact pre-2026-07-31 shape _ensure_column used to backfill
+    unconditionally), and must leave its rows untouched for
+    scripts/migrate_schedule_classes_to_events.py to read afterward."""
+
+    def test_init_schema_does_not_crash_and_backfills_the_missing_column(self, tmp_path):
+        import sqlite3
+
+        db_path = tmp_path / "legacy_schedule.sqlite"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE schedule_classes (uid TEXT PRIMARY KEY, day TEXT, start_time TEXT, "
+            "end_time TEXT, name TEXT, credits REAL, parity TEXT, enrolled INTEGER, "
+            "created_at TEXT, updated_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO schedule_classes (uid, day, start_time, end_time, name, credits, parity, enrolled, created_at, updated_at) "
+            "VALUES ('c1', 'Monday', '09:00', '10:00', 'Algorithms', 6, 'all', 1, ?, ?)",
+            (_now(), _now()),
+        )
+        conn.commit()
+
+        db.init_schema(conn)  # must not raise
+
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(schedule_classes)")}
+        assert "professor_contact_uid" in cols
+        row = conn.execute("SELECT * FROM schedule_classes WHERE uid = 'c1'").fetchone()
+        assert row["name"] == "Algorithms"
+        conn.close()
+
+    def test_fresh_database_has_no_schedule_classes_table_at_all(self, tmp_path):
+        with db.connect(tmp_path / "fresh2.sqlite") as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schedule_classes'"
+            ).fetchone()
+            assert row is None

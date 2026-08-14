@@ -443,22 +443,22 @@ class TestScheduleToolbarConsistency:
         assert body.count('name="q"') == 1
 
     def test_schedule_search_actually_filters(self, conn):
+        from src import schedule as schedule_logic
         from src.routers import schedule as schedule_router
 
-        db.upsert_schedule_class(
-            conn,
-            {
-                "uid": "cl1", "day": "Monday", "start_time": "09:00", "end_time": "10:00",
-                "name": "Algorithms", "credits": 5, "parity": "all", "created_at": _now(), "updated_at": _now(),
-            },
-        )
-        db.upsert_schedule_class(
-            conn,
-            {
-                "uid": "cl2", "day": "Tuesday", "start_time": "09:00", "end_time": "10:00",
-                "name": "History", "credits": 5, "parity": "all", "created_at": _now(), "updated_at": _now(),
-            },
-        )
+        # 1.6: a class is a real recurring event now (see schedule_
+        # router's module docstring) -- seeded straight via db.upsert_event
+        # (like the pre-1.6 db.upsert_schedule_class call this replaces),
+        # tagged with only the Schedule system label and deliberately no
+        # course label, so this stays a search-vs-table test and doesn't
+        # also exercise the (separate, label-driven) filter dropdown.
+        for uid, name, day in (("cl1", "Algorithms", "Monday"), ("cl2", "History", "Tuesday")):
+            row = schedule_logic.build_class_event_row(
+                {"uid": uid, "day": day, "start_time": "09:00", "end_time": "10:00", "title": name, "room": "", "parity": "all", "enrolled": True},
+                {}, [],
+            )
+            db.upsert_event(conn, row)
+            db.set_object_labels(conn, "event", uid, ["Schedule"])
         resp = schedule_router.classes_view(_request("/schedule?q=Algo"), q="Algo", conn=conn)
         body = resp.body.decode()
         assert "Algorithms" in body

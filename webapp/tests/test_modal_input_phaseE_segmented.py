@@ -170,17 +170,25 @@ class TestTaskImportanceUrgencySegmented:
 # --------------------------------------------------------------------- #
 
 
-def _seed_class(conn, uid="c1", **overrides):
-    now = _now()
-    row = {
-        "uid": uid, "day": "Monday", "start_time": "09:00", "end_time": "10:00",
-        "name": "Algorithms", "acronym": "ALG", "class_type": "Course", "professor": "",
-        "professor_contact_uid": None, "room": "", "credits": 6, "parity": "all",
-        "enrolled": True, "event_uid": None, "created_at": now, "updated_at": now,
+def _seed_class(conn, name="Algorithms", class_type="", **overrides):
+    """1.6: a class is a real recurring event tagged with its course label
+    now (see schedule_router's module docstring) -- goes through the real
+    create_class router path (which auto-provisions a course label named
+    after `name` when no project_uid is given, and writes acronym/type/
+    credits/professor onto THAT label's label_config row, not the event)
+    rather than a removed db.upsert_schedule_class call. Returns the
+    enriched class dict (schedule_router._class_row shape, includes the
+    real uid create_class minted)."""
+    fields = {
+        "day": "Monday", "start_time": "09:00", "end_time": "10:00",
+        "name": name, "acronym": "ALG", "class_type_select": class_type, "class_type_other": "",
+        "professor_select": "", "professor_new": "", "room": "", "credits": "6",
+        "parity": "all", "enrolled": "on", "project_uid": "",
     }
-    row.update(overrides)
-    db.upsert_schedule_class(conn, row)
-    return row
+    fields.update(overrides)
+    schedule_router.create_class(conn=conn, **fields)
+    event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == name)
+    return schedule_router._class_row(conn, event)
 
 
 class TestScheduleClassDayParitySegmented:
@@ -207,9 +215,10 @@ class TestScheduleClassDayParitySegmented:
             professor_select="", professor_new="",
             room="", credits="6", parity="odd", enrolled="on", project_uid="", conn=conn,
         )
-        classes = db.list_schedule_classes(conn)
-        assert classes[0]["day"] == "Wednesday"
-        assert classes[0]["parity"] == "odd"
+        events = db.list_schedule_class_events(conn)
+        cls = schedule_router._class_row(conn, events[0])
+        assert cls["day"] == "Wednesday"
+        assert cls["parity"] == "odd"
 
 
 # --------------------------------------------------------------------- #
@@ -219,9 +228,13 @@ class TestScheduleClassDayParitySegmented:
 
 class TestScheduleClassTypeSegmentedWithOther:
     def test_new_class_form_lists_distinct_class_types_already_in_use(self, conn):
-        _seed_class(conn, "c1", class_type="Seminar")
-        _seed_class(conn, "c2", class_type="Lab")
-        _seed_class(conn, "c3", class_type="Seminar")  # duplicate, should collapse
+        # Each class needs its own course (name) -- class_type is a
+        # course-level fact now (label_config.course_type), so three
+        # meetings of the *same* course would collapse onto one label/one
+        # type, not exercise the dedup list this test is about.
+        _seed_class(conn, name="Algorithms", class_type="Seminar")
+        _seed_class(conn, name="Databases", class_type="Lab")
+        _seed_class(conn, name="Compilers", class_type="Seminar")  # duplicate, should collapse
         resp = schedule_router.new_class_form(_request(), conn=conn)
         body = resp.body.decode()
         assert 'class-type-field' in body
@@ -232,52 +245,49 @@ class TestScheduleClassTypeSegmentedWithOther:
         assert '+ Other' in body
 
     def test_picking_an_existing_class_type_stores_that_string(self, conn):
-        _seed_class(conn, "c1", class_type="Seminar")
+        _seed_class(conn, name="Algorithms", class_type="Seminar")
         schedule_router.create_class(
             day="Tuesday", start_time="08:00", end_time="09:30", name="New course",
             acronym="", class_type_select="Seminar", class_type_other="",
             professor_select="", professor_new="",
             room="", credits="0", parity="all", enrolled="", project_uid="", conn=conn,
         )
-        classes = {c["name"]: c for c in db.list_schedule_classes(conn)}
-        assert classes["New course"]["class_type"] == "Seminar"
+        assert db.get_label_config(conn, "New course")["course_type"] == "Seminar"
 
     def test_picking_other_and_typing_a_new_class_type_stores_the_new_string(self, conn):
-        _seed_class(conn, "c1", class_type="Seminar")
+        _seed_class(conn, name="Algorithms", class_type="Seminar")
         schedule_router.create_class(
             day="Tuesday", start_time="08:00", end_time="09:30", name="Brand new type course",
             acronym="", class_type_select="__other__", class_type_other="Workshop",
             professor_select="", professor_new="",
             room="", credits="0", parity="all", enrolled="", project_uid="", conn=conn,
         )
-        classes = {c["name"]: c for c in db.list_schedule_classes(conn)}
-        assert classes["Brand new type course"]["class_type"] == "Workshop"
+        assert db.get_label_config(conn, "Brand new type course")["course_type"] == "Workshop"
         # The newly-typed value now shows up as an existing option next time.
         resp = schedule_router.new_class_form(_request(), conn=conn)
         body = resp.body.decode()
         assert 'name="class_type_select" value="Workshop"' in body
 
     def test_none_option_clears_class_type(self, conn):
-        _seed_class(conn, "c1", class_type="Seminar")
+        _seed_class(conn, name="Algorithms", class_type="Seminar")
         schedule_router.create_class(
             day="Tuesday", start_time="08:00", end_time="09:30", name="Untyped course",
             acronym="", class_type_select="", class_type_other="",
             professor_select="", professor_new="",
             room="", credits="0", parity="all", enrolled="", project_uid="", conn=conn,
         )
-        classes = {c["name"]: c for c in db.list_schedule_classes(conn)}
-        assert classes["Untyped course"]["class_type"] is None
+        assert db.get_label_config(conn, "Untyped course")["course_type"] is None
 
     def test_editing_a_class_whose_class_type_is_not_in_the_distinct_list_still_shows_it(self, conn, monkeypatch):
-        # Simulates stale/edge-case data: a class with a class_type that
-        # (for whatever reason) is no longer among the distinct values
-        # queried across the user's classes -- since that query naturally
-        # includes the class's own current value in the common case,
+        # Simulates stale/edge-case data: a class whose course_type (for
+        # whatever reason) is no longer among the distinct values queried
+        # across the user's own courses -- since that query naturally
+        # includes the course's own current value in the common case,
         # monkeypatch it here to force the edge case the template's
         # defensive `class_type_is_other` check exists to handle.
-        _seed_class(conn, "c1", class_type="Colloquium")
-        monkeypatch.setattr(db, "list_schedule_class_types", lambda conn: ["Lab", "Seminar"])
-        resp = schedule_router.edit_class_form("c1", _request(), conn=conn)
+        cls = _seed_class(conn, name="Algorithms", class_type="Colloquium")
+        monkeypatch.setattr(db, "list_course_types", lambda conn: ["Lab", "Seminar"])
+        resp = schedule_router.edit_class_form(cls["uid"], _request(), conn=conn)
         body = resp.body.decode()
         # "+ Other" should be pre-selected and pre-filled with the existing
         # value, not silently dropped -- mirrors how "+ Add new professor..."
@@ -290,12 +300,11 @@ class TestScheduleClassTypeSegmentedWithOther:
         assert 'name="class_type_select" value="Colloquium"' not in body
 
     def test_editing_that_stale_class_round_trips_unchanged_if_resubmitted_as_is(self, conn):
-        _seed_class(conn, "c1", class_type="Colloquium")
+        cls = _seed_class(conn, name="Algorithms", class_type="Colloquium")
         schedule_router.update_class(
-            uid="c1", day="Monday", start_time="09:00", end_time="10:00", name="Algorithms",
+            uid=cls["uid"], day="Monday", start_time="09:00", end_time="10:00", name="Algorithms",
             acronym="ALG", class_type_select="__other__", class_type_other="Colloquium",
             professor_select="", professor_new="",
-            room="", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
+            room="", credits="6", parity="all", enrolled="on", project_uid="Algorithms", conn=conn,
         )
-        updated = db.get_schedule_class(conn, "c1")
-        assert updated["class_type"] == "Colloquium"
+        assert db.get_label_config(conn, "Algorithms")["course_type"] == "Colloquium"

@@ -205,6 +205,7 @@ class TestTitleSync:
             start_at="2026-08-17T16:00:00",
             end_at="2026-08-17T18:00:00",
             all_day="", location="", meeting_url="", tags="", recurrence="", reminders="",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         assert db.get_task(conn, "t1")["title"] == "Deep research"
@@ -216,7 +217,8 @@ class TestTitleSync:
         _seed_event(conn, "e1", title="Plain event")
         calendar_router.update_event(
             "e1", title="Renamed plain event", description="", start_at="2026-08-17T09:00:00", end_at="",
-            all_day="", location="", meeting_url="", tags="", recurrence="", reminders="", conn=conn
+            all_day="", location="", meeting_url="", tags="", recurrence="", reminders="",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="", conn=conn
         )
         assert db.get_event(conn, "e1")["title"] == "Renamed plain event"
 

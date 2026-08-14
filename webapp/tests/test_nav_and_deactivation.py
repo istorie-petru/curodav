@@ -110,15 +110,16 @@ class TestActiveTabHighlighting:
         assert resp.context["active_tab"] == "schedule"
 
     def test_edit_class_form_highlights_schedule_tab(self, conn):
-        db.upsert_schedule_class(
-            conn,
-            {
-                "uid": "c1", "day": "Monday", "start_time": "09:00", "end_time": "10:00",
-                "name": "Algorithms", "credits": 6, "parity": "all", "enrolled": 1,
-                "created_at": _now(), "updated_at": _now(),
-            },
+        # 1.6: a class is a real recurring event now (see schedule_
+        # router's module docstring) -- create it via the real create_class
+        # router path instead of a removed db.upsert_schedule_class call.
+        schedule_router.create_class(
+            day="Monday", start_time="09:00", end_time="10:00", name="Algorithms",
+            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
+            room="", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
         )
-        resp = schedule_router.edit_class_form("c1", _request("/schedule/classes/c1/edit"), conn=conn)
+        uid = db.list_schedule_class_events(conn)[0]["uid"]
+        resp = schedule_router.edit_class_form(uid, _request(f"/schedule/classes/{uid}/edit"), conn=conn)
         assert resp.context["active_tab"] == "schedule"
 
     def test_schedule_settings_is_a_details_block_on_the_schedule_page_and_still_highlights_schedule_tab(self, conn):
@@ -265,7 +266,8 @@ class TestDatabasesFeatureRemoved:
             acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
             room="204", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
         )
-        cls = next(c for c in db.list_schedule_classes(conn) if c["name"] == "Algorithms")
+        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
+        cls = schedule_router._class_row(conn, event)
         assert cls["project_uid"] == "Algorithms"
 
 
