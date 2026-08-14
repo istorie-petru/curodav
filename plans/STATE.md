@@ -650,26 +650,63 @@ session, right before the final commit of that session.
   router-function-call convention, `asyncio.run` + a synthetic JSON
   `Request` for the two async endpoints), same as every other slice in
   this app. 19 new tests, full suite 1250 passed.
-- **Next slice:** `1.8` slice 2 — **Sync conflicts surface**
-  (`open-priority.md` § Offline-first editing & synchronization §11, slice
-  2). New `sync_conflicts` table (§9: `id`, `entity_type`, `entity_uid`,
-  `field_name`, `losing_value`, `losing_hlc`, `winning_hlc`, `created_at`,
-  `resolved_at`) + a Settings-adjacent list page (restore the losing value
-  as a normal new `field_set` op, or dismiss). Wires §7b/c's two
-  conflict-surfacing exceptions into slice 1's `src/offline_sync.py::
-  apply_op`/`apply_batch`: (b) a genuine concurrent edit to the same
-  event's `start_at`/`end_at` records the losing value as a conflict
-  instead of silently discarding it (still applies the higher-HLC value,
-  same "no device ever blocked" rule); (c) a synced batch that gives one
-  task two different project labels re-validates against
-  `db.MultipleProjectLabelsError` (1.5) after the whole batch applies, not
-  per-op, keeping the higher-HLC label_add and recording the other as a
-  conflict. Still no PWA/browser client — testable server-side the same
-  way slice 1 was. `open.md`'s Command palette actions follow-up (1.2 side
+- **Shipped:** `1.8` slice 2 — **Sync conflicts surface**, complete
+  (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 2. New `sync_conflicts` table (§9: `id`,
+  `entity_type`, `entity_uid`, `field_name`, `losing_value`, `losing_hlc`,
+  `winning_hlc`, `created_at`, `resolved_at`; HLCs stored as display-only
+  `"physical:logical:device_id"` text, never compared/sorted) + a new
+  `/settings/sync-conflicts` hub category (`routers/settings.py`,
+  `settings_sync_conflicts.html`) listing every unresolved conflict with
+  Restore (re-applies the losing value as a fresh op through the normal
+  `offline_sync.apply_op` path, a synthetic `"settings-restore"` device id
+  + a `now` HLC so it always outranks every real prior write, then marks
+  the conflict resolved) and Dismiss (`resolved_at` set, value discarded)
+  actions. Wired both of §7's deliberate LWW exceptions into slice 1's
+  `src/offline_sync.py` apply path:
+  - **§7b** (event `start_at`/`end_at`) — `_apply_field_write` now
+    surfaces a conflict instead of a plain silent stale no-op whenever the
+    losing write's `device_id` differs from the winner's. The concurrency
+    test is a deliberate simplification, not full causal/version-vector
+    tracking (§10 explicitly rules CRDTs out): per §3's HLC merge rule, a
+    device that had already observed another device's write would have
+    merged its own clock past it and could never subsequently lose to
+    that same write — so "different device_id on both sides of a losing
+    write" is concurrency's own observable signature, with no extra state
+    needed. A losing write from the *same* device as the winner (a
+    reordered/replayed op from that device's own causal history) is left
+    as an ordinary §6 stale no-op, not surfaced.
+  - **§7c** (single-project-per-task) — `apply_batch` re-validates after
+    every op in the batch has applied, not per-op (each individual
+    `label_add` is independently valid per §7a; only the *combination*
+    can violate the invariant). Highest-HLC `label_add` for a task wins;
+    a project label the task already carried *before* this batch always
+    outranks anything newly added within it (no in-batch HLC to lose
+    against). Every losing add is reverted from `object_labels`, recorded
+    as a conflict, and that op's own result status is patched to
+    `"rejected_invariant"` in the batch's returned results.
+  Still no PWA/browser client anywhere — everything above is exercised
+  server-side, same router-function-call convention as slice 1. 11 new
+  tests extending `test_offline_sync.py` (30 total in that file), plus a
+  hub-categories fixture update in `test_phase8_settings_hub.py`, full
+  suite 1261 passed.
+- **Next slice:** `1.8` slice 3 — **PWA shell** (`open-priority.md` §
+  Offline-first editing & synchronization §11, slice 3; architecture fork
+  in §0). Manifest + service worker + an app-shell cache — installable,
+  opens to a real shell offline, per `plans/ofline-first-pwa.md`'s own
+  acceptance line ("opening the application offline should lead directly
+  to the normal interface rather than an error page"). Deliberately no
+  sync, no IndexedDB, no local read/write path yet (slices 4-5) — this
+  slice is purely "can the app open at all with no network," the first
+  genuinely browser-dependent piece of 1.8 after two server-only slices.
+  Needs manual/browser verification (a service worker can't be exercised
+  by the existing pytest/router-function-call convention the same way
+  slices 1-2 were) — plan for that up front rather than discovering it
+  mid-slice. `open.md`'s Command palette actions follow-up (1.2 side
   work), 1.4's optional Project check-in side work, and 1.6's optional
   "Configurable views + optional Schedule module" side work are all still
   fine smaller, self-contained slices instead, whenever a session wants a
-  break from the sync-engine work.
+  break from the sync-engine/PWA work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

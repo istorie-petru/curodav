@@ -955,10 +955,33 @@ of it:
    field for now, including `start_at`/`end_at`; slice 2 wires those two
    exceptions into this slice's apply path. No PWA/browser client calls this
    API yet. 19 new tests (`test_offline_sync.py`), full suite 1250 passed.
-2. **Sync conflicts surface** — `sync_conflicts` table + a Settings-adjacent
-   list page (restore/dismiss), §7b/c's structural-conflict re-validation
-   (event time fields, single-project-per-task) wired into slice 1's apply
-   path.
+2. **Sync conflicts surface** — **shipped 2026-08-14.** `sync_conflicts`
+   table + `/settings/sync-conflicts` (routers/settings.py, a new hub
+   category adjacent to Data health), listing every unresolved conflict
+   with Restore (re-applies the losing value as a fresh `field_set`/
+   `label_add` op through the normal `apply_op` path, given a synthetic
+   `"settings-restore"` device id and a `now` HLC so it always outranks
+   every real device's prior write) and Dismiss (`resolved_at` set, value
+   discarded for good) actions. Wired both §7b/c exceptions into slice 1's
+   `src/offline_sync.py` apply path: (b) `_apply_field_write` detects a
+   genuinely concurrent `start_at`/`end_at` edit on an `event` via a
+   deliberate simplification instead of full causal/version-vector
+   tracking (out of scope, §10) — per §3's HLC merge rule, a losing write
+   can only come from a *different* device_id than the current winner if
+   neither had observed the other's write yet, so "different device_id on
+   both sides of a losing write" is concurrency's own observable
+   signature; a losing write from the *same* device as the winner is an
+   ordinary reordered/replayed op, not a conflict, and stays a plain §6
+   stale no-op. (c) `apply_batch` re-validates single-project-per-task
+   after every op in a batch has applied (not per-op, since each
+   individual `label_add` is independently valid per §7a) — the highest-
+   HLC `label_add` for a task wins, any pre-existing project label from
+   before the batch outranks every in-batch addition outright (no in-batch
+   HLC to lose against), and every losing add is reverted from
+   `object_labels` and recorded as a conflict, with that op's own result
+   status patched to `"rejected_invariant"`. 11 new tests extending
+   `test_offline_sync.py`, plus a hub-categories fixture update in
+   `test_phase8_settings_hub.py`, full suite 1261 passed.
 3. **PWA shell** — manifest, service worker, offline app-shell caching; no
    sync yet, just "installable, opens to a real shell offline" per
    `ofline-first-pwa.md`'s own acceptance line.

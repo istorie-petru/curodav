@@ -229,9 +229,13 @@ work-allocation/event time fields and single-project-per-task) is **designed,
 7-slice implementation breakdown. **Slice 1 (field-HLC shadow store + sync API
 skeleton) shipped 2026-08-14** — `field_versions`/`sync_devices`/
 `sync_applied_ops`, `src/offline_sync.py`'s §6 per-field LWW apply logic, and
-`POST /api/sync/push`/`/api/sync/pull` (`routers/sync_api.py`). Server-only,
-no browser/PWA client yet; slice 2 (`sync_conflicts` surface + §7b/c's two
-conflict-surfacing exceptions) is next.
+`POST /api/sync/push`/`/api/sync/pull` (`routers/sync_api.py`). **Slice 2
+(Sync conflicts surface) shipped 2026-08-14** — `sync_conflicts` table +
+`/settings/sync-conflicts` (restore/dismiss), §7b's event-time concurrent-edit
+detection and §7c's single-project-per-task batch re-validation both wired
+into slice 1's apply path. Still entirely server-only, no browser/PWA client
+yet; slice 3 (PWA shell -- manifest, service worker, offline app-shell cache)
+is next, and the first slice that genuinely needs browser-side verification.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

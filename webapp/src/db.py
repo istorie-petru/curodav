@@ -680,6 +680,32 @@ CREATE TABLE IF NOT EXISTS sync_applied_ops (
     result_json TEXT NOT NULL,
     applied_at TEXT
 );
+
+-- 1.8 slice 2 ("Sync conflicts surface", plans/open-priority.md §
+-- Offline-first editing & synchronization §§7b/c, 9): the two deliberate
+-- exceptions to plain per-field LWW (§6/§7a, slice 1) -- a genuine
+-- concurrent edit to the same event's start_at/end_at, or a synced batch
+-- that gives one task two different project labels -- still pick a
+-- winner automatically (so no device is ever blocked), but the losing
+-- side is never silently discarded: it lands here instead, for the
+-- person to restore or dismiss from Settings > Sync conflicts.
+-- `losing_value`/`winning_hlc` are stored as plain text (a field value is
+-- always one of the JSON-safe scalar types field_set ops already carry;
+-- `winning_hlc` packed as "physical:logical:device_id" -- display-only,
+-- never compared/sorted, so a single text column is simpler than three
+-- more int/text columns nothing queries).
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    losing_value TEXT,
+    losing_hlc TEXT NOT NULL,
+    winning_hlc TEXT NOT NULL,
+    created_at TEXT,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sync_conflicts_unresolved ON sync_conflicts(resolved_at);
 """
 
 
@@ -3662,6 +3688,69 @@ def touch_sync_device(
         "last_seen_at=excluded.last_seen_at",
         (device_id, *pushed, *pulled, now),
     )
+
+
+# --------------------------------------------------------------------- #
+# 1.8 slice 2 -- sync_conflicts (§§7b/c, 9). See the table's own CREATE
+# TABLE comment for what it's for. Plain CRUD helpers only -- the actual
+# decision of *when* a conflict is worth recording lives in
+# src/offline_sync.py, same layering as the field-HLC shadow store above.
+# --------------------------------------------------------------------- #
+
+
+def _hlc_to_str(hlc: tuple[int, int, str]) -> str:
+    return f"{hlc[0]}:{hlc[1]}:{hlc[2]}"
+
+
+def create_sync_conflict(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    field_name: str,
+    losing_value: Any,
+    losing_hlc: tuple[int, int, str],
+    winning_hlc: tuple[int, int, str],
+) -> str:
+    import uuid
+
+    conflict_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO sync_conflicts (id, entity_type, entity_uid, field_name, losing_value, "
+        "losing_hlc, winning_hlc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            conflict_id, entity_type, entity_uid, field_name,
+            None if losing_value is None else str(losing_value),
+            _hlc_to_str(losing_hlc), _hlc_to_str(winning_hlc),
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    return conflict_id
+
+
+def get_sync_conflict(conn: sqlite3.Connection, conflict_id: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM sync_conflicts WHERE id = ?", (conflict_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_sync_conflicts(conn: sqlite3.Connection, unresolved_only: bool = True) -> list[dict[str, Any]]:
+    query = "SELECT * FROM sync_conflicts"
+    if unresolved_only:
+        query += " WHERE resolved_at IS NULL"
+    query += " ORDER BY created_at DESC"
+    return [dict(r) for r in conn.execute(query).fetchall()]
+
+
+def resolve_sync_conflict(conn: sqlite3.Connection, conflict_id: str) -> None:
+    """Dismiss -- the losing value is discarded for good, `resolved_at`
+    set. Restoring the losing value instead is not a special "resolve"
+    variant: it's a normal new `field_set` op with a fresh HLC (routers/
+    settings.py's own restore action), applied through the same apply_op
+    path as any other write, followed by this same dismissal call."""
+    conn.execute(
+        "UPDATE sync_conflicts SET resolved_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), conflict_id),
+    )
+    conn.commit()
 
 
 def clear_page_banner(conn: sqlite3.Connection, page_key: str) -> None:

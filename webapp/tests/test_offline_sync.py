@@ -1,15 +1,20 @@
-"""Tests for 1.8 slice 1 -- "Field-HLC shadow store + sync API skeleton"
-(plans/open-priority.md § Offline-first editing & synchronization, §11
-slice 1). Per that slice's own acceptance shape: POST synthetic operation
-batches and assert the resulting field values/HLCs, and (for a
-deliberately-conflicting batch) that the losing value is retained
-somewhere inspectable rather than silently dropped -- no browser, no PWA
-client, same router-function-call pytest convention as every other slice.
+"""Tests for 1.8 slices 1-2 -- "Field-HLC shadow store + sync API
+skeleton" and "Sync conflicts surface" (plans/open-priority.md §
+Offline-first editing & synchronization, §11). Per slice 1's own
+acceptance shape: POST synthetic operation batches and assert the
+resulting field values/HLCs, and (for a deliberately-conflicting batch)
+that the losing value is retained somewhere inspectable rather than
+silently dropped -- no browser, no PWA client, same router-function-call
+pytest convention as every other slice. Slice 2 adds the two §7b/c
+conflict-*surfacing* exceptions plus the Settings > Sync conflicts
+restore/dismiss actions.
 
-Covers `src/offline_sync.py` (the pure §6/§7a/§4 apply logic) directly,
-and `src/routers/sync_api.py` (the §8 push/pull HTTP wrapper) the same
-way test_search_api.py exercises routers/search.py -- call the async
-route function with a synthetic Request, `asyncio.run` it."""
+Covers `src/offline_sync.py` (the pure §6/§7a/§4/§7b/§7c apply logic)
+directly, `src/routers/sync_api.py` (the §8 push/pull HTTP wrapper), and
+`src/routers/settings.py`'s sync-conflicts routes -- the latter two the
+same way test_search_api.py exercises routers/search.py: call the route
+function directly (`asyncio.run` for the async ones) with a synthetic
+Request."""
 
 from __future__ import annotations
 
@@ -20,6 +25,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db, offline_sync
+from src.routers import settings as settings_router
 from src.routers import sync_api
 
 
@@ -263,3 +269,173 @@ class TestSyncApiRouter:
         resp = asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
         body = _json.loads(resp.body.decode())
         assert any(c["entity_uid"] == "t1" and c["value"] == "From A" for c in body["changes"])
+
+
+def _seed_event(conn, uid, **overrides):
+    row = {
+        "uid": uid, "title": uid, "description": "", "status": "active", "all_day": False,
+        "start_at": "2026-08-10T09:00:00", "end_at": "2026-08-10T10:00:00", "tags": [],
+    }
+    row.update(overrides)
+    db.upsert_event(conn, row)
+
+
+class TestConcurrentEventTimeConflicts:
+    """§7b -- a genuinely concurrent edit to the same event's start_at/
+    end_at (different device_ids on both sides) is surfaced as a
+    sync_conflicts row instead of silently discarded, whichever order the
+    two writes happen to apply in."""
+
+    def test_higher_hlc_wins_and_the_loser_is_recorded_not_dropped(self, conn):
+        _seed_event(conn, "e1")
+        offline_sync.apply_op(conn, {
+            "op_id": "op1", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-b",
+            "fields": {"start_at": {"value": "2026-08-10T11:00:00", "hlc": _hlc(1000, device="device-b")}},
+        })
+        result = offline_sync.apply_op(conn, {
+            "op_id": "op2", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-a",
+            "fields": {"start_at": {"value": "2026-08-10T12:00:00", "hlc": _hlc(2000, device="device-a")}},
+        })
+        assert result["status"] == "applied"
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T12:00:00"
+        conflicts = db.list_sync_conflicts(conn)
+        assert len(conflicts) == 1
+        assert conflicts[0]["losing_value"] == "2026-08-10T11:00:00"
+        assert conflicts[0]["field_name"] == "start_at"
+
+    def test_stale_side_arriving_second_is_also_recorded(self, conn):
+        _seed_event(conn, "e1")
+        offline_sync.apply_op(conn, {
+            "op_id": "op1", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-a",
+            "fields": {"start_at": {"value": "2026-08-10T12:00:00", "hlc": _hlc(2000, device="device-a")}},
+        })
+        result = offline_sync.apply_op(conn, {
+            "op_id": "op2", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-b",
+            "fields": {"start_at": {"value": "2026-08-10T11:00:00", "hlc": _hlc(1000, device="device-b")}},
+        })
+        assert result["status"] == "conflict"
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T12:00:00"
+        assert len(db.list_sync_conflicts(conn)) == 1
+
+    def test_same_device_sequential_edit_is_never_a_conflict(self, conn):
+        _seed_event(conn, "e1")
+        offline_sync.apply_op(conn, {
+            "op_id": "op1", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-a",
+            "fields": {"start_at": {"value": "2026-08-10T12:00:00", "hlc": _hlc(2000, device="device-a")}},
+        })
+        # A later, older op_id from the SAME device (a replay/reorder
+        # artifact, not two devices editing without seeing each other).
+        result = offline_sync.apply_op(conn, {
+            "op_id": "op2", "entity_type": "event", "entity_uid": "e1", "op_type": "field_set",
+            "device_id": "device-a",
+            "fields": {"start_at": {"value": "2026-08-10T11:00:00", "hlc": _hlc(1000, device="device-a")}},
+        })
+        assert result["status"] == "stale"
+        assert db.list_sync_conflicts(conn) == []
+
+    def test_non_surfaced_fields_still_get_plain_silent_lww(self, conn):
+        # title isn't a §7b field -- an ordinary cross-device stale write
+        # is still a plain no-op, no conflict recorded.
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "New", "hlc": _hlc(2000, device="device-a")}}))
+        offline_sync.apply_op(conn, _field_set_op("op2", "task", "t1", {"title": {"value": "Old", "hlc": _hlc(1000, device="device-b")}}))
+        assert db.list_sync_conflicts(conn) == []
+
+
+class TestProjectLabelInvariantAfterBatch:
+    """§7c -- two devices each attach a different project label to the
+    same task within one synced batch."""
+
+    def _seed_projects(self, conn, *names):
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active", "tags": []})
+        for name in names:
+            conn.execute("INSERT INTO label_config (name, is_project) VALUES (?, 1)", (name,))
+        conn.commit()
+
+    def _label_add_op(self, op_id, task_uid, label_name, physical, device):
+        return {
+            "op_id": op_id, "entity_type": "object_label", "entity_uid": task_uid,
+            "op_type": "label_add", "device_id": device,
+            "hlc": _hlc(physical, device=device),
+            "target": {"object_type": "task", "object_id": task_uid, "label_name": label_name},
+        }
+
+    def test_higher_hlc_label_wins_the_other_is_reverted_and_conflict_recorded(self, conn):
+        self._seed_projects(conn, "ProjA", "ProjB")
+        ops = [
+            self._label_add_op("op1", "t1", "ProjA", 1000, "device-a"),
+            self._label_add_op("op2", "t1", "ProjB", 2000, "device-b"),
+        ]
+        results = offline_sync.apply_batch(conn, ops)
+        assert db.get_task(conn, "t1")["tags"] == ["ProjB"]
+        by_op_id = {r["op_id"]: r for r in results}
+        assert by_op_id["op1"]["status"] == "rejected_invariant"
+        assert by_op_id["op2"]["status"] == "applied"
+        conflicts = db.list_sync_conflicts(conn)
+        assert len(conflicts) == 1
+        assert conflicts[0]["losing_value"] == "ProjA"
+        assert conflicts[0]["field_name"] == "project_label"
+
+    def test_pre_existing_project_label_always_wins_over_a_batch_addition(self, conn):
+        self._seed_projects(conn, "ProjA", "ProjB")
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active", "tags": ["ProjA"]})
+        ops = [self._label_add_op("op1", "t1", "ProjB", 9999, "device-b")]
+        results = offline_sync.apply_batch(conn, ops)
+        assert db.get_task(conn, "t1")["tags"] == ["ProjA"]
+        assert results[0]["status"] == "rejected_invariant"
+        assert len(db.list_sync_conflicts(conn)) == 1
+
+    def test_two_devices_adding_the_same_label_is_not_a_conflict(self, conn):
+        self._seed_projects(conn, "ProjA")
+        ops = [
+            self._label_add_op("op1", "t1", "ProjA", 1000, "device-a"),
+            self._label_add_op("op2", "t1", "ProjA", 2000, "device-b"),
+        ]
+        offline_sync.apply_batch(conn, ops)
+        assert db.get_task(conn, "t1")["tags"] == ["ProjA"]
+        assert db.list_sync_conflicts(conn) == []
+
+
+class TestSyncConflictsSettingsPage:
+    def test_page_lists_unresolved_conflicts(self, conn):
+        db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        req = Request({"type": "http", "method": "GET", "path": "/settings/sync-conflicts", "query_string": b"", "headers": []})
+        resp = settings_router.settings_sync_conflicts(req, conn=conn)
+        body = resp.body.decode()
+        assert "2026-08-10T11:00:00" in body
+        assert "Restore" in body and "Dismiss" in body
+
+    def test_restore_reapplies_the_losing_value_and_resolves(self, conn):
+        _seed_event(conn, "e1", start_at="2026-08-10T12:00:00")
+        conflict_id = db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        resp = settings_router.restore_sync_conflict(conflict_id, conn=conn)
+        assert resp.status_code == 303
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T11:00:00"
+        assert db.get_sync_conflict(conn, conflict_id)["resolved_at"] is not None
+
+    def test_restore_of_a_project_label_conflict_re_adds_the_label(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active", "tags": ["ProjB"]})
+        conn.execute("INSERT INTO label_config (name, is_project) VALUES ('ProjA', 1)")
+        conn.execute("INSERT INTO label_config (name, is_project) VALUES ('ProjB', 1)")
+        conn.commit()
+        conflict_id = db.create_sync_conflict(conn, "task", "t1", "project_label", "ProjA", (1000, 0, "device-a"), (2000, 0, "device-b"))
+        settings_router.restore_sync_conflict(conflict_id, conn=conn)
+        # Restoring re-adds ProjA -- this task now (again) violates
+        # single-project-per-task, but restore is a plain apply_op call,
+        # not a batch, so §7c's batch-only re-validation correctly doesn't
+        # re-trigger here; that's a pre-existing narrower gap (a person
+        # manually restoring a losing label is a deliberate override, not
+        # an unattended sync writing two labels at once).
+        assert "ProjA" in db.get_task(conn, "t1")["tags"]
+
+    def test_dismiss_resolves_without_reapplying(self, conn):
+        _seed_event(conn, "e1", start_at="2026-08-10T12:00:00")
+        conflict_id = db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        resp = settings_router.dismiss_sync_conflict(conflict_id, conn=conn)
+        assert resp.status_code == 303
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T12:00:00"
+        assert db.get_sync_conflict(conn, conflict_id)["resolved_at"] is not None

@@ -94,12 +94,13 @@ from __future__ import annotations
 import base64
 import uuid
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import data_health, db
+from .. import data_health, db, offline_sync
 from ..deps import (
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
@@ -129,6 +130,7 @@ HUB_CATEGORIES = [
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
+    {"url": "/settings/sync-conflicts", "icon": "merge", "name": "Sync conflicts", "desc": "Offline edits the sync engine couldn't auto-merge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
     {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
@@ -630,3 +632,77 @@ def purge_completed(conn=Depends(get_db)):
 def purge_all(conn=Depends(get_db)):
     db.purge_all_data(conn)
     return RedirectResponse(url="/settings/advanced", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Sync conflicts (1.8 slice 2, plans/open-priority.md § Offline-first
+# editing & synchronization §§7b/c, 9, 11 slice 2) -- the "Sync conflicts
+# list" §7b's own text places "adjacent to Settings > Data health". A
+# conflict here is never auto-resolved or silently dropped (src/
+# offline_sync.py's apply_op/apply_batch record one whenever a genuinely
+# concurrent event-time edit or a same-batch project-label clash picks a
+# winner) -- restore or dismiss are the only two things a person can do
+# with one.
+# --------------------------------------------------------------------- #
+
+_SYNC_CONFLICTS_CRUMB = _ROOT_CRUMB
+
+
+@router.get("/settings/sync-conflicts")
+def settings_sync_conflicts(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_sync_conflicts.html",
+        {
+            "request": request,
+            "active_tab": "settings_sync_conflicts",
+            "crumbs": _SYNC_CONFLICTS_CRUMB,
+            "title": "Sync conflicts",
+            "conflicts": db.list_sync_conflicts(conn),
+        },
+    )
+
+
+@router.post("/settings/sync-conflicts/{conflict_id}/restore")
+def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
+    """Restoring the losing value is not a special sync-only code path --
+    it's a normal new `field_set`/`label_add` op, given a fresh HLC (`now`,
+    logical 0, a synthetic "settings-restore" device id, always sorting
+    after every real device's own last write), applied through the exact
+    same offline_sync.apply_op every push already goes through. The
+    conflict is then dismissed -- the restore itself is the resolution."""
+    conflict = db.get_sync_conflict(conn, conflict_id)
+    if conflict is None:
+        return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
+    if conflict["field_name"] == "project_label":
+        offline_sync.apply_op(conn, {
+            "op_id": f"restore-{conflict_id}",
+            "entity_type": "object_label",
+            "entity_uid": conflict["entity_uid"],
+            "op_type": "label_add",
+            "device_id": "settings-restore",
+            "hlc": restore_hlc,
+            "target": {
+                "object_type": conflict["entity_type"],
+                "object_id": conflict["entity_uid"],
+                "label_name": conflict["losing_value"],
+            },
+        })
+    else:
+        offline_sync.apply_op(conn, {
+            "op_id": f"restore-{conflict_id}",
+            "entity_type": conflict["entity_type"],
+            "entity_uid": conflict["entity_uid"],
+            "op_type": "field_set",
+            "device_id": "settings-restore",
+            "fields": {conflict["field_name"]: {"value": conflict["losing_value"], "hlc": restore_hlc}},
+        })
+    db.resolve_sync_conflict(conn, conflict_id)
+    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+
+
+@router.post("/settings/sync-conflicts/{conflict_id}/dismiss")
+def dismiss_sync_conflict(conflict_id: str, conn=Depends(get_db)):
+    db.resolve_sync_conflict(conn, conflict_id)
+    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)

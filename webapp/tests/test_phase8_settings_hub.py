@@ -120,6 +120,7 @@ class TestSettingsHub:
             "/labels",
             "/settings/holidays",
             "/settings/data-health",
+            "/settings/sync-conflicts",
             "/published-lists",
             "/settings/advanced",
         }
