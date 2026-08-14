@@ -1453,6 +1453,18 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    spacing here, reusing `.multiselect-new-input` for the input itself. */
 .recurrence-preset-select{margin-bottom:var(--space-2);}
 .recurrence-raw-input{margin-top:var(--space-1);}
+/* "Ends" sub-panel (recurrence_picker.js) -- Never/On date/After N
+   occurrences, shown only once a real preset (not "Does not repeat", not
+   Custom) is selected. Nested one level inside the same dropdown panel
+   as the FREQ presets, so it gets a heading + slightly indented rows
+   rather than looking like a second, unrelated control. */
+.recurrence-ends-heading{
+  padding:4px 8px; font-size:var(--text-caption); font-weight:600;
+  color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
+}
+.recurrence-ends-option{padding-left:16px;}
+.recurrence-ends-until{width:140px;}
+.recurrence-ends-count{width:64px;}
 .reminders-custom-input{margin-bottom:0;}
 .field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
 .field-grid .field-wide{grid-column:span 2;}

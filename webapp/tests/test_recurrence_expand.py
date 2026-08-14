@@ -60,6 +60,39 @@ class TestExpandEvents:
         assert "2026-09-15T10:00:00" not in starts
         assert len(expanded) == 3
 
+    def test_count_recurrence_expands_exact_number_of_occurrences(self):
+        """COUNT=N (the "After N occurrences" end condition, recurrence_
+        picker.js's Ends UI) -- limits the series to exactly N occurrences
+        regardless of the query window, same as UNTIL limits by date."""
+        row = {
+            "uid": "e6",
+            "title": "Standup",
+            "start_at": "2026-09-01T09:00:00",
+            "recurrence": "FREQ=DAILY;COUNT=3",
+        }
+        expanded = expand_events([row], date(2026, 9, 1), date(2026, 9, 30))
+        assert len(expanded) == 3
+        starts = sorted(e["start_at"] for e in expanded)
+        assert starts == [
+            "2026-09-01T09:00:00", "2026-09-02T09:00:00", "2026-09-03T09:00:00",
+        ]
+
+    def test_count_recurrence_respects_query_window(self):
+        """A COUNT-limited series still only returns occurrences that fall
+        inside the requested window -- COUNT caps the series length, it
+        doesn't force every occurrence to be returned regardless of range."""
+        row = {
+            "uid": "e7",
+            "title": "Standup",
+            "start_at": "2026-09-01T09:00:00",
+            "recurrence": "FREQ=DAILY;COUNT=10",
+        }
+        expanded = expand_events([row], date(2026, 9, 1), date(2026, 9, 4))
+        starts = sorted(e["start_at"] for e in expanded)
+        assert starts == [
+            "2026-09-01T09:00:00", "2026-09-02T09:00:00", "2026-09-03T09:00:00",
+        ]
+
     def test_malformed_recurrence_does_not_crash_the_view(self):
         """A garbage recurrence string (no valid FREQ) shouldn't raise --
         whether the underlying library treats it as "not recurring" (one

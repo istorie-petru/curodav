@@ -72,6 +72,24 @@ A segmented subnav switches views while preserving the label filter.
 `recurrence_expand.expand_events` expands recurring events across the visible
 window; RRULE is free text with a `recurrence_picker.js` helper.
 
+**Recurrence end condition** (side work, shipped 2026-08-14): the picker's
+FREQ presets (Daily/Weekly/Monthly/Yearly) gained an "Ends" sub-panel —
+Never (no suffix), "On date" (`UNTIL=YYYY-MM-DD`, the app's existing
+dashed-date convention normalized at export time by
+`ical_rows.py::_normalize_rrule`), or "After N occurrences" (`COUNT=N`).
+Entirely client-side (`recurrence_picker.js::parseValue`/`endsSuffix`) —
+`routers/calendar.py`'s `create_event`/`update_event` still do zero
+server-side parsing of `recurrence`, same as every other preset. On reload,
+`parseValue` strips any `UNTIL=`/`COUNT=` token from the stored string before
+matching it against a FREQ preset, so an existing end condition round-trips
+into the "Ends" radios instead of falling through to the raw Custom field.
+The Ends group only shows once a real preset (not "Does not repeat", not
+Custom — Custom already manages `UNTIL=`/`COUNT=` as free text) is selected.
+`COUNT=` needed no expansion-side changes: `recurring_ical_events` (already
+this app's expansion library, see this section's own note above) resolves it
+for free, same as `UNTIL=`; see `test_recurrence_expand.py`'s
+`test_count_recurrence_*` tests.
+
 **Non-working-day policy** (1.6, "Generalized recurrence and the non-working-
 day policy"): any recurring event can set `holiday_calendar` (a named,
 reusable holiday calendar — `db.list_holiday_calendar_names`/

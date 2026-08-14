@@ -44,14 +44,39 @@
     { value: "FREQ=YEARLY", label: "Yearly" },
   ];
 
+  // The app's `UNTIL=YYYY-MM-DD` dashed-date convention (see
+  // ical_rows.py::_normalize_rrule, which converts it to a proper
+  // RFC 5545 compact date only at export time) -- splitting the stored
+  // string on ";" and pulling UNTIL=/COUNT= out lets a preset's "Ends"
+  // state round-trip through the same plain-text `recurrence` field
+  // custom RRULEs already use, with no server-side parsing added.
+  function parseValue(value) {
+    const parts = (value || "").split(";").filter(Boolean);
+    let until = "";
+    let count = "";
+    const baseParts = [];
+    parts.forEach((part) => {
+      if (/^UNTIL=/i.test(part)) {
+        until = part.slice(6);
+      } else if (/^COUNT=/i.test(part)) {
+        count = part.slice(6);
+      } else {
+        baseParts.push(part);
+      }
+    });
+    return { base: baseParts.join(";"), until: until, count: count };
+  }
+
   function enhance(input) {
     if (enhanced.has(input)) return;
     enhanced.add(input);
     uid += 1;
     const radioName = "recurrence-preset-" + uid; // group only, never submitted
+    const endsRadioName = "recurrence-ends-" + uid; // group only, never submitted
 
     const currentValue = input.value || "";
-    const matched = PRESETS.find((p) => p.value === currentValue);
+    const parsedCurrent = parseValue(currentValue);
+    const matched = PRESETS.find((p) => p.value === parsedCurrent.base);
 
     const wrap = document.createElement("div");
     wrap.className = "multiselect widget-list-multiselect recurrence-preset-select";
@@ -93,6 +118,76 @@
       radios.push(radio);
     });
 
+    // "Ends" sub-panel -- only meaningful once a real preset (not "Does
+    // not repeat", not Custom -- Custom already manages its own UNTIL/
+    // COUNT as free text) is selected. Direct feedback: recurrence needs
+    // a way to stop besides "forever" or hand-typing UNTIL=/COUNT= into
+    // the Custom field -- "Never" (no suffix), "On date" (UNTIL=, the
+    // app's existing dashed-date convention -- see parseValue's own
+    // comment above), or "After N occurrences" (COUNT=).
+    const endsDivider = document.createElement("div");
+    endsDivider.className = "multiselect-divider";
+    panel.appendChild(endsDivider);
+
+    const endsGroup = document.createElement("div");
+    endsGroup.className = "recurrence-ends-group";
+    endsGroup.hidden = true; // toggled by sync() below
+
+    const endsHeading = document.createElement("div");
+    endsHeading.className = "recurrence-ends-heading";
+    endsHeading.textContent = "Ends";
+    endsGroup.appendChild(endsHeading);
+
+    function endsOption(value, labelText, extraNode) {
+      const label = document.createElement("label");
+      label.className = "multiselect-option recurrence-ends-option";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = endsRadioName;
+      radio.value = value;
+      label.appendChild(radio);
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      label.appendChild(span);
+      if (extraNode) label.appendChild(extraNode);
+      endsGroup.appendChild(label);
+      return radio;
+    }
+
+    const untilInput = document.createElement("input");
+    untilInput.type = "date";
+    untilInput.className = "multiselect-new-input recurrence-ends-until";
+
+    const countInput = document.createElement("input");
+    countInput.type = "number";
+    countInput.min = "1";
+    countInput.step = "1";
+    countInput.className = "multiselect-new-input recurrence-ends-count";
+    countInput.placeholder = "10";
+
+    const neverRadio = endsOption("never", "Never");
+    const untilRadio = endsOption("until", "On date", untilInput);
+    const countRadio = endsOption("count", "After", countInput);
+    const occLabel = document.createElement("span");
+    occLabel.textContent = "occurrences";
+    countRadio.parentNode.appendChild(occLabel);
+
+    if (matched && matched.value) {
+      if (parsedCurrent.until) {
+        untilRadio.checked = true;
+        untilInput.value = parsedCurrent.until;
+      } else if (parsedCurrent.count) {
+        countRadio.checked = true;
+        countInput.value = parsedCurrent.count;
+      } else {
+        neverRadio.checked = true;
+      }
+    } else {
+      neverRadio.checked = true;
+    }
+
+    panel.appendChild(endsGroup);
+
     // Custom RRULE row -- integrated into the panel itself (see file
     // header comment) instead of a second element below the dropdown.
     // Its own radio is visually part of the row but never needs a
@@ -126,6 +221,12 @@
       return radios.find((r) => r.checked);
     }
 
+    function endsSuffix() {
+      if (untilRadio.checked && untilInput.value) return ";UNTIL=" + untilInput.value;
+      if (countRadio.checked && countInput.value) return ";COUNT=" + countInput.value;
+      return "";
+    }
+
     function updateSummary() {
       if (customRadio.checked) {
         summary.textContent = customInput.value.trim() ? customInput.value.trim() : "Custom";
@@ -133,16 +234,47 @@
       }
       const checked = checkedPreset();
       const preset = checked && PRESETS.find((p) => p.value === checked.value);
-      summary.textContent = preset ? preset.label : "Does not repeat";
+      let text = preset ? preset.label : "Does not repeat";
+      if (preset && preset.value) {
+        if (untilRadio.checked && untilInput.value) {
+          text += " until " + untilInput.value;
+        } else if (countRadio.checked && countInput.value) {
+          text += ", " + countInput.value + "x";
+        }
+      }
+      summary.textContent = text;
     }
 
     function sync() {
-      input.value = customRadio.checked ? customInput.value.trim() : (checkedPreset() || {}).value || "";
+      if (customRadio.checked) {
+        input.value = customInput.value.trim();
+      } else {
+        const base = (checkedPreset() || {}).value || "";
+        input.value = base ? base + endsSuffix() : "";
+      }
+      endsGroup.hidden = customRadio.checked || !(checkedPreset() || {}).value;
       updateSummary();
     }
     sync();
 
     radios.forEach((r) => r.addEventListener("change", sync));
+    [neverRadio, untilRadio, countRadio].forEach((r) => r.addEventListener("change", sync));
+    untilInput.addEventListener("focus", () => {
+      untilRadio.checked = true;
+      sync();
+    });
+    untilInput.addEventListener("input", () => {
+      untilRadio.checked = true;
+      sync();
+    });
+    countInput.addEventListener("focus", () => {
+      countRadio.checked = true;
+      sync();
+    });
+    countInput.addEventListener("input", () => {
+      countRadio.checked = true;
+      sync();
+    });
     customInput.addEventListener("focus", () => {
       customRadio.checked = true;
       sync();

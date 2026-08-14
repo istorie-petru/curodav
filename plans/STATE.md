@@ -885,6 +885,27 @@ session, right before the final commit of that session.
   outcome doc. 16 new tests (12 extending `test_offline_sync.py`/
   `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
   1309 passed. **1.8 is now fully shipped.**
+- **Shipped:** side work — **recurrence end condition (Never/On date/After N
+  occurrences)**, complete (2026-08-14) — direct feedback ("recurrence should
+  also have the ability to set an end date, until X, or for the event to
+  repeat a set number of times"). `recurrence_picker.js`'s FREQ presets
+  (Daily/Weekly/Monthly/Yearly) gained an "Ends" sub-panel nested in the same
+  dropdown panel: Never (no suffix), "On date" (`UNTIL=YYYY-MM-DD`, the app's
+  existing dashed-date convention), or "After N occurrences" (`COUNT=N`) —
+  entirely client-side, same "zero server-side recurrence parsing" contract
+  `routers/calendar.py`'s create/update handlers already had. New
+  `parseValue()` strips any `UNTIL=`/`COUNT=` token from the stored string
+  before matching a FREQ preset on reload, so an existing end condition
+  round-trips into the Ends radios instead of falling through to Custom; the
+  Ends group only shows once a real preset (not "Does not repeat", not
+  Custom) is selected. No expansion-side change needed — `COUNT=` already
+  worked end-to-end via `recurring_ical_events`, confirmed and locked in by
+  two new tests (`test_recurrence_expand.py`'s `test_count_recurrence_*`).
+  New `.recurrence-ends-*` CSS reusing `.multiselect-option`/
+  `.multiselect-new-input` conventions. See `features/calendar.md`'s
+  Recurrence section. 3 new tests (2 in `test_recurrence_expand.py`, 1
+  structural check in `test_modal_footer_and_inputs.py`), full suite 1312
+  passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
