@@ -271,6 +271,33 @@ session, right before the final commit of that session.
   `tests/test_phase2_labels.py` for existing coverage (`generate_space`,
   `is_space` context, University-scoped classes). **1.7 is now fully
   shipped** (`pyproject.toml` bumped to `1.7.0`).
+- **Shipped:** side work — **Calendar "Timetable" sub-view**, complete
+  (2026-08-14) — `GET /calendar/timetable`
+  (`routers/calendar.py::timetable_view`), the Week (planning) surface
+  (`/week`, 1.7) folded into the main Calendar page as a "Timetable" entry
+  in the Month/4-Week/Week/Day segmented subnav (all four existing calendar
+  templates got the new link). It is the `/week` page copied into the
+  Calendar page, not a third implementation or a calendar.js merge: same
+  grid markup/CSS classes as `week_planning.html` (columns
+  `.time-col.project-calendar-col`, work allocations prominent and
+  draggable as `.work-allocation`, ordinary calendar events subdued
+  context as `.context-event`), `static/project_calendar.js` reused
+  verbatim with a `window.PROJECT_CALENDAR` config pointing at this page's
+  own `POST /calendar/timetable/allocations[...]` create/move/delete
+  endpoints (same shape/validation as `routers/week.py`'s trio, duplicated
+  with a cross-reference comment because `routers/week.py` imports this
+  router (calendar) and so this router cannot import week back) so
+  create/move/delete redirect back here instead of to `/week`. Drag a
+  scheduled block back onto the "Unscheduled work" panel to unschedule it
+  (a config-driven addition to `project_calendar.js` interaction 3,
+  `deleteUrlBase`/`unscheduleDropSelector`). The standalone `/week` page
+  and tab are left intact (additive change, no bookmarks/tests broken); a
+  later slice could retire them in favor of the sub-view. The timetable
+  keeps the calendar page's chrome (subnav, prev/next, label filter, New
+  button, next-lecture badges); adding normal calendar events is done there
+  as on any calendar view, not on the scheduling grid. See
+  `features/calendar.md`. 14 new tests (`test_calendar_timetable.py`), full
+  suite 1130 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

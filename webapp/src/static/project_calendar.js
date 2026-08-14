@@ -17,11 +17,22 @@
 //    file's JSON/fetch `/events/{uid}/reschedule` contract -- the page
 //    reloads either way, so there's no reason to duplicate the more
 //    complex optimistic-update/revert logic that route's own JS needs.
+// 3. (Optional, config-driven) Drag a `.work-allocation` block off the
+//    grid and onto the "Unscheduled work" panel to UNSCHEDULE it -- the
+//    inverse of interaction 1. Set `window.PROJECT_CALENDAR.deleteUrlBase`
+//    (the allocation-delete endpoint base) and `unscheduleDropSelector`
+//    (a CSS selector for the unscheduled panel) to enable it; while the
+//    drag is over that panel the block highlights it, and releasing there
+//    submits the delete form instead of the move form. Releasing anywhere
+//    else keeps the normal move/resize behavior. The delete endpoint only
+//    removes the scheduled block, never the task -- the task returns to
+//    the "Unscheduled work" list on the reloaded page, which is exactly
+//    what "unschedule" means here.
 //
-// Both interactions submit a real form and let the resulting redirect
-// reload the page -- the simplest way to guarantee what's shown always
-// matches whatever the server actually persisted (including a rejected
-// drop, e.g. a task that doesn't belong to this project), same reasoning
+// All of these submit a real form and let the resulting redirect reload
+// the page -- the simplest way to guarantee what's shown always matches
+// whatever the server actually persisted (including a rejected drop, e.g.
+// a task that doesn't belong to this project), same reasoning
 // static/calendar.js documents for its own revert-on-failure path.
 
 (function () {
@@ -114,11 +125,17 @@
     let origHeight = 0;
     let currentCol = el.closest(".project-calendar-col");
     let dragged = false;
+    let overUnscheduled = false; // drag is hovering the unscheduled-work panel
     const CLICK_THRESHOLD_PX = 4;
+    // Optional config (see the header comment): a delete endpoint base +
+    // selector for the panel that a moved block can be dropped on to
+    // unschedule it. Either one missing disables interaction 3 entirely.
+    const unscheduleTarget = cfg.unscheduleDropSelector ? document.querySelector(cfg.unscheduleDropSelector) : null;
 
     function begin(e, isResize) {
       mode = isResize ? "resize" : "move";
       dragged = false;
+      overUnscheduled = false;
       startX = e.clientX;
       startY = e.clientY;
       origTop = parseFloat(el.style.top) || 0;
@@ -157,6 +174,20 @@
           hoverCol.appendChild(el);
           currentCol = hoverCol;
         }
+
+        // Unschedule-drop detection (interaction 3): if the pointer is over
+        // the unscheduled-work panel, highlight it instead of a column. The
+        // block itself is clamped inside its own column by the math above,
+        // so this is purely a hover signal + release-target check -- on
+        // release over the panel, end() submits the delete form.
+        if (unscheduleTarget) {
+          const r = unscheduleTarget.getBoundingClientRect();
+          const inside =
+            e.clientX >= r.left && e.clientX <= r.right &&
+            e.clientY >= r.top && e.clientY <= r.bottom;
+          overUnscheduled = inside;
+          unscheduleTarget.classList.toggle("unschedule-drop-hover", inside);
+        }
       } else {
         let newHeight = snap(origHeight + dy, SNAP_PX);
         newHeight = Math.max(SNAP_PX, Math.min(DAY_HEIGHT_PX - origTop, newHeight));
@@ -171,7 +202,18 @@
       mode = null;
       el.classList.remove("dragging");
       document.querySelectorAll(".project-calendar-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
+      if (unscheduleTarget) unscheduleTarget.classList.remove("unschedule-drop-hover");
       if (!dragged) return; // was a click -- let the title link/delete button work normally
+
+      // Released over the unscheduled-work panel -> unschedule this block
+      // (delete endpoint removes only the block, never the task; the reload
+      // then shows the task back in the "Unscheduled work" list).
+      if (overUnscheduled && cfg.deleteUrlBase) {
+        submitForm(cfg.deleteUrlBase + el.dataset.uid + "/delete", {
+          date_: cfg.weekDate,
+        });
+        return;
+      }
 
       const top = parseFloat(el.style.top) || 0;
       const height = parseFloat(el.style.height) || SNAP_PX;

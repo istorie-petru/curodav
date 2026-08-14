@@ -17,6 +17,21 @@ label, and an event's color is its first (alphabetical) label's color
   chips.
 - **Day** (`/calendar/day/{date}`) — same grid for one day; `/calendar/agenda`
   redirects here (the old agenda page was merged then removed).
+- **Timetable** (`/calendar/timetable`) — the Week (planning) surface
+  (`/week`, see `features/week.md`) copied into the Calendar page as a
+  fifth sub-view, exactly how `/week` renders it: columns
+  `.time-col.project-calendar-col`, work allocations prominent and
+  draggable (`.work-allocation`, form-POST move/resize/delete, block only
+  never the task), ordinary calendar events subdued context
+  (`.context-event`). An "Unscheduled work" sidebar drags onto the grid to
+  create a work allocation (`POST /calendar/timetable/allocations`), and a
+  scheduled block dragged back onto the panel is unscheduled (deleted,
+  task kept). Only `static/project_calendar.js` runs, reused verbatim with
+  a `window.PROJECT_CALENDAR` config pointed at the timetable's own
+  endpoints. Adding normal calendar events is done via the page's calendar
+  chrome (the New button, or the Week/Day views), not on the scheduling
+  grid. The standalone `/week` page and tab remain for backwards
+  compatibility.
 
 A segmented subnav switches views while preserving the label filter.
 
