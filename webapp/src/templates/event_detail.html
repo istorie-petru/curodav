@@ -85,10 +85,14 @@
 
 <!-- Relations card (2026-08-09) -- same merged-card language task_detail
      uses for its Relations section, the event side only (related tasks;
-     events have no subtasks). See _event_relations.html. -->
+     events have no subtasks). See _event_relations.html. Hidden by the
+     "Show the Relations card" Appearance setting (deps.py's
+     show_relations_card() global). -->
+{% if show_relations_card(request) %}
 <div class="detail-card detail-section-gap">
     {{ event_relations_section(event, related_tasks) }}
 </div>
+{% endif %}
 
 <!-- 1.6 ("Manual recurrence exceptions") -- only rendered when this page
      was opened for a specific occurrence (?occurrence_date=..., appended

@@ -71,6 +71,18 @@ categories that are actually useful"):
     when the contextual shortcut provides a real usability advantage";
     a settings mirror nobody asked for isn't one.
 
+2026-08-14 follow-up: Holidays is the one exception to the "Schedule stays
+contextual-only" rule directly above, and deliberately so -- a named
+holiday calendar isn't a Schedule *setting* (a single field like semester
+dates), it's a reusable, named list of date ranges any recurring event
+anywhere in the app can reference (1.6), the same "Labels" shape as the
+existing Labels hub category rather than a per-page config field. It moved
+from Schedule's Table view into its own `/settings/holidays` hub category,
+built as a Tasks-table-style grid. Schedule's own <details> Settings panel
+still keeps its `holiday_calendar` field (which named calendar the
+semester's classes respect) -- only the calendars' contents moved, not the
+picker that chooses among them.
+
 Every child page shares one back-navigation shape (_settings_breadcrumb
 .html): "Settings" (or "Settings / Data") as a link, current page as plain
 text -- Back always returns one level up inside Settings, never out to
@@ -80,15 +92,20 @@ whatever page was open before Settings was entered (redesign brief item 3).
 from __future__ import annotations
 
 import base64
+import uuid
+
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import data_health, db, offline_sync
 from ..deps import (
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
+    SHOW_RELATIONS_CARD_KEY,
     TIME_FORMAT_KEY,
     WEEK_START_KEY,
     _four_week_position_from_value,
@@ -111,6 +128,9 @@ HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
+    {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
+    {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
+    {"url": "/settings/sync-conflicts", "icon": "merge", "name": "Sync conflicts", "desc": "Offline edits the sync engine couldn't auto-merge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
     {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
@@ -118,6 +138,12 @@ HUB_CATEGORIES = [
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
 _ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced"}]
+
+# Which schedule_holidays fields the Holidays table's inline edit
+# (static/settings_holidays.js) is allowed to touch -- same allowlist
+# convention as routers/tasks.py's _UPDATABLE_FIELDS / routers/schedule.py's
+# update_class_field, so a crafted request can't write an arbitrary column.
+_HOLIDAY_UPDATABLE_FIELDS = {"calendar_name", "label", "date_from", "date_to"}
 
 # "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
 # of choices, not a free-typed number: a handful of sane presets is
@@ -321,8 +347,22 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # forced on the General page for the exact same reason (see
             # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
+            "current_show_relations_card": db.get_app_meta(conn, SHOW_RELATIONS_CARD_KEY) != "0",
         },
     )
+
+
+@router.post("/settings/relations-card")
+def set_relations_card(show: str = Form("1"), conn=Depends(get_db)):
+    """"Show the Relations card" (Settings > Appearance, 2026-08-14) --
+    whether the Relations card renders on task/event detail and edit modals
+    (_task_relations.html/_event_relations.html). Read back via deps.py's
+    show_relations_card() Jinja global. Default on -- an install that's
+    never touched this stores nothing, which reads as "1" (shown), so the
+    card behaves exactly as it did before the setting existed; "0" hides
+    it."""
+    db.set_app_meta(conn, SHOW_RELATIONS_CARD_KEY, "1" if show == "1" else "0")
+    return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 @router.post("/settings/label-icons")
@@ -336,6 +376,225 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
     turned on."""
     db.set_app_meta(conn, SHOW_LABEL_ICONS_KEY, "1" if show == "1" else "")
     return RedirectResponse(url="/settings/appearance", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Holidays -- moved here from Schedule's own Table view (2026-08-14), per
+# direct feedback: a holiday calendar is a reusable, named resource that
+# any recurring event can reference (1.6, "Generalized non-working-day
+# policy + named holiday calendars"), not something specific to Schedule
+# blocks -- the same "Labels get their own page, not a Tasks-only widget"
+# reasoning that already applies elsewhere in this Settings hub. Rendered
+# as a Tasks-table-style grid (id="holiday-table", inline-editable cells
+# via static/settings_holidays.js's update-field call, same shape as
+# static/tasks_table.js) rather than the old compact add-form-plus-plain-
+# table pair, so editing an existing holiday's dates no longer requires
+# delete-and-re-add. Schedule's own Settings panel (routers/schedule.py's
+# save_settings) still picks *which* named calendar a semester's classes
+# respect via `holiday_calendar` -- only the calendars' own contents (the
+# individual date ranges) moved.
+# --------------------------------------------------------------------- #
+
+_HOLIDAYS_CRUMB = _ROOT_CRUMB
+
+
+@router.get("/settings/holidays")
+def settings_holidays(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_holidays.html",
+        {
+            "request": request,
+            "active_tab": "settings_holidays",
+            "crumbs": _HOLIDAYS_CRUMB,
+            "title": "Holidays",
+            "holidays": db.list_holidays(conn),
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+        },
+    )
+
+
+@router.post("/settings/holidays")
+def create_holiday(
+    calendar_name: str = Form("Default"),
+    label: str = Form(""),
+    date_from: str = Form(...),
+    date_to: str = Form(...),
+    conn=Depends(get_db),
+):
+    # No _regenerate_all(conn) call needed -- a recurring event only ever
+    # stores *which* holiday calendar it references (holiday_calendar),
+    # never the dates themselves; those are looked up fresh on every read
+    # (recurrence_expand.expand_events), so adding a holiday takes effect
+    # immediately without touching any event row. Same behavior as the old
+    # /schedule/holidays route this replaces.
+    db.upsert_holiday(
+        conn,
+        {
+            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
+            "label": label, "date_from": date_from, "date_to": date_to,
+        },
+    )
+    return RedirectResponse(url="/settings/holidays", status_code=303)
+
+
+@router.post("/settings/holidays/{uid}/update-field")
+async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db)):
+    """Single-field inline edit for the Holidays table -- mirrors
+    routers/tasks.py's/routers/schedule.py's identical update-field
+    endpoints. Merges the one changed field onto the existing row and
+    round-trips through upsert_holiday (there's no separate "update"
+    helper in db.py -- a holiday's uid never changes, so upsert-by-uid
+    already is the update)."""
+    payload = await request.json()
+    field = payload.get("field")
+    value = payload.get("value")
+    if field not in _HOLIDAY_UPDATABLE_FIELDS:
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    holiday = db.get_holiday(conn, uid)
+    if holiday is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if field in ("date_from", "date_to") and not str(value).strip():
+        return JSONResponse({"error": "date cannot be empty"}, status_code=400)
+    holiday[field] = value.strip() if field == "calendar_name" else value
+    if field == "calendar_name" and not holiday[field]:
+        holiday[field] = "Default"
+    db.upsert_holiday(conn, holiday)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/settings/holidays/{uid}/delete")
+def delete_holiday(uid: str, conn=Depends(get_db)):
+    db.delete_holiday(conn, uid)
+    return RedirectResponse(url="/settings/holidays", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Data health (`plans/open.md` § Data health & maintenance) -- server-side,
+# actively-verified backups plus database integrity/repair. The 1.8
+# (offline-first editing & synchronization) precondition: "trusted only
+# once verified backups exist" (plans/STATE.md). Every route here is a
+# thin wrapper around src/data_health.py's plain functions -- the same
+# functions scripts/data_health.py calls -- so the GUI and CLI genuinely
+# share one implementation instead of two copies that could drift
+# (open.md's own requirement). This is deliberately NOT folded into
+# Advanced's existing "Export & backup" section: that section is an
+# on-demand *download* a person triggers and keeps themselves; Data health
+# is server-side, verifiable, and restorable without ever leaving the app.
+# --------------------------------------------------------------------- #
+
+_DATA_HEALTH_CRUMB = _ROOT_CRUMB
+
+# Fixed preset choices, not a free-typed number -- same reasoning as
+# settings_advanced.html's own auto-archive field (this module's own
+# DAYS_CHOICES): a select autosubmits on pick, matching this page's other
+# direct controls, and a validated preset can never end up storing
+# something typo'd/out-of-range. This app's sync design documents 90 days
+# as the retention horizon's own default (offline_sync.RETENTION_DAYS),
+# so unlike DAYS_CHOICES' "0/Never" default, this field's own default
+# selection is 90 -- see data_health.sync_gc_retention_days's docstring.
+SYNC_GC_DAYS_CHOICES = [("0", "Never (disabled)"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days"), ("180", "180 days")]
+
+
+def _backups_dir(request: Request) -> Path:
+    return request.app.state.settings.backup_dir
+
+
+@router.get("/settings/data-health")
+def settings_data_health(request: Request, conn=Depends(get_db)):
+    backups_dir = _backups_dir(request)
+    summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
+    return templates.TemplateResponse(
+        "settings_data_health.html",
+        {
+            "request": request,
+            "active_tab": "settings_data_health",
+            "crumbs": _DATA_HEALTH_CRUMB,
+            "title": "Data health",
+            "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
+            **summary,
+        },
+    )
+
+
+@router.post("/settings/data-health/backup")
+def data_health_backup(request: Request, conn=Depends(get_db)):
+    path = data_health.create_backup(conn, _backups_dir(request))
+    return RedirectResponse(url=f"/settings/data-health?note=Backup+created+({path.name}).", status_code=303)
+
+
+@router.post("/settings/data-health/verify")
+def data_health_verify(request: Request, filename: str = Form(""), conn=Depends(get_db)):
+    backups_dir = _backups_dir(request)
+    target = backups_dir / filename if filename else None
+    if target is None or not target.exists():
+        latest = data_health.latest_backup(backups_dir)
+        target = Path(latest["path"]) if latest else None
+    if target is None:
+        return RedirectResponse(url="/settings/data-health?error=No+backup+to+verify+yet.", status_code=303)
+    result = data_health.verify_backup(target)
+    note = "Backup+verified+OK." if result.ok else f"Verification+found+{len(result.errors)}+problem(s)."
+    return RedirectResponse(url=f"/settings/data-health?{'note' if result.ok else 'error'}={note}", status_code=303)
+
+
+@router.post("/settings/data-health/restore")
+def data_health_restore(request: Request, filename: str = Form(...), conn=Depends(get_db)):
+    """Restores one of the server-stored backups listed on the page (by
+    filename, never a client-supplied path) -- restoring an *uploaded*
+    file is the existing /export/import/json flow (Settings > Advanced),
+    unchanged. Always takes a pre-restore safety snapshot first (see
+    data_health.restore_backup's own docstring)."""
+    backups_dir = _backups_dir(request)
+    target = backups_dir / filename
+    if ".." in filename or "/" in filename or not target.resolve().is_relative_to(backups_dir.resolve()):
+        raise HTTPException(400, "Invalid backup filename.")
+    result = data_health.restore_backup(conn, target, backups_dir=backups_dir)
+    if not result["ok"]:
+        return RedirectResponse(url="/settings/data-health?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
+    return RedirectResponse(
+        url=f"/settings/data-health?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
+        status_code=303,
+    )
+
+
+@router.post("/settings/data-health/integrity-check")
+def data_health_integrity_check(conn=Depends(get_db)):
+    result = data_health.check_integrity(conn)
+    note = "Database+integrity%3A+OK." if result["ok"] else "Database+integrity+check+found+problems+-+see+detail."
+    return RedirectResponse(url=f"/settings/data-health?{'note' if result['ok'] else 'error'}={note}", status_code=303)
+
+
+@router.post("/settings/data-health/repair")
+def data_health_repair(request: Request, conn=Depends(get_db)):
+    result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
+    return RedirectResponse(url="/settings/data-health?note=Compacted+and+reindexed+the+database.", status_code=303)
+
+
+@router.post("/settings/data-health/sync-retention")
+def data_health_set_sync_retention(days: str = Form("90"), conn=Depends(get_db)):
+    """1.8 slice 7 -- Settings' side of the tombstone/idempotency-ledger
+    retention horizon (§4). `0` disables automatic (lazy, on-pull) GC --
+    same "0 = Never" idiom `routers/tasks.py`'s auto-archive field already
+    uses -- without touching `pull()`'s own stale-cursor-forces-full-resync
+    safety check, which isn't gated by this setting at all. Only ever
+    stores one of the offered presets, same validation-against-the-select's-
+    -own-options convention as `set_task_auto_archive`."""
+    valid = {choice for choice, _ in SYNC_GC_DAYS_CHOICES}
+    data_health.set_sync_gc_retention_days(conn, int(days) if days in valid else 90)
+    return RedirectResponse(url="/settings/data-health?note=Sync+cleanup+retention+updated.", status_code=303)
+
+
+@router.post("/settings/data-health/sync-gc")
+def data_health_run_sync_gc(conn=Depends(get_db)):
+    """The manual "Run cleanup now" action -- always runs (force=True),
+    even if the lazy automatic trigger is set to Never, same as this
+    page's other maintenance actions (Backup now, Verify, Repair) always
+    being available regardless of any automatic counterpart's own
+    setting."""
+    result = data_health.run_sync_gc(conn, force=True)
+    purged_entities = result["purged_entities"]
+    purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
+    note = f"Sync+cleanup+ran%3A+{purged_total}+row(s)+purged." if purged_total else "Sync+cleanup+ran%3A+nothing+to+purge."
+    return RedirectResponse(url=f"/settings/data-health?note={note}", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -412,3 +671,77 @@ def purge_completed(conn=Depends(get_db)):
 def purge_all(conn=Depends(get_db)):
     db.purge_all_data(conn)
     return RedirectResponse(url="/settings/advanced", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Sync conflicts (1.8 slice 2, plans/open-priority.md § Offline-first
+# editing & synchronization §§7b/c, 9, 11 slice 2) -- the "Sync conflicts
+# list" §7b's own text places "adjacent to Settings > Data health". A
+# conflict here is never auto-resolved or silently dropped (src/
+# offline_sync.py's apply_op/apply_batch record one whenever a genuinely
+# concurrent event-time edit or a same-batch project-label clash picks a
+# winner) -- restore or dismiss are the only two things a person can do
+# with one.
+# --------------------------------------------------------------------- #
+
+_SYNC_CONFLICTS_CRUMB = _ROOT_CRUMB
+
+
+@router.get("/settings/sync-conflicts")
+def settings_sync_conflicts(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_sync_conflicts.html",
+        {
+            "request": request,
+            "active_tab": "settings_sync_conflicts",
+            "crumbs": _SYNC_CONFLICTS_CRUMB,
+            "title": "Sync conflicts",
+            "conflicts": db.list_sync_conflicts(conn),
+        },
+    )
+
+
+@router.post("/settings/sync-conflicts/{conflict_id}/restore")
+def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
+    """Restoring the losing value is not a special sync-only code path --
+    it's a normal new `field_set`/`label_add` op, given a fresh HLC (`now`,
+    logical 0, a synthetic "settings-restore" device id, always sorting
+    after every real device's own last write), applied through the exact
+    same offline_sync.apply_op every push already goes through. The
+    conflict is then dismissed -- the restore itself is the resolution."""
+    conflict = db.get_sync_conflict(conn, conflict_id)
+    if conflict is None:
+        return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
+    if conflict["field_name"] == "project_label":
+        offline_sync.apply_op(conn, {
+            "op_id": f"restore-{conflict_id}",
+            "entity_type": "object_label",
+            "entity_uid": conflict["entity_uid"],
+            "op_type": "label_add",
+            "device_id": "settings-restore",
+            "hlc": restore_hlc,
+            "target": {
+                "object_type": conflict["entity_type"],
+                "object_id": conflict["entity_uid"],
+                "label_name": conflict["losing_value"],
+            },
+        })
+    else:
+        offline_sync.apply_op(conn, {
+            "op_id": f"restore-{conflict_id}",
+            "entity_type": conflict["entity_type"],
+            "entity_uid": conflict["entity_uid"],
+            "op_type": "field_set",
+            "device_id": "settings-restore",
+            "fields": {conflict["field_name"]: {"value": conflict["losing_value"], "hlc": restore_hlc}},
+        })
+    db.resolve_sync_conflict(conn, conflict_id)
+    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+
+
+@router.post("/settings/sync-conflicts/{conflict_id}/dismiss")
+def dismiss_sync_conflict(conflict_id: str, conn=Depends(get_db)):
+    db.resolve_sync_conflict(conn, conflict_id)
+    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)

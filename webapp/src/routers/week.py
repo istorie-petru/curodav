@@ -107,14 +107,22 @@ def week_view(request: Request, date_: str | None = None, conn=Depends(get_db)):
     # "already-allocated tasks drop off the list entirely" rule
     # project_calendar's own unscheduled_tasks uses, just not scoped to one
     # project's label. Sorted by due date (earliest/most time-pressured
-    # first), no-due-date tasks last.
+    # first), no-due-date tasks last. Each item carries its
+    # db.work_allocation_panel_info summary (session count + scheduled/total
+    # hours) for the stepper and x/y readout the shared
+    # _unscheduled_task_item.html partial renders.
     unscheduled_tasks = []
     for t in open_tasks:
-        if db.list_work_allocations_for_task(conn, t["uid"]):
+        # Unscheduled = no work session at all, OR any session still has no
+        # date (a "+"-added placeholder from the task modal's Work sessions
+        # card awaiting placement on a grid -- see db.create_work_allocation's
+        # undated form). Only a task whose every session is dated has nothing
+        # left to place, so only those drop off the panel.
+        info = db.work_allocation_panel_info(conn, t["uid"])
+        if info["count"] and not info["undated_count"]:
             continue
-        project = db.project_label_for(conn, "task", t["uid"])
-        hours = db.task_work_hours(conn, t["uid"])
-        unscheduled_tasks.append({"task": t, "project": project, "hours": hours})
+        project = db.project_label_config_for(conn, "task", t["uid"])
+        unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     return templates.TemplateResponse(
@@ -130,6 +138,7 @@ def week_view(request: Request, date_: str | None = None, conn=Depends(get_db)):
             "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
             "next_week": (week_start_date + timedelta(days=7)).isoformat(),
             "unscheduled_tasks": unscheduled_tasks,
+            "unscheduled_next": f"/week?date_={week_start_date.isoformat()}",
         },
     )
 
@@ -156,7 +165,15 @@ def create_allocation(
     dropped range is well-formed, same defensive shape as that endpoint."""
     task = db.get_task(conn, task_uid)
     if task is not None and task.get("status") not in ("done", "archived") and start_at and end_at and end_at > start_at:
-        db.create_work_allocation(conn, task_uid, start_at, end_at)
+        # A task with an undated session placeholder (added via the task
+        # modal's Work sessions "+" button) gets THAT session placed onto
+        # the dropped slot instead of creating yet another block; a task
+        # with no sessions yet creates its first dated block, as before.
+        undated = db.first_undated_work_allocation_for_task(conn, task_uid)
+        if undated:
+            db.set_work_allocation_times(conn, undated["uid"], start_at, end_at)
+        else:
+            db.create_work_allocation(conn, task_uid, start_at, end_at)
     return _week_redirect(date_)
 
 
@@ -186,8 +203,25 @@ def move_allocation(
 
 @router.post("/allocations/{event_uid}/delete")
 def delete_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
-    """Removes only the scheduled block, never the task -- db.delete_work_
-    allocation is delete_event under a name that states that explicitly at
-    the call site, same as routers/projects.py::delete_allocation."""
-    db.delete_work_allocation(conn, event_uid)
+    """Unschedule a block (the block's own delete button, or dragging it
+    back onto the "Unscheduled work" panel) -- clears this ONE session's
+    start/end back to undated (`db.unschedule_work_allocation`) instead of
+    deleting it outright. The task's total session count never changes just
+    because a session was moved off the calendar; only the panel's own +/-
+    stepper (or the task's Work sessions card) adds/removes sessions. Went
+    through two earlier same-day (2026-08-14) designs, both wrong in
+    opposite directions: first this collapsed the task's ENTIRE session
+    count down to one undated placeholder on any single unschedule
+    (discarding the task's other sessions); the fix for that swapped in a
+    hard `db.delete_work_allocation` (deleting just this one session for
+    real) -- which then made a single-session task's count visibly drop to
+    0 the moment you unscheduled its only block, since "unschedule" isn't
+    "I don't need this session anymore." Unscheduling should never change
+    the count either way, so this route name still says "/delete" (URL
+    compat, other code links to it) but no longer deletes anything for a
+    real work allocation -- `unschedule_work_allocation` falls back to
+    `delete_work_allocation` only if `event_uid` isn't a work-allocation
+    event at all (nothing to unschedule)."""
+    if not db.unschedule_work_allocation(conn, event_uid):
+        db.delete_work_allocation(conn, event_uid)
     return _week_redirect(date_)

@@ -103,9 +103,11 @@
     {% endif %}
 </div>
 
+     {% if show_relations_card(request) %}
      <div class="detail-card detail-section-gap">
     {{ task_relations_section(task, related_events) }}
 </div>
+     {% endif %}
 
      <div class="detail-card detail-section-gap">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}

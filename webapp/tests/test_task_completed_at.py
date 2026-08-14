@@ -3,7 +3,7 @@ Streak widget) -- the one thing this table couldn't answer before: which
 day a plain (non-recurring) task was completed. Auto-managed by
 db.upsert_task based on the done/not-done status transition; a JSON
 backup restore overrides it with the real historical value instead (see
-routers/export.py's _restore)."""
+routers/export.py's restore_backup_payload)."""
 
 from __future__ import annotations
 
@@ -103,5 +103,5 @@ class TestCompletedAtRestore:
                 }
             ]
         }
-        export_router._restore(conn, payload)
+        export_router.restore_backup_payload(conn, payload)
         assert db.get_task(conn, "t1")["completed_at"] == historical

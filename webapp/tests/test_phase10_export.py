@@ -134,6 +134,24 @@ class TestStandardFormats:
         names = [c["UID"] for c in cal.walk() if c.name == "VEVENT"]
         assert "e1" in names
 
+    def test_events_ics_skips_undated_work_sessions(self, conn):
+        _seed(conn)
+        db.upsert_event(
+            conn,
+            {"uid": "e-undated", "title": "Unplaced session", "description": "",
+             "start_at": None, "end_at": None, "all_day": 0,
+             "location": None, "meeting_url": None, "status": "active", "recurrence": None,
+             "exdates_json": "[]", "reminders_json": "[]", "tags_json": "[]",
+             "created_at": _now(), "updated_at": _now()},
+        )
+        resp = export_router.export_events_ics(conn=conn)
+        from icalendar import Calendar
+
+        cal = Calendar.from_ical(resp.body)
+        names = [c["UID"] for c in cal.walk() if c.name == "VEVENT"]
+        assert "e1" in names
+        assert "e-undated" not in names
+
     def test_tasks_ics_round_trips(self, conn):
         _seed(conn)
         resp = export_router.export_tasks_ics(conn=conn)

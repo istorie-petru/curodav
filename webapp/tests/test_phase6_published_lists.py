@@ -232,13 +232,24 @@ class TestMaterialize:
         assert set(bridge.task_collections["published-uni"]) == {"t2"}
 
     def test_events_and_contacts_also_materialize(self, conn):
-        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "all_day": 0, "status": "active", "tags": ["University"], "created_at": _now()})
+        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "all_day": 0, "status": "active", "tags": ["University"], "created_at": _now(), "start_at": "2026-08-17T16:00:00", "end_at": "2026-08-17T18:00:00"})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Prof X", "tags": ["University"], "created_at": _now()})
         bridge = FakeBridge()
         materialize(conn, bridge, self._list_row("lst2", "event", collection="published-events"))
         materialize(conn, bridge, self._list_row("lst3", "contact", collection="published-contacts"))
         assert set(bridge.event_collections["published-events"]) == {"e1"}
         assert set(bridge.contact_collections["published-contacts"]) == {"c1"}
+
+    def test_undated_event_member_is_skipped(self, conn):
+        """An undated work-session placeholder (the Work sessions "+" on a
+        task card) has no start_at yet -- it must not be pushed to a
+        published event collection as a DTSTART-less VEVENT. A dated event
+        with the same label still materializes."""
+        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "all_day": 0, "status": "active", "tags": ["University"], "created_at": _now(), "start_at": "2026-08-17T16:00:00", "end_at": "2026-08-17T18:00:00"})
+        db.upsert_event(conn, {"uid": "e2", "title": "Unplaced session", "description": "", "all_day": 0, "status": "active", "tags": ["University"], "created_at": _now()})
+        bridge = FakeBridge()
+        materialize(conn, bridge, self._list_row("lst2", "event", collection="published-events"))
+        assert set(bridge.event_collections["published-events"]) == {"e1"}
 
     def test_materialize_records_last_materialized_at(self, conn):
         _make_task(conn, "t1", "A", ["University"])

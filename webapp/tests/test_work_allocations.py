@@ -111,6 +111,41 @@ class TestCreateAndList:
         allocations = db.list_work_allocations_for_task(conn, "t1")
         assert [a["start_at"] for a in allocations] == ["2026-08-17T16:00:00", "2026-08-20T14:00:00"]
 
+    def test_create_work_allocation_without_dates_makes_undated_session(self, conn):
+        """The task modal's "+" button creates a work session with NO date --
+        an unscheduled placeholder event (start/end NULL), still a real
+        work-allocation session of the task."""
+        _seed_task(conn, "t1")
+        event_uid = db.create_work_allocation(conn, "t1")
+        event = db.get_event(conn, event_uid)
+        assert event["start_at"] is None
+        assert event["end_at"] is None
+        assert db.work_allocation_task_uid(conn, event_uid) == "t1"
+
+    def test_first_undated_work_allocation_returns_oldest_undated(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        assert db.first_undated_work_allocation_for_task(conn, "t1")["uid"] == undated_uid
+
+    def test_first_undated_work_allocation_none_when_all_dated(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        assert db.first_undated_work_allocation_for_task(conn, "t1") is None
+
+    def test_set_work_allocation_times_places_undated_session(self, conn):
+        _seed_task(conn, "t1")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        assert db.set_work_allocation_times(conn, undated_uid, "2026-08-17T16:00:00", "2026-08-17T18:00:00") is True
+        event = db.get_event(conn, undated_uid)
+        assert event["start_at"] == "2026-08-17T16:00:00"
+        assert event["end_at"] == "2026-08-17T18:00:00"
+
+    def test_set_work_allocation_times_rejects_non_allocation(self, conn):
+        _seed_event(conn, "e1")
+        assert db.set_work_allocation_times(conn, "e1", "2026-08-17T16:00:00", "2026-08-17T18:00:00") is False
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-17T09:00:00"  # untouched
+
     def test_list_work_allocations_excludes_ordinary_relations(self, conn):
         """An ordinary Relations-card link (is_work_allocation=0) must never
         show up as a work allocation -- the flag is the only thing that
@@ -240,6 +275,19 @@ class TestTaskDetailRouter:
         )
         assert db.list_work_allocations_for_task(conn, "t1") == []
 
+    def test_add_work_allocation_without_date_creates_unscheduled_session(self, conn):
+        """The Work sessions card's "+" button posts NO date at all -- the
+        route must create an unscheduled session placeholder (start/end NULL)
+        rather than reject the empty form."""
+        _seed_task(conn, "t1")
+        resp = tasks_router.add_work_allocation("t1", start_at="", end_at="", conn=conn)
+        assert resp.status_code == 303
+        allocations = db.list_work_allocations_for_task(conn, "t1")
+        assert len(allocations) == 1
+        assert allocations[0]["start_at"] is None
+        assert allocations[0]["end_at"] is None
+        assert db.first_undated_work_allocation_for_task(conn, "t1")["uid"] == allocations[0]["uid"]
+
     def test_remove_work_allocation_route_keeps_task(self, conn):
         _seed_task(conn, "t1")
         event_uid = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
@@ -255,12 +303,126 @@ class TestTaskDetailRouter:
         assert "Work sessions" in body
         assert "/tasks/t1/work-allocations" in body
         assert "/tasks/t1/work-allocations/remove" in body
+        # New card shape: sessions are a numbered list ("Session n") with the
+        # date+hour at the row's end, added purely via the header's "+" button
+        # (no datetime inputs on the page).
+        assert "Session 1" in body
+        assert "2026-08-17 16:00 &ndash; 18:00" in body
+        assert "datetime-local" not in body
+
+    def test_work_sessions_card_numbers_sessions_in_creation_order(self, conn):
+        _seed_task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        db.create_work_allocation(conn, "t1")  # undated placeholder, added second
+        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
+        assert "Session 1" in body
+        assert "Session 2" in body
 
     def test_task_form_renders_work_sessions_card_on_edit(self, conn):
         _seed_task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
         body = tasks_router.edit_task_form("t1", _request("/tasks/t1/edit"), conn=conn).body.decode()
         assert "/tasks/t1/work-allocations" in body
+
+
+class TestPanelInfoAndSessionStepper:
+    """1.9 "Unscheduled work" panel rework -- the db summary the planning
+    grids' panel items render (work_allocation_panel_info), the panel's −
+    button (remove_latest_work_allocation + its route), and the same-origin
+    `next` redirect the +/− forms post so the reload returns to the grid."""
+
+    def test_panel_info_no_sessions(self, conn):
+        _seed_task(conn, "t1")
+        info = db.work_allocation_panel_info(conn, "t1")
+        assert info == {"count": 0, "scheduled_hours": 0.0, "total_hours": 0.0, "undated_count": 0}
+
+    def test_panel_info_dated_sessions_sum_scheduled(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        db.create_work_allocation(conn, "t1", "2026-08-18T09:00:00", "2026-08-18T10:30:00")
+        info = db.work_allocation_panel_info(conn, "t1")
+        assert info["count"] == 2
+        assert info["scheduled_hours"] == 3.5
+        assert info["total_hours"] == 3.5
+        assert info["undated_count"] == 0
+
+    def test_panel_info_undated_session_counts_one_hour_toward_total(self, conn):
+        """An undated session has no duration yet -- its planned contribution
+        counts as the default 1-hour block it becomes when placed, so the
+        x/y reads "on the calendar out of planned"."""
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        db.create_work_allocation(conn, "t1")  # undated
+        info = db.work_allocation_panel_info(conn, "t1")
+        assert info["count"] == 2
+        assert info["scheduled_hours"] == 2.0
+        assert info["total_hours"] == 3.0
+        assert info["undated_count"] == 1
+
+    def test_panel_info_unknown_task_is_zero_filled(self, conn):
+        assert db.work_allocation_panel_info(conn, "ghost") == {
+            "count": 0, "scheduled_hours": 0.0, "total_hours": 0.0, "undated_count": 0,
+        }
+
+    def test_remove_latest_removes_most_recent_session(self, conn):
+        _seed_task(conn, "t1")
+        first = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        second = db.create_work_allocation(conn, "t1")
+        removed = db.remove_latest_work_allocation(conn, "t1")
+        assert removed == second
+        remaining = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        assert remaining == [first]
+
+    def test_remove_latest_with_no_sessions_returns_none(self, conn):
+        _seed_task(conn, "t1")
+        assert db.remove_latest_work_allocation(conn, "t1") is None
+        assert db.remove_latest_work_allocation(conn, "ghost") is None
+
+    def test_remove_latest_never_touches_a_dated_session(self, conn):
+        """Direct feedback (2026-08-14): the panel's number is "sessions
+        still needing placement" (undated_count), so its "−" must only ever
+        remove undated sessions -- even one created AFTER an already-
+        scheduled block (i.e. more recent in creation order) must be picked
+        over it. With no undated sessions left, "−" is a no-op even though
+        the task still has dated ones."""
+        _seed_task(conn, "t1")
+        dated = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        undated = db.create_work_allocation(conn, "t1")  # created after `dated`
+        removed = db.remove_latest_work_allocation(conn, "t1")
+        assert removed == undated
+        remaining = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        assert remaining == [dated]
+        # Nothing left to remove -- the dated session is never touched.
+        assert db.remove_latest_work_allocation(conn, "t1") is None
+        assert [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")] == [dated]
+
+    def test_add_work_allocation_route_returns_to_next_path(self, conn):
+        _seed_task(conn, "t1")
+        resp = tasks_router.add_work_allocation(
+            "t1", start_at="", end_at="", next="/week?date_=2026-08-17", conn=conn
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/week?date_=2026-08-17"
+        assert db.first_undated_work_allocation_for_task(conn, "t1") is not None
+
+    def test_add_work_allocation_route_rejects_open_redirect_next(self, conn):
+        """A client-submitted `next` is only honored when it's a same-origin
+        path -- a scheme or //-host payload falls back to the task."""
+        _seed_task(conn, "t1")
+        for bad in ("https://evil.example", "//evil.example", "\\\\evil"):
+            resp = tasks_router.add_work_allocation("t1", start_at="", end_at="", next=bad, conn=conn)
+            assert resp.headers["location"] == "/tasks/t1"
+
+    def test_remove_latest_route_removes_one_session_and_returns_to_next(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        resp = tasks_router.remove_latest_work_allocation(
+            "t1", next="/calendar/timetable?date_=2026-08-17", conn=conn
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/calendar/timetable?date_=2026-08-17"
+        assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
 
 
 class TestBackupRoundTrip:

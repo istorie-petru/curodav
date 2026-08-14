@@ -622,6 +622,90 @@ CREATE TABLE IF NOT EXISTS event_occurrence_overrides (
     updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_event_occurrence_overrides_master ON event_occurrence_overrides(master_uid);
+
+-- 1.8 slice 1 ("Field-HLC shadow store + sync API skeleton",
+-- plans/open-priority.md § Offline-first editing & synchronization §9):
+-- purely sync-infrastructure metadata, not a fourth kind of domain entity
+-- (features/architecture.md §1.4) -- `tasks`/`events`/`contacts` keep
+-- their own columns as the single source of truth for a field's *value*;
+-- this table only remembers the HLC each field was last written at, so
+-- the server can tell "is this incoming write newer than what I already
+-- have" (§6) without conflating that with the value itself. `deleted_at`
+-- is tracked here as an ordinary field name like any other (§4: a delete
+-- is a field write, not a row removal -- see `tasks`/`events`/`contacts`'
+-- own new `deleted_at` column below), which is what makes "an edit newer
+-- than the tombstone un-deletes the row" fall out of the same per-field
+-- LWW rule instead of needing special-case code.
+-- HLC is the triple from §3, `(physical_time_ms, logical_counter,
+-- device_id)`, stored as three columns rather than one packed string so
+-- SQLite's row-value comparison (`(a, b, c) > (?, ?, ?)`, supported since
+-- 3.15) can do the ordering directly in the pull query (§8) instead of
+-- pulling every row into Python to compare.
+CREATE TABLE IF NOT EXISTS field_versions (
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    hlc_physical INTEGER NOT NULL,
+    hlc_logical INTEGER NOT NULL,
+    hlc_device_id TEXT NOT NULL,
+    PRIMARY KEY (entity_type, entity_uid, field_name)
+);
+CREATE INDEX IF NOT EXISTS idx_field_versions_hlc ON field_versions(hlc_physical, hlc_logical, hlc_device_id);
+
+-- One row per device that has ever synced -- the pull cursor (§8) and the
+-- "last sync time" line Data Health's own page already reserves a
+-- placeholder for (src/data_health.py's health_summary `sync` key).
+CREATE TABLE IF NOT EXISTS sync_devices (
+    device_id TEXT PRIMARY KEY,
+    last_pushed_physical INTEGER,
+    last_pushed_logical INTEGER,
+    last_pushed_device_id TEXT,
+    last_pulled_physical INTEGER,
+    last_pulled_logical INTEGER,
+    last_pulled_device_id TEXT,
+    last_seen_at TEXT
+);
+
+-- §5's applied-op_id idempotency ledger -- "an implementation detail for
+-- the slice that builds it, not a modeling decision this doc needs to
+-- fix" (§9). `result_json` is the exact response this op_id produced the
+-- first time it was applied, replayed verbatim on a duplicate push
+-- instead of re-applying (safe after a connection drop mid-push, since
+-- the client can never be sure whether the server actually received the
+-- last batch).
+CREATE TABLE IF NOT EXISTS sync_applied_ops (
+    op_id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    applied_at TEXT
+);
+
+-- 1.8 slice 2 ("Sync conflicts surface", plans/open-priority.md §
+-- Offline-first editing & synchronization §§7b/c, 9): the two deliberate
+-- exceptions to plain per-field LWW (§6/§7a, slice 1) -- a genuine
+-- concurrent edit to the same event's start_at/end_at, or a synced batch
+-- that gives one task two different project labels -- still pick a
+-- winner automatically (so no device is ever blocked), but the losing
+-- side is never silently discarded: it lands here instead, for the
+-- person to restore or dismiss from Settings > Sync conflicts.
+-- `losing_value`/`winning_hlc` are stored as plain text (a field value is
+-- always one of the JSON-safe scalar types field_set ops already carry;
+-- `winning_hlc` packed as "physical:logical:device_id" -- display-only,
+-- never compared/sorted, so a single text column is simpler than three
+-- more int/text columns nothing queries).
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    losing_value TEXT,
+    losing_hlc TEXT NOT NULL,
+    winning_hlc TEXT NOT NULL,
+    created_at TEXT,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sync_conflicts_unresolved ON sync_conflicts(resolved_at);
 """
 
 
@@ -734,6 +818,15 @@ def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[
 
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
+    # delete operation, not a row removal ... this design adds one
+    # (deleted_at + the deleting op's HLC)"). A plain sync-unaware write
+    # (every existing router) never sets this column and nothing existing
+    # reads it -- it's additive, inert until the sync API (routers/
+    # sync_api.py) is actually used.
+    _ensure_column(conn, "tasks", "deleted_at", "TEXT")
+    _ensure_column(conn, "events", "deleted_at", "TEXT")
+    _ensure_column(conn, "contacts", "deleted_at", "TEXT")
     _ensure_column(conn, "events", "exdates_json", "TEXT NOT NULL DEFAULT '[]'")
     # 1.6 ("Generalized recurrence and the non-working-day policy") -- see
     # the `events` CREATE TABLE comment above for the model.
@@ -1216,7 +1309,8 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # this" check would need. The one path that genuinely needs to set a
     # specific historical `completed_at` (a JSON backup restore) does so
     # with its own explicit UPDATE after calling this function, not by
-    # fighting this auto-detection -- see routers/export.py's `_restore`.
+    # fighting this auto-detection -- see routers/export.py's
+    # `restore_backup_payload`.
     existing_status = conn.execute("SELECT status FROM tasks WHERE uid = ?", (data.get("uid"),)).fetchone()
     was_done = bool(existing_status and existing_status["status"] in _TASK_DONE_STATUSES)
     now_done = data.get("status") in _TASK_DONE_STATUSES
@@ -1524,7 +1618,7 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
 
 
 def create_work_allocation(
-    conn: sqlite3.Connection, task_uid: str, start_at: str, end_at: str
+    conn: sqlite3.Connection, task_uid: str, start_at: str | None = None, end_at: str | None = None
 ) -> str:
     """Schedule a block of work on `task_uid`: a plain event titled after
     the task (kept in sync by upsert_task, see below) and inheriting the
@@ -1533,7 +1627,16 @@ def create_work_allocation(
     necessary keeps every allocation associated with the same task" -- so
     this is called once per block; calling it again for the same task just
     creates another independent event/relation pair, exactly as the spec
-    describes for a task split across multiple sessions."""
+    describes for a task split across multiple sessions.
+
+    Either both of `start_at`/`end_at` or neither may be given. A
+    start/end pair schedules the block (renders on calendars, counts toward
+    `db.task_work_hours`'s `scheduled`). Omitting both creates an
+    UNSCHEDULED session placeholder -- no date yet, so the task still
+    appears on the planning grids' "Unscheduled work" panel and the session
+    is placed onto a real slot by dragging it there (see
+    `set_work_allocation_times`/`first_undated_work_allocation_for_task`);
+    this is what the task modal's Work sessions "+" button creates."""
     import uuid
 
     task = get_task(conn, task_uid)
@@ -1566,12 +1669,15 @@ def create_work_allocation(
 
 
 def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
-    """Every scheduled work block for `task_uid`, ordered by start time --
-    the work-allocation-only counterpart to related_events_for_task above
-    (which returns ordinary Relations-card links too)."""
+    """Every scheduled work block for `task_uid` -- the work-allocation-only
+    counterpart to related_events_for_task above (which returns ordinary
+    Relations-card links too). Ordered by creation time (not start time), so
+    the Work sessions card's "Session 1/2/3" numbering stays the stable
+    order sessions were added in and an undated session (start_at NULL, a
+    "+"-added placeholder) keeps its position once it's placed later."""
     rows = conn.execute(
         "SELECT events.* FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
-        "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.start_at ASC",
+        "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.created_at ASC, events.uid ASC",
         (task_uid,),
     ).fetchall()
     return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
@@ -1598,6 +1704,69 @@ def delete_work_allocation(conn: sqlite3.Connection, event_uid: str) -> None:
     delete_event(conn, event_uid)
 
 
+def first_undated_work_allocation_for_task(conn: sqlite3.Connection, task_uid: str) -> dict[str, Any] | None:
+    """The task's oldest work-allocation session that has no start/end yet
+    (a "+"-added session placeholder awaiting placement on a planning grid),
+    or None. `list_work_allocations_for_task` is creation-ordered, so the
+    first undated one is the session a grid drop should place next."""
+    for wa in list_work_allocations_for_task(conn, task_uid):
+        if not wa.get("start_at"):
+            return wa
+    return None
+
+
+def set_work_allocation_times(conn: sqlite3.Connection, event_uid: str, start_at: str, end_at: str) -> bool:
+    """Give an existing work-allocation session its scheduled start/end --
+    the "place this session" half of a session created undated from the task
+    modal's Work sessions card (create_work_allocation with no dates). Only
+    a real work allocation may be moved (work_allocation_task_uid guard, the
+    same idiom the routers' move_allocation endpoints use); returns False if
+    it isn't one or the range is invalid, otherwise updates the event and
+    returns True."""
+    if not start_at or not end_at or end_at <= start_at:
+        return False
+    if not work_allocation_task_uid(conn, event_uid):
+        return False
+    existing = get_event(conn, event_uid)
+    if existing is None:
+        return False
+    row = dict(existing)
+    row["start_at"] = start_at
+    row["end_at"] = end_at
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upsert_event(conn, row)
+    return True
+
+
+def unschedule_work_allocation(conn: sqlite3.Connection, event_uid: str) -> bool:
+    """The inverse of `set_work_allocation_times`: clear an existing work-
+    allocation session's start/end back to undated instead of deleting the
+    session outright. This is what "unschedule" means for the planning
+    grids' block interactions (drag a block back onto the "Unscheduled
+    work" panel, or its own delete button) -- the block comes off the
+    calendar, but the session itself is still there, now back on the panel
+    as an unplaced session, exactly like a "+"-added placeholder. 2026-08-14:
+    this used to fully `delete_work_allocation` the block, which silently
+    shrank the task's total session count by one every time a block was
+    unscheduled -- surprising when the point of unscheduling is "I'll place
+    this later," not "I don't need this session anymore" (that's what the
+    panel's own "−" stepper, or the task's Work sessions card, are for).
+    Only a real work allocation may be unscheduled (`work_allocation_
+    task_uid` guard, same idiom `set_work_allocation_times` uses); returns
+    False if it isn't one or the event doesn't exist."""
+    if not work_allocation_task_uid(conn, event_uid):
+        return False
+    existing = get_event(conn, event_uid)
+    if existing is None:
+        return False
+    row = dict(existing)
+    row["start_at"] = None
+    row["end_at"] = None
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upsert_event(conn, row)
+    return True
+
+
 def _hours_between(start_at: str | None, end_at: str | None) -> float:
     if not start_at or not end_at:
         return 0.0
@@ -1607,6 +1776,55 @@ def _hours_between(start_at: str | None, end_at: str | None) -> float:
     except ValueError:
         return 0.0
     return max((end - start).total_seconds() / 3600.0, 0.0)
+
+
+def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[str, Any]:
+    """Summary the planning grids' "Unscheduled work" panel needs for one
+    task (week_view/timetable_view/project_calendar build the same item
+    shape): session count plus the scheduled/total hours shown next to the
+    title. `scheduled_hours` is the sum of dated session durations (the
+    same number db.task_work_hours reports as `scheduled`); `total_hours`
+    adds one default hour per undated session -- an undated session has no
+    duration yet, so its planned contribution counts as the default 1-hour
+    block it becomes when placed on a grid (project_calendar.js's
+    DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
+    out of hours planned". `undated_count` is the number of sessions still
+    awaiting placement -- the panel's "still unscheduled" rule
+    (`count > 0 and undated_count == 0` drops a task off the list) needs
+    it, and it's what separates the panel summary from task_work_hours."""
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
+    undated = sum(1 for a in allocations if not a.get("start_at"))
+    return {
+        "count": len(allocations),
+        "scheduled_hours": scheduled,
+        "total_hours": scheduled + undated,
+        "undated_count": undated,
+    }
+
+
+def remove_latest_work_allocation(conn: sqlite3.Connection, task_uid: str) -> str | None:
+    """Remove the task's most recently added UNDATED work session -- the
+    last still-undated one in `list_work_allocations_for_task`'s creation
+    order, the "Unscheduled work" panel "−" button's undo of its own "+".
+    Deliberately ignores dated (already-scheduled) sessions even if one of
+    those is more recently created -- the panel's count is now "sessions
+    still needing placement" (`work_allocation_panel_info`'s
+    `undated_count`), so "−" must only ever touch that same pool; it must
+    never silently delete an already-scheduled calendar block just because
+    it happened to be the most recent thing created. Returns the removed
+    event's uid, or None if the task has no undated sessions to remove
+    (also None for a task that doesn't exist -- get_task guard, same as
+    create_work_allocation). The task itself, and every dated session, are
+    never touched."""
+    if get_task(conn, task_uid) is None:
+        return None
+    undated = [wa for wa in list_work_allocations_for_task(conn, task_uid) if not wa.get("start_at")]
+    if not undated:
+        return None
+    uid = undated[-1]["uid"]
+    delete_event(conn, uid)
+    return uid
 
 
 def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]:
@@ -2196,6 +2414,11 @@ def upsert_holiday(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     conn.commit()
 
 
+def get_holiday(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM schedule_holidays WHERE uid = ?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
 def delete_holiday(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM schedule_holidays WHERE uid = ?", (uid,))
     conn.commit()
@@ -2735,6 +2958,23 @@ def project_label_for(conn: sqlite3.Connection, object_type: str, object_id: str
         if not (cfg and cfg.get("generate_space")):
             return name
     return None
+
+
+def project_label_config_for(
+    conn: sqlite3.Connection, object_type: str, object_id: str
+) -> dict[str, Any] | None:
+    """The project label's *effective config* (every default filled in, so
+    `name`/`icon`/`color` are all present) for an object, or None if it has
+    no project label. Thin wrapper over `project_label_for` +
+    `effective_label_config` so a planning grid's "Unscheduled work" panel
+    can render the project pill (icon + name, 2026-08-14) without
+    re-deriving the lookup at each of its three call sites. The returned
+    dict is the label's config, not a name string -- callers that only
+    needed the name (the older panel items) can read `["name"]` off it."""
+    name = project_label_for(conn, object_type, object_id)
+    if name is None:
+        return None
+    return effective_label_config(conn, name)
 
 
 def set_object_project_label_uniform(conn: sqlite3.Connection, object_type: str, object_id: str, label_name: str | None) -> None:
@@ -3292,6 +3532,249 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
 
 def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, Any]) -> None:
     set_app_meta(conn, _page_banner_key(page_key), json.dumps(banner))
+
+
+# --------------------------------------------------------------------- #
+# 1.8 slice 1 -- field-HLC shadow store (plans/open-priority.md §
+# Offline-first editing & synchronization §§6, 9). See field_versions'
+# own CREATE TABLE comment for what this table does and doesn't store.
+# The comparison/apply *logic* (§§6-7) lives in src/offline_sync.py, kept
+# pure and independent of routers/HTTP -- these are just the plain reads/
+# writes against the shadow-store tables themselves, same "db.py never
+# contains a router-shaped decision" convention as everywhere else in
+# this file.
+# --------------------------------------------------------------------- #
+
+
+def get_field_hlc(
+    conn: sqlite3.Connection, entity_type: str, entity_uid: str, field_name: str
+) -> tuple[int, int, str] | None:
+    row = conn.execute(
+        "SELECT hlc_physical, hlc_logical, hlc_device_id FROM field_versions "
+        "WHERE entity_type = ? AND entity_uid = ? AND field_name = ?",
+        (entity_type, entity_uid, field_name),
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row else None
+
+
+def set_field_hlc(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    field_name: str,
+    hlc: tuple[int, int, str],
+) -> None:
+    conn.execute(
+        "INSERT INTO field_versions (entity_type, entity_uid, field_name, "
+        "hlc_physical, hlc_logical, hlc_device_id) VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(entity_type, entity_uid, field_name) DO UPDATE SET "
+        "hlc_physical=excluded.hlc_physical, hlc_logical=excluded.hlc_logical, "
+        "hlc_device_id=excluded.hlc_device_id",
+        (entity_type, entity_uid, field_name, hlc[0], hlc[1], hlc[2]),
+    )
+
+
+def list_field_versions_since(
+    conn: sqlite3.Connection, cursor_hlc: tuple[int, int, str] | None
+) -> list[dict[str, Any]]:
+    """Every field write with a stored HLC strictly newer than `cursor_hlc`
+    -- the incremental pull delta (§8). `cursor_hlc=None` means "give me
+    everything" (a brand-new device's first pull, or the fresh-cursor
+    reset a forced full resync performs). Row-value comparison
+    (`(a, b, c) > (?, ?, ?)`) matches HLC's own lexicographic total order
+    (§3) directly in SQL."""
+    if cursor_hlc is None:
+        rows = conn.execute(
+            "SELECT entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id "
+            "FROM field_versions ORDER BY hlc_physical, hlc_logical, hlc_device_id"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id "
+            "FROM field_versions WHERE (hlc_physical, hlc_logical, hlc_device_id) > (?, ?, ?) "
+            "ORDER BY hlc_physical, hlc_logical, hlc_device_id",
+            cursor_hlc,
+        ).fetchall()
+    return [
+        {
+            "entity_type": r[0],
+            "entity_uid": r[1],
+            "field_name": r[2],
+            "hlc": (r[3], r[4], r[5]),
+        }
+        for r in rows
+    ]
+
+
+def max_field_hlc(conn: sqlite3.Connection) -> tuple[int, int, str] | None:
+    """The server's own newest known HLC across every tracked field --
+    what a forced full resync (§8, stale cursor) resets a device's cursor
+    to once it has re-fetched everything, so the device's next incremental
+    pull only asks for changes after that point rather than replaying the
+    resync itself."""
+    row = conn.execute(
+        "SELECT hlc_physical, hlc_logical, hlc_device_id FROM field_versions "
+        "ORDER BY hlc_physical DESC, hlc_logical DESC, hlc_device_id DESC LIMIT 1"
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row else None
+
+
+def get_sync_applied_op(conn: sqlite3.Connection, op_id: str) -> dict[str, Any] | None:
+    """§5's idempotency lookup -- a cached result means this exact op_id
+    was already applied and should not be re-applied on a retried push."""
+    row = conn.execute(
+        "SELECT result_json FROM sync_applied_ops WHERE op_id = ?", (op_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row[0])
+
+
+def record_sync_applied_op(
+    conn: sqlite3.Connection,
+    op_id: str,
+    entity_type: str,
+    entity_uid: str,
+    result: dict[str, Any],
+) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO sync_applied_ops (op_id, entity_type, entity_uid, result_json, applied_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (op_id, entity_type, entity_uid, json.dumps(result), datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def get_sync_device(conn: sqlite3.Connection, device_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT device_id, last_pushed_physical, last_pushed_logical, last_pushed_device_id, "
+        "last_pulled_physical, last_pulled_logical, last_pulled_device_id, last_seen_at "
+        "FROM sync_devices WHERE device_id = ?",
+        (device_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "device_id": row[0],
+        "last_pushed_hlc": (row[1], row[2], row[3]) if row[1] is not None else None,
+        "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
+        "last_seen_at": row[7],
+    }
+
+
+def touch_sync_device(
+    conn: sqlite3.Connection,
+    device_id: str,
+    last_pushed_hlc: tuple[int, int, str] | None = None,
+    last_pulled_hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Upserts `sync_devices`. Either HLC arg may be omitted (a push-only
+    or pull-only round keeps the other field as it already was) -- uses
+    `COALESCE(excluded.x, sync_devices.x)` so a NULL passed through
+    `excluded` (arg omitted) doesn't clobber a previously-recorded value."""
+    now = datetime.now(timezone.utc).isoformat()
+    pushed = last_pushed_hlc or (None, None, None)
+    pulled = last_pulled_hlc or (None, None, None)
+    conn.execute(
+        "INSERT INTO sync_devices (device_id, last_pushed_physical, last_pushed_logical, "
+        "last_pushed_device_id, last_pulled_physical, last_pulled_logical, last_pulled_device_id, "
+        "last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(device_id) DO UPDATE SET "
+        "last_pushed_physical=COALESCE(excluded.last_pushed_physical, sync_devices.last_pushed_physical), "
+        "last_pushed_logical=COALESCE(excluded.last_pushed_logical, sync_devices.last_pushed_logical), "
+        "last_pushed_device_id=COALESCE(excluded.last_pushed_device_id, sync_devices.last_pushed_device_id), "
+        "last_pulled_physical=COALESCE(excluded.last_pulled_physical, sync_devices.last_pulled_physical), "
+        "last_pulled_logical=COALESCE(excluded.last_pulled_logical, sync_devices.last_pulled_logical), "
+        "last_pulled_device_id=COALESCE(excluded.last_pulled_device_id, sync_devices.last_pulled_device_id), "
+        "last_seen_at=excluded.last_seen_at",
+        (device_id, *pushed, *pulled, now),
+    )
+
+
+def list_sync_devices(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """1.8 slice 6 -- every device that has ever pushed or pulled, most
+    recently seen first. `data_health.health_summary`'s own "sync" field
+    was a fixed `{"configured": False}` placeholder through slice 5
+    (open.md's own note: "the field exists now so the page's shape doesn't
+    change once it does") -- this is what that placeholder needed once a
+    real sync engine (routers/sync_api.py, called by static/offline_sync_
+    client.js) actually exists to populate `sync_devices` rows."""
+    rows = conn.execute(
+        "SELECT device_id, last_pushed_physical, last_pushed_logical, last_pushed_device_id, "
+        "last_pulled_physical, last_pulled_logical, last_pulled_device_id, last_seen_at "
+        "FROM sync_devices ORDER BY last_seen_at DESC"
+    ).fetchall()
+    return [
+        {
+            "device_id": row[0],
+            "last_pushed_hlc": (row[1], row[2], row[3]) if row[1] is not None else None,
+            "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
+            "last_seen_at": row[7],
+        }
+        for row in rows
+    ]
+
+
+# --------------------------------------------------------------------- #
+# 1.8 slice 2 -- sync_conflicts (§§7b/c, 9). See the table's own CREATE
+# TABLE comment for what it's for. Plain CRUD helpers only -- the actual
+# decision of *when* a conflict is worth recording lives in
+# src/offline_sync.py, same layering as the field-HLC shadow store above.
+# --------------------------------------------------------------------- #
+
+
+def _hlc_to_str(hlc: tuple[int, int, str]) -> str:
+    return f"{hlc[0]}:{hlc[1]}:{hlc[2]}"
+
+
+def create_sync_conflict(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    field_name: str,
+    losing_value: Any,
+    losing_hlc: tuple[int, int, str],
+    winning_hlc: tuple[int, int, str],
+) -> str:
+    import uuid
+
+    conflict_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO sync_conflicts (id, entity_type, entity_uid, field_name, losing_value, "
+        "losing_hlc, winning_hlc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            conflict_id, entity_type, entity_uid, field_name,
+            None if losing_value is None else str(losing_value),
+            _hlc_to_str(losing_hlc), _hlc_to_str(winning_hlc),
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    return conflict_id
+
+
+def get_sync_conflict(conn: sqlite3.Connection, conflict_id: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM sync_conflicts WHERE id = ?", (conflict_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_sync_conflicts(conn: sqlite3.Connection, unresolved_only: bool = True) -> list[dict[str, Any]]:
+    query = "SELECT * FROM sync_conflicts"
+    if unresolved_only:
+        query += " WHERE resolved_at IS NULL"
+    query += " ORDER BY created_at DESC"
+    return [dict(r) for r in conn.execute(query).fetchall()]
+
+
+def resolve_sync_conflict(conn: sqlite3.Connection, conflict_id: str) -> None:
+    """Dismiss -- the losing value is discarded for good, `resolved_at`
+    set. Restoring the losing value instead is not a special "resolve"
+    variant: it's a normal new `field_set` op with a fresh HLC (routers/
+    settings.py's own restore action), applied through the same apply_op
+    path as any other write, followed by this same dismissal call."""
+    conn.execute(
+        "UPDATE sync_conflicts SET resolved_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), conflict_id),
+    )
+    conn.commit()
 
 
 def clear_page_banner(conn: sqlite3.Connection, page_key: str) -> None:

@@ -1,23 +1,26 @@
 {# Work sessions card (1.4, plans/open-priority.md § Work allocations, §
-   Task & calendar semantics). A work allocation is a calendar Event linked
-   to this task (db.create_work_allocation) -- "Research — 6h may become
-   Monday 16:00–18:00, Thursday 14:00–16:00, Tuesday 17:00–19:00 without
-   creating multiple tasks." This card is the task-detail entry point for
-   scheduling one directly (a start/end datetime pair); the project's Week
-   Calendar view (not yet built) will be the drag-and-drop surface for the
-   same underlying operation, so this card stays the plain-forms fallback
-   both here and there.
+   Task & calendar semantics). A work session is a calendar Event linked to
+   this task (db.create_work_allocation) -- "Research — 6h may become Monday
+   16:00–18:00, Thursday 14:00–16:00, Tuesday 17:00–19:00 without creating
+   multiple tasks." The card's "+" button adds a session with NO date at all
+   (an unscheduled placeholder): the task then still appears on the planning
+   grids' "Unscheduled work" panel (the Timetable sub-view, /week, the
+   project Week Calendar) and that session is placed onto a real slot by
+   dragging it there -- so this card stays a plain-form fallback while the
+   grid stays the drag-and-drop surface for the same underlying operation.
 
-   Same layout convention as _task_relations.html's Relations card: a
-   checklist of existing rows (each with an inline remove form,
-   data-modal-keep-open so the modal re-renders in place) plus a compact
-   add row below. Shared by task_detail.html (header shown) and
-   task_form.html (no header, same spot). #}
+   Rows are the task's sessions in creation order ("Session 1", "Session 2",
+   ...), with the session's date and hour at the row's end (blank while the
+   session is still undated) and an inline remove form. Shared by
+   task_detail.html (header shown) and task_form.html (same spot). #}
 {% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
 {% if show_header %}
-<h2>
-    Work sessions
+<h2 class="work-sessions-head">
+    <span>Work sessions</span>
     {% if work_allocations %}<span class="checklist-progress">{{ work_allocations|length }}</span>{% endif %}
+    <form class="work-session-add" method="post" action="/tasks/{{ task.uid }}/work-allocations" data-modal-keep-open>
+        <button type="submit" class="icon-btn" title="Add a work session (date it later in the Timetable)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
+    </form>
 </h2>
 {% endif %}
 <div class="relations-group">
@@ -31,10 +34,10 @@
     <div class="checklist">
         {% for wa in work_allocations %}
         <div class="checklist-row">
-            <span class="detail-identity-dot cal-{{ wa.calendar_color }}"></span>
-            <a class="checklist-text" href="/events/{{ wa.uid }}" data-modal>
-                {{ wa.start_at[:16].replace('T', ' ') if wa.start_at else '' }}{% if wa.end_at %} – {{ wa.end_at[11:16] }}{% endif %}
-            </a>
+            <span class="checklist-text">Session {{ loop.index }}</span>
+            {% if wa.start_at %}
+            <span class="session-when">{{ wa.start_at[:16].replace('T', ' ') }}{% if wa.end_at %} &ndash; {{ wa.end_at[11:16] }}{% endif %}</span>
+            {% endif %}
             <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>
                 <input type="hidden" name="event_uid" value="{{ wa.uid }}">
                 <button type="submit" class="checklist-delete" title="Remove work session">{{ icon('x') }}</button>
@@ -43,13 +46,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state" style="padding:10px 0">No work sessions scheduled yet.</div>
+    <div class="empty-state" style="padding:10px 0">No work sessions yet -- add one with the + button, then drag it onto a slot in the Timetable.</div>
     {% endif %}
-    <form method="post" action="/tasks/{{ task.uid }}/work-allocations" class="checklist-add-form form-inline" data-modal-keep-open>
-        <input type="datetime-local" name="start_at" required>
-        <span>–</span>
-        <input type="datetime-local" name="end_at" required>
-        <button type="submit" class="btn">{{ icon('plus', 'icon-sm') }} Schedule</button>
-    </form>
 </div>
 {% endmacro %}

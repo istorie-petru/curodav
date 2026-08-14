@@ -80,6 +80,7 @@ def radicale_settings(tmp_path: Path) -> Settings:
             contacts_collection="contacts",
             db_path=tmp_path / "cache.sqlite",
             sync_interval_seconds=9999,
+            backup_dir=tmp_path / "backups",
         )
     finally:
         proc.terminate()

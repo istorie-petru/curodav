@@ -519,3 +519,111 @@ class TestSettingsAppearanceLabelIcons:
         db.set_app_meta(conn, deps.SHOW_LABEL_ICONS_KEY, "1")
         settings_router.set_label_icons(show="", conn=conn)
         assert db.get_app_meta(conn, deps.SHOW_LABEL_ICONS_KEY) == ""
+
+
+class TestShowRelationsCard:
+    """Settings > Appearance's "Show the Relations card" (2026-08-14) --
+    whether the Relations card renders on task/event detail and edit modals.
+    Unlike the label-icons toggle this one defaults ON: an install that has
+    never touched it stores nothing, which reads as the default "1" and
+    shows the card exactly as it always has."""
+
+    def test_defaults_on(self):
+        assert deps._show_relations_card(_bare_request()) is True
+
+    def test_on_when_stored_1(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "1")
+        assert deps._show_relations_card(_request_with_app("/", db_path)) is True
+
+    def test_off_when_stored_0(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
+        assert deps._show_relations_card(_request_with_app("/", db_path)) is False
+
+
+class TestShowRelationsCardInRenderedPages:
+    """The card is gated in the templates themselves
+    ({% if show_relations_card(request) %} around the macro call), so the
+    hidden state must drop the whole card from the rendered page while
+    leaving its sibling cards (Work sessions) intact."""
+
+    def _seed_task(self, conn):
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Essay", "description": "", "status": "active",
+            "tags": ["University"], "created_at": _now(),
+        })
+
+    def _seed_event(self, conn):
+        db.upsert_event(conn, {
+            "uid": "e1", "title": "Standup", "description": "", "start_at": "2026-08-17T09:00:00",
+            "end_at": "2026-08-17T09:30:00", "all_day": 0, "status": "active", "tags": ["University"],
+            "created_at": _now(),
+        })
+
+    def test_task_detail_shows_relations_by_default(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            self._seed_task(c)
+            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
+        assert "Related events" in resp.body.decode()
+
+    def test_task_detail_hides_relations_when_off(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
+            self._seed_task(c)
+            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
+        body = resp.body.decode()
+        assert "Related events" not in body
+        assert "Work sessions" in body  # the sibling card still renders
+
+    def test_edit_task_form_hides_relations_when_off(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
+            self._seed_task(c)
+            resp = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c)
+        body = resp.body.decode()
+        assert "Related events" not in body
+        assert "Work sessions" in body
+
+    def test_event_detail_shows_relations_by_default(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            self._seed_event(c)
+            resp = calendar_router.event_detail("e1", _request_with_app("/events/e1", db_path), conn=c)
+        assert "Related tasks" in resp.body.decode()
+
+    def test_event_detail_hides_relations_when_off(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
+            self._seed_event(c)
+            resp = calendar_router.event_detail("e1", _request_with_app("/events/e1", db_path), conn=c)
+        assert "Related tasks" not in resp.body.decode()
+
+
+class TestSettingsAppearanceRelationsCard:
+    def test_renders_toggle_defaulting_to_on(self, conn):
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/relations-card"' in body
+        assert resp.context["current_show_relations_card"] is True
+
+    def test_renders_toggle_off_when_stored_0(self, conn):
+        db.set_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY, "0")
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        assert resp.context["current_show_relations_card"] is False
+
+    def test_set_relations_card_route_stores_1(self, conn):
+        resp = settings_router.set_relations_card(show="1", conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/appearance"
+        assert db.get_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY) == "1"
+
+    def test_set_relations_card_route_stores_0_on_off(self, conn):
+        settings_router.set_relations_card(show="0", conn=conn)
+        assert db.get_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY) == "0"

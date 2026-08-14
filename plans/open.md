@@ -29,9 +29,10 @@ step is sized to ship on its own; nothing here blocks the work in
    because they must not touch data.
 2. **Widget consolidation + Streak + Next Deadline** — dashboard-local; a single
    `app_meta`-guarded migration.
-3. **Data health & maintenance** — independent and low-risk; scheduled early
-   because verified backups are the prerequisite for trusting the offline/sync
-   work in `open-priority.md`.
+3. ~~**Data health & maintenance**~~ — **shipped 2026-08-14** (Settings > Data
+   health, `src/data_health.py`, `scripts/data_health.py`) — see
+   `features/settings.md`. Unblocks 1.8 (offline-first editing &
+   synchronization)'s "trusted only once verified backups exist" precondition.
 4. **Contacts field parity** — isolated to the Contacts entity and its vCard
    round-trip.
 5. **Webapp usability + DAVx5 hosting** — Phase B (pagination) is app-wide UI
@@ -108,26 +109,6 @@ Agenda); **Streak** and **Next Deadline** are new. One migration
 **Already shipped ahead of the rest:** `tasks.completed_at`
 (auto-managed in `db.upsert_task`, `test_task_completed_at.py`) — the schema
 change the Streak widget reads.
-
-## Data health & maintenance
-
-**Status:** decision recorded — no code.
-
-Settings contains a **Data Health** section exposing the operational state of
-the data layer: database integrity/status; last successful backup; last backup
-verification; synchronization status and last sync time for connected
-endpoints/devices; storage usage; relevant entity statistics.
-
-Backups are **actively verified**, not merely created. Verification at minimum
-validates JSON structure, expected top-level data, required entity collections,
-and basic data integrity.
-
-Provide both **GUI and CLI** workflows for creating backups, verifying backups,
-restoring backups, checking database integrity, and performing supported repair
-operations. GUI and CLI use the same underlying maintenance services rather than
-separate logic. Restore operations clearly communicate their destructive
-implications and preserve a recoverable backup of the current state where
-practical.
 
 ## Contacts field parity with Nextcloud Contacts
 

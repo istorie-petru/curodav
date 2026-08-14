@@ -73,6 +73,12 @@ candidate event on every page load; the overlay now asks
 `GET /api/search?for_task=<uid>` for exactly the page of shared-label,
 not-already-linked candidates it needs.
 
+**Hide/show the card (2026-08-14)** — Settings > Appearance's "Show the
+Relations card" toggle (`deps.py`'s `show_relations_card()` global, default
+on) hides or shows the card across all four of its homes (task detail/edit,
+event detail/edit), presentation-layer only — the underlying relations data
+and all their endpoints are untouched.
+
 ## Work allocations (1.4)
 
 A work allocation is *not* a new object — it's an ordinary `event_task_relations`
@@ -97,15 +103,88 @@ between the two.
 
 **UI shipped:** a "Work sessions" card on the task detail/edit modals
 (`_task_work_allocations.html`, `POST /tasks/{uid}/work-allocations` +
-`/work-allocations/remove`) — a plain start/end datetime form, the
-functional (non-drag) way to schedule a block; and (1.4 slice 3) the
-project's own Week Calendar view (`GET /projects/{name}/calendar`) — the
-drag-and-drop surface the spec describes, dragging a task onto the grid to
-create an allocation, dragging/resizing an existing block to move it. See
-§ Projects' "Week Calendar view" below for the full shape. **Still open,
-deferred:** wiring `_project_card`'s `progress` to real scheduled-work
-hours instead of task count, and hiding a completed task's future
-allocations from the active calendar — see `plans/STATE.md`.
+`/work-allocations/remove`); and (1.4 slice 3) the project's own Week
+Calendar view (`GET /projects/{name}/calendar`) — the drag-and-drop surface
+the spec describes, dragging a task onto the grid to create an allocation,
+dragging/resizing an existing block to move it. See § Projects' "Week
+Calendar view" below for the full shape.
+
+**Add-undated-sessions (2026-08-14):** the card's start/end datetime inputs
+are gone — a single "+" button in the card's header adds a session with no
+date at all (`db.create_work_allocation(conn, task_uid)` with neither
+`start_at` nor `end_at`, the new both-or-neither signature). Such a session
+is an **undated session placeholder** (an event with NULL `start_at`/
+`end_at`; `events.start_at` is nullable, so no schema change): it has no
+slot yet, so the task stays on the planning grids' "Unscheduled work"
+panel (the Timetable sub-view, `/week`, the project Week Calendar) until
+the session is placed. Dragging the task onto a grid slot **places the
+task's oldest undated session** — `db.first_undated_work_allocation_for_
+task` + `db.set_work_allocation_times` in all three create endpoints
+(`week.py`/`calendar.py`/`projects.py` `create_allocation`) — rather than
+creating yet another block, so repeated "+" sessions each get placed by one
+drag. A task drops off the panel only when every one of its sessions is
+dated. The card renders sessions in creation order ("Session 1/2/3", since
+`list_work_allocations_for_task` now orders by creation time) with the
+session's date+hour at the row's end (blank while undated). Undated
+sessions are private placeholders and are skipped by every publishable
+outlet (`events.ics` export and published event Lists), so they can never
+leak out as DTSTART-less VEVENTs.
+
+**Unscheduled-work panel rework (2026-08-14):** each planning grid's
+"Unscheduled work" sidebar item is now a shared partial
+(`_unscheduled_task_item.html`, imported `with context` by the Timetable
+sub-view, `/week`, and the project Week Calendar) showing, per task:
+- a **scheduled/total hours x/y** next to the title —
+  `db.work_allocation_panel_info`: `scheduled_hours` is the sum of dated
+  session durations (same number as `task_work_hours.scheduled`),
+  `total_hours` adds one default hour per undated session (its planned
+  contribution, the 1-hour block it becomes when placed) so the readout is
+  "hours on the calendar out of hours planned", e.g. `2/3h`;
+- a **−/count/+ session stepper**: "+" posts `POST /tasks/{uid}/work-
+  allocations` (adds an undated placeholder), "−" posts `POST /tasks/{uid}/
+  work-allocations/remove-latest` (removes the most recently added UNDATED
+  session, `db.remove_latest_work_allocation` — never an already-scheduled
+  one) and **renders whenever `undated_count > 0`**. The number itself is
+  `undated_count` — sessions still needing placement — NOT the task's total
+  session count (`count`); direct feedback (2026-08-14, same day as the
+  fixes above) was that dropping one of a task's sessions onto the grid
+  didn't move the panel's number when it showed the total ("the counter
+  doesn't update from 2 to 1"). Placing a session (or unscheduling one back
+  off the grid) automatically moves it in/out of this number, since it's
+  just "how many of this task's sessions have no start/end yet." Reaching 0
+  remaining is a normal state (everything's placed), not a floor the panel
+  avoids — that's a change from the count's old semantics, where the panel
+  deliberately never let you reach zero *total* sessions (that's still the
+  task modal's Work sessions card's job). Both forms carry a same-origin
+  `next` path (validated by `tasks.py::_safe_next` against open-redirect
+  payloads) so the reload lands back on the grid they were used from.
+- **Unschedule never changes the task's session count** — the three delete
+  endpoints (`db.unschedule_work_allocation`) clear ONLY the one session's
+  start/end back to undated instead of deleting it; the task's other
+  sessions are untouched and the session count stays exactly what it was.
+  (2026-08-14, two earlier designs the same day, both wrong: first this
+  collapsed *every* session down to one undated placeholder on any single
+  unschedule — `db.collapse_task_work_allocations`, since deleted — until
+  direct feedback flagged that as silently discarding a task's other
+  planned sessions, "the session count doesn't hold as a guide"; the first
+  fix for that then hard-deleted just the one session via `db.
+  delete_work_allocation`, which visibly dropped a single-session task's
+  count to zero the moment its only block was unscheduled — also wrong,
+  since unscheduling isn't "I don't need this session anymore," that's what
+  the panel's own −/+ stepper or the task's Work sessions card are for.)
+  The block's delete button and the drag-onto-panel gesture both skip the
+  generic delete-confirmation popover now too (`data-confirmed="1"` on the
+  form) since neither is destructive anymore.
+- **Pointer-based drag** (static/project_calendar.js interaction 1) replaces
+  native HTML5 drag-and-drop: a fixed ghost clone follows the cursor, the
+  hovered column lights up, and the grid auto-scrolls near its top/bottom
+  edge so any time is reachable; the block move/resize path gained
+  pointercancel revert, scroll-aware positioning, and an edge auto-scroll of
+  its own. Panel items no longer carry a native `draggable` attribute.
+
+**Still open, deferred:** wiring `_project_card`'s `progress` to real
+scheduled-work hours instead of task count, and hiding a completed task's
+future allocations from the active calendar — see `plans/STATE.md`.
 
 ## Task model (1.5)
 
@@ -271,23 +350,27 @@ below.
 surface: the current week's grid (reusing `grid_layout.layout_day`, the
 same function `routers/calendar.py::week_view` calls, rather than a second
 copy of that math), with an "Unscheduled tasks" list beside it (open
-project tasks with no work allocation yet, each item reading `{project} >
-{task} · {remaining}h` — the task's `db.task_work_hours` remaining total,
-not the shared `_task_row.html` macro). Dragging a list item onto the grid
+project tasks with no work allocation yet — since the 2026-08-14 panel
+rework each item is the shared `_unscheduled_task_item.html` partial: the
+`{project} > {task}` title with a scheduled/total-hours x/y and a −/count/+
+session stepper). Dragging a list item onto the grid
 POSTs `task_uid`/`start_at`/`end_at` to `POST
 /projects/{name}/calendar/allocations` (`create_allocation`), which
 defensively re-checks the task actually carries this project's label
-before calling `db.create_work_allocation` — the same function the
-task-detail "Work sessions" card's plain form already calls, kept as an
-alongside fallback, not replaced. Dragging or resizing an existing block
+before calling `db.create_work_allocation` — or placing the task's oldest
+undated session (`db.set_work_allocation_times`, for a session the Work
+sessions "+" added without a date) — the same helpers the task-detail
+"Work sessions" card's own endpoint already calls, kept as the alongside
+fallback, not replaced. Dragging or resizing an existing block
 POSTs to `POST /projects/{name}/calendar/allocations/{event_uid}/move`
 (`move_allocation`) — a plain `start_at`/`end_at` edit via `db.upsert_event`,
 the same technique `routers/calendar.py::reschedule_event` already uses for
 the global grid's own drag, just a form-POST/redirect endpoint instead of
 that route's JSON/fetch contract, to match this page's other actions. Each
 block's delete button POSTs to `.../{event_uid}/delete`
-(`delete_allocation` -> `db.delete_work_allocation`) — removes only the
-scheduled block, never the task (§ Task & calendar semantics). Ordinary
+(`delete_allocation` -> `db.unschedule_work_allocation`) — clears only that
+one session's start/end back to undated; the task's other sessions, the
+task itself, and the task's total session count are all untouched. Ordinary
 calendar events (and any other project's own work allocations) render as
 visually subdued context (`.context-event`, reduced opacity); only this
 project's own work allocations (`.work-allocation`) are prominent and

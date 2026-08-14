@@ -46,4 +46,22 @@
         </div>
     </form>
 </div>
+<!-- Show the Relations card (2026-08-14) -- an Appearance preference:
+     whether the Relations card renders on task/event detail and edit modals
+     (the merged Relations/subtasks card, _task_relations.html/
+     _event_relations.html). Same autosubmit segmented on/off pattern as the
+     label-icons control above. Read back via deps.py's
+     show_relations_card() Jinja global; default on. -->
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/relations-card">
+        <span class="settings-field-label">Show the Relations card
+            <span class="settings-field-hint">The Relations card on task and event detail/edit modals</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Show the Relations card">
+            <label class="seg-btn"><input type="radio" name="show" value="1" class="seg-radio" {% if current_show_relations_card %}checked{% endif %} onchange="this.form.requestSubmit()"> On</label>
+            <label class="seg-btn"><input type="radio" name="show" value="0" class="seg-radio" {% if not current_show_relations_card %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
+        </div>
+    </form>
+</div>
 {% endblock %}

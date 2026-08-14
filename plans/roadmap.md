@@ -29,14 +29,14 @@ never hold Track A up.
 
 | Release | Main work (Track A) | Side work (Track B) | Depends on |
 |---|---|---|---|
-| `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | Data health; Contacts parity | — |
+| `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | ~~Data health~~ **shipped 2026-08-14**; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
 | `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14** | Configurable views + optional Schedule (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | Offline-first editing & synchronization | Pagination | 1.1 (WebDAV) + data health |
+| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | Pagination (not started — optional, doesn't block 1.9+) | 1.1 (WebDAV) + ~~data health~~ (shipped) |
 | `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
 | `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
 
@@ -52,8 +52,9 @@ labels; the shared aggregation service computes the counts and workload every
 surface needs; Importance/Urgency replace WebDAV priority (with the WebDAV
 representation settled here — the sync work in 1.8 builds on it).
 
-Side work (independent): **Data health & maintenance** (verified backups — the
-prerequisite for trusting offline sync in 1.8) and **Contacts field parity**.
+Side work (independent): ~~**Data health & maintenance**~~ (verified backups —
+the prerequisite for trusting offline sync in 1.8 — **shipped 2026-08-14**,
+see `features/settings.md`) and **Contacts field parity**.
 
 ### 1.2 — Task model settled
 
@@ -216,13 +217,55 @@ phases (Dashboard's widget-grid Home, Spaces' `generate_space` label pages +
 University module) and closed out without new code. See `plans/STATE.md`'s
 1.7 entries.
 
-### 1.8 — Trust & offline
+### ~~1.8 — Trust & offline~~ — fully shipped 2026-08-14
 
-**Offline-first editing & synchronization** (`open-priority.md` § Offline-first
-editing & synchronization) — the largest engineering item. Its sync model
-(identifiers, tombstones, conflict resolution, work-allocation conflict
-semantics) must be written before code. It starts on the WebDAV mapping from 1.1
-and is trusted only once verified backups (data health, 1.1) exist.
+**Offline-first editing & synchronization** (`open-priority.md` §
+~~Offline-first editing & synchronization~~, `features/offline-sync.md`) —
+the largest engineering item, delivered as 7 separable slices (a server-side
+sync engine with no browser dependency, wired to a PWA client at the end).
+Both preconditions were met before slice 1: verified backups (Settings >
+Data health) and the sync model design (entity identifiers, HLC ordering,
+tombstones, per-field conflict detection, the two conflict-surfacing
+exceptions for work-allocation/event time fields and single-project-per-
+task). `pyproject.toml` bumped to `1.8.0`.
+
+- ~~Field-HLC shadow store + sync API skeleton~~ **shipped 2026-08-14** —
+  `field_versions`/`sync_devices`/`sync_applied_ops`, `src/offline_sync.py`'s
+  per-field LWW apply logic, `POST /api/sync/push`/`/api/sync/pull`.
+- ~~Sync conflicts surface~~ **shipped 2026-08-14** — `sync_conflicts` table
+  + `/settings/sync-conflicts` (restore/dismiss); event-time concurrent-edit
+  detection and single-project-per-task batch re-validation wired in.
+- ~~PWA shell~~ **shipped 2026-08-14** — `static/manifest.webmanifest` +
+  `static/sw.js` (`routers/pwa.py`'s `GET /sw.js`/`GET /offline`),
+  installable with an app-shell precache and an `/offline` fallback page.
+- ~~Local IndexedDB store + read path~~ **shipped 2026-08-14** —
+  `static/offline_db.js` (a per-field-HLC-tracked mirror of tasks/events/
+  contacts) + `static/offline_sync_client.js` (the pull half, loaded
+  globally) + `static/offline_shell.js` (`/offline`'s read-only list).
+- ~~Local write path + outbox~~ **shipped 2026-08-14** —
+  `static/offline_write.js` (create/complete/delete a task offline, queued
+  into a new `outbox` IndexedDB store, applied optimistically to the
+  mirror) + `offline_db.js`'s own client-side HLC clock (`nextHlc`/
+  `mergeHlc`).
+- ~~Sync engine~~ **shipped 2026-08-14** — `offline_sync_client.js` grew a
+  push half (draining the outbox, push-then-pull order) plus exponential
+  backoff/jitter retry; new `static/offline_status.js` (the small offline/
+  synchronizing/pending/synced indicator, computed live off real state).
+- ~~Tombstone GC~~ **shipped 2026-08-14** — `offline_sync.purge_expired`
+  physically removes tombstoned entities and stale idempotency-ledger rows
+  past the retention horizon (default 90 days), run lazily on every pull
+  and configurable from Settings > Data health / the CLI. Closed a real
+  correctness gap along the way: a `full_resync` now wipes the local
+  mirror first (`offline_db.js::clearMirror`) so a badly-stale device can't
+  resurrect an already-purged entity; also fixed a genuine bug
+  (`mergeHlc` had been destructuring its argument as the wrong shape since
+  slice 5, caught by a smoke script built to exercise a real full-resync
+  round trip). **1.8 is now fully shipped.**
+
+See `features/offline-sync.md` for the outcome doc (data model, conflict
+resolution, protocol, PWA shell, GC) now that the open-priority.md design
+section has been marked shipped/struck-through per this repo's own "How
+open work gets tracked" convention.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

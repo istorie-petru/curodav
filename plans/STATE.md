@@ -271,23 +271,630 @@ session, right before the final commit of that session.
   `tests/test_phase2_labels.py` for existing coverage (`generate_space`,
   `is_space` context, University-scoped classes). **1.7 is now fully
   shipped** (`pyproject.toml` bumped to `1.7.0`).
-- **Next slice:** `1.8` — Offline-first editing & synchronization
-  (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
-  synchronization). The largest engineering item on the roadmap — its status
-  is still "decision recorded, no code." Per the spec's own instruction, the
-  sync model (entity identifiers, local change tracking, ordering,
-  deletion/tombstones, retries, idempotency, conflict detection and
-  resolution — explicitly *not* casual "last write wins," since that can
-  silently destroy offline changes) must be designed and written down before
-  any implementation starts; treat "write the sync model" as its own slice,
-  separate from and before any code-writing slice, rather than scoping both
-  in one session. It builds on 1.1's WebDAV mapping and is meant to start
-  only once verified backups exist (data health, 1.1) — check that
-  precondition still holds before beginning. `open.md`'s Command palette
-  actions follow-up (1.2 side work), 1.4's optional Project check-in side
-  work, and 1.6's optional "Configurable views + optional Schedule module"
-  side work are all still fine smaller, self-contained slices instead,
-  whenever a session wants a break from the sync work.
+- **Shipped:** side work — **Calendar "Timetable" sub-view**, complete
+  (2026-08-14) — `GET /calendar/timetable`
+  (`routers/calendar.py::timetable_view`), the Week (planning) surface
+  (`/week`, 1.7) folded into the main Calendar page as a "Timetable" entry
+  in the Month/4-Week/Week/Day segmented subnav (all four existing calendar
+  templates got the new link). It is the `/week` page copied into the
+  Calendar page, not a third implementation or a calendar.js merge: same
+  grid markup/CSS classes as `week_planning.html` (columns
+  `.time-col.project-calendar-col`, work allocations prominent and
+  draggable as `.work-allocation`, ordinary calendar events subdued
+  context as `.context-event`), `static/project_calendar.js` reused
+  verbatim with a `window.PROJECT_CALENDAR` config pointing at this page's
+  own `POST /calendar/timetable/allocations[...]` create/move/delete
+  endpoints (same shape/validation as `routers/week.py`'s trio, duplicated
+  with a cross-reference comment because `routers/week.py` imports this
+  router (calendar) and so this router cannot import week back) so
+  create/move/delete redirect back here instead of to `/week`.   Drag a
+  scheduled block back onto the "Unscheduled work" panel to unschedule it
+  (a config-driven addition to `project_calendar.js` interaction 3,
+  `deleteUrlBase`/`unscheduleDropSelector`), and a plain click anywhere on
+  a scheduled block's body opens that task's edit view (where more work
+  sessions can be added) via interaction 4 (`taskEditUrlBase` config, the
+  same destination the block's title link carries) — applied consistently
+  to the sibling planning grids `/week` and the project Week Calendar too.
+  All three override `.time-col`'s `cursor:copy` (the Calendar grid's
+  drag-to-create affordance, wrong where empty-space drag isn't a create
+  gesture) to plain `default` via `.project-calendar-col`, so the
+  misleading "mouse add" cursor is gone from every planning surface. The standalone `/week` page
+  and tab are left intact (additive change, no bookmarks/tests broken); a
+  later slice could retire them in favor of the sub-view. The timetable
+  keeps the calendar page's chrome (subnav, prev/next, label filter, New
+  button, next-lecture badges); adding normal calendar events is done there
+  as on any calendar view, not on the scheduling grid. See
+  `features/calendar.md`. 14 new tests (`test_calendar_timetable.py`), full
+  suite 1130 passed.
+- **Shipped:** side work — **Holidays moved into Settings**, complete
+  (2026-08-14) — a named holiday calendar is a reusable resource any
+  recurring event can reference (1.6), not a Schedule-only setting, so it
+  moved off `schedule_classes.html`'s compact `<details>` panel into its
+  own `GET /settings/holidays` hub category (`routers/settings.py::
+  settings_holidays`), the same "Labels get their own page" shape already
+  established for Labels. Rendered as a Tasks-table-style grid
+  (`settings_holidays.html`, `id="holiday-table"`, columns Title/Calendar/
+  Start date/End date) with inline editing — new `POST /settings/holidays/
+  {uid}/update-field` (`static/settings_holidays.js`, mirrors `static/
+  tasks_table.js`'s pattern) — where the old panel only ever supported add/
+  delete. The Calendar column uses `_widget_list_multiselect.html` in
+  `single`+`allow_new` mode (pick an existing named calendar or type a new
+  one) instead of the old free-text-plus-datalist input, both on the "add
+  holiday" row and per-existing-row reassignment; per-row instances are
+  named `calendar_name__{uid}` so the holiday's uid travels with the
+  change event via the input's own `name` rather than a DOM-position
+  lookup, which would break once `app.js` portals an open panel out to
+  `#multiselect-portal`. `create_holiday`/`delete_holiday` moved from
+  `routers/schedule.py` (`/schedule/holidays...`) to `routers/settings.py`
+  (`/settings/holidays...`); new `db.get_holiday` added alongside the
+  existing `upsert_holiday`/`delete_holiday`/`list_holidays*` (no separate
+  "update" helper needed — a holiday's uid never changes, so upsert-by-uid
+  already is the update). Schedule's own `<details>` Settings panel keeps
+  its `holiday_calendar` field (which named calendar the semester's
+  classes respect) and now links out to `/settings/holidays` to manage the
+  calendars' own contents. See `routers/settings.py`'s "2026-08-14
+  follow-up" docstring note for the full "why Holidays is the one
+  exception to Schedule-settings-stay-contextual" reasoning. 16 new tests
+   (`test_settings_holidays.py`), `test_holiday_calendars.py`/
+   `test_phase8_settings_hub.py` updated for the moved routes/new hub
+   category, full suite 1145 passed.
+- **Shipped:** side work — **Work sessions card: add undated sessions**,
+  complete (2026-08-14) — the task edit modal's "Work sessions" card (1.4
+  slice 1) dropped its start/end datetime inputs for a single "+" button
+  (`_task_work_allocations.html`; `POST /tasks/{uid}/work-allocations` now
+  treats absent dates as valid). A "+"-added session is an **undated
+  session placeholder** — an event with no `start_at`/`end_at`
+  (`db.create_work_allocation`'s new both-or-neither signature;
+  `events.start_at` is nullable, so no schema change) that keeps the task
+  on the planning grids' "Unscheduled work" panel until the session is
+  placed. Three consequences, each implemented and tested:
+  - The unscheduled-panel rule in `routers/week.py`/`routers/calendar.py`/
+    `routers/projects.py` changed from "has any allocation" to "has
+    allocations AND every one is dated" — a task whose only session is
+    undated (or that has none) still lists on the panel.
+  - The three create endpoints (week/calendar/projects `create_allocation`)
+    now **place the task's oldest undated session** onto the dropped slot
+    (`db.first_undated_work_allocation_for_task` +
+    `db.set_work_allocation_times`) instead of creating yet another block —
+    so repeated "+" sessions each get placed by one drag. Session numbering
+    stays stable ("Session 1/2/3" on the card) because
+    `db.list_work_allocations_for_task` now orders by creation, not start
+    time.
+  - Undated events are private scheduling placeholders, never publishable:
+    `routers/export.py`'s `events.ics` and `src/published_lists.py`'s event
+    materialization both skip rows without `start_at`, so a placeholder
+    can't leak out as a DTSTART-less VEVENT.
+  The card renders each session as `Session n` with its date+hour
+  (`{date} &ndash; {hh:mm}`) at the row's end (`.session-when`, blank while
+  undated) and the same per-row remove form; the "+" button sits at the end
+  of the "Work sessions" header (`.work-sessions-head`,
+  `.work-session-add`). See `features/tasks.md` § Work allocations. ~15 new
+  tests across `test_work_allocations.py`/`test_week_planning.py`/
+  `test_calendar_timetable.py`/`test_project_calendar.py`/
+  `test_phase10_export.py`/`test_phase6_published_lists.py`, full suite
+  1161 passed.
+- **Shipped:** side work — **block click opens task view + Relations card
+  toggle**, complete (2026-08-14) — two direct-feedback refinements:
+  - Clicking a scheduled work block on a planning grid (its body via
+    `project_calendar.js` interaction 4, or its title link) now opens the
+    block's task **view modal** (`/tasks/{uid}`) instead of the edit form
+    (`/tasks/{uid}/edit`) — the config is renamed from `taskEditUrlBase`
+    to `taskUrlBase` (it no longer appends `/edit`) across the Timetable
+    sub-view, `/week`, and the project Week Calendar, with tests updated
+    to assert the `/edit` href is gone.
+  - Settings > Appearance gained a "Show the Relations card" toggle
+    (`deps.py`'s `show_relations_card()` Jinja global, `SHOW_RELATIONS_
+    CARD_KEY` app_meta, default **on** — an install that's never touched
+    it stores nothing and shows the card exactly as it always has; `"0"`
+    hides it). The card (`_task_relations.html`/`_event_relations.html`)
+    is now gated at all four of its homes — task detail, task edit, event
+    detail, event edit — via `{% if show_relations_card(request) %}`,
+    presentation-layer only (the underlying relations data and all their
+    endpoints are untouched; the sibling Work sessions card still renders
+    when Relations is hidden). 12 new tests
+    (`test_display_prefs_settings.py`'s TestShowRelationsCard/
+    TestShowRelationsCardInRenderedPages/TestSettingsAppearanceRelationsCard),
+    full suite 1173 passed.
+- **Shipped:** side work — **"Unscheduled work" panel: session stepper +
+  scheduled/total hours + collapse-on-unschedule + pointer-based drag**,
+  complete (2026-08-14) — the planning grids' (Timetable, `/week`, project
+  Week Calendar) unscheduled-work panel reworked:
+  - Each panel item is now a shared partial
+    (`_unscheduled_task_item.html`, imported `with context` by all three
+    templates — replacing the triplicated old markup) showing the task
+    title with a **scheduled/total hours x/y readout** next to it
+    (`db.work_allocation_panel_info`: `scheduled_hours` = sum of dated
+    session durations, `total_hours` = that plus one default hour per
+    undated session, so an unplaced placeholder reads "hours on the
+    calendar out of hours planned"), plus a **−/count/+ session stepper**:
+    "+" adds an undated session placeholder (`POST
+    /tasks/{uid}/work-allocations`), "−" removes the most recently added
+    one (`POST /tasks/{uid}/work-allocations/remove-latest`,
+    `db.remove_latest_work_allocation`) and is **hidden at count 1** (the
+    panel never removes the last session — reaching zero is the task modal's
+    Work sessions card; "a task can have no timeblock" stays the plain
+    unscheduled state). Both forms post a same-origin `next` path (validated
+    by `tasks.py`'s `_safe_next`, open-redirect-safe) so the reload returns
+    to the grid they were used from.
+  - **Unschedule now collapses**: the three delete endpoints
+    (`week.py::delete_allocation`, `calendar.py::delete_timetable_
+    allocation`, `projects.py::delete_allocation`) no longer delete just the
+    one block — they delete **all** of the task's work sessions and leave
+    exactly **one undated session** behind
+    (`db.collapse_task_work_allocations`), so the task returns to the panel
+    at a count of one ("when unscheduling a task it is deleted and only one
+    work session remains"); the block's ✕ tooltip says so.
+  - **Pointer-based drag** (static/project_calendar.js interaction 1): the
+    old native HTML5 drag-and-drop is replaced by the same
+    pointerdown/pointermove/pointerup model the block move/resize already
+    used — a fixed ghost clone follows the cursor (`drag-ghost`), the hovered
+    column lights up, and the grid **auto-scrolls near its top/bottom edge**
+    so any time is reachable; block move/resize got pointercancel handling
+    (revert-and-submit-nothing), scroll-aware positioning
+    (`origTop + dy + scrollDelta` keeps a moved block glued to the pointer
+    through an auto-scroll), and the resize-handle click now correctly skips
+    the task-view modal (a latent `mode`-already-nulled bug fixed). Panel
+    items carry no native `draggable` attribute anymore. New `icon-minus`
+    sprite symbol and `.unscheduled-*`/`.drag-ghost` CSS. See
+    `features/tasks.md` § Work allocations. ~24 new tests
+    (`test_work_allocations.py`'s TestPanelInfoAndSessionStepper, and
+    stepper/collapse classes in `test_week_planning.py`/
+    `test_calendar_timetable.py`/`test_project_calendar.py`), full suite
+    1197 passed.
+- **Shipped:** side work — **"Unscheduled work" panel: one-line card +
+  project icons**, complete (2026-08-14) — direct follow-up feedback on the
+  panel item above: collapse it to strictly one line — a project pill
+  (icon + name) and the task title on the left, the session-count stepper
+  on the right — and drop the scheduled/total hours readout and due date
+  entirely (`_unscheduled_task_item.html` trimmed; the `item.sessions`
+  dict built by `week.py`/`projects.py`/`calendar.py::timetable_view` still
+  carries `scheduled_hours`/`total_hours` from `db.work_allocation_
+  panel_info`, just unused by the template now — left in rather than
+  stripped from the return shape, since nothing else about that summary
+  changed). "Add icons to projects" was backend-only, as asked: `label_
+  config.icon` already existed (the general per-label icon field behind
+  Settings > Appearance's "Show icons next to labels", 2026-08-09) — new
+  `db.project_label_config_for(conn, object_type, object_id)` wraps
+  `project_label_for` + `effective_label_config` so the panel gets the
+  project's full config (name + icon, defaults filled in) in one call
+  instead of just a name string; no icon-picker or other client work was
+  needed since labels already have one. New `.unscheduled-project-pill`
+  CSS (rounded pill, icon + name, ellipsis-truncated). Caught and fixed a
+  real bug while integrating this: an editor merge had silently dropped
+  the `@router.post("/settings/label-icons")` decorator during the
+  Relations-card-toggle slice above, off the tail end of `set_relations_
+  card` — the route was gone from the app (`set_label_icons` was still a
+  plain function, never registered) even though every existing test still
+  passed, since this app's settings tests call router functions directly
+  rather than through the ASGI app; confirmed the fix by listing `router.
+  routes` directly, not just re-running pytest. See `features/tasks.md` §
+  Work allocations and `features/week.md`. Tests trimmed to assert the
+  hours readout and due date are gone (`"unscheduled-hours" not in body`)
+  and to cover the project-icon pill (`test_project_calendar.py`/
+  `test_week_planning.py`/`test_calendar_timetable.py`), full suite 1199
+  passed.
+- **Fixed:** side work — **unscheduling a block no longer changes a task's
+  session count at all**, complete (2026-08-14), reported directly against
+  the Timetable ("deleting/drag-drop doesn't work at all... doesn't hold the
+  number of work sessions to be a guide"). Reproduced live (headless
+  Chromium against a real seeded app instance, not just reading code) before
+  changing anything, and again after each fix attempt -- went through three
+  designs the same day:
+  1. Original ("Unschedule now collapses" side work, earlier the same day):
+     any single block delete/unschedule collapsed ALL of the task's
+     sessions to exactly one undated placeholder (`db.
+     collapse_task_work_allocations`, called unconditionally by all three
+     planning grids' delete endpoints). A task with 3 sessions (1 scheduled
+     + 2 still-undated) lost the other 2 the moment just one was
+     unscheduled -- confirmed live, and confirmed with the user this was
+     the actual bug before reversing a very recent explicit decision.
+  2. First fix: swapped in `db.delete_work_allocation` (a real, permanent
+     delete of just the one session) -- fixed the "wipes other sessions"
+     part, but now a single-session task's count visibly dropped to 0 the
+     instant its only block was unscheduled, since "unschedule" isn't "I
+     don't need this session anymore." User caught this immediately
+     ("why when i drag a work time block onto unschedule, i says 0
+     sessions").
+  3. Final fix: new `db.unschedule_work_allocation` clears the one
+     session's start/end back to undated (mirrors the already-existing
+     `set_work_allocation_times`) instead of deleting anything -- the
+     task's session count never changes just from scheduling/unscheduling a
+     block; only the panel's own −/+ stepper (or the task's Work sessions
+     card) adds/removes sessions. `db.collapse_task_work_allocations`
+     deleted outright (dead code, and leaving it around risked a future
+     "fix" reintroducing #1). Since unscheduling is no longer destructive,
+     the block's delete-button form got `data-confirmed="1"` so it skips
+     `app.js`'s generic delete-confirmation popover and submits instantly,
+     matching the drag-onto-panel gesture's already-immediate behavior.
+  Updated the three delete-button tooltips (`week_planning.html`/
+  `calendar_timetable.html`/`project_calendar.html`),
+  `project_calendar.js`'s header comment, and `features/tasks.md`'s two
+  references, off the stale wording each round. Tests in
+  `test_week_planning.py`/`test_calendar_timetable.py`/
+  `test_project_calendar.py`'s `TestDeleteAllocation` now assert the
+  unscheduled session survives (undated) and the other sessions are
+  untouched; 2 now-pointless `db.collapse_task_work_allocations` unit tests
+  removed from `test_work_allocations.py`. Full suite 1198 passed.
+- **Fixed:** side work — **the "Unscheduled work" panel's number now counts
+  down as sessions get placed**, complete (2026-08-14), immediate follow-up
+  feedback on the fix directly above ("i have two work sessions. why after
+  droping one, the counter... doesn't update from 2 to 1"). Root cause: the
+  panel displayed `item.sessions.count` — the task's TOTAL session count —
+  which by design (confirmed with the user earlier the same day, "the count
+  ... keeps acting as an accurate running total of planned sessions") never
+  changes just from scheduling one of them. That's correct for "how much
+  work did I plan," but the user's actual mental model for this specific
+  number was "how many sessions still need placing" — asked directly via
+  AskUserQuestion given two prior same-day pivots already, confirmed:
+  "sessions still needing placement." `_unscheduled_task_item.html` now
+  shows `item.sessions.undated_count` instead (the field already existed on
+  `db.work_allocation_panel_info`, just wasn't the one rendered) — this
+  automatically counts down as sessions are placed and back up when
+  unscheduled, no router changes needed for the display itself. The "−"
+  stepper button visibility changed from `count > 1` to `undated_count > 0`
+  (available whenever there's an unplaced session to remove, including down
+  to exactly one — reaching 0 remaining is now a normal state, not a floor
+  the panel avoids). `db.remove_latest_work_allocation` (the "−" button's
+  handler) changed to only ever consider undated sessions when picking
+  "most recently added" — it used to pick the literal last-created session
+  regardless of scheduled state, which could have silently deleted an
+  already-scheduled block if that happened to be more recent than any
+  undated one; now it's guaranteed to only ever touch the same pool the
+  displayed number represents. Verified live again (headless Chromium,
+  a task with 2 undated sessions): counter read 2, dropped one onto the
+  grid, counter read 1. Updated `_unscheduled_task_item.html`'s and
+  `features/tasks.md`'s stepper documentation off the old "total count"
+  wording. `TestUnscheduledPanelStepper` rewritten across `test_week_
+  planning.py`/`test_calendar_timetable.py`/`test_project_calendar.py` (−
+  now shown at exactly 1 undated session, hidden only at 0 even if the task
+  has dated sessions; new count-decrements-on-placement assertions); one new
+  `test_work_allocations.py` test (`test_remove_latest_never_touches_a_
+  dated_session`). Full suite 1205 passed.
+- **Shipped:** side work — **Data health & maintenance**, complete
+  (2026-08-14) — 1.8's precondition ("trusted only once verified backups
+  exist"). New Settings > Data health hub category (`/settings/data-health`,
+  `routers/settings.py`): database integrity (`PRAGMA integrity_check`),
+  last successful backup, last backup verification, a fixed "sync not
+  configured — ships in 1.8" placeholder, storage usage, entity stats, and a
+  Backups table (per-row Verify/Restore). Every operation lives as a plain
+  function in new `src/data_health.py` (`create_backup`/`list_backups`/
+  `verify_backup`/`restore_backup`/`check_integrity`/`compact_and_reindex`/
+  `storage_stats`/`entity_stats`/`health_summary`) — both the Settings routes
+  and new `scripts/data_health.py` (CLI: `status`/`backup`/`list`/`verify`/
+  `restore`/`integrity-check`/`repair`) call the same functions, satisfying
+  open.md's "GUI and CLI use the same underlying maintenance services"
+  requirement directly, not by convention. A backup is the identical payload
+  `routers/export.py`'s `build_backup_payload` produces (factored out of
+  `export_data_json` so the on-demand data.json download and these
+  server-side backups share one definition); verification (JSON structure,
+  required top-level keys, list-shaped collections, every task/event/contact
+  row has a `uid`) caches its result as a `<file>.verify.json` filesystem
+  sidecar next to the backup, not in the app database — no schema change,
+  and a backup + its sidecar travel together. Restore always takes a fresh
+  safety-snapshot backup of the current state first and aborts untouched if
+  the target fails verification — "preserve a recoverable backup of the
+  current state where practical" (open.md). Backup filenames carry
+  microsecond precision plus a collision-retry loop, found necessary when a
+  restore's own safety-snapshot landed in the same wall-clock second as the
+  backup being restored from and silently overwrote it before it could be
+  read — caught by a same-session test, not in the wild. `config.py` gained
+  `backup_dir` (env `CC_BACKUP_DIR`, default `db_path.parent / "backups"`) on
+  the `Settings` dataclass — the one call site outside `load_settings()` that
+  constructs `Settings` directly (`test_caldav_bridge_live.py`, a live-server
+  fixture) needed updating for the new required field. See
+  `features/settings.md`, `plans/open.md`/`plans/roadmap.md`'s 1.1 side-work
+  rows marked shipped. 26 new tests (`test_data_health.py`), full suite 1231
+  passed.
+- **Shipped:** side work — **1.8's sync model, designed** (docs only, no
+  code), complete (2026-08-14) — `open-priority.md` § Offline-first editing
+  & synchronization expanded from a one-paragraph decision record into a
+  full model, per this file's own standing instruction to write the sync
+  model as its own slice before any implementation code. Covers: entity
+  identifiers (existing `uid`s, client-generated on offline create, no
+  central allocation needed — single-user app); an append-only local
+  operation log (field-level, not whole-row, so conflict resolution can be
+  per field); a Hybrid Logical Clock, `(physical_time_ms, logical_counter,
+  device_id)`, for a total order across devices that survives clock skew
+  (prior art: the ported-forward HLC per-field merge decision in
+  `abandoned.md`); soft-delete tombstones with a configurable GC retention
+  horizon (a device reconnecting past it forces a full resync rather than
+  risking resurrecting an already-deleted row); an `op_id` idempotency
+  ledger for safe retries; per-field newer-wins conflict detection as the
+  default, with two deliberate, explicitly-named exceptions where a plain
+  per-field LWW would violate "must never result in silent data loss":
+  concurrent edits to the *same* work-allocation/event's `start_at`/
+  `end_at` (two real scheduling decisions, not the same fact measured
+  twice) and two devices attaching *different* project labels to the same
+  task while offline (violates 1.5's existing single-project-per-task
+  invariant only as a *combination*, even though each individual label-add
+  op is independently valid) — both surfaced to a new Sync conflicts list
+  instead of auto-resolved or silently dropped. A push-then-pull protocol
+  shape (§8) and the three new sync-infrastructure tables it needs
+  (`field_versions`, `sync_devices`, `sync_conflicts` — metadata, not a new
+  domain object type, per `features/architecture.md` §1.4). Closes with an
+  acceptance line and a 7-slice implementation breakdown (§11) so
+  implementation sessions can each ship one slice standalone, starting with
+  a server-only, browser-independent field-HLC shadow store + sync API
+  skeleton (slice 1) before any PWA/client work (slices 3+). See
+  `open-priority.md`'s own section for the full text;
+  `plans/roadmap.md`'s 1.8 subsection updated to match.
+- **Shipped:** `1.8` slice 1 — **field-HLC shadow store + sync API
+  skeleton**, complete (2026-08-14) — `open-priority.md` § Offline-first
+  editing & synchronization §11, slice 1. New `field_versions` (per-field
+  HLC only, no value — the value stays solely on `tasks`/`events`/
+  `contacts`), `sync_devices` (per-device push/pull cursor bookkeeping),
+  and `sync_applied_ops` (§5's idempotency ledger) tables. New
+  `src/offline_sync.py`: pure §6 per-field last-write-wins apply logic
+  (`apply_op`/`apply_batch`) and §8's `pull` (incremental delta since a
+  cursor, or a `full_resync` signal once a non-`None` cursor is older than
+  the 90-day retention horizon — a `None` cursor, a brand-new device's
+  first-ever pull, is just a plain "everything" delta, not a staleness
+  case). New `routers/sync_api.py`: `POST /api/sync/push`/`/api/sync/pull`,
+  the thin HTTP wrapper (request parsing + `sync_devices` cursor writes
+  only), wired into `main.py` (named `sync_api` specifically to not shadow
+  the already-imported, unrelated `src/sync.py` Radicale/Published-Lists
+  background sync). `tasks`/`events`/`contacts` each gained a `deleted_at`
+  column (§4's tombstone model: delete is a field write, not a row
+  removal) — a delete op sets it via the same per-field HLC path as any
+  other field, which is also what makes "an edit newer than the tombstone
+  un-deletes the row" fall out for free, no special-case code. Label
+  add/remove (`entity_type: "object_label"`) needs no HLC arbitration at
+  all (§7a, commutative by construction) — applying twice converges
+  either way. Deliberately out of scope, per the slice's own boundary: the
+  `sync_conflicts` table and §7b/c's two conflict-*surfacing* exceptions
+  (event `start_at`/`end_at` concurrent-edit detection,
+  single-project-per-task re-validation after a batch) — every field,
+  including those two, gets plain §6 LWW for now; slice 2 wires the
+  exceptions into this slice's own `apply_op` path. No PWA/browser client
+  exists yet — tested entirely server-side (`test_offline_sync.py`,
+  router-function-call convention, `asyncio.run` + a synthetic JSON
+  `Request` for the two async endpoints), same as every other slice in
+  this app. 19 new tests, full suite 1250 passed.
+- **Shipped:** `1.8` slice 2 — **Sync conflicts surface**, complete
+  (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 2. New `sync_conflicts` table (§9: `id`,
+  `entity_type`, `entity_uid`, `field_name`, `losing_value`, `losing_hlc`,
+  `winning_hlc`, `created_at`, `resolved_at`; HLCs stored as display-only
+  `"physical:logical:device_id"` text, never compared/sorted) + a new
+  `/settings/sync-conflicts` hub category (`routers/settings.py`,
+  `settings_sync_conflicts.html`) listing every unresolved conflict with
+  Restore (re-applies the losing value as a fresh op through the normal
+  `offline_sync.apply_op` path, a synthetic `"settings-restore"` device id
+  + a `now` HLC so it always outranks every real prior write, then marks
+  the conflict resolved) and Dismiss (`resolved_at` set, value discarded)
+  actions. Wired both of §7's deliberate LWW exceptions into slice 1's
+  `src/offline_sync.py` apply path:
+  - **§7b** (event `start_at`/`end_at`) — `_apply_field_write` now
+    surfaces a conflict instead of a plain silent stale no-op whenever the
+    losing write's `device_id` differs from the winner's. The concurrency
+    test is a deliberate simplification, not full causal/version-vector
+    tracking (§10 explicitly rules CRDTs out): per §3's HLC merge rule, a
+    device that had already observed another device's write would have
+    merged its own clock past it and could never subsequently lose to
+    that same write — so "different device_id on both sides of a losing
+    write" is concurrency's own observable signature, with no extra state
+    needed. A losing write from the *same* device as the winner (a
+    reordered/replayed op from that device's own causal history) is left
+    as an ordinary §6 stale no-op, not surfaced.
+  - **§7c** (single-project-per-task) — `apply_batch` re-validates after
+    every op in the batch has applied, not per-op (each individual
+    `label_add` is independently valid per §7a; only the *combination*
+    can violate the invariant). Highest-HLC `label_add` for a task wins;
+    a project label the task already carried *before* this batch always
+    outranks anything newly added within it (no in-batch HLC to lose
+    against). Every losing add is reverted from `object_labels`, recorded
+    as a conflict, and that op's own result status is patched to
+    `"rejected_invariant"` in the batch's returned results.
+  Still no PWA/browser client anywhere — everything above is exercised
+  server-side, same router-function-call convention as slice 1. 11 new
+  tests extending `test_offline_sync.py` (30 total in that file), plus a
+  hub-categories fixture update in `test_phase8_settings_hub.py`, full
+  suite 1261 passed.
+- **Shipped:** `1.8` slice 3 — **PWA shell**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  3. New `static/manifest.webmanifest` (name/icons/`display:
+  "standalone"`/`start_url: "/"`, linked from `base.html` plus a
+  `theme-color` meta tag) and `static/sw.js`, the app-shell service
+  worker. `sw.js` is served at the root path by new `routers/pwa.py`'s
+  `GET /sw.js` (not `/static/sw.js` — a service worker's default scope is
+  the directory of the URL it's fetched from, so serving it under
+  `/static/` would cap its scope at `/static/*` instead of the whole
+  app), registered by new `static/pwa.js` (loaded globally in
+  `base.html`, last, as a progressive enhancement guarded by a feature
+  check). It precaches every static asset `base.html` loads on every page
+  plus a new `GET /offline` fallback page (`templates/offline.html`,
+  extends `base.html` so the tabbar/nav renders identically offline — a
+  plain "you're offline" message where content would go, since there's no
+  local data layer yet) and serves that fallback for any navigation
+  request that fails with the network down — `ofline-first-pwa.md`'s
+  "opening the application offline should lead directly to the normal
+  interface rather than an error page" line, for the app-shell-only scope
+  this slice covers. Static assets use a cache-first strategy (safe
+  because every asset URL is already cache-busted by `deps.py`'s
+  `static_url()`); real page navigations stay network-first, since this
+  app's pages are server-rendered from live SQLite state and must never
+  serve a stale copy when the network is actually reachable. Deliberately
+  out of scope, per the slice's own boundary: sync, IndexedDB, and any
+  local read/write path (slices 4-5) — this slice is purely "can the app
+  open at all with no network." The first genuinely browser-dependent
+  piece of 1.8: a real service worker install/fetch cycle can't be
+  exercised by this app's router-function-call pytest convention, so
+  `test_pwa_shell.py`'s 10 tests cover what *is* server-verifiable
+  (manifest validity, every icon it references existing on disk,
+  `/sw.js`'s content-type/no-store header, the precache list only naming
+  assets that exist on disk, `/offline` rendering full chrome, and
+  `routers/pwa.py` actually being wired into `main.py` — confirmed via
+  `app.routes` directly, the same style of check that caught the
+  `settings.py` route-registration bug the same day slice 2 shipped, not
+  just by calling the router function). Actual install/offline-navigation
+  behavior needs manual browser verification, not performed as part of
+  this slice (this sandbox has no browser and no reachable Radicale
+  server to boot the full app against). Full suite 1271 passed.
+- **Shipped:** `1.8` slice 4 — **Local IndexedDB store + read path**,
+  complete (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 4. New `static/offline_db.js`: an IndexedDB
+  database (`cc-offline`) mirroring `tasks`/`events`/`contacts` (written
+  incrementally, field by field, never a whole-row replace) plus a
+  `field_hlc` store replaying the same §6 per-field-HLC-wins rule the
+  server's `field_versions` table applies — a pull can never regress a
+  field even out of order — and a `meta` store for `device_id`
+  (`crypto.randomUUID()`, generated once and persisted) and the pull
+  cursor. New `static/offline_sync_client.js` is §8's pull half,
+  client-side: `POST /api/sync/pull` with the stored cursor on the page's
+  `load` and the browser's `online` event, applies the returned changes
+  into the mirror, advances the cursor. Deliberately push-free (nothing
+  local to push yet) and retry-free (§5 backoff is slice 6) — one
+  best-effort attempt per trigger, silent no-op on failure. A
+  `full_resync` response just clears the cursor and re-pulls once, which
+  is exactly correct today since nothing has ever been physically purged
+  (§4's GC is slice 7). Both scripts load globally in `base.html` (not
+  just `/offline`) so the mirror is warm from ordinary online browsing
+  before the network ever drops. `templates/offline.html` gained
+  `#offline-local-data`, rendered by new `static/offline_shell.js`
+  straight from the mirror (`getAllTasks`/`getAllEvents`, soft-deleted
+  rows filtered) with no network call of its own — open tasks by due
+  date and upcoming events by start time, reusing `search.html`'s own
+  `.checklist`/`.checklist-row` styling. Deliberately partial: labels/
+  tags aren't mirrored (`object_label` ops are commutative, §7a, never
+  flow through the field-HLC pull this mirrors) — title/due/time only,
+  no project pill. `sw.js`'s precache list bumped to `cc-shell-v2` to
+  cover the three new scripts. Still read-only — no local writes
+  anywhere yet (slice 5). Verified two ways: `test_pwa_shell.py`'s 6 new
+  structural checks (same "read the JS source, assert the shape" level
+  as slice 3's own sw.js tests, full suite 1277 passed), plus a one-off
+  Node + `fake-indexeddb` smoke run (not added to the pytest suite, no
+  new runtime dependency introduced there) that exercised the real merge
+  logic end to end: newer-HLC writes apply, older-HLC writes are
+  rejected, a `deleted_at` write removes the row from `getAllTasks`, and
+  `device_id`/cursor round-trip correctly through IndexedDB.
+- **Shipped:** `1.8` slice 5 — **Local write path + outbox**, complete
+  (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 5. New `static/offline_write.js`: offline
+  create/complete/delete on a task queues a real §2 op into a new
+  IndexedDB `outbox` store (`offline_db.js`'s `enqueueOp`/`getOutboxOps`/
+  `getOutboxCount`) and applies it immediately to the local mirror through
+  the same per-field-HLC-wins path a pull already uses (`applyChanges`) —
+  a same-device optimistic write can never lose to itself. `offline_db.js`
+  gained this device's own §3 HLC clock (`nextHlc`/`mergeHlc` — nothing
+  through slice 4 ever minted its own HLC, only applied server-supplied
+  ones); `offline_sync_client.js` now merges the clock forward after every
+  pull. `create` stamps every field with one shared HLC per §2; a
+  `field_set` shares its HLC with the `updated_at` write riding along with
+  it. Deliberately scoped to tasks only (create/complete/delete) — events/
+  contacts get no offline write UI yet. `/offline`'s task list
+  (`offline_shell.js`) gained an inline "add a task" form and per-row
+  complete/delete buttons (reusing `.checklist-check`/`.checklist-delete`)
+  plus an outbox-count-driven "N local changes saved, waiting for sync
+  support" note — no claim that anything syncs yet (slice 6). A device
+  that's never completed a pull can now create its very first task offline
+  (slice 4's render-nothing-until-`lastSynced` gate removed for the task
+  section only). Found and fixed a real bug via a one-off Node +
+  fake-indexeddb smoke script (slice 4's pattern, not added to pytest):
+  `getOutboxOps()`'s plain `getAll()` returned ops in IndexedDB's default
+  key-order (a random `op_id` UUID keyPath), not queued order — fixed by
+  sorting on each op's own top-level `hlc` (now stamped onto
+  `create`/`field_set` too, not just `delete`). `sw.js` precache bumped to
+  `cc-shell-v3`. 8 new tests extending `test_pwa_shell.py`, full suite 1285
+  passed.
+- **Shipped:** `1.8` slice 6 — **Sync engine**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  6. `static/offline_sync_client.js` grew a push half alongside its
+  existing pull half: `pushOnce()` sends every outbox op (already HLC-
+  ordered by `offline_db.js`'s `getOutboxOps`) to `POST /api/sync/push`,
+  then acknowledges via a new `offline_db.js::removeOutboxOps` — an
+  acknowledged op is dropped immediately rather than kept in a separate
+  "acknowledged but retained" state, one of §2's two explicitly-allowed
+  options. `syncNow()` wraps both halves in §8's own push-then-pull order.
+  §5's retry policy: exponential backoff with jitter capped at 30s, reset
+  on the browser's `online` event or any successful round; a local write
+  (`offline_write.js`'s `submitOp`) now calls new `requestSync()`
+  immediately after queuing rather than waiting for the next periodic
+  retry. Status is computed live, never stored — new `getStatus()` derives
+  `offline`/`synchronizing`/`pending`/`synced` fresh from `{navigator.
+  onLine, in-flight, outbox size}` every time, dispatching
+  `cc-offline-status-change` whenever it might have changed, so it can
+  never drift from what's actually true. New `static/offline_status.js` is
+  the small indicator itself (`ofline-first-pwa.md`'s own line) — a pure
+  renderer, no IndexedDB/network calls of its own — hidden entirely in the
+  `synced` state ("successful background sync stays unobtrusive, while
+  errors are visible") and a small top-right pill otherwise.
+  `data_health.py`'s Data health "sync" field, a fixed
+  `{"configured": false}` placeholder since slice 1, now reflects real
+  `sync_devices` rows via new `db.list_sync_devices` — flips to
+  "Configured" once any device has actually synced. `sw.js` precache
+  bumped to `cc-shell-v4`. Verified two ways: `test_pwa_shell.py`'s
+  structural checks (8 new tests) plus a one-off Node + fake-indexeddb
+  smoke script (not added to pytest) with a faked `fetch` exercising push-
+  drains-outbox / failed-push-keeps-the-op / recovery-drains-it-again /
+  offline-skips-the-network end to end — caught and fixed a real Node-
+  specific gotcha along the way (Node 21+'s built-in read-only `navigator`
+  global silently no-ops a plain reassignment; needed `Object.
+  defineProperty` instead). Full suite 1293 passed. This wires slices 1-5
+  together end to end — an offline write now actually leaves the device
+  once one comes back online.
+- **Shipped:** `1.8` slice 7 — **Tombstone GC**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  7. New `offline_sync.purge_expired(conn, retention_days, now_ms)`: any
+  entity whose tombstone (`deleted_at`'s own stored HLC in
+  `field_versions`, not a string-timestamp comparison) is older than the
+  horizon is physically removed via the *existing* `db.delete_task`/
+  `delete_event`/`delete_contact` (so related-row cleanup —
+  `object_labels`, `event_task_relations`, ... — matches every other hard
+  delete in this app) plus its now-orphaned `field_versions` rows; an
+  edit newer than the tombstone (an un-delete, §4) naturally falls outside
+  the query with no special-casing, since that edit already advanced
+  `field_versions`' own `deleted_at` HLC past the old one. A second half
+  purges `sync_applied_ops` rows past the same horizon. New
+  `data_health.py` wrappers (`sync_gc_retention_days`/
+  `set_sync_gc_retention_days`/`run_sync_gc`/`sync_gc_last_run`) give this
+  the same "GUI and CLI share one implementation, no cron — check lazily
+  on a natural request path" treatment as every other Data health action:
+  `routers/sync_api.py`'s `pull` handler now calls `run_sync_gc` before
+  computing its own response (a pull is the sync engine's own heartbeat);
+  Settings > Data health gained a retention preset field (0/14/30/90/180
+  days, same fixed-choices convention as the existing auto-archive field)
+  and a "Run cleanup now" button; `scripts/data_health.py` gained a
+  `sync-gc` subcommand.
+  Closed a real correctness gap the slice's own acceptance line demanded:
+  once the server can physically purge an old tombstone, a plain
+  "re-pull and applyChanges" on a `full_resync` response could never tell
+  a badly-stale device that an already-purged entity is gone (nothing
+  left server-side to say so) — new `offline_db.js::clearMirror` wipes the
+  local `tasks`/`events`/`contacts`/`field_hlc` stores (outbox and device
+  identity untouched) before a full resync re-pulls, so "start over"
+  means an actual rebuild, not a merge into a mirror that might still
+  hold something the server has since forgotten.
+  Found and fixed a second real bug via a one-off Node + fake-indexeddb
+  smoke script purpose-built to exercise a genuine full-resync round trip
+  (every earlier smoke script's fake pull response had used a `null`
+  cursor, which never touched this code path): `offline_db.js::mergeHlc`
+  had been destructuring its argument as a `[physical, logical,
+  device_id]` array since slice 5, but every real caller passes the
+  `{physical, logical, device_id}` dict payload shape the wire protocol
+  actually uses — it silently threw against any real pull response
+  carrying a non-null cursor.
+  This closes 1.8's 7-slice breakdown. `pyproject.toml` bumped to
+  `1.8.0` — also caught and fixed a stale-versioning gap while doing so:
+  it had stayed at `1.3.0` since 1.4 despite this file's own session logs
+  claiming a bump at the end of each of 1.4/1.5/1.6/1.7; those bumps were
+  never actually committed. Not investigated further or backfilled — this
+  slice's bump just catches the number up to the app's real feature set.
+  `open-priority.md`'s own section heading struck through and marked
+  shipped (kept as the reference spec, per this repo's "How open work
+  gets tracked" convention); new `features/offline-sync.md` is the
+  outcome doc. 16 new tests (12 extending `test_offline_sync.py`/
+  `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
+  1309 passed. **1.8 is now fully shipped.**
+- **Next slice:** nothing queued yet toward `1.9` — the next session should
+  open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
+  the first real slice there (DAVx5 mobile hosting is pure infra, blocked
+  on an external domain + server, so likely not the first thing to pick
+  up). In the meantime, any of these smaller, self-contained side-work
+  items are fair game for a session that wants a break from that: `open.md`'s
+  Command palette actions follow-up (1.2 side work), 1.4's optional Project
+  check-in, 1.6's optional "Configurable views + optional Schedule module",
+  and 1.8's own Pagination/collapsible-sections side work (Phase B of
+  webapp usability, `roadmap.md`'s 1.8 row).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

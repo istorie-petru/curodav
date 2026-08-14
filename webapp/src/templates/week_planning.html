@@ -2,6 +2,7 @@
 {% block title %}Week Planning{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
+{% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 <!-- Week (planning), 1.7 slice 2 (plans/open-priority.md § Information
      architecture & view surfaces' "Week -- planning" bullet): "How should I
      allocate my time over the coming week?" Reuses the exact grid markup/
@@ -26,10 +27,7 @@
         {% if unscheduled_tasks %}
         <div class="unscheduled-task-list">
             {% for item in unscheduled_tasks %}
-            <div class="unscheduled-task-item" draggable="true" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
-                {{ icon('move', 'icon-sm') }}
-                <span>{% if item.project %}{{ item.project }} &gt; {% endif %}{{ item.task.title }}{% if item.task.due_at %} &middot; due {{ item.task.due_at[:10] }}{% endif %}</span>
-            </div>
+            {{ unscheduled_task_item(item, unscheduled_next) }}
             {% endfor %}
         </div>
         {% else %}
@@ -75,13 +73,17 @@
             <div class="time-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
                 {% for e in day.timed %}
                 {% if e.is_allocation %}
-                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
-                    <a class="te-name" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>
+                    <a class="te-name" href="/tasks/{{ e.task_uid }}" data-modal>{{ e.title }}</a>
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
-                    <form class="work-allocation-delete" method="post" action="/week/allocations/{{ e.uid }}/delete">
+                    {# data-confirmed: not destructive anymore (unschedules
+                       to an undated placeholder, see routers/week.py::
+                       delete_allocation) -- skips app.js's generic confirm
+                       sheet, same as calendar_timetable.html's own copy. #}
+                    <form class="work-allocation-delete" method="post" action="/week/allocations/{{ e.uid }}/delete" data-confirmed="1">
                         <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
-                        <button type="submit" class="icon-btn" title="Remove this scheduled block (keeps the task)">{{ icon('x', 'icon-sm') }}</button>
+                        <button type="submit" class="icon-btn" title="Unschedule this session (it stays on the task, unplaced, on Unscheduled work)">{{ icon('x', 'icon-sm') }}</button>
                     </form>
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
@@ -111,6 +113,7 @@
   window.PROJECT_CALENDAR = {
     createUrl: "/week/allocations",
     moveUrlBase: "/week/allocations/",
+    taskUrlBase: "/tasks/",
     weekDate: "{{ monday.isoformat() }}",
   };
 </script>

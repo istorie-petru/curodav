@@ -34,9 +34,11 @@
      + related events). 1.2: the subtasks half is removed -- tasks are
      flat -- so the card now holds related events only. -->
 {% if task %}
+{% if show_relations_card(request) %}
 <div class="relations-section">
     {{ task_relations_section(task, related_events) }}
 </div>
+{% endif %}
 <div class="relations-section">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>

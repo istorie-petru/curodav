@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Sync conflicts - Settings{% endblock %}
+{% block content %}
+{% include "_settings_breadcrumb.html" with context %}
+<h1>Sync conflicts</h1>
+<p class="settings-hint">Offline edits the sync engine couldn't auto-merge --
+    a genuinely concurrent change to the same event's start/end time on two
+    devices, or two devices attaching different projects to the same task
+    while both offline. The higher-priority side is already applied; nothing
+    here is silently lost -- restore the other value, or dismiss it.</p>
+
+{% if conflicts %}
+<div class="card table-scroll">
+<table class="task-table">
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Field</th>
+            <th>Losing value</th>
+            <th>Detected</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in conflicts %}
+        <tr>
+            <td>{{ c.entity_type }} · {{ c.entity_uid }}</td>
+            <td>{{ 'Project label' if c.field_name == 'project_label' else c.field_name }}</td>
+            <td>{{ c.losing_value if c.losing_value is not none else '(empty)' }}</td>
+            <td>{{ c.created_at }}</td>
+            <td style="text-align:right;white-space:nowrap">
+                <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/restore" style="display:inline">
+                    <button type="submit" class="btn ghost btn-sm">{{ icon('repeat', 'icon-sm') }} Restore</button>
+                </form>
+                <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/dismiss" style="display:inline">
+                    <button type="submit" class="btn danger subtle btn-sm">{{ icon('x', 'icon-sm') }} Dismiss</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">No unresolved sync conflicts.</div>
+{% endif %}
+{% endblock %}

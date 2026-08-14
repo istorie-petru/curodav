@@ -577,10 +577,13 @@ outcomes and their state, Contacts manages people. Other surfaces provide
 contextual projections of these entities rather than duplicating their
 management logic.
 
-## Offline-first editing & synchronization
+## ~~Offline-first editing & synchronization~~ — fully shipped 2026-08-14
 
-**Status:** decision recorded — no code. The sync model must be written before
-implementation (see below).
+**Status:** all 7 implementation slices shipped 2026-08-14 (`plans/
+STATE.md`'s 1.8 entries; outcome summarized in `features/offline-sync.md`).
+`pyproject.toml` bumped to `1.8.0`. Kept below as the reference spec for
+what shipped — §11's own slice list has every slice marked shipped, with
+dates and per-slice detail.
 
 The application supports creating, editing, scheduling, and completing entries
 while offline; connectivity is not a prerequisite for normal operation. Local
@@ -601,13 +604,600 @@ devices must never result in silent data loss. The application retains enough
 local state to determine what changed and to reconcile when connectivity
 returns.
 
-**Before implementation, the synchronization model must explicitly define:**
-entity identifiers, local change tracking, ordering, deletion/tombstones,
-retries, idempotency, conflict detection, and conflict resolution. A "last write
-wins" policy should not be adopted casually because it can silently destroy
-offline changes. Offline UI notifications are straightforward; reliable
-conflict-safe synchronization is the underlying engineering requirement. Prior
-art to draw on: the HLC per-field merge decision preserved in `abandoned.md`.
+Source material: this app's own earlier offline/PWA brainstorm
+(`plans/ofline-first-pwa.md`, still a rough draft — install-to-offline-shell,
+local-data-as-primary, per-change sync records, transparent online/offline
+transitions, a small status indicator); the HLC per-field merge decision
+preserved in `abandoned.md`'s "Decision history" section (ported forward from
+the pre-rework `desktop/` client, never implemented in the current webapp).
+
+### 0. The architectural fork this creates
+
+Everything else in this app is server-rendered Jinja: a request hits a router,
+which reads/writes SQLite directly and returns HTML. There is no client-side
+data layer today, no JSON API beyond the export/import routes, and no build
+step. "Offline-first" cannot be bolted onto that shape — a page that doesn't
+exist locally can't render when the network is down. This is the one part of
+1.8 that is a real architectural addition, not a rework of what's there:
+
+- A **PWA shell** (manifest, service worker, an app-shell cache) becomes the
+  offline entry point. It coexists with the existing server-rendered pages —
+  visiting the app online still hits the normal routers; the PWA shell is what
+  loads when the network is unavailable or when the installed app is opened
+  offline.
+- A **local data layer** (IndexedDB) becomes the primary store for the PWA
+  shell's own views once installed — "network availability should not be
+  checked before ordinary operations" (`ofline-first-pwa.md`). This is a
+  second read/write path alongside the server-rendered one, not a replacement
+  of it; the plain browser-tab experience (no install, no service worker)
+  keeps working exactly as it does today, fully online-only, no change.
+- A **thin JSON sync API** (§8 below) is the only new HTTP surface — it does
+  not replace or wrap the existing page routers, and the existing routers do
+  not gain sync awareness. The sync API's job is narrow: accept a batch of
+  field-level operations, apply them with conflict detection, and hand back
+  everything newer than what the caller already has.
+
+This means 1.8 is genuinely two builds — the sync engine (server + protocol,
+entirely testable with the existing pytest/router-function-call convention, no
+browser needed) and the PWA client (service worker, IndexedDB, the offline UI)
+— wired together at the end. The slice breakdown at the bottom of this section
+keeps them separable for exactly that reason.
+
+### 1. Entity identifiers
+
+Tasks, events, and contacts already carry a stable `uid` (the iCal/vCard
+round-trip identifier every export/import path already depends on) — that
+`uid` is the sync identifier too, no new column. A device creates a new
+entity offline by generating its own `uid` (`str(uuid.uuid4())`, same call
+already used everywhere in this codebase) at creation time; a v4 UUID's
+collision probability needs no central allocation to stay safe, and this is a
+single-user app (`abandoned.md`: "single-user is load-bearing" — no
+multi-tenant namespacing question to solve). Two devices independently
+creating a task offline always land as two distinct rows once synced, never a
+collision.
+
+Work allocations are plain `events` rows (`is_work_allocation=1` on the
+`event_task_relations` join) — no separate identifier scheme. Recurrence
+overrides are real second `events` rows sharing the master's `uid` with a
+`RECURRENCE-ID` (1.6's manual-exceptions design) — sync treats an override
+exactly like any other event row; nothing here is new because of recurrence.
+
+Labels are the one pool object with **no uid** — `label_config.label_name` is
+already the natural key (globally unique text, per
+`features/architecture.md` §1.2), and a label has no delete/rename lifecycle
+today ("a label empties itself naturally," no `routers/labels.py` delete
+route). Sync therefore never needs to reconcile two different labels claiming
+the same name, or a rename race — those operations don't exist in the app to
+begin with. `object_labels` rows (the join table) have no uid either; they're
+identified by the natural key `(object_type, object_id, label_name)`, and
+add/remove are naturally idempotent (`INSERT OR IGNORE` / delete-if-exists) —
+see §7 for why this makes label attach/detach commutative rather than
+something HLC has to arbitrate.
+
+### 2. Local change tracking — an operation log, not a state diff
+
+Every offline write becomes an **operation record**, appended to a local
+outbox (IndexedDB on the client), never a raw "here's my new row" state dump.
+Recording *what changed* rather than *what the row now looks like* is what
+makes field-level conflict resolution (§7) possible at all — a whole-row
+overwrite can't tell the server "only the due date changed, don't touch
+anything else this device never touched."
+
+An operation:
+
+```
+{ op_id:        <uuid, client-generated>       -- idempotency key, see §5
+  entity_type:  "task" | "event" | "contact" | "object_label"
+  entity_uid:   <uid>                          -- or the object_labels natural key
+  op_type:      "create" | "field_set" | "delete" | "label_add" | "label_remove"
+  fields:       { field_name: { value, hlc } } -- field_set/create only
+  device_id:    <uuid, generated once per install, stored locally>
+  hlc:          <the op's own HLC, see §3>     -- for delete/label_add/label_remove
+}
+```
+
+`create` is a `field_set` covering every field at once (the whole row as
+authored), stamped with one HLC — a plain-form create with no prior state to
+conflict against. The outbox is append-only: an op, once written, is never
+mutated, only marked "acknowledged" once the server confirms it (or dropped
+after a bounded retention once acknowledged, to keep the local store small).
+
+### 3. Ordering — a Hybrid Logical Clock (HLC)
+
+Per-field writes need a total order that survives clock skew between devices
+and doesn't require them to be online at the same time to agree on "who's
+newer" — plain wall-clock timestamps aren't safe for that (a device with a
+clock 10 minutes fast can silently "win" every conflict). An HLC is a triple:
+
+```
+(physical_time_ms, logical_counter, device_id)
+```
+
+`physical_time_ms` is the device's own clock at the moment of the write.
+`logical_counter` increments within the same millisecond (or when a received
+HLC's physical time is >= the local clock, per the standard HLC update rule)
+so ordering stays correct even when clocks are close or momentarily behind.
+`device_id` is the final, deterministic tiebreaker when the first two are
+genuinely equal — never "last one processed by the server wins," which
+depends on network arrival order, not causal order. Two HLCs compare
+lexicographically on that triple; this is a total order, so "which of these
+two field writes is newer" always has one unambiguous answer.
+
+Both the client (per device) and the server maintain their own HLC clock,
+merged (`max` + increment) on every operation they observe from the other
+side — the standard HLC synchronization rule, so a device's clock advances
+past whatever it's seen from the server and vice versa.
+
+### 4. Deletion / tombstones
+
+Deleting an entity offline is a `delete` operation, not a row removal —
+existing rows (`tasks`/`events`/`contacts`) already have no `deleted`/
+tombstone concept; this design adds one (`deleted_at` + the deleting op's HLC)
+rather than physically deleting on the first device that gets the change, so
+a *concurrent* edit from a second, still-offline device has something to
+reconcile against once it syncs (see §7 for the resolution rule — an edit
+newer than the tombstone un-deletes the row, rather than the edit being
+silently lost against a row that no longer exists to receive it).
+
+**Tombstone retention / GC:** a tombstone must stay visible to every device
+long enough for all of them to have observed it before it's purged for real,
+or a device that reconnects after a long time offline could "resurrect" a
+row everyone else already knows is gone. A configurable retention horizon
+(default 90 days, alongside the existing auto-archive-style `app_meta`
+presets) governs physical purge; a device whose last successful sync is
+older than the horizon cannot safely apply an incremental pull and instead
+triggers a full resync (§8) rather than risking a stale tombstone gap.
+
+### 5. Retries and idempotency
+
+Every operation's `op_id` is the idempotency key. The server keeps a bounded
+window of recently-applied `op_id`s (per entity is enough — an op only ever
+touches one entity) and, on receiving a duplicate, returns the cached result
+of the first application rather than re-applying it — this is what makes a
+naive "resend the whole pending batch" retry safe after a connection drop
+mid-push (client can never be sure whether the server actually received and
+applied the last batch before the connection died).
+
+Retry policy: exponential backoff with jitter (a fixed cap, e.g. 30s) while a
+push/pull attempt is failing; an immediate attempt on the browser's `online`
+event (transparent reconnect, no user action, per `ofline-first-pwa.md`);
+periodic background retry while nominally online but a sync attempt is
+failing (e.g. the server itself is briefly down). Pending-changes count and
+sync state persist in IndexedDB, so a closed-and-reopened PWA resumes exactly
+where it left off, per `ofline-first-pwa.md`'s own requirement.
+
+Ops sync in per-entity chronological order (their own HLC order) even though
+cross-entity order never matters — this preserves intra-entity causality
+(e.g. a task's `create` always arrives and applies before a later `field_set`
+against the same `uid`).
+
+### 6. Conflict detection
+
+The server needs to know, per field, "is this incoming write newer than what
+I already have" — which means the server must track an **HLC per field**,
+not just the row's existing single `updated_at` timestamp. This is new
+server-side state (§9) `tasks`/`events`/`contacts` don't carry today.
+
+On receiving a `field_set`/`create` op: for each field in the op, compare its
+HLC to the field's currently-stored HLC (absent = treat as smaller than
+anything). Newer wins and is applied, with the stored HLC advanced; older is
+a silent no-op **for that one field only** — the incoming value is discarded
+because a genuinely newer value for that exact field already exists, which
+is correct, not lossy (the "loser" write's intent for every *other* field it
+touched is unaffected, since detection is per field, not per row).
+
+This silent-no-op-per-field behavior is the normal, expected outcome for
+ordinary fields (title, description, due date, importance...) and needs no
+user-facing surfacing — it's what "conflict-safe sync" means for the common
+case. §7 defines the fields where a plain newer-wins isn't suffient and a
+conflict must be surfaced instead of auto-resolved.
+
+### 7. Conflict resolution
+
+**Default rule: per-field last-write-wins by HLC**, exactly as detected in
+§6, for every field on every entity, with two deliberate categories of
+exception:
+
+**a) Structural/relational operations are commutative by construction, so
+they never need HLC arbitration at all:**
+
+- Two devices each **create** a new work allocation (a new event `uid`) for
+  the same task while offline, at different times — these are two different
+  entities. Both sync in as separate rows; there is no conflict because
+  nothing shares an identifier. This is the common "I planned two separate
+  work sessions from two devices" case, and by construction it always just
+  works.
+- `object_labels` add/remove (`label_add`/`label_remove`) on the same
+  `(object_type, object_id, label_name)` tuple from two devices are
+  idempotent — applying "add" twice or "remove" twice converges to the same
+  state regardless of arrival order. No HLC needed; last-applied-wins is
+  fine because the two possible operations commute.
+
+**b) Fields representing a committed scheduling decision are conflict-surfaced,
+not auto-merged — the one deliberate exception to per-field LWW:**
+
+Two devices independently **moving or resizing the same existing** work
+allocation or event (editing its `start_at`/`end_at`) while both offline is
+the case the spec's "must never result in silent data loss" line is about.
+Plain per-field LWW would pick one device's new time and silently discard
+the other's — but these aren't "the same fact measured twice converging on
+one true value" the way a title edit is; they're two different, deliberate
+scheduling decisions, and discarding one is a real loss of the user's intent
+on that device, not noise. For `start_at`/`end_at` on `events` specifically:
+if both sides changed the same field while neither had synced the other's
+change yet (detected via: the losing write's HLC is *not* an ancestor the
+winning device could have already observed — i.e. this is a genuine
+concurrent edit, not a normal newer-supersedes-older sequential edit), the
+server does not auto-apply either value. Instead it applies the higher-HLC
+value as usual (so no device is ever blocked by an unresolved conflict) *and*
+records the losing value as an unresolved **sync conflict** (§9) surfaced in
+a "Sync conflicts" list (adjacent to Settings > Data health, §9) for the
+person to look at and, if the auto-picked side was wrong, manually restore
+the other time. Nothing is silently dropped — the losing value is retained
+until the person resolves or dismisses it.
+
+**c) App-level invariants must be re-checked after a sync batch, not just
+after each individual op:** two devices each attach a *different* project
+label to the same task while both offline violates
+`db.MultipleProjectLabelsError`'s single-project-per-task rule (1.5) — each
+individual `label_add` is a valid, commutative op per (a) above, but the
+*combination* is invalid. The server re-validates this specific invariant
+after applying a synced batch, exactly the same check `upsert_task`/the bulk
+label-add endpoint already perform on an ordinary write (1.5's existing
+`MultipleProjectLabelsError`, not new logic): the higher-HLC label_add is
+kept, the other is rejected and recorded as a sync conflict the same way as
+(b), rather than either silently violating the invariant or silently
+dropping the losing device's intent without telling anyone.
+
+No other cross-field/cross-entity invariant in the current data model
+(`features/architecture.md`'s "the data model principle") has this
+same-batch-violates-an-invariant shape — project-label exclusivity and
+work-allocation/event time fields are the two known cases; a future feature
+that adds a new invariant should ask this same question (per (b)/(c) above)
+before assuming plain per-field LWW is enough.
+
+### 8. Sync protocol shape
+
+Two phases per sync round, always in this order (push before pull, so a
+device's own changes are already applied server-side and can't be
+immediately re-conflicted against by its own pull):
+
+- **Push:** the client sends every unacknowledged op in its local outbox,
+  oldest-HLC-first per entity. The server applies each per §§6–7, records
+  applied `op_id`s (§5), and returns, per op, either "applied" or "applied
+  with conflict" (§7b/c) plus the conflict record's id.
+- **Pull:** the client sends the HLC of the newest change it has already
+  observed from the server (its sync cursor, persisted in IndexedDB). The
+  server returns every field-level change with a stored HLC newer than that
+  cursor — an incremental delta, never a full-table dump — which the client
+  applies to its local IndexedDB store the same way §6 applies changes
+  server-side (the client's local copy is just another HLC-tracked replica).
+  If the client's cursor predates the tombstone GC horizon (§4), the server
+  instead responds "cursor too old" and the client performs a full resync
+  (fetch-everything-fresh, same shape as the existing `/export/data.json` /
+  `restore_backup_payload` round-trip, then reset its cursor to "now").
+
+The UI's status indicator (`ofline-first-pwa.md`: offline / synchronizing /
+pending changes / synchronized) is driven directly off outbox size (pending
+changes > 0), in-flight push/pull state, and the browser's own
+online/offline events — no new signal needed beyond what the outbox and the
+last push/pull result already carry.
+
+### 9. New server-side state this requires
+
+Purely sync-infrastructure metadata, not new domain object types — per
+`features/architecture.md` §1.4's local-only-module rule, this is config/
+bookkeeping the pool itself can't derive, the same category `task_checklist_
+items`/`task_completions` already fall into, not a fourth kind of entity:
+
+- **`field_versions(entity_type, entity_uid, field_name, hlc_physical,
+  hlc_logical, hlc_device_id)`** — the per-field HLC shadow store §6 needs;
+  `tasks`/`events`/`contacts` themselves gain no new columns, this is a
+  side table keyed off the existing `uid`.
+- **`sync_devices(device_id, last_pushed_hlc, last_pulled_hlc, last_seen_at)`**
+  — one row per device that has ever synced; the pull cursor (§8) and the
+  eventual "last sync time for connected endpoints/devices" line Data
+  Health's own page already reserves a placeholder for (`src/data_health.py`'s
+  `health_summary` `sync` key, shipped 2026-08-14 as
+  `{"configured": false, ...}` — this is what flips it to configured).
+- **`sync_conflicts(id, entity_type, entity_uid, field_name, losing_value,
+  losing_hlc, winning_hlc, created_at, resolved_at)`** — §7b/c's surfaced
+  conflicts; a "Sync conflicts" list reads this table, lets the person
+  restore the losing value (a normal new `field_set` op with a fresh HLC,
+  not special-cased) or dismiss it (`resolved_at` set, value discarded for
+  good).
+- The applied-`op_id` ledger (§5) can live as a column/index on
+  `field_versions`/a small dedicated table — an implementation detail for
+  the slice that builds it, not a modeling decision this doc needs to fix.
+
+### 10. Explicitly out of scope
+
+- **Real-time collaborative editing (CRDTs).** Not needed without multi-user
+  — HLC/LWW is sufficient for one person across N devices
+  (`abandoned.md`'s existing "deferred systems" table already rules this
+  out for the same reason).
+- **Multi-user / sharing.** Single-user remains load-bearing; this design
+  assumes every device syncing belongs to the same person.
+- **Server-authoritative conflict resolution UI beyond a plain list.** §9's
+  Sync conflicts list is deliberately minimal (see the losing value, restore
+  or dismiss) — no diff view, no three-way merge editor.
+
+### 11. Acceptance line and implementation slices
+
+**Acceptance:** a task/event/contact created, edited, or deleted on Device A
+while offline is visible in the same state on Device B after both have been
+online at the same time, with no field silently lost — either it applied
+cleanly (the common case) or it's sitting in Sync conflicts (the two flagged
+exception cases). Restoring from an old client cursor never resurrects a
+tombstoned row past the GC horizon; it forces a full resync instead.
+
+Kept as separable slices — the server-side sync engine has no browser
+dependency and is fully testable with this app's existing router-function-
+call pytest convention; the PWA client is a second, independent build on top
+of it:
+
+1. **Field-HLC shadow store + sync API skeleton** — **shipped 2026-08-14.**
+   `field_versions`, `sync_devices`, `sync_applied_ops` (the §5 idempotency
+   ledger), the push/pull endpoints (§8, `routers/sync_api.py`'s `POST
+   /api/sync/push`/`/api/sync/pull`) and their conflict-detection logic (§6,
+   `src/offline_sync.py`), tested entirely server-side (no client, no
+   browser) by POSTing synthetic op batches and asserting the resulting
+   field values/HLCs. `tasks`/`events`/`contacts` gained a `deleted_at`
+   column (§4's tombstone) — the one deliberate departure from §9's "no new
+   columns" framing, needed so a delete has somewhere to actually live;
+   `field_versions` itself still stores no value, only each field's HLC,
+   exactly as §9 describes. §7a (label add/remove commutativity) and §4 (an
+   edit newer than the tombstone un-deletes) both fell out of the same
+   per-field apply path with no special-casing. Deliberately NOT in this
+   slice, per its own scope: the `sync_conflicts` table and §7b/c's two
+   conflict-*surfacing* exceptions (event time concurrent-edit detection,
+   single-project-per-task re-validation) — ordinary §6 LWW applies to every
+   field for now, including `start_at`/`end_at`; slice 2 wires those two
+   exceptions into this slice's apply path. No PWA/browser client calls this
+   API yet. 19 new tests (`test_offline_sync.py`), full suite 1250 passed.
+2. **Sync conflicts surface** — **shipped 2026-08-14.** `sync_conflicts`
+   table + `/settings/sync-conflicts` (routers/settings.py, a new hub
+   category adjacent to Data health), listing every unresolved conflict
+   with Restore (re-applies the losing value as a fresh `field_set`/
+   `label_add` op through the normal `apply_op` path, given a synthetic
+   `"settings-restore"` device id and a `now` HLC so it always outranks
+   every real device's prior write) and Dismiss (`resolved_at` set, value
+   discarded for good) actions. Wired both §7b/c exceptions into slice 1's
+   `src/offline_sync.py` apply path: (b) `_apply_field_write` detects a
+   genuinely concurrent `start_at`/`end_at` edit on an `event` via a
+   deliberate simplification instead of full causal/version-vector
+   tracking (out of scope, §10) — per §3's HLC merge rule, a losing write
+   can only come from a *different* device_id than the current winner if
+   neither had observed the other's write yet, so "different device_id on
+   both sides of a losing write" is concurrency's own observable
+   signature; a losing write from the *same* device as the winner is an
+   ordinary reordered/replayed op, not a conflict, and stays a plain §6
+   stale no-op. (c) `apply_batch` re-validates single-project-per-task
+   after every op in a batch has applied (not per-op, since each
+   individual `label_add` is independently valid per §7a) — the highest-
+   HLC `label_add` for a task wins, any pre-existing project label from
+   before the batch outranks every in-batch addition outright (no in-batch
+   HLC to lose against), and every losing add is reverted from
+   `object_labels` and recorded as a conflict, with that op's own result
+   status patched to `"rejected_invariant"`. 11 new tests extending
+   `test_offline_sync.py`, plus a hub-categories fixture update in
+   `test_phase8_settings_hub.py`, full suite 1261 passed.
+3. **PWA shell** — **shipped 2026-08-14.** `static/manifest.webmanifest`
+   (name/icons/`display: "standalone"`/`start_url: "/"`) linked from
+   `base.html`; `static/sw.js`, served at the root path by new
+   `routers/pwa.py` (`GET /sw.js`, not `/static/sw.js` — a service
+   worker's default scope is the directory of the URL it's fetched from,
+   so serving it under `/static/` would cap its scope at `/static/*`
+   instead of the whole app) and registered by `static/pwa.js` (loaded
+   globally in `base.html`, last, as a progressive enhancement). `sw.js`
+   precaches the app shell — every static asset `base.html` loads on
+   every page, plus a new `GET /offline` fallback page
+   (`templates/offline.html`, extends `base.html` so the tabbar/nav
+   chrome renders identically offline, ordinary content is just an honest
+   "you're offline" message since there's no local data layer yet) — and
+   serves it for any navigation request that fails with the network down,
+   satisfying `ofline-first-pwa.md`'s "opening the application offline
+   should lead directly to the normal interface rather than an error
+   page" line, for the app-shell-only scope this slice covers. Static
+   assets get a cache-first strategy (safe because every asset URL is
+   already cache-busted by `deps.py`'s `static_url()` — a changed file is
+   requested under a new URL, never silently serves stale content under
+   an old one); real page navigations stay network-first, since this
+   app's pages are server-rendered from live SQLite state and must never
+   serve a stale cached copy when the network is actually reachable. No
+   sync, no IndexedDB, no local read/write path — deliberately deferred
+   to slices 4-5. The first genuinely browser-dependent piece of 1.8:
+   service worker install/fetch behavior can't be exercised by this app's
+   router-function-call pytest convention, so `test_pwa_shell.py`'s 10
+   tests cover everything that *is* server-verifiable (manifest validity,
+   every icon it references existing on disk, `/sw.js`'s content-
+   type/no-store header, the precache list only naming assets that exist,
+   `/offline` rendering full chrome, and `routers/pwa.py` actually being
+   wired into `main.py`) — actual install/offline-navigation behavior
+   needs manual browser verification, not done as part of this slice.
+   Full suite 1271 passed.
+4. **Local IndexedDB store + read path** — **shipped 2026-08-14.**
+   `static/offline_db.js`: an IndexedDB database (`cc-offline`) mirroring
+   `tasks`/`events`/`contacts` (one row per entity, written incrementally
+   field-by-field — never a whole-row replace) plus a `field_hlc` store
+   that replays the exact same §6 per-field-HLC-wins rule the server
+   applies to `field_versions`, so a pull can never regress a field even
+   if changes ever arrived out of order (today they don't —
+   `offline_sync.pull()` already returns them HLC-ascending — but slice
+   5's own local writes will need this comparison to already be correct),
+   and a `meta` store for `device_id` (generated once via
+   `crypto.randomUUID()`, §1's client-generation rule) and the pull
+   cursor. `static/offline_sync_client.js` is §8's pull half, client-side:
+   `POST /api/sync/pull` with the stored cursor, apply the returned
+   changes into the mirror, advance the cursor, on the page's `load`
+   event and the browser's `online` event. Deliberately push-free (no
+   local writes exist yet to push) and retry-free (§5's backoff is slice
+   6) — a single best-effort attempt per trigger, silent no-op on
+   failure. A `full_resync` response is handled as "clear the cursor and
+   pull again once," which today is exactly correct because nothing has
+   ever been physically purged (§4's GC is slice 7) — a `None` cursor
+   pull already returns everything. Loaded globally in `base.html` (not
+   just on `/offline`) so the mirror is already warm from ordinary online
+   browsing by the time the network actually drops. `templates/
+   offline.html` gained `#offline-local-data`, rendered by new
+   `static/offline_shell.js` straight from the mirror (`getAllTasks`/
+   `getAllEvents`, filtering out soft-deleted rows) with zero network
+   calls of its own — open tasks by due date and upcoming events by start
+   time, reusing `search.html`'s own plain `.checklist`/`.checklist-row`
+   list styling rather than inventing a second one. Deliberately partial:
+   labels/tags aren't mirrored (`object_label` ops are commutative, §7a,
+   and never flow through the field-HLC pull this slice mirrors), so the
+   local list shows title/due/time only, no project pill — an honest
+   scope line, not a bug. The static "nothing synced yet" empty-state
+   markup stays as the fallback for a device that has never completed a
+   pull. `sw.js`'s own precache list (bumped to `cc-shell-v2`) grew the
+   three new scripts, so they're available to `/offline` even fully
+   offline. Verified two ways: `test_pwa_shell.py`'s structural checks
+   (same "read the JS source, assert the shape" level as slice 3's own
+   sw.js tests — 6 new tests, full suite 1277 passed), plus a one-off
+   Node + `fake-indexeddb` smoke run (not part of the pytest suite, no
+   new runtime dependency added to it) exercising `offline_db.js`'s real
+   merge logic end-to-end: newer-HLC writes apply, older-HLC writes are
+   rejected, a `deleted_at` write removes the row from `getAllTasks`, and
+   `device_id`/cursor round-trip through IndexedDB correctly. Still no
+   local writes anywhere (slice 5) — this slice is read-only, same
+   boundary as `ofline-first-pwa.md`'s "viewing... should be executed
+   locally" without yet covering "creating and editing."
+5. **Local write path + outbox** — **shipped 2026-08-14.** New
+   `static/offline_write.js`: offline create/complete/delete on a task now
+   queues a real §2 op (`createTask`/`updateTaskField`/`deleteTask`) into a
+   new IndexedDB `outbox` store (`offline_db.js`'s `enqueueOp`/
+   `getOutboxOps`/`getOutboxCount`) instead of failing, and applies it
+   immediately to the local mirror through the exact same per-field-HLC-
+   wins path a pull already uses (`applyChanges`) -- an optimistic,
+   same-device write can never lose to itself, since a freshly minted HLC
+   is always newer than anything already stored for that field.
+   `offline_db.js` also gained this device's own §3 HLC clock -- nothing
+   through slice 4 ever needed to *mint* an HLC, only apply server-supplied
+   ones from pull(): `nextHlc()` (bump the logical counter within the same
+   millisecond, else reset against the new physical time) and `mergeHlc()`
+   (the receive-side half, called by `offline_sync_client.js` after every
+   pull so a write minted afterward always sorts strictly after everything
+   just observed from the server). `create` stamps every field with one
+   shared HLC per §2's own "stamped with one HLC" line; a `field_set`
+   shares its HLC with the `updated_at` write that rides along with it.
+   Deliberately scoped to tasks only (create/mark-complete/delete) --
+   events/contacts get no offline write UI yet, matching this slice's own
+   "extends local-read coverage" framing rather than rebuilding every
+   entity type's write surface at once. `/offline`'s task list
+   (`offline_shell.js`) gained an inline "add a task" form and per-row
+   complete/delete buttons (reusing `.checklist-check`/`.checklist-delete`,
+   the same interactive-row classes `task_detail.html`'s own checklist
+   widget already established, rather than a new style), plus an honest
+   "N local changes saved on this device, waiting for sync support" note
+   driven straight off the outbox count -- no claim that anything syncs
+   yet, since slice 6 is what will. A device that has never completed a
+   pull can now still create its very first task offline (slice 4's
+   render-nothing-until-`lastSynced` gate was removed for the task
+   section; only the events list, still read-only, keeps that gate since
+   there's no offline way to create one). Found and fixed a real bug via a
+   one-off Node + fake-indexeddb smoke script (same pattern as slice 4's,
+   not added to the pytest suite): `getOutboxOps()`'s plain
+   `objectStore.getAll()` returned ops in IndexedDB's default key-order
+   (the store's keyPath is a random `op_id` UUID), not the order they were
+   queued -- fixed by sorting explicitly on each op's own top-level `hlc`
+   (also newly stamped onto `create`/`field_set` ops, not just `delete`,
+   for exactly this reason). `sw.js`'s precache list gained
+   `/static/offline_write.js` (bumped to `cc-shell-v3`). 8 new tests
+   extending `test_pwa_shell.py`'s structural-check convention, full suite
+   1285 passed.
+6. **Sync engine** — **shipped 2026-08-14.** `static/offline_sync_client.js`
+   grew a push half alongside its existing pull half: `pushOnce()` sends
+   every op still in the outbox (`offline_db.js`'s `getOutboxOps`, already
+   HLC-ordered) to `POST /api/sync/push`, then removes every acknowledged
+   `op_id` from the outbox via a new `offline_db.js::removeOutboxOps` —
+   acknowledging drops the op immediately rather than modeling a separate
+   "acknowledged but retained" state (§2 explicitly allows either). `syncNow()`
+   is §8's own ordering rule (push, then pull, always in that order) wrapping
+   both halves. §5's retry policy: exponential backoff with jitter capped at
+   30s (`scheduleRetry`/`attempt`), reset to the base delay on the browser's
+   `online` event or any successful round; a local write (`offline_write.js`'s
+   `submitOp`) now calls the new `requestSync()` immediately after queuing,
+   rather than waiting for the next periodic retry, if the device is already
+   online. Status is deliberately *not* a stored state machine — new
+   `getStatus()` computes `offline`/`synchronizing`/`pending`/`synced` fresh
+   every time from live `{navigator.onLine, in-flight, outbox size}`, so it
+   can never drift from what's actually true, and dispatches
+   `cc-offline-status-change` whenever it might have changed. New
+   `static/offline_status.js` is the small indicator itself (`ofline-first-
+   pwa.md`'s own line) — a pure renderer with no IndexedDB/network calls of
+   its own, listening only for that event; hidden entirely in the `synced`
+   state ("successful background sync stays unobtrusive, while errors are
+   visible") and shown as a small top-right pill otherwise. `data_health.py`'s
+   `health_summary`'s `sync` field, a fixed `{"configured": false}` placeholder
+   since slice 1, now reflects real `sync_devices` rows via a new
+   `db.list_sync_devices` — Settings > Data health finally flips to
+   "Configured" once any device has actually synced, per §9's own note that
+   this was the point of leaving the placeholder's shape unchanged all along.
+   `sw.js`'s precache list gained `offline_status.js` (bumped to
+   `cc-shell-v4`). Verified two ways: `test_pwa_shell.py`'s structural checks
+   (8 new tests) plus a one-off Node + fake-indexeddb smoke script (same
+   pattern as slices 4-5's, not added to the pytest suite) with a faked
+   `fetch` exercising a full push-drains-the-outbox / failed-push-keeps-the-
+   op / recovery-drains-it-again / offline-skips-the-network-entirely
+   sequence end to end. Full suite 1293 passed.
+7. **Tombstone GC** — **shipped 2026-08-14.** The retention horizon (§4)
+   and the forced-full-resync path for a stale cursor were already in place
+   since slice 1 (`offline_sync.pull`'s `is_stale` check); what this slice
+   adds is the actual physical purge those safety checks were sized around.
+   New `offline_sync.purge_expired(conn, retention_days, now_ms)`: for
+   every entity whose tombstone (`deleted_at`'s own stored HLC in
+   `field_versions`, not a plain string-timestamp comparison) is older than
+   the horizon, it's physically removed via the *existing*
+   `db.delete_task`/`delete_event`/`delete_contact` (not a raw `DELETE`,
+   so related-row cleanup — `object_labels`, `event_task_relations`, ... —
+   happens exactly the same way it does for any other hard delete in this
+   app) plus its now-orphaned `field_versions` rows; an edit newer than the
+   tombstone (an un-delete, §4) naturally falls outside the query with no
+   special-case code, since that edit already advanced `field_versions`'
+   own `deleted_at` HLC past the old tombstone's. A second, independent
+   half purges `sync_applied_ops` rows older than the horizon (§5's
+   idempotency ledger — nothing plausibly retries a push from that long
+   ago). New `data_health.py` wrapper functions
+   (`sync_gc_retention_days`/`set_sync_gc_retention_days`/`run_sync_gc`/
+   `sync_gc_last_run`) give this the same "GUI and CLI share one
+   implementation, no cron — check lazily on a natural request path"
+   treatment as every other Data health maintenance action: `routers/
+   sync_api.py`'s `pull` handler now calls `run_sync_gc` before computing
+   its own response (a pull is the sync engine's most natural heartbeat);
+   Settings > Data health gained a "Sync cleanup retention" preset field
+   (0/14/30/90/180 days, same fixed-choices-not-free-typed-number
+   convention as the existing auto-archive field) and a "Run cleanup now"
+   button that always runs regardless of that setting; `scripts/
+   data_health.py` gained a `sync-gc` subcommand. Also closed a real
+   correctness gap this slice's own acceptance line demanded: once the
+   server can physically purge an old tombstone, a plain "re-pull and
+   applyChanges" on a `full_resync` response could never tell a badly-
+   stale device that an already-purged entity is gone (there's nothing
+   left server-side to say so) — new `offline_db.js::clearMirror` wipes
+   the local `tasks`/`events`/`contacts`/`field_hlc` stores (leaving the
+   outbox and device identity untouched) before a full resync re-pulls,
+   so "start over" actually means starting over rather than merging into
+   a mirror that might still be holding something the server has since
+   forgotten. Found and fixed a second real bug via a one-off Node +
+   fake-indexeddb smoke script built specifically to exercise a genuine
+   full-resync round trip end to end (every prior smoke script's fake
+   pull response had used a `null` cursor, which never touched this code
+   path): `offline_db.js::mergeHlc` had been destructuring its argument as
+   a `[physical, logical, device_id]` array since slice 5, but every real
+   caller passes the `{physical, logical, device_id}` *dict* payload shape
+   the wire protocol actually uses — it silently threw against any real
+   pull response carrying a non-null cursor. This is the last of 1.8's
+   7 planned slices — **1.8 is now fully shipped**
+   (`pyproject.toml` bumped straight to `1.8.0`; a pre-existing gap
+   found while doing so: `pyproject.toml` had stayed at `1.3.0` since
+   1.4, despite `plans/STATE.md`'s own session logs claiming a bump at
+   the end of each of 1.4/1.5/1.6/1.7 — those bumps were never actually
+   committed. Not investigated further/not backfilled; this slice's own
+   bump catches the version number up to the app's real, current feature
+   set). 16 new tests (12 extending `test_offline_sync.py`/
+   `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
+   1309 passed.
 
 ## The data model principle
 

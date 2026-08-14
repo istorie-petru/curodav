@@ -1266,6 +1266,11 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .pill-yellow{background-color:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
 .inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:128px;}
 .inline-date:hover{border-color:var(--control-border);}
+/* Holidays table (settings_holidays.html) -- title cell, same idea as
+   .inline-date above but a plain text input instead of a date picker. */
+.inline-text{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:100%; min-width:120px;}
+.inline-text:hover{border-color:var(--control-border);}
+.holiday-calendar-select{margin:0;}
 .th-sort{color:inherit; text-decoration:none;}
 .th-sort:hover{color:var(--fg-primary); text-decoration:none;}
 
@@ -1326,6 +1331,14 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .checklist-delete{margin-left:auto;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
+/* Work sessions card (task_detail.html/task_form.html, _task_work_allocations
+   .html): the "+" button sits at the end of the "Work sessions" header
+   (margin-left:auto inside a flex header), and each session row's date+hour
+   sits at the row's end (the .checklist-text's flex:1 pushes it right,
+   before the remove button). */
+.work-sessions-head{display:flex; align-items:center; gap:6px;}
+.work-sessions-head .work-session-add{margin-left:auto;}
+.session-when{color:var(--fg-secondary); font-size:var(--text-caption); white-space:nowrap;}
 
 /* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
    -- the merged Subtasks+relations detail card; 1.2 removed the Subtasks
@@ -1700,7 +1713,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event{
   position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
   font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
-  cursor:grab; touch-action:none; z-index:3;
+  cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; z-index:3;
 }
 .time-event:hover{text-decoration:none; filter:brightness(1.08);}
 /* While actively dragging, the block should look locked to the grid it's
@@ -1741,16 +1754,67 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event.work-allocation .work-allocation-delete .icon-btn:hover{opacity:1;}
 .allday-task.context-event{opacity:.5;}
 
-.project-calendar-layout{display:flex; gap:16px; align-items:flex-start;}
+/* align-items:stretch (not flex-start) on both axes by design -- row layout:
+   the unscheduled sidebar stretches to match the calendar card's fixed
+   viewport height (they share the same --calendar-chrome-h budget) instead
+   of hanging at its content height; column layout below 900px: the calendar
+   card stretches to the container's full width so it scales horizontally
+   rather than collapsing to its content width (flex-start was making it sit
+   as a narrow strip beside the full-width sidebar). */
+.project-calendar-layout{display:flex; gap:16px; align-items:stretch;}
 .project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto;}
 .project-calendar-grid{flex:1; min-width:0;}
 .unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
+/* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
+   partial on the planning grids). ONE line (2026-08-14 design): a project
+   pill (icon + name) then the task title on the left, the session-count
+   stepper on the right -- no hours readout, no due date, no grip. This is a
+   POINTER-based drag source (not native HTML5 DnD -- see project_calendar.js
+   interaction 1), so it needs touch-action:none + user-select:none for
+   reliable pointermove on touch and to keep a drag from also selecting text. */
 .unscheduled-task-item{
-  display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px;
-  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab; font-size:13px;
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px;
+  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
+  font-size:13px; touch-action:none; user-select:none; -webkit-user-select:none;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
+.unscheduled-task-item.item-dragging{opacity:.5;}
+.unscheduled-project-pill{
+  flex:none; display:inline-flex; align-items:center; gap:4px; max-width:130px;
+  padding:2px 9px; border-radius:999px; background:var(--accent-neutral-subtle);
+  color:var(--fg-primary); font-size:11px; font-weight:600; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.unscheduled-project-pill .icon{flex:none;}
+.unscheduled-task-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.unscheduled-stepper{flex:none; display:flex; align-items:center; gap:2px;}
+.unscheduled-stepper form{margin:0;}
+.unscheduled-step-btn{width:20px; height:20px;}
+.unscheduled-count{min-width:18px; text-align:center; font-size:12px; font-weight:600; color:var(--fg-secondary);}
+/* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
+   pointer-following copy of the source item while dragging -- hidden until
+   the gesture passes the drag threshold, so a plain click isn't mistaken
+   for a drop. pointer-events:none keeps the pointermove stream flowing to
+   the drag handlers on document. */
+.drag-ghost{
+  position:fixed; z-index:1000; pointer-events:none; opacity:.85; display:none;
+  width:220px; max-width:80vw;
+  background:var(--bg-elevated); border:1px solid var(--accent); border-radius:8px;
+  box-shadow:0 6px 16px rgba(0,0,0,.18);
+}
 .project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
+/* The planning grids (project_calendar.html, week_planning.html,
+   calendar_timetable.html) reuse .time-col, whose cursor:copy is the
+   Calendar grid's "click-drag to create an event" affordance (calendar.js)
+   -- wrong on the planning surfaces, where empty-space drag isn't a create
+   gesture at all (only dropping an unscheduled task onto a column is, and
+   that task row itself already carries the grab cursor). */
+.project-calendar-col{cursor:default;}
+/* Drag-a-scheduled-block-onto-the-panel-to-unschedule-it (project_calendar.js
+   interaction 3): the unscheduled-work panel lights up while a dragged block
+   is over it, the same visual vocabulary as a column's .drop-hover, so the
+   inverse gesture reads as clearly as the forward one. */
+.project-calendar-unscheduled.unschedule-drop-hover{outline:2px dashed var(--accent); outline-offset:-2px; background:var(--accent-neutral-subtle);}
 
 @media (max-width:900px){
   .project-calendar-layout{flex-direction:column;}
@@ -3485,3 +3549,38 @@ body.command-palette-open{overflow:hidden;}
    side rather than nested (HTML forbids a form inside a form); everything
    stays on one tight row (no wrap). */
 .profile-photo-controls{display:flex; align-items:center; gap:var(--space-2);}
+
+/* Offline shell's local-mirror read path (templates/offline.html,
+   static/offline_shell.js, 1.8 slice 4). */
+.offline-synced-at{font-size:var(--text-footnote); color:var(--fg-tertiary); margin-bottom:var(--space-4);}
+.offline-section-title{font-size:var(--text-headline); font-weight:600; margin:var(--space-5) 0 var(--space-2);}
+/* Offline shell's local *write* path (offline_write.js, 1.8 slice 5) --
+   the outbox pending-changes note and the inline "add a task" form, both
+   entirely client-rendered by offline_shell.js so they get no server-side
+   template counterpart. */
+.offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
+.offline-add-task-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
+.offline-add-task-form input[type="text"]{flex:1;}
+
+/* Sync status pill (offline_status.js, 1.8 slice 6) -- ofline-first-
+   pwa.md's "small status indicator." Hidden by default/when synced (only
+   `.is-visible` shows it -- successful background sync stays unobtrusive,
+   per §8); global, not /offline-specific, since a retry can be stuck
+   failing no matter which page is open. Top-right corner, same fixed-
+   overlay convention as .toast-stack/.fab but a small pill rather than a
+   stack, since there's ever only one of these at a time. */
+.sync-status-pill{
+  display:none; position:fixed; top:var(--space-3); right:var(--space-3); z-index:210;
+  align-items:center; gap:6px; background:var(--bg-elevated); border:1px solid var(--separator);
+  border-radius:var(--radius-pill); padding:5px 12px; font-size:var(--text-caption);
+  color:var(--fg-secondary); box-shadow:var(--elevation-2);
+}
+.sync-status-pill.is-visible{display:flex;}
+.sync-status-dot{width:7px; height:7px; border-radius:50%; background:var(--fg-tertiary); flex:none;}
+.sync-status-pill.is-offline .sync-status-dot{background:var(--warning);}
+.sync-status-pill.is-pending .sync-status-dot{background:var(--warning);}
+.sync-status-pill.is-synchronizing .sync-status-dot{background:var(--accent); animation:sync-status-pulse 1s ease-in-out infinite;}
+@keyframes sync-status-pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+@media (max-width:720px){
+  .sync-status-pill{top:auto; bottom:calc(72px + env(safe-area-inset-bottom, 0px)); right:var(--space-3);}
+}

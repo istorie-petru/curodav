@@ -13,6 +13,7 @@
             <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
             <a class="seg-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
             <a class="seg-btn active" href="/calendar/week?date_={{ monday.isoformat() }}{{ _lq }}">Week</a>
+            <a class="seg-btn" href="/calendar/timetable?date_={{ monday.isoformat() }}{{ _lq }}">Timetable</a>
             <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
         </div>
         <div class="spacer"></div>
