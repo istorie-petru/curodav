@@ -398,6 +398,18 @@ class TestContactFormAvatarUploadAndFieldOrder:
         ]:
             assert expected in js
 
+    def test_recurrence_picker_js_ends_is_a_separate_dropdown(self):
+        """Direct follow-up ("could we make ends another drop down menu?")
+        -- Ends is its own `.multiselect` sibling of the FREQ preset
+        dropdown, not a sub-panel nested inside it."""
+        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
+        js = js_path.read_text(encoding="utf-8")
+        for expected in [
+            'recurrence-ends-select',
+            'endsWrap.className = "multiselect widget-list-multiselect recurrence-ends-select"',
+        ]:
+            assert expected in js
+
     def test_reminders_picker_js_defines_the_expected_presets(self):
         js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "reminders_picker.js"
         js = js_path.read_text(encoding="utf-8")

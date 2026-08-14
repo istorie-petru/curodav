@@ -118,23 +118,41 @@
       radios.push(radio);
     });
 
-    // "Ends" sub-panel -- only meaningful once a real preset (not "Does
-    // not repeat") is selected. Direct feedback: recurrence needs a way to
-    // stop besides "forever" -- "Never" (no suffix), "On date" (UNTIL=,
-    // the app's existing dashed-date convention -- see parseValue's own
-    // comment above), or "After N occurrences" (COUNT=).
-    const endsDivider = document.createElement("div");
-    endsDivider.className = "multiselect-divider";
-    panel.appendChild(endsDivider);
+    wrap.appendChild(panel);
 
-    const endsGroup = document.createElement("div");
-    endsGroup.className = "recurrence-ends-group";
-    endsGroup.hidden = true; // toggled by sync() below
+    // "Ends" -- its own separate dropdown (same `.multiselect` markup
+    // contract as `wrap` above, so app.js's generic multiselect click/
+    // portal/position handling picks it up for free) rather than a
+    // sub-panel nested inside the FREQ dropdown -- direct feedback ("could
+    // we make ends another drop down menu?"). Only meaningful once a real
+    // preset (not "Does not repeat") is selected -- hidden entirely
+    // otherwise. "Never" (no suffix), "On date" (UNTIL=, the app's
+    // existing dashed-date convention -- see parseValue's own comment
+    // above), or "After N occurrences" (COUNT=).
+    const endsWrap = document.createElement("div");
+    endsWrap.className = "multiselect widget-list-multiselect recurrence-ends-select";
+    endsWrap.setAttribute("data-ms", "");
+    endsWrap.setAttribute("data-ms-mode", "single");
+    endsWrap.setAttribute("data-ms-label", "ends");
+    endsWrap.hidden = true; // toggled by sync() below
 
-    const endsHeading = document.createElement("div");
-    endsHeading.className = "recurrence-ends-heading";
-    endsHeading.textContent = "Ends";
-    endsGroup.appendChild(endsHeading);
+    const endsTrigger = document.createElement("button");
+    endsTrigger.type = "button";
+    endsTrigger.className = "multiselect-trigger ms-trigger";
+    endsTrigger.setAttribute("aria-haspopup", "true");
+    endsTrigger.setAttribute("aria-expanded", "false");
+    const endsSummary = document.createElement("span");
+    endsSummary.className = "ms-summary";
+    endsTrigger.appendChild(endsSummary);
+    const endsCaret = document.createElement("span");
+    endsCaret.className = "filter-caret";
+    endsCaret.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>';
+    endsTrigger.appendChild(endsCaret);
+    endsWrap.appendChild(endsTrigger);
+
+    const endsPanel = document.createElement("div");
+    endsPanel.className = "multiselect-panel ms-panel";
+    endsWrap.appendChild(endsPanel);
 
     function endsOption(value, labelText, extraNode) {
       const label = document.createElement("label");
@@ -148,7 +166,7 @@
       span.textContent = labelText;
       label.appendChild(span);
       if (extraNode) label.appendChild(extraNode);
-      endsGroup.appendChild(label);
+      endsPanel.appendChild(label);
       return radio;
     }
 
@@ -184,12 +202,16 @@
       neverRadio.checked = true;
     }
 
-    panel.appendChild(endsGroup);
-    wrap.appendChild(panel);
-
+    // Both dropdowns are siblings of the same original parent -- insert
+    // `endsWrap` before `input` (still a plain child of that parent at
+    // this point) so it lands right after `wrap`, *then* move `input`
+    // inside `wrap` last (see the header comment: `input` stays the
+    // permanent, hidden source of truth either dropdown writes into).
+    const originalParent = input.parentNode;
     input.setAttribute("autocomplete", "off");
     input.style.display = "none";
-    input.parentNode.insertBefore(wrap, input);
+    originalParent.insertBefore(wrap, input);
+    originalParent.insertBefore(endsWrap, input);
     wrap.appendChild(input);
 
     function checkedPreset() {
@@ -202,6 +224,16 @@
       return "";
     }
 
+    function updateEndsSummary() {
+      if (untilRadio.checked && untilInput.value) {
+        endsSummary.textContent = "Ends " + untilInput.value;
+      } else if (countRadio.checked && countInput.value) {
+        endsSummary.textContent = "Ends after " + countInput.value + (countInput.value === "1" ? " occurrence" : " occurrences");
+      } else {
+        endsSummary.textContent = "Never ends";
+      }
+    }
+
     function updateSummary() {
       const checked = checkedPreset();
       if (!checked) {
@@ -210,16 +242,7 @@
         summary.textContent = currentValue || "Does not repeat";
         return;
       }
-      const preset = PRESETS.find((p) => p.value === checked.value);
-      let text = preset.label;
-      if (preset.value) {
-        if (untilRadio.checked && untilInput.value) {
-          text += " until " + untilInput.value;
-        } else if (countRadio.checked && countInput.value) {
-          text += ", " + countInput.value + "x";
-        }
-      }
-      summary.textContent = text;
+      summary.textContent = PRESETS.find((p) => p.value === checked.value).label;
     }
 
     function sync() {
@@ -230,8 +253,9 @@
       // else: nothing checked (unmatched existing value) -- leave the
       // hidden input's value untouched until the user actually picks a
       // preset.
-      endsGroup.hidden = !checked || !checked.value;
+      endsWrap.hidden = !checked || !checked.value;
       updateSummary();
+      updateEndsSummary();
     }
     sync();
 

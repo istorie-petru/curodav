@@ -103,6 +103,17 @@ a preset is actually selected, so opening and closing the form can never
 silently clobber a rule this picker doesn't model. Selecting any preset does
 replace it, same as switching between any two presets always has.
 
+**Ends is its own dropdown** (side work, shipped 2026-08-14): direct
+follow-up ("could we make ends another drop down menu?") — the Ends choice
+(Never/On date/After N occurrences) moved out of a sub-panel nested inside
+the FREQ dropdown into a second, separate `.multiselect` dropdown
+(`recurrence-ends-select`), a sibling of the FREQ preset dropdown, reusing
+the exact same markup contract (`.multiselect-trigger`/`.multiselect-panel`)
+so `app.js`'s generic multiselect click/portal/position handling picks it up
+for free — no JS changes needed there. Hidden entirely until a real preset
+(not "Does not repeat") is selected, same rule as before, just applied to
+`endsWrap.hidden` instead of a nested group's.
+
 **Non-working-day policy** (1.6, "Generalized recurrence and the non-working-
 day policy"): any recurring event can set `holiday_calendar` (a named,
 reusable holiday calendar — `db.list_holiday_calendar_names`/

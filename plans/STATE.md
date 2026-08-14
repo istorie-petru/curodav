@@ -919,6 +919,19 @@ session, right before the final commit of that session.
   `features/calendar.md`'s Recurrence section. Full suite 1312 passed (no
   new tests — pure removal, existing structural/server-pass-through tests
   already cover the remaining shape).
+- **Shipped:** side work — **"Ends" split into its own dropdown**, complete
+  (2026-08-14) — direct follow-up ("could we make ends another drop down
+  menu?"). The Ends choice (Never/On date/After N occurrences) moved out of
+  a sub-panel nested inside the FREQ preset dropdown into a second, separate
+  `.multiselect` dropdown (`recurrence-ends-select`), a sibling of the FREQ
+  dropdown reusing the same trigger/panel markup contract so `app.js`'s
+  generic multiselect click/portal/position handling picks it up with no JS
+  changes there. Still hidden entirely until a real preset (not "Does not
+  repeat") is selected — same rule, just driven off `endsWrap.hidden`
+  instead of a nested group. See `features/calendar.md`'s Recurrence
+  section. 1 new structural test
+  (`test_recurrence_picker_js_ends_is_a_separate_dropdown`), full suite 1313
+  passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
