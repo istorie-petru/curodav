@@ -137,6 +137,13 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
             # push (deleted mid-materialize) -- just skip it, the next tick
             # will naturally not see it as a member either.
             continue
+        if entity_type == "event" and not row.get("start_at"):
+            # Undated work-session placeholders (the Work sessions "+" on a
+            # task card) have no date yet -- nothing publishable until a
+            # session is placed onto a grid slot. The uid stays in
+            # member_ids, so this stays idempotent: it is skipped every
+            # tick and never ends up in the deleted set either.
+            continue
         push_row = dict(row)
         push_row[path_field] = collection_path
         _SAVE_ROW[entity_type](bridge, push_row)

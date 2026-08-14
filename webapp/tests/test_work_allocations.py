@@ -111,6 +111,41 @@ class TestCreateAndList:
         allocations = db.list_work_allocations_for_task(conn, "t1")
         assert [a["start_at"] for a in allocations] == ["2026-08-17T16:00:00", "2026-08-20T14:00:00"]
 
+    def test_create_work_allocation_without_dates_makes_undated_session(self, conn):
+        """The task modal's "+" button creates a work session with NO date --
+        an unscheduled placeholder event (start/end NULL), still a real
+        work-allocation session of the task."""
+        _seed_task(conn, "t1")
+        event_uid = db.create_work_allocation(conn, "t1")
+        event = db.get_event(conn, event_uid)
+        assert event["start_at"] is None
+        assert event["end_at"] is None
+        assert db.work_allocation_task_uid(conn, event_uid) == "t1"
+
+    def test_first_undated_work_allocation_returns_oldest_undated(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        assert db.first_undated_work_allocation_for_task(conn, "t1")["uid"] == undated_uid
+
+    def test_first_undated_work_allocation_none_when_all_dated(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        assert db.first_undated_work_allocation_for_task(conn, "t1") is None
+
+    def test_set_work_allocation_times_places_undated_session(self, conn):
+        _seed_task(conn, "t1")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        assert db.set_work_allocation_times(conn, undated_uid, "2026-08-17T16:00:00", "2026-08-17T18:00:00") is True
+        event = db.get_event(conn, undated_uid)
+        assert event["start_at"] == "2026-08-17T16:00:00"
+        assert event["end_at"] == "2026-08-17T18:00:00"
+
+    def test_set_work_allocation_times_rejects_non_allocation(self, conn):
+        _seed_event(conn, "e1")
+        assert db.set_work_allocation_times(conn, "e1", "2026-08-17T16:00:00", "2026-08-17T18:00:00") is False
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-17T09:00:00"  # untouched
+
     def test_list_work_allocations_excludes_ordinary_relations(self, conn):
         """An ordinary Relations-card link (is_work_allocation=0) must never
         show up as a work allocation -- the flag is the only thing that
@@ -240,6 +275,19 @@ class TestTaskDetailRouter:
         )
         assert db.list_work_allocations_for_task(conn, "t1") == []
 
+    def test_add_work_allocation_without_date_creates_unscheduled_session(self, conn):
+        """The Work sessions card's "+" button posts NO date at all -- the
+        route must create an unscheduled session placeholder (start/end NULL)
+        rather than reject the empty form."""
+        _seed_task(conn, "t1")
+        resp = tasks_router.add_work_allocation("t1", start_at="", end_at="", conn=conn)
+        assert resp.status_code == 303
+        allocations = db.list_work_allocations_for_task(conn, "t1")
+        assert len(allocations) == 1
+        assert allocations[0]["start_at"] is None
+        assert allocations[0]["end_at"] is None
+        assert db.first_undated_work_allocation_for_task(conn, "t1")["uid"] == allocations[0]["uid"]
+
     def test_remove_work_allocation_route_keeps_task(self, conn):
         _seed_task(conn, "t1")
         event_uid = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
@@ -255,6 +303,20 @@ class TestTaskDetailRouter:
         assert "Work sessions" in body
         assert "/tasks/t1/work-allocations" in body
         assert "/tasks/t1/work-allocations/remove" in body
+        # New card shape: sessions are a numbered list ("Session n") with the
+        # date+hour at the row's end, added purely via the header's "+" button
+        # (no datetime inputs on the page).
+        assert "Session 1" in body
+        assert "2026-08-17 16:00 &ndash; 18:00" in body
+        assert "datetime-local" not in body
+
+    def test_work_sessions_card_numbers_sessions_in_creation_order(self, conn):
+        _seed_task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        db.create_work_allocation(conn, "t1")  # undated placeholder, added second
+        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
+        assert "Session 1" in body
+        assert "Session 2" in body
 
     def test_task_form_renders_work_sessions_card_on_edit(self, conn):
         _seed_task(conn, "t1", title="Research")

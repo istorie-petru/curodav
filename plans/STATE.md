@@ -287,10 +287,18 @@ session, right before the final commit of that session.
   endpoints (same shape/validation as `routers/week.py`'s trio, duplicated
   with a cross-reference comment because `routers/week.py` imports this
   router (calendar) and so this router cannot import week back) so
-  create/move/delete redirect back here instead of to `/week`. Drag a
+  create/move/delete redirect back here instead of to `/week`.   Drag a
   scheduled block back onto the "Unscheduled work" panel to unschedule it
   (a config-driven addition to `project_calendar.js` interaction 3,
-  `deleteUrlBase`/`unscheduleDropSelector`). The standalone `/week` page
+  `deleteUrlBase`/`unscheduleDropSelector`), and a plain click anywhere on
+  a scheduled block's body opens that task's edit view (where more work
+  sessions can be added) via interaction 4 (`taskEditUrlBase` config, the
+  same destination the block's title link carries) — applied consistently
+  to the sibling planning grids `/week` and the project Week Calendar too.
+  All three override `.time-col`'s `cursor:copy` (the Calendar grid's
+  drag-to-create affordance, wrong where empty-space drag isn't a create
+  gesture) to plain `default` via `.project-calendar-col`, so the
+  misleading "mouse add" cursor is gone from every planning surface. The standalone `/week` page
   and tab are left intact (additive change, no bookmarks/tests broken); a
   later slice could retire them in favor of the sub-view. The timetable
   keeps the calendar page's chrome (subnav, prev/next, label filter, New
@@ -327,9 +335,44 @@ session, right before the final commit of that session.
   calendars' own contents. See `routers/settings.py`'s "2026-08-14
   follow-up" docstring note for the full "why Holidays is the one
   exception to Schedule-settings-stay-contextual" reasoning. 16 new tests
-  (`test_settings_holidays.py`), `test_holiday_calendars.py`/
-  `test_phase8_settings_hub.py` updated for the moved routes/new hub
-  category, full suite 1145 passed.
+   (`test_settings_holidays.py`), `test_holiday_calendars.py`/
+   `test_phase8_settings_hub.py` updated for the moved routes/new hub
+   category, full suite 1145 passed.
+- **Shipped:** side work — **Work sessions card: add undated sessions**,
+  complete (2026-08-14) — the task edit modal's "Work sessions" card (1.4
+  slice 1) dropped its start/end datetime inputs for a single "+" button
+  (`_task_work_allocations.html`; `POST /tasks/{uid}/work-allocations` now
+  treats absent dates as valid). A "+"-added session is an **undated
+  session placeholder** — an event with no `start_at`/`end_at`
+  (`db.create_work_allocation`'s new both-or-neither signature;
+  `events.start_at` is nullable, so no schema change) that keeps the task
+  on the planning grids' "Unscheduled work" panel until the session is
+  placed. Three consequences, each implemented and tested:
+  - The unscheduled-panel rule in `routers/week.py`/`routers/calendar.py`/
+    `routers/projects.py` changed from "has any allocation" to "has
+    allocations AND every one is dated" — a task whose only session is
+    undated (or that has none) still lists on the panel.
+  - The three create endpoints (week/calendar/projects `create_allocation`)
+    now **place the task's oldest undated session** onto the dropped slot
+    (`db.first_undated_work_allocation_for_task` +
+    `db.set_work_allocation_times`) instead of creating yet another block —
+    so repeated "+" sessions each get placed by one drag. Session numbering
+    stays stable ("Session 1/2/3" on the card) because
+    `db.list_work_allocations_for_task` now orders by creation, not start
+    time.
+  - Undated events are private scheduling placeholders, never publishable:
+    `routers/export.py`'s `events.ics` and `src/published_lists.py`'s event
+    materialization both skip rows without `start_at`, so a placeholder
+    can't leak out as a DTSTART-less VEVENT.
+  The card renders each session as `Session n` with its date+hour
+  (`{date} &ndash; {hh:mm}`) at the row's end (`.session-when`, blank while
+  undated) and the same per-row remove form; the "+" button sits at the end
+  of the "Work sessions" header (`.work-sessions-head`,
+  `.work-session-add`). See `features/tasks.md` § Work allocations. ~15 new
+  tests across `test_work_allocations.py`/`test_week_planning.py`/
+  `test_calendar_timetable.py`/`test_project_calendar.py`/
+  `test_phase10_export.py`/`test_phase6_published_lists.py`, full suite
+  1161 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

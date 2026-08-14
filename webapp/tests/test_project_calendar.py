@@ -123,6 +123,8 @@ class TestProjectCalendarRoute:
         ).body.decode()
         assert "work-allocation" in body
         assert "Research" in body
+        assert 'data-task-uid="t1"' in body
+        assert 'href="/tasks/t1/edit"' in body
 
     def test_ordinary_event_and_other_projects_allocation_render_as_subdued_context(self, conn):
         _project(conn, "Conference XYZ")
@@ -189,6 +191,43 @@ class TestCreateAllocation:
             conn=conn,
         )
         assert db.list_work_allocations_for_task(conn, "t1") == []
+
+    def test_task_with_undated_session_stays_unscheduled(self, conn):
+        """A session added from the task modal's Work sessions "+" button has
+        no date yet -- the task is still unscheduled work and must remain in
+        the drag-source panel until the session is placed onto a slot."""
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = projects_router.project_calendar(
+            "Conference XYZ",
+            _request("/projects/Conference XYZ/calendar", query_string=f"date_={_MONDAY}".encode()),
+            date_=_MONDAY,
+            conn=conn,
+        ).body.decode()
+        assert "unscheduled-task-item" in body
+        assert "Research" in body
+
+    def test_dragging_task_with_undated_session_places_that_session(self, conn):
+        """Dragging a task that has an undated session placeholder places
+        THAT session onto the dropped slot instead of creating yet another
+        block -- so repeated "+" sessions each get placed by a drag, not
+        multiplied."""
+        _project(conn, "Conference XYZ")
+        _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        projects_router.create_allocation(
+            "Conference XYZ",
+            task_uid="t1",
+            start_at=f"{_MONDAY}T16:00:00",
+            end_at=f"{_MONDAY}T18:00:00",
+            date_=_MONDAY,
+            conn=conn,
+        )
+        allocations = db.list_work_allocations_for_task(conn, "t1")
+        assert len(allocations) == 1
+        assert allocations[0]["uid"] == undated_uid
+        assert allocations[0]["start_at"] == f"{_MONDAY}T16:00:00"
 
     def test_end_before_start_is_rejected(self, conn):
         _project(conn, "Conference XYZ")

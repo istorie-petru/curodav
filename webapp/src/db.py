@@ -1524,7 +1524,7 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
 
 
 def create_work_allocation(
-    conn: sqlite3.Connection, task_uid: str, start_at: str, end_at: str
+    conn: sqlite3.Connection, task_uid: str, start_at: str | None = None, end_at: str | None = None
 ) -> str:
     """Schedule a block of work on `task_uid`: a plain event titled after
     the task (kept in sync by upsert_task, see below) and inheriting the
@@ -1533,7 +1533,16 @@ def create_work_allocation(
     necessary keeps every allocation associated with the same task" -- so
     this is called once per block; calling it again for the same task just
     creates another independent event/relation pair, exactly as the spec
-    describes for a task split across multiple sessions."""
+    describes for a task split across multiple sessions.
+
+    Either both of `start_at`/`end_at` or neither may be given. A
+    start/end pair schedules the block (renders on calendars, counts toward
+    `db.task_work_hours`'s `scheduled`). Omitting both creates an
+    UNSCHEDULED session placeholder -- no date yet, so the task still
+    appears on the planning grids' "Unscheduled work" panel and the session
+    is placed onto a real slot by dragging it there (see
+    `set_work_allocation_times`/`first_undated_work_allocation_for_task`);
+    this is what the task modal's Work sessions "+" button creates."""
     import uuid
 
     task = get_task(conn, task_uid)
@@ -1566,12 +1575,15 @@ def create_work_allocation(
 
 
 def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
-    """Every scheduled work block for `task_uid`, ordered by start time --
-    the work-allocation-only counterpart to related_events_for_task above
-    (which returns ordinary Relations-card links too)."""
+    """Every scheduled work block for `task_uid` -- the work-allocation-only
+    counterpart to related_events_for_task above (which returns ordinary
+    Relations-card links too). Ordered by creation time (not start time), so
+    the Work sessions card's "Session 1/2/3" numbering stays the stable
+    order sessions were added in and an undated session (start_at NULL, a
+    "+"-added placeholder) keeps its position once it's placed later."""
     rows = conn.execute(
         "SELECT events.* FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
-        "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.start_at ASC",
+        "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.created_at ASC, events.uid ASC",
         (task_uid,),
     ).fetchall()
     return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
@@ -1596,6 +1608,40 @@ def delete_work_allocation(conn: sqlite3.Connection, event_uid: str) -> None:
     touches `tasks` -- so this is delete_event under a name that states the
     1.4 semantics explicitly at the call site."""
     delete_event(conn, event_uid)
+
+
+def first_undated_work_allocation_for_task(conn: sqlite3.Connection, task_uid: str) -> dict[str, Any] | None:
+    """The task's oldest work-allocation session that has no start/end yet
+    (a "+"-added session placeholder awaiting placement on a planning grid),
+    or None. `list_work_allocations_for_task` is creation-ordered, so the
+    first undated one is the session a grid drop should place next."""
+    for wa in list_work_allocations_for_task(conn, task_uid):
+        if not wa.get("start_at"):
+            return wa
+    return None
+
+
+def set_work_allocation_times(conn: sqlite3.Connection, event_uid: str, start_at: str, end_at: str) -> bool:
+    """Give an existing work-allocation session its scheduled start/end --
+    the "place this session" half of a session created undated from the task
+    modal's Work sessions card (create_work_allocation with no dates). Only
+    a real work allocation may be moved (work_allocation_task_uid guard, the
+    same idiom the routers' move_allocation endpoints use); returns False if
+    it isn't one or the range is invalid, otherwise updates the event and
+    returns True."""
+    if not start_at or not end_at or end_at <= start_at:
+        return False
+    if not work_allocation_task_uid(conn, event_uid):
+        return False
+    existing = get_event(conn, event_uid)
+    if existing is None:
+        return False
+    row = dict(existing)
+    row["start_at"] = start_at
+    row["end_at"] = end_at
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upsert_event(conn, row)
+    return True
 
 
 def _hours_between(start_at: str | None, end_at: str | None) -> float:

@@ -28,6 +28,14 @@
 //    removes the scheduled block, never the task -- the task returns to
 //    the "Unscheduled work" list on the reloaded page, which is exactly
 //    what "unschedule" means here.
+// 4. (Optional, config-driven) A plain click on a `.work-allocation`
+//    block's own body (not its title link, not the delete button, not a
+//    drag, not the resize handle) opens the block's task edit view -- so
+//    reaching the task (where more work sessions can be added) needs no
+//    smaller click target. Set `window.PROJECT_CALENDAR.taskEditUrlBase`
+//    (e.g. "/tasks/") to enable it; the block's `data-task-uid` is the
+//    task uid appended with "/edit". The block's `.te-name` title link
+//    carries the same href, so the whole block is one target.
 //
 // All of these submit a real form and let the resulting redirect reload
 // the page -- the simplest way to guarantee what's shown always matches
@@ -131,6 +139,10 @@
     // selector for the panel that a moved block can be dropped on to
     // unschedule it. Either one missing disables interaction 3 entirely.
     const unscheduleTarget = cfg.unscheduleDropSelector ? document.querySelector(cfg.unscheduleDropSelector) : null;
+    // Optional config (see the header comment): a click on the block's own
+    // body opens its task's edit view (interaction 4). Missing/absent
+    // disables it entirely.
+    const taskEditUrlBase = cfg.taskEditUrlBase;
 
     function begin(e, isResize) {
       mode = isResize ? "resize" : "move";
@@ -203,7 +215,23 @@
       el.classList.remove("dragging");
       document.querySelectorAll(".project-calendar-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
       if (unscheduleTarget) unscheduleTarget.classList.remove("unschedule-drop-hover");
-      if (!dragged) return; // was a click -- let the title link/delete button work normally
+      if (!dragged) {
+        // A click, not a drag. Let the title link and the delete button
+        // work normally (their pointerdowns never reach begin()); a click
+        // on the block's own body opens its task's edit view instead of
+        // doing nothing, when configured (interaction 4). A click that
+        // started on the resize handle is mode "resize" -- still no
+        // navigation, so the handle stays a pure drag affordance.
+        if (mode !== "resize" && taskEditUrlBase && el.dataset.taskUid) {
+          const url = taskEditUrlBase + el.dataset.taskUid + "/edit";
+          if (window.CCModal) {
+            window.CCModal.open(url, el);
+          } else {
+            window.location.href = url;
+          }
+        }
+        return;
+      }
 
       // Released over the unscheduled-work panel -> unschedule this block
       // (delete endpoint removes only the block, never the task; the reload

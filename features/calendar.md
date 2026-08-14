@@ -26,8 +26,25 @@ label, and an event's color is its first (alphabetical) label's color
   (`.context-event`). An "Unscheduled work" sidebar drags onto the grid to
   create a work allocation (`POST /calendar/timetable/allocations`), and a
   scheduled block dragged back onto the panel is unscheduled (deleted,
-  task kept). Only `static/project_calendar.js` runs, reused verbatim with
-  a `window.PROJECT_CALENDAR` config pointed at the timetable's own
+  task kept). A task stays on the panel as long as any of its work
+  sessions is still **undated** — the task modal's Work sessions "+" button
+  adds a session with no date yet (`db.create_work_allocation` with neither
+  start nor end), and dragging such a task onto a slot **places that
+  session** (the oldest undated one) rather than creating another block,
+  exactly as `/week` and the project Week Calendar do (see
+  `features/tasks.md` § Work allocations). A plain click anywhere on a
+  scheduled block's body (not a
+  drag, not the delete button, not the resize handle) opens its task's
+  edit view — where more work sessions can be added — via
+  `project_calendar.js` interaction 4 (`taskEditUrlBase` config, same
+  destination as the block's own title link). The same whole-block-click
+  and task-view title apply on the sibling planning grids (`/week` and the
+  project Week Calendar), which also override the shared `.time-col`
+  `cursor:copy` (the Calendar grid's drag-to-create affordance) to plain
+  `default` via `.project-calendar-col` — empty-space drag on a planning
+  grid isn't a create gesture, so the misleading "add" mouse is gone there.
+  Only `static/project_calendar.js` runs, reused verbatim with a
+  `window.PROJECT_CALENDAR` config pointed at the timetable's own
   endpoints. Adding normal calendar events is done via the page's calendar
   chrome (the New button, or the Week/Day views), not on the scheduling
   grid. The standalone `/week` page and tab remain for backwards

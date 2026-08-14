@@ -658,23 +658,23 @@ def timetable_view(
 ):
     """Timetable -- the global Week (planning) surface (1.7, routers/week.py::
     week_view) folded in as another sub-view of the main Calendar page, named
-    "Timetable" in the calendar-subnav. Same real week grid + mouse actions as
-    `week_view` above (drag-to-move/resize ordinary events, click-drag on
-    empty space to create a new event) but, unlike it, ALSO the scheduling
-    affordances the /week page brought: the "Unscheduled work" sidebar that
-    drags onto the grid to create a work allocation, and every scheduled
-    work-allocation block rendered prominently with its own move/resize/
-    delete (block only, never the task).
+    "Timetable" in the calendar-subnav. It is `/week` copied into the
+    Calendar page, not a calendar.js merge: the exact grid markup/CSS classes
+    `week_planning.html` renders, with the scheduling affordances -- the
+    "Unscheduled work" sidebar that drags onto the grid to create (or place)
+    a work allocation, and every work-allocation block rendered prominently
+    with its own move/resize/delete (block only, never the task) plus the
+    same click-a-block-to-open-its-task behavior. Ordinary calendar events
+    render as subdued `.context-event` context, exactly as on /week, so
+    `static/project_calendar.js` runs alone here (its own
+    window.PROJECT_CALENDAR config pointed at this page's
+    /calendar/timetable/allocations endpoints).
 
-    This is the same "one grid, two purposes" composition the rest of this
-    router already manages: it reuses week_view's geometry/annotations (the
-    grid_layout.layout_day call, the _annotate_calendar_colors pass) and
-    week.py's scheduling data (per-event `is_allocation`/`task_uid`, the
-    unscheduled-work list) on a single page. The client-side interaction is
-    static/calendar.js (ordinary events + drag-to-create) AND static/
-    project_calendar.js (work allocations + task-drop) running side by side
-    -- the template only needs to keep their selector spaces disjoint (see
-    calendar_timetable.html's own comment)."""
+    This reuses week_view's geometry/annotations (the grid_layout.layout_day
+    call, the _annotate_calendar_colors pass) and week.py's scheduling data
+    (per-event `is_allocation`/`task_uid`, the unscheduled-work list) on a
+    single page -- see calendar_timetable.html's own comment."""
+
     anchor = date.fromisoformat(date_) if date_ else date.today()
     week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
 
@@ -726,7 +726,13 @@ def timetable_view(
     # no-due-date tasks last).
     unscheduled_tasks = []
     for t in open_tasks:
-        if db.list_work_allocations_for_task(conn, t["uid"]):
+        # Unscheduled = no work session at all, OR any session still has no
+        # date (a "+"-added placeholder from the task modal's Work sessions
+        # card awaiting placement on a grid -- see db.create_work_allocation's
+        # undated form). Only a task whose every session is dated has nothing
+        # left to place, so only those drop off the panel.
+        allocations = db.list_work_allocations_for_task(conn, t["uid"])
+        if allocations and all(a.get("start_at") for a in allocations):
             continue
         project = db.project_label_for(conn, "task", t["uid"])
         hours = db.task_work_hours(conn, t["uid"])
@@ -781,7 +787,15 @@ def create_timetable_allocation(
     pattern for exactly this one-directional-import constraint."""
     task = db.get_task(conn, task_uid)
     if task is not None and task.get("status") not in ("done", "archived") and start_at and end_at and end_at > start_at:
-        db.create_work_allocation(conn, task_uid, start_at, end_at)
+        # A task with an undated session placeholder (added via the task
+        # modal's Work sessions "+" button) gets THAT session placed onto
+        # the dropped slot instead of creating yet another block; a task
+        # with no sessions yet creates its first dated block, as before.
+        undated = db.first_undated_work_allocation_for_task(conn, task_uid)
+        if undated:
+            db.set_work_allocation_times(conn, undated["uid"], start_at, end_at)
+        else:
+            db.create_work_allocation(conn, task_uid, start_at, end_at)
     return _timetable_redirect(date_)
 
 

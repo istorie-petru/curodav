@@ -219,7 +219,13 @@ def project_calendar(name: str, request: Request, date_: str | None = None, conn
     open_tasks = [t for t in project_tasks if t.get("status") not in ("done", "archived")]
     unscheduled_tasks = []
     for t in open_tasks:
-        if db.list_work_allocations_for_task(conn, t["uid"]):
+        # Unscheduled = no work session at all, OR any session still has no
+        # date (a "+"-added placeholder from the task modal's Work sessions
+        # card awaiting placement on a grid -- see db.create_work_allocation's
+        # undated form). Only a task whose every session is dated has nothing
+        # left to place, so only those drop off the panel.
+        allocations = db.list_work_allocations_for_task(conn, t["uid"])
+        if allocations and all(a.get("start_at") for a in allocations):
             continue
         hours = db.task_work_hours(conn, t["uid"])
         unscheduled_tasks.append({"task": t, "hours": hours})
@@ -268,7 +274,15 @@ def create_allocation(
     uses, since the dragged task's identity is client-submitted."""
     task = db.get_task(conn, task_uid)
     if task is not None and name in (task.get("tags") or []) and start_at and end_at and end_at > start_at:
-        db.create_work_allocation(conn, task_uid, start_at, end_at)
+        # A task with an undated session placeholder (added via the task
+        # modal's Work sessions "+" button) gets THAT session placed onto
+        # the dropped slot instead of creating yet another block; a task
+        # with no sessions yet creates its first dated block, as before.
+        undated = db.first_undated_work_allocation_for_task(conn, task_uid)
+        if undated:
+            db.set_work_allocation_times(conn, undated["uid"], start_at, end_at)
+        else:
+            db.create_work_allocation(conn, task_uid, start_at, end_at)
     return _calendar_redirect(name, date_)
 
 

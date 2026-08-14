@@ -1331,6 +1331,14 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .checklist-delete{margin-left:auto;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
+/* Work sessions card (task_detail.html/task_form.html, _task_work_allocations
+   .html): the "+" button sits at the end of the "Work sessions" header
+   (margin-left:auto inside a flex header), and each session row's date+hour
+   sits at the row's end (the .checklist-text's flex:1 pushes it right,
+   before the remove button). */
+.work-sessions-head{display:flex; align-items:center; gap:6px;}
+.work-sessions-head .work-session-add{margin-left:auto;}
+.session-when{color:var(--fg-secondary); font-size:var(--text-caption); white-space:nowrap;}
 
 /* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
    -- the merged Subtasks+relations detail card; 1.2 removed the Subtasks
@@ -1763,6 +1771,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
+/* The planning grids (project_calendar.html, week_planning.html,
+   calendar_timetable.html) reuse .time-col, whose cursor:copy is the
+   Calendar grid's "click-drag to create an event" affordance (calendar.js)
+   -- wrong on the planning surfaces, where empty-space drag isn't a create
+   gesture at all (only dropping an unscheduled task onto a column is, and
+   that task row itself already carries the grab cursor). */
+.project-calendar-col{cursor:default;}
 /* Drag-a-scheduled-block-onto-the-panel-to-unschedule-it (project_calendar.js
    interaction 3): the unscheduled-work panel lights up while a dragged block
    is over it, the same visual vocabulary as a column's .drop-hover, so the

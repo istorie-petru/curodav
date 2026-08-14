@@ -113,6 +113,8 @@ class TestWeekPlanningRoute:
         assert "Research" in body
         assert "Other work" in body
         assert body.count("work-allocation") >= 2
+        assert 'data-task-uid="t1"' in body
+        assert 'href="/tasks/t1/edit"' in body
 
     def test_ordinary_event_renders_as_subdued_context(self, conn):
         db.upsert_event(
@@ -144,6 +146,33 @@ class TestCreateAllocation:
         assert resp.headers["location"] == f"/week?date_={_MONDAY}"
         allocations = db.list_work_allocations_for_task(conn, "t1")
         assert len(allocations) == 1
+
+    def test_task_with_undated_session_stays_on_unscheduled_panel(self, conn):
+        """A session added from the task modal's Work sessions "+" button has
+        no date yet -- the task is still unscheduled work and must remain in
+        the drag-source panel until the session is placed onto a slot."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = week_router.week_view(_request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn).body.decode()
+        assert "unscheduled-task-item" in body
+        assert "Research" in body
+
+    def test_dragging_task_with_undated_session_places_that_session(self, conn):
+        """Dragging a task that has an undated session placeholder places
+        THAT session onto the dropped slot (sets its start/end) instead of
+        creating yet another block -- so repeated "+" sessions each get
+        placed by a drag, not multiplied."""
+        _task(conn, "t1", title="Research")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        resp = week_router.create_allocation(
+            task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
+        )
+        assert resp.status_code == 303
+        allocations = db.list_work_allocations_for_task(conn, "t1")
+        assert len(allocations) == 1
+        assert allocations[0]["uid"] == undated_uid
+        assert allocations[0]["start_at"] == f"{_MONDAY}T16:00:00"
+        assert allocations[0]["end_at"] == f"{_MONDAY}T18:00:00"
 
     def test_no_project_membership_check_unlike_project_calendar(self, conn):
         """The whole point of this global page: a task doesn't need to

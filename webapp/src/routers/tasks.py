@@ -1226,15 +1226,24 @@ def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_
 @router.post("/{uid}/work-allocations")
 def add_work_allocation(
     uid: str,
-    start_at: str = Form(...),
-    end_at: str = Form(...),
+    start_at: str = Form(""),
+    end_at: str = Form(""),
     conn=Depends(get_db),
 ):
+    """The Work sessions card's "+" button -- add a work session with NO
+    date at all. A session added this way is an unscheduled placeholder
+    (no start/end), so the task stays on the planning grids' "Unscheduled
+    work" panel and is placed onto a real slot by dragging it there (the
+    create endpoints' place-the-oldest-undated-session behavior). The old
+    start/end datetime inputs are gone from the modal but still honored
+    here if a caller posts them: a valid pair schedules the session
+    directly, a malformed pair is rejected the same as before (no-op)."""
     task = db.get_task(conn, uid)
-    start_at = start_at.strip()
-    end_at = end_at.strip()
-    if task is not None and start_at and end_at and end_at > start_at:
-        db.create_work_allocation(conn, uid, start_at, end_at)
+    if task is not None:
+        if start_at and end_at and end_at > start_at:
+            db.create_work_allocation(conn, uid, start_at, end_at)
+        elif not (start_at or end_at):
+            db.create_work_allocation(conn, uid)  # undated session placeholder
     return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 

@@ -85,6 +85,18 @@ class TestTimetableViewRoute:
         ).body.decode()
         assert "unscheduled-task-item" not in body
 
+    def test_task_with_undated_session_stays_on_unscheduled_panel(self, conn):
+        """A session added from the task modal's Work sessions "+" button has
+        no date yet -- the task is still unscheduled work and must remain in
+        the drag-source panel until the session is placed onto a slot."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert "unscheduled-task-item" in body
+        assert "Research" in body
+
     def test_completed_task_never_appears_unscheduled(self, conn):
         _task(conn, "t1", title="Done thing", status="done")
         body = calendar_router.timetable_view(_request(), conn=conn).body.decode()
@@ -108,6 +120,23 @@ class TestTimetableViewRoute:
         ).body.decode()
         assert "work-allocation" in body
         assert "/calendar/timetable/allocations" in body
+
+    def test_scheduled_block_links_to_its_task_view(self, conn):
+        """A scheduled work block is one target for the task it belongs to:
+        its title links to the task's edit view (where more work sessions
+        can be added), the block carries the task uid as data-task-uid so a
+        click anywhere on the block body reaches the same view
+        (project_calendar.js interaction 4, taskEditUrlBase config), and the
+        delete form still targets the allocation endpoint."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        body = calendar_router.timetable_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert 'data-task-uid="t1"' in body
+        assert 'href="/tasks/t1/edit"' in body
+        assert 'taskEditUrlBase: "/tasks/"' in body
+        assert "/calendar/timetable/allocations/" in body
 
     def test_ordinary_event_renders_as_subdued_context_like_week(self, conn):
         """The Timetable is the Week (planning) surface -- same as
@@ -179,6 +208,22 @@ class TestCreateTimetableAllocation:
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
         )
         assert db.list_work_allocations_for_task(conn, "t1") == []
+
+    def test_dragging_task_with_undated_session_places_that_session(self, conn):
+        """Dragging a task that has an undated session placeholder places
+        THAT session onto the dropped slot instead of creating yet another
+        block -- so repeated "+" sessions each get placed by a drag, not
+        multiplied."""
+        _task(conn, "t1", title="Research")
+        undated_uid = db.create_work_allocation(conn, "t1")
+        calendar_router.create_timetable_allocation(
+            task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T18:00:00", date_=_MONDAY, conn=conn
+        )
+        allocations = db.list_work_allocations_for_task(conn, "t1")
+        assert len(allocations) == 1
+        assert allocations[0]["uid"] == undated_uid
+        assert allocations[0]["start_at"] == f"{_MONDAY}T16:00:00"
+        assert allocations[0]["end_at"] == f"{_MONDAY}T18:00:00"
 
 
 class TestMoveTimetableAllocation:

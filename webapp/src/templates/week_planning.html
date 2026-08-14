@@ -75,9 +75,9 @@
             <div class="time-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
                 {% for e in day.timed %}
                 {% if e.is_allocation %}
-                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
-                    <a class="te-name" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>
+                    <a class="te-name" href="/tasks/{{ e.task_uid }}/edit" data-modal>{{ e.title }}</a>
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
                     <form class="work-allocation-delete" method="post" action="/week/allocations/{{ e.uid }}/delete">
                         <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
@@ -111,6 +111,7 @@
   window.PROJECT_CALENDAR = {
     createUrl: "/week/allocations",
     moveUrlBase: "/week/allocations/",
+    taskEditUrlBase: "/tasks/",
     weekDate: "{{ monday.isoformat() }}",
   };
 </script>

@@ -106,6 +106,11 @@ def export_events_ics(conn=Depends(get_db)):
     cal.add("version", "2.0")
     events = db.list_events(conn)
     for row in events:
+        if not row.get("start_at"):
+            # Undated work-session placeholders (the Work sessions "+" on a
+            # task card) have no date yet -- nothing to publish until a
+            # session is placed onto a grid slot.
+            continue
         cal.add_component(Event.from_ical(ical_rows.event_row_to_ical(row)))
     return _attachment("events.ics", cal.to_ical(), "text/calendar")
 
