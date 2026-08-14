@@ -358,12 +358,11 @@ subtask links is removed, and the Relations card holds related events only.
 
 ## Schedule & recurrence rework
 
-**Status:** "Classes as project labels + recurring events" and "Generalized
-recurrence and the non-working-day policy" both shipped 2026-08-14
-(`plans/STATE.md`'s 1.6 entries, `features/schedule.md` + `features/
-calendar.md`'s Recurrence section). The other two subsections below (manual
-recurrence exceptions, configurable terminology) are still full planning
-model, no code.
+**Status:** "Classes as project labels + recurring events", "Generalized
+recurrence and the non-working-day policy", and "Manual recurrence
+exceptions" all shipped 2026-08-14 (`plans/STATE.md`'s 1.6 entries,
+`features/schedule.md` + `features/calendar.md`'s Recurrence section). Only
+"Configurable terminology" below is still full planning model, no code.
 
 ### ~~Classes as project labels + recurring events~~ — shipped 2026-08-14
 
@@ -427,7 +426,7 @@ Exclude Sunday: On/Off
 The exact interface can be simplified where appropriate, but the underlying data
 should retain these as independent constraints.
 
-### Manual recurrence exceptions
+### ~~Manual recurrence exceptions~~ — shipped 2026-08-14
 
 Recurring events must support manual exceptions and overrides. A specific
 occurrence can be cancelled, moved, or otherwise modified without destroying the
@@ -439,7 +438,8 @@ the recurrence rule, the generated occurrences, and the manual exceptions or
 overrides.
 
 (This is the model that resolves the "recurring-event single-occurrence
-editing" risk — now specified, not yet implemented.)
+editing" risk — implemented as `event_occurrence_overrides`, see
+`features/calendar.md`'s Recurrence section.)
 
 ### Configurable terminology
 

@@ -59,11 +59,35 @@ def _excluded_by_policy(
     return False
 
 
+def _build_override_component(master: dict[str, Any], override: dict[str, Any]) -> Event:
+    """1.6 ("Manual recurrence exceptions"): a moved/modified occurrence
+    becomes a second real VEVENT sharing the master's UID, with a
+    RECURRENCE-ID marking which original occurrence it replaces -- the
+    standard RFC 5545 override mechanism (see ical_rows.py's
+    `event_row_to_ical` `recurrence_id` support). `recurring_ical_events`
+    then substitutes this component's own start/end/title/location in
+    place of the master's generated occurrence at that slot, for free --
+    this function never re-implements that substitution itself."""
+    override_row = {
+        "uid": master["uid"],
+        "title": override.get("title") or master.get("title"),
+        "description": master.get("description", ""),
+        "start_at": override["start_at"],
+        "end_at": override.get("end_at"),
+        "all_day": master.get("all_day", False),
+        "location": override.get("location") or master.get("location"),
+        "status": master.get("status", "active"),
+        "recurrence_id": override["occurrence_date"],
+    }
+    return Event.from_ical(event_row_to_ical(override_row))
+
+
 def expand_events(
     rows: list[dict[str, Any]],
     window_start: date,
     window_end: date,
     holiday_calendars: dict[str, list[dict[str, Any]]] | None = None,
+    overrides_by_master: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Returns `rows` with every recurring row expanded into one row per
     occurrence inside [window_start, window_end] (same uid as the master --
@@ -77,16 +101,36 @@ def expand_events(
     the RRULE/EXDATE expansion below -- an occurrence excluded by either is
     dropped from the result, same as one already excluded by a stored
     EXDATE. Passing nothing here just means "no holiday calendar lookups
-    available" (weekend exclusion still works, since it needs no lookup)."""
+    available" (weekend exclusion still works, since it needs no lookup).
+
+    `overrides_by_master` (optional, `{master_uid: [override row, ...]}` --
+    see `db.list_event_occurrence_overrides_by_master`) applies manual
+    per-occurrence exceptions: a cancelled override's `occurrence_date`
+    folds into the master's own EXDATE list (same proven exclusion
+    mechanism `exdates_json` already uses); a moved/modified override
+    becomes an extra VEVENT component (`_build_override_component`) fed
+    into the same Calendar, which `recurring_ical_events` resolves at its
+    own new date instead of the original slot."""
     result: list[dict[str, Any]] = []
     for row in rows:
         if not row.get("recurrence"):
             result.append(row)
             continue
+        overrides = (overrides_by_master or {}).get(row["uid"], [])
+        cancelled_dates = [o["occurrence_date"] for o in overrides if o.get("cancelled")]
+        moved_overrides = [o for o in overrides if not o.get("cancelled")]
+
+        row_for_ical = row
+        if cancelled_dates:
+            row_for_ical = dict(row)
+            row_for_ical["exdates"] = [*(row.get("exdates") or []), *cancelled_dates]
+
         cal = Calendar()
         cal.add("PRODID", "-//command-center-web//")
         cal.add("VERSION", "2.0")
-        cal.add_component(Event.from_ical(event_row_to_ical(row)))
+        cal.add_component(Event.from_ical(event_row_to_ical(row_for_ical)))
+        for override in moved_overrides:
+            cal.add_component(_build_override_component(row, override))
         try:
             occurrences = recurring_ical_events.of(cal).between(window_start, window_end)
         except Exception:

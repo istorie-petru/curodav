@@ -161,16 +161,47 @@ session, right before the final commit of that session.
   and `features/schedule.md`. Full suite 1056 passed (new
   `test_holiday_calendars.py`, extended `test_recurrence_expand.py`/
   `test_schedule.py`).
-- **Next slice:** `1.6` continues — Manual recurrence exceptions
-  (`open-priority.md` § Schedule & recurrence rework, "Manual recurrence
-  exceptions"): distinguish the recurrence rule, generated occurrences, and
-  manual per-occurrence overrides/cancellations, so e.g. a weekly Monday
-  class can have one occurrence moved to Tuesday or cancelled without
-  touching the master rule — "the model that resolves the
-  'recurring-event single-occurrence editing' risk." `open.md`'s Command
-  palette actions follow-up (1.2 side work) and 1.4's optional Project
-  check-in side work are both still fine smaller, self-contained slices
-  instead, whenever a session wants one.
+- **Shipped:** `1.6` slice — **Manual recurrence exceptions**, complete
+  (2026-08-14) — new `event_occurrence_overrides` table (deterministic
+  `master_uid::occurrence_date` key) distinguishes the recurrence rule
+  (`events.recurrence`), the generated occurrences (computed, never
+  stored), and manual per-occurrence overrides, resolving "the
+  recurring-event single-occurrence editing" risk. A cancelled occurrence
+  folds into the master's own EXDATE list at expand time; a moved/modified
+  one becomes a second real VEVENT sharing the master's UID with a
+  RECURRENCE-ID (`ical_rows.py`'s new `recurrence_id` support,
+  `recurrence_expand.py`'s `_build_override_component`/`overrides_by_
+  master` param) — the standard RFC 5545 override, which
+  `recurring_ical_events` (already this app's expansion library) resolves
+  for free, confirmed empirically before committing to the design. Every
+  expanded occurrence now carries its own original slot as
+  `occurrence_date` (the RECURRENCE-ID the library tags every occurrence
+  with, not just overridden ones — `ical_to_event_row`), which
+  calendar_month/week/fourweek/day.html append to each occurrence's link
+  (`?occurrence_date=...`) so `event_detail.html`'s new "This occurrence"
+  card (Cancel / Move / Restore — `POST /events/{uid}/occurrences/
+  cancel|move|restore`) always targets the right instance. Found and fixed
+  a real pre-existing bug in `db.list_events` along the way: a recurring
+  row's own literal `start_at`/`end_at` (its first occurrence only) wrongly
+  excluded the whole row from a date-range query once the window fell far
+  enough past that anchor, regardless of whether the RRULE would still
+  generate real occurrences inside it — nothing had ever caught this
+  because no prior test queried a week more than ~one occurrence-length
+  past a recurring event's own creation date. See `features/calendar.md`'s
+  Recurrence section. Full suite 1078 passed (new
+  `test_manual_recurrence_exceptions.py`, extended
+  `test_recurrence_expand.py`).
+- **Next slice:** `1.6` continues — Configurable terminology
+  (`open-priority.md` § Schedule & recurrence rework, "Configurable
+  terminology"), the last open 1.6 subsection: a Settings toggle between
+  the underlying neutral field names (`holiday_calendar`,
+  `exclude_saturday`, `exclude_sunday`) and an optional playful
+  presentation-layer mode ("Respects Labor Laws", "Marx Weekend") on the
+  recurrence editor — database/APIs/sync stay neutral either way. Once
+  this ships, **1.6 is fully shipped** and `pyproject.toml` should be
+  bumped. `open.md`'s Command palette actions follow-up (1.2 side work)
+  and 1.4's optional Project check-in side work are both still fine
+  smaller, self-contained slices instead, whenever a session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

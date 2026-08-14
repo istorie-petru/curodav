@@ -584,6 +584,44 @@ CREATE TABLE IF NOT EXISTS published_lists (
     last_materialized_at TEXT,
     created_at TEXT
 );
+
+-- 1.6 ("Manual recurrence exceptions", plans/open-priority.md § Schedule &
+-- recurrence rework): the recurrence system distinguishes three things --
+-- the recurrence rule (events.recurrence), the generated occurrences
+-- (computed, never stored -- recurrence_expand.py), and manual exceptions
+-- or overrides for ONE specific occurrence, which is what this table is.
+-- "uid" is a deterministic composite key (master_uid + '::' +
+-- occurrence_date, see db.py's _occurrence_override_uid), not a random
+-- uuid -- there's exactly one override per (master, original occurrence),
+-- so upserting by that pair is more natural than tracking a separate id.
+-- `occurrence_date` is the ORIGINAL occurrence's own start_at (the RFC
+-- 5545 RECURRENCE-ID this overrides), always in ISO date or datetime
+-- form matching the master's own DTSTART precision.
+--
+-- Cancelling an occurrence (`cancelled=1`) folds its `occurrence_date`
+-- into the master's own EXDATE list at expand time (recurrence_expand.py)
+-- -- the same proven exclusion mechanism `exdates_json` already uses, not
+-- a separate code path. Moving/modifying an occurrence (`cancelled=0`,
+-- `start_at` set) becomes a second real VEVENT sharing the master's UID
+-- with a RECURRENCE-ID (ical_rows.py's `event_row_to_ical`
+-- `recurrence_id` support) -- the standard RFC 5545 override mechanism,
+-- which `recurring_ical_events` (already this app's expansion library)
+-- resolves for free. `title`/`location` are optional per-occurrence
+-- overrides (NULL = keep the master's own); day-to-day "move this one
+-- lecture to Tuesday" only ever needs start_at/end_at.
+CREATE TABLE IF NOT EXISTS event_occurrence_overrides (
+    uid TEXT PRIMARY KEY,
+    master_uid TEXT NOT NULL,
+    occurrence_date TEXT NOT NULL,
+    cancelled INTEGER NOT NULL DEFAULT 0,
+    start_at TEXT,
+    end_at TEXT,
+    title TEXT,
+    location TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_event_occurrence_overrides_master ON event_occurrence_overrides(master_uid);
 """
 
 
@@ -992,6 +1030,11 @@ def delete_event(conn: sqlite3.Connection, uid: str) -> None:
     # stays, only this event's rows go (an event always owns the `event_uid`
     # side of an event_task_relations row).
     conn.execute("DELETE FROM event_task_relations WHERE event_uid = ?", (uid,))
+    # 1.6 ("Manual recurrence exceptions") -- a per-occurrence override is
+    # owned by its master event; deleting the master (the whole recurring
+    # series) makes every override for it meaningless, same ownership
+    # relationship as event_task_relations above.
+    conn.execute("DELETE FROM event_occurrence_overrides WHERE master_uid = ?", (uid,))
     conn.commit()
 
 
@@ -1005,20 +1048,105 @@ def list_events(
     start: str | None = None,
     end: str | None = None,
 ) -> list[dict[str, Any]]:
+    """Real bug fix (found 2026-08-14 while building 1.6's manual
+    recurrence exceptions, via a router test that moved an occurrence into
+    a later week and it silently never rendered): a *recurring* row's own
+    literal start_at/end_at only anchor its first occurrence -- the date
+    range filter below used to exclude the row entirely once `start`/`end`
+    fell far enough past that literal end_at, even though its RRULE would
+    still generate real occurrences inside the window. Nothing caught this
+    before because no existing test seeded a recurring event and then
+    queried a week more than ~one occurrence-length past its own creation
+    date. Fix: a recurring row (recurrence IS NOT NULL) is always a
+    candidate regardless of its own literal bounds -- `recurrence_expand.
+    expand_events` (which every caller of this function already runs
+    recurring rows through) is what actually decides whether it produces
+    any occurrence in the window, via the real RRULE/UNTIL/COUNT."""
     query = "SELECT * FROM events"
     params: list[str] = []
-    clauses = []
+    bounds_clauses = []
     if start:
-        clauses.append("(end_at IS NULL OR end_at >= ?)")
+        bounds_clauses.append("(end_at IS NULL OR end_at >= ?)")
         params.append(start)
     if end:
-        clauses.append("start_at <= ?")
+        bounds_clauses.append("start_at <= ?")
         params.append(end)
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
+    if bounds_clauses:
+        query += " WHERE (recurrence IS NOT NULL OR (" + " AND ".join(bounds_clauses) + "))"
     query += " ORDER BY start_at ASC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+
+
+# --------------------------------------------------------------------- #
+# Manual recurrence exceptions (1.6, "Manual recurrence exceptions") --
+# see event_occurrence_overrides' own CREATE TABLE comment for the model.
+# --------------------------------------------------------------------- #
+
+
+def _occurrence_override_uid(master_uid: str, occurrence_date: str) -> str:
+    """Deterministic key for the one override a given (master, original
+    occurrence) pair can have -- lets upsert_event_occurrence_override use
+    the same ON CONFLICT(uid) idiom every other upsert_* in this file uses,
+    instead of a separate find-then-update step."""
+    return f"{master_uid}::{occurrence_date}"
+
+
+def upsert_event_occurrence_override(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
+    """Cancels or moves/modifies one occurrence of a recurring event
+    without touching its recurrence rule. `row`: {master_uid,
+    occurrence_date, cancelled, start_at, end_at, title, location,
+    created_at, updated_at} -- cancelled=True and a moved start_at are
+    mutually exclusive in practice (routers/calendar.py only ever sets
+    one), but nothing here enforces that; recurrence_expand.py only reads
+    start_at when cancelled is falsy. Returns the override's own uid."""
+    uid = _occurrence_override_uid(row["master_uid"], row["occurrence_date"])
+    conn.execute(
+        "INSERT INTO event_occurrence_overrides "
+        "(uid, master_uid, occurrence_date, cancelled, start_at, end_at, title, location, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(uid) DO UPDATE SET cancelled=excluded.cancelled, start_at=excluded.start_at, "
+        "end_at=excluded.end_at, title=excluded.title, location=excluded.location, updated_at=excluded.updated_at",
+        (
+            uid, row["master_uid"], row["occurrence_date"],
+            1 if row.get("cancelled") else 0,
+            row.get("start_at"), row.get("end_at"), row.get("title"), row.get("location"),
+            row.get("created_at"), row.get("updated_at"),
+        ),
+    )
+    conn.commit()
+    return uid
+
+
+def delete_event_occurrence_override(conn: sqlite3.Connection, master_uid: str, occurrence_date: str) -> None:
+    """Restores one occurrence back to whatever the recurrence rule alone
+    would generate -- "undo" for a cancel or a move."""
+    conn.execute(
+        "DELETE FROM event_occurrence_overrides WHERE uid = ?",
+        (_occurrence_override_uid(master_uid, occurrence_date),),
+    )
+    conn.commit()
+
+
+def list_event_occurrence_overrides(conn: sqlite3.Connection, master_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM event_occurrence_overrides WHERE master_uid = ? ORDER BY occurrence_date",
+        (master_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_event_occurrence_overrides_by_master(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    """{master_uid: [override row, ...]} -- the shape
+    `recurrence_expand.expand_events`'s `overrides_by_master` parameter
+    expects. Built once per request, same "routers compute, pure logic
+    just reads what it's given" layering `list_holidays_by_calendar`
+    already follows."""
+    by_master: dict[str, list[dict[str, Any]]] = {}
+    rows = conn.execute("SELECT * FROM event_occurrence_overrides ORDER BY occurrence_date").fetchall()
+    for row in rows:
+        by_master.setdefault(row["master_uid"], []).append(dict(row))
+    return by_master
 
 
 def all_event_uids(conn: sqlite3.Connection) -> set[str]:

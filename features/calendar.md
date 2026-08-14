@@ -37,6 +37,38 @@ effect immediately, on every view, with no regenerate step. `_event_form_
 fields.html` exposes all three on the event form (Holiday calendar text field
 + datalist, Exclude Saturday/Sunday checkboxes).
 
+**Manual recurrence exceptions** (1.6, shipped 2026-08-14): a specific
+occurrence can be cancelled or moved/modified without touching the master's
+own recurrence rule — three distinguished things, per `open-priority.md`'s
+spec: the rule (`events.recurrence`), the generated occurrences (computed,
+never stored), and manual per-occurrence overrides
+(`event_occurrence_overrides` table, `db.py`'s own CREATE TABLE comment has
+the full model). A cancelled occurrence folds its date into the master's own
+EXDATE list at expand time (the same proven exclusion mechanism
+`exdates_json` already used); a moved/modified occurrence becomes a second
+real VEVENT sharing the master's UID with a `RECURRENCE-ID` — the standard
+RFC 5545 override, which `recurring_ical_events` (already this app's
+expansion library) resolves for free
+(`recurrence_expand.py::_build_override_component`/`expand_events`'s
+`overrides_by_master` param, `db.list_event_occurrence_overrides_by_master`).
+Every expanded occurrence carries its own original slot as `occurrence_date`
+(the RECURRENCE-ID `recurring_ical_events` tags every occurrence with, even
+non-overridden ones — `ical_rows.py::ical_to_event_row`), which
+calendar_month/week/fourweek/day.html append to each occurrence's own link
+(`?occurrence_date=...`) so `event_detail.html`'s "This occurrence" card
+(Cancel / Move / Restore, `POST /events/{uid}/occurrences/cancel`
+`/move` `/restore`) always targets the right instance, even one that's
+already been moved once.
+
+**Note:** `db.list_events`'s date-range query had a real bug (found while
+building this: a recurring row's own literal `start_at`/`end_at` only anchor
+its *first* occurrence, but the SQL filter excluded the whole row once the
+queried window fell far enough past that anchor, regardless of whether the
+RRULE would still generate real occurrences inside it) — fixed alongside this
+subsection; a recurring row (`recurrence IS NOT NULL`) is now always a query
+candidate, and `expand_events` is what actually decides whether it produces
+anything in the window.
+
 ## Interactions
 
 - **Drag to move / resize** on Week/Day (15-min snap) → `POST /events/{uid}/reschedule`

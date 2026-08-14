@@ -165,8 +165,7 @@ and configurable terminology.
   `course_professor_contact_uid`); day/parity are derived from the event's
   own `start_at`/`recurrence`, never stored. `scripts/migrate_schedule_
   classes_to_events.py` converts any pre-1.6 database. See
-  `features/schedule.md`. Still open: manual occurrence exceptions,
-  configurable terminology.
+  `features/schedule.md`. Still open: configurable terminology.
 - ~~Generalized non-working-day policy + named holiday calendars~~
   **shipped 2026-08-14** — `schedule_holidays` rows belong to a named,
   reusable `calendar_name` (default `'Default'` for every pre-1.6 holiday)
@@ -177,6 +176,20 @@ and configurable terminology.
   Schedule's own class events switched from per-write EXDATE-stuffing to
   just carrying `schedule_settings.holiday_calendar`. See
   `features/calendar.md`'s Recurrence section and `features/schedule.md`.
+- ~~Manual recurrence exceptions~~ **shipped 2026-08-14** — a specific
+  occurrence can be cancelled or moved/modified without touching the
+  master's own recurrence rule (`event_occurrence_overrides` table). A
+  cancelled occurrence folds into the master's own EXDATE list at expand
+  time; a moved/modified one becomes a real second VEVENT sharing the
+  master's UID with a RECURRENCE-ID -- the standard RFC 5545 override,
+  which `recurring_ical_events` resolves for free
+  (`recurrence_expand.py`'s `overrides_by_master` param). `event_detail.
+  html`'s "This occurrence" card (Cancel/Move/Restore) is reached via
+  `?occurrence_date=...`, which every calendar view now appends to a
+  recurring occurrence's own link. Found and fixed a real pre-existing bug
+  in `db.list_events`'s date-range query along the way (a recurring row's
+  own literal start_at/end_at wrongly excluded it from far-future
+  windows). See `features/calendar.md`'s Recurrence section.
 
 Side work: **Configurable views + optional Schedule module** — best landed now
 that the reworked views are stable, since it toggles them.
