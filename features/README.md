@@ -65,6 +65,9 @@ these pieces fit together.
   purge, and more.
 - **Export & backup** — your data out as standard ICS/CSV/VCF, a full JSON
   backup, or back in via import/restore.
+- **Offline-first PWA** — install the app and it opens with no network, using
+  a local copy of your data; create/edit tasks offline and they sync
+  automatically (with conflict-safe merging) once you're back online.
 
 ## Per-feature docs
 
@@ -89,6 +92,7 @@ reference for development; the tour above is the plain-language version.
 | [`export.md`](export.md) | ICS/CSV/VCF exports, JSON backup, import/restore |
 | [`banners.md`](banners.md) | Per-page cover images |
 | [`design-system.md`](design-system.md) | M3 tokens, theming, shared input patterns, favicon |
+| [`offline-sync.md`](offline-sync.md) | PWA shell, local IndexedDB mirror + write path, HLC sync engine, conflict resolution, tombstone GC |
 
 ## Workflow
 

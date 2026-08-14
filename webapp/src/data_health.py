@@ -342,6 +342,75 @@ def entity_stats(conn: sqlite3.Connection) -> dict[str, int]:
     return export_context(conn)
 
 
+# --------------------------------------------------------------------- #
+# 1.8 slice 7 -- Tombstone GC's own maintenance-service wrapper, same
+# "GUI and CLI share one implementation" shape as every backup action
+# above. `offline_sync.purge_expired` (src/offline_sync.py) does the
+# actual deletion; everything here is bookkeeping around *when* to call
+# it and remembering that it ran, for Settings > Data health's benefit.
+# --------------------------------------------------------------------- #
+
+SYNC_GC_RETENTION_DAYS_KEY = "sync_gc_retention_days"
+SYNC_GC_LAST_RUN_KEY = "sync_gc_last_run"
+
+
+def sync_gc_retention_days(conn: sqlite3.Connection) -> int:
+    """The configured tombstone/idempotency-ledger retention horizon (§4)
+    -- "alongside the existing auto-archive-style app_meta presets," per
+    §4's own line. Unset means the sync design's own documented default
+    (`offline_sync.RETENTION_DAYS`, 90 days -- already what `pull()`'s
+    staleness check has used since slice 1); an explicit `"0"` disables
+    physical purging specifically (the staleness-forces-full-resync
+    safety check is a correctness guarantee, not a storage-management
+    knob, and stays in effect either way)."""
+    from . import db, offline_sync
+
+    raw = db.get_app_meta(conn, SYNC_GC_RETENTION_DAYS_KEY)
+    if not raw:
+        return offline_sync.RETENTION_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return offline_sync.RETENTION_DAYS
+
+
+def set_sync_gc_retention_days(conn: sqlite3.Connection, days: int) -> None:
+    from . import db
+
+    db.set_app_meta(conn, SYNC_GC_RETENTION_DAYS_KEY, str(max(0, days)))
+
+
+def sync_gc_last_run(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    from . import db
+
+    raw = db.get_app_meta(conn, SYNC_GC_LAST_RUN_KEY)
+    return json.loads(raw) if raw else None
+
+
+def run_sync_gc(conn: sqlite3.Connection, *, force: bool = False) -> dict[str, Any] | None:
+    """The one entry point every caller goes through: routers/sync_api.py's
+    lazy "check on every pull" trigger (`force=False` -- a no-op when
+    retention is configured to 0/Never, the same "check lazily on a
+    request path, no cron" idiom `routers/tasks.py`'s auto-archive check
+    already established for this app), Settings' "Run cleanup now" button,
+    and `scripts/data_health.py`'s CLI (both `force=True` -- a manual
+    action should still work even with the automatic version turned off,
+    same as this page's other maintenance actions). Records what happened
+    as `SYNC_GC_LAST_RUN_KEY` regardless of whether anything was actually
+    purged, so Data health can show "last checked," not just "last found
+    something to delete." Returns `None` only for the force=False/disabled
+    case -- nothing ran, nothing to record."""
+    from . import db, offline_sync
+
+    days = sync_gc_retention_days(conn)
+    if days <= 0 and not force:
+        return None
+    result = offline_sync.purge_expired(conn, retention_days=days if days > 0 else offline_sync.RETENTION_DAYS)
+    record = {"at": datetime.now(timezone.utc).isoformat(), **result}
+    db.set_app_meta(conn, SYNC_GC_LAST_RUN_KEY, json.dumps(record))
+    return record
+
+
 def _sync_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     """1.8 slice 6 -- the sync engine (routers/sync_api.py, driven client-
     side by static/offline_sync_client.js) is now real, so this is no
@@ -363,6 +432,19 @@ def _sync_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _sync_gc_summary(conn: sqlite3.Connection) -> dict[str, Any]:
+    """1.8 slice 7 -- retention configuration + the last GC run, for
+    Settings > Data health's own Maintenance section. Separate from
+    `_sync_summary` (device push/pull state) since retention/purge is a
+    distinct concern -- a fresh install with no devices yet still has a
+    perfectly real (default) retention horizon to report."""
+    last_run = sync_gc_last_run(conn)
+    return {
+        "retention_days": sync_gc_retention_days(conn),
+        "last_run": last_run,
+    }
+
+
 def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -> dict[str, Any]:
     """Everything Settings > Data health's page needs in one call --
     open.md's own list: "database integrity/status; last successful
@@ -371,7 +453,7 @@ def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -
     directly (see `_sync_summary`) now that 1.8 slice 6 has shipped a real
     sync engine -- slices 1-5 left this as a fixed not-yet-available
     placeholder so this function's own shape wouldn't need to change once
-    it did."""
+    it did. `sync_gc` (slice 7) is the retention/purge counterpart."""
     backups = list_backups(backups_dir)
     latest = backups[0] if backups else None
     latest_verified = next((b for b in backups if b["verification"] is not None), None)
@@ -380,6 +462,7 @@ def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -
         "latest_backup": latest,
         "latest_verified_backup": latest_verified,
         "sync": _sync_summary(conn),
+        "sync_gc": _sync_gc_summary(conn),
         "storage": storage_stats(db_path, backups_dir),
         "entities": entity_stats(conn),
         "backups": backups,

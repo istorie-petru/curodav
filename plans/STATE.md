@@ -832,29 +832,69 @@ session, right before the final commit of that session.
   defineProperty` instead). Full suite 1293 passed. This wires slices 1-5
   together end to end — an offline write now actually leaves the device
   once one comes back online.
-- **Next slice:** `1.8` slice 7 — **Tombstone GC** (`open-priority.md` §
-  Offline-first editing & synchronization §11, slice 7). The §4 retention
-  horizon (default 90 days, `offline_sync.py`'s existing `RETENTION_DAYS`
-  constant already used by `pull()`'s staleness check) and the actual
-  physical purge job it currently has nothing to do — `field_versions`/
-  `sync_applied_ops` rows (and fully-tombstoned entity rows themselves,
-  per §4) older than the horizon get deleted for real, not just treated as
-  stale by a comparison. Needs a trigger (a scheduled/background job, or a
-  lazy check on some existing request path — this app has no cron
-  infrastructure yet outside `scripts/`, worth checking what
-  `scripts/data_health.py`'s own CLI convention already establishes before
-  inventing a new one) and a decision on whether purge only runs server-
-  side (client mirrors just accumulate forever, harmless for a single-user
-  local IndexedDB store) or needs a client-side counterpart too. This is
-  the last slice of 1.8's own 7-slice breakdown — closing it out completes
-  1.8 (bump `pyproject.toml`), pending a final pass confirming the
-  acceptance line (§11: "no field silently lost... restoring from an old
-  client cursor never resurrects a tombstoned row past the GC horizon").
-  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
-  optional Project check-in side work, and 1.6's optional "Configurable
-  views + optional Schedule module" side work are all still fine smaller,
-  self-contained slices instead, whenever a session wants a break from the
-  sync-engine/PWA work.
+- **Shipped:** `1.8` slice 7 — **Tombstone GC**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  7. New `offline_sync.purge_expired(conn, retention_days, now_ms)`: any
+  entity whose tombstone (`deleted_at`'s own stored HLC in
+  `field_versions`, not a string-timestamp comparison) is older than the
+  horizon is physically removed via the *existing* `db.delete_task`/
+  `delete_event`/`delete_contact` (so related-row cleanup —
+  `object_labels`, `event_task_relations`, ... — matches every other hard
+  delete in this app) plus its now-orphaned `field_versions` rows; an
+  edit newer than the tombstone (an un-delete, §4) naturally falls outside
+  the query with no special-casing, since that edit already advanced
+  `field_versions`' own `deleted_at` HLC past the old one. A second half
+  purges `sync_applied_ops` rows past the same horizon. New
+  `data_health.py` wrappers (`sync_gc_retention_days`/
+  `set_sync_gc_retention_days`/`run_sync_gc`/`sync_gc_last_run`) give this
+  the same "GUI and CLI share one implementation, no cron — check lazily
+  on a natural request path" treatment as every other Data health action:
+  `routers/sync_api.py`'s `pull` handler now calls `run_sync_gc` before
+  computing its own response (a pull is the sync engine's own heartbeat);
+  Settings > Data health gained a retention preset field (0/14/30/90/180
+  days, same fixed-choices convention as the existing auto-archive field)
+  and a "Run cleanup now" button; `scripts/data_health.py` gained a
+  `sync-gc` subcommand.
+  Closed a real correctness gap the slice's own acceptance line demanded:
+  once the server can physically purge an old tombstone, a plain
+  "re-pull and applyChanges" on a `full_resync` response could never tell
+  a badly-stale device that an already-purged entity is gone (nothing
+  left server-side to say so) — new `offline_db.js::clearMirror` wipes the
+  local `tasks`/`events`/`contacts`/`field_hlc` stores (outbox and device
+  identity untouched) before a full resync re-pulls, so "start over"
+  means an actual rebuild, not a merge into a mirror that might still
+  hold something the server has since forgotten.
+  Found and fixed a second real bug via a one-off Node + fake-indexeddb
+  smoke script purpose-built to exercise a genuine full-resync round trip
+  (every earlier smoke script's fake pull response had used a `null`
+  cursor, which never touched this code path): `offline_db.js::mergeHlc`
+  had been destructuring its argument as a `[physical, logical,
+  device_id]` array since slice 5, but every real caller passes the
+  `{physical, logical, device_id}` dict payload shape the wire protocol
+  actually uses — it silently threw against any real pull response
+  carrying a non-null cursor.
+  This closes 1.8's 7-slice breakdown. `pyproject.toml` bumped to
+  `1.8.0` — also caught and fixed a stale-versioning gap while doing so:
+  it had stayed at `1.3.0` since 1.4 despite this file's own session logs
+  claiming a bump at the end of each of 1.4/1.5/1.6/1.7; those bumps were
+  never actually committed. Not investigated further or backfilled — this
+  slice's bump just catches the number up to the app's real feature set.
+  `open-priority.md`'s own section heading struck through and marked
+  shipped (kept as the reference spec, per this repo's "How open work
+  gets tracked" convention); new `features/offline-sync.md` is the
+  outcome doc. 16 new tests (12 extending `test_offline_sync.py`/
+  `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
+  1309 passed. **1.8 is now fully shipped.**
+- **Next slice:** nothing queued yet toward `1.9` — the next session should
+  open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
+  the first real slice there (DAVx5 mobile hosting is pure infra, blocked
+  on an external domain + server, so likely not the first thing to pick
+  up). In the meantime, any of these smaller, self-contained side-work
+  items are fair game for a session that wants a break from that: `open.md`'s
+  Command palette actions follow-up (1.2 side work), 1.4's optional Project
+  check-in, 1.6's optional "Configurable views + optional Schedule module",
+  and 1.8's own Pagination/collapsible-sections side work (Phase B of
+  webapp usability, `roadmap.md`'s 1.8 row).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -1,4 +1,4 @@
-"""1.8 slices 3-5 -- the PWA shell (plans/open-priority.md § Offline-first
+"""1.8 slices 3-7 -- the PWA shell (plans/open-priority.md § Offline-first
 editing & synchronization §11).
 
 Slice 3: manifest, service worker, offline app-shell caching -- "can the
@@ -18,9 +18,29 @@ offline_db.js's new `outbox` IndexedDB store and applied optimistically to
 the mirror through the same per-field-HLC path a pull already uses).
 offline_db.js also gained this device's own §3 HLC clock (`nextHlc`/
 `mergeHlc`) -- nothing before this slice ever needed to *mint* an HLC, only
-apply server-supplied ones. Still no sync *engine* -- push, retry/backoff,
-and the status indicator are slice 6; queued ops just accumulate in the
-outbox until then.
+apply server-supplied ones.
+
+Slice 6: the sync *engine* -- static/offline_sync_client.js grew a push
+half (draining the outbox against POST /api/sync/push) alongside its pull
+half, wrapped in §8's push-then-pull order; §5's retry/backoff with
+jitter; and static/offline_status.js, the small offline/synchronizing/
+pending/synced indicator, computed live off {navigator.onLine, in-flight,
+outbox size} rather than stored. This is what wires slices 1-5 together
+end to end -- an offline write finally leaves the device once one comes
+back online.
+
+Slice 7: "Tombstone GC" -- src/offline_sync.py's `purge_expired` (the
+physical-deletion half of §4's retention horizon; slice 1's `pull()`
+already had the safety half, forcing a full resync for a stale cursor),
+wired into routers/sync_api.py's pull handler as a lazy "check on every
+pull" trigger (src/data_health.py's `run_sync_gc`, also reachable from
+Settings > Data health and scripts/data_health.py's CLI). Closing this
+gap also exposed a real correctness risk in slice 4's own full_resync
+handling: once the server can physically purge an old tombstone, a plain
+re-pull-and-applyChanges could never tell a badly-stale device that
+already-purged entity is gone -- static/offline_db.js's new `clearMirror`
+and offline_sync_client.js calling it before a full resync's re-pull is
+what closes that gap. This is the last of 1.8's 7 planned slices.
 
 Neither a real service worker nor real IndexedDB can be exercised by this
 app's usual pytest/router-function-call convention (there's no browser
@@ -356,6 +376,40 @@ class TestSyncEngine:
             assert summary["sync"]["configured"] is True
             assert summary["sync"]["device_count"] == 1
             assert summary["sync"]["last_seen_at"] is not None
+
+
+class TestTombstoneGc:
+    """1.8 slice 7 -- "Tombstone GC" (open-priority.md §11 slice 7). Same
+    structural-check level as every other class here; the real purge logic
+    is covered server-side by test_offline_sync.py's TestPurgeExpired, and
+    the client-side wipe-before-full-resync fix by a one-off Node +
+    fake-indexeddb smoke script (this slice's own, not part of this
+    suite, same pattern slices 4-6 already established)."""
+
+    def test_offline_db_gained_clear_mirror(self):
+        script = (_STATIC_DIR / "offline_db.js").read_text()
+        assert "clearMirror" in script
+        assert "window.CCOfflineDB" in script
+
+    def test_full_resync_clears_the_mirror_before_re_pulling(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "clearMirror()" in script
+        # clearMirror() must run inside the `if (body.full_resync)` branch,
+        # strictly before the pull's own applyChanges call that follows it
+        # (whether or not that particular round hit the full_resync path).
+        assert script.index("if (body.full_resync)") < script.index("clearMirror()") < script.index(
+            "applyChanges(body.changes)"
+        )
+
+    def test_settings_data_health_page_shows_sync_cleanup_controls(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_health.html").read_text()
+        assert "sync-retention" in html
+        assert "sync-gc" in html
+
+    def test_scripts_data_health_cli_has_a_sync_gc_subcommand(self):
+        script = (Path(__file__).resolve().parent.parent / "scripts" / "data_health.py").read_text()
+        assert '"sync-gc"' in script
+        assert "cmd_sync_gc" in script
 
 
 class TestRouterWiring:

@@ -51,6 +51,17 @@ def _field_set_op(op_id, entity_type, entity_uid, fields: dict, device_id="devic
     }
 
 
+def _delete_op(op_id, entity_type, entity_uid, physical, device_id="device-a") -> dict:
+    return {
+        "op_id": op_id,
+        "entity_type": entity_type,
+        "entity_uid": entity_uid,
+        "op_type": "delete",
+        "device_id": device_id,
+        "hlc": _hlc(physical, device=device_id),
+    }
+
+
 def _json_request(payload: dict) -> Request:
     req = Request({
         "type": "http", "method": "POST", "path": "/x",
@@ -232,6 +243,94 @@ class TestPullPureLogic:
         assert result["changes"] == []
 
 
+_DAY_MS = 24 * 60 * 60 * 1000
+
+
+class TestPurgeExpired:
+    """1.8 slice 7 -- "Tombstone GC." `purge_expired`'s two halves: old
+    tombstoned entities (+ their field_versions rows) and old
+    sync_applied_ops ledger entries. `now_ms` is pinned throughout, same
+    convention TestPullPureLogic's own staleness tests already use, so
+    "how old" is exact rather than dependent on when the test happens to
+    run."""
+
+    def test_old_tombstone_is_physically_purged(self, conn):
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        now_ms = 2000 + 200 * _DAY_MS  # 200 days after the delete, > 90-day horizon
+        result = offline_sync.purge_expired(conn, now_ms=now_ms)
+        assert result["purged_entities"]["task"] == 1
+        assert db.get_task(conn, "t1") is None
+        assert db.get_field_hlc(conn, "task", "t1", "title") is None
+        assert db.get_field_hlc(conn, "task", "t1", "deleted_at") is None
+
+    def test_tombstone_within_retention_is_left_alone(self, conn):
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        now_ms = 2000 + 5 * _DAY_MS  # only 5 days later, well within the 90-day default
+        result = offline_sync.purge_expired(conn, now_ms=now_ms)
+        assert result["purged_entities"]["task"] == 0
+        assert db.get_task(conn, "t1") is not None
+
+    def test_un_deleted_row_is_never_purged_even_though_the_original_tombstone_is_old(self, conn):
+        # §4: an edit newer than the tombstone un-deletes the row -- that
+        # newer edit's own HLC becomes field_versions' new deleted_at HLC
+        # (offline_sync._apply_field_write's "cleared_by_newer_edit"
+        # branch), so this case naturally falls outside the "old
+        # tombstone" query with no special-case purge logic needed.
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        offline_sync.apply_op(conn, _field_set_op("op3", "task", "t1", {"title": {"value": "Restored", "hlc": _hlc(3000)}}))
+        now_ms = 3000 + 200 * _DAY_MS
+        result = offline_sync.purge_expired(conn, now_ms=now_ms)
+        assert result["purged_entities"]["task"] == 0
+        task = db.get_task(conn, "t1")
+        assert task is not None and task["title"] == "Restored" and task["deleted_at"] is None
+
+    def test_purge_removes_related_rows_via_the_normal_delete_path(self, conn):
+        # Reuses db.delete_task (not a raw DELETE), so object_labels/
+        # event_task_relations cleanup happens the same way any other
+        # hard-delete in this app already gets it.
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        db.set_object_labels(conn, "task", "t1", ["Work"])
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        now_ms = 2000 + 200 * _DAY_MS
+        offline_sync.purge_expired(conn, now_ms=now_ms)
+        remaining = conn.execute(
+            "SELECT COUNT(*) FROM object_labels WHERE object_type = 'task' AND object_id = 't1'"
+        ).fetchone()[0]
+        assert remaining == 0
+
+    def test_old_sync_applied_ops_are_purged_recent_ones_are_not(self, conn):
+        old = _field_set_op("old-op", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})
+        offline_sync.apply_op(conn, old)
+        # Backdate the ledger row directly -- record_sync_applied_op always
+        # stamps real wall-clock "now," so this simulates "applied a long
+        # time ago" the same way a real installation would accumulate one.
+        conn.execute(
+            "UPDATE sync_applied_ops SET applied_at = ? WHERE op_id = ?",
+            ("2020-01-01T00:00:00+00:00", "old-op"),
+        )
+        conn.commit()
+        recent = _field_set_op("recent-op", "task", "t2", {"title": {"value": "T2", "hlc": _hlc(1000)}})
+        offline_sync.apply_op(conn, recent)
+        result = offline_sync.purge_expired(conn)  # real "now" -- old-op is years stale, recent-op is seconds old
+        assert result["purged_applied_ops"] == 1
+        assert db.get_sync_applied_op(conn, "old-op") is None
+        assert db.get_sync_applied_op(conn, "recent-op") is not None
+
+    def test_retention_days_zero_would_purge_everything_strictly_past_now(self, conn):
+        # purge_expired itself takes retention_days at face value -- the
+        # "0 disables GC" policy decision lives in data_health.run_sync_gc
+        # (Settings/CLI/lazy-trigger layer), not here, so this only checks
+        # the math: a 0-day horizon means the cutoff equals "now," and
+        # anything strictly older than that instant is eligible.
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        result = offline_sync.purge_expired(conn, retention_days=0, now_ms=2001)
+        assert result["purged_entities"]["task"] == 1
+
+
 class TestSyncApiRouter:
     def test_push_applies_ops_and_returns_per_op_results(self, conn):
         resp = asyncio.run(sync_api.push(_json_request({
@@ -269,6 +368,27 @@ class TestSyncApiRouter:
         resp = asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
         body = _json.loads(resp.body.decode())
         assert any(c["entity_uid"] == "t1" and c["value"] == "From A" for c in body["changes"])
+
+    def test_pull_lazily_runs_gc_at_the_configured_retention(self, conn):
+        # 1.8 slice 7 -- pull is the sync engine's own heartbeat (routers/
+        # sync_api.py's own docstring note); a genuinely ancient tombstone
+        # (physical ~ 1970, guaranteed >> 90 days before whenever this test
+        # actually runs) should be gone by the time a pull request returns,
+        # with no separate GC call from the test itself.
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        assert db.get_task(conn, "t1") is not None  # sanity: still there before the pull
+        asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
+        assert db.get_task(conn, "t1") is None
+
+    def test_pull_does_not_run_gc_when_retention_is_disabled(self, conn):
+        from src import data_health
+
+        data_health.set_sync_gc_retention_days(conn, 0)
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}}))
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
+        assert db.get_task(conn, "t1") is not None
 
 
 def _seed_event(conn, uid, **overrides):

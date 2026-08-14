@@ -36,7 +36,7 @@ never hold Track A up.
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14** | Configurable views + optional Schedule (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | Offline-first editing & synchronization | Pagination | 1.1 (WebDAV) + ~~data health~~ (shipped) |
+| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | Pagination (not started — optional, doesn't block 1.9+) | 1.1 (WebDAV) + ~~data health~~ (shipped) |
 | `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
 | `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
 
@@ -217,59 +217,55 @@ phases (Dashboard's widget-grid Home, Spaces' `generate_space` label pages +
 University module) and closed out without new code. See `plans/STATE.md`'s
 1.7 entries.
 
-### 1.8 — Trust & offline
+### ~~1.8 — Trust & offline~~ — fully shipped 2026-08-14
 
-**Offline-first editing & synchronization** (`open-priority.md` § Offline-first
-editing & synchronization) — the largest engineering item. Both preconditions
-are now met: verified backups **shipped 2026-08-14** (Settings > Data health),
-and the sync model itself (entity identifiers, HLC ordering, tombstones,
-per-field conflict detection, the two conflict-surfacing exceptions for
-work-allocation/event time fields and single-project-per-task) is **designed,
-2026-08-14** — see `open-priority.md`'s own section for the full model and its
-7-slice implementation breakdown. **Slice 1 (field-HLC shadow store + sync API
-skeleton) shipped 2026-08-14** — `field_versions`/`sync_devices`/
-`sync_applied_ops`, `src/offline_sync.py`'s §6 per-field LWW apply logic, and
-`POST /api/sync/push`/`/api/sync/pull` (`routers/sync_api.py`). **Slice 2
-(Sync conflicts surface) shipped 2026-08-14** — `sync_conflicts` table +
-`/settings/sync-conflicts` (restore/dismiss), §7b's event-time concurrent-edit
-detection and §7c's single-project-per-task batch re-validation both wired
-into slice 1's apply path. **Slice 3 (PWA shell) shipped 2026-08-14** —
-`static/manifest.webmanifest` + `static/sw.js` (`routers/pwa.py`'s `GET
-/sw.js`/`GET /offline`), installable with an app-shell precache and an
-`/offline` fallback page for a failed navigation, no sync/IndexedDB/local
-writes yet (slices 4-6). The first genuinely browser-dependent piece of 1.8 —
-service worker registration/caching itself needs manual browser
-verification, not covered by this app's router-function-call pytest
-convention. **Slice 4 (local IndexedDB store + read path) shipped
-2026-08-14** — `static/offline_db.js` (an IndexedDB mirror of tasks/events/
-contacts, per-field HLC tracked the same way `field_versions` is server-side)
-+ `static/offline_sync_client.js` (§8's pull half, client-side, loaded
-globally so the mirror is warm before the network drops) + `static/
-offline_shell.js` (renders `/offline`'s `#offline-local-data` straight from
-the mirror, no network call of its own). Still read-only — no local writes
-or push yet (slice 5). Verified both by `test_pwa_shell.py`'s structural
-checks and a one-off Node + fake-indexeddb smoke run of the real merge logic
-(not added to the pytest suite). **Slice 5 (local write path + outbox)
-shipped 2026-08-14** — `static/offline_write.js` (create/complete/delete a
-task offline, each queued as a §2 op into `offline_db.js`'s new `outbox`
-IndexedDB store and applied optimistically to the mirror through the same
-per-field-HLC path a pull already uses) + `offline_db.js`'s own new §3 HLC
-clock (`nextHlc`/`mergeHlc`) + `/offline`'s task list gaining an "add a
-task" form and per-row complete/delete controls. Still no sync engine —
-queued ops just accumulate until slice 6. **Slice 6 (sync engine) shipped
-2026-08-14** — `offline_sync_client.js` grew a push half (`pushOnce`,
-draining the outbox against `POST /api/sync/push`, acking via
-`removeOutboxOps`) alongside its existing pull half, wrapped by `syncNow()`
-in §8's push-then-pull order, plus §5's exponential backoff/jitter retry
-(capped 30s, reset on the `online` event or a successful round) and a
-local write triggering an immediate sync attempt when already online. New
-`static/offline_status.js` renders the small offline/synchronizing/
-pending/synced indicator off a `cc-offline-status-change` event the engine
-dispatches — status is computed live, never stored, so it can't drift.
-`data_health.py`'s Data health "sync" field flips from a fixed placeholder
-to real `sync_devices` state via new `db.list_sync_devices`. This closes
-the sync engine that wires slices 1-5 together end to end; **1.8 is not
-yet fully shipped** — slice 7 (tombstone GC) remains.
+**Offline-first editing & synchronization** (`open-priority.md` §
+~~Offline-first editing & synchronization~~, `features/offline-sync.md`) —
+the largest engineering item, delivered as 7 separable slices (a server-side
+sync engine with no browser dependency, wired to a PWA client at the end).
+Both preconditions were met before slice 1: verified backups (Settings >
+Data health) and the sync model design (entity identifiers, HLC ordering,
+tombstones, per-field conflict detection, the two conflict-surfacing
+exceptions for work-allocation/event time fields and single-project-per-
+task). `pyproject.toml` bumped to `1.8.0`.
+
+- ~~Field-HLC shadow store + sync API skeleton~~ **shipped 2026-08-14** —
+  `field_versions`/`sync_devices`/`sync_applied_ops`, `src/offline_sync.py`'s
+  per-field LWW apply logic, `POST /api/sync/push`/`/api/sync/pull`.
+- ~~Sync conflicts surface~~ **shipped 2026-08-14** — `sync_conflicts` table
+  + `/settings/sync-conflicts` (restore/dismiss); event-time concurrent-edit
+  detection and single-project-per-task batch re-validation wired in.
+- ~~PWA shell~~ **shipped 2026-08-14** — `static/manifest.webmanifest` +
+  `static/sw.js` (`routers/pwa.py`'s `GET /sw.js`/`GET /offline`),
+  installable with an app-shell precache and an `/offline` fallback page.
+- ~~Local IndexedDB store + read path~~ **shipped 2026-08-14** —
+  `static/offline_db.js` (a per-field-HLC-tracked mirror of tasks/events/
+  contacts) + `static/offline_sync_client.js` (the pull half, loaded
+  globally) + `static/offline_shell.js` (`/offline`'s read-only list).
+- ~~Local write path + outbox~~ **shipped 2026-08-14** —
+  `static/offline_write.js` (create/complete/delete a task offline, queued
+  into a new `outbox` IndexedDB store, applied optimistically to the
+  mirror) + `offline_db.js`'s own client-side HLC clock (`nextHlc`/
+  `mergeHlc`).
+- ~~Sync engine~~ **shipped 2026-08-14** — `offline_sync_client.js` grew a
+  push half (draining the outbox, push-then-pull order) plus exponential
+  backoff/jitter retry; new `static/offline_status.js` (the small offline/
+  synchronizing/pending/synced indicator, computed live off real state).
+- ~~Tombstone GC~~ **shipped 2026-08-14** — `offline_sync.purge_expired`
+  physically removes tombstoned entities and stale idempotency-ledger rows
+  past the retention horizon (default 90 days), run lazily on every pull
+  and configurable from Settings > Data health / the CLI. Closed a real
+  correctness gap along the way: a `full_resync` now wipes the local
+  mirror first (`offline_db.js::clearMirror`) so a badly-stale device can't
+  resurrect an already-purged entity; also fixed a genuine bug
+  (`mergeHlc` had been destructuring its argument as the wrong shape since
+  slice 5, caught by a smoke script built to exercise a real full-resync
+  round trip). **1.8 is now fully shipped.**
+
+See `features/offline-sync.md` for the outcome doc (data model, conflict
+resolution, protocol, PWA shell, GC) now that the open-priority.md design
+section has been marked shipped/struck-through per this repo's own "How
+open work gets tracked" convention.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

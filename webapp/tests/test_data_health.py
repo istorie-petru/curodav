@@ -200,9 +200,13 @@ class TestHealthSummary:
         summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", tmp_path / "backups")
         assert set(summary) == {
             "integrity", "latest_backup", "latest_verified_backup",
-            "sync", "storage", "entities", "backups",
+            "sync", "sync_gc", "storage", "entities", "backups",
         }
         assert summary["sync"]["configured"] is False
+        # 1.8 slice 7 -- retention defaults to offline_sync.RETENTION_DAYS
+        # (90) until explicitly configured; no GC has run yet on a fresh db.
+        assert summary["sync_gc"]["retention_days"] == 90
+        assert summary["sync_gc"]["last_run"] is None
 
 
 class TestSettingsDataHealthPage:
@@ -265,3 +269,49 @@ class TestSettingsDataHealthPage:
     def test_data_health_is_a_hub_category(self):
         urls = [c["url"] for c in settings_router.HUB_CATEGORIES]
         assert "/settings/data-health" in urls
+
+
+class TestSyncGcRoutes:
+    """1.8 slice 7 -- Settings' side of tombstone GC: the retention preset
+    field and the manual "Run cleanup now" action."""
+
+    def test_set_retention_stores_a_valid_preset(self, conn):
+        resp = settings_router.data_health_set_sync_retention(days="30", conn=conn)
+        assert resp.status_code == 303
+        assert data_health.sync_gc_retention_days(conn) == 30
+
+    def test_set_retention_rejects_an_unrecognized_value(self, conn):
+        # Same "fall back to the safe default rather than storing a typo'd
+        # value" convention as set_task_auto_archive.
+        resp = settings_router.data_health_set_sync_retention(days="not-a-number", conn=conn)
+        assert resp.status_code == 303
+        assert data_health.sync_gc_retention_days(conn) == 90
+
+    def test_run_now_purges_and_records_a_last_run(self, conn):
+        from src import offline_sync
+
+        offline_sync.apply_op(conn, {
+            "op_id": "op1", "entity_type": "task", "entity_uid": "t1", "op_type": "field_set",
+            "device_id": "device-a", "fields": {"title": {"value": "T", "hlc": {"physical": 1000, "logical": 0, "device_id": "device-a"}}},
+        })
+        offline_sync.apply_op(conn, {
+            "op_id": "op2", "entity_type": "task", "entity_uid": "t1", "op_type": "delete",
+            "device_id": "device-a", "hlc": {"physical": 2000, "logical": 0, "device_id": "device-a"},
+        })
+        resp = settings_router.data_health_run_sync_gc(conn=conn)
+        assert resp.status_code == 303
+        assert "note" in resp.headers["location"]
+        # force=True runs even though retention defaults to 90 days and
+        # this tombstone is only milliseconds old by wall-clock "now" --
+        # the manual action isn't gated by the automatic trigger's own
+        # retention window at all, it always runs.
+        last_run = data_health.sync_gc_last_run(conn)
+        assert last_run is not None
+        assert last_run["retention_days"] == 90
+        assert last_run["purged_entities"]["task"] == 1
+
+    def test_run_now_still_works_when_retention_is_set_to_never(self, conn):
+        data_health.set_sync_gc_retention_days(conn, 0)
+        resp = settings_router.data_health_run_sync_gc(conn=conn)
+        assert resp.status_code == 303
+        assert data_health.sync_gc_last_run(conn) is not None

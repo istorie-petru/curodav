@@ -1,9 +1,10 @@
-"""1.8 slices 1-2 -- "Field-HLC shadow store + sync API skeleton" and
-"Sync conflicts surface" (plans/open-priority.md § Offline-first editing &
-synchronization, §11). Pure conflict-detection/apply logic, deliberately
-independent of FastAPI/HTTP (routers/sync_api.py is the thin HTTP wrapper
-around this module) -- same "pure module + router" split as
-recurrence_expand.py/grid_layout.py elsewhere in this app.
+"""1.8 slices 1-2 and 7 -- "Field-HLC shadow store + sync API skeleton",
+"Sync conflicts surface", and "Tombstone GC" (plans/open-priority.md §
+Offline-first editing & synchronization, §11). Pure conflict-detection/
+apply/GC logic, deliberately independent of FastAPI/HTTP
+(routers/sync_api.py is the thin HTTP wrapper around this module) -- same
+"pure module + router" split as recurrence_expand.py/grid_layout.py
+elsewhere in this app.
 
 Slice 1 scope: §6's per-field last-write-wins conflict detection and §8's
 push/pull protocol shape. What falls out of that same mechanism with no
@@ -36,6 +37,14 @@ of silently discarding it:
   `MultipleProjectLabelsError`) across an entire batch's `label_add` ops
   after they've all applied, not per-op (each individual add is a valid,
   commutative §7a op; only the *combination* can violate the invariant).
+
+Slice 7 adds `purge_expired` -- the physical-deletion half of §4's
+retention horizon. Slice 1's `pull()` already had the *safety* half (a
+stale cursor forces a full resync instead of a possibly-incomplete
+incremental delta); this is what actually removes a tombstoned entity
+(and its `field_versions` rows) and stale `sync_applied_ops` ledger
+entries once they're safely past that same horizon, so this app's own
+sync bookkeeping doesn't grow forever.
 """
 
 from __future__ import annotations
@@ -386,8 +395,9 @@ def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, f
 # Tombstone GC retention horizon (§4) -- a device whose cursor predates
 # this can't safely apply an incremental pull (a tombstone it never saw
 # may already be gone) and instead gets told to do a full resync (§8).
-# Physical purge itself is slice 7's job; this slice only needs the
-# comparison, since nothing here ever deletes a field_versions row yet.
+# Slice 1 only needed this for that comparison; slice 7's `purge_expired`
+# below (further down this file) is what actually deletes anything once
+# it's safely past the same horizon.
 RETENTION_DAYS = 90
 
 
@@ -425,3 +435,101 @@ def pull(
     ]
     new_cursor = changes[-1]["hlc"] if changes else cursor
     return {"full_resync": False, "changes": changes, "cursor": new_cursor}
+
+
+# --------------------------------------------------------------------- #
+# 1.8 slice 7 -- "Tombstone GC" (open-priority.md §11 slice 7). `pull()`
+# above (slice 1) already has the *safety* half of §4's retention horizon:
+# a cursor older than RETENTION_DAYS gets a forced full_resync instead of
+# a possibly-incomplete incremental delta. What was still missing is the
+# other half -- actually deleting anything once it's safely past that
+# horizon, so field_versions/sync_applied_ops/the entity tables don't grow
+# forever. `purge_expired` below is that job; it's deliberately a plain
+# function with no scheduling opinion of its own (no cron in this app --
+# routers/sync_api.py's own lazy "check on every pull" trigger, and
+# Settings > Data health's manual one, both just call this the same way
+# routers/tasks.py's own auto-archive check calls db.delete_old_completed_
+# tasks).
+# --------------------------------------------------------------------- #
+
+
+def _purge_expired_tombstones(conn: sqlite3.Connection, cutoff_ms: int) -> dict[str, int]:
+    """Physically removes any entity whose tombstone (`deleted_at`, per §4)
+    is older than `cutoff_ms` -- by the time GC runs at all, the retention
+    horizon has already elapsed, so every device that could still need an
+    incremental delta mentioning this deletion has either already applied
+    it or has a cursor stale enough to trigger `pull()`'s own full_resync
+    branch instead (which never depends on an already-purged tombstone
+    still being present -- a device rebuilding from scratch has nothing
+    locally to "resurrect" for a uid the fresh pull simply never mentions).
+
+    Reads eligibility off `field_versions`' own stored HLC for the
+    `deleted_at` field, not the entity row's plain `deleted_at` column --
+    an edit newer than a tombstone un-deletes the row (§4) by advancing
+    that same field_versions HLC forward, so a row that was un-deleted
+    naturally stops being eligible with no separate check needed. Reuses
+    `db.delete_task`/`delete_event`/`delete_contact` (not a raw `DELETE
+    FROM`) so the same related-row cleanup (`object_labels`,
+    `event_task_relations`, ...) every other hard-delete path in this app
+    already gets applies here too."""
+    counts = {entity_type: 0 for entity_type in _ENTITY_TABLES}
+    rows = conn.execute(
+        "SELECT entity_type, entity_uid FROM field_versions WHERE field_name = 'deleted_at' AND hlc_physical < ?",
+        (cutoff_ms,),
+    ).fetchall()
+    for entity_type, uid in rows:
+        table = _ENTITY_TABLES.get(entity_type)
+        if table is None:
+            continue
+        current = conn.execute(f"SELECT deleted_at FROM {table} WHERE uid = ?", (uid,)).fetchone()
+        if current is None or current[0] is None:
+            # Already gone (a prior GC run, or some other cleanup path),
+            # or un-deleted since -- see the docstring above. Either way,
+            # nothing to purge for this uid.
+            continue
+        if entity_type == "task":
+            db.delete_task(conn, uid)
+        elif entity_type == "event":
+            db.delete_event(conn, uid)
+        elif entity_type == "contact":
+            db.delete_contact(conn, uid)
+        conn.execute(
+            "DELETE FROM field_versions WHERE entity_type = ? AND entity_uid = ?", (entity_type, uid)
+        )
+        counts[entity_type] += 1
+    conn.commit()
+    return counts
+
+
+def _purge_expired_applied_ops(conn: sqlite3.Connection, cutoff_ms: int) -> int:
+    """§5's idempotency ledger is only ever consulted to replay a *retried*
+    push after a dropped connection -- nothing plausibly retries a push
+    from `cutoff_ms` ago, so these rows are pure accumulated cruft past
+    that point. `applied_at` is stored as an ISO 8601 UTC string
+    (`record_sync_applied_op`), which sorts correctly as plain text, so no
+    parsing is needed to compare it against the same cutoff."""
+    cutoff_iso = _hlc_to_iso((cutoff_ms, 0, ""))
+    cur = conn.execute(
+        "DELETE FROM sync_applied_ops WHERE applied_at IS NOT NULL AND applied_at < ?", (cutoff_iso,)
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def purge_expired(
+    conn: sqlite3.Connection, *, retention_days: int = RETENTION_DAYS, now_ms: int | None = None
+) -> dict[str, Any]:
+    """The one entry point every caller (the lazy pull-time trigger, the
+    Settings "Run cleanup now" button, and the CLI) goes through -- see
+    this section's own header comment for why none of them duplicate the
+    cutoff math or the two purge steps themselves."""
+    now_ms = now_ms if now_ms is not None else int(datetime.now(timezone.utc).timestamp() * 1000)
+    cutoff_ms = now_ms - retention_days * 24 * 60 * 60 * 1000
+    purged_entities = _purge_expired_tombstones(conn, cutoff_ms)
+    purged_applied_ops = _purge_expired_applied_ops(conn, cutoff_ms)
+    return {
+        "retention_days": retention_days,
+        "cutoff_ms": cutoff_ms,
+        "purged_entities": purged_entities,
+        "purged_applied_ops": purged_applied_ops,
+    }

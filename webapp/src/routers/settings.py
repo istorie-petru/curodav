@@ -484,6 +484,16 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
 
 _DATA_HEALTH_CRUMB = _ROOT_CRUMB
 
+# Fixed preset choices, not a free-typed number -- same reasoning as
+# settings_advanced.html's own auto-archive field (this module's own
+# DAYS_CHOICES): a select autosubmits on pick, matching this page's other
+# direct controls, and a validated preset can never end up storing
+# something typo'd/out-of-range. This app's sync design documents 90 days
+# as the retention horizon's own default (offline_sync.RETENTION_DAYS),
+# so unlike DAYS_CHOICES' "0/Never" default, this field's own default
+# selection is 90 -- see data_health.sync_gc_retention_days's docstring.
+SYNC_GC_DAYS_CHOICES = [("0", "Never (disabled)"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days"), ("180", "180 days")]
+
 
 def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
@@ -500,6 +510,7 @@ def settings_data_health(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_data_health",
             "crumbs": _DATA_HEALTH_CRUMB,
             "title": "Data health",
+            "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
             **summary,
         },
     )
@@ -556,6 +567,34 @@ def data_health_integrity_check(conn=Depends(get_db)):
 def data_health_repair(request: Request, conn=Depends(get_db)):
     result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
     return RedirectResponse(url="/settings/data-health?note=Compacted+and+reindexed+the+database.", status_code=303)
+
+
+@router.post("/settings/data-health/sync-retention")
+def data_health_set_sync_retention(days: str = Form("90"), conn=Depends(get_db)):
+    """1.8 slice 7 -- Settings' side of the tombstone/idempotency-ledger
+    retention horizon (§4). `0` disables automatic (lazy, on-pull) GC --
+    same "0 = Never" idiom `routers/tasks.py`'s auto-archive field already
+    uses -- without touching `pull()`'s own stale-cursor-forces-full-resync
+    safety check, which isn't gated by this setting at all. Only ever
+    stores one of the offered presets, same validation-against-the-select's-
+    -own-options convention as `set_task_auto_archive`."""
+    valid = {choice for choice, _ in SYNC_GC_DAYS_CHOICES}
+    data_health.set_sync_gc_retention_days(conn, int(days) if days in valid else 90)
+    return RedirectResponse(url="/settings/data-health?note=Sync+cleanup+retention+updated.", status_code=303)
+
+
+@router.post("/settings/data-health/sync-gc")
+def data_health_run_sync_gc(conn=Depends(get_db)):
+    """The manual "Run cleanup now" action -- always runs (force=True),
+    even if the lazy automatic trigger is set to Never, same as this
+    page's other maintenance actions (Backup now, Verify, Repair) always
+    being available regardless of any automatic counterpart's own
+    setting."""
+    result = data_health.run_sync_gc(conn, force=True)
+    purged_entities = result["purged_entities"]
+    purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
+    note = f"Sync+cleanup+ran%3A+{purged_total}+row(s)+purged." if purged_total else "Sync+cleanup+ran%3A+nothing+to+purge."
+    return RedirectResponse(url=f"/settings/data-health?note={note}", status_code=303)
 
 
 # --------------------------------------------------------------------- #

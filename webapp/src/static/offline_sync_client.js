@@ -69,13 +69,21 @@
     if (!body) return false;
 
     if (body.full_resync) {
-      // §8: nothing has ever been physically purged yet in this app (§4's
-      // GC is slice 7), so "full resync" today is simply "re-pull from
-      // the very start" -- a cursor of null already returns everything
-      // (offline_sync.pull's own docstring), so one retry with a cleared
-      // cursor is enough; a server that somehow answers full_resync again
-      // for cursor=null is a bug on the server side, not something to
-      // retry forever for.
+      // 1.8 slice 7 -- now that the server actually purges old tombstones
+      // (offline_sync.purge_expired), a full resync can no longer be
+      // treated as "just re-pull, applyChanges will sort it out": a
+      // purged entity's field_versions rows are gone server-side, so the
+      // resync payload can never carry a "this is deleted" signal for it.
+      // The only honest way to guarantee this device can't resurrect a
+      // stale local copy of something that's since been purged is to
+      // actually start over -- wipe the local mirror first, then rebuild
+      // purely from what the resync returns (see offline_db.js's
+      // `clearMirror` for the full reasoning). One retry with a cleared
+      // cursor is enough (a cursor of null already returns everything,
+      // per offline_sync.pull's own docstring); a server that somehow
+      // answers full_resync again for cursor=null is a bug on the server
+      // side, not something to retry forever for.
+      await window.CCOfflineDB.clearMirror();
       await window.CCOfflineDB.setCursor(null);
       body = await postJson("/api/sync/pull", { device_id: await window.CCOfflineDB.getDeviceId(), cursor: null });
       if (!body || body.full_resync) return false;

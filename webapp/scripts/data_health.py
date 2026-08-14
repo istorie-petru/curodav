@@ -14,6 +14,7 @@ Usage:
     python scripts/data_health.py restore <filename> [--no-safety-backup]
     python scripts/data_health.py integrity-check
     python scripts/data_health.py repair
+    python scripts/data_health.py sync-gc [--retention-days N]
 
 All subcommands accept --db-path and --backup-dir to override the app's
 configured locations (same CC_DB_PATH / CC_BACKUP_DIR env vars
@@ -31,7 +32,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_THIS_DIR.parent / "src"))
 sys.path.insert(0, str(_THIS_DIR.parent))
 
-from src import data_health, db  # noqa: E402
+from src import data_health, db, offline_sync  # noqa: E402
 
 
 def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
@@ -70,6 +71,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     else:
         print("Last verification  : none yet")
     print(f"Sync               : {summary['sync']['detail']}")
+    gc = summary["sync_gc"]
+    gc_line = f"{gc['retention_days']}-day retention" if gc["retention_days"] else "disabled"
+    if gc["last_run"]:
+        purged = sum(gc["last_run"]["purged_entities"].values()) + gc["last_run"]["purged_applied_ops"]
+        gc_line += f", last ran {gc['last_run']['at']} ({purged} row(s) purged)"
+    else:
+        gc_line += ", never run"
+    print(f"Sync cleanup       : {gc_line}")
     st = summary["storage"]
     print(f"Database size      : {_fmt_bytes(st['db_size_bytes'])}")
     print(f"Backups            : {st['backup_count']} ({_fmt_bytes(st['backups_dir_size_bytes'])})")
@@ -156,6 +165,28 @@ def cmd_repair(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync_gc(args: argparse.Namespace) -> int:
+    """1.8 slice 7 -- always runs (force=True), same as `repair`/`backup`
+    above always running regardless of the lazy on-pull trigger's own
+    Settings > Data health toggle; `--retention-days` overrides that
+    stored setting for this one run without changing it, useful for e.g.
+    a one-off "clean up anything older than 7 days" run without touching
+    the app's own configured default."""
+    db_path, _ = _resolve_paths(args)
+    with db.connect(db_path) as conn:
+        if args.retention_days is not None:
+            result = offline_sync.purge_expired(conn, retention_days=args.retention_days)
+        else:
+            result = data_health.run_sync_gc(conn, force=True)
+    purged_entities = result["purged_entities"]
+    purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
+    print(f"Purged {purged_total} row(s) past the {result['retention_days']}-day retention horizon:")
+    for entity_type, count in purged_entities.items():
+        print(f"  {entity_type:<8}: {count}")
+    print(f"  applied ops: {result['purged_applied_ops']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db-path", type=Path, default=None)
@@ -177,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("integrity-check").set_defaults(func=cmd_integrity_check)
     sub.add_parser("repair").set_defaults(func=cmd_repair)
+
+    p_sync_gc = sub.add_parser("sync-gc")
+    p_sync_gc.add_argument("--retention-days", type=int, default=None)
+    p_sync_gc.set_defaults(func=cmd_sync_gc)
 
     args = parser.parse_args(argv)
     return args.func(args)

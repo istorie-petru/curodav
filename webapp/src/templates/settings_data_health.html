@@ -49,6 +49,19 @@
             <span class="spacer"></span>
             <span class="tag-usage-count">{{ 'Configured' if sync.configured else 'Not configured' }}</span>
         </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Sync cleanup
+                <span class="settings-field-hint">
+                    {% if sync_gc.last_run %}
+                        Last ran {{ sync_gc.last_run.at }} -- {{ (sync_gc.last_run.purged_entities.values() | sum) + sync_gc.last_run.purged_applied_ops }} row(s) purged
+                    {% else %}
+                        Not run yet
+                    {% endif %}
+                </span>
+            </span>
+            <span class="spacer"></span>
+            <span class="tag-usage-count">{{ sync_gc.retention_days ~ '-day retention' if sync_gc.retention_days else 'Disabled' }}</span>
+        </div>
     </div>
 </div>
 
@@ -103,6 +116,24 @@
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('tool', 'icon-sm') }} Repair</button>
+        </form>
+        <form class="settings-field-row" method="post" action="/settings/data-health/sync-retention">
+            <span class="settings-field-label">Sync cleanup retention
+                <span class="settings-field-hint">How long a deleted item is kept as a tombstone before permanent removal</span>
+            </span>
+            <span class="spacer"></span>
+            <select name="days" onchange="this.form.requestSubmit()">
+                {% for value, label in sync_gc_days_choices %}
+                <option value="{{ value }}" {% if sync_gc.retention_days == (value | int) %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <form class="settings-field-row" method="post" action="/settings/data-health/sync-gc">
+            <span class="settings-field-label">Run sync cleanup now
+                <span class="settings-field-hint">Purges tombstoned items and idempotency records past the retention window</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Clean up</button>
         </form>
     </div>
 </div>

@@ -146,13 +146,26 @@
   // (physical = max of both sides and the wall clock; logical resets to 0
   // only if the wall clock strictly exceeded both prior physical times,
   // otherwise increments past whichever tied for the max).
+  //
+  // Takes the `{physical, logical, device_id}` payload shape every server
+  // HLC uses on the wire (offline_sync.hlc_to_payload's own dict, not the
+  // `[physical, logical, device_id]` array this file uses internally for
+  // field_hlc/hlc_clock) -- `offline_sync_client.js` passes `body.cursor`
+  // straight through from the pull response, unconverted. A real bug once
+  // lived here: this function used to destructure its argument as an
+  // array (`const [remotePhysical, remoteLogical] = remoteHlc`), which
+  // silently threw against every real pull response with a non-null
+  // cursor -- caught by a one-off Node smoke script exercising an actual
+  // full-resync round trip, not by any test that happened to pass a null
+  // cursor.
   async function mergeHlc(remoteHlc) {
     if (!remoteHlc) return;
     const db = await openDb();
     const store = tx(db, "meta", "readwrite").objectStore("meta");
     const row = await reqToPromise(store.get("hlc_clock"));
     const [localPhysical, localLogical] = row && row.value ? row.value : [0, 0];
-    const [remotePhysical, remoteLogical] = remoteHlc;
+    const remotePhysical = remoteHlc.physical;
+    const remoteLogical = remoteHlc.logical;
     const now = Date.now();
     const newPhysical = Math.max(localPhysical, remotePhysical, now);
     let newLogical;
@@ -301,6 +314,32 @@
     }
   }
 
+  // 1.8 slice 7 -- the client-side half of tombstone GC's own safety
+  // requirement (§4/§11's acceptance line: "restoring from an old client
+  // cursor never resurrects a tombstoned row past the GC horizon; it
+  // forces a full resync instead"). A `full_resync` response
+  // (offline_sync_client.js) means the server may have already *purged*
+  // some old tombstones entirely -- a purged entity's field_versions rows
+  // are gone, so a plain incremental-style `applyChanges` over the full-
+  // resync payload would never tell this device to delete its own stale
+  // local copy of that entity (there's nothing left server-side to say
+  // "this is deleted," only silence). The only way a full resync can
+  // honestly mean "start over" is to actually start over: wipe the local
+  // mirror and field_hlc shadow store first, then rebuild purely from
+  // what the resync returns -- anything genuinely still relevant comes
+  // back in that payload; anything this device had that's now gone (a
+  // purged tombstone included) simply never reappears. The outbox and
+  // `meta` (device_id, in particular) are deliberately untouched -- a
+  // full resync is about *pulled* state, not this device's own identity
+  // or its own not-yet-acknowledged local writes.
+  async function clearMirror() {
+    const db = await openDb();
+    const t = tx(db, ["tasks", "events", "contacts", "field_hlc"], "readwrite");
+    await Promise.all(
+      ["tasks", "events", "contacts", "field_hlc"].map((name) => reqToPromise(t.objectStore(name).clear()))
+    );
+  }
+
   window.CCOfflineDB = {
     open: openDb,
     getDeviceId,
@@ -318,5 +357,6 @@
     getOutboxOps,
     getOutboxCount,
     removeOutboxOps,
+    clearMirror,
   };
 })();

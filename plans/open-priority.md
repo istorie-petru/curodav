@@ -577,13 +577,13 @@ outcomes and their state, Contacts manages people. Other surfaces provide
 contextual projections of these entities rather than duplicating their
 management logic.
 
-## Offline-first editing & synchronization
+## ~~Offline-first editing & synchronization~~ — fully shipped 2026-08-14
 
-**Status:** sync model designed 2026-08-14 (this section) — no implementation
-code yet. Its precondition — verified backups (Data health & maintenance,
-`open.md`) — **shipped 2026-08-14**. Implementation is scoped into the numbered
-slices at the end of this section; per `plans/STATE.md`, the design below was
-written and reviewed as its own slice, separate from and before any of them.
+**Status:** all 7 implementation slices shipped 2026-08-14 (`plans/
+STATE.md`'s 1.8 entries; outcome summarized in `features/offline-sync.md`).
+`pyproject.toml` bumped to `1.8.0`. Kept below as the reference spec for
+what shipped — §11's own slice list has every slice marked shipped, with
+dates and per-slice detail.
 
 The application supports creating, editing, scheduling, and completing entries
 while offline; connectivity is not a prerequisite for normal operation. Local
@@ -1141,8 +1141,63 @@ of it:
    `fetch` exercising a full push-drains-the-outbox / failed-push-keeps-the-
    op / recovery-drains-it-again / offline-skips-the-network-entirely
    sequence end to end. Full suite 1293 passed.
-7. **Tombstone GC** — the retention horizon (§4) and the forced-full-resync
-   path for a stale cursor.
+7. **Tombstone GC** — **shipped 2026-08-14.** The retention horizon (§4)
+   and the forced-full-resync path for a stale cursor were already in place
+   since slice 1 (`offline_sync.pull`'s `is_stale` check); what this slice
+   adds is the actual physical purge those safety checks were sized around.
+   New `offline_sync.purge_expired(conn, retention_days, now_ms)`: for
+   every entity whose tombstone (`deleted_at`'s own stored HLC in
+   `field_versions`, not a plain string-timestamp comparison) is older than
+   the horizon, it's physically removed via the *existing*
+   `db.delete_task`/`delete_event`/`delete_contact` (not a raw `DELETE`,
+   so related-row cleanup — `object_labels`, `event_task_relations`, ... —
+   happens exactly the same way it does for any other hard delete in this
+   app) plus its now-orphaned `field_versions` rows; an edit newer than the
+   tombstone (an un-delete, §4) naturally falls outside the query with no
+   special-case code, since that edit already advanced `field_versions`'
+   own `deleted_at` HLC past the old tombstone's. A second, independent
+   half purges `sync_applied_ops` rows older than the horizon (§5's
+   idempotency ledger — nothing plausibly retries a push from that long
+   ago). New `data_health.py` wrapper functions
+   (`sync_gc_retention_days`/`set_sync_gc_retention_days`/`run_sync_gc`/
+   `sync_gc_last_run`) give this the same "GUI and CLI share one
+   implementation, no cron — check lazily on a natural request path"
+   treatment as every other Data health maintenance action: `routers/
+   sync_api.py`'s `pull` handler now calls `run_sync_gc` before computing
+   its own response (a pull is the sync engine's most natural heartbeat);
+   Settings > Data health gained a "Sync cleanup retention" preset field
+   (0/14/30/90/180 days, same fixed-choices-not-free-typed-number
+   convention as the existing auto-archive field) and a "Run cleanup now"
+   button that always runs regardless of that setting; `scripts/
+   data_health.py` gained a `sync-gc` subcommand. Also closed a real
+   correctness gap this slice's own acceptance line demanded: once the
+   server can physically purge an old tombstone, a plain "re-pull and
+   applyChanges" on a `full_resync` response could never tell a badly-
+   stale device that an already-purged entity is gone (there's nothing
+   left server-side to say so) — new `offline_db.js::clearMirror` wipes
+   the local `tasks`/`events`/`contacts`/`field_hlc` stores (leaving the
+   outbox and device identity untouched) before a full resync re-pulls,
+   so "start over" actually means starting over rather than merging into
+   a mirror that might still be holding something the server has since
+   forgotten. Found and fixed a second real bug via a one-off Node +
+   fake-indexeddb smoke script built specifically to exercise a genuine
+   full-resync round trip end to end (every prior smoke script's fake
+   pull response had used a `null` cursor, which never touched this code
+   path): `offline_db.js::mergeHlc` had been destructuring its argument as
+   a `[physical, logical, device_id]` array since slice 5, but every real
+   caller passes the `{physical, logical, device_id}` *dict* payload shape
+   the wire protocol actually uses — it silently threw against any real
+   pull response carrying a non-null cursor. This is the last of 1.8's
+   7 planned slices — **1.8 is now fully shipped**
+   (`pyproject.toml` bumped straight to `1.8.0`; a pre-existing gap
+   found while doing so: `pyproject.toml` had stayed at `1.3.0` since
+   1.4, despite `plans/STATE.md`'s own session logs claiming a bump at
+   the end of each of 1.4/1.5/1.6/1.7 — those bumps were never actually
+   committed. Not investigated further/not backfilled; this slice's own
+   bump catches the version number up to the app's real, current feature
+   set). 16 new tests (12 extending `test_offline_sync.py`/
+   `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
+   1309 passed.
 
 ## The data model principle
 
