@@ -936,12 +936,25 @@ dependency and is fully testable with this app's existing router-function-
 call pytest convention; the PWA client is a second, independent build on top
 of it:
 
-1. **Field-HLC shadow store + sync API skeleton** — `field_versions`,
-   `sync_devices`, the push/pull endpoints (§8) and their conflict-detection
-   logic (§6), tested entirely server-side (no client, no browser) by POSTing
-   synthetic op batches and asserting the resulting field values/HLCs/
-   conflict records. This is the one slice that makes every later slice
-   possible; the others can ship in any order after it.
+1. **Field-HLC shadow store + sync API skeleton** — **shipped 2026-08-14.**
+   `field_versions`, `sync_devices`, `sync_applied_ops` (the §5 idempotency
+   ledger), the push/pull endpoints (§8, `routers/sync_api.py`'s `POST
+   /api/sync/push`/`/api/sync/pull`) and their conflict-detection logic (§6,
+   `src/offline_sync.py`), tested entirely server-side (no client, no
+   browser) by POSTing synthetic op batches and asserting the resulting
+   field values/HLCs. `tasks`/`events`/`contacts` gained a `deleted_at`
+   column (§4's tombstone) — the one deliberate departure from §9's "no new
+   columns" framing, needed so a delete has somewhere to actually live;
+   `field_versions` itself still stores no value, only each field's HLC,
+   exactly as §9 describes. §7a (label add/remove commutativity) and §4 (an
+   edit newer than the tombstone un-deletes) both fell out of the same
+   per-field apply path with no special-casing. Deliberately NOT in this
+   slice, per its own scope: the `sync_conflicts` table and §7b/c's two
+   conflict-*surfacing* exceptions (event time concurrent-edit detection,
+   single-project-per-task re-validation) — ordinary §6 LWW applies to every
+   field for now, including `start_at`/`end_at`; slice 2 wires those two
+   exceptions into this slice's apply path. No PWA/browser client calls this
+   API yet. 19 new tests (`test_offline_sync.py`), full suite 1250 passed.
 2. **Sync conflicts surface** — `sync_conflicts` table + a Settings-adjacent
    list page (restore/dismiss), §7b/c's structural-conflict re-validation
    (event time fields, single-project-per-task) wired into slice 1's apply

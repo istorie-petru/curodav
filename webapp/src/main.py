@@ -116,12 +116,18 @@ def create_app() -> FastAPI:
     # features/architecture.md's Grades/Databases removal note and
     # db.py's own removal comments on the `databases`/`database_columns`/
     # `database_rows`/`grades` tables.
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, schedule, search, settings, tasks, timeline, today, week
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, schedule, search, settings, sync_api, tasks, timeline, today, week
 
     app.include_router(dashboard.router)
     app.include_router(today.router)
     app.include_router(week.router)
     app.include_router(search.router)
+    # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
+    # src/offline_sync.py). No PWA client calls this yet (§11 slices 3+);
+    # it's exercised synthetically by tests today. Named `sync_api` (not
+    # `sync`) to avoid shadowing this module's own already-imported
+    # `sync` (the unrelated Radicale Published-Lists background sync).
+    app.include_router(sync_api.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
     app.include_router(schedule.router)

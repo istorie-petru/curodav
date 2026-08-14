@@ -618,22 +618,58 @@ session, right before the final commit of that session.
   skeleton (slice 1) before any PWA/client work (slices 3+). See
   `open-priority.md`'s own section for the full text;
   `plans/roadmap.md`'s 1.8 subsection updated to match.
-- **Next slice:** `1.8` slice 1 — **field-HLC shadow store + sync API
-  skeleton** (`open-priority.md` § Offline-first editing & synchronization
-  §11, slice 1, full model in §§1–9 just above). New `field_versions`/
-  `sync_devices` tables (§9) and push/pull endpoints (§8) implementing §6's
-  per-field conflict detection — no PWA/browser/service-worker work yet,
-  and no `sync_conflicts` surfacing yet (that's slice 2). Fully testable
-  server-side, same router-function-call pytest convention as every other
-  slice in this app: POST synthetic operation batches, assert the resulting
-  field values/HLCs and (for a deliberately-conflicting batch) that the
-  losing value is retained somewhere inspectable rather than silently
-  dropped, even before slice 2 gives it a real UI. `open.md`'s Command
-  palette actions follow-up (1.2 side work), 1.4's optional Project
-  check-in side work, and 1.6's optional "Configurable views + optional
-  Schedule module" side work are all still fine smaller, self-contained
-  slices instead, whenever a session wants a break from the sync-engine
-  work.
+- **Shipped:** `1.8` slice 1 — **field-HLC shadow store + sync API
+  skeleton**, complete (2026-08-14) — `open-priority.md` § Offline-first
+  editing & synchronization §11, slice 1. New `field_versions` (per-field
+  HLC only, no value — the value stays solely on `tasks`/`events`/
+  `contacts`), `sync_devices` (per-device push/pull cursor bookkeeping),
+  and `sync_applied_ops` (§5's idempotency ledger) tables. New
+  `src/offline_sync.py`: pure §6 per-field last-write-wins apply logic
+  (`apply_op`/`apply_batch`) and §8's `pull` (incremental delta since a
+  cursor, or a `full_resync` signal once a non-`None` cursor is older than
+  the 90-day retention horizon — a `None` cursor, a brand-new device's
+  first-ever pull, is just a plain "everything" delta, not a staleness
+  case). New `routers/sync_api.py`: `POST /api/sync/push`/`/api/sync/pull`,
+  the thin HTTP wrapper (request parsing + `sync_devices` cursor writes
+  only), wired into `main.py` (named `sync_api` specifically to not shadow
+  the already-imported, unrelated `src/sync.py` Radicale/Published-Lists
+  background sync). `tasks`/`events`/`contacts` each gained a `deleted_at`
+  column (§4's tombstone model: delete is a field write, not a row
+  removal) — a delete op sets it via the same per-field HLC path as any
+  other field, which is also what makes "an edit newer than the tombstone
+  un-deletes the row" fall out for free, no special-case code. Label
+  add/remove (`entity_type: "object_label"`) needs no HLC arbitration at
+  all (§7a, commutative by construction) — applying twice converges
+  either way. Deliberately out of scope, per the slice's own boundary: the
+  `sync_conflicts` table and §7b/c's two conflict-*surfacing* exceptions
+  (event `start_at`/`end_at` concurrent-edit detection,
+  single-project-per-task re-validation after a batch) — every field,
+  including those two, gets plain §6 LWW for now; slice 2 wires the
+  exceptions into this slice's own `apply_op` path. No PWA/browser client
+  exists yet — tested entirely server-side (`test_offline_sync.py`,
+  router-function-call convention, `asyncio.run` + a synthetic JSON
+  `Request` for the two async endpoints), same as every other slice in
+  this app. 19 new tests, full suite 1250 passed.
+- **Next slice:** `1.8` slice 2 — **Sync conflicts surface**
+  (`open-priority.md` § Offline-first editing & synchronization §11, slice
+  2). New `sync_conflicts` table (§9: `id`, `entity_type`, `entity_uid`,
+  `field_name`, `losing_value`, `losing_hlc`, `winning_hlc`, `created_at`,
+  `resolved_at`) + a Settings-adjacent list page (restore the losing value
+  as a normal new `field_set` op, or dismiss). Wires §7b/c's two
+  conflict-surfacing exceptions into slice 1's `src/offline_sync.py::
+  apply_op`/`apply_batch`: (b) a genuine concurrent edit to the same
+  event's `start_at`/`end_at` records the losing value as a conflict
+  instead of silently discarding it (still applies the higher-HLC value,
+  same "no device ever blocked" rule); (c) a synced batch that gives one
+  task two different project labels re-validates against
+  `db.MultipleProjectLabelsError` (1.5) after the whole batch applies, not
+  per-op, keeping the higher-HLC label_add and recording the other as a
+  conflict. Still no PWA/browser client — testable server-side the same
+  way slice 1 was. `open.md`'s Command palette actions follow-up (1.2 side
+  work), 1.4's optional Project check-in side work, and 1.6's optional
+  "Configurable views + optional Schedule module" side work are all still
+  fine smaller, self-contained slices instead, whenever a session wants a
+  break from the sync-engine work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

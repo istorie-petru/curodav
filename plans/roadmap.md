@@ -226,8 +226,12 @@ and the sync model itself (entity identifiers, HLC ordering, tombstones,
 per-field conflict detection, the two conflict-surfacing exceptions for
 work-allocation/event time fields and single-project-per-task) is **designed,
 2026-08-14** — see `open-priority.md`'s own section for the full model and its
-7-slice implementation breakdown. No implementation code yet; slice 1 (the
-field-HLC shadow store + sync API skeleton) is next.
+7-slice implementation breakdown. **Slice 1 (field-HLC shadow store + sync API
+skeleton) shipped 2026-08-14** — `field_versions`/`sync_devices`/
+`sync_applied_ops`, `src/offline_sync.py`'s §6 per-field LWW apply logic, and
+`POST /api/sync/push`/`/api/sync/pull` (`routers/sync_api.py`). Server-only,
+no browser/PWA client yet; slice 2 (`sync_conflicts` surface + §7b/c's two
+conflict-surfacing exceptions) is next.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

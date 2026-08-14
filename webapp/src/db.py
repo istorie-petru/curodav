@@ -622,6 +622,64 @@ CREATE TABLE IF NOT EXISTS event_occurrence_overrides (
     updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_event_occurrence_overrides_master ON event_occurrence_overrides(master_uid);
+
+-- 1.8 slice 1 ("Field-HLC shadow store + sync API skeleton",
+-- plans/open-priority.md § Offline-first editing & synchronization §9):
+-- purely sync-infrastructure metadata, not a fourth kind of domain entity
+-- (features/architecture.md §1.4) -- `tasks`/`events`/`contacts` keep
+-- their own columns as the single source of truth for a field's *value*;
+-- this table only remembers the HLC each field was last written at, so
+-- the server can tell "is this incoming write newer than what I already
+-- have" (§6) without conflating that with the value itself. `deleted_at`
+-- is tracked here as an ordinary field name like any other (§4: a delete
+-- is a field write, not a row removal -- see `tasks`/`events`/`contacts`'
+-- own new `deleted_at` column below), which is what makes "an edit newer
+-- than the tombstone un-deletes the row" fall out of the same per-field
+-- LWW rule instead of needing special-case code.
+-- HLC is the triple from §3, `(physical_time_ms, logical_counter,
+-- device_id)`, stored as three columns rather than one packed string so
+-- SQLite's row-value comparison (`(a, b, c) > (?, ?, ?)`, supported since
+-- 3.15) can do the ordering directly in the pull query (§8) instead of
+-- pulling every row into Python to compare.
+CREATE TABLE IF NOT EXISTS field_versions (
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    hlc_physical INTEGER NOT NULL,
+    hlc_logical INTEGER NOT NULL,
+    hlc_device_id TEXT NOT NULL,
+    PRIMARY KEY (entity_type, entity_uid, field_name)
+);
+CREATE INDEX IF NOT EXISTS idx_field_versions_hlc ON field_versions(hlc_physical, hlc_logical, hlc_device_id);
+
+-- One row per device that has ever synced -- the pull cursor (§8) and the
+-- "last sync time" line Data Health's own page already reserves a
+-- placeholder for (src/data_health.py's health_summary `sync` key).
+CREATE TABLE IF NOT EXISTS sync_devices (
+    device_id TEXT PRIMARY KEY,
+    last_pushed_physical INTEGER,
+    last_pushed_logical INTEGER,
+    last_pushed_device_id TEXT,
+    last_pulled_physical INTEGER,
+    last_pulled_logical INTEGER,
+    last_pulled_device_id TEXT,
+    last_seen_at TEXT
+);
+
+-- §5's applied-op_id idempotency ledger -- "an implementation detail for
+-- the slice that builds it, not a modeling decision this doc needs to
+-- fix" (§9). `result_json` is the exact response this op_id produced the
+-- first time it was applied, replayed verbatim on a duplicate push
+-- instead of re-applying (safe after a connection drop mid-push, since
+-- the client can never be sure whether the server actually received the
+-- last batch).
+CREATE TABLE IF NOT EXISTS sync_applied_ops (
+    op_id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_uid TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    applied_at TEXT
+);
 """
 
 
@@ -734,6 +792,15 @@ def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[
 
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
+    # delete operation, not a row removal ... this design adds one
+    # (deleted_at + the deleting op's HLC)"). A plain sync-unaware write
+    # (every existing router) never sets this column and nothing existing
+    # reads it -- it's additive, inert until the sync API (routers/
+    # sync_api.py) is actually used.
+    _ensure_column(conn, "tasks", "deleted_at", "TEXT")
+    _ensure_column(conn, "events", "deleted_at", "TEXT")
+    _ensure_column(conn, "contacts", "deleted_at", "TEXT")
     _ensure_column(conn, "events", "exdates_json", "TEXT NOT NULL DEFAULT '[]'")
     # 1.6 ("Generalized recurrence and the non-working-day policy") -- see
     # the `events` CREATE TABLE comment above for the model.
@@ -3439,6 +3506,162 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
 
 def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, Any]) -> None:
     set_app_meta(conn, _page_banner_key(page_key), json.dumps(banner))
+
+
+# --------------------------------------------------------------------- #
+# 1.8 slice 1 -- field-HLC shadow store (plans/open-priority.md §
+# Offline-first editing & synchronization §§6, 9). See field_versions'
+# own CREATE TABLE comment for what this table does and doesn't store.
+# The comparison/apply *logic* (§§6-7) lives in src/offline_sync.py, kept
+# pure and independent of routers/HTTP -- these are just the plain reads/
+# writes against the shadow-store tables themselves, same "db.py never
+# contains a router-shaped decision" convention as everywhere else in
+# this file.
+# --------------------------------------------------------------------- #
+
+
+def get_field_hlc(
+    conn: sqlite3.Connection, entity_type: str, entity_uid: str, field_name: str
+) -> tuple[int, int, str] | None:
+    row = conn.execute(
+        "SELECT hlc_physical, hlc_logical, hlc_device_id FROM field_versions "
+        "WHERE entity_type = ? AND entity_uid = ? AND field_name = ?",
+        (entity_type, entity_uid, field_name),
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row else None
+
+
+def set_field_hlc(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    field_name: str,
+    hlc: tuple[int, int, str],
+) -> None:
+    conn.execute(
+        "INSERT INTO field_versions (entity_type, entity_uid, field_name, "
+        "hlc_physical, hlc_logical, hlc_device_id) VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(entity_type, entity_uid, field_name) DO UPDATE SET "
+        "hlc_physical=excluded.hlc_physical, hlc_logical=excluded.hlc_logical, "
+        "hlc_device_id=excluded.hlc_device_id",
+        (entity_type, entity_uid, field_name, hlc[0], hlc[1], hlc[2]),
+    )
+
+
+def list_field_versions_since(
+    conn: sqlite3.Connection, cursor_hlc: tuple[int, int, str] | None
+) -> list[dict[str, Any]]:
+    """Every field write with a stored HLC strictly newer than `cursor_hlc`
+    -- the incremental pull delta (§8). `cursor_hlc=None` means "give me
+    everything" (a brand-new device's first pull, or the fresh-cursor
+    reset a forced full resync performs). Row-value comparison
+    (`(a, b, c) > (?, ?, ?)`) matches HLC's own lexicographic total order
+    (§3) directly in SQL."""
+    if cursor_hlc is None:
+        rows = conn.execute(
+            "SELECT entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id "
+            "FROM field_versions ORDER BY hlc_physical, hlc_logical, hlc_device_id"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id "
+            "FROM field_versions WHERE (hlc_physical, hlc_logical, hlc_device_id) > (?, ?, ?) "
+            "ORDER BY hlc_physical, hlc_logical, hlc_device_id",
+            cursor_hlc,
+        ).fetchall()
+    return [
+        {
+            "entity_type": r[0],
+            "entity_uid": r[1],
+            "field_name": r[2],
+            "hlc": (r[3], r[4], r[5]),
+        }
+        for r in rows
+    ]
+
+
+def max_field_hlc(conn: sqlite3.Connection) -> tuple[int, int, str] | None:
+    """The server's own newest known HLC across every tracked field --
+    what a forced full resync (§8, stale cursor) resets a device's cursor
+    to once it has re-fetched everything, so the device's next incremental
+    pull only asks for changes after that point rather than replaying the
+    resync itself."""
+    row = conn.execute(
+        "SELECT hlc_physical, hlc_logical, hlc_device_id FROM field_versions "
+        "ORDER BY hlc_physical DESC, hlc_logical DESC, hlc_device_id DESC LIMIT 1"
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row else None
+
+
+def get_sync_applied_op(conn: sqlite3.Connection, op_id: str) -> dict[str, Any] | None:
+    """§5's idempotency lookup -- a cached result means this exact op_id
+    was already applied and should not be re-applied on a retried push."""
+    row = conn.execute(
+        "SELECT result_json FROM sync_applied_ops WHERE op_id = ?", (op_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row[0])
+
+
+def record_sync_applied_op(
+    conn: sqlite3.Connection,
+    op_id: str,
+    entity_type: str,
+    entity_uid: str,
+    result: dict[str, Any],
+) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO sync_applied_ops (op_id, entity_type, entity_uid, result_json, applied_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (op_id, entity_type, entity_uid, json.dumps(result), datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def get_sync_device(conn: sqlite3.Connection, device_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT device_id, last_pushed_physical, last_pushed_logical, last_pushed_device_id, "
+        "last_pulled_physical, last_pulled_logical, last_pulled_device_id, last_seen_at "
+        "FROM sync_devices WHERE device_id = ?",
+        (device_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "device_id": row[0],
+        "last_pushed_hlc": (row[1], row[2], row[3]) if row[1] is not None else None,
+        "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
+        "last_seen_at": row[7],
+    }
+
+
+def touch_sync_device(
+    conn: sqlite3.Connection,
+    device_id: str,
+    last_pushed_hlc: tuple[int, int, str] | None = None,
+    last_pulled_hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Upserts `sync_devices`. Either HLC arg may be omitted (a push-only
+    or pull-only round keeps the other field as it already was) -- uses
+    `COALESCE(excluded.x, sync_devices.x)` so a NULL passed through
+    `excluded` (arg omitted) doesn't clobber a previously-recorded value."""
+    now = datetime.now(timezone.utc).isoformat()
+    pushed = last_pushed_hlc or (None, None, None)
+    pulled = last_pulled_hlc or (None, None, None)
+    conn.execute(
+        "INSERT INTO sync_devices (device_id, last_pushed_physical, last_pushed_logical, "
+        "last_pushed_device_id, last_pulled_physical, last_pulled_logical, last_pulled_device_id, "
+        "last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(device_id) DO UPDATE SET "
+        "last_pushed_physical=COALESCE(excluded.last_pushed_physical, sync_devices.last_pushed_physical), "
+        "last_pushed_logical=COALESCE(excluded.last_pushed_logical, sync_devices.last_pushed_logical), "
+        "last_pushed_device_id=COALESCE(excluded.last_pushed_device_id, sync_devices.last_pushed_device_id), "
+        "last_pulled_physical=COALESCE(excluded.last_pulled_physical, sync_devices.last_pulled_physical), "
+        "last_pulled_logical=COALESCE(excluded.last_pulled_logical, sync_devices.last_pulled_logical), "
+        "last_pulled_device_id=COALESCE(excluded.last_pulled_device_id, sync_devices.last_pulled_device_id), "
+        "last_seen_at=excluded.last_seen_at",
+        (device_id, *pushed, *pulled, now),
+    )
 
 
 def clear_page_banner(conn: sqlite3.Connection, page_key: str) -> None:
