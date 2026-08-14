@@ -1468,6 +1468,15 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    while the All day checkbox is checked (event_form.html), same `:has()`
    progressive-disclosure pattern the professor/class-type fields use. */
 #event-form:has(#all_day:checked) .event-start-end-field{display:none;}
+/* Holiday calendar / Exclude Saturday / Exclude Sunday (_event_form_fields.html,
+   toggled via the `hidden` attribute by static/recurrence_picker.js's sync())
+   -- `.field{display:flex}` above is author CSS of equal specificity to the
+   browser's own `[hidden]{display:none}` UA rule, and author styles always
+   win that fight regardless of selector order, so the bare `hidden` attribute
+   alone is silently ineffective on any `.field` element. Needs this explicit,
+   higher-specificity override -- same reason .event-start-end-field above
+   can't just rely on `hidden` either. */
+.field.holiday-field[hidden]{display:none;}
 
 /* Tile/card picker (2026-08-07, modal-input-design pattern 1) -- a row of
    large tappable cards (icon + label), one visibly selected, for a

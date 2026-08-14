@@ -964,6 +964,24 @@ session, right before the final commit of that session.
   `test_modal_footer_and_inputs.py` still assert `name="holiday_calendar"`
   and the create/update round-trip, which the `<select>` still satisfies).
   Full suite 1313 passed.
+- **Fixed:** side work — **holiday fields' `hidden` attribute was silently
+  a no-op**, complete (2026-08-14), immediate follow-up on the slice above
+  ("Holiday calendar still appears when Recurrence is on Do not repeat").
+  Root cause: `style.css`'s `.field{display:flex; ...}` (author CSS) is the
+  same specificity as the browser's own `[hidden]{display:none}` UA rule,
+  and author styles always win that fight regardless of selector order --
+  so toggling `.hidden` on a `.field`/`.field-toggle` element (both the new
+  `holiday-field`s and, on reflection, the exact same reason
+  `.event-start-end-field` already uses an explicit `display:none` `:has()`
+  rule rather than the bare attribute) never actually hid anything, it just
+  silently set an attribute the box model ignored. New
+  `.field.holiday-field[hidden]{display:none;}` in `style.css` gives it the
+  specificity it needs. No JS/template change needed -- `recurrence_picker.
+  js`'s `sync()` and `_event_form_fields.html`'s server-rendered initial
+  `hidden` attribute were both already correct, just invisible. Full suite
+  1313 passed (no new tests -- CSS-only fix, existing structural tests
+  already assert the `hidden` attribute's presence/absence, which was
+  never the broken part).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
