@@ -585,25 +585,55 @@ session, right before the final commit of that session.
   `features/settings.md`, `plans/open.md`/`plans/roadmap.md`'s 1.1 side-work
   rows marked shipped. 26 new tests (`test_data_health.py`), full suite 1231
   passed.
-- **Next slice:** `1.8` — Offline-first editing & synchronization
-  (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
-  synchronization). The largest engineering item on the roadmap. Its
-  precondition (verified backups) is now met — see the Data health entry
-  just above — but its own status is still "decision recorded, no code" for
-  the sync model itself. Per the spec's own instruction, the sync model
-  (entity identifiers, local change tracking, ordering, deletion/tombstones,
-  retries, idempotency, conflict detection and resolution — explicitly *not*
-  casual "last write wins," since that can silently destroy offline changes)
-  must be designed and written down before any implementation starts; treat
-  "write the sync model" as its own slice, separate from and before any
-  code-writing slice, rather than scoping both in one session. It builds on
-  1.1's WebDAV mapping. Prior art to read first: the HLC per-field merge
-  decision preserved in `abandoned.md`'s "Decision history" section.
-  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
-  optional Project check-in side work, and 1.6's optional "Configurable
-  views + optional Schedule module" side work are all still fine smaller,
-  self-contained slices instead, whenever a session wants a break from the
-  sync-model design work.
+- **Shipped:** side work — **1.8's sync model, designed** (docs only, no
+  code), complete (2026-08-14) — `open-priority.md` § Offline-first editing
+  & synchronization expanded from a one-paragraph decision record into a
+  full model, per this file's own standing instruction to write the sync
+  model as its own slice before any implementation code. Covers: entity
+  identifiers (existing `uid`s, client-generated on offline create, no
+  central allocation needed — single-user app); an append-only local
+  operation log (field-level, not whole-row, so conflict resolution can be
+  per field); a Hybrid Logical Clock, `(physical_time_ms, logical_counter,
+  device_id)`, for a total order across devices that survives clock skew
+  (prior art: the ported-forward HLC per-field merge decision in
+  `abandoned.md`); soft-delete tombstones with a configurable GC retention
+  horizon (a device reconnecting past it forces a full resync rather than
+  risking resurrecting an already-deleted row); an `op_id` idempotency
+  ledger for safe retries; per-field newer-wins conflict detection as the
+  default, with two deliberate, explicitly-named exceptions where a plain
+  per-field LWW would violate "must never result in silent data loss":
+  concurrent edits to the *same* work-allocation/event's `start_at`/
+  `end_at` (two real scheduling decisions, not the same fact measured
+  twice) and two devices attaching *different* project labels to the same
+  task while offline (violates 1.5's existing single-project-per-task
+  invariant only as a *combination*, even though each individual label-add
+  op is independently valid) — both surfaced to a new Sync conflicts list
+  instead of auto-resolved or silently dropped. A push-then-pull protocol
+  shape (§8) and the three new sync-infrastructure tables it needs
+  (`field_versions`, `sync_devices`, `sync_conflicts` — metadata, not a new
+  domain object type, per `features/architecture.md` §1.4). Closes with an
+  acceptance line and a 7-slice implementation breakdown (§11) so
+  implementation sessions can each ship one slice standalone, starting with
+  a server-only, browser-independent field-HLC shadow store + sync API
+  skeleton (slice 1) before any PWA/client work (slices 3+). See
+  `open-priority.md`'s own section for the full text;
+  `plans/roadmap.md`'s 1.8 subsection updated to match.
+- **Next slice:** `1.8` slice 1 — **field-HLC shadow store + sync API
+  skeleton** (`open-priority.md` § Offline-first editing & synchronization
+  §11, slice 1, full model in §§1–9 just above). New `field_versions`/
+  `sync_devices` tables (§9) and push/pull endpoints (§8) implementing §6's
+  per-field conflict detection — no PWA/browser/service-worker work yet,
+  and no `sync_conflicts` surfacing yet (that's slice 2). Fully testable
+  server-side, same router-function-call pytest convention as every other
+  slice in this app: POST synthetic operation batches, assert the resulting
+  field values/HLCs and (for a deliberately-conflicting batch) that the
+  losing value is retained somewhere inspectable rather than silently
+  dropped, even before slice 2 gives it a real UI. `open.md`'s Command
+  palette actions follow-up (1.2 side work), 1.4's optional Project
+  check-in side work, and 1.6's optional "Configurable views + optional
+  Schedule module" side work are all still fine smaller, self-contained
+  slices instead, whenever a session wants a break from the sync-engine
+  work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

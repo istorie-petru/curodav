@@ -220,13 +220,14 @@ University module) and closed out without new code. See `plans/STATE.md`'s
 ### 1.8 — Trust & offline
 
 **Offline-first editing & synchronization** (`open-priority.md` § Offline-first
-editing & synchronization) — the largest engineering item. Its sync model
-(identifiers, tombstones, conflict resolution, work-allocation conflict
-semantics) must be written before code. It starts on the WebDAV mapping from 1.1
-and is trusted only once verified backups exist — **data health shipped
-2026-08-14** (Settings > Data health, `src/data_health.py`,
-`scripts/data_health.py`), so this precondition is now met; the sync model
-itself is still undesigned (next up).
+editing & synchronization) — the largest engineering item. Both preconditions
+are now met: verified backups **shipped 2026-08-14** (Settings > Data health),
+and the sync model itself (entity identifiers, HLC ordering, tombstones,
+per-field conflict detection, the two conflict-surfacing exceptions for
+work-allocation/event time fields and single-project-per-task) is **designed,
+2026-08-14** — see `open-priority.md`'s own section for the full model and its
+7-slice implementation breakdown. No implementation code yet; slice 1 (the
+field-HLC shadow store + sync API skeleton) is next.
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 
