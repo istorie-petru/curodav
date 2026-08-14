@@ -690,23 +690,62 @@ session, right before the final commit of that session.
   tests extending `test_offline_sync.py` (30 total in that file), plus a
   hub-categories fixture update in `test_phase8_settings_hub.py`, full
   suite 1261 passed.
-- **Next slice:** `1.8` slice 3 — **PWA shell** (`open-priority.md` §
-  Offline-first editing & synchronization §11, slice 3; architecture fork
-  in §0). Manifest + service worker + an app-shell cache — installable,
-  opens to a real shell offline, per `plans/ofline-first-pwa.md`'s own
-  acceptance line ("opening the application offline should lead directly
-  to the normal interface rather than an error page"). Deliberately no
-  sync, no IndexedDB, no local read/write path yet (slices 4-5) — this
-  slice is purely "can the app open at all with no network," the first
-  genuinely browser-dependent piece of 1.8 after two server-only slices.
-  Needs manual/browser verification (a service worker can't be exercised
-  by the existing pytest/router-function-call convention the same way
-  slices 1-2 were) — plan for that up front rather than discovering it
-  mid-slice. `open.md`'s Command palette actions follow-up (1.2 side
-  work), 1.4's optional Project check-in side work, and 1.6's optional
-  "Configurable views + optional Schedule module" side work are all still
-  fine smaller, self-contained slices instead, whenever a session wants a
-  break from the sync-engine/PWA work.
+- **Shipped:** `1.8` slice 3 — **PWA shell**, complete (2026-08-14) —
+  `open-priority.md` § Offline-first editing & synchronization §11, slice
+  3. New `static/manifest.webmanifest` (name/icons/`display:
+  "standalone"`/`start_url: "/"`, linked from `base.html` plus a
+  `theme-color` meta tag) and `static/sw.js`, the app-shell service
+  worker. `sw.js` is served at the root path by new `routers/pwa.py`'s
+  `GET /sw.js` (not `/static/sw.js` — a service worker's default scope is
+  the directory of the URL it's fetched from, so serving it under
+  `/static/` would cap its scope at `/static/*` instead of the whole
+  app), registered by new `static/pwa.js` (loaded globally in
+  `base.html`, last, as a progressive enhancement guarded by a feature
+  check). It precaches every static asset `base.html` loads on every page
+  plus a new `GET /offline` fallback page (`templates/offline.html`,
+  extends `base.html` so the tabbar/nav renders identically offline — a
+  plain "you're offline" message where content would go, since there's no
+  local data layer yet) and serves that fallback for any navigation
+  request that fails with the network down — `ofline-first-pwa.md`'s
+  "opening the application offline should lead directly to the normal
+  interface rather than an error page" line, for the app-shell-only scope
+  this slice covers. Static assets use a cache-first strategy (safe
+  because every asset URL is already cache-busted by `deps.py`'s
+  `static_url()`); real page navigations stay network-first, since this
+  app's pages are server-rendered from live SQLite state and must never
+  serve a stale copy when the network is actually reachable. Deliberately
+  out of scope, per the slice's own boundary: sync, IndexedDB, and any
+  local read/write path (slices 4-5) — this slice is purely "can the app
+  open at all with no network." The first genuinely browser-dependent
+  piece of 1.8: a real service worker install/fetch cycle can't be
+  exercised by this app's router-function-call pytest convention, so
+  `test_pwa_shell.py`'s 10 tests cover what *is* server-verifiable
+  (manifest validity, every icon it references existing on disk,
+  `/sw.js`'s content-type/no-store header, the precache list only naming
+  assets that exist on disk, `/offline` rendering full chrome, and
+  `routers/pwa.py` actually being wired into `main.py` — confirmed via
+  `app.routes` directly, the same style of check that caught the
+  `settings.py` route-registration bug the same day slice 2 shipped, not
+  just by calling the router function). Actual install/offline-navigation
+  behavior needs manual browser verification, not performed as part of
+  this slice (this sandbox has no browser and no reachable Radicale
+  server to boot the full app against). Full suite 1271 passed.
+- **Next slice:** `1.8` slice 4 — **Local IndexedDB store + read path**
+  (`open-priority.md` § Offline-first editing & synchronization §11,
+  slice 4). The PWA shell's own views (starting with `/offline`, or
+  wherever the slice decides the first real local-read surface should be)
+  read from IndexedDB instead of requiring a live request; still no local
+  *writes* (slice 5). This is the slice that makes "opens to a real shell
+  offline" (slice 3) actually show real data — needs a design decision
+  up front on what subset of `tasks`/`events`/`contacts` gets mirrored
+  into IndexedDB and how it's kept in sync with slice 1-2's server-side
+  `field_versions` shape, before writing client code. Also still browser-
+  dependent (IndexedDB has no server-side pytest equivalent, same
+  constraint as slice 3). `open.md`'s Command palette actions follow-up
+  (1.2 side work), 1.4's optional Project check-in side work, and 1.6's
+  optional "Configurable views + optional Schedule module" side work are
+  all still fine smaller, self-contained slices instead, whenever a
+  session wants a break from the sync-engine/PWA work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

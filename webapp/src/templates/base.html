@@ -7,6 +7,14 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
     <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
+    <!-- PWA shell (1.8 slice 3) -- manifest.webmanifest is plain, unversioned
+         static content (no cache-busting needed, its icons are referenced by
+         stable /static/icons/... paths); theme-color matches style.css's
+         light-mode --accent so the installed app's OS chrome (title bar,
+         task switcher) isn't a jarring mismatch even before dark-mode-aware
+         theming is worth the complexity here. -->
+    <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
+    <meta name="theme-color" content="#007aff">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
          (app.js used to do this at the bottom of <body>, which painted the
@@ -296,6 +304,12 @@
      <script> tags), so modal.js's wireContent() calls CCQuickAdd.init(body)
      against the freshly-injected content to wire its Task/Event tab switch. -->
 <script src="{{ static_url('quick_add.js') }}"></script>
+<!-- PWA shell (1.8 slice 3) -- registers static/sw.js (served at /sw.js,
+     not this /static/pwa.js path -- see routers/pwa.py's own comment on
+     why the service worker script itself can't live under /static/ and
+     keep the scope it needs). Loaded last, after everything the page
+     actually needs to function, since it's a pure enhancement. -->
+<script src="{{ static_url('pwa.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

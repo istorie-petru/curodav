@@ -1,0 +1,29 @@
+{# 1.8 slice 3 -- PWA shell's offline fallback (plans/open-priority.md §
+   Offline-first editing & synchronization §11 slice 3). This is the page
+   sw.js serves for a navigation request that fails with no network and no
+   better cached match -- the "opening the application offline should lead
+   directly to the normal interface rather than an error page"
+   (plans/ofline-first-pwa.md) acceptance line, for the app-shell-only
+   scope this slice covers. It extends base.html like any other page, so
+   the tabbar/nav chrome renders identically -- the app *looks* like
+   itself, it just has nothing live to show yet.
+
+   Deliberately no data here: slices 4-5 (local IndexedDB store + write
+   path) are what let this page -- or any page -- actually render real
+   content while offline. Until then this is intentionally just the shell
+   plus an honest status message, not a fake empty Tasks/Calendar page
+   that would look like data loss. Also reachable online (GET /offline is
+   a normal route, not sw.js-only) so it can be previewed/tested without
+   simulating a dropped connection. #}
+{% extends "base.html" %}
+{% block title %}Offline{% endblock %}
+{% block content %}
+<div class="toolbar top-app-bar">
+    <h1>You're offline</h1>
+</div>
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('wifi') }}</div>
+    <div class="empty-state-title">Nothing to load right now</div>
+    <div class="empty-state-text">This page couldn't reach the server, so nothing new can load. Reconnect to pick up where you left off -- your tasks, calendar, and everything else are exactly as you left them on the server.</div>
+</div>
+{% endblock %}

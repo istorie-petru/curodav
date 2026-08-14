@@ -982,9 +982,40 @@ of it:
    status patched to `"rejected_invariant"`. 11 new tests extending
    `test_offline_sync.py`, plus a hub-categories fixture update in
    `test_phase8_settings_hub.py`, full suite 1261 passed.
-3. **PWA shell** — manifest, service worker, offline app-shell caching; no
-   sync yet, just "installable, opens to a real shell offline" per
-   `ofline-first-pwa.md`'s own acceptance line.
+3. **PWA shell** — **shipped 2026-08-14.** `static/manifest.webmanifest`
+   (name/icons/`display: "standalone"`/`start_url: "/"`) linked from
+   `base.html`; `static/sw.js`, served at the root path by new
+   `routers/pwa.py` (`GET /sw.js`, not `/static/sw.js` — a service
+   worker's default scope is the directory of the URL it's fetched from,
+   so serving it under `/static/` would cap its scope at `/static/*`
+   instead of the whole app) and registered by `static/pwa.js` (loaded
+   globally in `base.html`, last, as a progressive enhancement). `sw.js`
+   precaches the app shell — every static asset `base.html` loads on
+   every page, plus a new `GET /offline` fallback page
+   (`templates/offline.html`, extends `base.html` so the tabbar/nav
+   chrome renders identically offline, ordinary content is just an honest
+   "you're offline" message since there's no local data layer yet) — and
+   serves it for any navigation request that fails with the network down,
+   satisfying `ofline-first-pwa.md`'s "opening the application offline
+   should lead directly to the normal interface rather than an error
+   page" line, for the app-shell-only scope this slice covers. Static
+   assets get a cache-first strategy (safe because every asset URL is
+   already cache-busted by `deps.py`'s `static_url()` — a changed file is
+   requested under a new URL, never silently serves stale content under
+   an old one); real page navigations stay network-first, since this
+   app's pages are server-rendered from live SQLite state and must never
+   serve a stale cached copy when the network is actually reachable. No
+   sync, no IndexedDB, no local read/write path — deliberately deferred
+   to slices 4-5. The first genuinely browser-dependent piece of 1.8:
+   service worker install/fetch behavior can't be exercised by this app's
+   router-function-call pytest convention, so `test_pwa_shell.py`'s 10
+   tests cover everything that *is* server-verifiable (manifest validity,
+   every icon it references existing on disk, `/sw.js`'s content-
+   type/no-store header, the precache list only naming assets that exist,
+   `/offline` rendering full chrome, and `routers/pwa.py` actually being
+   wired into `main.py`) — actual install/offline-navigation behavior
+   needs manual browser verification, not done as part of this slice.
+   Full suite 1271 passed.
 4. **Local IndexedDB store + read path** — the PWA shell's views read from
    IndexedDB instead of requiring a live request; still no local writes.
 5. **Local write path + outbox** — offline create/edit/delete queues as ops

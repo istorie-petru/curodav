@@ -1,0 +1,13 @@
+## Offline-First PWA
+
+The application should function as a fully usable Progressive Web App even when the central server is unreachable. After installation, the PWA should cache the resources required to launch the application and maintain a local representation of the user's data. Opening the application offline should therefore lead directly to the normal interface rather than an error or a server-unavailable page.
+
+The PWA should use a local data layer for all normal interactions. Viewing entities, creating and editing tasks, events, contacts and notes, changing labels, scheduling timeblocks, and other application operations should be executed locally and reflected immediately in the interface. Network availability should not be checked before ordinary operations, because the local application must be treated as the primary source for interaction while the server is used for synchronization.
+
+Every local modification should generate a synchronization record describing the affected entity and the change performed. Pending changes should remain stored locally while offline and should survive closing and reopening the PWA. When connectivity becomes available, the synchronization engine should automatically send pending changes to the server, retrieve changes created or modified on other devices, and update the local data accordingly.
+
+Synchronization should be incremental and entity-based rather than performed by replacing the local database with the server database. Each entity should have a stable unique identifier, allowing entities created independently on multiple devices to be synchronized later. The synchronization system should detect conflicting modifications and apply defined conflict-resolution rules without silently discarding unrelated changes.
+
+The feature should support transparent transitions between online and offline states. Going offline should not interrupt an existing session or disable functionality, and returning online should trigger synchronization automatically without requiring the user to manually reload the application. The interface may communicate connection and synchronization state through a small status indicator, such as offline, synchronizing, pending changes, or synchronized.
+
+The PWA should provide the same offline functionality on supported desktop and mobile browsers. A user should therefore be able to install the application on a Linux computer or Android device, use the application normally without network access, make arbitrary local changes, close the application, and later reconnect to synchronize those changes with the central server.

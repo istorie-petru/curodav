@@ -233,9 +233,14 @@ skeleton) shipped 2026-08-14** — `field_versions`/`sync_devices`/
 (Sync conflicts surface) shipped 2026-08-14** — `sync_conflicts` table +
 `/settings/sync-conflicts` (restore/dismiss), §7b's event-time concurrent-edit
 detection and §7c's single-project-per-task batch re-validation both wired
-into slice 1's apply path. Still entirely server-only, no browser/PWA client
-yet; slice 3 (PWA shell -- manifest, service worker, offline app-shell cache)
-is next, and the first slice that genuinely needs browser-side verification.
+into slice 1's apply path. **Slice 3 (PWA shell) shipped 2026-08-14** —
+`static/manifest.webmanifest` + `static/sw.js` (`routers/pwa.py`'s `GET
+/sw.js`/`GET /offline`), installable with an app-shell precache and an
+`/offline` fallback page for a failed navigation, no sync/IndexedDB/local
+writes yet (slices 4-6). The first genuinely browser-dependent piece of 1.8 —
+service worker registration/caching itself needs manual browser
+verification, not covered by this app's router-function-call pytest
+convention. Next: slice 4 (local IndexedDB store + read path).
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

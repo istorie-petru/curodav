@@ -1,0 +1,124 @@
+// 1.8 slice 3 -- PWA shell service worker (plans/open-priority.md §
+// Offline-first editing & synchronization §11 slice 3). Served at the
+// root path via routers/pwa.py::service_worker (not directly off
+// /static/sw.js) so its default scope is the whole app, not just /static/.
+//
+// Scope of this slice, deliberately: precache the app shell (the CSS/JS/
+// icons every page loads, per base.html, plus the /offline fallback page)
+// and serve /offline for a navigation request that fails offline with
+// nothing better cached. No sync, no IndexedDB, no runtime caching of
+// dynamic server-rendered pages (Tasks/Calendar/etc. still require a live
+// request -- caching their HTML here would go stale the moment the
+// underlying data changes, and there is no local data layer yet to keep
+// it honest; that's slices 4-5).
+//
+// CACHE_NAME is bumped whenever this file's own precache list changes --
+// activate's cleanup below deletes any previous cc-shell-* cache, so an
+// old shell version never lingers once a new one has installed.
+const CACHE_NAME = "cc-shell-v1";
+
+const SHELL_ASSETS = [
+  "/offline",
+  "/manifest.webmanifest",
+  "/static/style.css",
+  "/static/toast.js",
+  "/static/app.js",
+  "/static/modal.js",
+  "/static/tag_input.js",
+  "/static/recurrence_picker.js",
+  "/static/reminders_picker.js",
+  "/static/stepper.js",
+  "/static/schedule_table.js",
+  "/static/schedule_grid.js",
+  "/static/dashboard_widget_preview.js",
+  "/static/avatar_cropper.js",
+  "/static/task_habit_field_toggle.js",
+  "/static/command_palette.js",
+  "/static/quick_add.js",
+  "/static/favicon-16.png",
+  "/static/favicon-32.png",
+  "/static/apple-touch-icon.png",
+  "/static/icons/icon-192.png",
+  "/static/icons/icon-512.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      // Take over immediately on first install instead of waiting for
+      // every open tab to close -- this app has no in-page "update
+      // available, reload?" prompt (out of scope for this slice), so the
+      // alternative is a stale worker sitting idle until the user
+      // happens to close and reopen the tab themselves.
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("cc-shell-") && key !== CACHE_NAME)
+            .map((key) => caches.delete(key))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+
+  // Only ever intervene for this app's own GETs -- cross-origin requests
+  // (none today, but future-proofing) and non-GET writes (every task/
+  // event/contact mutation in this app is a plain form POST, per
+  // features/architecture.md) always go straight to the network
+  // untouched.
+  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) {
+    return;
+  }
+
+  if (request.mode === "navigate") {
+    // Network-first for real page loads: this app's pages are server-
+    // rendered from live SQLite state (main.py's own comment on why
+    // full-page HTTP caching is deliberately avoided), so a page that
+    // *can* reach the network must never be served a stale cached copy.
+    // Only a genuine network failure (offline, DNS, timeout) falls
+    // through to the offline shell.
+    event.respondWith(
+      fetch(request).catch(() =>
+        caches.match("/offline").then((cached) => cached || caches.match(request))
+      )
+    );
+    return;
+  }
+
+  if (new URL(request.url).pathname.startsWith("/static/")) {
+    // Cache-first for static assets: every static URL this app renders
+    // is already cache-busted with a `?v=<mtime>` query string
+    // (deps.py's static_url()) whenever the underlying file changes, so
+    // the plain un-versioned path cached here can never silently serve
+    // stale content under a *new* version's URL -- a changed file simply
+    // gets requested under a different URL than the one already cached.
+    // Falls back to the network (and refreshes the cache entry) for
+    // anything not in the precache list above.
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            return response;
+          })
+      )
+    );
+  }
+  // Everything else (JSON APIs, non-precached GETs) is left alone --
+  // default browser network handling, no caching.
+});
