@@ -1197,6 +1197,11 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
+/* Separator before `ms_extra_checkboxes` (2026-08-14, event form's Holiday
+   calendar dropdown folding in Exclude Saturday/Sunday) -- visually splits
+   the picker's own radios/checkboxes above from the unrelated boolean
+   fields appended after them. */
+.multiselect-option-divider{height:1px; margin:4px 4px; background:var(--separator);}
 /* "+ New label" row (2026-08-07, modal-input-design Phase B follow-up) --
    converting Labels to a checkbox-only list removed the app's only way
    to type a brand-new label name; this restores it as one extra row at

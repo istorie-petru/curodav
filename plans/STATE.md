@@ -982,6 +982,35 @@ session, right before the final commit of that session.
   1313 passed (no new tests -- CSS-only fix, existing structural tests
   already assert the `hidden` attribute's presence/absence, which was
   never the broken part).
+- **Shipped:** side work — **Exclude Saturday/Sunday folded into the
+  Holiday calendar dropdown**, complete (2026-08-14), direct follow-up
+  ("add exclude saturday and sunday into the holiday drop down menu as
+  checkboxes at the end"). `_widget_list_multiselect.html` (the shared
+  single/multi-select dropdown Recurrence/Ends/Labels already use) gained
+  two new optional params: `ms_extra_checkboxes` (a list of independent
+  `{name, id, label, checked}` boolean fields, each its own real form
+  field, rendered as extra rows after a new `.multiselect-option-divider`
+  separator at the end of the panel — not part of the picker's own
+  single/multi-select group) and `ms_hidden` (starts the outer `.field`
+  with the `hidden` attribute set). `_event_form_fields.html`'s three
+  separate Holiday calendar / Exclude Saturday / Exclude Sunday fields
+  collapsed into one such dropdown — `holiday_calendar` (single-select
+  radios, an explicit `{'uid': '', 'name': '(none)'}` leading the list so
+  "no calendar" is a real selectable option instead of the widget's
+  "nothing selected -> defaults to the first item" fallback silently
+  forcing whichever calendar sorts first) plus the two exclude checkboxes
+  via `ms_extra_checkboxes`. The whole dropdown keeps the single
+  `holiday-field` class from the slice above, so
+  `recurrence_picker.js`/`style.css`'s recurring-only show/hide is
+  unaffected — it now toggles one dropdown instead of three fields. No
+  server-side change: `routers/calendar.py`/`dashboard.py`'s create/update
+  still read the same three plain form field names. Verified by rendering
+  `calendar_router.new_event_form` directly (temporary test, not kept) —
+  radios/divider/checkboxes render in the right order inside one panel.
+  Full suite 1313 passed (no new tests — presentation-only regrouping of
+  three already-covered fields; `test_holiday_calendars.py`/
+  `test_recurrence_terminology.py`/`test_modal_footer_and_inputs.py` still
+  assert the same field names/round-trip).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
