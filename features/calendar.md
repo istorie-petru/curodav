@@ -45,13 +45,13 @@ label, and an event's color is its first (alphabetical) label's color
     its work sessions is still **undated** (the task modal's Work sessions
     "+" button adds one with no date yet), and dragging such a task onto a
     slot **places that session** (the oldest undated one) rather than
-    creating another block, exactly as `/week` and the project Week Calendar
-    do (see `features/tasks.md` § Work allocations). A plain click anywhere
+    creating another block, exactly as the project Week Calendar does (see
+    `features/tasks.md` § Work allocations). A plain click anywhere
     on a scheduled block's body (not a drag, not the delete button, not the
     resize handle) opens the block's task **view modal** via
     `project_calendar.js` interaction 4 (`taskUrlBase` config) — same
-    behavior the sibling planning grids (`/week`, the project Week Calendar)
-    have. The title (`.te-name`) is a plain `<span>`, not a nested `<a>`
+    behavior the sibling planning grid (the project Week Calendar)
+    has. The title (`.te-name`) is a plain `<span>`, not a nested `<a>`
     (direct feedback, immediate follow-up: "why can't it function like any
     other event so that the whole div is a link and can be moved at the
     same time?") — the block can't itself be a real `<a>` (it also contains
@@ -70,9 +70,8 @@ label, and an event's color is its first (alphabetical) label's color
     scripts never double-attach a pointerdown handler to the same block, and
     `style.css`'s planning-surface cursor override
     (`.project-calendar-col{cursor:default}`, which kills the "click-drag to
-    create" cursor on the *planning-only* grids `/week`/the project Week
-    Calendar) is scoped with `:not(.calendar-create-col)` so Week keeps the
-    create-drag cursor.
+    create" cursor on the *planning-only* project Week Calendar) is scoped
+    with `:not(.calendar-create-col)` so Week keeps the create-drag cursor.
   - The "Unscheduled work" sidebar is **collapsible** — a header button
     (`static/unscheduled_panel_toggle.js`) collapses it to a narrow rail,
     state persisted per-device (`localStorage`, no server involvement).
@@ -92,6 +91,14 @@ label, and an event's color is its first (alphabetical) label's color
   - `GET /calendar/timetable` and the old `/calendar/timetable/allocations`
     endpoint trio are gone; `/calendar/timetable` redirects to
     `/calendar/week` (any old bookmark still lands somewhere real).
+  - **`GET /week` (1.9 side work, direct follow-up the same theme continued)
+    is retired too**, once confirmed its own cross-project planning
+    capability (Unscheduled work sidebar + drag-drop) was already fully
+    present here — `routers/week.py`, `templates/week_planning.html`, and
+    `tests/test_week_planning.py` are gone; `GET /week` now redirects to
+    `/calendar/week` (`routers/calendar.py::week_redirect`, same "any
+    bookmark still lands somewhere real" precedent as the Timetable
+    retirement above). See `features/week.md`.
 - **Day** (`/calendar/day/{date}`) — same grid for one day; `/calendar/agenda`
   redirects here (the old agenda page was merged then removed).
 
@@ -127,8 +134,10 @@ top exactly as before — when no configured Sleep block covers midnight on
 any visible day.
 
 **Unscheduled-work panel (2026-08-14)** — each panel item (shared
-`_unscheduled_task_item.html` partial, same on Week, `/week`, and the
-project Week Calendar) shows a **−/count/+ session stepper** ("+" adds an
+`_unscheduled_task_item.html` partial, same on Week and the project Week
+Calendar — the standalone `/week` planning page this was originally
+triplicated with is retired, 1.9 side work, see `features/week.md`) shows
+a **−/count/+ session stepper** ("+" adds an
 undated session placeholder via `POST /tasks/{uid}/work-allocations`; "−"
 removes the most recently added undated one via `/remove-latest`, hidden at
 zero undated sessions) — the count reflects sessions still needing

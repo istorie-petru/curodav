@@ -1288,6 +1288,86 @@ session, right before the final commit of that session.
   — 24h default, 12h when set, and that `task_form.html`'s edit view
   respects it too). Full suite 1347 passed (same 4 pre-existing unrelated
   `test_today.py` failures).
+- **Shipped:** side work — **`/today` and `/week` retired, folded into the
+  Dashboard and Calendar**, complete (2026-08-15), a single large session
+  (user-approved deviation from this file's own one-slice default) covering
+  three ordered pieces:
+  1. **New Dashboard widget types, built and verified before anything was
+     deleted** (the session's own content-loss guard) — `routers/
+     dashboard.py`'s `WIDGET_TYPES` registry grew three entries:
+     `important_urgent` (open tasks flagged important/urgent that aren't
+     already due/overdue, `_render_important_urgent` — the exact
+     `derived_state.virtual_states` logic `/today` used, right down to
+     excluding anything already shown as due/overdue) and
+     `scheduled_work_today` (today's work-allocation sessions + a
+     completed-hours total, `_render_scheduled_work_today` — the same
+     `db.work_allocation_task_uid` per-event lookup `/today` used), both
+     addable through the existing Source/View picker
+     (`important_urgent_view`/`scheduled_work_view` under the
+     `calendar_tasks` source). Also added `quick_links` (a visual tile grid
+     of every Space + every open project, `label_config.icon`/`color` and
+     `filled_cards`' own `.filled-card` CSS reused, no new visual language
+     — the "more visual, less data-heavy" ask; the app has no separate
+     "pinned"/"favorite" concept, confirmed by reading `label_config`'s own
+     schema comment first rather than inventing one, so "every Space + every
+     open project" is the deliberately-simple v1), its own new
+     `quick_links`/`quick_links_view` source since it reads `label_config`
+     directly (`uses: set()`, same shape as `project_preview`/
+     `filled_cards`) and is excluded on Space/Project page scopes for the
+     same "meaningless once you're already inside one" reason those two
+     already were. Found and fixed a real Jinja footgun while wiring these
+     up: a render function's returned dict must never use the key name
+     `"items"` — Jinja's attribute-then-item lookup silently resolves
+     `data.items` to `dict.items` (the builtin method) instead of the
+     stored key, reproduced live before renaming to `rows`/`tiles`. Also
+     audited every `_widget_*.html` partial for the double-line date+time
+     wrap bug already found in `_widget_upcoming_events.html` (a fixed
+     110px `<td>` holding both a date and a time, per this slice's own
+     starting brief) — that was the only one; every sibling widget shows
+     either just a time or just a date in its narrow column, never both.
+     Widened to 150px + `white-space:nowrap`. 19 new tests.
+  2. **`/today` retired as a redirect** — `routers/today.py`,
+     `templates/today.html`, `tests/test_today.py` deleted; `GET /today`
+     now redirects (302, `routers/dashboard.py::today_redirect`) to `/`.
+  3. **`/week` retired as a redirect** — confirmed first, by reading both
+     routers/templates directly rather than assuming, that its entire
+     cross-project planning capability (Unscheduled work sidebar,
+     drag-to-schedule, block move/resize/delete, session stepper) was
+     already fully present at `/calendar/week`, a leftover from the earlier
+     "Calendar Week + Timetable merged" side work (2026-08-14) — `/week` had
+     become a third copy of the same thing, not a distinct surface.
+     `routers/week.py`, `templates/week_planning.html`,
+     `tests/test_week_planning.py` deleted; `GET /week` now redirects (302,
+     `routers/calendar.py::week_redirect`, registered on that module's
+     unprefixed `events_router` since the redirect's own path can't live
+     under `router`'s `prefix="/calendar"`) to `/calendar/week`, preserving
+     `?date_=`. Same "any bookmark still lands somewhere real" precedent
+     `timetable_view_redirect` already set for `/calendar/timetable`.
+  Both tabbar entries removed from `base.html` (Home/Calendar/Tasks/
+  Projects/Schedule/Contacts remain) — the explanatory comment there is a
+  Jinja `{# #}` comment, not an HTML `<!-- -->`, so the retired path text
+  doesn't leak into rendered markup (an HTML comment would have broken
+  `test_calendar_week_scheduling.py`'s own "no stale `/calendar/timetable`
+  text anywhere in the body" assertion the same way). `main.py`'s router
+  imports/`include_router` calls for `today`/`week` removed.
+  `features/today.md`/`features/week.md` rewritten as short retirement
+  notices (where their content lives now / why the merge was safe),
+  `features/dashboard.md` documents all 3 new widget types (now 14 total)
+  and the scope-exclusion change, `features/calendar.md`/`features/
+  tasks.md` had their stray `/week` mentions updated to stop implying a
+  separate page still exists, `features/README.md`'s table/tour updated.
+  `plans/roadmap.md`/`open-priority.md` needed no changes — their 1.7
+  Today/Week entries were already struck-through shipped history, not
+  open items, so nothing there was stale. New
+  `tests/test_dashboard_today_week_widgets.py` (24 tests: the 3 render
+  functions incl. tag-filter/limit/archived-project edge cases, both
+  redirects incl. `/week`'s `?date_=` passthrough, the tabbar/router-file
+  removal, the double-line fix). Full suite **1337 passed** — the 4
+  previously-pre-existing `test_today.py` failures are gone along with the
+  file itself (a UTC-vs-local `date.today()` test-environment quirk, not
+  worked around, just moot now that the file is gone), confirmed this is
+  the *only* change in the failure count by running the full suite after
+  each of the three commits, not just at the end.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

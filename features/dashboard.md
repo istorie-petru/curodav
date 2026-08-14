@@ -4,7 +4,7 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (11)
+## Widget types (14)
 
 | Type | Shows | Default width |
 |---|---|---|
@@ -19,6 +19,16 @@ entry + a render function; add/edit/reorder/delete machinery is generic.
 | `project_preview` | child-label progress bars | third |
 | `contact_list` | contacts filtered by labels, `limit` | third |
 | `filled_cards` | Material-You filled squares per Space, linking to `/labels/{name}` | full |
+| `important_urgent` | open tasks flagged important/urgent that aren't already due/overdue (`limit`, default 8) — ported from the retired `/today` page (1.9 side work), see `features/today.md` | half |
+| `scheduled_work_today` | today's work-allocation sessions + a completed-hours total — ported from the retired `/today` page (1.9 side work) | third |
+| `quick_links` | visual tile grid of every Space + every open project (label icon/color, `filled_cards`' own CSS reused) — Home-only, 1.9 side work | full |
+
+`important_urgent`/`scheduled_work_today` are addable through the existing
+Source/View picker (both under the `calendar_tasks` source, as
+`important_urgent_view`/`scheduled_work_view`); `quick_links` has its own
+`quick_links` source/`quick_links_view` view, since it reads `label_config`
+directly and has no tasks/events filter (`uses: set()`, same as
+`project_preview`/`filled_cards`).
 
 Plus the `stack` container type (not in the registry): drag a widget onto another
 card → one shared-width card with both stacked; members share `group_uid`; stacks
@@ -44,8 +54,12 @@ members).
   Agenda + stacked At a Glance/Upcoming Events/Overdue Tasks) for Home and every
   label page; `_backfill_mini_calendar_widget` one-time migration. Reset layout
   re-seeds.
-- Scope rules: Home offers all types; a generated label page excludes
-  `filled_cards`; a plain label page excludes `filled_cards` + `project_preview`.
+- Scope rules: Home offers all types; a generated Space page excludes
+  `filled_cards` + `quick_links`; a plain label (Project) page excludes
+  `filled_cards` + `project_preview` + `quick_links` (`quick_links`'s "every
+  Space + every project" view is meaningless once you're already inside
+  one, same reasoning `filled_cards`/`project_preview` were already excluded
+  for).
 
 ## Page chrome
 
@@ -55,6 +69,17 @@ members).
 - **Quick add**: the merged "+" button opens one modal (`/quick/add`,
   `quick_add.html`) with a Task/Event tab switch; the tab switcher retargets the
   footer Save via `form=`. Same form fields as the full task/event forms.
+
+## Display fixes (1.9 side work)
+
+- `_widget_upcoming_events.html`'s date+time column was a fixed 110px `<td>`
+  holding both an ISO date and a time on the same line, which wrapped onto
+  two lines at that width — widened to 150px + `white-space:nowrap`. Audited
+  every other `_widget_*.html` partial for the same fixed-narrow-column
+  date+time pattern; none of the rest combine a date and a time in one
+  column (most show just a time, e.g. `today_agenda`'s event rows, or just a
+  date, e.g. `overdue_tasks`'s due-date cell), so this was the only fix
+  needed.
 
 ## Endpoints
 

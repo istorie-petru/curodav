@@ -116,13 +116,15 @@ date at all (`db.create_work_allocation(conn, task_uid)` with neither
 is an **undated session placeholder** (an event with NULL `start_at`/
 `end_at`; `events.start_at` is nullable, so no schema change): it has no
 slot yet, so the task stays on the planning grids' "Unscheduled work"
-panel (Calendar's Week view, `/week`, the project Week Calendar) until
-the session is placed. Dragging the task onto a grid slot **places the
-task's oldest undated session** — `db.first_undated_work_allocation_for_
-task` + `db.set_work_allocation_times` in all three create endpoints
-(`week.py`/`calendar.py`/`projects.py` `create_allocation`) — rather than
-creating yet another block, so repeated "+" sessions each get placed by one
-drag. A task drops off the panel only when every one of its sessions is
+panel (Calendar's Week view, the project Week Calendar — the standalone
+`/week` planning page these were originally triplicated with is retired,
+1.9 side work, see `features/week.md`) until the session is placed.
+Dragging the task onto a grid slot **places the task's oldest undated
+session** — `db.first_undated_work_allocation_for_task` +
+`db.set_work_allocation_times` in both create endpoints (`calendar.py`/
+`projects.py` `create_allocation`) — rather than creating yet another
+block, so repeated "+" sessions each get placed by one drag. A task drops
+off the panel only when every one of its sessions is
 dated. The card renders sessions in creation order ("Session 1/2/3", since
 `list_work_allocations_for_task` now orders by creation time) with the
 session's date+hour at the row's end (blank while undated). Undated
@@ -133,7 +135,7 @@ leak out as DTSTART-less VEVENTs.
 **Unscheduled-work panel rework (2026-08-14):** each planning grid's
 "Unscheduled work" sidebar item is now a shared partial
 (`_unscheduled_task_item.html`, imported `with context` by Calendar's Week
-view, `/week`, and the project Week Calendar) showing, per task:
+view and the project Week Calendar) showing, per task:
 - a **scheduled/total hours x/y** next to the title —
   `db.work_allocation_panel_info`: `scheduled_hours` is the sum of dated
   session durations (same number as `task_work_hours.scheduled`),

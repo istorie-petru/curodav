@@ -36,15 +36,11 @@ these pieces fit together.
   and configure (today's agenda, the week ahead, overdue tasks, mini calendar,
   habit check-ins, project progress, contacts, and more), plus a greeting, a
   per-page cover banner, and a quick-add box for tasks and events.
-- **Today** — a single-page "what am I dealing with now" view: due/overdue
-  tasks, today's calendar events and scheduled task work side by side, and
-  anything else important or urgent, all in one place.
-- **Week (planning)** — a "how should I spend the week" view across every
-  project at once: unscheduled work you can drag straight onto a real week
-  grid alongside your existing commitments and due dates.
 - **Calendar** — your events in month, 4-week, week, or day views; drag to
-  move/resize, repeat on a schedule, set reminders, and link events to related
-  tasks.
+  move/resize, repeat on a schedule, set reminders, and link events to
+  related tasks. Week also doubles as the cross-project planning surface:
+  unscheduled work you can drag straight onto the grid alongside your
+  existing commitments and due dates.
 - **Tasks** — to-dos as a sortable table, a kanban board, or a timeline/Gantt;
   statuses, priorities, bulk edits, recurring to-dos with streaks, subtasks,
   and links to related events.
@@ -78,9 +74,9 @@ reference for development; the tour above is the plain-language version.
 | Doc | Covers |
 |---|---|
 | [`architecture.md`](architecture.md) | The "how it works" + rulebook — data model, layering, M3, nav, lifecycle |
-| [`dashboard.md`](dashboard.md) | Widget grid, 11 widget types, Customize/Widget Builder, quick-add, greeting, banner |
-| [`today.md`](today.md) | `/today` — due/overdue tasks, today's schedule vs. scheduled work, important/urgent items |
-| [`week.md`](week.md) | `/week` — cross-project unscheduled work draggable onto the week grid, vs. Calendar's/a project's own week views |
+| [`dashboard.md`](dashboard.md) | Widget grid, 14 widget types, Customize/Widget Builder, quick-add, greeting, banner |
+| [`today.md`](today.md) | Retired (1.9) — folded into Dashboard widgets; see the doc for where its content lives now |
+| [`week.md`](week.md) | Retired (1.9) — folded into Calendar's Week view; see the doc for why that was already a safe merge |
 | [`calendar.md`](calendar.md) | Month/4-week/week/day views, recurrence, drag interactions, event CRUD, relations |
 | [`tasks.md`](tasks.md) | Table/board/timeline views, statuses/priorities, bulk actions, recurring tasks, relations |
 | [`contacts.md`](contacts.md) | Contact list/detail/form, fields, photo upload, professor linking |
