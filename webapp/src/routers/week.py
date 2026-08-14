@@ -203,17 +203,18 @@ def move_allocation(
 
 @router.post("/allocations/{event_uid}/delete")
 def delete_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
-    """Unschedule a block -- the scheduled block is deleted and the task is
-    left with exactly one work session: an undated placeholder back on the
-    "Unscheduled work" panel (db.collapse_task_work_allocations). This is
-    the 1.9 semantics for the unschedule gesture (drag the block back onto
-    the panel, or use its delete button) -- "when unscheduling a task it is
-    deleted and only one work session remains"; session *management* now
-    lives on the panel's +/− stepper and the task's Work sessions card. A
-    non-allocation event (no task to collapse) is still just deleted."""
-    task_uid = db.work_allocation_task_uid(conn, event_uid)
-    if task_uid:
-        db.collapse_task_work_allocations(conn, task_uid)
-    else:
-        db.delete_work_allocation(conn, event_uid)
+    """Unschedule a block -- deletes ONLY this one scheduled session (the
+    gesture's own gesture, either the block's delete button or dragging it
+    back onto the "Unscheduled work" panel). The task's other sessions,
+    dated or still-undated, are left completely untouched; the task itself
+    is never deleted. 2026-08-14 originally had this collapse the task's
+    entire session count down to one undated placeholder ("when
+    unscheduling a task it is deleted and only one work session remains"),
+    but direct feedback the same day flagged that as the actual cause of
+    "the session count doesn't hold as a guide" -- removing one scheduled
+    block was silently discarding a task's other planned-but-not-yet-placed
+    sessions. `db.delete_work_allocation` (== delete_event) already does
+    exactly "remove only this block" for both allocation and non-allocation
+    events, so no task_uid branch is needed here anymore."""
+    db.delete_work_allocation(conn, event_uid)
     return _week_redirect(date_)

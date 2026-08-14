@@ -306,10 +306,9 @@ class TestMoveAllocation:
 
 class TestDeleteAllocation:
     def test_delete_removes_only_the_block_not_the_task(self, conn):
-        """1.9 unschedule semantics: deleting a block leaves the task with
-        exactly ONE work session -- an undated placeholder back on this
-        page's panel (collapse_task_work_allocations) -- not zero, and the
-        task itself is never deleted."""
+        """Deleting a block removes only that one session; a task with no
+        other sessions is left at zero, and the task itself is never
+        deleted."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
@@ -318,24 +317,25 @@ class TestDeleteAllocation:
         assert resp.headers["location"] == f"/projects/Conference%20XYZ/calendar?date_={_MONDAY}"
         assert db.get_event(conn, event_uid) is None
         assert db.get_task(conn, "t1") is not None
-        remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert len(remaining) == 1
-        assert remaining[0]["start_at"] is None  # the one remaining session is undated
+        assert db.list_work_allocations_for_task(conn, "t1") == []
 
-    def test_delete_collapses_multiple_sessions_to_one_undated(self, conn):
-        """A task with several scheduled blocks unscheduled via any one of
-        them loses ALL its dated blocks and keeps exactly one undated
-        session (the panel stepper then manages the count)."""
+    def test_delete_leaves_the_tasks_other_sessions_untouched(self, conn):
+        """Fixed 2026-08-14 direct feedback: removing one scheduled block
+        used to collapse ALL of a task's sessions down to a single undated
+        placeholder -- "the session count doesn't hold as a guide". Deleting
+        the middle one of three sessions must leave the other two exactly as
+        they were."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
         for day in ("2026-08-17", "2026-08-18", "2026-08-19"):
             db.create_work_allocation(conn, "t1", f"{day}T16:00:00", f"{day}T18:00:00")
         event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
         projects_router.delete_allocation("Conference XYZ", event_uids[1], date_=_MONDAY, conn=conn)
-        remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert len(remaining) == 1
-        assert remaining[0]["start_at"] is None
-        assert all(db.get_event(conn, uid) is None for uid in event_uids)
+        remaining = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
+        assert remaining == [event_uids[0], event_uids[2]]
+        assert db.get_event(conn, event_uids[1]) is None
+        assert db.get_event(conn, event_uids[0]) is not None
+        assert db.get_event(conn, event_uids[2]) is not None
 
     def test_deleted_allocations_task_becomes_unscheduled_again(self, conn):
         _project(conn, "Conference XYZ")

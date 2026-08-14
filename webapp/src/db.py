@@ -1698,23 +1698,6 @@ def remove_latest_work_allocation(conn: sqlite3.Connection, task_uid: str) -> st
     return uid
 
 
-def collapse_task_work_allocations(conn: sqlite3.Connection, task_uid: str) -> None:
-    """Unschedule a task: delete every work session and leave exactly one
-    undated session placeholder behind. This is what the planning grids'
-    "unschedule" gesture (drag a block back onto the panel, or use a block's
-    delete button) means -- the scheduled block(s) are gone and the task
-    returns to the "Unscheduled work" panel as a single unplaced session
-    ("when unscheduling a task it is deleted and only one work session
-    remains"; session *management* is the panel's +/− stepper and the task
-    modal's Work sessions card). A task with no sessions is left untouched
-    (nothing to collapse); the task itself is never deleted."""
-    allocations = list_work_allocations_for_task(conn, task_uid)
-    for wa in allocations:
-        delete_event(conn, wa["uid"])
-    if allocations:
-        create_work_allocation(conn, task_uid)
-
-
 def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]:
     """"The estimated work of a task is calculated from its actual calendar
     allocations... Total planned work is therefore the sum of the task's

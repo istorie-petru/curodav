@@ -247,29 +247,32 @@ class TestMoveAllocation:
 
 class TestDeleteAllocation:
     def test_delete_removes_only_the_block_not_the_task(self, conn):
-        """1.9 unschedule semantics: deleting a block leaves the task with
-        exactly ONE work session -- an undated placeholder back on the
-        panel -- not zero, and the task itself is never deleted."""
+        """Deleting a block removes only that one session; a task with no
+        other sessions is left at zero (still discoverable on the panel via
+        its count=0 state), and the task itself is never deleted."""
         _task(conn, "t1", title="Research")
         event_uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         resp = week_router.delete_allocation(event_uid, date_=_MONDAY, conn=conn)
         assert resp.status_code == 303
         assert db.get_event(conn, event_uid) is None
         assert db.get_task(conn, "t1") is not None
-        remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert len(remaining) == 1
-        assert remaining[0]["start_at"] is None
+        assert db.list_work_allocations_for_task(conn, "t1") == []
 
-    def test_delete_collapses_multiple_sessions_to_one_undated(self, conn):
+    def test_delete_leaves_the_tasks_other_sessions_untouched(self, conn):
+        """Fixed 2026-08-14 direct feedback: removing one scheduled block
+        used to collapse ALL of a task's sessions down to a single undated
+        placeholder, silently discarding the others -- "the session count
+        doesn't hold as a guide". Deleting one of three sessions must leave
+        the other two exactly as they were."""
         _task(conn, "t1", title="Research")
         for day in ("2026-08-17", "2026-08-18", "2026-08-19"):
             db.create_work_allocation(conn, "t1", f"{day}T16:00:00", f"{day}T18:00:00")
         event_uids = [wa["uid"] for wa in db.list_work_allocations_for_task(conn, "t1")]
         week_router.delete_allocation(event_uids[0], date_=_MONDAY, conn=conn)
         remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert len(remaining) == 1
-        assert remaining[0]["start_at"] is None
-        assert all(db.get_event(conn, uid) is None for uid in event_uids)
+        assert [wa["uid"] for wa in remaining] == event_uids[1:]
+        assert db.get_event(conn, event_uids[0]) is None
+        assert all(db.get_event(conn, uid) is not None for uid in event_uids[1:])
 
 
 class TestUnscheduledPanelStepper:

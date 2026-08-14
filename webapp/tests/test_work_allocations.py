@@ -378,20 +378,6 @@ class TestPanelInfoAndSessionStepper:
         assert db.remove_latest_work_allocation(conn, "t1") is None
         assert db.remove_latest_work_allocation(conn, "ghost") is None
 
-    def test_collapse_leaves_exactly_one_undated_session(self, conn):
-        _seed_task(conn, "t1")
-        uids = [db.create_work_allocation(conn, "t1", f"2026-08-1{i}T16:00:00", f"2026-08-1{i}T18:00:00") for i in range(1, 4)]
-        db.collapse_task_work_allocations(conn, "t1")
-        remaining = db.list_work_allocations_for_task(conn, "t1")
-        assert len(remaining) == 1
-        assert remaining[0]["start_at"] is None
-        assert all(db.get_event(conn, uid) is None for uid in uids)
-
-    def test_collapse_with_no_sessions_is_a_noop(self, conn):
-        _seed_task(conn, "t1")
-        db.collapse_task_work_allocations(conn, "t1")
-        assert db.list_work_allocations_for_task(conn, "t1") == []
-
     def test_add_work_allocation_route_returns_to_next_path(self, conn):
         _seed_task(conn, "t1")
         resp = tasks_router.add_work_allocation(

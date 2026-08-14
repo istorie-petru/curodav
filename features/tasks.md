@@ -149,10 +149,15 @@ sub-view, `/week`, and the project Week Calendar) showing, per task:
   the task modal's Work sessions card). Both forms carry a same-origin
   `next` path (validated by `tasks.py::_safe_next` against open-redirect
   payloads) so the reload lands back on the grid they were used from.
-- **Unschedule collapses the task** — the three delete endpoints no longer
-  remove just the one block: they delete **every** session and leave exactly
-  **one undated session** (`db.collapse_task_work_allocations`), returning
-  the task to the panel at a count of one.
+- **Unschedule removes only the one block** — the three delete endpoints
+  (`db.delete_work_allocation`) delete just the session being unscheduled;
+  the task's other sessions, dated or still-undated, are untouched, and the
+  task itself is never deleted. (2026-08-14: briefly collapsed *every*
+  session down to one undated placeholder instead — `db.
+  collapse_task_work_allocations` — until direct feedback the same day
+  flagged that as silently discarding a task's other planned sessions on
+  any single unschedule, "the session count doesn't hold as a guide";
+  reverted, and the now-dead collapse helper was deleted.)
 - **Pointer-based drag** (static/project_calendar.js interaction 1) replaces
   native HTML5 drag-and-drop: a fixed ghost clone follows the cursor, the
   hovered column lights up, and the grid auto-scrolls near its top/bottom
@@ -346,9 +351,9 @@ the same technique `routers/calendar.py::reschedule_event` already uses for
 the global grid's own drag, just a form-POST/redirect endpoint instead of
 that route's JSON/fetch contract, to match this page's other actions. Each
 block's delete button POSTs to `.../{event_uid}/delete`
-(`delete_allocation` -> `db.collapse_task_work_allocations`) — the 1.9
-unschedule semantics: it deletes *all* of the task's sessions and leaves
-exactly one undated one (never the task itself). Ordinary
+(`delete_allocation` -> `db.delete_work_allocation`) — removes only that one
+session; the task's other sessions and the task itself are untouched.
+Ordinary
 calendar events (and any other project's own work allocations) render as
 visually subdued context (`.context-event`, reduced opacity); only this
 project's own work allocations (`.work-allocation`) are prominent and

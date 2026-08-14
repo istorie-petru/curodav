@@ -34,9 +34,9 @@
 //    drag is over that panel the block highlights it, and releasing there
 //    submits the delete form instead of the move form. Releasing anywhere
 //    else keeps the normal move/resize behavior. The delete endpoint
-//    COLLAPSES the task's work sessions to a single undated one (the 1.9
-//    unschedule semantics -- "deleted and only one work session remains"),
-//    so the reload shows the task back on the panel at a count of one.
+//    removes ONLY this one session -- the task's other sessions (dated or
+//    still-undated) are untouched, so the reload shows the task back on
+//    the panel at whatever count it already had, minus this one.
 // 4. (Optional, config-driven) A plain click on a `.work-allocation`
 //    block's own body (not its title link, not the delete button, not a
 //    drag, not the resize handle) opens the block's task VIEW modal -- so
@@ -364,10 +364,10 @@
         return;
       }
 
-      // Released over the unscheduled-work panel -> unschedule this block
-      // (the delete endpoint collapses the task's sessions to one undated
-      // session -- 1.9 semantics -- so the reload shows the task back in
-      // the "Unscheduled work" list at a count of one).
+      // Released over the unscheduled-work panel -> delete this one block
+      // (the task's other sessions are untouched, so the reload shows the
+      // task back in the "Unscheduled work" list at whatever count it
+      // already had, minus this one).
       if (wasOverUnscheduled && cfg.deleteUrlBase) {
         submitForm(cfg.deleteUrlBase + el.dataset.uid + "/delete", {
           date_: cfg.weekDate,

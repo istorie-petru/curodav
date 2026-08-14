@@ -473,6 +473,39 @@ session, right before the final commit of that session.
   and to cover the project-icon pill (`test_project_calendar.py`/
   `test_week_planning.py`/`test_calendar_timetable.py`), full suite 1199
   passed.
+- **Fixed:** side work — **unscheduling a block no longer wipes a task's
+  other work sessions**, complete (2026-08-14), reported directly against
+  the Timetable ("deleting/drag-drop doesn't work at all... doesn't hold the
+  number of work sessions to be a guide"). Reproduced live (headless
+  Chromium against a real seeded app instance, not just reading code) before
+  changing anything: a task with 3 sessions (1 scheduled + 2 still-undated)
+  lost ALL of them, collapsing to exactly 1 undated placeholder, the moment
+  *any one* scheduled block was deleted/unscheduled -- `db.
+  collapse_task_work_allocations`, called unconditionally by all three
+  planning grids' delete endpoints (`routers/week.py`, `routers/calendar.py`
+  ::`delete_timetable_allocation`, `routers/projects.py`). That was the
+  earlier same-day "Unschedule now collapses" side work's own deliberate
+  design (§ above), built from feedback that day -- confirmed with the user
+  before reversing it, since this reverts a very recent explicit decision.
+  Root cause fixed: all three endpoints now call the already-existing
+  `db.delete_work_allocation` (== `delete_event`, "removes only that
+  scheduled block") directly, no task_uid branch, no collapse; `db.
+  collapse_task_work_allocations` deleted outright (dead code once nothing
+  called it, and leaving it around risked a future "fix" wiring it back in).
+  Separately confirmed but NOT changed: the block's ✕ button posts a form
+  whose action contains "/delete", so `app.js`'s generic delete-confirmation
+  fallback intercepts it and requires a second click on a small popover --
+  functions correctly once you click through it (verified live), just easy
+  to miss on a first click; left as-is since the fallback is now accurate
+  ("cannot be undone" is true again post-fix) and is the same pattern used
+  elsewhere in the app. Updated the three delete-button tooltips (`week_
+  planning.html`/`calendar_timetable.html`/`project_calendar.html`) and
+  `project_calendar.js`'s header comment off the old "collapses to one"
+  wording. 3 tests changed to assert only-the-one-session-is-removed
+  (`test_week_planning.py`/`test_calendar_timetable.py`/
+  `test_project_calendar.py`'s `TestDeleteAllocation`), 2 now-pointless
+  `db.collapse_task_work_allocations` unit tests removed from `test_work_
+  allocations.py`, full suite 1198 passed.
 - **Next slice:** `1.8` — Offline-first editing & synchronization
   (`roadmap.md`'s 1.8 row, `open-priority.md` § Offline-first editing &
   synchronization). The largest engineering item on the roadmap — its status

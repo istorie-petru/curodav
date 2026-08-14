@@ -94,7 +94,7 @@
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
                     <form class="work-allocation-delete" method="post" action="/calendar/timetable/allocations/{{ e.uid }}/delete">
                         <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
-                        <button type="submit" class="icon-btn" title="Unschedule this block (the task returns to Unscheduled work with one session)">{{ icon('x', 'icon-sm') }}</button>
+                        <button type="submit" class="icon-btn" title="Delete this session (only this one -- the task's other sessions are unaffected)">{{ icon('x', 'icon-sm') }}</button>
                     </form>
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
