@@ -129,6 +129,7 @@ HUB_CATEGORIES = [
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
+    {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
     {"url": "/settings/sync-conflicts", "icon": "merge", "name": "Sync conflicts", "desc": "Offline edits the sync engine couldn't auto-merge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
@@ -466,6 +467,97 @@ async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db))
 def delete_holiday(uid: str, conn=Depends(get_db)):
     db.delete_holiday(conn, uid)
     return RedirectResponse(url="/settings/holidays", status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Sleep Time / Leisure Time (1.9 side work, direct feedback: "Add an
+# option in the settings to set-up Leisure Time and Sleep Time... similar
+# to the holiday settings, but just adding the hours... and days"). Same
+# Tasks-table-style grid shape as Holidays directly above -- one page,
+# two tables (Sleep, Leisure), each row inline-editable via
+# static/settings_time_blocks.js. Unlike Holidays, `kind` is fixed per
+# table (no free-form calendar name) and there's no date range, just a
+# time-of-day start/end plus a day-of-week set
+# (`_widget_list_multiselect.html`, filter mode -- see db.TIME_BLOCK_DAYS).
+# See routers/calendar.py's `_time_block_overlays` for where these rows
+# turn into the Week/Day grid's soft hatching + scheduling warning.
+# --------------------------------------------------------------------- #
+
+_TIME_BLOCKS_CRUMB = _ROOT_CRUMB
+
+# Which time_blocks fields the inline edit (static/settings_time_blocks.js)
+# may touch -- same allowlist convention as _HOLIDAY_UPDATABLE_FIELDS.
+_TIME_BLOCK_UPDATABLE_FIELDS = {"label", "start_time", "end_time", "days"}
+
+
+@router.get("/settings/time-blocks")
+def settings_time_blocks(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_time_blocks.html",
+        {
+            "request": request,
+            "active_tab": "settings_time_blocks",
+            "crumbs": _TIME_BLOCKS_CRUMB,
+            "title": "Sleep & Leisure Time",
+            "sleep_blocks": db.list_time_blocks(conn, "sleep"),
+            "leisure_blocks": db.list_time_blocks(conn, "leisure"),
+            "time_block_days": db.TIME_BLOCK_DAYS,
+        },
+    )
+
+
+@router.post("/settings/time-blocks")
+def create_time_block(
+    kind: str = Form(...),
+    label: str = Form(""),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    days: list[str] = Form([]),
+    conn=Depends(get_db),
+):
+    if kind in db.TIME_BLOCK_KINDS and start_time and end_time and end_time > start_time:
+        valid_days = [d for d in days if d in db.TIME_BLOCK_DAYS]
+        db.upsert_time_block(
+            conn,
+            {
+                "uid": str(uuid.uuid4()), "kind": kind, "label": label,
+                "start_time": start_time, "end_time": end_time, "days": ",".join(valid_days),
+            },
+        )
+    return RedirectResponse(url="/settings/time-blocks", status_code=303)
+
+
+@router.post("/settings/time-blocks/{uid}/update-field")
+async def update_time_block_field(uid: str, request: Request, conn=Depends(get_db)):
+    """Single-field inline edit for the Sleep/Leisure tables -- mirrors
+    update_holiday_field. `field == "days"` takes a comma-joined string
+    (static/settings_time_blocks.js collects every checked day into one
+    string before calling this, same as it does for a plain text/time
+    input's single value) rather than a JSON list, so this endpoint has
+    exactly one request shape regardless of which field changed."""
+    payload = await request.json()
+    field = payload.get("field")
+    value = payload.get("value")
+    if field not in _TIME_BLOCK_UPDATABLE_FIELDS:
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    block = db.get_time_block(conn, uid)
+    if block is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if field in ("start_time", "end_time") and not str(value).strip():
+        return JSONResponse({"error": "time cannot be empty"}, status_code=400)
+    if field == "days":
+        value = ",".join(d for d in str(value).split(",") if d.strip() in db.TIME_BLOCK_DAYS)
+    block[field] = value
+    if block["end_time"] <= block["start_time"]:
+        return JSONResponse({"error": "end time must be after start time"}, status_code=400)
+    db.upsert_time_block(conn, block)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/settings/time-blocks/{uid}/delete")
+def delete_time_block(uid: str, conn=Depends(get_db)):
+    db.delete_time_block(conn, uid)
+    return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
 # --------------------------------------------------------------------- #

@@ -92,6 +92,9 @@
         <div class="time-cols week">
             {% for day in days %}
             <div class="time-col calendar-create-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
+                {% for ov in day.time_block_overlays %}
+                <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
+                {% endfor %}
                 {% for e in day.timed %}
                 {% if e.is_allocation %}
                 <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
@@ -145,6 +148,11 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
+     Settings > Sleep & Leisure Time) -- loaded before calendar.js/
+     project_calendar.js so both can call window.ccTimeBlocks. -->
+<script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
+<script src="{{ static_url('time_blocks.js') }}"></script>
 <script>
   // See this template's own top comment -- ordinary events keep calendar.js's
   // interactions; work-allocation blocks get project_calendar.js's, pointed

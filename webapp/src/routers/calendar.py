@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar as py_calendar
+import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -75,6 +76,66 @@ def _weekday_names(week_start: str) -> list[str]:
     if week_start == "sunday":
         names = names[6:] + names[:6]
     return names
+
+
+def _hhmm_to_minutes(t: str) -> int:
+    """"HH:MM" -> minutes since midnight -- the Sleep/Leisure Time blocks'
+    own start_time/end_time storage format (routers/settings.py's Time
+    inputs), same idea as grid_layout._minutes but reading a bare time
+    string instead of slicing an ISO datetime."""
+    h, m = t.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _time_block_overlays_for_day(blocks: list[dict], day: date) -> list[dict]:
+    """Every Sleep/Leisure Time block (db.list_time_blocks) that applies to
+    `day`'s weekday, turned into a top_px/height_px overlay the Week/Day
+    grid can render directly behind its events -- same top/height math as
+    grid_layout.position_event, just driven off a fixed weekly time range
+    instead of one event's start_at/end_at. `date.strftime('%A')` gives the
+    same full weekday name (e.g. "Monday") db.TIME_BLOCK_DAYS/time_blocks.days
+    already store, so no separate lookup table is needed here."""
+    weekday = day.strftime("%A")
+    overlays = []
+    for b in blocks:
+        if weekday not in db.time_block_days(b):
+            continue
+        start_min = _hhmm_to_minutes(b["start_time"])
+        end_min = _hhmm_to_minutes(b["end_time"])
+        if end_min <= start_min:
+            continue  # defensive -- create/update already reject this, but never trust storage alone
+        overlays.append(
+            {
+                "kind": b["kind"],
+                "top_px": round(start_min / 60 * grid_layout.PX_PER_HOUR, 1),
+                "height_px": round((end_min - start_min) / 60 * grid_layout.PX_PER_HOUR, 1),
+            }
+        )
+    return overlays
+
+
+def _time_blocks_client_payload(blocks: list[dict]) -> str:
+    """JSON for the Week/Day grid's client-side scheduling-warning check
+    (static/time_blocks.js) -- {kind, label, days, start_min, end_min} per
+    block, minutes-since-midnight so the client never has to re-parse
+    "HH:MM" strings. Rendered into a page-local <script type="application/
+    json"> tag rather than an inline JS literal so it round-trips through
+    Jinja's HTML auto-escaping safely (json.dumps already produces valid,
+    self-contained JSON text -- no `</script>`-breaking concerns here since
+    every string value is a plain label/day name this app itself controls
+    via Settings > Sleep & Leisure Time, never arbitrary user HTML)."""
+    return json.dumps(
+        [
+            {
+                "kind": b["kind"],
+                "label": b.get("label") or "",
+                "days": db.time_block_days(b),
+                "start_min": _hhmm_to_minutes(b["start_time"]),
+                "end_min": _hhmm_to_minutes(b["end_time"]),
+            }
+            for b in blocks
+        ]
+    )
 
 
 def _tags_list(tags: str) -> list[str]:
@@ -630,6 +691,12 @@ def week_view(
     tasks = _apply_task_label_filter(tasks, label)
     open_tasks = [t for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
 
+    # Sleep/Leisure Time hatching (1.9 side work) -- fetched once for the
+    # whole week, then resolved per day by weekday name (_time_block_overlays_
+    # for_day), same "compute once, slice per day" shape day_all_day above
+    # already uses.
+    time_blocks = db.list_time_blocks(conn)
+
     days = []
     for i in range(7):
         d = week_start_date + timedelta(days=i)
@@ -637,6 +704,7 @@ def week_view(
         day_events = [e for e in events if e.get("start_at", "").startswith(key)]
         timed = grid_layout.layout_day(day_events)
         day_tasks = [t for t in tasks if (t.get("due_at") or "").startswith(key)]
+        time_block_overlays = _time_block_overlays_for_day(time_blocks, d)
         # All-day events repeat on every day they span, not just their
         # start date -- the same "repeated entry per day" behavior Month's
         # _month_grid already has (a multi-day all-day trip should fill
@@ -657,6 +725,7 @@ def week_view(
                 "all_day": day_all_day,
                 "timed": timed,
                 "tasks": day_tasks,
+                "time_block_overlays": time_block_overlays,
             }
         )
 
@@ -705,6 +774,7 @@ def week_view(
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
             "schedule_next_lectures": _group_education_next_lectures(conn, label),
+            "time_blocks_json": _time_blocks_client_payload(time_blocks),
         },
     )
 
@@ -836,6 +906,8 @@ def day_view(
     ]
     day_events = [e for e in events if e.get("start_at", "").startswith(day)]
     timed = grid_layout.layout_day(day_events)
+    day_time_blocks = db.list_time_blocks(conn)
+    time_block_overlays = _time_block_overlays_for_day(day_time_blocks, d)
 
     return templates.TemplateResponse(
         "calendar_day.html",
@@ -850,11 +922,13 @@ def day_view(
             "all_day": all_day,
             "timed": timed,
             "tasks": tasks,
+            "time_block_overlays": time_block_overlays,
             "hours": list(range(grid_layout.GRID_HOURS)),
             "px_per_hour": grid_layout.PX_PER_HOUR,
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
             "schedule_next_lectures": _group_education_next_lectures(conn, label),
+            "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
         },
     )
 

@@ -119,6 +119,7 @@ class TestSettingsHub:
             "/settings/appearance",
             "/labels",
             "/settings/holidays",
+            "/settings/time-blocks",
             "/settings/data-health",
             "/settings/sync-conflicts",
             "/published-lists",

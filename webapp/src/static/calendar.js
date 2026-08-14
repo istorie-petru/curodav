@@ -136,6 +136,11 @@
       const uid = el.dataset.uid;
       const droppedCol = currentCol;
 
+      // Sleep Time / Leisure Time warning (static/time_blocks.js) -- purely
+      // advisory, fired alongside the save below rather than gating it; a
+      // no-op if the page has no configured blocks or the script didn't load.
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
+
       // Optimistic, same as Kanban's drag-and-drop (tasks_board.js) --
       // the position on screen is already correct the instant the pointer
       // is released (that's what the whole drag was doing), so a reload

@@ -1174,6 +1174,65 @@ session, right before the final commit of that session.
   the pre-slice commit via `git stash`; a UTC-vs-local `date.today()` /
   test-module-import-time date mismatch in this sandbox, not caused by this
   slice).
+- **Shipped:** side work — **Sleep Time / Leisure Time**, complete
+  (2026-08-15), direct feedback ("Add an option in the settings to set-up
+  Leisure Time and Sleep Time... similar to the holiday settings, but just
+  adding the hours... and days... a soft hatching... that when placing an
+  event to timetable an event there gives a warning"). New `time_blocks`
+  table (`db.py`: `kind` fixed to `'sleep'`/`'leisure'` — not a user-named
+  open-ended set like a holiday calendar — plus `label`, `start_time`/
+  `end_time` as plain `"HH:MM"`, `days` a comma-joined subset of the new
+  `db.TIME_BLOCK_DAYS`; no date component at all, this is a weekly
+  recurring rule, not a dated range) plus `upsert_time_block`/
+  `get_time_block`/`delete_time_block`/`list_time_blocks`/`time_block_days`,
+  same minimal shape as `schedule_holidays`' own functions.
+  - **Settings > Sleep & Leisure Time** (`/settings/time-blocks`,
+    `routers/settings.py`, new hub category) — same Tasks-table-style grid
+    as Holidays, two sections (Sleep, Leisure), each row inline-editable
+    (`POST /settings/time-blocks/{uid}/update-field`,
+    `_TIME_BLOCK_UPDATABLE_FIELDS`). Days picked via
+    `_widget_list_multiselect.html` in `filter` (multi-select) mode rather
+    than Holidays' `single` mode — "days" genuinely is a set, not one
+    choice. Deliberately two duplicated top-level template sections rather
+    than one Jinja macro wrapping the shared multiselect include — that
+    partial's own set-then-include pattern is only proven directly inside a
+    template body/for-loop elsewhere in this codebase, not inside a macro's
+    local scope, so this didn't risk a scoping surprise for a two-line
+    saving.
+  - **Week/Day grid hatching** — `routers/calendar.py::
+    _time_block_overlays_for_day` resolves each visible day's applicable
+    blocks (by `date.strftime('%A')` against `days`) into top/height px,
+    same math `grid_layout.position_event` uses for a real event; both
+    `week_view` and `day_view` compute this per day and
+    `calendar_week.html`/`calendar_day.html` render a `pointer-events:none`
+    `.time-block-overlay.time-block-{sleep,leisure}` div per block, behind
+    every real event (z-index 1 vs events' 3) so no drag/click interaction
+    is affected. Red/green via the app's existing `--danger`/`--success`
+    vars, not new colors. Month has no time axis and was left untouched —
+    "the calendar view" in the feedback read as Week/Day, the two views
+    that actually have hours to hatch.
+  - **Scheduling warning** — new `static/time_blocks.js` (loaded only on
+    `calendar_week.html`/`calendar_day.html`, reading a page-local
+    `<script type="application/json" id="cc-time-blocks">` tag built by
+    `routers/calendar.py::_time_blocks_client_payload`) exposes
+    `window.ccTimeBlocks.warnIfOverlapping(dateStr, startMin, endMin)`.
+    Wired into `static/calendar.js`'s block-move/resize `end()` and
+    `static/project_calendar.js`'s work-allocation create-drag and
+    move-drag `end()`s (both guarded by `if (window.ccTimeBlocks)`, a
+    silent no-op on `/week`/the project Week Calendar, which render no
+    `cc-time-blocks` tag) — a `toast-warning` toast ("Heads up: this
+    overlaps Sleep Time...") fires alongside the save, never blocking or
+    reverting it (the feature request's own "gives a warning," not "gives
+    an error"). The drag-to-*create a brand-new plain event* path
+    (calendar.js's `finishCreate`) deliberately has no warning call — it
+    only opens the New Event form prefilled, nothing is placed yet at that
+    point. New `.toast-warning` CSS (`var(--warning)`, dark text — the app's
+    existing amber "caution" color, distinct from `.toast-error`'s red).
+  24 new tests (`test_settings_time_blocks.py`: the Settings page/routes,
+  `_time_block_overlays_for_day`, `_time_blocks_client_payload`, and that
+  Month renders no hatching), plus `test_phase8_settings_hub.py`'s hub-URL
+  set updated for the new category. Full suite 1340 passed (same 4
+  pre-existing unrelated `test_today.py` failures as the slice above).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

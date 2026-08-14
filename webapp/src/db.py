@@ -623,6 +623,31 @@ CREATE TABLE IF NOT EXISTS event_occurrence_overrides (
 );
 CREATE INDEX IF NOT EXISTS idx_event_occurrence_overrides_master ON event_occurrence_overrides(master_uid);
 
+-- 1.9 side work ("Sleep Time / Leisure Time", direct feedback): weekly
+-- recurring soft-scheduling guidance blocks -- "this time of day, on these
+-- days of the week, is meant for X" (e.g. sleep 00:00-05:59 Monday-Sunday,
+-- leisure 21:00-21:59 Monday-Sunday). Deliberately NOT shaped like
+-- schedule_holidays (a dated range under a user-named, open-ended
+-- calendar) -- a time block has no date component at all, just a
+-- time-of-day range plus a day-of-week set, and `kind` is one of exactly
+-- two fixed categories (not a user-named set) since the feature request
+-- named exactly these two. Rendered as a soft diagonal-hatch overlay on
+-- the Week/Day grid (red for sleep, green for leisure, see
+-- routers/calendar.py's `_time_block_overlays`) and produces a
+-- non-blocking warning (never a hard block) when an event or work
+-- allocation is scheduled to overlap one -- see static/time_blocks.js.
+-- `days` is a comma-separated subset of db.TIME_BLOCK_DAYS, stored as full
+-- weekday names so a row reads directly in the admin table with no lookup.
+CREATE TABLE IF NOT EXISTS time_blocks (
+    uid TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('sleep', 'leisure')),
+    label TEXT NOT NULL DEFAULT '',
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    days TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_time_blocks_kind ON time_blocks(kind);
+
 -- 1.8 slice 1 ("Field-HLC shadow store + sync API skeleton",
 -- plans/open-priority.md § Offline-first editing & synchronization §9):
 -- purely sync-infrastructure metadata, not a fourth kind of domain entity
@@ -2465,6 +2490,51 @@ def list_holidays_by_calendar(conn: sqlite3.Connection) -> dict[str, list[dict[s
     for row in list_holidays(conn):
         by_calendar.setdefault(row["calendar_name"], []).append(row)
     return by_calendar
+
+
+# --------------------------------------------------------------------- #
+# Sleep Time / Leisure Time (see time_blocks' own CREATE TABLE comment) --
+# same minimal shape as the schedule_holidays functions directly above
+# (plain dict rows, upsert-by-uid, explicit commit).
+# --------------------------------------------------------------------- #
+
+TIME_BLOCK_KINDS = ("sleep", "leisure")
+TIME_BLOCK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def upsert_time_block(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    conn.execute(
+        "INSERT INTO time_blocks (uid, kind, label, start_time, end_time, days) VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(uid) DO UPDATE SET kind=excluded.kind, label=excluded.label, "
+        "start_time=excluded.start_time, end_time=excluded.end_time, days=excluded.days",
+        (row["uid"], row["kind"], row.get("label", ""), row["start_time"], row["end_time"], row.get("days", "")),
+    )
+    conn.commit()
+
+
+def get_time_block(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM time_blocks WHERE uid = ?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_time_block(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM time_blocks WHERE uid = ?", (uid,))
+    conn.commit()
+
+
+def list_time_blocks(conn: sqlite3.Connection, kind: str | None = None) -> list[dict[str, Any]]:
+    if kind:
+        rows = conn.execute("SELECT * FROM time_blocks WHERE kind = ? ORDER BY start_time", (kind,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM time_blocks ORDER BY kind, start_time").fetchall()
+    return [dict(r) for r in rows]
+
+
+def time_block_days(row: dict[str, Any]) -> list[str]:
+    """`row['days']` ("Monday,Wednesday,Friday") split back into a list --
+    the one place both the settings table and the overlay/warning code
+    parse this field, so they can't drift on the separator."""
+    return [d.strip() for d in (row.get("days") or "").split(",") if d.strip()]
 
 
 def get_schedule_settings(conn: sqlite3.Connection) -> dict[str, Any]:

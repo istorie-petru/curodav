@@ -61,6 +61,9 @@
     </div>
     <div class="time-cols day">
         <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
+            {% for ov in time_block_overlays %}
+            <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
+            {% endfor %}
             {% for e in timed %}
             <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
@@ -78,5 +81,10 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
+     Settings > Sleep & Leisure Time) -- loaded before calendar.js so it
+     can call window.ccTimeBlocks. -->
+<script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
+<script src="{{ static_url('time_blocks.js') }}"></script>
 <script src="{{ static_url('calendar.js') }}"></script>
 {% endblock %}

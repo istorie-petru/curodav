@@ -1752,6 +1752,27 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
 
+/* Sleep Time / Leisure Time hatching (1.9 side work, Settings > Sleep &
+   Leisure Time) -- a soft diagonal hatch behind the grid's own events,
+   never interactive (pointer-events:none, so drag-to-create/move/resize
+   all still work straight through it) and always beneath every real event
+   and drag ghost (.time-event z-index:3, .schedule-ghost z-index:2, this
+   z-index:1 -- just above the plain gridline background). Red for Sleep,
+   green for Leisure -- var(--danger)/
+   var(--success), the same two semantic colors the rest of the app
+   already uses for "avoid" / "go", just at low opacity so the hatch reads
+   as a soft background cue, not a blocking overlay (this feature only
+   ever warns, never blocks -- see static/time_blocks.js). */
+.time-block-overlay{
+  position:absolute; left:0; right:0; pointer-events:none; z-index:1; opacity:.5;
+}
+.time-block-sleep{
+  background-image:repeating-linear-gradient(135deg, var(--danger) 0, var(--danger) 1.5px, transparent 1.5px, transparent 9px);
+}
+.time-block-leisure{
+  background-image:repeating-linear-gradient(135deg, var(--success) 0, var(--success) 1.5px, transparent 1.5px, transparent 9px);
+}
+
 /* Project Week Calendar (1.4 slice 3, templates/project_calendar.html) --
    ordinary calendar events render as visually subdued context ("reduced
    opacity or a restrained hashed treatment", § Project pages & views) so
@@ -2245,6 +2266,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .toast-close:hover{opacity:1; background:rgba(255,255,255,.12);}
 .toast-error{background:var(--danger);}
 .toast-error .toast-close{color:#fff;}
+/* Sleep/Leisure Time scheduling warning (static/time_blocks.js) -- a
+   caution, not a failure, so it gets --warning (the same amber the app
+   already uses for that meaning) rather than --danger's red. Dark text,
+   not the base toast's light color, since --warning is a light/mid amber
+   in both themes and white text on it fails contrast. */
+.toast-warning{background:var(--warning); color:#1a1a1a;}
+.toast-warning .toast-close{color:#1a1a1a;}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */

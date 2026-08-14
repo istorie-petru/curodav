@@ -95,6 +95,28 @@ label, and an event's color is its first (alphabetical) label's color
 - **Day** (`/calendar/day/{date}`) — same grid for one day; `/calendar/agenda`
   redirects here (the old agenda page was merged then removed).
 
+**Sleep Time / Leisure Time (1.9 side work, Settings > Sleep & Leisure
+Time)** — weekly recurring guidance hours (`db.time_blocks`, no date
+component, just a `"HH:MM"` range + day-of-week set), rendered as a soft
+diagonal hatch behind the grid on both Week and Day (`.time-block-overlay
+.time-block-sleep`/`.time-block-leisure`, red/green via `var(--danger)`/
+`var(--success)`, `pointer-events:none` so every drag interaction passes
+straight through it) — `routers/calendar.py::_time_block_overlays_for_day`
+resolves each day's applicable blocks by weekday name
+(`date.strftime('%A')`, matching `db.TIME_BLOCK_DAYS`'s own storage
+format) into top/height px, same math `grid_layout.position_event` uses
+for a real event. Purely advisory, never a hard constraint: dropping an
+event (`static/calendar.js`) or a work-allocation block/create-drag
+(`static/project_calendar.js`) onto an overlapping slot still saves
+normally, but a shared `static/time_blocks.js` (loaded only on
+`calendar_week.html`/`calendar_day.html`, reading a page-local
+`<script type="application/json" id="cc-time-blocks">` payload built by
+`routers/calendar.py::_time_blocks_client_payload`) shows a `toast-warning`
+toast ("Heads up: this overlaps Sleep Time...") alongside the save. Month
+has no time-of-day axis at all, so neither the hatching nor the warning
+apply there. Config lives in Settings > Sleep & Leisure Time
+(`features/settings.md`).
+
 **Unscheduled-work panel (2026-08-14)** — each panel item (shared
 `_unscheduled_task_item.html` partial, same on Week, `/week`, and the
 project Week Calendar) shows a **−/count/+ session stepper** ("+" adds an

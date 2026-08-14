@@ -238,6 +238,11 @@
       const startMin = Math.round((startPx / PX_PER_HOUR) * 60);
       const endMin = startMin + DEFAULT_BLOCK_MINUTES;
       const day = col.dataset.date;
+      // Sleep Time / Leisure Time warning (static/time_blocks.js) -- see
+      // calendar.js's identical call for the full rationale; a no-op when
+      // the page renders no cc-time-blocks tag (only calendar_week.html/
+      // calendar_day.html do -- /week and the project Week Calendar don't).
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
       submitForm(cfg.createUrl, {
         task_uid: item.dataset.taskUid,
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
@@ -418,6 +423,7 @@
       const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
       submitForm(cfg.moveUrlBase + uid + "/move", {
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
         end_at: `${day}T${minutesToHHMMSS(endMin)}`,
