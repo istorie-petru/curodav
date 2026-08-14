@@ -485,6 +485,18 @@ once.
 
 ### Today — execution
 
+**Shipped 2026-08-14 (1.7 slice 1)** — see `features/today.md`: `GET /today`
+(`routers/today.py::today_view`), a `/today` tabbar entry right after Home.
+An at-a-glance stats strip, a Due & overdue list, a Today's schedule list
+(today's ordinary calendar events split from today's scheduled task work —
+work-allocation events, via the same `db.work_allocation_task_uid` lookup
+`routers/projects.py::project_calendar` uses), and an Important & urgent
+list (open tasks whose `derived_state.virtual_states` includes `important`
+or `urgent`, excluding whatever's already shown in Due & overdue). No
+separate Today data model — everything reads straight off
+`db.list_events`/`list_tasks` plus the shared aggregation service (1.1)
+each request.
+
 Answers **"What am I dealing with now?"** An operational view of the current
 day combining today's calendar events, scheduled task work, due/overdue tasks,
 important upcoming items, and relevant workload. Generated from existing data —

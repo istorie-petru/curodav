@@ -206,16 +206,47 @@ session, right before the final commit of that session.
   `features/calendar.md`'s Recurrence section. Full suite 1088 passed (new
   `test_recurrence_terminology.py`). **1.6 is now fully shipped**
   (`pyproject.toml` bumped to `1.6.0`).
-- **Next slice:** `1.7` — Information architecture & view surfaces
+- **Shipped:** `1.7` slice 1 — **Today (execution)**, complete
+  (2026-08-14) — `GET /today` (`routers/today.py::today_view`), a `/today`
+  tabbar entry right after Home (`{{ icon('sun') }}`). An at-a-glance stats
+  strip (overdue / due today / events today / scheduled hours today, reusing
+  `_widget_at_a_glance.html`'s own CSS classes), a Due & overdue list, a
+  Today's schedule list splitting today's ordinary calendar events from
+  today's scheduled task work (work-allocation events, via the same
+  `db.work_allocation_task_uid` per-event lookup
+  `routers/projects.py::project_calendar` already uses), and an Important &
+  urgent list (open tasks whose `derived_state.virtual_states` includes
+  `important`/`urgent`, excluding anything already shown in Due & overdue —
+  no task appears twice). No separate Today data model — everything reads
+  straight off `db.list_events`/`list_tasks` plus the shared aggregation
+  service (1.1, `src/derived_state.py`) each request, same as the spec's own
+  "no separate Today data model" line. New `.today-grid`/`.today-grid-full`
+  CSS (mirrors `.habit-task-grid`'s two-column-collapsing-to-one shape). See
+  `features/today.md`, 12 new tests (`test_today.py`), full suite 1100
+  passed.
+- **Next slice:** `1.7` — Week (planning) or Spaces (context)
   (`roadmap.md`'s 1.7 row, `open-priority.md` § Information architecture &
-  view surfaces): Dashboard (orientation), Today (execution), Week
-  (planning), Spaces (context), built on the aggregation service (1.1), the
-  project stack (1.3), and work allocations (1.4), with the consolidated
-  widget grid (1.3). `open.md`'s Command palette actions follow-up (1.2
-  side work), 1.4's optional Project check-in side work, and 1.6's
-  optional "Configurable views + optional Schedule module" side work are
-  all still fine smaller, self-contained slices instead, whenever a
-  session wants one.
+  view surfaces): Today (execution) is now shipped (see above). Week answers
+  "how should I allocate my time over the coming week" — calendar
+  commitments together with schedulable task/subtask work, due dates,
+  remaining estimated effort, and available time, with unscheduled work
+  draggable onto open calendar intervals (distinct from the existing global
+  Week Calendar and from a single project's own Week Calendar view, 1.4
+  slice 3 — this is the cross-project planning surface). Spaces answers
+  "what belongs to this area of my life" — contextual projections generated
+  from labels, extended by specialized modules (a University Space exposing
+  courses/schedule/professors/credits/assignments on top of generic
+  calendar/task/contact functionality); Space *pages* already exist
+  (`routers/labels.py`'s generated label pages, `sidebar_spaces()`) — check
+  what's still actually missing against the spec before assuming this is a
+  from-scratch build. Dashboard (orientation) itself already exists as the
+  widget-grid home page (`routers/dashboard.py`) — 1.7 doesn't require a
+  rebuild there unless a future session finds a real gap against the
+  "orientation, not a second management interface" framing.
+  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
+  optional Project check-in side work, and 1.6's optional "Configurable
+  views + optional Schedule module" side work are all still fine smaller,
+  self-contained slices instead, whenever a session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -116,9 +116,10 @@ def create_app() -> FastAPI:
     # features/architecture.md's Grades/Databases removal note and
     # db.py's own removal comments on the `databases`/`database_columns`/
     # `database_rows`/`grades` tables.
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, schedule, search, settings, tasks, timeline
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, schedule, search, settings, tasks, timeline, today
 
     app.include_router(dashboard.router)
+    app.include_router(today.router)
     app.include_router(search.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)

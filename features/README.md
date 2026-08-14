@@ -36,6 +36,9 @@ these pieces fit together.
   and configure (today's agenda, the week ahead, overdue tasks, mini calendar,
   habit check-ins, project progress, contacts, and more), plus a greeting, a
   per-page cover banner, and a quick-add box for tasks and events.
+- **Today** — a single-page "what am I dealing with now" view: due/overdue
+  tasks, today's calendar events and scheduled task work side by side, and
+  anything else important or urgent, all in one place.
 - **Calendar** — your events in month, 4-week, week, or day views; drag to
   move/resize, repeat on a schedule, set reminders, and link events to related
   tasks.
@@ -70,6 +73,7 @@ reference for development; the tour above is the plain-language version.
 |---|---|
 | [`architecture.md`](architecture.md) | The "how it works" + rulebook — data model, layering, M3, nav, lifecycle |
 | [`dashboard.md`](dashboard.md) | Widget grid, 11 widget types, Customize/Widget Builder, quick-add, greeting, banner |
+| [`today.md`](today.md) | `/today` — due/overdue tasks, today's schedule vs. scheduled work, important/urgent items |
 | [`calendar.md`](calendar.md) | Month/4-week/week/day views, recurrence, drag interactions, event CRUD, relations |
 | [`tasks.md`](tasks.md) | Table/board/timeline views, statuses/priorities, bulk actions, recurring tasks, relations |
 | [`contacts.md`](contacts.md) | Contact list/detail/form, fields, photo upload, professor linking |
