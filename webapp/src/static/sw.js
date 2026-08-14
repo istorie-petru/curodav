@@ -15,7 +15,7 @@
 // CACHE_NAME is bumped whenever this file's own precache list changes --
 // activate's cleanup below deletes any previous cc-shell-* cache, so an
 // old shell version never lingers once a new one has installed.
-const CACHE_NAME = "cc-shell-v1";
+const CACHE_NAME = "cc-shell-v2";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -35,6 +35,16 @@ const SHELL_ASSETS = [
   "/static/task_habit_field_toggle.js",
   "/static/command_palette.js",
   "/static/quick_add.js",
+  "/static/pwa.js",
+  // 1.8 slice 4 -- the local read path's own scripts must be in the
+  // shell precache too: a device that opens /offline fully offline still
+  // needs offline_db.js/offline_shell.js to read the mirror it already
+  // built while online (offline_sync_client.js is included for
+  // completeness/consistency, even though its own pull attempts are
+  // harmless no-ops with no network).
+  "/static/offline_db.js",
+  "/static/offline_sync_client.js",
+  "/static/offline_shell.js",
   "/static/favicon-16.png",
   "/static/favicon-32.png",
   "/static/apple-touch-icon.png",

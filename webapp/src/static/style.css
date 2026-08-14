@@ -3549,3 +3549,8 @@ body.command-palette-open{overflow:hidden;}
    side rather than nested (HTML forbids a form inside a form); everything
    stays on one tight row (no wrap). */
 .profile-photo-controls{display:flex; align-items:center; gap:var(--space-2);}
+
+/* Offline shell's local-mirror read path (templates/offline.html,
+   static/offline_shell.js, 1.8 slice 4). */
+.offline-synced-at{font-size:var(--text-footnote); color:var(--fg-tertiary); margin-bottom:var(--space-4);}
+.offline-section-title{font-size:var(--text-headline); font-weight:600; margin:var(--space-5) 0 var(--space-2);}

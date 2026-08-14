@@ -240,7 +240,16 @@ into slice 1's apply path. **Slice 3 (PWA shell) shipped 2026-08-14** —
 writes yet (slices 4-6). The first genuinely browser-dependent piece of 1.8 —
 service worker registration/caching itself needs manual browser
 verification, not covered by this app's router-function-call pytest
-convention. Next: slice 4 (local IndexedDB store + read path).
+convention. **Slice 4 (local IndexedDB store + read path) shipped
+2026-08-14** — `static/offline_db.js` (an IndexedDB mirror of tasks/events/
+contacts, per-field HLC tracked the same way `field_versions` is server-side)
++ `static/offline_sync_client.js` (§8's pull half, client-side, loaded
+globally so the mirror is warm before the network drops) + `static/
+offline_shell.js` (renders `/offline`'s `#offline-local-data` straight from
+the mirror, no network call of its own). Still read-only — no local writes
+or push yet (slice 5). Verified both by `test_pwa_shell.py`'s structural
+checks and a one-off Node + fake-indexeddb smoke run of the real merge logic
+(not added to the pytest suite). Next: slice 5 (local write path + outbox).
 
 Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
 

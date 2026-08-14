@@ -1016,8 +1016,53 @@ of it:
    wired into `main.py`) — actual install/offline-navigation behavior
    needs manual browser verification, not done as part of this slice.
    Full suite 1271 passed.
-4. **Local IndexedDB store + read path** — the PWA shell's views read from
-   IndexedDB instead of requiring a live request; still no local writes.
+4. **Local IndexedDB store + read path** — **shipped 2026-08-14.**
+   `static/offline_db.js`: an IndexedDB database (`cc-offline`) mirroring
+   `tasks`/`events`/`contacts` (one row per entity, written incrementally
+   field-by-field — never a whole-row replace) plus a `field_hlc` store
+   that replays the exact same §6 per-field-HLC-wins rule the server
+   applies to `field_versions`, so a pull can never regress a field even
+   if changes ever arrived out of order (today they don't —
+   `offline_sync.pull()` already returns them HLC-ascending — but slice
+   5's own local writes will need this comparison to already be correct),
+   and a `meta` store for `device_id` (generated once via
+   `crypto.randomUUID()`, §1's client-generation rule) and the pull
+   cursor. `static/offline_sync_client.js` is §8's pull half, client-side:
+   `POST /api/sync/pull` with the stored cursor, apply the returned
+   changes into the mirror, advance the cursor, on the page's `load`
+   event and the browser's `online` event. Deliberately push-free (no
+   local writes exist yet to push) and retry-free (§5's backoff is slice
+   6) — a single best-effort attempt per trigger, silent no-op on
+   failure. A `full_resync` response is handled as "clear the cursor and
+   pull again once," which today is exactly correct because nothing has
+   ever been physically purged (§4's GC is slice 7) — a `None` cursor
+   pull already returns everything. Loaded globally in `base.html` (not
+   just on `/offline`) so the mirror is already warm from ordinary online
+   browsing by the time the network actually drops. `templates/
+   offline.html` gained `#offline-local-data`, rendered by new
+   `static/offline_shell.js` straight from the mirror (`getAllTasks`/
+   `getAllEvents`, filtering out soft-deleted rows) with zero network
+   calls of its own — open tasks by due date and upcoming events by start
+   time, reusing `search.html`'s own plain `.checklist`/`.checklist-row`
+   list styling rather than inventing a second one. Deliberately partial:
+   labels/tags aren't mirrored (`object_label` ops are commutative, §7a,
+   and never flow through the field-HLC pull this slice mirrors), so the
+   local list shows title/due/time only, no project pill — an honest
+   scope line, not a bug. The static "nothing synced yet" empty-state
+   markup stays as the fallback for a device that has never completed a
+   pull. `sw.js`'s own precache list (bumped to `cc-shell-v2`) grew the
+   three new scripts, so they're available to `/offline` even fully
+   offline. Verified two ways: `test_pwa_shell.py`'s structural checks
+   (same "read the JS source, assert the shape" level as slice 3's own
+   sw.js tests — 6 new tests, full suite 1277 passed), plus a one-off
+   Node + `fake-indexeddb` smoke run (not part of the pytest suite, no
+   new runtime dependency added to it) exercising `offline_db.js`'s real
+   merge logic end-to-end: newer-HLC writes apply, older-HLC writes are
+   rejected, a `deleted_at` write removes the row from `getAllTasks`, and
+   `device_id`/cursor round-trip through IndexedDB correctly. Still no
+   local writes anywhere (slice 5) — this slice is read-only, same
+   boundary as `ofline-first-pwa.md`'s "viewing... should be executed
+   locally" without yet covering "creating and editing."
 5. **Local write path + outbox** — offline create/edit/delete queues as ops
    (§2) instead of failing; still no sync engine, so pending changes just
    accumulate.

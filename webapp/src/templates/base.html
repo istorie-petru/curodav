@@ -310,6 +310,14 @@
      keep the scope it needs). Loaded last, after everything the page
      actually needs to function, since it's a pure enhancement. -->
 <script src="{{ static_url('pwa.js') }}"></script>
+<!-- Local read path (1.8 slice 4) -- offline_db.js is the IndexedDB
+     mirror, offline_sync_client.js is §8's pull loop that keeps it warm.
+     Loaded globally (not just on /offline) so the mirror already has
+     data by the time the network actually drops -- syncing only when the
+     offline page itself loads would be too late. No local writes read or
+     write anything here yet (slice 5); this pair is read-path-only. -->
+<script src="{{ static_url('offline_db.js') }}"></script>
+<script src="{{ static_url('offline_sync_client.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

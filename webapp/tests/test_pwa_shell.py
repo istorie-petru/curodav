@@ -1,14 +1,25 @@
-"""1.8 slice 3 -- PWA shell (plans/open-priority.md § Offline-first editing
-& synchronization §11 slice 3): manifest, service worker, offline app-shell
-caching. No sync, no IndexedDB, no local read/write path yet (those are
-slices 4-6) -- this slice is purely "can the app open at all with no
-network."
+"""1.8 slices 3-4 -- the PWA shell (plans/open-priority.md § Offline-first
+editing & synchronization §11).
 
-A real service worker can't be exercised by this app's usual pytest/
-router-function-call convention (there's no browser here to install it,
-intercept fetches, or read from the Cache Storage API) -- that part needs
-manual/browser verification, per plans/STATE.md's own note on this slice.
-What *is* verifiable server-side, and covered here:
+Slice 3: manifest, service worker, offline app-shell caching -- "can the
+app open at all with no network."
+
+Slice 4: the client-side local read path on top of that shell --
+static/offline_db.js (an IndexedDB mirror of tasks/events/contacts, keyed
+by the same per-field HLC rule offline_sync.py's own field_versions table
+uses server-side) and static/offline_sync_client.js (§8's pull half,
+run client-side, loaded globally so the mirror is warm before the network
+actually drops). templates/offline.html's #offline-local-data now renders
+straight from that mirror via static/offline_shell.js. Still no local
+*writes* anywhere (slice 5) -- push, retry/backoff, and the status
+indicator are slices 5-6.
+
+Neither a real service worker nor real IndexedDB can be exercised by this
+app's usual pytest/router-function-call convention (there's no browser
+here to install a worker, intercept fetches, read Cache Storage, or run
+indexedDB.open) -- that part needs manual/browser verification, per
+plans/STATE.md's own note on this slice. What *is* verifiable server-side,
+and covered here:
 
   - manifest.webmanifest is valid, has the fields a browser's install
     prompt needs, and every icon it references actually exists on disk.
@@ -19,13 +30,21 @@ What *is* verifiable server-side, and covered here:
     honest "you're offline" message -- reachable normally online, not
     sw.js-only, so this needs no simulated dropped connection.
   - sw.js's own precache list only names static assets that actually
-    exist under src/static, and /offline -- confirmed at the source level
-    since nothing else can run the service worker.
+    exist under src/static, /offline, and /manifest.webmanifest --
+    confirmed at the source level since nothing else can run the service
+    worker. This automatically covers slice 4's own new scripts (offline_
+    db.js/offline_sync_client.js/offline_shell.js) once they're added to
+    that list, with no test change needed for them specifically.
   - main.py actually registers pwa.router (routers/settings.py's own
     2026-08-14 follow-up note describes a router losing its decorator
     silently while every existing test still passed -- confirmed here via
     `router.routes` directly, the same fix applied there, not just by
-    hitting the routes through router-function calls)."""
+    hitting the routes through router-function calls).
+  - offline_db.js/offline_sync_client.js/offline_shell.js are structurally
+    sound (define the expected object stores/exports/handlers) and are
+    actually wired into base.html/offline.html -- the same "read the JS
+    source, assert the shape" level of confidence as the sw.js checks
+    above, not a claim that the logic runs correctly in a real browser."""
 
 from __future__ import annotations
 
@@ -132,6 +151,63 @@ class TestOfflineShell:
 
         params = inspect.signature(pwa_router.offline_shell).parameters
         assert "conn" not in params
+
+
+class TestLocalReadPath:
+    def test_offline_db_defines_the_expected_stores_and_exports(self):
+        script = (_STATIC_DIR / "offline_db.js").read_text()
+        for store in ('"tasks"', '"events"', '"contacts"', '"field_hlc"', '"meta"'):
+            assert store in script
+        for export in (
+            "getDeviceId",
+            "getCursor",
+            "setCursor",
+            "getLastSyncedAt",
+            "setLastSyncedAt",
+            "applyChanges",
+            "getAllTasks",
+            "getAllEvents",
+            "getAllContacts",
+        ):
+            assert export in script
+        assert "window.CCOfflineDB" in script
+        # §6's per-field HLC compare must exist, not just a blind
+        # overwrite -- the whole reason field_hlc is a separate store.
+        assert "isNewer" in script
+
+    def test_offline_sync_client_pulls_and_never_pushes(self):
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "/api/sync/pull" in script
+        # Slice 5 adds the outbox/push path -- this slice must not call
+        # push at all yet, since there is nothing of this device's own to
+        # send (no local writes exist).
+        assert "/api/sync/push" not in script
+        assert "full_resync" in script
+        assert "window.CCOfflineSync" in script
+
+    def test_offline_shell_reads_from_the_mirror_not_the_network(self):
+        script = (_STATIC_DIR / "offline_shell.js").read_text()
+        assert "CCOfflineDB.getAllTasks" in script
+        assert "CCOfflineDB.getAllEvents" in script
+        assert "fetch(" not in script
+
+    def test_base_html_loads_the_mirror_and_pull_loop_globally(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
+        assert "offline_db.js" in html
+        assert "offline_sync_client.js" in html
+        # offline_shell.js is /offline-specific, not a global page load --
+        # it belongs in offline.html's own extra_scripts block, not here.
+        assert "offline_shell.js" not in html
+
+    def test_offline_html_has_the_render_target_and_loads_the_shell_script(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert 'id="offline-local-data"' in html
+        assert "offline_shell.js" in html
+
+    def test_precache_list_includes_the_local_read_path_scripts(self):
+        script = (_STATIC_DIR / "sw.js").read_text()
+        for asset in ("/static/offline_db.js", "/static/offline_sync_client.js", "/static/offline_shell.js"):
+            assert asset in script
 
 
 class TestRouterWiring:

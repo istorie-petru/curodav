@@ -730,22 +730,63 @@ session, right before the final commit of that session.
   behavior needs manual browser verification, not performed as part of
   this slice (this sandbox has no browser and no reachable Radicale
   server to boot the full app against). Full suite 1271 passed.
-- **Next slice:** `1.8` slice 4 — **Local IndexedDB store + read path**
+- **Shipped:** `1.8` slice 4 — **Local IndexedDB store + read path**,
+  complete (2026-08-14) — `open-priority.md` § Offline-first editing &
+  synchronization §11, slice 4. New `static/offline_db.js`: an IndexedDB
+  database (`cc-offline`) mirroring `tasks`/`events`/`contacts` (written
+  incrementally, field by field, never a whole-row replace) plus a
+  `field_hlc` store replaying the same §6 per-field-HLC-wins rule the
+  server's `field_versions` table applies — a pull can never regress a
+  field even out of order — and a `meta` store for `device_id`
+  (`crypto.randomUUID()`, generated once and persisted) and the pull
+  cursor. New `static/offline_sync_client.js` is §8's pull half,
+  client-side: `POST /api/sync/pull` with the stored cursor on the page's
+  `load` and the browser's `online` event, applies the returned changes
+  into the mirror, advances the cursor. Deliberately push-free (nothing
+  local to push yet) and retry-free (§5 backoff is slice 6) — one
+  best-effort attempt per trigger, silent no-op on failure. A
+  `full_resync` response just clears the cursor and re-pulls once, which
+  is exactly correct today since nothing has ever been physically purged
+  (§4's GC is slice 7). Both scripts load globally in `base.html` (not
+  just `/offline`) so the mirror is warm from ordinary online browsing
+  before the network ever drops. `templates/offline.html` gained
+  `#offline-local-data`, rendered by new `static/offline_shell.js`
+  straight from the mirror (`getAllTasks`/`getAllEvents`, soft-deleted
+  rows filtered) with no network call of its own — open tasks by due
+  date and upcoming events by start time, reusing `search.html`'s own
+  `.checklist`/`.checklist-row` styling. Deliberately partial: labels/
+  tags aren't mirrored (`object_label` ops are commutative, §7a, never
+  flow through the field-HLC pull this mirrors) — title/due/time only,
+  no project pill. `sw.js`'s precache list bumped to `cc-shell-v2` to
+  cover the three new scripts. Still read-only — no local writes
+  anywhere yet (slice 5). Verified two ways: `test_pwa_shell.py`'s 6 new
+  structural checks (same "read the JS source, assert the shape" level
+  as slice 3's own sw.js tests, full suite 1277 passed), plus a one-off
+  Node + `fake-indexeddb` smoke run (not added to the pytest suite, no
+  new runtime dependency introduced there) that exercised the real merge
+  logic end to end: newer-HLC writes apply, older-HLC writes are
+  rejected, a `deleted_at` write removes the row from `getAllTasks`, and
+  `device_id`/cursor round-trip correctly through IndexedDB.
+- **Next slice:** `1.8` slice 5 — **Local write path + outbox**
   (`open-priority.md` § Offline-first editing & synchronization §11,
-  slice 4). The PWA shell's own views (starting with `/offline`, or
-  wherever the slice decides the first real local-read surface should be)
-  read from IndexedDB instead of requiring a live request; still no local
-  *writes* (slice 5). This is the slice that makes "opens to a real shell
-  offline" (slice 3) actually show real data — needs a design decision
-  up front on what subset of `tasks`/`events`/`contacts` gets mirrored
-  into IndexedDB and how it's kept in sync with slice 1-2's server-side
-  `field_versions` shape, before writing client code. Also still browser-
-  dependent (IndexedDB has no server-side pytest equivalent, same
-  constraint as slice 3). `open.md`'s Command palette actions follow-up
-  (1.2 side work), 1.4's optional Project check-in side work, and 1.6's
-  optional "Configurable views + optional Schedule module" side work are
-  all still fine smaller, self-contained slices instead, whenever a
-  session wants a break from the sync-engine/PWA work.
+  slice 5). Offline create/edit/delete on `/offline` (or wherever this
+  slice extends local-read coverage to) queue as ops (§2's operation-log
+  shape, `op_id`/`entity_type`/`entity_uid`/`op_type`/`fields`/
+  `device_id`/`hlc`) into a new IndexedDB `outbox` store instead of
+  failing — still no sync engine wired up (slice 6), so pending ops just
+  accumulate locally until then. Needs its own client-side HLC clock
+  (§3: `(physical_time_ms, logical_counter, device_id)`, merged forward
+  on every server response the same way the server merges forward on
+  every op it receives) — nothing in slices 1-4 built a client HLC clock
+  yet, since slice 4 only ever *applied* server-supplied HLCs, never
+  minted its own. Also still browser-dependent, same pytest-convention
+  constraint as slices 3-4; the Node + fake-indexeddb smoke-test pattern
+  from slice 4 is worth reusing for the outbox's own merge/apply logic.
+  `open.md`'s Command palette actions follow-up (1.2 side work), 1.4's
+  optional Project check-in side work, and 1.6's optional "Configurable
+  views + optional Schedule module" side work are all still fine
+  smaller, self-contained slices instead, whenever a session wants a
+  break from the sync-engine/PWA work.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
