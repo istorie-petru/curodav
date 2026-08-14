@@ -1097,6 +1097,33 @@ session, right before the final commit of that session.
   structural JS-source tests, same convention as `test_pwa_shell.py`'s own
   JS structural checks -- no browser in this test environment). Full suite
   1320 passed.
+- **Fixed:** side work — **work-allocation blocks are one uniform drag
+  target, title included**, complete (2026-08-14), immediate follow-up
+  ("why can't it function like any other event so that the whole div is a
+  link and can be moved at the same time?"). Root cause: `.te-name` (the
+  block's title) was a real nested `<a href="/tasks/{uid}" data-modal>`,
+  and `project_calendar.js`'s block pointerdown handler had to explicitly
+  exclude clicks starting on it (`e.target.closest(".te-name")`) so its
+  native click could still navigate -- meaning you could NOT move a block
+  by grabbing its title text, only by grabbing the surrounding padding,
+  unlike an ordinary `.time-event` (itself a single `<a>`, draggable
+  anywhere on itself, since calendar.js owns click-vs-drag uniformly at the
+  JS level with no competing native link). The block can't itself become a
+  real `<a>` the same way (it also contains a delete `<form>`/`<button>`,
+  which `<a>` cannot legally contain), so instead `.te-name` dropped its
+  `<a>`/`href`/`data-modal` down to a plain `<span>` across all three
+  templates that render a `.work-allocation` block (`calendar_week.html`,
+  `week_planning.html`, `project_calendar.html`) -- opening the task view
+  is already handled uniformly by `project_calendar.js`'s own interaction 4
+  (any non-drag click, anywhere on the block) via `taskUrlBase`, so nothing
+  about "click to open the task" changed; only "click-drag to move" now
+  works from anywhere on the block, title included. `project_calendar.js`'s
+  pointerdown handler's `.te-name` exclusion removed (the
+  `.work-allocation-delete` exclusion stays, so the delete button keeps
+  working). Three tests updated (`test_calendar_week_scheduling.py`/
+  `test_week_planning.py`/`test_project_calendar.py`, each had one
+  `'href="/tasks/t1"' in body` assertion -- now asserts that href is GONE
+  and the title renders as a plain `<span>`). Full suite 1320 passed.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

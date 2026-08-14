@@ -35,9 +35,20 @@ label, and an event's color is its first (alphabetical) label's color
     do (see `features/tasks.md` § Work allocations). A plain click anywhere
     on a scheduled block's body (not a drag, not the delete button, not the
     resize handle) opens the block's task **view modal** via
-    `project_calendar.js` interaction 4 (`taskUrlBase` config, same
-    destination as the block's own title link) — same behavior the sibling
-    planning grids (`/week`, the project Week Calendar) have.
+    `project_calendar.js` interaction 4 (`taskUrlBase` config) — same
+    behavior the sibling planning grids (`/week`, the project Week Calendar)
+    have. The title (`.te-name`) is a plain `<span>`, not a nested `<a>`
+    (direct feedback, immediate follow-up: "why can't it function like any
+    other event so that the whole div is a link and can be moved at the
+    same time?") — the block can't itself be a real `<a>` (it also contains
+    a delete `<form>`/`<button>`, invalid inside `<a>`), so instead the
+    title dropped link semantics and the WHOLE block, title text included,
+    is one uniform drag target, matching an ordinary `.time-event`
+    (itself a single `<a>`, draggable from anywhere on itself). Before this,
+    the title was a real nested `<a>` that `project_calendar.js`'s
+    pointerdown handler had to exclude from drag-start so its native click
+    could navigate — meaning a block couldn't be moved by grabbing its
+    title specifically.
   - Grid columns carry BOTH `.calendar-create-col` (calendar.js) and
     `.project-calendar-col` (project_calendar.js) so both scripts'
     interactions coexist; `calendar.js`'s own `.time-event` selector

@@ -129,7 +129,12 @@ class TestWeekPlanningRoute:
         assert "Other work" in body
         assert body.count("work-allocation") >= 2
         assert 'data-task-uid="t1"' in body
-        assert 'href="/tasks/t1"' in body
+        # The title is a plain span, not a nested <a> -- the whole block
+        # (title included) is one uniform drag target, opened via JS
+        # (project_calendar.js interaction 4) instead of a native link, so
+        # you can move a block by grabbing it anywhere, its title text
+        # included (direct feedback, 2026-08-14).
+        assert 'href="/tasks/t1"' not in body
         assert 'href="/tasks/t1/edit"' not in body
 
     def test_ordinary_event_renders_as_subdued_context(self, conn):

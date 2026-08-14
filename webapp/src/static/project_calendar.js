@@ -427,7 +427,14 @@
 
     el.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest(".work-allocation-delete") || e.target.closest(".te-name")) return;
+      // The `.te-name` title is a plain span now, not a nested <a> (direct
+      // feedback: "why can't the whole div be a link and moved at the same
+      // time" -- a real <a> couldn't wrap the delete <form>/<button>
+      // anyway), so there's no native link click to preserve here anymore
+      // -- the whole block, title included, is one uniform drag target,
+      // same as an ordinary .time-event. Only the delete button still
+      // needs to let its own click through untouched.
+      if (e.target.closest(".work-allocation-delete")) return;
       e.preventDefault();
       begin(e, handle && e.target === handle);
     });

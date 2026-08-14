@@ -134,19 +134,24 @@ class TestWeekViewRoute:
         assert "/calendar/week/allocations" in body
 
     def test_scheduled_block_links_to_its_task_view(self, conn):
-        """A scheduled work block is one target for the task it belongs to:
-        its title links to the task's view modal (not the edit form), the
-        block carries the task uid as data-task-uid so a click anywhere on
-        the block body reaches the same view (project_calendar.js
-        interaction 4, taskUrlBase config), and the delete form still
-        targets the allocation endpoint."""
+        """A scheduled work block is one target for the task it belongs to,
+        opened via JS (project_calendar.js interaction 4, taskUrlBase
+        config) for ANY non-drag click on the block, title text included --
+        the title is a plain span, not a nested <a> (direct feedback: "why
+        can't the whole div be a link and moved at the same time" -- the
+        whole block can't itself be a real <a> since it also contains a
+        delete <form>/<button>, invalid inside <a>, so instead the title
+        drops link semantics and the whole block, title included, is one
+        uniform drag target). The delete form still targets the allocation
+        endpoint."""
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'data-task-uid="t1"' in body
-        assert 'href="/tasks/t1"' in body
+        assert '<span class="te-name">Research</span>' in body
+        assert 'href="/tasks/t1"' not in body
         assert 'href="/tasks/t1/edit"' not in body
         assert 'taskUrlBase: "/tasks/"' in body
         assert "/calendar/week/allocations/" in body

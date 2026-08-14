@@ -74,7 +74,13 @@
                 {% if e.is_allocation %}
                 <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%; --wa-border:var(--cal-bg-{{ e.calendar_color }});">
-                    <a class="te-name" href="/tasks/{{ e.task_uid }}" data-modal>{{ e.title }}</a>
+                    {# Plain span, not a link -- see calendar_week.html's own
+                       comment: the block can't itself be an <a> (nested
+                       delete <form>/<button>), so the title drops link
+                       semantics and the whole block drags/opens uniformly
+                       via JS, matching an ordinary .time-event's
+                       drag-from-anywhere behavior. #}
+                    <span class="te-name">{{ e.title }}</span>
                     <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
                     {# data-confirmed: not destructive anymore (unschedules
                        to an undated placeholder, see routers/projects.py::
