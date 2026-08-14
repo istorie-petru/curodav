@@ -25,6 +25,18 @@ A segmented subnav switches views while preserving the label filter.
 `recurrence_expand.expand_events` expands recurring events across the visible
 window; RRULE is free text with a `recurrence_picker.js` helper.
 
+**Non-working-day policy** (1.6, "Generalized recurrence and the non-working-
+day policy"): any recurring event can set `holiday_calendar` (a named,
+reusable holiday calendar — `db.list_holiday_calendar_names`/
+`db.list_holidays_by_calendar`, see `features/schedule.md`), `exclude_saturday`,
+and `exclude_sunday` — three independent constraints, not one enum. Applied at
+*read* time (`expand_events`'s optional `holiday_calendars` param, passed by
+every caller as `db.list_holidays_by_calendar(conn)`), never materialized into
+`exdates_json` — a holiday added/removed or an event's own policy change takes
+effect immediately, on every view, with no regenerate step. `_event_form_
+fields.html` exposes all three on the event form (Holiday calendar text field
++ datalist, Exclude Saturday/Sunday checkboxes).
+
 ## Interactions
 
 - **Drag to move / resize** on Week/Day (15-min snap) → `POST /events/{uid}/reschedule`

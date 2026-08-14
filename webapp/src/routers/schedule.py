@@ -78,7 +78,7 @@ def _class_row(conn, event: dict, today: date | None = None) -> dict:
         "project_uid": course_name,
         "tags": event.get("tags") or [],
     }
-    nxt = schedule_logic.next_occurrence_for_event(event, today)
+    nxt = schedule_logic.next_occurrence_for_event(event, today, holiday_calendars=db.list_holidays_by_calendar(conn))
     row["next_occurrence"] = schedule_logic.next_label(nxt, today) if nxt else None
     return row
 
@@ -171,12 +171,15 @@ def _resolve_class_type_field(class_type_select: str, class_type_other: str) -> 
 
 def _regenerate_event(uid: str, day: str, start_time: str, end_time: str, parity: str, title: str, room: str, enrolled: bool, conn) -> None:
     """(Re)build one class meeting's recurring event from its own
-    day/time/parity/title/room + the current semester settings/holidays,
-    and write it straight into the universal `events` pool -- preserves
-    whatever tags/uid the event already carries (upsert_event only
-    replaces tags when explicitly given, and this never passes `tags`)."""
+    day/time/parity/title/room + the current semester settings, and write
+    it straight into the universal `events` pool -- preserves whatever
+    tags/uid the event already carries (upsert_event only replaces tags
+    when explicitly given, and this never passes `tags`). Holiday exclusion
+    is no longer computed here (1.6, "Generalized recurrence and the
+    non-working-day policy") -- build_class_event_row just copies
+    settings['holiday_calendar'] onto the event, applied generically at
+    read time."""
     settings = db.get_schedule_settings(conn)
-    holidays = db.list_holidays(conn)
     row = schedule_logic.build_class_event_row(
         {
             "uid": uid,
@@ -189,16 +192,15 @@ def _regenerate_event(uid: str, day: str, start_time: str, end_time: str, parity
             "enrolled": enrolled,
         },
         settings,
-        holidays,
     )
     db.upsert_event(conn, row)
 
 
 def _regenerate_all(conn) -> None:
-    """Every class event's start_at/end_at/recurrence/exdates depend on
-    settings (semester bounds) and holidays that just changed -- rebuild
-    each from its own current day/time/parity/title/room/enrolled (all
-    still derivable off the event itself), same as before 1.6."""
+    """Every class event's start_at/end_at/recurrence depend on settings
+    (semester bounds, holiday calendar) that just changed -- rebuild each
+    from its own current day/time/parity/title/room/enrolled (all still
+    derivable off the event itself), same as before 1.6."""
     for event in db.list_schedule_class_events(conn):
         row = _class_row(conn, event)
         _regenerate_event(
@@ -301,6 +303,7 @@ def classes_view(
             "parities": PARITIES,
             "days": schedule_logic.DAYS,
             "holidays": db.list_holidays(conn),
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
             "settings": settings,
         },
     )
@@ -527,22 +530,30 @@ def delete_class(uid: str, conn=Depends(get_db)):
 
 @router.post("/holidays")
 def create_holiday(
+    calendar_name: str = Form("Default"),
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
     conn=Depends(get_db),
 ):
+    # 1.6: no more _regenerate_all(conn) call here -- a class event only
+    # ever stores *which* holiday calendar it references
+    # (holiday_calendar), never the dates themselves; those are looked up
+    # fresh on every read (recurrence_expand.expand_events), so adding a
+    # holiday takes effect immediately without touching any event row.
     db.upsert_holiday(
-        conn, {"uid": str(uuid.uuid4()), "label": label, "date_from": date_from, "date_to": date_to}
+        conn,
+        {
+            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
+            "label": label, "date_from": date_from, "date_to": date_to,
+        },
     )
-    _regenerate_all(conn)
     return RedirectResponse(url="/schedule", status_code=303)
 
 
 @router.post("/holidays/{uid}/delete")
 def delete_holiday(uid: str, conn=Depends(get_db)):
     db.delete_holiday(conn, uid)
-    _regenerate_all(conn)
     return RedirectResponse(url="/schedule", status_code=303)
 
 
@@ -553,6 +564,7 @@ def save_settings(
     credits_needed: str = Form(""),
     reminder_minutes: str = Form("15"),
     schedule_label: str = Form("Schedule"),
+    holiday_calendar: str = Form("Default"),
     conn=Depends(get_db),
 ):
     old_label = db.get_schedule_settings(conn).get("schedule_label") or "Schedule"
@@ -565,6 +577,7 @@ def save_settings(
             "credits_needed": float(credits_needed) if credits_needed else None,
             "reminder_minutes": int(reminder_minutes) if reminder_minutes else 15,
             "schedule_label": new_label,
+            "holiday_calendar": holiday_calendar.strip() or "Default",
         },
     )
     # 1.6: renaming the event label used to require a bespoke rewrite of

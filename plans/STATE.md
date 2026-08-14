@@ -139,17 +139,38 @@ session, right before the final commit of that session.
   passed (new `test_migrate_schedule_classes_to_events.py`, a rewritten
   `test_schedule.py`, and several other test files updated off the
   removed `db.upsert_schedule_class` test-seeding helper).
-- **Next slice:** `1.6` continues — Generalized non-working-day policy +
-  named holiday calendars (`open-priority.md` § Schedule & recurrence
-  rework, "Generalized recurrence and the non-working-day policy"):
-  replace the flat `schedule_holidays` date-range list with named,
-  reusable calendars (e.g. `Romania`/`University`/`Personal`) a recurring
-  event references, plus independent `exclude_saturday`/`exclude_sunday`
-  constraints — foundational for the still-open "manual recurrence
-  exceptions" and "configurable terminology" subsections after it.
-  `open.md`'s Command palette actions follow-up (1.2 side work) and 1.4's
-  optional Project check-in side work are both still fine smaller,
-  self-contained slices instead, whenever a session wants one.
+- **Shipped:** `1.6` slice — **Generalized non-working-day policy + named
+  holiday calendars**, complete (2026-08-14) — `schedule_holidays` rows
+  belong to a named, reusable `calendar_name` now (default `'Default'` for
+  every pre-1.6 holiday, so nothing already-configured changes behavior);
+  `db.list_holiday_calendar_names`/`list_holidays_by_calendar` read it back.
+  Any recurring `events` row — not just a Schedule class — can set
+  `holiday_calendar`/`exclude_saturday`/`exclude_sunday` (three independent
+  constraints, per `open-priority.md`'s "a public holiday and a weekend are
+  deliberately different kinds of constraints" rule), applied at *read*
+  time by `recurrence_expand.expand_events`'s new `holiday_calendars` param
+  (every one of its 6 call sites now passes `db.list_holidays_by_calendar
+  (conn)`), never materialized into `exdates_json` — a holiday add/remove
+  takes effect immediately, no regenerate step. `_event_form_fields.html`
+  exposes all three on the ordinary Calendar event form. Schedule's own
+  class events switched from per-write EXDATE-stuffing
+  (`compute_excluded`/`generate_occurrences`, both deleted) to just
+  carrying `schedule_settings.holiday_calendar` (new field, default
+  `'Default'`) — `schedule.build_class_event_row` no longer takes a
+  `holidays` list at all. See `features/calendar.md`'s Recurrence section
+  and `features/schedule.md`. Full suite 1056 passed (new
+  `test_holiday_calendars.py`, extended `test_recurrence_expand.py`/
+  `test_schedule.py`).
+- **Next slice:** `1.6` continues — Manual recurrence exceptions
+  (`open-priority.md` § Schedule & recurrence rework, "Manual recurrence
+  exceptions"): distinguish the recurrence rule, generated occurrences, and
+  manual per-occurrence overrides/cancellations, so e.g. a weekly Monday
+  class can have one occurrence moved to Tuesday or cancelled without
+  touching the master rule — "the model that resolves the
+  'recurring-event single-occurrence editing' risk." `open.md`'s Command
+  palette actions follow-up (1.2 side work) and 1.4's optional Project
+  check-in side work are both still fine smaller, self-contained slices
+  instead, whenever a session wants one.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -1330,6 +1330,7 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
             "prefill_start": None,
             "prefill_end": None,
             "prefill_all_day": False,
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 

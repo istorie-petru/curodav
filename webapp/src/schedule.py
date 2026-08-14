@@ -21,9 +21,18 @@ recurring meeting, and those already have a real VEVENT home
 (start_at/end_at/RRULE/location/title).
 
 Generalized non-working-day policy (named holiday calendars, independent
-weekend exclusions) is a separate, not-yet-built 1.6 item -- this module
-still reads the existing flat `schedule_holidays` date-range list, same as
-before; see plans/STATE.md's next-slice note.
+weekend exclusions): a class meeting's holiday exclusion is no longer
+computed at write time into a static EXDATE list -- it uses the same
+generic mechanism any recurring event does (`events.holiday_calendar`,
+applied at *read* time by `recurrence_expand.expand_events`, see db.py's
+`events` CREATE TABLE comment). `schedule_settings.holiday_calendar` names
+which calendar this install's classes reference (default `'Default'`,
+matching every holiday that existed before this rework); `routers/
+schedule.py::build_class_event_row`'s callers no longer need to pass a
+`holidays` list in for that reason -- only to decide whether the meeting's
+one placeholder occurrence should be excluded outright when the semester is
+too short for its day/parity to ever land (an "this can never occur"
+structural fact, not a holiday).
 """
 
 from __future__ import annotations
@@ -51,26 +60,6 @@ def first_occurrence(semester_start: date, weekday_name: str, parity: str) -> da
     if parity in ("odd", "even") and iso_week_parity(occ) != parity:
         occ += timedelta(days=7)
     return occ
-
-
-def generate_occurrences(anchor: date, until: date, parity: str) -> list[date]:
-    """Raw occurrence dates (before holiday exclusion), stepping weekly
-    ('all') or every 2 weeks (odd/even)."""
-    step = timedelta(weeks=1 if parity == "all" else 2)
-    occurrences = []
-    current = anchor
-    while current <= until:
-        occurrences.append(current)
-        current += step
-    return occurrences
-
-
-def compute_excluded(occurrences: list[date], holidays: list[dict[str, str]]) -> list[date]:
-    ranges = [
-        (date.fromisoformat(h["date_from"]), date.fromisoformat(h["date_to"]))
-        for h in holidays
-    ]
-    return [occ for occ in occurrences if any(lo <= occ <= hi for lo, hi in ranges)]
 
 
 # --------------------------------------------------------------------- #
@@ -108,17 +97,23 @@ def event_parity(event: dict[str, Any]) -> str:
 
 
 def next_occurrence_for_event(
-    event: dict[str, Any], today: date | None = None, horizon_days: int = 400
+    event: dict[str, Any],
+    today: date | None = None,
+    horizon_days: int = 400,
+    holiday_calendars: dict[str, list[dict[str, Any]]] | None = None,
 ) -> date | None:
     """Next date (>= today) this recurring event actually occurs, honoring
-    its own RRULE + EXDATE list (via `recurrence_expand.expand_events`, the
-    same RFC 5545 expansion the Calendar tab itself uses) -- used for the
-    "next lecture" badges on a course's label page and the Space-filtered
-    calendar agenda. A non-recurring event just returns its own date if
-    that's still >= today."""
+    its own RRULE + EXDATE list *and* its holiday-calendar/weekend policy
+    (via `recurrence_expand.expand_events`, the same RFC 5545 expansion +
+    1.6 non-working-day filtering the Calendar tab itself uses) -- used for
+    the "next lecture" badges on a course's label page and the Space-
+    filtered calendar agenda. A non-recurring event just returns its own
+    date if that's still >= today. `holiday_calendars` is optional (see
+    `db.list_holidays_by_calendar`) -- omitting it just means "no calendar
+    lookups available," weekend exclusion still applies regardless."""
     today = today or date.today()
     window_end = today + timedelta(days=horizon_days)
-    occurrences = recurrence_expand.expand_events([event], today, window_end)
+    occurrences = recurrence_expand.expand_events([event], today, window_end, holiday_calendars)
     dates: list[date] = []
     for occ in occurrences:
         start_at = occ.get("start_at")
@@ -151,7 +146,7 @@ def next_label(next_date: date, today: date | None = None) -> str:
 
 
 def build_class_event_row(
-    fields: dict[str, Any], settings: dict[str, Any], holidays: list[dict[str, str]], today: date | None = None
+    fields: dict[str, Any], settings: dict[str, Any], today: date | None = None
 ) -> dict[str, Any]:
     """The real recurring `events` row for one class meeting (a lecture, a
     seminar, ...). Unlike the pre-1.6 `class_to_event_row` this never
@@ -163,11 +158,20 @@ def build_class_event_row(
     Anchor date: the semester start if configured, otherwise the first
     matching day/parity on or after `today` -- a placeholder that gets
     replaced with the real semester-anchored date the moment semester_start
-    is saved (every settings/holiday change re-calls this for every class
-    event, see routers/schedule.py's `_regenerate_all`). Recurrence: open-
-    ended (no UNTIL, no EXDATEs) until semester_end is also configured --
-    "Blocks only generate real calendar occurrences once both semester
-    dates are set" no longer means *no event*, just *no recurrence yet*.
+    is saved (every settings change re-calls this for every class event,
+    see routers/schedule.py's `_regenerate_all`). Recurrence: open-ended
+    (no UNTIL) until semester_end is also configured -- "Blocks only
+    generate real calendar occurrences once both semester dates are set"
+    no longer means *no event*, just *no recurrence yet*.
+
+    Holiday exclusion is NOT computed here anymore (1.6, "Generalized
+    recurrence and the non-working-day policy") -- the returned row's
+    `holiday_calendar` is just `settings['holiday_calendar']`
+    (`schedule_settings`'s own new field, default `'Default'`), applied at
+    *read* time by `recurrence_expand.expand_events` like any other
+    recurring event's policy. The only EXDATE this function still computes
+    by hand is the "this meeting structurally can never occur" case below,
+    which is not a holiday.
 
     `fields`: {uid, day, start_time, end_time, title, room, parity,
     enrolled} -- everything that's actually this *meeting's* own, not the
@@ -200,9 +204,6 @@ def build_class_event_row(
             exdates = [start_at]
             recurrence_parts.append(f"UNTIL={anchor.isoformat()}")
         else:
-            occurrences = generate_occurrences(anchor, end_date, parity)
-            excluded = compute_excluded(occurrences, holidays)
-            exdates = [f"{d.isoformat()}T{fields['start_time']}:00" for d in excluded]
             recurrence_parts.append(f"UNTIL={end_date.isoformat()}")
 
     return {
@@ -216,6 +217,7 @@ def build_class_event_row(
         "status": "active" if fields.get("enrolled", True) else "archived",
         "recurrence": ";".join(recurrence_parts),
         "exdates": exdates,
+        "holiday_calendar": settings.get("holiday_calendar") or None,
     }
 
 

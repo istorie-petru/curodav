@@ -165,9 +165,18 @@ and configurable terminology.
   `course_professor_contact_uid`); day/parity are derived from the event's
   own `start_at`/`recurrence`, never stored. `scripts/migrate_schedule_
   classes_to_events.py` converts any pre-1.6 database. See
-  `features/schedule.md`. Still open: generalized non-working-day policy +
-  named holiday calendars, manual occurrence exceptions, configurable
-  terminology.
+  `features/schedule.md`. Still open: manual occurrence exceptions,
+  configurable terminology.
+- ~~Generalized non-working-day policy + named holiday calendars~~
+  **shipped 2026-08-14** — `schedule_holidays` rows belong to a named,
+  reusable `calendar_name` (default `'Default'` for every pre-1.6 holiday)
+  instead of one flat list; any recurring `events` row (not just a Schedule
+  class) can set `holiday_calendar`/`exclude_saturday`/`exclude_sunday` --
+  three independent constraints, applied at *read* time by
+  `recurrence_expand.expand_events`, never materialized into `exdates_json`.
+  Schedule's own class events switched from per-write EXDATE-stuffing to
+  just carrying `schedule_settings.holiday_calendar`. See
+  `features/calendar.md`'s Recurrence section and `features/schedule.md`.
 
 Side work: **Configurable views + optional Schedule module** — best landed now
 that the reworked views are stable, since it toggles them.

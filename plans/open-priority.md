@@ -358,12 +358,12 @@ subtask links is removed, and the Relations card holds related events only.
 
 ## Schedule & recurrence rework
 
-**Status:** "Classes as project labels + recurring events" shipped
-2026-08-14 (`plans/STATE.md`'s 1.6 entry, `features/schedule.md`). The other
-three subsections below (generalized non-working-day policy + named holiday
-calendars, manual recurrence exceptions, configurable terminology) are still
-full planning model, no code — builds on the shipped subsection, not the
-project stack directly.
+**Status:** "Classes as project labels + recurring events" and "Generalized
+recurrence and the non-working-day policy" both shipped 2026-08-14
+(`plans/STATE.md`'s 1.6 entries, `features/schedule.md` + `features/
+calendar.md`'s Recurrence section). The other two subsections below (manual
+recurrence exceptions, configurable terminology) are still full planning
+model, no code.
 
 ### ~~Classes as project labels + recurring events~~ — shipped 2026-08-14
 
@@ -390,7 +390,7 @@ events, but the resulting events belong to the same calendar, label, relation,
 and project systems as everything else; the project becomes the context in which
 the entire course is understood.
 
-### Generalized recurrence and the non-working-day policy
+### ~~Generalized recurrence and the non-working-day policy~~ — shipped 2026-08-14
 
 The recurrence system is generalized so that any recurring event can specify how
 it behaves on non-working days. The system does not encode university-specific

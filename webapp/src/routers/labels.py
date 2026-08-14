@@ -386,9 +386,10 @@ def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(g
     # machinery the Calendar tab itself expands with.
     next_lecture: dict[str, dict] = {}
     today = date.today()
+    holiday_calendars = db.list_holidays_by_calendar(conn)
     for cl in scope["classes"]:
         event = db.get_event(conn, cl["uid"])
-        next_date = schedule.next_occurrence_for_event(event, today) if event else None
+        next_date = schedule.next_occurrence_for_event(event, today, holiday_calendars=holiday_calendars) if event else None
         if next_date:
             next_lecture[cl["uid"]] = {"date": next_date, "label": _next_label(next_date, today)}
     ctx["class_next_lecture"] = next_lecture

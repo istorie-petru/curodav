@@ -33,12 +33,24 @@ convention) can be converted with
 `scripts/migrate_schedule_classes_to_events.py` (idempotent, `--dry-run`
 supported) — see that script's own module docstring.
 
-Still using the flat, pre-1.6 `schedule_holidays`/`schedule_settings` model
-(semester bounds + one un-named list of holiday date ranges) — the
-"generalized non-working-day policy + named holiday calendars" and "manual
-recurrence exceptions" and "configurable terminology" items from
-`plans/open-priority.md`'s Schedule & recurrence rework section are still
-open, tracked in `plans/STATE.md`.
+**Named holiday calendars** (1.6, shipped 2026-08-14, "Generalized recurrence
+and the non-working-day policy"): `schedule_holidays` rows now belong to a
+named, reusable `calendar_name` (e.g. `Romania`/`University`/`Personal`,
+default `'Default'` for every pre-1.6 holiday) instead of one flat list —
+`db.list_holiday_calendar_names`/`db.list_holidays_by_calendar`.
+`schedule_settings.holiday_calendar` (default `'Default'`) is which calendar
+this install's classes reference; every class event just carries that name on
+its own `holiday_calendar` field, applied generically at read time by
+`recurrence_expand.expand_events` (see `features/calendar.md`'s Recurrence
+section) — `schedule.build_class_event_row` no longer computes a per-holiday
+EXDATE at write time at all, so adding/removing a holiday takes effect
+immediately with **no regenerate step**, unlike a semester-date or
+holiday-calendar-name change (still `_regenerate_all`, since those change the
+event's own start_at/recurrence/holiday_calendar fields).
+
+Still open: "manual recurrence exceptions" and "configurable terminology"
+items from `plans/open-priority.md`'s Schedule & recurrence rework section,
+tracked in `plans/STATE.md`.
 
 ## Classes page (`/schedule`)
 
@@ -78,15 +90,21 @@ generate real bounded occurrences yet.
 
 ## Holidays & settings
 
-Both are `<details>` on the same page, unchanged by 1.6:
+Both are `<details>` on the same page:
 
-- **Holidays**: create + delete (`POST /holidays`, `/holidays/{uid}/delete`),
-  both regenerate every class event's recurrence/exdates
-  (`routers/schedule.py::_regenerate_all`).
+- **Holidays**: create + delete (`POST /holidays`, `/holidays/{uid}/delete`).
+  1.6: each holiday now names a `calendar_name` (text field + datalist of
+  calendars already in use, default `'Default'`) — adding/removing one no
+  longer regenerates any class event (see above); it's just a row in
+  `schedule_holidays`.
 - **Settings**: semester start/end, credits needed, reminder minutes, event
-  label (`POST /schedule/settings`) — renaming the event label re-tags every
-  existing class event from the old name to the new one before regenerating.
+  label, **holiday calendar** (`POST /schedule/settings`) — renaming the
+  event label re-tags every existing class event from the old name to the
+  new one; changing semester dates or the holiday calendar both still
+  regenerate every class event's `start_at`/`recurrence`/`holiday_calendar`
+  (`routers/schedule.py::_regenerate_all`), since those are the event's own
+  fields, not a read-time lookup.
 
-Shared logic in `schedule.py`: `DAYS`, `first_occurrence`, `generate_occurrences`,
-`compute_excluded`, `event_day`, `event_parity`, `next_occurrence_for_event`,
-`next_label`, `build_class_event_row`, `compute_conflicts`.
+Shared logic in `schedule.py`: `DAYS`, `first_occurrence`, `event_day`,
+`event_parity`, `next_occurrence_for_event`, `next_label`,
+`build_class_event_row`, `compute_conflicts`.

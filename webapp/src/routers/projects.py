@@ -172,7 +172,7 @@ def project_calendar(name: str, request: Request, date_: str | None = None, conn
     events = db.list_events(
         conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59"
     )
-    events = recurrence_expand.expand_events(events, week_start_date, week_end_date)
+    events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn))
     events = calendar_router._annotate_calendar_colors(conn, events)
 
     # Tag each event with whether it's a work allocation belonging to THIS

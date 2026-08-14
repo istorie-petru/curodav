@@ -27,11 +27,15 @@ What this does, per schedule_classes row:
      the first one migrated wins and the rest are silently consistent
      with it from then on.
   3. Builds the real recurring event via `schedule.build_class_event_row`
-     off the class's own day/start_time/end_time/parity/name/room/
-     enrolled, using this database's current `schedule_settings`/
-     `schedule_holidays` (unaffected by 1.6, still the source of semester
-     bounds and holiday exclusions). Reuses the class's already-mirrored
-     `event_uid` as the new event's uid when one exists (repurposing that
+     off the class's own day/start_time/end_time/parity/name/room/enrolled
+     and this database's current `schedule_settings` (semester bounds +
+     `holiday_calendar`, default 'Default' -- the calendar every pre-1.6
+     holiday already migrated onto, see schedule_holidays' own CREATE
+     TABLE comment). The new event just carries that calendar name; the
+     actual date exclusion is applied generically at read time
+     (`recurrence_expand.expand_events`), not computed here. Reuses the
+     class's already-mirrored `event_uid` as the new event's uid when one
+     exists (repurposing that
      row rather than leaving it an orphaned duplicate); falls back to the
      class's own `uid` if the class was never successfully mirrored
      before (e.g. semester dates were never configured pre-1.6).
@@ -128,7 +132,6 @@ def run_migration(conn: sqlite3.Connection, dry_run: bool = False) -> dict:
         return dict(counts)
 
     settings = db.get_schedule_settings(conn)
-    holidays = db.list_holidays(conn)
     schedule_label = settings.get("schedule_label") or "Schedule"
 
     rows = conn.execute("SELECT * FROM schedule_classes").fetchall()
@@ -159,7 +162,6 @@ def run_migration(conn: sqlite3.Connection, dry_run: bool = False) -> dict:
                     "enrolled": cls["enrolled"],
                 },
                 settings,
-                holidays,
             )
             db.upsert_event(conn, event_row)
             db.set_object_labels(conn, "event", event_uid, [schedule_label, label_name, *space_labels])

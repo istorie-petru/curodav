@@ -236,17 +236,33 @@
 <details class="widget-config" style="margin-top:16px">
 <summary class="btn ghost" style="display:inline-block; cursor:pointer">{{ icon('chevron-down', 'icon-sm') }} Holidays{% if holidays %} ({{ holidays|length }}){% endif %}</summary>
 <div class="card" style="margin-top:10px; padding:12px 14px">
+    <!-- 1.6 ("Generalized recurrence and the non-working-day policy"):
+         a holiday belongs to a named, reusable calendar now (e.g.
+         Romania/University/Personal), not one single flat list -- the
+         Calendar field is free text with a datalist of calendars already
+         in use (same "type an existing one or a new one" idiom Schedule's
+         own Class type field uses), defaulting to 'Default' so this stays
+         a one-field-more change for anyone who only ever had one flat list
+         before. Which calendar a class actually respects is chosen in
+         Settings below, not per-holiday. -->
     <form method="post" action="/schedule/holidays" class="calendar-new-form">
+        <input type="text" name="calendar_name" list="holiday-calendar-names" placeholder="Calendar (e.g. University)" value="Default" style="max-width:160px">
         <input type="text" name="label" placeholder="Label (e.g. Winter break)">
         <input type="date" name="date_from" required title="From">
         <input type="date" name="date_to" required title="To">
         <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
     </form>
+    <datalist id="holiday-calendar-names">
+        {% for name in holiday_calendar_names %}
+        <option value="{{ name }}">
+        {% endfor %}
+    </datalist>
     {% if holidays %}
     <table style="margin-top:10px; font-size:var(--text-caption)">
-        <thead><tr><th>Label</th><th>From</th><th>To</th><th></th></tr></thead>
+        <thead><tr><th>Calendar</th><th>Label</th><th>From</th><th>To</th><th></th></tr></thead>
         {% for h in holidays %}
         <tr>
+            <td><span class="cell-tag tag-gray">{{ h.calendar_name }}</span></td>
             <td>{{ h.label }}</td>
             <td>{{ h.date_from }}</td>
             <td>{{ h.date_to }}</td>
@@ -308,10 +324,15 @@
             <label>Event label</label>
             <input type="text" name="schedule_label" value="{{ settings.schedule_label or 'Schedule' }}" placeholder="Schedule">
         </div>
+        <div class="field">
+            <label>Holiday calendar</label>
+            <input type="text" name="holiday_calendar" list="holiday-calendar-names" value="{{ settings.holiday_calendar or 'Default' }}" placeholder="Default">
+        </div>
     </form>
     <p class="settings-hint" style="margin-top:8px">
         Blocks only generate calendar occurrences once both semester dates are set.
         The event label is the tag applied to every generated occurrence -- saving here regenerates all of them.
+        The holiday calendar is which named list of dates (from Holidays above) every block excludes.
     </p>
     <button type="submit" form="schedule-settings-form" class="btn primary">Save</button>
 </div>

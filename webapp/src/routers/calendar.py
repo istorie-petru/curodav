@@ -155,9 +155,10 @@ def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
     if not classes:
         return []
     today = _date.today()
+    holiday_calendars = db.list_holidays_by_calendar(conn)
     badges = []
     for cl in classes:
-        nxt = schedule.next_occurrence_for_event(cl, today)
+        nxt = schedule.next_occurrence_for_event(cl, today, holiday_calendars=holiday_calendars)
         if not nxt:
             continue
         # The badge's acronym is the course's own label_config.course_acronym
@@ -458,7 +459,7 @@ def month_view(
     grid_start = date(year, month, 1) - timedelta(days=6)
     grid_end = date(year, month, 28) + timedelta(days=13)
     events = db.list_events(conn, start=grid_start.isoformat(), end=grid_end.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, grid_start, grid_end)
+    events = recurrence_expand.expand_events(events, grid_start, grid_end, db.list_holidays_by_calendar(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -535,7 +536,7 @@ def four_week_view(
     # db.list_events compares these as plain strings, and a bare end-date
     # would silently exclude every timed event on the window's last day.
     events = db.list_events(conn, start=view_start.isoformat(), end=view_end.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, view_start, view_end)
+    events = recurrence_expand.expand_events(events, view_start, view_end, db.list_holidays_by_calendar(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -580,7 +581,7 @@ def week_view(
     # *after* "2026-09-02" lexicographically, so a bare end-date would
     # silently exclude every timed event on the range's last calendar day.
     events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, week_start_date, week_end_date)
+    events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -661,7 +662,7 @@ def day_view(
     here."""
     d = date.fromisoformat(day)
     events = db.list_events(conn, start=day, end=day + "T23:59:59")
-    events = recurrence_expand.expand_events(events, d, d)
+    events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn))
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
@@ -756,6 +757,7 @@ def new_event_form(
             "prefill_all_day": prefill_all_day,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -773,6 +775,9 @@ def create_event(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -790,6 +795,11 @@ def create_event(
         "tags": _tags_list(tags),
         "recurrence": _clean_field(recurrence),
         "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
+        # 1.6 ("Generalized recurrence and the non-working-day policy") --
+        # see _event_form_fields.html's own comment on these three fields.
+        "holiday_calendar": _clean_field(holiday_calendar),
+        "exclude_saturday": bool(exclude_saturday),
+        "exclude_sunday": bool(exclude_sunday),
         "created_at": now,
         "updated_at": now,
     }
@@ -836,6 +846,7 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "event": event,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
             # Relations card (2026-08-09) -- see _related_context above.
             **_related_context(conn, event),
         },
@@ -856,6 +867,9 @@ def update_event(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     reminders: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -882,6 +896,9 @@ def update_event(
             "tags": _tags_list(tags),
             "recurrence": _clean_field(recurrence),
             "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
+            "holiday_calendar": _clean_field(holiday_calendar),
+            "exclude_saturday": bool(exclude_saturday),
+            "exclude_sunday": bool(exclude_sunday),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )

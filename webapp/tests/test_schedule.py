@@ -15,11 +15,9 @@ from datetime import date
 from src.schedule import (
     build_class_event_row,
     compute_conflicts,
-    compute_excluded,
     event_day,
     event_parity,
     first_occurrence,
-    generate_occurrences,
     iso_week_parity,
     next_label,
     next_occurrence_for_event,
@@ -43,27 +41,6 @@ class TestFirstOccurrence:
         assert iso_week_parity(anchor) == "odd"
 
 
-class TestGenerateOccurrences:
-    def test_all_week_steps_by_one_week(self):
-        occs = generate_occurrences(date(2026, 9, 1), date(2026, 9, 22), "all")
-        assert occs == [date(2026, 9, 1), date(2026, 9, 8), date(2026, 9, 15), date(2026, 9, 22)]
-
-    def test_parity_week_steps_by_two_weeks(self):
-        occs = generate_occurrences(date(2026, 9, 8), date(2026, 10, 1), "odd")
-        assert occs == [date(2026, 9, 8), date(2026, 9, 22)]
-
-
-class TestComputeExcluded:
-    def test_holiday_range_excludes_occurrences_inside_it(self):
-        occs = [date(2026, 9, 1), date(2026, 9, 8), date(2026, 9, 15)]
-        holidays = [{"label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"}]
-        assert compute_excluded(occs, holidays) == [date(2026, 9, 15)]
-
-    def test_no_holidays_excludes_nothing(self):
-        occs = [date(2026, 9, 1), date(2026, 9, 8)]
-        assert compute_excluded(occs, []) == []
-
-
 class TestBuildClassEventRow:
     BASE_FIELDS = {
         "uid": "c1",
@@ -81,33 +58,40 @@ class TestBuildClassEventRow:
         # entered before semester dates are configured still needs
         # somewhere to live -- an open-ended (no UNTIL), today-anchored
         # event rather than None.
-        row = build_class_event_row(self.BASE_FIELDS, {}, [], today=date(2026, 9, 1))
+        row = build_class_event_row(self.BASE_FIELDS, {}, today=date(2026, 9, 1))
         assert row["uid"] == "c1"
         assert row["start_at"] == "2026-09-01T10:00:00"
         assert "UNTIL" not in row["recurrence"]
         assert row["exdates"] == []
 
-    def test_builds_row_with_rrule_and_exdates(self):
+    def test_builds_row_with_rrule(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22"}
-        holidays = [{"label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"}]
-        row = build_class_event_row(self.BASE_FIELDS, settings, holidays)
+        row = build_class_event_row(self.BASE_FIELDS, settings)
 
         assert row["uid"] == "c1"
         assert row["start_at"] == "2026-09-01T10:00:00"
         assert row["end_at"] == "2026-09-01T12:00:00"
         assert row["location"] == "204"
         assert row["title"] == "Algorithms"
-        assert row["exdates"] == ["2026-09-15T10:00:00"]
+        assert row["exdates"] == []
         assert row["recurrence"] == "FREQ=WEEKLY;UNTIL=2026-09-22"
+
+    def test_holiday_calendar_is_copied_from_settings(self):
+        # 1.6: holiday exclusion is no longer computed here at all -- the
+        # event just carries which named calendar it should respect,
+        # applied generically at read time (recurrence_expand.expand_events).
+        settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-22", "holiday_calendar": "University"}
+        row = build_class_event_row(self.BASE_FIELDS, settings)
+        assert row["holiday_calendar"] == "University"
 
     def test_odd_even_parity_adds_interval(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-12-20"}
-        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings, [])
+        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings)
         assert "INTERVAL=2" in row["recurrence"]
 
     def test_disenrolled_class_maps_to_archived_status(self):
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-12-20"}
-        row = build_class_event_row(dict(self.BASE_FIELDS, enrolled=False), settings, [])
+        row = build_class_event_row(dict(self.BASE_FIELDS, enrolled=False), settings)
         assert row["status"] == "archived"
 
     def test_semester_too_short_for_parity_excludes_the_only_occurrence(self):
@@ -115,7 +99,7 @@ class TestBuildClassEventRow:
         # the meeting itself still exists (editable/reschedulable), just
         # with its one placeholder occurrence excluded outright.
         settings = {"semester_start": "2026-09-01", "semester_end": "2026-09-02"}
-        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings, [])
+        row = build_class_event_row(dict(self.BASE_FIELDS, parity="odd"), settings)
         assert row["start_at"] in row["exdates"]
 
 

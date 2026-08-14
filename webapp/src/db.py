@@ -77,6 +77,26 @@ CREATE TABLE IF NOT EXISTS events (
     recurrence TEXT,
     exdates_json TEXT NOT NULL DEFAULT '[]',
     reminders_json TEXT NOT NULL DEFAULT '[]',
+    -- 1.6 ("Generalized recurrence and the non-working-day policy"): any
+    -- recurring event -- not just a Schedule class meeting -- can specify
+    -- how it behaves on non-working days. A holiday calendar (see
+    -- `schedule_holidays` above) is deliberately a *different* kind of
+    -- constraint from a weekend exclusion (open-priority.md: "A public
+    -- holiday and a weekend are deliberately different kinds of
+    -- constraints even though both may cause an occurrence to be
+    -- skipped"), so these are three independent fields, not one enum:
+    -- `holiday_calendar` (a calendar_name from schedule_holidays, or NULL
+    -- = respects no calendar), `exclude_saturday`/`exclude_sunday`
+    -- (independent booleans -- an event can exclude one weekend day, both,
+    -- or neither, regardless of its holiday_calendar setting). Applied at
+    -- *read* time by `recurrence_expand.expand_events` (never materialized
+    -- into `exdates_json`), same "don't store derived values" rule as
+    -- everywhere else in this app -- changing a holiday calendar's dates
+    -- or an event's policy takes effect immediately, with no "regenerate"
+    -- step required.
+    holiday_calendar TEXT,
+    exclude_saturday INTEGER NOT NULL DEFAULT 0,
+    exclude_sunday INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
 );
@@ -359,8 +379,21 @@ CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
 -- own thing, even though it had its own dedicated table (Phase 9) rather
 -- than living on the generic databases engine.
 
+-- 1.6 (Schedule & recurrence rework, "Generalized recurrence and the
+-- non-working-day policy"): a holiday is now a dated range under a named,
+-- reusable **holiday calendar** (`calendar_name` -- e.g. `Romania`,
+-- `University`, `Personal`), not one single flat exclusion list shared by
+-- everything. There is deliberately no separate `holiday_calendars` table
+-- -- a calendar is just the set of distinct `calendar_name` values in use
+-- here, same "a name is the identity, no surrogate row required" pattern
+-- `object_labels`/labels already use; `db.list_holiday_calendar_names`
+-- reads it back. `calendar_name` defaults to `'Default'` so every holiday
+-- row that existed before this migration (all under one flat list) keeps
+-- working unchanged under that name, still reachable from any event or
+-- class that referenced holidays before this rework existed.
 CREATE TABLE IF NOT EXISTS schedule_holidays (
     uid TEXT PRIMARY KEY,
+    calendar_name TEXT NOT NULL DEFAULT 'Default',
     label TEXT NOT NULL DEFAULT '',
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL
@@ -373,7 +406,17 @@ CREATE TABLE IF NOT EXISTS schedule_settings (
     credits_needed REAL,
     reminder_minutes INTEGER NOT NULL DEFAULT 15,
     target_calendar_uid TEXT,
-    schedule_label TEXT NOT NULL DEFAULT 'Schedule'
+    schedule_label TEXT NOT NULL DEFAULT 'Schedule',
+    -- 1.6 ("Generalized recurrence and the non-working-day policy"): which
+    -- named holiday calendar (schedule_holidays.calendar_name) this
+    -- install's class events reference -- 'Default' so every pre-1.6
+    -- holiday (all under that name, see schedule_holidays' own CREATE
+    -- TABLE comment) keeps excluding class occurrences exactly as before,
+    -- with no action required. `schedule.build_class_event_row` just
+    -- copies this straight onto every class event's own `holiday_calendar`
+    -- field -- there's no per-class override; a semester's classes all
+    -- respect the same institutional calendar together.
+    holiday_calendar TEXT NOT NULL DEFAULT 'Default'
 );
 
 -- Phase 2 (label-space rework, 2026-08-06): `tags`/`tag_groups`/
@@ -654,6 +697,16 @@ def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     _ensure_column(conn, "events", "exdates_json", "TEXT NOT NULL DEFAULT '[]'")
+    # 1.6 ("Generalized recurrence and the non-working-day policy") -- see
+    # the `events` CREATE TABLE comment above for the model.
+    _ensure_column(conn, "events", "holiday_calendar", "TEXT")
+    _ensure_column(conn, "events", "exclude_saturday", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "events", "exclude_sunday", "INTEGER NOT NULL DEFAULT 0")
+    # Same 1.6 subsection -- see schedule_holidays' own CREATE TABLE
+    # comment for why every pre-existing holiday keeps working unchanged
+    # under the 'Default' calendar name.
+    _ensure_column(conn, "schedule_holidays", "calendar_name", "TEXT NOT NULL DEFAULT 'Default'")
+    _ensure_column(conn, "schedule_settings", "holiday_calendar", "TEXT NOT NULL DEFAULT 'Default'")
     # Phase 1 (label-space rework): task_lists/calendars/addressbooks and
     # every href/etag/*_path/raw_ics/raw_vcard column are no longer part
     # of SCHEMA_SQL for a brand-new database. An *existing* cache.sqlite
@@ -898,14 +951,26 @@ def upsert_event(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     data["reminders_json"] = json.dumps(data.get("reminders") or [])
     data["exdates_json"] = json.dumps(data.get("exdates") or [])
+    # NOT NULL DEFAULT 0 columns -- must coerce None -> 0 explicitly here;
+    # an INSERT that names the column with an explicit NULL value doesn't
+    # fall back to the column's own DEFAULT the way omitting it would.
+    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
+    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
     data.pop("reminders", None)
     data.pop("exdates", None)
     cols = [
         "uid", "title", "description",
         "start_at", "end_at", "all_day", "location", "meeting_url", "status",
-        "recurrence", "exdates_json", "reminders_json", "created_at",
-        "updated_at",
+        "recurrence", "exdates_json", "reminders_json",
+        # 1.6 ("Generalized recurrence and the non-working-day policy") --
+        # see the `events` CREATE TABLE comment. NULL/0 (not present in
+        # `row`) is the correct default for every event that isn't a
+        # recurring one specifying a policy, same "missing key -> column
+        # default" convention every other upsert_* in this file already
+        # relies on via data.get(c).
+        "holiday_calendar", "exclude_saturday", "exclude_sunday",
+        "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
@@ -1995,9 +2060,10 @@ def list_schedule_class_events(
 
 def upsert_holiday(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     conn.execute(
-        "INSERT INTO schedule_holidays (uid, label, date_from, date_to) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(uid) DO UPDATE SET label=excluded.label, date_from=excluded.date_from, date_to=excluded.date_to",
-        (row["uid"], row.get("label", ""), row["date_from"], row["date_to"]),
+        "INSERT INTO schedule_holidays (uid, calendar_name, label, date_from, date_to) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(uid) DO UPDATE SET calendar_name=excluded.calendar_name, label=excluded.label, "
+        "date_from=excluded.date_from, date_to=excluded.date_to",
+        (row["uid"], row.get("calendar_name") or "Default", row.get("label", ""), row["date_from"], row["date_to"]),
     )
     conn.commit()
 
@@ -2007,9 +2073,38 @@ def delete_holiday(conn: sqlite3.Connection, uid: str) -> None:
     conn.commit()
 
 
-def list_holidays(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute("SELECT * FROM schedule_holidays ORDER BY date_from").fetchall()
+def list_holidays(conn: sqlite3.Connection, calendar_name: str | None = None) -> list[dict[str, Any]]:
+    if calendar_name:
+        rows = conn.execute(
+            "SELECT * FROM schedule_holidays WHERE calendar_name = ? ORDER BY date_from", (calendar_name,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM schedule_holidays ORDER BY calendar_name COLLATE NOCASE, date_from").fetchall()
     return [dict(r) for r in rows]
+
+
+def list_holiday_calendar_names(conn: sqlite3.Connection) -> list[str]:
+    """Every distinct named holiday calendar in use -- there's no separate
+    `holiday_calendars` table (see schedule_holidays' own CREATE TABLE
+    comment), a calendar is just a name some holiday rows share. Powers the
+    recurrence editor's "Holiday calendar" dropdown and the manage UI's own
+    list of existing calendars."""
+    rows = conn.execute(
+        "SELECT DISTINCT calendar_name FROM schedule_holidays ORDER BY calendar_name COLLATE NOCASE"
+    ).fetchall()
+    return [r["calendar_name"] for r in rows]
+
+
+def list_holidays_by_calendar(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    """{calendar_name: [holiday rows]} -- the shape
+    `recurrence_expand.expand_events`'s `holiday_calendars` parameter
+    expects. Built once per request (never per-event), same "routers
+    compute, pure logic just reads what it's given" layering every other
+    feature in this app follows."""
+    by_calendar: dict[str, list[dict[str, Any]]] = {}
+    for row in list_holidays(conn):
+        by_calendar.setdefault(row["calendar_name"], []).append(row)
+    return by_calendar
 
 
 def get_schedule_settings(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -2022,6 +2117,7 @@ def get_schedule_settings(conn: sqlite3.Connection) -> dict[str, Any]:
             "reminder_minutes": 15,
             "target_calendar_uid": None,
             "schedule_label": "Schedule",
+            "holiday_calendar": "Default",
         }
     return dict(row)
 
@@ -2042,17 +2138,19 @@ def set_schedule_target_calendar(conn: sqlite3.Connection, calendar_uid: str) ->
 
 def save_schedule_settings(conn: sqlite3.Connection, settings: dict[str, Any]) -> None:
     conn.execute(
-        "INSERT INTO schedule_settings (id, semester_start, semester_end, credits_needed, reminder_minutes, schedule_label) "
-        "VALUES (1, ?, ?, ?, ?, ?) "
+        "INSERT INTO schedule_settings (id, semester_start, semester_end, credits_needed, reminder_minutes, schedule_label, holiday_calendar) "
+        "VALUES (1, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET semester_start=excluded.semester_start, "
         "semester_end=excluded.semester_end, credits_needed=excluded.credits_needed, "
-        "reminder_minutes=excluded.reminder_minutes, schedule_label=excluded.schedule_label",
+        "reminder_minutes=excluded.reminder_minutes, schedule_label=excluded.schedule_label, "
+        "holiday_calendar=excluded.holiday_calendar",
         (
             settings.get("semester_start"),
             settings.get("semester_end"),
             settings.get("credits_needed"),
             settings.get("reminder_minutes", 15),
             settings.get("schedule_label") or "Schedule",
+            settings.get("holiday_calendar") or "Default",
         ),
     )
     conn.commit()

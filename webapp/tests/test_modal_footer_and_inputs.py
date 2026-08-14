@@ -404,6 +404,7 @@ class TestSubmissionUnaffectedByPickerUI:
             all_day="", location="", meeting_url="", tags="",
             recurrence="FREQ=WEEKLY",
             reminders="0, 10, 1440",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         events = db.list_events(conn, start="2026-01-01", end="2026-12-31")
@@ -419,6 +420,7 @@ class TestSubmissionUnaffectedByPickerUI:
             all_day="", location="", meeting_url="", tags="",
             recurrence="FREQ=MONTHLY;BYMONTHDAY=1",
             reminders="5, 60",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         updated = db.get_event(conn, "e1")
@@ -447,6 +449,7 @@ class TestSubmissionUnaffectedByPickerUI:
         calendar_router.create_event(
             title="One-off", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="", recurrence="", reminders="",
+            holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         events = [e for e in db.list_events(conn, start="2026-01-01", end="2026-12-31") if e["title"] == "One-off"]

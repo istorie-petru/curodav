@@ -88,4 +88,31 @@
             <label>Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '' }}">
         </div>
+        <!-- 1.6 ("Generalized recurrence and the non-working-day policy"):
+             any recurring event -- not just a Schedule class -- can specify
+             how it behaves on non-working days. A holiday calendar and a
+             weekend exclusion are independent constraints (an event can
+             combine either, both, or neither), applied at read time
+             (recurrence_expand.expand_events), never materialized into a
+             stored EXDATE. Only meaningful once Recurrence above is set;
+             harmless (silently unused) otherwise. -->
+        <div class="field">
+            <label>Holiday calendar</label>
+            <input type="text" name="holiday_calendar" list="holiday-calendar-names"
+                   placeholder="(none)"
+                   value="{{ event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' }}">
+            <datalist id="holiday-calendar-names">
+                {% for name in holiday_calendar_names|default([]) %}
+                <option value="{{ name }}">
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="field field-toggle">
+            <input type="checkbox" id="exclude_saturday" name="exclude_saturday" value="1" {% if event and event.exclude_saturday %}checked{% endif %}>
+            <label for="exclude_saturday">Exclude Saturday</label>
+        </div>
+        <div class="field field-toggle">
+            <input type="checkbox" id="exclude_sunday" name="exclude_sunday" value="1" {% if event and event.exclude_sunday %}checked{% endif %}>
+            <label for="exclude_sunday">Exclude Sunday</label>
+        </div>
     </div>
