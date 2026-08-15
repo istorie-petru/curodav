@@ -2827,6 +2827,52 @@ body.command-palette-open{overflow:hidden;}
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
 .project-scope-section{margin-top:16px;}
+
+/* projects.html (side work, 2026-08-15 direct feedback: "square colored
+   cards... open with click, not an open button"). The whole card is one
+   `<a>` (no separate Open button/link inside it), colored with the
+   project's own `.cal-*` swatch as a full-bleed background rather than
+   just a small tag pill -- the same palette every other .cal-* consumer
+   (calendar events, label chips) already uses, so a project's color here
+   is the same color it shows everywhere else, not a second palette.
+   `aspect-ratio:1` keeps every card square regardless of content length;
+   `auto-fill`/`minmax` wraps to however many columns fit rather than a
+   fixed count, same responsive approach as .habit-task-grid/.today-grid
+   above use fixed 2-column instead -- this grid can hold many more items
+   than either of those, so a fixed column count would either waste width
+   on a wide screen or crowd a narrow one. */
+.project-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+  gap:var(--space-4); margin-bottom:var(--space-4);
+}
+.project-card-square{
+  aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between;
+  padding:var(--space-4); border-radius:var(--radius-lg); text-decoration:none;
+  box-shadow:var(--elevation-1);
+  transition:transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.project-card-square:hover, .project-card-square:focus-visible{
+  transform:translateY(-2px); box-shadow:var(--elevation-3); text-decoration:none;
+}
+/* Archived projects stay visible (historical record, per db.project_status's
+   own docstring) but visually recede rather than competing with the
+   still-live cards for attention. */
+.project-card-square.is-archived{opacity:.5;}
+.project-card-square.is-archived:hover{opacity:.85;}
+.project-card-square-status{
+  display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  padding:2px 7px; border-radius:var(--radius-pill); background:rgba(0,0,0,.22); margin-bottom:8px;
+}
+.project-card-square-title{
+  display:flex; align-items:center; gap:6px; font-weight:600; font-size:15px; line-height:1.3;
+  overflow-wrap:anywhere;
+}
+.project-card-square-footer{font-size:12px; opacity:.92; margin:0;}
+.project-card-square .project-progress-bar{background:rgba(0,0,0,.22);}
+.project-card-square .project-progress-fill{background:currentColor; opacity:.9;}
+@media (max-width:480px){
+  .project-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));}
+}
 .project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
 
 /* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.

@@ -1368,6 +1368,47 @@ session, right before the final commit of that session.
   worked around, just moot now that the file is gone), confirmed this is
   the *only* change in the failure count by running the full suite after
   each of the three commits, not just at the end.
+- **Shipped:** side work — **/projects rework: square colored cards,
+  click-to-open, create/edit moved into Settings**, complete (2026-08-15),
+  direct feedback ("square colored cards... open with click, not an open
+  button... creating/editing done entirely in settings"). `templates/
+  projects.html` is now a pure display surface: each project is one
+  `<a class="project-card-square cal-{{ p.color }}">` (new `.project-grid`/
+  `.project-card-square*` CSS, `static/style.css`) — the whole card is the
+  link (no inner Open button), full-bleed in the project's own `.cal-*`
+  swatch (the same palette every other `.cal-*` consumer already uses, not
+  a second one), `aspect-ratio:1` via `auto-fill`/`minmax` grid, status
+  pill + progress bar + task/deadline line inside, Archived cards dimmed
+  via `.is-archived`. The promote-a-label form, per-project dates form,
+  and Archive/Demote actions moved off this page entirely onto Settings >
+  Labels (`templates/labels_manage.html`'s existing Project `<td>`, using
+  the `.label-table details > summary` styling that already existed
+  there unused): not-yet-a-project rows get a `<details>` "promote" popover
+  (dates + submit -> `/projects/promote`), is_project rows get one showing
+  status + an inline dates-save form + conditional Archive + Demote,
+  matching every other per-label control's "own cell on this row" shape.
+  `routers/labels.py::manage_labels` now computes `project_status` per
+  is_project row (`db.project_status`) and accepts the same `overlap`/
+  `pending_*` query params `routers/projects.py`'s promote/dates conflict
+  redirects already produced — `_redirect_with_conflict` and every
+  promote/dates/demote/archive success redirect in `routers/projects.py`
+  now target `/labels` instead of `/projects` (the overlap-warning card
+  itself moved into `labels_manage.html`, `projects.html` dropped
+  `overlap_name`/`pending`/`existing_labels` from its context entirely).
+  No schema/endpoint changes — `promote`/`set_dates`/`demote`/`archive`
+  are the same functions with the same params, only their redirect target
+  and the form markup that posts to them moved; `tests/test_project_
+  stack.py`'s router-level tests (status-code/location-substring only,
+  never asserting on `/projects` specifically) needed no changes and all
+  still pass. Verified both pages render end-to-end (not just unit-level)
+  via a one-off script seeding a real project + tasks and calling
+  `list_projects`/`manage_labels` directly, checking the actual rendered
+  HTML for the card markup, the promote/dates/demote forms, and the
+  overlap-warning card together — router-function-call convention doesn't
+  by itself prove Jinja renders without error, since most existing tests
+  only assert on `resp.context`, not `resp.body`. Full suite still 1337
+  passed (no test count change — this was a display/relocation change, not
+  new behavior needing new coverage).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

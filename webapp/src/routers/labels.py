@@ -201,7 +201,30 @@ def manage_labels(request: Request, conn=Depends(get_db)):
     labels = db.list_labels(conn)
     for lbl in labels:
         lbl["parent_display"] = lbl.get("parent_name") or "~ Ungrouped"
+        # Project behavior (side work, 2026-08-15 direct feedback):
+        # promote/edit-dates/archive/demote moved here from the dedicated
+        # /projects page, which is now a pure display surface -- see
+        # routers/projects.py::list_projects' docstring. Status is only
+        # needed for is_project rows (Archive only shows once a project
+        # reaches "Pending Archiving"), so it's skipped for everything
+        # else rather than calling db.project_status on every label.
+        if lbl.get("is_project"):
+            lbl["project_status"] = db.project_status(conn, lbl)
+
     labels.sort(key=lambda l: (l["parent_display"].lower(), l["name"].lower()))
+
+    # Overlap warning (moved from routers/projects.py's own promote/dates
+    # handlers, which now redirect here with the same query params -- see
+    # projects.py::_redirect_with_conflict).
+    overlap_name = request.query_params.get("overlap")
+    pending = None
+    if overlap_name:
+        pending = {
+            "name": request.query_params.get("pending_name", ""),
+            "start_date": request.query_params.get("pending_start", ""),
+            "end_date": request.query_params.get("pending_end", ""),
+        }
+
     return templates.TemplateResponse(
         "labels_manage.html",
         {
@@ -213,6 +236,8 @@ def manage_labels(request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "label_icons": LABEL_ICONS,
             "icon_groups": ICON_GROUPS,
+            "overlap_name": overlap_name,
+            "pending": pending,
         },
     )
 

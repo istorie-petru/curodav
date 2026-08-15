@@ -71,26 +71,20 @@ def _project_card(conn, cfg: dict) -> dict:
 
 @router.get("")
 def list_projects(request: Request, conn=Depends(get_db)):
+    """The Projects page is a pure display surface (side work, 2026-08-15
+    direct feedback): square colored cards you click to open. Creating a
+    project (promoting a label), editing its dates, archiving, and
+    demoting all moved onto Settings > Labels (routers/labels.py's
+    manage_labels/labels_manage.html) -- the labels table is already
+    where every other per-label control (color/icon/rename/space) lives,
+    so Project behavior joined them instead of keeping a second,
+    disconnected place to manage the same thing."""
     projects = [_project_card(conn, cfg) for cfg in db.list_project_labels(conn)]
     # Open/Pending/Pending Archiving first (still-live work), Archived last
     # -- an archived project is historical record, not something to hunt
     # for above the projects still being worked on.
     order = {"Open": 0, "Pending": 1, "Pending Archiving": 2, "Archived": 3}
     projects.sort(key=lambda p: (order.get(p["status"], 0), p["name"].lower()))
-
-    overlap_name = request.query_params.get("overlap")
-    pending = None
-    if overlap_name:
-        pending = {
-            "name": request.query_params.get("pending_name", ""),
-            "start_date": request.query_params.get("pending_start", ""),
-            "end_date": request.query_params.get("pending_end", ""),
-        }
-
-    # Existing non-project labels -- offered as the promote form's
-    # datalist, so promoting reuses a label already applied to real tasks
-    # rather than always typing a brand-new name.
-    existing_labels = [l["name"] for l in db.list_labels(conn) if not l.get("is_project")]
 
     return templates.TemplateResponse(
         "projects.html",
@@ -99,9 +93,6 @@ def list_projects(request: Request, conn=Depends(get_db)):
             "active_tab": "projects",
             "title": "Projects",
             "projects": projects,
-            "overlap_name": overlap_name,
-            "pending": pending,
-            "existing_labels": existing_labels,
         },
     )
 
@@ -333,8 +324,12 @@ def delete_allocation(name: str, event_uid: str, date_: str = Form(""), conn=Dep
 
 
 def _redirect_with_conflict(name: str, start_date: str, end_date: str, conflict_name: str) -> RedirectResponse:
+    # Targets /labels, not /projects -- promote/dates now live entirely on
+    # Settings > Labels (see list_projects' docstring above), so the
+    # overlap warning needs to surface where the form that triggered it
+    # actually is.
     url = (
-        f"/projects?overlap={quote(conflict_name)}"
+        f"/labels?overlap={quote(conflict_name)}"
         f"&pending_name={quote(name)}&pending_start={quote(start_date)}&pending_end={quote(end_date)}"
     )
     return RedirectResponse(url=url, status_code=303)
@@ -357,7 +352,7 @@ def promote(
     start_date = start_date.strip()
     end_date = end_date.strip()
     if not name or not start_date or not end_date:
-        return RedirectResponse(url="/projects", status_code=303)
+        return RedirectResponse(url="/labels", status_code=303)
     conflict = db.find_overlapping_project(conn, name, start_date, end_date)
     if conflict and confirm_overlap not in ("1", "true", "on"):
         return _redirect_with_conflict(name, start_date, end_date, conflict["name"])
@@ -372,7 +367,7 @@ def promote(
             "created_at": _now(),
         },
     )
-    return RedirectResponse(url="/projects", status_code=303)
+    return RedirectResponse(url="/labels", status_code=303)
 
 
 @router.post("/{name}/dates")
@@ -389,7 +384,7 @@ def set_dates(
     if conflict and confirm_overlap not in ("1", "true", "on"):
         return _redirect_with_conflict(name, start_date, end_date, conflict["name"])
     db.upsert_label_config(conn, {"name": name, "start_date": start_date, "end_date": end_date})
-    return RedirectResponse(url="/projects", status_code=303)
+    return RedirectResponse(url="/labels", status_code=303)
 
 
 @router.post("/{name}/demote")
@@ -399,7 +394,7 @@ def demote(name: str, conn=Depends(get_db)):
     Project behavior drops its project-specific semantics and views but
     preserves the label and every entity associated with it")."""
     db.upsert_label_config(conn, {"name": name, "is_project": 0, "start_date": None, "end_date": None, "archived_at": None})
-    return RedirectResponse(url="/projects", status_code=303)
+    return RedirectResponse(url="/labels", status_code=303)
 
 
 @router.post("/{name}/archive")
@@ -407,4 +402,4 @@ def archive(name: str, conn=Depends(get_db)):
     """The user's explicit confirmation that a project is finished (§
     Project lifecycle) -- never automatic, see db.project_status."""
     db.archive_project(conn, name)
-    return RedirectResponse(url="/projects", status_code=303)
+    return RedirectResponse(url="/labels", status_code=303)

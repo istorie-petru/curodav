@@ -5,7 +5,26 @@
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Labels</h1>
-<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and flip "Generate a Space page" on to aggregate its child labels into their own page.</p>
+<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and flip "Generate a Space page" on to aggregate its child labels into their own page. The Project column below promotes a label to a project (bounded period + lifecycle); see <a href="/projects">Projects</a> for the read-only card view.</p>
+
+<!-- Overlap warning -- moved from the old /projects page (side work,
+     2026-08-15): routers/projects.py's promote/dates handlers now
+     redirect back here with the same query params on a period conflict,
+     since that's the only place those forms live anymore. -->
+{% if overlap_name and pending %}
+<div class="card" style="border-color:var(--accent-warning, #b58900)">
+    <p><strong>{{ icon('activity', 'icon-sm') }} "{{ pending.name }}" ({{ pending.start_date }} &ndash; {{ pending.end_date }}) overlaps the existing project "{{ overlap_name }}".</strong></p>
+    <p class="settings-hint">Projects can't share an overlapping period. Resolve the conflict (change one project's dates) or confirm you want them to overlap anyway.</p>
+    <form method="post" action="/projects/promote" class="form-inline">
+        <input type="hidden" name="name" value="{{ pending.name }}">
+        <input type="hidden" name="start_date" value="{{ pending.start_date }}">
+        <input type="hidden" name="end_date" value="{{ pending.end_date }}">
+        <input type="hidden" name="confirm_overlap" value="1">
+        <button type="submit" class="btn ghost">Save anyway</button>
+        <a href="/labels" class="btn ghost">Cancel</a>
+    </form>
+</div>
+{% endif %}
 
 {% if labels %}
 <!-- Search (2026-08-08 redesign) -- client-side only, same "everything's
@@ -150,20 +169,49 @@
         <td style="text-align:center">
             <input type="checkbox" name="generate_space" value="1" title="Generate a Space page" {% if l.generate_space %}checked{% endif %} onchange="this.form.requestSubmit()" form="label-set-{{ outer_index }}-{{ label_index }}">
         </td>
-        <!-- Project (1.3, Project-enabled label stack) -- unlike Space,
-             turning this on isn't a bare checkbox: a project needs a
+        <!-- Project (1.3, Project-enabled label stack; moved fully into
+             this row 2026-08-15 direct feedback -- the /projects page is
+             now a pure read-only display of square cards, so promote/
+             edit-dates/archive/demote all live here instead, the same
+             "every per-label control lives in its own cell on this row"
+             shape the rest of the table already uses. A project needs a
              start/end period the moment it's created (§ Project period:
-             "a project has exactly one start date and one end date"), so
-             promoting/demoting lives on the dedicated /projects page
-             (routers/projects.py's promote/demote), which can collect
-             those dates and check the overlap rule. This cell is a
-             read-only status link into that flow, not a second place that
-             writes is_project. -->
+             "a project has exactly one start date and one end date") and
+             its own overlap check, so both promote and edit-dates are a
+             small inline <details> form rather than a bare checkbox like
+             Space -- .label-table details styling above already exists
+             for exactly this. -->
         <td style="text-align:center">
             {% if l.is_project %}
-            <a href="/projects" class="icon-btn" title="Project ({{ l.start_date }} to {{ l.end_date }}) -- manage on the Projects page">{{ icon('folder', 'icon-sm') }}</a>
+            <details>
+                <summary class="icon-btn" title="Project ({{ l.start_date }} to {{ l.end_date }}) -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }}</summary>
+                <div class="label-cell-inline" style="flex-wrap:wrap; margin-top:6px; justify-content:flex-end">
+                    <span class="tag-usage-count" title="Lifecycle status">{{ l.project_status }}</span>
+                    <form method="post" action="/projects/{{ l.name }}/dates" class="label-cell-inline">
+                        <label class="settings-hint">Start <input type="date" name="start_date" value="{{ l.start_date }}"></label>
+                        <label class="settings-hint">End <input type="date" name="end_date" value="{{ l.end_date }}"></label>
+                        <button type="submit" class="icon-btn" title="Save dates">{{ icon('check-square', 'icon-sm') }}</button>
+                    </form>
+                    {% if l.project_status == "Pending Archiving" %}
+                    <form method="post" action="/projects/{{ l.name }}/archive" data-confirm-sheet="Archive &quot;{{ l.name }}&quot;? This confirms the project is finished -- the label and its history stay intact.">
+                        <button type="submit" class="btn ghost btn-sm">{{ icon('archive', 'icon-sm') }} Archive</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/projects/{{ l.name }}/demote" data-confirm-sheet="Remove Project behavior from &quot;{{ l.name }}&quot;? The label and everything tagged with it stay exactly as they are -- only the project period/lifecycle/cards go away.">
+                        <button type="submit" class="icon-btn" title="Demote back to a plain label">{{ icon('x', 'icon-sm') }}</button>
+                    </form>
+                </div>
+            </details>
             {% else %}
-            <a href="/projects" class="icon-btn" title="Not a project -- promote it on the Projects page">{{ icon('folder-plus', 'icon-sm') }}</a>
+            <details>
+                <summary class="icon-btn" title="Not a project -- click to promote">{{ icon('folder-plus', 'icon-sm') }}</summary>
+                <form method="post" action="/projects/promote" class="label-cell-inline" style="flex-wrap:wrap; margin-top:6px; justify-content:flex-end">
+                    <input type="hidden" name="name" value="{{ l.name }}">
+                    <label class="settings-hint">Start <input type="date" name="start_date" required></label>
+                    <label class="settings-hint">End <input type="date" name="end_date" required></label>
+                    <button type="submit" class="btn primary btn-sm">{{ icon('plus', 'icon-sm') }} Make it a project</button>
+                </form>
+            </details>
             {% endif %}
         </td>
         <!-- Open/Merge/Remove, one line (2026-08-08 follow-up) -- each of
