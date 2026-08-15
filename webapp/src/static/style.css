@@ -1522,6 +1522,17 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    picker is ever shown at; the label just wraps onto a second line
    inside its own narrower tile instead of pushing the row wider. */
 .tile-select{display:flex; flex-wrap:nowrap; gap:var(--space-2);}
+/* Data source picker specifically (direct feedback, 2026-08-15: "make the
+   Data source grid show on two rows") -- five sources now (calendar_tasks/
+   habits/contacts/quick_links/spaces_projects, up from the four the
+   2026-08-07 one-row decision above was made for), which read as too
+   cramped forced into a single row. Grid instead of flex (`flex` on
+   .tile-option below is simply ignored once its container isn't a flex
+   container, no override needed there), 3 columns so 4-5 sources wrap to
+   a readable 2-row layout (3+1 or 3+2). .tile-select itself is untouched
+   -- still just flex/one-row for any future single-row tile picker that
+   reuses the base pattern. */
+.widget-source-select{display:grid; grid-template-columns:repeat(3, 1fr);}
 .tile-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
 .tile-option{
   position:relative; display:flex; flex-direction:column; align-items:center; gap:4px;
