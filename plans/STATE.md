@@ -2198,6 +2198,47 @@ session, right before the final commit of that session.
   window uniformization section. 9 new tests
   (`test_modal_uniformization.py`), full suite 1431 passed.
 
+- **Shipped:** **Contacts field parity slice 3 of 6 — Website**, complete
+  (2026-08-15) — multi-value, Home/Work/Other type vocabulary (same as
+  email/address, green-lit alongside the other Contacts field parity
+  decisions), new `contact_websites` table (`db.py`, same owned-child-row
+  shape as `contact_phones`/`contact_emails` — `contact_uid`, `type`,
+  `position`, no FOREIGN KEY — but the value column is named `url`, not
+  `value`, matching vCard's own URL property name). Unlike Phone/Email,
+  there was never a pre-existing single-value website column anywhere in
+  this app (confirmed by grepping `db.py`/`vcard_rows.py`/
+  `contact_form.html`/`contact_detail.html` before writing any code), so
+  no auto-migration was needed for this slice. vCard round-trips as
+  multiple `URL` lines with the same `TYPE=` convention Phone/Email use
+  ("Other" omits the param) — vCard's URL property isn't one of RFC
+  2426/6350's typed multi-instance properties the way TEL/EMAIL are, but
+  vobject supports repeated `card.add("url")` calls and a `card.url_list`
+  read-back identically, confirmed directly against vobject with a live
+  Python snippet before writing `vcard_rows.py`, not assumed. The
+  create/edit form submits every website row together as parallel
+  `website_type[]`/`website_url[]` form arrays, reusing
+  `static/contact_phone_email_rows.js`'s existing add/remove-row wiring
+  verbatim — it was already written generically enough
+  (`data-repeatable-rows-scope`/`-add`/`-template`) for a third field
+  group, no JS changes needed. The detail page lists every website with
+  its type and an external link (`target="_blank" rel="noopener"`,
+  matching event `meeting_url`'s own convention in `event_detail.html`).
+  Left off the contacts-list row subtitle and dashboard Contact List
+  widget — org/title/phone/email stay the more useful compact-row fields,
+  per the slice's own scoping note. Search (`db.list_contacts`/
+  `db._search_contacts`) matches website URLs too. See
+  `features/contacts.md`. 26 new tests
+  (`test_contacts_field_parity_website.py`); updated 7 existing
+  contact-route call sites (`test_contacts_field_parity_phone_email.py`,
+  `test_contacts_field_parity_title.py`, `test_phase5_contacts.py`,
+  `test_phase1_universal_pool.py`,
+  `test_modal_input_phaseB_chip_multiselect.py`) that call
+  `contacts_router.create_contact`/`update_contact` directly, off the new
+  required `website_type`/`website_url` form-array params — same "wire up
+  the new arrays at every existing call site" step Phone/Email's own
+  slice needed. Full suite 1457 passed. **Next in this build order:
+  Birthday** (full or year-less date, 4 of 6).
+
 ## Breadcrumbs for 1.4's two still-deferred items
 
 1.4's main line (work allocations + both project views) is fully shipped.

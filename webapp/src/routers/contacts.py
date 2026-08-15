@@ -78,6 +78,18 @@ def _phone_email_list(types: list[str], values: list[str]) -> list[dict]:
     ]
 
 
+def _website_list(types: list[str], urls: list[str]) -> list[dict]:
+    """Same zip as `_phone_email_list` (parallel `website_type[]`/
+    `website_url[]` form arrays into db.set_contact_websites' {"type",
+    "url"} shape) -- kept as a separate function rather than a shared
+    generic helper because the value key differs (`url`, not `value` --
+    db.py's contact_websites column naming choice)."""
+    return [
+        {"type": (t or "").strip() or "Other", "url": u}
+        for t, u in zip(types, urls)
+    ]
+
+
 @router.get("")
 def list_contacts(
     request: Request,
@@ -123,6 +135,7 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
+            "website_types": db.CONTACT_WEBSITE_TYPES,
         },
     )
 
@@ -136,6 +149,8 @@ async def create_contact(
     phone_value: list[str] = Form([]),
     email_type: list[str] = Form([]),
     email_value: list[str] = Form([]),
+    website_type: list[str] = Form([]),
+    website_url: list[str] = Form([]),
     address: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -162,6 +177,11 @@ async def create_contact(
         # written here at all (db.py's contacts CREATE TABLE comment).
         "phones": _phone_email_list(phone_type, phone_value),
         "emails": _phone_email_list(email_type, email_value),
+        # Contacts field parity slice 3 of 6 -- Website, same multi-value
+        # form-array shape as phone/email above (website_type[]/
+        # website_url[]; the value key is "url" to match db.py's
+        # contact_websites column naming, not "value").
+        "websites": _website_list(website_type, website_url),
         "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
         "tags": _tags_list(tags),
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
@@ -201,6 +221,7 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
+            "website_types": db.CONTACT_WEBSITE_TYPES,
         },
     )
 
@@ -215,6 +236,8 @@ async def update_contact(
     phone_value: list[str] = Form([]),
     email_type: list[str] = Form([]),
     email_value: list[str] = Form([]),
+    website_type: list[str] = Form([]),
+    website_url: list[str] = Form([]),
     address: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -239,6 +262,7 @@ async def update_contact(
             # phones`/`set_contact_emails`, a full delete-then-reinsert).
             "phones": _phone_email_list(phone_type, phone_value),
             "emails": _phone_email_list(email_type, email_value),
+            "websites": _website_list(website_type, website_url),
             "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
             "tags": _tags_list(tags),
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,

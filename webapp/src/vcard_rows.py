@@ -18,7 +18,20 @@ TYPE= for entirely (a bare `TEL:...`/`EMAIL:...` line) rather than invent a
 non-standard `TYPE=OTHER` value; reading a line with no TYPE= back always
 maps to "Other" for the same reason, matching the vocabulary's own
 "Other" being the catch-all default (db.CONTACT_PHONE_TYPES/
-CONTACT_EMAIL_TYPES)."""
+CONTACT_EMAIL_TYPES).
+
+Contacts field parity slice 3 of 6 (Website): `websites` is a list of
+{"type", "url"} dicts (db.py's contact_websites table), round-tripped the
+same way as phones/emails above -- multiple `URL` vCard lines, one per
+entry, with the same TYPE= convention (Home/Work carry TYPE=, Other omits
+it). vCard's URL property isn't one of the typed multi-instance properties
+RFC 2426/6350's core defines (TEL/EMAIL/ADR are; URL is single-valued in
+the strict spec), but vobject supports repeated `card.add("url")` calls and
+a `card.url_list` read-back identically to tel/email -- confirmed directly
+against vobject (not assumed) before writing this: building a card with two
+`card.add("url")` calls round-trips as two `URL;TYPE=...:` lines and
+`card.url_list` returns both, `type_param` included, the exact same shape
+as `tel_list`/`email_list`."""
 
 from __future__ import annotations
 
@@ -76,6 +89,19 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
         prop = card.add("email")
         prop.value = value
         vcard_type = _TYPE_TO_VCARD.get(email.get("type") or "Other")
+        if vcard_type:
+            prop.type_param = vcard_type
+    # Multi-value website (Contacts field parity slice 3 of 6) -- same
+    # TYPE=/omission convention as phone/email above, via vobject's
+    # repeatable `card.add("url")` (confirmed directly against vobject --
+    # see the module docstring).
+    for website in row.get("websites") or []:
+        url = (website.get("url") or "").strip()
+        if not url:
+            continue
+        prop = card.add("url")
+        prop.value = url
+        vcard_type = _TYPE_TO_VCARD.get(website.get("type") or "Other")
         if vcard_type:
             prop.type_param = vcard_type
     if row.get("address"):
@@ -137,6 +163,14 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
         {"type": _VCARD_TO_TYPE.get(str(getattr(email, "type_param", "") or "").upper(), "Other"), "value": str(email.value)}
         for email in getattr(card, "email_list", [])
         if email.value
+    ]
+    # Multi-value website (Contacts field parity slice 3 of 6) -- every URL
+    # line becomes one {"type", "url"} entry, via vobject's plural
+    # `url_list` (see the module docstring).
+    row["websites"] = [
+        {"type": _VCARD_TO_TYPE.get(str(getattr(url, "type_param", "") or "").upper(), "Other"), "url": str(url.value)}
+        for url in getattr(card, "url_list", [])
+        if url.value
     ]
     if hasattr(card, "adr"):
         adr = card.adr.value

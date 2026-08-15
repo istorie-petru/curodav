@@ -125,6 +125,42 @@
             </template>
             <button type="button" class="btn btn-sm" data-repeatable-add="email-rows" data-repeatable-template="email-row-template">{{ icon('plus', 'icon-sm') }} Add email</button>
         </div>
+        <!-- Contacts field parity slice 3 of 6 (plans/open.md): Website,
+             same multi-value shape as Phone/Email above (db.CONTACT_
+             WEBSITE_TYPES -- Home/Work/Other, matching email/address per
+             the green-lit decision). No pre-existing single-value website
+             field ever existed on this app, so there's nothing to prefill
+             beyond `contact.websites` itself. Reuses
+             static/contact_phone_email_rows.js's generic `data-repeatable-
+             rows-scope`/`data-repeatable-add`/`data-repeatable-template`
+             add/remove wiring verbatim -- it was already written generic
+             enough for a third field group, no JS changes needed. Form
+             field is `website_url` (not `website_value`), matching db.py's
+             contact_websites.url column naming. -->
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <label>Website</label>
+            <div id="website-rows" class="contact-multi-rows">
+                {% for w in (contact.websites if contact else []) %}
+                <div class="contact-multi-row">
+                    <select name="website_type">
+                        {% for t in website_types %}<option value="{{ t }}" {% if w.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="url" name="website_url" value="{{ w.url }}" placeholder="https://example.com">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="website-row-template">
+                <div class="contact-multi-row">
+                    <select name="website_type">
+                        {% for t in website_types %}<option value="{{ t }}" {% if t == 'Other' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="url" name="website_url" value="" placeholder="https://example.com">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
+                </div>
+            </template>
+            <button type="button" class="btn btn-sm" data-repeatable-add="website-rows" data-repeatable-template="website-row-template">{{ icon('plus', 'icon-sm') }} Add website</button>
+        </div>
         <!-- Address book selector removed -- contacts now always live in
              Active or Archived, toggled via the Archive/Unarchive button on
              the contact detail page, not a dropdown on the edit form.

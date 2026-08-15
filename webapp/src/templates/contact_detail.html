@@ -69,6 +69,18 @@
             <span class="detail-meta-value"><a href="mailto:{{ e.value }}">{{ e.value }}</a></span>
         </div>
         {% endfor %}
+        <!-- Contacts field parity slice 3 of 6: website is multi-value
+             (contact.websites, each {"type", "url"}) -- listed same as
+             phone/email above, one row per entry with its type label, an
+             external link (target="_blank" rel="noopener", matching
+             event_detail.html's meeting_url convention) rather than tel:/
+             mailto:. -->
+        {% for w in contact.websites %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Website{% if w.type %} ({{ w.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="{{ w.url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ w.url }}</a></span>
+        </div>
+        {% endfor %}
         {% if contact.address %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Address</span>
@@ -88,7 +100,7 @@
         <p>{{ contact.notes }}</p>
     </div>
     {% endif %}
-    {% if not (contact.phones or contact.emails or contact.address or contact.tags or contact.notes) %}
+    {% if not (contact.phones or contact.emails or contact.websites or contact.address or contact.tags or contact.notes) %}
     <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
     {% endif %}
 </div>

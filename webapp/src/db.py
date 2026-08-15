@@ -233,6 +233,28 @@ CREATE TABLE IF NOT EXISTS contact_emails (
     created_at TEXT
 );
 
+-- Contacts field parity slice 3 of 6 -- Website. There has never been a
+-- single-value website-ish column on `contacts` (confirmed by grepping
+-- db.py/vcard_rows.py/contact_form.html/contact_detail.html before writing
+-- this table -- unlike Phone/Email above, there is genuinely nothing to
+-- auto-migrate here), so this is a brand-new field, multi-value from day
+-- one -- same shape as contact_phones/contact_emails immediately above
+-- (owned child rows keyed by `contact_uid`, no FOREIGN KEY constraint,
+-- float `position` sort key). vCard's property is URL, not a typed multi-
+-- instance property in the RFC 2426/6350 core the way TEL/EMAIL are, but
+-- vobject supports repeated `URL;TYPE=...:` lines identically (confirmed
+-- empirically -- see vcard_rows.py's module docstring) so the column is
+-- named `url` (the vCard property name) rather than `value`, purely for
+-- readability at this call site; the shape is otherwise identical.
+CREATE TABLE IF NOT EXISTS contact_websites (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    url TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
 
 -- Local-only checklist items for a task -- see the module docstring above
 -- for why this is the one exception to "no graph/desktop-only tables."
@@ -387,6 +409,7 @@ CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(full_name);
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
 CREATE INDEX IF NOT EXISTS idx_contact_phones_contact ON contact_phones(contact_uid);
 CREATE INDEX IF NOT EXISTS idx_contact_emails_contact ON contact_emails(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_websites_contact ON contact_websites(contact_uid);
 
 -- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` was
 -- dropped from a brand-new database's schema then -- a university class
@@ -2341,9 +2364,10 @@ def _search_contacts(
             "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
             "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?) OR uid IN "
             "(SELECT contact_uid FROM contact_phones WHERE value LIKE ?) OR uid IN "
-            "(SELECT contact_uid FROM contact_emails WHERE value LIKE ?))"
+            "(SELECT contact_uid FROM contact_emails WHERE value LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_websites WHERE url LIKE ?))"
         )
-        params.extend([like, like, like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like, like])
     if labels:
         placeholders = ", ".join("?" for _ in labels)
         clauses.append(
@@ -2472,6 +2496,10 @@ _CONTACT_JSON_FIELDS: tuple[str, ...] = ()
 # CardDAV client could carry a TYPE token outside this list.
 CONTACT_PHONE_TYPES: tuple[str, ...] = ("Home", "Work", "Cell", "Fax", "Pager", "Other")
 CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 3 of 6 -- Website. Same vocabulary as email/
+# address (green-lit, AskUserQuestion, 2026-08-15) -- vCard's URL property
+# has no CELL/FAX/PAGER concept either.
+CONTACT_WEBSITE_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 
 
 def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -2484,6 +2512,9 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # now also owns writing the child tables when the caller supplies them.
     phones = data.pop("phones", None)
     emails = data.pop("emails", None)
+    # Contacts field parity slice 3 of 6 -- Website, same "pop, write the
+    # base row, then attach the related rows" shape as phones/emails above.
+    websites = data.pop("websites", None)
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "notes",
@@ -2503,6 +2534,8 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         set_contact_phones(conn, data["uid"], phones)
     if emails is not None:
         set_contact_emails(conn, data["uid"], emails)
+    if websites is not None:
+        set_contact_websites(conn, data["uid"], websites)
     conn.commit()
 
 
@@ -2511,9 +2544,11 @@ def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ?", (uid,))
     # Same cascade-cleanup reasoning as delete_checklist_items_for_task --
     # never actually reachable via a reused uid (uuid4), but an orphaned
-    # phone/email row pointing at a gone contact serves no purpose either.
+    # phone/email/website row pointing at a gone contact serves no purpose
+    # either.
     conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (uid,))
     conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (uid,))
     conn.commit()
 
 
@@ -2526,12 +2561,14 @@ def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 
 
 def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
-    """Attaches `phones`/`emails` (each a list of {"uid", "type", "value"}
-    dicts, position-ordered) the same way `_attach_tags` attaches `tags` --
-    computed live from the child tables at read time, never a stored JSON
-    blob on the contacts row itself."""
+    """Attaches `phones`/`emails`/`websites` (each a list of position-ordered
+    dicts -- phones/emails are {"uid", "type", "value"}, websites {"uid",
+    "type", "url"}) the same way `_attach_tags` attaches `tags` -- computed
+    live from the child tables at read time, never a stored JSON blob on the
+    contacts row itself."""
     d["phones"] = list_contact_phones(conn, d["uid"])
     d["emails"] = list_contact_emails(conn, d["uid"])
+    d["websites"] = list_contact_websites(conn, d["uid"])
     return d
 
 
@@ -2553,10 +2590,11 @@ def list_contacts(
         clauses.append(
             "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? "
             "OR uid IN (SELECT contact_uid FROM contact_phones WHERE value LIKE ?) "
-            "OR uid IN (SELECT contact_uid FROM contact_emails WHERE value LIKE ?))"
+            "OR uid IN (SELECT contact_uid FROM contact_emails WHERE value LIKE ?) "
+            "OR uid IN (SELECT contact_uid FROM contact_websites WHERE url LIKE ?))"
         )
         like = f"%{q}%"
-        params.extend([like, like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like])
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"
@@ -2669,6 +2707,45 @@ def set_contact_emails(conn: sqlite3.Connection, contact_uid: str, items: list[d
         conn.execute(
             "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact websites -- Contacts field parity slice 3 of 6 (plans/open.md).
+# Same shape as contact_phones/contact_emails immediately above -- one
+# Save-button replace-all write path (set_contact_websites), no separate
+# add/remove endpoints. Unlike phone/email, there is no legacy single-value
+# column to migrate from (confirmed by grep before this slice started), so
+# there's no add_contact_website standalone helper -- nothing needs to
+# insert exactly one row outside of set_contact_websites.
+# --------------------------------------------------------------------- #
+
+
+def list_contact_websites(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_websites WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_contact_websites(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every website row for `contact_uid` with `items` (each a
+    {"type", "url"} dict), in the given order -- same "delete everything,
+    re-insert in submitted order" reasoning as set_contact_phones/
+    set_contact_emails. Blank URLs are dropped silently."""
+    conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        url = (item.get("url") or "").strip()
+        if not url:
+            continue
+        conn.execute(
+            "INSERT INTO contact_websites (uid, contact_uid, type, url, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", url, position, now),
         )
         position += 1
     conn.commit()

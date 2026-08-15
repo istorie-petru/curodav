@@ -165,7 +165,25 @@ its own test file).
   show only the first entry. Search matches the new tables too. See
   `features/contacts.md`. 40 new tests
   (`test_contacts_field_parity_phone_email.py`), full suite 1422 passed.
-- **Website** (multi-value) — not started.
+- ~~**Website**~~ — **shipped 2026-08-15** — multi-value, Home/Work/Other
+  vocabulary (same as email/address), new `contact_websites` table (owned
+  child rows, same shape as `contact_phones`/`contact_emails`, `url`
+  column named for the vCard property, not `value`). No legacy single-
+  value column ever existed for Website, so no auto-migration was needed
+  (confirmed by grep before writing any code). vCard round-trips as
+  multiple `URL` lines with `TYPE=` (Other omits the param), via vobject's
+  `card.add("url")`/`card.url_list` — confirmed to behave identically to
+  `tel_list`/`email_list` with a live snippet before writing the code, not
+  assumed. Create/edit form submits parallel `website_type[]`/
+  `website_url[]` arrays, reusing `static/contact_phone_email_rows.js`'s
+  existing generic add/remove-row wiring verbatim (already written
+  generic enough for a third field group); detail page lists every entry
+  with its type + an external link (`target="_blank" rel="noopener"`,
+  matching event `meeting_url`'s convention). Left off the compact
+  contacts-list row/dashboard widget (org/title/phone/email stay the
+  subtitle fields). Search matches website URLs too. See
+  `features/contacts.md`. 26 new tests
+  (`test_contacts_field_parity_website.py`), full suite 1457 passed.
 - **Birthday** (full or year-less date) — not started.
 - **Address** (structured multi-value, full vCard ADR) — not started.
 - **Social network** (`X-SOCIALPROFILE`) — not started.

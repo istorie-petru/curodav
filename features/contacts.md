@@ -39,8 +39,33 @@
   concise, showing only the first (lowest-position) entry of each. Contact
   search (`db.list_contacts`/`db._search_contacts`) matches values in the
   new tables (the dead legacy columns are still searched too, harmlessly
-  redundant). See `plans/open.md` for the remaining fields (Website,
-  structured Address, Birthday, Social network).
+  redundant). See `plans/open.md` for the remaining fields (structured
+  Address, Birthday, Social network).
+- **Website (multi-value)** — Contacts field parity slice 3 of 6,
+  2026-08-15. A contact can have any number of websites, each tagged Home/
+  Work/Other (same vocabulary as email/address), stored in a new
+  `contact_websites` child table (`db.py`, same owned-row shape as
+  `contact_phones`/`contact_emails` — `contact_uid`, `type`, `position`,
+  no FOREIGN KEY; the value column is named `url`, not `value`, to match
+  vCard's own URL property name). There was never a pre-existing single-
+  value website column anywhere in this app, so unlike Phone/Email there
+  is no legacy data to auto-migrate. vCard round-trips as multiple `URL`
+  lines with the same `TYPE=` convention ("Other" omits the param) —
+  vCard's URL property isn't one of RFC 2426/6350's typed multi-instance
+  properties the way TEL/EMAIL are, but vobject supports repeated
+  `card.add("url")` calls and a `card.url_list` read-back identically,
+  confirmed directly against vobject before writing `vcard_rows.py`. The
+  create/edit form submits every website row together as parallel
+  `website_type[]`/`website_url[]` form arrays (reusing
+  `static/contact_phone_email_rows.js`'s add/remove-row wiring verbatim —
+  it was already written generically enough for a third field group). The
+  detail page lists every website with its type and an external link
+  (`target="_blank" rel="noopener"`, matching event `meeting_url`'s
+  convention). Left off the contacts-list row subtitle and dashboard
+  Contact List widget — org/title/phone/email stay the more useful
+  compact-row fields. Search matches website URLs too. See `plans/
+  open.md` for the remaining fields (structured Address, Birthday, Social
+  network).
 - **Routes** — `/contacts`, `/contacts/new`, `POST /contacts`,
   `/contacts/{uid}`, `/contacts/{uid}/edit`, `POST /contacts/{uid}`,
   `/contacts/{uid}/delete`.

@@ -141,7 +141,7 @@ class TestCreateWithTwoLabelsStoresBoth:
     def test_create_contact_with_two_labels(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], address="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address="",
             tags="", tags_labels=["Professor", "CS"], notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -178,7 +178,7 @@ class TestEditAddOrRemoveLabel:
         _seed_contact(conn, "c1", tags=["Old"])
         asyncio.run(contacts_router.update_contact(
             uid="c1", full_name="c1", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], address="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address="",
             tags="", tags_labels=["New"], notes="", photo=None, remove_photo="", conn=conn,
         ))
         assert db.get_contact(conn, "c1")["tags"] == ["New"]

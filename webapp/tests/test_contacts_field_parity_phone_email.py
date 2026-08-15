@@ -262,7 +262,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
             phone_type=["Cell", "Work"], phone_value=["555-1111", "555-2222"],
-            email_type=[], email_value=[],
+            email_type=[], email_value=[], website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -273,6 +273,7 @@ class TestCreateEditFlow:
             full_name="Grace Hopper", title="", org="",
             phone_type=[], phone_value=[],
             email_type=["Home", "Work"], email_value=["g@home.com", "g@work.com"],
+            website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -281,7 +282,7 @@ class TestCreateEditFlow:
     def test_create_contact_with_no_phone_email_stores_empty_lists(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="No Contact Info", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[],
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -292,7 +293,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="Blank Row", title="", org="",
             phone_type=["Home"], phone_value=[""],
-            email_type=[], email_value=[],
+            email_type=[], email_value=[], website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -304,7 +305,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=["Cell"], phone_value=["555-9999"],
-            email_type=[], email_value=[],
+            email_type=[], email_value=[], website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -315,7 +316,7 @@ class TestCreateEditFlow:
         db.set_contact_phones(conn, uid, [{"type": "Home", "value": "111"}])
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[],
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
             address="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
