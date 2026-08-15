@@ -1,3 +1,15 @@
+**Status:** implemented 2026-08-15, layered onto the command palette
+(`static/command_palette.js`, `src/quick_capture.py`, `routers/
+quick_capture.py`) — see `features/tasks.md` § Search & the command surface
+for the outcome writeup and `features/notes.md` for the Notes entity this
+introduced. Kept here as the reference grammar/spec, not rewritten into past
+tense, per this repo's usual convention for a design doc that outlives its
+own implementation slice. Noted simplifications where the shipped v1
+narrows the spec: label resolution's "suggested for correction" tier
+(between an automatic fuzzy match and a genuinely new label) has no
+separate interactive review step yet — an automatic resolution doubles as
+the accepted correction (`db.resolve_capture_label`'s own docstring).
+
 ### Introduction
 
 Quick Capture is a single-field input method for creating entities without opening a dedicated creation form. Users enter a line of text containing the entity's content and any structured information they want to provide. The input is parsed by recognizing explicit entity markers, dates, times, labels, telephone numbers, and email addresses. The syntax is language-agnostic and relies on explicit structural notation rather than words whose meaning changes between languages.

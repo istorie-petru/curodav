@@ -73,6 +73,13 @@ def _make_project(conn, name):
     )
 
 
+def _seed_note(conn, uid, tags=None, **overrides):
+    row = {"uid": uid, "content": uid, "tags": tags or [], "created_at": _now(), "updated_at": _now()}
+    row.update(overrides)
+    db.upsert_note(conn, row)
+    return db.get_note(conn, uid)
+
+
 def _json_request(path: str, payload: dict):
     req = Request({"type": "http", "method": "POST", "path": path, "headers": [(b"content-type", b"application/json")]})
 
@@ -130,6 +137,16 @@ class TestAddEntityLabel:
         )
         assert resp.status_code == 200
         assert db.get_contact(conn, "c1")["tags"] == ["Family"]
+
+    def test_adds_a_label_to_a_note(self, conn):
+        # Notes (Quick Capture's !n, plans/quick-capture.md) get the same
+        # Add label palette action as every other type.
+        _seed_note(conn, "n1", tags=[])
+        resp = asyncio.run(
+            search_router.add_entity_label("note", "n1", _json_request("/api/entities/note/n1/labels", {"label": "Ideas"}), conn=conn)
+        )
+        assert resp.status_code == 200
+        assert db.get_note(conn, "n1")["tags"] == ["Ideas"]
 
     def test_blank_label_is_rejected(self, conn):
         _seed_task(conn, "t1")

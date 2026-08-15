@@ -32,6 +32,39 @@ from ..deps import get_db, templates
 
 router = APIRouter(tags=["search"])
 
+# Page navigation (direct feedback, 2026-08-15: "I would like it to also
+# allow to navigate to pages") -- global mode's results now include the
+# app's own primary destinations, not just entities. A fixed list (every
+# primary tabbar destination, base.html) plus every Space (generate_space=1
+# label, db.list_space_labels -- a real per-install page, not a built-in
+# one) matched the same substring-on-title way entities are. These are
+# synthetic rows, never touched by db.search_entities/_picker_result -- a
+# page isn't a database row, it has no uid/tags/status, just a title and a
+# URL to navigate straight to (static/command_palette.js's selectResult
+# special-cases type == "page" to a plain navigation, not CCModal.open).
+_STATIC_PAGES = [
+    {"title": "Dashboard", "url": "/", "subtitle": "Home"},
+    {"title": "Calendar", "url": "/calendar", "subtitle": ""},
+    {"title": "Tasks", "url": "/tasks", "subtitle": ""},
+    {"title": "Contacts", "url": "/contacts", "subtitle": ""},
+    {"title": "Notes", "url": "/notes", "subtitle": ""},
+    {"title": "Settings", "url": "/settings", "subtitle": ""},
+]
+
+
+def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
+    pages = list(_STATIC_PAGES)
+    for space in db.list_space_labels(conn):
+        pages.append({"title": space["name"], "url": f"/labels/{space['name']}", "subtitle": "Space"})
+    if not q:
+        return pages[:limit]
+    q_lower = q.lower()
+    return [p for p in pages if q_lower in p["title"].lower()][:limit]
+
+
+def _page_result(page: dict) -> dict:
+    return {"type": "page", "uid": page["url"], "url": page["url"], "title": page["title"], "subtitle": page["subtitle"], "tags": [], "status": None}
+
 
 def _picker_result(row: dict) -> dict:
     # Compact surface only -- title/subtitle/tags/type/uid, never the full
@@ -109,7 +142,16 @@ def api_search(
         exclude_uids=exclude_uids,
         limit=limit,
     )
-    return JSONResponse({"results": [_picker_result(r) for r in results], "context": context_title})
+    picked = [_picker_result(r) for r in results]
+    if not for_task and not for_event and not types:
+        # Global mode only, and only when the caller hasn't already
+        # narrowed to specific entity types (relation-picker mode always
+        # does; a caller that explicitly asked for just tasks/events/
+        # contacts/notes gets exactly that, no pages mixed in) -- a page
+        # isn't linkable to anything, and a type-filtered request has
+        # already said it doesn't want anything outside that filter.
+        picked.extend(_page_result(p) for p in _matching_pages(conn, q))
+    return JSONResponse({"results": picked, "context": context_title})
 
 
 @router.get("/api/labels")
@@ -160,6 +202,11 @@ async def add_entity_label(entity_type: str, uid: str, request: Request, conn=De
         if contact is None:
             return JSONResponse({"error": "contact not found"}, status_code=404)
         db.add_object_label(conn, "contact", uid, label)
+    elif entity_type == "note":
+        note = db.get_note(conn, uid)
+        if note is None:
+            return JSONResponse({"error": "note not found"}, status_code=404)
+        db.add_object_label(conn, "note", uid, label)
     else:
         return JSONResponse({"error": f"unknown entity type '{entity_type}'"}, status_code=400)
 

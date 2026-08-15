@@ -209,6 +209,59 @@ class TestMutualExclusivity:
         assert resp.status_code == 400
 
 
+class TestPageNavigation:
+    """Direct feedback (2026-08-15): "I would like it to also allow to
+    navigate to pages" -- global mode's results now include the app's own
+    pages alongside entities (routers/search.py's _matching_pages)."""
+
+    def test_matching_page_appears_in_global_results(self, conn):
+        import json
+
+        data = json.loads(search_router.api_search(q="Tasks", conn=conn).body.decode())
+        pages = [r for r in data["results"] if r["type"] == "page"]
+        assert pages == [{"type": "page", "uid": "/tasks", "url": "/tasks", "title": "Tasks", "subtitle": "", "tags": [], "status": None}]
+
+    def test_no_query_still_lists_pages(self, conn):
+        import json
+
+        data = json.loads(search_router.api_search(conn=conn).body.decode())
+        titles = {r["title"] for r in data["results"] if r["type"] == "page"}
+        assert "Dashboard" in titles
+
+    def test_a_space_label_is_a_navigable_page(self, conn):
+        import json
+
+        db.upsert_label_config(
+            conn,
+            {"name": "University", "generate_space": 1, "created_at": _now()},
+        )
+        data = json.loads(search_router.api_search(q="Univers", conn=conn).body.decode())
+        pages = [r for r in data["results"] if r["type"] == "page"]
+        assert pages == [
+            {"type": "page", "uid": "/labels/University", "url": "/labels/University", "title": "University", "subtitle": "Space", "tags": [], "status": None}
+        ]
+
+    def test_type_filtered_search_excludes_pages(self, conn):
+        import json
+
+        _seed_task(conn, "t1", title="Tasks about things")
+        data = json.loads(search_router.api_search(q="Tasks", types=["task"], conn=conn).body.decode())
+        assert all(r["type"] != "page" for r in data["results"])
+
+    def test_relation_mode_excludes_pages(self, conn):
+        import json
+
+        task = _seed_task(conn, "t1", tags=["Work"])
+        data = json.loads(search_router.api_search(for_task="t1", q="Tasks", conn=conn).body.decode())
+        assert all(r["type"] != "page" for r in data["results"])
+
+    def test_no_match_returns_no_pages(self, conn):
+        import json
+
+        data = json.loads(search_router.api_search(q="zzzznomatch", conn=conn).body.decode())
+        assert [r for r in data["results"] if r["type"] == "page"] == []
+
+
 class TestSearchPage:
     def test_no_query_shows_prompt_not_results(self, conn):
         body = search_router.search_page(_request("/search"), q="", conn=conn).body.decode()

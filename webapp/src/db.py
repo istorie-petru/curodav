@@ -696,6 +696,38 @@ CREATE TABLE IF NOT EXISTS sync_conflicts (
     resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sync_conflicts_unresolved ON sync_conflicts(resolved_at);
+
+-- Quick Capture (plans/quick-capture.md) -- Notes are a fourth captured
+-- entity type (`!n`), alongside the pre-existing tasks/events/contacts.
+-- Deliberately minimal: a note is just free-text content plus labels
+-- (via the same `object_labels` table every other type uses, object_type
+-- 'note') -- no title field of its own (the content's first line serves
+-- that purpose everywhere it's displayed, same as this app's habit-log
+-- entries). Unrelated to `contacts.notes` (a free-text field on a
+-- contact) -- same English word, different concept, no schema overlap.
+CREATE TABLE IF NOT EXISTS notes (
+    uid TEXT PRIMARY KEY,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT
+);
+
+-- Quick Capture's label resolution (plans/quick-capture.md § Labels and
+-- Approximate Matching): "user corrections may also be retained as
+-- aliases... future uses of #universitty can resolve directly to the
+-- existing canonical label." One row per learned alias -- `alias` is the
+-- exact (lowercased) misspelling/variant typed in a capture, mapping to
+-- the real label's canonical name. Looked up before falling back to a
+-- fuzzy (difflib) match on every capture (db.resolve_capture_label), and
+-- written to once a fuzzy match is accepted -- see that function's own
+-- docstring for why an accepted fuzzy match is treated as the "user
+-- correction" the spec describes, there being no separate interactive
+-- confirm-the-suggestion step in this v1.
+CREATE TABLE IF NOT EXISTS label_aliases (
+    alias TEXT PRIMARY KEY,
+    canonical_name TEXT NOT NULL,
+    created_at TEXT
+);
 """
 
 
@@ -1982,17 +2014,21 @@ def search_entities(
     include_habit_tasks: bool = False,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Search across tasks, events, and contacts.
+    """Search across tasks, events, contacts, and notes.
 
     Explicit filters (AND together):
       - `q`        -- free-text, case-insensitive substring across the
                       meaningful metadata: task title/description/labels;
                       event title/description/labels; contact name/org/
-                      phone/email/labels. (Fuzzy = SQL LIKE, the same
-                      mechanism list_tasks/list_contacts already use -- no
-                      index, appropriate at personal-scale volumes.)
-      - `types`    -- subset of ("task", "event", "contact"); None/empty
-                      means all three.
+                      phone/email/labels; note content/labels. (Fuzzy = SQL
+                      LIKE, the same mechanism list_tasks/list_contacts
+                      already use -- no index, appropriate at personal-scale
+                      volumes.)
+      - `types`    -- subset of ("task", "event", "contact", "note");
+                      None/empty means all four. ("note" added 2026-08-15,
+                      Quick Capture -- every existing caller that passes an
+                      explicit `types` list of its own, e.g. the relation
+                      picker's `["event"]`/`["task"]`, is unaffected.)
       - `labels`   -- multi-select label filter, any-match (a result needs
                       just one of the chosen labels), case-sensitive on the
                       stored object_labels name like every other label
@@ -2033,6 +2069,8 @@ def search_entities(
         result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set())))
     if not wanted or "contact" in wanted:
         result.extend(_search_contacts(conn, q, labels, exclude.get("contact", set())))
+    if not wanted or "note" in wanted:
+        result.extend(_search_notes(conn, q, labels, exclude.get("note", set())))
 
     if limit is not None:
         result = result[:limit]
@@ -2220,6 +2258,57 @@ def _search_contacts(
     return out
 
 
+def _search_notes(
+    conn: sqlite3.Connection,
+    q: str | None,
+    labels: list[str] | None,
+    excluded: set[str],
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM notes"
+    params: list[str] = []
+    clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(content LIKE ? OR uid IN (SELECT object_id FROM object_labels "
+            "WHERE object_type = 'note' AND label_name LIKE ?))"
+        )
+        params.extend([like, like])
+    if labels:
+        placeholders = ", ".join("?" for _ in labels)
+        clauses.append(
+            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'note' AND label_name IN ({placeholders}))"
+        )
+        params.extend(labels)
+    if excluded:
+        placeholders = ", ".join("?" for _ in excluded)
+        clauses.append(f"uid NOT IN ({placeholders})")
+        params.extend(excluded)
+
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = _attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS))
+        title = note_title(d)
+        body = (d.get("content") or "").strip()
+        subtitle = body[len(title) :].strip()[:80] if body.startswith(title) else body[:80]
+        out.append(
+            {
+                "type": "note",
+                "uid": d["uid"],
+                "title": title,
+                "subtitle": subtitle,
+                "tags": d["tags"],
+                "entity": d,
+            }
+        )
+    return out
+
+
 # --------------------------------------------------------------------- #
 # Task checklist items -- 2026-08-08: checklists and subtasks merged into
 # one feature (task_detail.html/task_form.html showed a single list,
@@ -2303,6 +2392,67 @@ def list_contacts(
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)) for r in rows]
+
+
+# --------------------------------------------------------------------- #
+# Notes (Quick Capture, plans/quick-capture.md) -- see the `notes` CREATE
+# TABLE comment above for what a note is/isn't. Same shape as contacts'
+# own CRUD immediately above: upsert/get/delete/list, tags attached live
+# via object_labels like every other type.
+# --------------------------------------------------------------------- #
+
+_NOTE_JSON_FIELDS: tuple[str, ...] = ()
+
+
+def upsert_note(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    data = dict(row)
+    tags = data.pop("tags", None)
+    cols = ["uid", "content", "created_at", "updated_at"]
+    values = [data.get(c) for c in cols]
+    placeholders = ", ".join("?" for _ in cols)
+    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
+    conn.execute(
+        f"INSERT INTO notes ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"ON CONFLICT(uid) DO UPDATE SET {updates}",
+        values,
+    )
+    if tags is not None:
+        set_object_labels(conn, "note", data["uid"], tags)
+    conn.commit()
+
+
+def delete_note(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM notes WHERE uid = ?", (uid,))
+    conn.execute("DELETE FROM object_labels WHERE object_type = 'note' AND object_id = ?", (uid,))
+    conn.commit()
+
+
+def get_note(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM notes WHERE uid = ?", (uid,)).fetchone()
+    return _attach_tags(conn, "note", _row_to_dict(row, _NOTE_JSON_FIELDS)) if row else None
+
+
+def list_notes(conn: sqlite3.Connection, q: str | None = None) -> list[dict[str, Any]]:
+    query = "SELECT * FROM notes"
+    params: list[str] = []
+    if q:
+        query += " WHERE content LIKE ?"
+        params.append(f"%{q}%")
+    query += " ORDER BY updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    return [_attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS)) for r in rows]
+
+
+def note_title(note: dict[str, Any]) -> str:
+    """A note has no title column (see the `notes` CREATE TABLE comment) --
+    every list/search/picker surface that needs a short label for one uses
+    this: the content's first non-blank line, truncated, or a placeholder
+    for a still-empty note."""
+    for line in (note.get("content") or "").splitlines():
+        line = line.strip()
+        if line:
+            return line[:80]
+    return "(empty note)"
 
 
 def list_object_label_names(conn: sqlite3.Connection, object_type: str) -> list[str]:
@@ -2572,6 +2722,67 @@ def _resolve_label_name(conn: sqlite3.Connection, name: str) -> str:
     ).fetchall()
     if len(rows) == 1:
         return rows[0]["name"]
+    return name
+
+
+def resolve_capture_label(conn: sqlite3.Connection, name: str) -> str:
+    """Quick Capture's label resolution (plans/quick-capture.md § Labels
+    and Approximate Matching) -- deliberately separate from
+    `_resolve_label_name` above (that one only ever resolves an explicit
+    `label_config.abbreviation` synonym; this is the spec's own
+    approximate-matching pipeline for a capture's `#label` tokens, which
+    have no such config row backing them):
+
+      1. Exact match (case-insensitive) against every label already in
+         use always wins -- "a label is first matched ... using an exact
+         match."
+      2. Exact match against a previously-learned alias (`label_aliases`)
+         -- a typo already corrected once resolves instantly without
+         recomputing the fuzzy match below.
+      3. A close-but-not-exact match against every label in use
+         (`difflib.get_close_matches`, cutoff 0.8 -- high on purpose, so
+         only genuine near-typos resolve, e.g. "uunniversity"/
+         "universitty"/"unisity" -> "university" from the spec's own
+         examples, not merely related words) is picked automatically ("a
+         very close match may be resolved automatically") and persisted
+         as a new alias.
+      4. Otherwise `name` is returned unchanged -- a genuinely new label,
+         "preserving the ability to create genuinely new labels."
+
+    Simplification, noted deliberately: the spec also describes an
+    "uncertain match ... suggested for correction" tier sitting between
+    (3) and (4), reviewed interactively before being accepted. Quick
+    Capture v1 has no such review step (a capture is a single fire-and-
+    forget submission, not a multi-turn form) -- step 3's automatic
+    resolution doubles as the "user correction" step 4 of the spec
+    describes recording into the alias table, since there's no separate
+    moment where a person explicitly confirms it. A future interactive
+    capture flow could split this back into two real tiers without
+    changing the alias table's shape."""
+    import difflib
+
+    existing = list_all_label_names(conn)
+    lower_map = {n.lower(): n for n in existing}
+    if name.lower() in lower_map:
+        return lower_map[name.lower()]
+
+    alias_row = conn.execute(
+        "SELECT canonical_name FROM label_aliases WHERE alias = ?", (name.lower(),)
+    ).fetchone()
+    if alias_row:
+        return alias_row["canonical_name"]
+
+    if existing:
+        matches = difflib.get_close_matches(name.lower(), list(lower_map.keys()), n=1, cutoff=0.8)
+        if matches:
+            canonical = lower_map[matches[0]]
+            conn.execute(
+                "INSERT OR REPLACE INTO label_aliases (alias, canonical_name, created_at) VALUES (?, ?, ?)",
+                (name.lower(), canonical, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            return canonical
+
     return name
 
 

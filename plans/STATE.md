@@ -1769,6 +1769,63 @@ session, right before the final commit of that session.
   (`test_command_palette_actions.py`, plus one pre-existing
   `test_search_api.py` assertion updated for the new `status` field), full
   suite 1253 passed.
+- **Shipped:** side work — **Page navigation + Quick Capture in the command
+  palette**, complete (2026-08-15), direct follow-up feedback right after
+  Command palette actions above ("I would like it to also allow to navigate
+  to pages. And to quick capture according to the design document" —
+  `plans/quick-capture.md`, a previously-unreferenced standalone spec, now
+  marked implemented at its own top).
+  - **Page navigation** — global-mode results now also include the app's
+    own pages (Dashboard/Calendar/Tasks/Contacts/Notes/Settings, every
+    Space), computed server-side (`routers/search.py`'s new
+    `_matching_pages`) and tagged `type: "page"` — a synthetic row (no
+    `uid` that means anything beyond doubling as its URL), no action
+    buttons, picked via a plain navigation rather than `CCModal.open`.
+    Excluded from relation-picker mode and from any already-type-filtered
+    request.
+  - **Quick Capture** — a single-field capture syntax (`!t`/`!e`/`!c`/`!n`
+    markers, `#label`s, dates, time ranges, phone/email) layered onto
+    global mode's own input. New `src/quick_capture.py`: a pure,
+    `conn`-free parser (`parse()` dispatches to `parse_task`/
+    `parse_event`/`parse_contact`/`parse_note`), verified against every
+    example in the design doc verbatim plus edge cases the doc doesn't
+    spell out (multiple bare dates, short-date year inference, malformed
+    tokens) — 27 tests, `test_quick_capture_parser.py`. New
+    `routers/quick_capture.py`: `GET /api/quick-capture/preview` (parse
+    only, feeds the palette's live preview row — deliberately does NOT
+    resolve/persist labels, since that would write a new alias on every
+    debounced keystroke of a still-uncommitted label) and
+    `POST /api/quick-capture` (parse + resolve labels + create). A
+    captured task's timeblocks become real `db.create_work_allocation`
+    calls, same helper 1.4's Work sessions card already uses.
+  - **Notes** — the fourth entity type `!n` needed (none existed before).
+    Deliberately minimal per the design doc's own scope: `notes` table
+    (`uid`/`content`/`created_at`/`updated_at`) + `object_labels` tags,
+    same CRUD shape as contacts (`db.upsert_note`/`get_note`/`delete_note`/
+    `list_notes`), a bare `routers/notes.py` (list/new/edit/delete) and two
+    minimal templates. Not a tabbar destination (a deliberate, separate UI
+    decision left unmade) — reached via the palette or a direct `/notes`
+    visit. `db.search_entities` gained a fourth `_search_notes` branch so a
+    captured note is actually findable afterward, not a write-only row.
+    See `features/notes.md`.
+  - **Label fuzzy matching** (`plans/quick-capture.md` § Labels and
+    Approximate Matching) — new `db.resolve_capture_label`: exact match →
+    a previously-learned alias (new `label_aliases` table) → a
+    `difflib.get_close_matches` fuzzy match at a deliberately high cutoff
+    (0.8 — covers the spec's own three typo examples,
+    "uunniversity"/"universitty"/"unisity" → "university", without
+    matching unrelated words) → else treated as a genuinely new label. An
+    accepted fuzzy match is persisted as a new alias immediately — this v1
+    has no separate interactive "suggested for correction" review step
+    (a single fire-and-forget capture, not a multi-turn form), so an
+    automatic high-confidence resolution doubles as the spec's own "user
+    correction," noted explicitly in the function's docstring and in
+    `quick-capture.md`'s own new status line.
+  See `features/tasks.md` § Search & the command surface (page nav +
+  capture outcome) and `features/notes.md` (the new entity). 64 new tests
+  total (`test_quick_capture_parser.py`, `test_quick_capture.py`, plus
+  `TestPageNavigation` in `test_search_api.py` and one added case in
+  `test_command_palette_actions.py`), full suite 1317 passed.
 - **Reprioritized (direct steer, 2026-08-15):** the next sessions should
   work Track B (`open.md`) in this order, not pick arbitrarily: (1)
   **Command palette actions** (`open.md` § Command palette actions —

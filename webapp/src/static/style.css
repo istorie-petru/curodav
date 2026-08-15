@@ -2500,6 +2500,18 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-action:hover{background:var(--bg-tertiary); color:var(--fg-primary);}
 .command-palette-action.is-danger:hover{color:var(--danger);}
 
+/* Quick Capture (plans/quick-capture.md) -- the single preview row shown
+   while a !t/!e/!c/!n marker is present in global mode's input
+   (command_palette.js's renderCapturePreview). A tinted left border marks
+   it as a distinct mode from an ordinary search result, not just another
+   row in the list -- there's only ever exactly one of these on screen at
+   a time. */
+.command-palette-capture-row{
+  border-left:3px solid var(--accent); cursor:default;
+  background:var(--accent-subtle);
+}
+.command-palette-capture-row .icon{color:var(--accent);}
+
 /* Standalone /search page (search.html) -- the same result-row language
    as .command-palette-row above, laid over the app's ordinary .checklist
    card styling (search.html's results list is a plain .checklist) rather

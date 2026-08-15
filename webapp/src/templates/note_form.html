@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit note' if note else 'New note' }}{% endblock %}
+{% block content %}
+{# Notes (Quick Capture's `!n`, plans/quick-capture.md) -- deliberately
+   minimal, matching db.py's `notes` CREATE TABLE comment: content + labels,
+   nothing else. One shared form for new/edit, same convention task_form.html
+   uses (note is None on the new-note path). #}
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ 'Edit note' if note else 'New note' }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="note-form" action="{{ '/notes/' ~ note.uid if note else '/notes' }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Content</label>
+            <textarea name="content" rows="6" required autofocus>{{ note.content if note else (prefill_content or '') }}</textarea>
+        </div>
+        <div class="field">
+            {% set ms_form_id = 'note-form' %}
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = note.tags if note else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+<div class="modal-footer">
+{% if note %}
+<form method="post" action="/notes/{{ note.uid }}/delete">
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
+</form>
+<span class="spacer"></span>
+{% endif %}
+<a href="/notes" class="btn ghost" data-modal-cancel>Cancel</a>
+<button type="submit" form="note-form" class="btn primary">Save</button>
+</div>
+</div>
+{% endblock %}

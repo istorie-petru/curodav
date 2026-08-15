@@ -46,6 +46,8 @@ these pieces fit together.
   and links to related events.
 - **Contacts** — people you know with photos, phones, emails, addresses, and
   notes; one click to call or email.
+- **Notes** — free-text notes with labels, the fourth thing Quick Capture
+  (`!n` in the command palette) can create.
 - **Labels & Spaces** — one consistent way to organize everything: tag any
   task, event, or contact; labels become filterable pages, and "Spaces" group
   labels into projects with their own dashboard, course info, and homework
@@ -80,6 +82,7 @@ reference for development; the tour above is the plain-language version.
 | [`calendar.md`](calendar.md) | Month/4-week/week/day views, recurrence, drag interactions, event CRUD, relations |
 | [`tasks.md`](tasks.md) | Table/board/timeline views, statuses/priorities, bulk actions, recurring tasks, relations |
 | [`contacts.md`](contacts.md) | Contact list/detail/form, fields, photo upload, professor linking |
+| [`notes.md`](notes.md) | The fourth Quick Capture entity type — free-text + labels, list/edit/delete |
 | [`labels.md`](labels.md) | The one organizing mechanism — manage page, generated Space/project pages, modules |
 | [`schedule.md`](schedule.md) | Class timetable → real events, table/weekly-grid views, holidays, settings |
 | [`habits.md`](habits.md) | Local habit tracking, heatmaps, streaks, habits-as-tasks view |
@@ -98,9 +101,11 @@ describe outcomes, not intentions. If you're about to start work, check
 
 ## Known gaps
 
-Noted for honesty, not as a promise to fix: **no global search / command
-palette** (per-view search only); **no file attachments** (beyond contact
-photos); **no generic links/backlinks graph** (only curated event↔task
-relations); Published Lists are **read-only** sync today. All four were
-deliberate decisions — see `plans/abandoned.md`. (Global search across tasks,
-events, and contacts is now scoped in `plans/open.md`.)
+Noted for honesty, not as a promise to fix: **no file attachments** (beyond
+contact photos); **no generic links/backlinks graph** (only curated
+event↔task relations); Published Lists are **read-only** sync today. All
+three were deliberate decisions — see `plans/abandoned.md`. (Global search
+and a real command palette — search, navigate, create/complete/delete/label,
+plus Quick Capture's `!t`/`!e`/`!c`/`!n` syntax — shipped as 1.2 side work
+plus two follow-up slices; see `tasks.md` § Search & the command surface and
+`plans/quick-capture.md`.)

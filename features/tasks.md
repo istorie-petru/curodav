@@ -366,6 +366,48 @@ updated for `_picker_result`'s new `status` field — a task's status, `None`
 for the other two types, needed so the palette can hide "Mark done" on an
 already-done task).
 
+**Page navigation and Quick Capture**, complete 2026-08-15, both direct
+follow-up feedback and both layered on top of global mode rather than new
+modes of their own:
+
+- **Page navigation** — global-mode results now also include the app's own
+  pages: Dashboard/Calendar/Tasks/Contacts/Notes/Settings plus every Space
+  (`generate_space=1` label), matched by title the same substring way
+  entities are (`routers/search.py`'s `_matching_pages`, new). A page result
+  is synthetic (`type: "page"`, no `uid`/tags/status that mean anything —
+  `uid` doubles as its URL) and carries no action buttons; picking one is a
+  plain `window.location.href` navigation, not `CCModal.open`, since a page
+  replaces the whole view rather than layering a detail modal over wherever
+  you already were. Excluded from relation-picker mode and from any request
+  that already narrows `types` itself — a page isn't a link target, and an
+  explicit type filter has already said it wants only that type.
+- **Quick Capture** (`plans/quick-capture.md`) — a single-field capture
+  syntax (`!t`/`!e`/`!c`/`!n` markers, `#label`s, dates, time ranges,
+  phone/email) layered onto global mode's own input: typing a standalone
+  marker token anywhere switches the results panel to a live-parsed preview
+  (`GET /api/quick-capture/preview`, new `src/quick_capture.py` — a pure,
+  `conn`-free parser, unit-tested directly against every example in the
+  design doc) instead of search results, for as long as the marker is
+  present; Enter posts the same raw text to `POST /api/quick-capture` (new
+  `routers/quick_capture.py`), which parses again, resolves each `#label`
+  through `db.resolve_capture_label` (exact match → learned alias → a high-
+  confidence `difflib` fuzzy match, persisting a new alias on that path, per
+  the design doc's own "user corrections may also be retained as aliases" —
+  else a genuinely new label), and creates the right entity: a task (with
+  its due date and any timeblocks, each a real `db.create_work_allocation`
+  call), an event, a contact, or a **note** — the fourth entity type this
+  added, see [`notes.md`](notes.md). Preview never resolves/persists a
+  label itself (that would write a new alias on every debounced keystroke
+  of a still-uncommitted label) — only an actual create does. `!n` is also
+  what makes Notes findable afterward: `db.search_entities` gained a fourth
+  `_search_notes` branch alongside tasks/events/contacts, so a captured note
+  shows up in Ctrl-K/`/search` immediately, and the palette's Add label/
+  Delete actions apply to it exactly like any other type (it just never
+  gets a "Mark done" button — that's task-only). See
+  `plans/quick-capture.md` for the full grammar and every simplification
+  this v1 makes explicit (short-date year inference, the fuzzy-match cutoff,
+  no interactive "suggested for correction" review step).
+
 ## Auto-archive
 
 `TASK_AUTO_ARCHIVE_DAYS_KEY` ("Never"/7/14/30/90), lazy `_auto_archive_if_configured`

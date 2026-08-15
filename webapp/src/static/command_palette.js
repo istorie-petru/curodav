@@ -35,9 +35,31 @@
 //     throughout: the query layer, /api/search, and the relations-picker
 //     wiring below are all unchanged.
 //
-// All three modes share one overlay (#command-palette-overlay, base.html)
-// -- one query implementation, one keyboard-nav implementation, one set of
-// result-rendering rules, not three independent UIs. It's a portal like
+// Two further additions, direct feedback (2026-08-15), both layered on top
+// of global mode rather than new modes of their own:
+//
+//   - Page navigation: global-mode results can now include the app's own
+//     pages (Dashboard/Calendar/Tasks/Contacts/Notes/Settings, every
+//     Space), computed server-side (routers/search.py's `_matching_pages`)
+//     and tagged `type: "page"` -- picking one is a plain navigation
+//     (`window.location.href`), not `CCModal.open`, and it carries no
+//     action buttons (buildActions skips `type === "page"` entirely).
+//   - Quick Capture (plans/quick-capture.md): typing a standalone `!t`/
+//     `!e`/`!c`/`!n` token anywhere in the global-mode input (see
+//     CAPTURE_MARKER_RE below) switches the results panel from search
+//     results to a single live-parsed preview row, fed by
+//     `GET /api/quick-capture/preview` instead of `/api/search` for as
+//     long as a marker is present. Enter posts the raw text to
+//     `POST /api/quick-capture`, which does the actual parse + create.
+//     This is genuinely a sub-state of global mode, not a fourth `mode`
+//     value -- `captureState.active` gates it, checked first in the
+//     input-debounce and Enter-key handlers below, falling through to the
+//     ordinary /api/search path the instant the marker is edited away.
+//
+// All three modes (plus the two global-mode additions above) share one
+// overlay (#command-palette-overlay, base.html) -- one query
+// implementation, one keyboard-nav implementation, one set of
+// result-rendering rules, not several independent UIs. It's a portal like
 // #modal-overlay/#color-popover (see base.html's own comments on those):
 // it must render on top of an already-open modal, since a
 // relations-picker trigger lives inside modal-body, so it can't be a
@@ -62,8 +84,16 @@
   let activeIndex = -1;
   let fetchToken = 0;
   let debounceTimer = null;
+  // Quick Capture sub-state (global mode only) -- {active, text}. `text`
+  // is the exact raw input the last preview was fetched for, re-sent
+  // verbatim to POST /api/quick-capture on Enter so the server parses the
+  // same string the preview was computed from.
+  const captureState = { active: false, text: "" };
+  const CAPTURE_MARKER_RE = /(^|\s)!(t|e|c|n)(\s|$)/;
+  const CAPTURE_TYPE_LABEL = { task: "Task", event: "Event", contact: "Contact", note: "Note" };
+  const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text" };
 
-  const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user" };
+  const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text", page: "layout" };
 
   function iconMarkup(name) {
     return '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
@@ -84,10 +114,11 @@
     mode = opts.forTask || opts.forEvent ? "relation" : "global";
     relationCtx = mode === "relation" ? opts : null;
     labelCtx = null;
+    captureState.active = false;
     input.value = "";
     input.placeholder = mode === "relation"
       ? "Add a related " + (opts.label || "item") + "…"
-      : "Search tasks, events, contacts…";
+      : "Search tasks, events, contacts… (or !t/!e/!c/!n to capture)";
     activeIndex = -1;
     overlay.classList.add("is-open");
     document.body.classList.add("command-palette-open");
@@ -103,6 +134,7 @@
     mode = "global";
     relationCtx = null;
     labelCtx = null;
+    captureState.active = false;
   }
 
   // Label mode is entered from within an already-open overlay (a result
@@ -198,7 +230,84 @@
       : "Type to search across tasks, events, and contacts.";
   }
 
+  function runCapturePreview(rawText) {
+    const token = ++fetchToken;
+    fetch("/api/quick-capture/preview?text=" + encodeURIComponent(rawText))
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (token !== fetchToken) return;
+        renderCapturePreview(rawText, data);
+      })
+      .catch(function () {
+        if (token !== fetchToken) return;
+        renderCapturePreview(rawText, { ok: false, error: "Could not parse that." });
+      });
+  }
+
+  function captureSummary(data) {
+    const parts = [];
+    if (data.type === "task") {
+      if (data.due_date) parts.push("due " + data.due_date);
+      if (data.timeblock_count) parts.push(data.timeblock_count + " timeblock" + (data.timeblock_count === 1 ? "" : "s"));
+    } else if (data.type === "event") {
+      if (data.all_day && data.start) parts.push(data.start.slice(0, 10) + " (all day)");
+      else if (data.start) parts.push(data.start.replace("T", " ").slice(0, 16) + (data.end ? "–" + data.end.slice(11, 16) : ""));
+    } else if (data.type === "contact") {
+      if (data.phone) parts.push(data.phone);
+      if (data.email) parts.push(data.email);
+    }
+    if (data.labels && data.labels.length) parts.push(data.labels.map(function (l) { return "#" + l; }).join(" "));
+    return parts.join(" · ");
+  }
+
+  function renderCapturePreview(rawText, data) {
+    captureState.active = true;
+    captureState.text = rawText;
+    resultsEl.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "command-palette-row command-palette-capture-row";
+    if (!data || !data.ok) {
+      row.innerHTML =
+        iconMarkup("zap") +
+        '<span class="command-palette-row-text"><span class="command-palette-row-title">' +
+        escapeHtml((data && data.error) || "Keep typing…") + "</span></span>";
+    } else {
+      row.innerHTML =
+        iconMarkup(CAPTURE_ICON[data.type] || "zap") +
+        '<span class="command-palette-row-text"><span class="command-palette-row-title">' +
+        (CAPTURE_TYPE_LABEL[data.type] || "Item") + ": " + escapeHtml(data.title || "") +
+        '</span><span class="command-palette-row-subtitle">' +
+        escapeHtml(captureSummary(data)) + (captureSummary(data) ? " — " : "") + "Enter to create</span></span>";
+    }
+    resultsEl.appendChild(row);
+    activeIndex = -1;
+  }
+
+  function submitCapture() {
+    if (!captureState.active || !captureState.text) return;
+    const text = captureState.text;
+    fetch("/api/quick-capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    })
+      .then(async function (resp) {
+        const data = await resp.json().catch(function () {
+          return {};
+        });
+        if (!resp.ok) throw new Error(data.error || "Could not capture that.");
+        toast({ message: (CAPTURE_TYPE_LABEL[data.type] || "Item") + ' created: "' + (data.title || "") + '".' });
+        close();
+      })
+      .catch(function (err) {
+        toast({ message: err.message || "Could not capture that.", variant: "error" });
+      });
+  }
+
   function render(q, items, data) {
+    captureState.active = false;
     resultsEl.innerHTML = "";
     const rows = buildRows(q, items);
 
@@ -256,7 +365,7 @@
           selectResult(r);
         });
         el.appendChild(main);
-        if (mode === "global") el.appendChild(buildActions(r));
+        if (mode === "global" && r.type !== "page") el.appendChild(buildActions(r));
       }
       resultsEl.appendChild(el);
     });
@@ -300,10 +409,15 @@
   }
 
   function entityUrl(r) {
-    return r.type === "task" ? "/tasks/" + r.uid : r.type === "event" ? "/events/" + r.uid : "/contacts/" + r.uid;
+    if (r.type === "page") return r.url;
+    if (r.type === "task") return "/tasks/" + r.uid;
+    if (r.type === "event") return "/events/" + r.uid;
+    if (r.type === "note") return "/notes/" + r.uid + "/edit"; // notes have no separate view page
+    return "/contacts/" + r.uid;
   }
 
   function deleteUrl(r) {
+    if (r.type === "note") return "/notes/" + r.uid + "/delete";
     return entityUrl(r) + "/delete";
   }
 
@@ -404,6 +518,13 @@
       return;
     }
     close();
+    if (r.type === "page") {
+      // A page replaces the whole view, unlike an entity's detail modal
+      // layered over whatever page you were already on -- plain
+      // navigation, not CCModal.open.
+      window.location.href = r.url;
+      return;
+    }
     const url = entityUrl(r);
     if (window.CCModal) {
       window.CCModal.open(url);
@@ -425,9 +546,19 @@
 
   input.addEventListener("input", function () {
     window.clearTimeout(debounceTimer);
-    const q = input.value.trim();
+    const raw = input.value;
+    const q = raw.trim();
     debounceTimer = window.setTimeout(function () {
-      runQuery(q);
+      // Quick Capture (plans/quick-capture.md) -- a standalone !t/!e/!c/!n
+      // token anywhere in global mode's input switches from search to a
+      // live capture preview instead. Checked fresh on every keystroke, so
+      // editing the marker away falls straight back to runQuery's normal
+      // /api/search path (render() itself resets captureState.active).
+      if (mode === "global" && CAPTURE_MARKER_RE.test(raw)) {
+        runCapturePreview(raw);
+      } else {
+        runQuery(q);
+      }
     }, 150);
   });
 
@@ -440,7 +571,11 @@
       moveActive(-1);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      activateCurrent();
+      if (captureState.active) {
+        submitCapture();
+      } else {
+        activateCurrent();
+      }
     } else if (e.key === "Escape") {
       e.preventDefault();
       // Label mode backs out to the global results it was entered from
