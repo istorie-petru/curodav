@@ -12,13 +12,20 @@ section below.
 ## Views (shared `_tasks_toolbar.html`)
 
 - **Table** (`/tasks`) — open/completed split into two tbody sections; sortable
-  (title/due/importance/urgency/status, the axes sorting by their *computed*
-  value); status has an inline pill-select + inline date cell →
-  `POST /tasks/{uid}/update-field` (JSON, single field, no reload); Importance/
-  Urgency render as read-only pills (`.pill-static`) instead — no field to
-  edit; bulk-actions bar (checkbox select → `POST /tasks/bulk` with
-  `delete`/`status`/`tag` add-remove). Every task delete is the undo path —
-  tasks are flat (1.2), so no delete cascades.
+  (title/due/status); status has an inline pill-select + inline date cell →
+  `POST /tasks/{uid}/update-field` (JSON, single field, no reload). Importance/
+  Urgency do **not** appear as table columns (direct feedback: "I don't want
+  importance and urgency to show in the tasks table view" — a further
+  follow-up on the axes rework below; they were briefly read-only pills here
+  first, then dropped from this view entirely). Both axes are still fully
+  computed and still shown on Board (pills) and the task detail modal (meta
+  grid); the toolbar's Importance/Urgency filter dropdowns are untouched —
+  this was a column removal, not a filter removal. `_sort_keys` still knows
+  how to sort by either axis (used by Board/other surfaces if ever needed),
+  it's just not linked from a Table column header anymore. Bulk-actions bar
+  (checkbox select → `POST /tasks/bulk` with `delete`/`status`/`tag`
+  add-remove). Every task delete is the undo path — tasks are flat (1.2), so
+  no delete cascades.
 - **Board** (`/tasks/board`) — kanban columns per status (archived excluded),
   pointer-event drag-drop (`DRAG_THRESHOLD=6`), optimistic move via the same
   `update-field` endpoint. Cards carry both axes as pills.
@@ -62,22 +69,27 @@ like the other `DATE_FILTERS` values; the shared aggregation service
 (`derived_state.count_by_state`, `dashboard.py`'s at-a-glance widget) reads
 the same derivation, so every surface agrees.
 
-Display everywhere (Table/Board/Detail) reads the computed value via two
-new Jinja globals, `effective_importance(request, task)` /
-`effective_urgency(request, task)` (`deps.py`, label rules memoized per
-request the same way `label_icon` is) — the one template-facing entry
-point, so no router needs to precompute/attach the value onto every task
-dict just to render a pill. WebDAV export (`ical_rows.py`) still maps the
-combined *effective* axes to iCal `PRIORITY` via the same fixed
-urgency-dominant table (callers — `routers/export.py`'s tasks.ics,
-`published_lists.py`'s materialize — resolve label rules once and attach
-the effective values onto a row copy before calling
-`task_row_to_ical`, since that module itself stays DB-free); import no
-longer maps `PRIORITY` back to anything (dropped silently, this app is the
-write-source for its own tasks). Tasks CSV export emits `Importance` /
-`Urgency` columns populated with the effective values. Sorting
-(`routers/tasks.py::_sort_keys`, a factory now — it needs `label_rules` to
-compute the value) orders higher axes first.
+Display reads the computed value via two Jinja globals,
+`effective_importance(request, task)` / `effective_urgency(request, task)`
+(`deps.py`, label rules memoized per request the same way `label_icon`
+is) — the one template-facing entry point, so no router needs to
+precompute/attach the value onto every task dict just to render a pill.
+Board (pills) and the task detail modal (meta grid) use them; the Table
+view does **not** — a further follow-up removed the two columns from
+Table entirely (see "Views" above), so on that page the axes are only
+reachable via the toolbar's filter dropdowns, not shown per-row. WebDAV
+export (`ical_rows.py`) still maps the combined *effective* axes to iCal
+`PRIORITY` via the same fixed urgency-dominant table (callers —
+`routers/export.py`'s tasks.ics, `published_lists.py`'s materialize —
+resolve label rules once and attach the effective values onto a row copy
+before calling `task_row_to_ical`, since that module itself stays
+DB-free); import no longer maps `PRIORITY` back to anything (dropped
+silently, this app is the write-source for its own tasks). Tasks CSV
+export emits `Importance` / `Urgency` columns populated with the
+effective values. `routers/tasks.py::_sort_keys` (a factory — it needs
+`label_rules` to compute the value) still knows how to sort by either
+axis; nothing links to it from a Table column header anymore, but the
+filters/underlying capability are unchanged.
 
 ## Recurring tasks / completions
 

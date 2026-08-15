@@ -579,19 +579,30 @@ class TestSlice5AxesInUI:
         resp = tasks_router.list_tasks(_request(), importance_filter="3", urgency_filter="3", conn=conn)
         assert {t["uid"] for t in resp.context["open_tasks"]} == {"c"}
 
-    def test_table_renders_both_as_read_only_pills(self, conn):
+    def test_table_does_not_render_either_axis(self, conn):
+        # Further follow-up feedback ("I don't want importance and urgency
+        # to show in the tasks table view"): the Table view dropped the
+        # two columns entirely (first made read-only, then removed
+        # outright) -- both axes are still fully computed and still shown
+        # on Board/Detail (see test_board_renders_both_pills/
+        # test_detail_renders_both_meta_items below), this is a Table-view-
+        # only removal.
         db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})
         today = date.today()
         _seed_task(conn, "t1", tags=["Exam"], due_at=(today + timedelta(days=1)).isoformat())
         resp = tasks_router.list_tasks(_request(), conn=conn)
         ctx = {"request": _request(), **resp.context}
         body = tasks_router.templates.get_template("tasks_list.html").render(ctx)
-        # No editable pill-select for either axis anymore.
         assert 'data-field="importance"' not in body
         assert 'data-field="urgency"' not in body
-        assert "Importance" in body
-        assert "Urgency" in body
-        assert "pill-static" in body
+        assert "pill-static" not in body
+        # The toolbar's Importance/Urgency filter dropdowns are untouched
+        # (this feedback was about the table's own columns, not the
+        # filters) -- so "Importance"/"Urgency" text legitimately still
+        # appears there; what's gone is the sortable column header link.
+        assert "&urgency_filter=" in body  # toolbar filter still present
+        assert "sort=importance" not in body  # no column header link to it
+        assert "sort=urgency" not in body
 
     def test_board_renders_both_pills(self, conn, tmp_path):
         db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})

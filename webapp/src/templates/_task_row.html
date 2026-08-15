@@ -11,11 +11,15 @@
    and projects.py's project_detail route supply the same keys), same as
    when this was an inline macro.
 
-   Importance/Urgency (side work, post-1.1) are read-only here -- both
-   columns render via the `effective_importance`/`effective_urgency`
-   template globals (deps.py) instead of a pill-select, since there is no
-   manual per-task value left to edit (src/derived_state.py's module
-   docstring: purely computed from label rules + temporal state).
+   Importance/Urgency (side work, post-1.1) don't render as columns here
+   at all anymore -- first made read-only, then dropped from this view
+   entirely per direct feedback ("I don't want importance and urgency to
+   show in the tasks table view"). Both are still fully computed and
+   still visible on the task detail modal (task_detail.html) and the
+   Board view (tasks_board.html) -- this was a Table-view-only removal,
+   not a removal of the feature. The `effective_importance`/
+   `effective_urgency` template globals (deps.py) still exist for those
+   other surfaces.
 
    `show_select` (default true) gates the row-select checkbox column --
    only the global Tasks page's bulk-actions bar (static/tasks_table.js)
@@ -38,14 +42,6 @@
             <option value="{{ s }}" data-color="{{ status_colors[s] }}" {% if t.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
             {% endfor %}
         </select>
-    </td>
-    {% set _imp = effective_importance(request, t) %}
-    <td>
-        <span class="pill-static {% if _imp %}pill-{{ importance_colors[_imp] }}{% else %}pill-gray{% endif %}">{{ importance_labels[_imp] if _imp else "—" }}</span>
-    </td>
-    {% set _urg = effective_urgency(request, t) %}
-    <td>
-        <span class="pill-static {% if _urg %}pill-{{ urgency_colors[_urg] }}{% else %}pill-gray{% endif %}">{{ urgency_labels[_urg] if _urg else "—" }}</span>
     </td>
     <td>
         <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">

@@ -1663,6 +1663,23 @@ session, right before the final commit of that session.
   removed manual-input UI deleted outright, several schema/round-trip
   tests rewritten to assert the opposite of before, not a coverage
   regression).
+- **Shipped:** side work — **Importance/Urgency dropped from the Tasks
+  Table columns**, complete (2026-08-15), immediate follow-up feedback on
+  the slice directly above ("I don't want importance and urgency to show
+  in the tasks table view"). `_task_row.html`'s two read-only `.pill-static`
+  cells removed, `tasks_list.html`'s two sortable `<th>` headers removed —
+  Table now shows Title/Status/Due/Scheduled/Labels only. **Table-view-only
+  removal, not a feature removal**: both axes are still fully computed
+  (`src/derived_state.py`, unchanged) and still visible on Board (pills)
+  and the task detail modal (meta grid); the toolbar's Importance/Urgency
+  filter dropdowns are untouched (this was about the columns, not
+  filtering by the axis). `routers/tasks.py::_sort_keys` still supports
+  sorting by either axis, just with no Table column header linking to it
+  anymore. One test rewritten (`test_table_renders_both_as_read_only_pills`
+  -> `test_table_does_not_render_either_axis`, asserting the columns are
+  gone while the toolbar filters remain). Full suite 1291 passed (no
+  count change — a markup-only removal, same reasoning as other pure-
+  presentation slices in this file).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
