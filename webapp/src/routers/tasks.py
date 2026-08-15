@@ -84,94 +84,125 @@ STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 # stored column.
 #
 # 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states): the date filter grew `tomorrow` and `this_month`, and gained the
-# two derived virtual states `important` / `urgent`. Important/urgent are
-# NOT labels -- they are query projections over the derived importance/
-# urgency values (src/derived_state.py), computed per task at filter time,
-# never stored, never assigned. They sit in DATE_FILTERS because they are
-# state-based system filters (the toolbar's one mechanism for narrowing a
-# view), not because they are dates; see _apply_date_filter's docstring.
-DATE_FILTERS = ["all", "today", "tomorrow", "this_week", "this_month", "overdue", "important", "urgent"]
+# states) originally grew this dropdown with `tomorrow`/`this_month` plus the
+# two derived virtual states `important`/`urgent`, and later folded the
+# temporal `overdue` state in here too. Tasks page filter cleanup (small,
+# 2026-08-15, plans/open.md § Tasks page filter cleanup): direct feedback
+# said `overdue`/`important`/`urgent` read as clutter/wrong-drawer in the
+# Date dropdown -- they aren't dates, they're virtual states on other axes.
+# `important` moved into IMPORTANCE_FILTERS (an "(any level)" option
+# alongside the explicit 1/2/3 values -- decided), `urgent` moved into
+# URGENCY_FILTERS the same way (decided), and `overdue` moved into
+# STATUS_FILTERS as a virtual pseudo-status (the "fold it into the Status
+# dropdown" candidate from that section, since it isn't a value on any real
+# axis and a toolbar chip would've been a second, redundant filtering
+# mechanism). DATE_FILTERS is back to being just real date buckets.
+DATE_FILTERS = ["all", "today", "tomorrow", "this_week", "this_month"]
 DATE_FILTER_LABELS = {
     "all": "All dates",
     "today": "Today",
     "tomorrow": "Tomorrow",
     "this_week": "This week",
     "this_month": "This month",
-    "overdue": "Overdue",
-    "important": "Important",
-    "urgent": "Urgent",
 }
 
-STATUS_FILTERS = ["all"] + STATUSES
-STATUS_FILTER_LABELS = {"all": "All statuses", **STATUS_LABELS}
+# `overdue` is a virtual pseudo-status (src/derived_state.py's `overdue`
+# state, computed from due_at vs. today) -- not a real `tasks.status` value,
+# same "query projection, never stored" nature DATE_FILTERS' old
+# important/urgent entries had. See _apply_status_filter.
+STATUS_FILTERS = ["all"] + STATUSES + ["overdue"]
+STATUS_FILTER_LABELS = {"all": "All statuses", **STATUS_LABELS, "overdue": "Overdue"}
 
-IMPORTANCE_FILTERS = ["all", "1", "2", "3"]
-IMPORTANCE_FILTER_LABELS = {"all": "All importance", **{str(k): v for k, v in IMPORTANCE_LABELS.items()}}
-URGENCY_FILTERS = ["all", "1", "2", "3"]
-URGENCY_FILTER_LABELS = {"all": "All urgency", **{str(k): v for k, v in URGENCY_LABELS.items()}}
+# `important` is an "(any level)" virtual option -- src/derived_state.py's
+# `is_important` (effective importance >= IMPORTANT_THRESHOLD), distinct
+# from picking an exact 1/2/3 level below it. See _apply_importance_filter.
+IMPORTANCE_FILTERS = ["all", "1", "2", "3", "important"]
+IMPORTANCE_FILTER_LABELS = {
+    "all": "All importance",
+    **{str(k): v for k, v in IMPORTANCE_LABELS.items()},
+    "important": "Important (any level)",
+}
+# `urgent` is the urgency-axis sibling of `important` above (`is_urgent`).
+URGENCY_FILTERS = ["all", "1", "2", "3", "urgent"]
+URGENCY_FILTER_LABELS = {
+    "all": "All urgency",
+    **{str(k): v for k, v in URGENCY_LABELS.items()},
+    "urgent": "Urgent (any level)",
+}
 
 DONE_STATUSES = ("done", "archived")
 
 
 def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | None = None) -> list[dict]:
-    """Filters tasks by the state-based date/system filters. Each value
-    delegates to src/derived_state.py's `virtual_states` predicate -- the
-    single place per-state membership is computed -- so this filter, the
-    Dashboard's aggregation service, and any future surface agree by
-    construction rather than by each re-implementing the date math.
+    """Filters tasks by the real date buckets (today/tomorrow/this_week/
+    this_month). Delegates to src/derived_state.py's `virtual_states`
+    predicate -- the single place per-state membership is computed -- so
+    this filter, the Dashboard's aggregation service, and any future
+    surface agree by construction rather than by each re-implementing the
+    date math.
 
-    The temporal ones (`today`/`tomorrow`/`this_week`/`this_month`/
-    `overdue`) match `due_at` against the current date (the same pure date
-    math that's been here since 2026-08-01, extended 1.1 with `tomorrow`
-    and `this_month`); `important` and `urgent` (1.1) are the virtual/
-    derived states projecting through effective-importance / effective-
-    urgency (explicit values + label rules + temporal state, deterministic,
-    never stored). They need the resolved label-config rules to compute the
-    label-derived component, which is why this function takes `label_rules`
-    ({label name: effective config}) -- each view resolves them once (see
-    `_task_label_rules`) and passes them through, rather than this pure
-    function touching the database."""
+    Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue`/
+    `important`/`urgent` used to live here too (1.1) but have moved to
+    STATUS_FILTERS/IMPORTANCE_FILTERS/URGENCY_FILTERS respectively -- see
+    _apply_status_filter/_apply_importance_filter/_apply_urgency_filter.
+    `label_rules` is kept as a parameter (unused by the remaining, purely
+    temporal buckets) rather than dropped, so every call site can keep
+    passing it uniformly across all four `_apply_*_filter` functions
+    without special-casing this one."""
     if date_filter == "all":
         return tasks
     states = {date_filter}
     return [t for t in tasks if states & derived_state.virtual_states(t, label_rules or {})]
 
 
-def _apply_status_filter(tasks: list[dict], status_filter: str) -> list[dict]:
+def _apply_status_filter(tasks: list[dict], status_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Status filter (toolbar Status dropdown). `overdue` (2026-08-15,
+    Tasks page filter cleanup) is a virtual pseudo-status, not a real
+    `tasks.status` value -- it delegates to src/derived_state.py's
+    `virtual_states` the same way the old DATE_FILTERS `overdue` entry did,
+    which is why this function now takes `label_rules` too (unused by the
+    real-status branch, needed for the virtual one) -- same "each `_apply_*`
+    takes label_rules uniformly" reasoning as _apply_date_filter above."""
     if status_filter == "all":
         return tasks
+    if status_filter == "overdue":
+        return [t for t in tasks if "overdue" in derived_state.virtual_states(t, label_rules or {})]
     return [t for t in tasks if t["status"] == status_filter]
 
 
 def _apply_importance_filter(tasks: list[dict], importance_filter: str, label_rules: dict | None = None) -> list[dict]:
     """Importance-level filter (toolbar Importance dropdown) -- matches
     the *computed* effective importance value (1..3, src/derived_state.py:
-    label-derived, no manual per-task value exists anymore). Distinct from
-    the derived-state `important` filter in DATE_FILTERS only in that this
-    one lets you pick an exact level (1/2/3) rather than "at/above the
-    Important threshold"."""
+    label-derived, no manual per-task value exists anymore). `important`
+    (2026-08-15, Tasks page filter cleanup -- moved here from DATE_FILTERS)
+    is the "(any level)" virtual option: at/above the Important threshold
+    (`derived_state.is_important`) rather than one exact level."""
     if importance_filter == "all":
         return tasks
+    label_rules = label_rules or {}
+    if importance_filter == "important":
+        return [t for t in tasks if derived_state.is_important(t, label_rules)]
     try:
         wanted = int(importance_filter)
     except ValueError:
         return tasks
-    label_rules = label_rules or {}
     return [t for t in tasks if derived_state.effective_importance(t, label_rules) == wanted]
 
 
 def _apply_urgency_filter(tasks: list[dict], urgency_filter: str, label_rules: dict | None = None) -> list[dict]:
     """Urgency-level filter (toolbar Urgency dropdown) -- the urgency-axis
-    sibling of _apply_importance_filter, same "exact computed level"
-    semantics."""
+    sibling of _apply_importance_filter, same "exact level, plus an
+    `urgent` (any level) virtual option moved here from DATE_FILTERS
+    2026-08-15" shape."""
     if urgency_filter == "all":
         return tasks
+    label_rules = label_rules or {}
+    if urgency_filter == "urgent":
+        return [t for t in tasks if derived_state.is_urgent(t, label_rules)]
     try:
         wanted = int(urgency_filter)
     except ValueError:
         return tasks
-    label_rules = label_rules or {}
     return [t for t in tasks if derived_state.effective_urgency(t, label_rules) == wanted]
 
 
@@ -354,7 +385,7 @@ def list_tasks(
     label_rules = _task_label_rules(conn)
     tasks = db.list_tasks(conn, q=q)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter)
+    tasks = _apply_status_filter(tasks, status_filter, label_rules)
     tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
     tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     # Phase 9b toolbar rework: label filter, the real replacement for the
@@ -498,7 +529,7 @@ def board_view(
     # status" is a meaningful, non-redundant combination.
     label_rules = _task_label_rules(conn)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter)
+    tasks = _apply_status_filter(tasks, status_filter, label_rules)
     tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
     tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     tasks = _apply_label_filter(tasks, label)

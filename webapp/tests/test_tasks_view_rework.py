@@ -94,6 +94,30 @@ class TestStatusFilter:
         result = tasks_router._apply_status_filter(tasks, "waiting")
         assert {t["uid"] for t in result} == {"b"}
 
+    def test_overdue_is_a_virtual_pseudo_status(self):
+        """Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue`
+        moved from DATE_FILTERS into STATUS_FILTERS as a virtual value --
+        it isn't a real `tasks.status`, so it needs the same
+        `derived_state.virtual_states` path _apply_date_filter's old
+        `overdue` branch used, now reached via `label_rules`."""
+        today = date.today()
+        tasks = [
+            {"uid": "a", "due_at": (today - timedelta(days=1)).isoformat(), "status": "active"},
+            {"uid": "b", "due_at": today.isoformat(), "status": "active"},
+            {"uid": "c", "due_at": (today - timedelta(days=5)).isoformat(), "status": "done"},
+        ]
+        result = tasks_router._apply_status_filter(tasks, "overdue", {})
+        assert {t["uid"] for t in result} == {"a", "c"}
+
+    def test_overdue_is_absent_from_status_filter_with_no_label_rules_arg(self):
+        """label_rules defaults to None (same convention as the other three
+        `_apply_*_filter` helpers) -- overdue still resolves correctly
+        without every call site being forced to pass `{}` explicitly."""
+        today = date.today()
+        tasks = [{"uid": "a", "due_at": (today - timedelta(days=1)).isoformat(), "status": "active"}]
+        result = tasks_router._apply_status_filter(tasks, "overdue")
+        assert {t["uid"] for t in result} == {"a"}
+
 
 class TestImportanceUrgencyFilters:
     """importance/urgency are computed (label rules + temporal state, see
@@ -133,6 +157,51 @@ class TestImportanceUrgencyFilters:
         rules = {"Hi": {"importance": 3}, "Lo": {"importance": 1}}
         assert {t["uid"] for t in tasks_router._apply_importance_filter(tasks, "3", rules)} == {"a"}
         assert {t["uid"] for t in tasks_router._apply_urgency_filter(tasks, "3", rules)} == {"b"}
+
+    def test_important_any_level_option(self):
+        """Tasks page filter cleanup (2026-08-15, plans/open.md): `important`
+        moved from DATE_FILTERS into IMPORTANCE_FILTERS as an "(any level)"
+        option -- at/above the Important threshold (derived_state.
+        is_important), not one exact 1/2/3 level."""
+        tasks = [
+            {"uid": "a", "tags": ["Hi"]},
+            {"uid": "b", "tags": ["Mid"]},
+            {"uid": "c", "tags": []},
+        ]
+        rules = {"Hi": {"importance": 3}, "Mid": {"importance": 2}}
+        result = tasks_router._apply_importance_filter(tasks, "important", rules)
+        assert {t["uid"] for t in result} == {"a"}
+
+    def test_urgent_any_level_option(self):
+        """The urgency-axis sibling of test_important_any_level_option."""
+        today = date.today().isoformat()
+        far_out = (date.today() + timedelta(days=30)).isoformat()
+        tasks = [{"uid": "a", "due_at": today}, {"uid": "b", "due_at": far_out}]
+        result = tasks_router._apply_urgency_filter(tasks, "urgent", {})
+        assert {t["uid"] for t in result} == {"a"}
+
+
+class TestFilterOptionListsAfterFilterCleanup:
+    """Tasks page filter cleanup (2026-08-15, plans/open.md § Tasks page
+    filter cleanup): pins the exact new shape of the four dropdowns' option
+    lists so a future edit can't silently reintroduce overdue/important/
+    urgent into the Date dropdown, or drop them from their new homes."""
+
+    def test_date_filters_no_longer_carry_virtual_states(self):
+        assert tasks_router.DATE_FILTERS == ["all", "today", "tomorrow", "this_week", "this_month"]
+
+    def test_status_filters_gained_overdue(self):
+        assert tasks_router.STATUS_FILTERS[0] == "all"
+        assert tasks_router.STATUS_FILTERS[-1] == "overdue"
+        assert tasks_router.STATUS_FILTER_LABELS["overdue"] == "Overdue"
+
+    def test_importance_filters_gained_important(self):
+        assert tasks_router.IMPORTANCE_FILTERS == ["all", "1", "2", "3", "important"]
+        assert "important" in tasks_router.IMPORTANCE_FILTER_LABELS
+
+    def test_urgency_filters_gained_urgent(self):
+        assert tasks_router.URGENCY_FILTERS == ["all", "1", "2", "3", "urgent"]
+        assert "urgent" in tasks_router.URGENCY_FILTER_LABELS
 
 
 class TestFiltersAreIndependentAndCombine:

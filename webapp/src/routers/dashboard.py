@@ -357,19 +357,26 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
     The counts come from src/derived_state.py's shared aggregation service
     (1.1, plans/open-priority.md § Virtual & derived states): ONE pass over
     the scoped pool computing every per-state count through `count_by_state`
-    -- state names match routers/tasks.py's DATE_FILTERS, so "3 overdue" is
-    a real, already-filtered destination (`?date_filter=overdue`, plus
-    `&label={label_name}` when scoped to a label page), not a number you
-    have to go re-derive yourself, and the count and the filter view can
-    never disagree."""
+    -- state names match `count_by_state`'s own keys, so "3 overdue" is a
+    real, already-filtered destination, not a number you have to go
+    re-derive yourself, and the count and the filter view can never
+    disagree.
+
+    Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue` moved
+    from a `date_filter` value to a `status_filter` value, and `important`/
+    `urgent` from `date_filter` values to `importance_filter`/
+    `urgency_filter` "(any level)" values -- see routers/tasks.py's
+    STATUS_FILTERS/IMPORTANCE_FILTERS/URGENCY_FILTERS. `_tasks_link` now
+    takes the query param name alongside the value so each stat can point
+    at its own axis's dropdown."""
     tasks = _filtered_tasks(conn, config)
     label_rules = db.list_label_rules(conn)
     counts = derived_state.count_by_state(tasks, label_rules)
 
     label_name = config.get("label_name")
 
-    def _tasks_link(date_filter: str) -> str:
-        url = f"/tasks?date_filter={date_filter}"
+    def _tasks_link(param: str, value: str) -> str:
+        url = f"/tasks?{param}={value}"
         if label_name:
             url += f"&label={label_name}"
         return url
@@ -380,11 +387,11 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
         "week_count": counts["this_week"],
         "important_count": counts["important"],
         "urgent_count": counts["urgent"],
-        "overdue_link": _tasks_link("overdue"),
-        "today_link": _tasks_link("today"),
-        "week_link": _tasks_link("this_week"),
-        "important_link": _tasks_link("important"),
-        "urgent_link": _tasks_link("urgent"),
+        "overdue_link": _tasks_link("status_filter", "overdue"),
+        "today_link": _tasks_link("date_filter", "today"),
+        "week_link": _tasks_link("date_filter", "this_week"),
+        "important_link": _tasks_link("importance_filter", "important"),
+        "urgent_link": _tasks_link("urgency_filter", "urgent"),
     }
 
 
@@ -841,8 +848,10 @@ def _render_important_urgent(conn, config: dict, nav: dict | None = None) -> dic
     due today" section into the Dashboard's widget registry ahead of that
     page's retirement -- see plans/STATE.md). Reuses the exact same shared
     aggregation service (src/derived_state.py) /today already used, so this
-    widget can never disagree with what /tasks?date_filter=important/urgent
-    shows. Scoped like every other widget via `_filtered_tasks` (a Space/
+    widget can never disagree with what /tasks?importance_filter=important
+    or ?urgency_filter=urgent shows (Tasks page filter cleanup, 2026-08-15,
+    moved these off `date_filter`). Scoped like every other widget via
+    `_filtered_tasks` (a Space/
     Project page's Important & Urgent widget only considers that page's own
     tasks), which /today itself never needed since it was always a whole-app
     view."""

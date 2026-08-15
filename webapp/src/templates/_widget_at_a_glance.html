@@ -2,8 +2,11 @@
      urgent_count, overdue_link, today_link, week_link, important_link,
      urgent_link} -- see routers/dashboard.py::_render_at_a_glance. Five
      number+label stat blocks, each a link to the matching filtered Tasks
-     view (?date_filter=overdue/today/this_week/important/urgent, plus
-     &label=<name> when this widget is scoped to a label page). Zero counts
+     view (?date_filter=today/this_week, ?status_filter=overdue,
+     ?importance_filter=important, ?urgency_filter=urgent -- Tasks page
+     filter cleanup, 2026-08-15, moved overdue/important/urgent off
+     date_filter -- plus &label=<name> when this widget is scoped to a
+     label page). Zero counts
      still render -- "nothing's overdue" is itself useful at-a-glance
      information, not an empty state to hide. The counts come from the
      shared aggregation service (src/derived_state.py's count_by_state), so

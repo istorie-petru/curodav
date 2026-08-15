@@ -198,14 +198,14 @@ class TestAtAGlanceWidget:
 
     def test_links_use_real_tasks_date_filters(self, conn):
         data = dashboard_router._render_at_a_glance(conn, {})
-        assert data["overdue_link"] == "/tasks?date_filter=overdue"
+        assert data["overdue_link"] == "/tasks?status_filter=overdue"
         assert data["today_link"] == "/tasks?date_filter=today"
         assert data["week_link"] == "/tasks?date_filter=this_week"
 
     def test_links_append_label_when_scoped_to_a_label_page(self, conn):
         _make_project(conn, "CS101")
         data = dashboard_router._render_at_a_glance(conn, {"label_name": "CS101"})
-        assert data["overdue_link"] == "/tasks?date_filter=overdue&label=CS101"
+        assert data["overdue_link"] == "/tasks?status_filter=overdue&label=CS101"
         assert data["today_link"] == "/tasks?date_filter=today&label=CS101"
         assert data["week_link"] == "/tasks?date_filter=this_week&label=CS101"
 

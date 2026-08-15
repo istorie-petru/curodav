@@ -312,6 +312,30 @@ retired project detail page's Tasks view, which shared the same macro; see
 detail/edit modals) is unchanged. See `tests/test_task_scheduled_column.py`.
 **This was 1.5's last piece — 1.5 is now fully shipped.**
 
+**Tasks page filter cleanup (shipped 2026-08-15)** — the Table/Board/Timeline
+toolbar's Date dropdown used to carry three virtual/derived states
+(`overdue`/`important`/`urgent`) alongside the real date buckets
+(today/tomorrow/this week/this month), a deliberate 1.1 choice that read as
+clutter/wrong-drawer in practice (direct feedback: "they shouldn't be in the
+Date dropdown"). `important`/`urgent` moved into the Importance/Urgency
+dropdowns as an "Important (any level)"/"Urgent (any level)" option
+alongside the existing explicit Low/Medium/High values — at/above the
+Important/Urgent threshold (`derived_state.is_important`/`is_urgent`), not
+one exact level. `overdue` moved into the Status dropdown as a virtual
+pseudo-status (`STATUS_FILTERS`'s new trailing `"overdue"` entry) rather
+than a toolbar chip, since it isn't a value on any real axis and a chip
+would've been a second, redundant filtering mechanism alongside the existing
+dropdowns. `DATE_FILTERS` is back to just the five real date buckets.
+`_apply_status_filter` gained a `label_rules` parameter (same "each
+`_apply_*_filter` takes label_rules uniformly" shape the other three already
+had) since the virtual `overdue` branch needs it, mirroring how
+`_apply_importance_filter`/`_apply_urgency_filter` already used `label_rules`
+for their new "(any level)" branches. Every call site (Table, Board,
+Timeline) updated; the Dashboard's At-a-glance widget and Important & Urgent
+widget's outbound links updated to match (`status_filter=overdue`,
+`importance_filter=important`, `urgency_filter=urgent` instead of
+`date_filter=...`). See `tests/test_tasks_view_rework.py`.
+
 ## Search & the command surface
 
 `Ctrl-K`/`Cmd-K` from anywhere, the tabbar's Search entry, or `/search`

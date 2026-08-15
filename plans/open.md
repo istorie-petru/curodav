@@ -27,21 +27,21 @@ step is sized to ship on its own; nothing here blocks the work in
 **Reprioritized 2026-08-15** (direct steer, supersedes the old ordering
 below the line): ~~Command palette actions~~ **shipped 2026-08-15** (see
 `features/tasks.md` § Search & the command surface), then the expanded
-Dashboard widgets work (next up now), then the small Tasks-filter cleanup and
-Event format items (both small, no particular urgency, slot in wherever
-convenient), then Contacts field parity, then Project check-in, then Modal
-window uniformization. Configurable views + optional Schedule module and
-Webapp usability's remaining pieces (collapsible sections, DAVx5 — see
-`roadmap.md`'s 1.9 row) weren't mentioned in the reprioritization and stay
-parked at the back of the queue.
+Dashboard widgets work (~~shipped 2026-08-15~~), then the small Tasks-filter
+cleanup (~~shipped 2026-08-15~~) and Event format items (both small, no
+particular urgency, slot in wherever convenient), then Contacts field parity,
+then Project check-in, then Modal window uniformization. Configurable views +
+optional Schedule module and Webapp usability's remaining pieces (collapsible
+sections, DAVx5 — see `roadmap.md`'s 1.9 row) weren't mentioned in the
+reprioritization and stay parked at the back of the queue.
 
 1. ~~**Command palette actions**~~ — **shipped 2026-08-15**, see
    `features/tasks.md` § Search & the command surface.
-2. **Dashboard widgets: new widgets + real customization** — see "Widget
-   consolidation + Streak + Next Deadline, expanded scope" below. **Next up
-   now.**
-3. **Tasks page filter cleanup** (small) — see below.
-4. **Event format for simple events** (small) — see below.
+2. ~~**Dashboard widgets: new widgets + real customization**~~ — **shipped
+   2026-08-15**, see `features/dashboard.md`.
+3. ~~**Tasks page filter cleanup**~~ (small) — **shipped 2026-08-15**, see
+   `features/tasks.md` § Tasks page filter cleanup.
+4. **Event format for simple events** (small) — see below. **Next up now.**
 5. **Contacts field parity** — isolated to the Contacts entity and its vCard
    round-trip.
 6. **Project check-in (optional)** — a lightweight, app-local addition to the
@@ -98,33 +98,6 @@ lets the user review the state of an active project without treating the
 check-in as a task. The exact workflow stays deliberately lightweight and must
 not introduce another hierarchy of objects — it is a review action on a project,
 not a new entity type.
-
-## Tasks page filter cleanup (small, 2026-08-15)
-
-**Status:** decision recorded for two of three pieces — no code.
-
-The Table view's Date dropdown (`routers/tasks.py`'s `DATE_FILTERS`) carries
-three virtual/derived states — `overdue`, `important`, `urgent` — alongside
-real date buckets (today/tomorrow/this week/this month). This was a
-deliberate 1.1 choice (see the comment above `DATE_FILTERS`: "the derived
-`important`/`urgent` states live in the Date dropdown instead" of the
-explicit-value-only Importance/Urgency dropdowns) but reads as clutter/
-wrong-drawer in practice. Direct feedback, 2026-08-15: they shouldn't be in
-the Date dropdown.
-
-- **Important → the Importance dropdown**, **Urgent → the Urgency
-  dropdown**, each as an "(any)" style option alongside the existing
-  all/1/2/3 explicit values — decided.
-- **Overdue needs a new home** — not decided yet. It isn't a value on any
-  existing axis (not an Importance/Urgency level, not a status); candidates
-  worth considering when this gets picked up: a small toggle/chip in the
-  toolbar next to the dropdowns, or folding it into the Status dropdown as
-  a virtual pseudo-status the way `important`/`urgent` were virtual date
-  values. Your call when this slice starts.
-- `DATE_FILTERS`/`DATE_FILTER_LABELS` shrink to just the real date buckets;
-  `_apply_date_filter`'s overdue/important/urgent branches move to
-  `_apply_importance_filter`/`_apply_urgency_filter` (and wherever Overdue
-  ends up). `_sort_keys` and Board's own filter application are unaffected.
 
 ## Archived vs. Done — mental-model note, no behavior change (2026-08-15)
 

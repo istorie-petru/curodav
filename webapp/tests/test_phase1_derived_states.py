@@ -423,7 +423,7 @@ class TestAtAGlanceWidget:
         assert data["important_count"] == 1
         # The overdue and due-today tasks are both urgent (temporal urgency).
         assert data["urgent_count"] == 2
-        assert data["overdue_link"].startswith("/tasks?date_filter=overdue")
+        assert data["overdue_link"].startswith("/tasks?status_filter=overdue")
 
     def test_at_a_glance_widget_renders_five_stats(self, conn):
         from src.routers import dashboard as dashboard_router

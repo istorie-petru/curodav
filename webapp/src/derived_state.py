@@ -22,8 +22,10 @@ label, not per task -- which live in the DB as real columns; see db.py's
 
 The virtual states this derives (`Important`, `Urgent`, and the temporal
 `Today` / `Tomorrow` / `This Week` / `This Month` / `Overdue`) are query
-projections, not labels -- see routers/tasks.py's DATE_FILTERS for where they
-surface as filters.
+projections, not labels -- see routers/tasks.py's DATE_FILTERS (the
+temporal ones) and IMPORTANCE_FILTERS/URGENCY_FILTERS/STATUS_FILTERS
+(Important/Urgent/Overdue, moved there by the Tasks page filter cleanup,
+2026-08-15) for where they surface as filters.
 """
 
 from __future__ import annotations
@@ -157,8 +159,11 @@ def is_urgent(task: dict, label_rules: dict, today: date | None = None) -> bool:
 def virtual_states(task: dict, label_rules: dict, today: date | None = None) -> set[str]:
     """The set of virtual-state names a task currently belongs to, computed
     purely from current data (dates + derived importance/urgency) -- never
-    stored, never labels. State names match the DATE_FILTERS values in
-    routers/tasks.py so a count here links 1:1 to a filter there."""
+    stored, never labels. State names match the filter values in
+    routers/tasks.py -- the temporal ones in DATE_FILTERS, `important` in
+    IMPORTANCE_FILTERS, `urgent` in URGENCY_FILTERS, `overdue` in
+    STATUS_FILTERS (Tasks page filter cleanup, 2026-08-15) -- so a count
+    here links 1:1 to a filter there."""
     if today is None:
         today = date.today()
     states = set()
@@ -185,11 +190,13 @@ def virtual_states(task: dict, label_rules: dict, today: date | None = None) -> 
 def count_by_state(tasks: list[dict], label_rules: dict, today: date | None = None) -> dict[str, int]:
     """One pass over a task list producing the per-state counts every
     surface needs (overdue / today / tomorrow / this_week / this_month /
-    important / urgent). State names match routers/tasks.py's DATE_FILTERS,
-    so `count_by_state(...)["overdue"]` is the same set of tasks the
-    Tasks page's `date_filter=overdue` shows. A task counts toward every
-    state it belongs to (overdue *and* important etc.), matching how the
-    filters AND -- each is an independent projection, not a partition."""
+    important / urgent). State names match routers/tasks.py's filter
+    values (see virtual_states' docstring for exactly which dropdown each
+    lives in since the 2026-08-15 Tasks page filter cleanup), so
+    `count_by_state(...)["overdue"]` is the same set of tasks the Tasks
+    page's `status_filter=overdue` shows. A task counts toward every state
+    it belongs to (overdue *and* important etc.), matching how the filters
+    AND -- each is an independent projection, not a partition."""
     if today is None:
         today = date.today()
     counts = {name: 0 for name in ("overdue", "today", "tomorrow", "this_week", "this_month", "important", "urgent")}

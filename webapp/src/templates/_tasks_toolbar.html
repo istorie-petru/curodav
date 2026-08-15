@@ -22,8 +22,17 @@
      1.1 (virtual & derived states, plans/open-priority.md § Virtual &
      derived states): the single Priority dropdown (the old 1-4 WebDAV
      axis) is now two independent dropdowns -- Importance and Urgency
-     (each all/1/2/3, matching the stored explicit value; the derived
-     `important`/`urgent` states live in the Date dropdown instead).
+     (each all/1/2/3, matching the stored explicit value).
+
+     Tasks page filter cleanup (2026-08-15, plans/open.md): the derived
+     `important`/`urgent` states used to live in the Date dropdown as extra
+     values; direct feedback said that read as clutter/wrong-drawer, so
+     they moved into their own axis's dropdown instead -- Importance gained
+     an "Important (any level)" option, Urgency gained "Urgent (any level)",
+     each alongside the existing all/1/2/3 explicit values. `overdue`
+     (also formerly a Date dropdown value) moved into the Status dropdown
+     as a virtual pseudo-status instead, since it isn't a value on any real
+     axis -- see routers/tasks.py's STATUS_FILTERS/_apply_status_filter.
 
      Context this partial expects (all optional except request/q):
        q, active_date_filter, active_status_filter, active_importance_filter,

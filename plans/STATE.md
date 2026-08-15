@@ -1984,6 +1984,38 @@ session, right before the final commit of that session.
   See `features/dashboard.md`. 12 new tests (`TestIsLongLivedRecurrence`/
   `TestWeeklyScheduleWidget` in `test_dashboard_router.py`), full suite
   1344 passed.
+- **Shipped:** side work — **Tasks page filter cleanup**, complete
+  (2026-08-15), `plans/open.md` § Tasks page filter cleanup (build-order
+  item 3 of the 2026-08-15 reprioritization). The Table/Board/Timeline
+  toolbar's Date dropdown (`routers/tasks.py`'s `DATE_FILTERS`) used to
+  carry `overdue`/`important`/`urgent` alongside the real date buckets —
+  direct feedback said that reads as clutter/wrong-drawer. Two of three
+  moves were already decided (Important -> Importance dropdown, Urgent ->
+  Urgency dropdown, each an "(any level)" option alongside the explicit
+  Low/Medium/High values); **Overdue's new home was left to this session's
+  call** — went with folding it into the Status dropdown as a virtual
+  pseudo-status (`STATUS_FILTERS`'s new trailing `"overdue"` entry) over
+  the toolbar-chip alternative, since it isn't a value on any real axis and
+  a chip would've been a second, redundant filtering mechanism sitting next
+  to dropdowns that already cover every other axis. `DATE_FILTERS` is back
+  to just the five real date buckets. `_apply_status_filter` gained a
+  `label_rules` parameter (mirroring the shape `_apply_importance_filter`/
+  `_apply_urgency_filter` already had) since the virtual `overdue` branch
+  needs it; every call site (Table, Board, Timeline) updated. The
+  Dashboard's At-a-glance widget's outbound links updated to match
+  (`status_filter=overdue`, `importance_filter=important`,
+  `urgency_filter=urgent` instead of `date_filter=...`) — caught by its own
+  existing link-assertion tests. Direct function calls with the old
+  `date_filter=overdue/important/urgent` values still happened to work
+  unchanged (`_apply_date_filter` never validated against `DATE_FILTERS`,
+  it just intersects whatever string it's given against
+  `derived_state.virtual_states`), so most of the pre-existing filter tests
+  needed no changes at all — only the three link-assertion tests that
+  literally spelled out `date_filter=overdue`. See `features/tasks.md` §
+  Tasks page filter cleanup. 8 new tests (`TestFilterOptionListsAfter
+  FilterCleanup`, `test_overdue_is_a_virtual_pseudo_status`,
+  `test_important_any_level_option`/`test_urgent_any_level_option`, etc. in
+  `test_tasks_view_rework.py`), full suite 1352 passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
