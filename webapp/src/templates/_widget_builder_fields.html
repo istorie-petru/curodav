@@ -82,7 +82,7 @@
          browser UI -- see that partial's own header comment). -->
     {% set _view_ns = namespace(items=[]) %}
     {% for key, spec in widget_views.items() %}
-    {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': spec.label, 'data': {'source': spec.source, 'has-range': ('1' if spec.has_range else '')}}] %}
+    {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': spec.label, 'data': {'source': spec.source, 'has-range': ('1' if spec.has_range else ''), 'has-limit': ('1' if spec.get('has_limit') else '')}}] %}
     {% endfor %}
     {% set ms_name = 'view' %}
     {% set ms_mode = 'single' %}
@@ -141,6 +141,23 @@
             <label class="field-toggle"><input type="radio" name="style" value="cards"> Cards</label>
         </div>
     </div>
+    <!-- Scope -- Spaces & Projects-only, and only meaningful on a Space/
+         Project page (2026-08-15, expanded scope: "make the Spaces &
+         Projects widget placeable on a Space's own dashboard, scoped to
+         that Space's children or everything"). Home has no auto-scope to
+         override in the first place (config["label_name"] is never set
+         there), so this field is omitted entirely rather than shown as a
+         dead no-op choice. Same JS gating as Show/Style; see
+         _config_from_form's own `scope` handling. -->
+    {% if space_uid or project_uid %}
+    <div class="field widget-scope-field">
+        <label>Scope</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="radio" name="scope" value="space" checked> This Space</label>
+            <label class="field-toggle"><input type="radio" name="scope" value="everything"> Everything</label>
+        </div>
+    </div>
+    {% endif %}
 </div>
 <!-- Labels/Task lists/Calendars -- used to be wrapped in a visually
      distinct "Advanced" group (background/heading/its own field-grid);

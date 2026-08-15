@@ -450,10 +450,25 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     project_preview's own rows (a project/label + progress bar); Cards
     reuses filled_cards' own Material-You-style filled squares (one per
     Space). Both styles honor `config["label_name"]` the same way
-    project_preview always did -- scoped to that label's own children on
-    a Space/Project page, every top-level label/Space on Home."""
+    project_preview always did -- scoped to that label's own children
+    (projects AND sub-Spaces both, db.list_child_labels doesn't
+    distinguish -- a Space's "children" were always both kinds structurally,
+    nothing new needed there) on a Space/Project page, every top-level
+    label/Space on Home.
+
+    `config["scope"]` (2026-08-15, expanded scope) -- a Space/Project
+    page's widget is auto-scoped to that page via `label_name`
+    (widget_page_context/add_widget's own auto-scope), which used to be
+    the only option: there was no way to place a "show literally
+    everything, every Space/project app-wide" instance of this widget on
+    a Space's own dashboard. `scope == "everything"` opts a single widget
+    instance out of that auto-scoping and renders exactly like the Home/
+    unscoped case instead -- a per-instance override, not a second widget
+    type (per plans/open.md's own framing of this ask). Default ("space")
+    preserves every existing/migrated widget's current behavior
+    unchanged."""
     style = config.get("style") or "list"
-    label_name = config.get("label_name")
+    label_name = config.get("label_name") if config.get("scope") != "everything" else None
     if label_name:
         labels = db.list_child_labels(conn, label_name)
     elif style == "cards":
@@ -547,6 +562,64 @@ def _render_next_deadline(conn, config: dict, nav: dict | None = None) -> dict:
         "next_event": next_event,
         "next_event_days": _days_until(next_event["start_at"]) if next_event else None,
     }
+
+
+def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
+    """"What needs organizing today" widget (2026-08-15 widget
+    consolidation, expanded scope, plans/open.md § Widget consolidation)
+    -- surfaces *decisions to make*, distinct from Agenda (which lists
+    what's already scheduled): open tasks due within 3 days with no work
+    session yet, open Urgency=3 tasks with no session at all regardless of
+    date, and today's/tomorrow's events with no location or meeting link
+    set. "No session yet" reuses the exact same unscheduled rule
+    `routers/calendar.py::week_view`'s own "Unscheduled work" panel
+    applies (`db.work_allocation_panel_info`: no allocations at all, OR
+    at least one still undated -- only a task whose every session is
+    already dated has nothing left to organize), not a new rule. The
+    location/meeting-link check is a proxy for the not-yet-shipped
+    Format field (`plans/open.md` § Event format for simple events) --
+    both empty reads as "unclear", the same interpretation that field
+    will eventually formalize; this widget needs no changes once Format
+    ships, since `location`/`meeting_url` stay the underlying columns
+    either way.
+
+    Each task row reuses the exact `{"task", "project", "sessions"}` item
+    shape `week_view` builds for its own panel, so the shared
+    `_unscheduled_task_item.html` partial (project pill + title + the
+    "+"/"-" session stepper, `POST /tasks/{uid}/work-allocations[...]`)
+    renders identically here -- an inline quick action to add a work
+    session, not just a link to go fix it elsewhere."""
+    today = date.today()
+    today_iso = today.isoformat()
+    horizon_iso = (today + timedelta(days=3)).isoformat()
+    tomorrow_iso = (today + timedelta(days=1)).isoformat()
+    label_rules = db.list_label_rules(conn)
+
+    due_soon: list[dict] = []
+    urgent: list[dict] = []
+    seen: set[str] = set()
+    for t in _filtered_tasks(conn, config):
+        info = db.work_allocation_panel_info(conn, t["uid"])
+        if info["count"] and not info["undated_count"]:
+            continue  # every session already dated -- nothing left to organize
+        due_at = t.get("due_at")
+        if due_at and due_at[:10] <= horizon_iso:
+            item = {"task": t, "project": db.project_label_config_for(conn, "task", t["uid"]), "sessions": info}
+            due_soon.append(item)
+            seen.add(t["uid"])
+        elif t["uid"] not in seen and derived_state.effective_urgency(t, label_rules, today) == 3:
+            urgent.append({"task": t, "project": db.project_label_config_for(conn, "task", t["uid"]), "sessions": info})
+    due_soon.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
+
+    events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{tomorrow_iso}T23:59:59")
+    unclear_format = [
+        e for e in events
+        if e.get("start_at") and today_iso <= e["start_at"][:10] <= tomorrow_iso
+        and not (e.get("location") or "").strip() and not (e.get("meeting_url") or "").strip()
+    ]
+    unclear_format.sort(key=lambda e: e.get("start_at") or "")
+
+    return {"due_soon": due_soon, "urgent": urgent, "unclear_format": unclear_format}
 
 
 def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
@@ -908,6 +981,18 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": {"tasks", "events"},
         "default_width": "third",
     },
+    # "organize_today" (2026-08-15, expanded scope) -- see
+    # _render_organize_today's own docstring. "half" width: it can render
+    # up to three sections at once (each an _unscheduled_task_item.html
+    # list or a small table), more content than a "third"-width stat
+    # widget but not a full day-grid like Agenda's grouped mode either.
+    "organize_today": {
+        "label": "What Needs Organizing",
+        "template": "_widget_organize_today.html",
+        "render": _render_organize_today,
+        "uses": {"tasks", "events"},
+        "default_width": "half",
+    },
 }
 
 # --------------------------------------------------------------------- #
@@ -961,12 +1046,20 @@ WIDGET_VIEWS: dict[str, dict] = {
     # three separate "agenda"/"upcoming_list"/"overdue_list" views; which
     # of those three the old picker offered is now the Show checkboxes
     # inside this one view instead (see _widget_builder_fields.html).
-    "agenda_view": {"label": "Agenda", "source": "calendar_tasks", "has_range": True, "has_show": True},
+    "agenda_view": {"label": "Agenda", "source": "calendar_tasks", "has_range": True, "has_show": True, "has_limit": True},
     "at_a_glance_view": {"label": "At a glance (stats)", "source": "calendar_tasks", "has_range": False},
     "mini_calendar": {"label": "Mini calendar", "source": "calendar_tasks", "has_range": False},
     "checklist": {"label": "Checklist", "source": "habits", "has_range": False},
-    "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False},
-    "important_urgent_view": {"label": "Important & urgent", "source": "calendar_tasks", "has_range": False},
+    # `has_limit` (2026-08-15, expanded scope: "widgets should be more
+    # customizable") -- contact_list/important_urgent's own render
+    # functions already read `config["limit"]` (`_render_contact_list`/
+    # `_render_important_urgent`), but the builder never offered a way to
+    # set it -- a real, narrow customizability gap, not the "Range/Show/
+    # Style toggles already cover it" case. Fixed by generalizing the
+    # Limit field's gate from a single hardcoded view name to this flag,
+    # same `has_range`/`has_show`/`has_style` pattern.
+    "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False, "has_limit": True},
+    "important_urgent_view": {"label": "Important & urgent", "source": "calendar_tasks", "has_range": False, "has_limit": True},
     "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
     "quick_links_view": {"label": "Quick links (tiles)", "source": "quick_links", "has_range": False},
     # "spaces_projects_view"/"streak_view"/"next_deadline_view"
@@ -976,6 +1069,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     "spaces_projects_view": {"label": "Spaces & Projects", "source": "spaces_projects", "has_range": False, "has_style": True},
     "streak_view": {"label": "Streak", "source": "calendar_tasks", "has_range": False},
     "next_deadline_view": {"label": "Next deadline", "source": "calendar_tasks", "has_range": False},
+    "organize_today_view": {"label": "What needs organizing", "source": "calendar_tasks", "has_range": False},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
@@ -1017,6 +1111,7 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("spaces_projects_view", None): ("spaces_projects", {}),
     ("streak_view", None): ("streak", {}),
     ("next_deadline_view", None): ("next_deadline", {}),
+    ("organize_today_view", None): ("organize_today", {}),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
@@ -1037,6 +1132,7 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("quick_links", None): ("quick_links", "quick_links_view", None),
     ("streak", None): ("calendar_tasks", "streak_view", None),
     ("next_deadline", None): ("calendar_tasks", "next_deadline_view", None),
+    ("organize_today", None): ("calendar_tasks", "organize_today_view", None),
 }
 
 
@@ -1788,6 +1884,7 @@ def _config_from_form(
     extra: dict | None = None,
     style: str = "",
     show: list[str] | None = None,
+    scope: str = "",
 ) -> dict:
     config: dict = {}
     tag_list = _tags_list(tags)
@@ -1824,6 +1921,11 @@ def _config_from_form(
     # other type's stored config.
     if style:
         config["style"] = style
+    # `scope` (2026-08-15, expanded scope) -- Spaces & Projects' "This
+    # Space" (default, omitted) / "Everything" per-instance override; see
+    # _render_spaces_projects' own docstring.
+    if scope:
+        config["scope"] = scope
     if show is not None:
         config["show"] = show
     return config
@@ -1847,6 +1949,7 @@ def preview_widget(
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
     style: str = Form(""),
+    scope: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -1880,7 +1983,8 @@ def preview_widget(
     show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
-        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+        extra=extra, style=style if wtype == "spaces_projects" else "",
+        scope=scope if wtype == "spaces_projects" else "", show=show,
     )
     page_label = space_uid or project_uid
     if page_label:
@@ -1905,6 +2009,7 @@ def add_widget(
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
     style: str = Form(""),
+    scope: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -1936,7 +2041,8 @@ def add_widget(
     show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
-        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+        extra=extra, style=style if wtype == "spaces_projects" else "",
+        scope=scope if wtype == "spaces_projects" else "", show=show,
     )
     if page_label:
         config["label_name"] = page_label
@@ -1969,6 +2075,7 @@ def edit_widget(
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
     style: str = Form(""),
+    scope: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -2009,7 +2116,8 @@ def edit_widget(
     show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
     new_config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
-        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+        extra=extra, style=style if wtype == "spaces_projects" else "",
+        scope=scope if wtype == "spaces_projects" else "", show=show,
     )
     # Width isn't a field on this form (2026-08-07 removal of the manual
     # width picker/drag-resize) -- there's no per-widget-instance width

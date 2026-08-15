@@ -99,53 +99,6 @@ check-in as a task. The exact workflow stays deliberately lightweight and must
 not introduce another hierarchy of objects — it is a review action on a project,
 not a new entity type.
 
-## Widget consolidation, expanded scope (2026-08-15)
-
-**Status:** the original consolidation design shipped 2026-08-15 (side
-work, same day as this reprioritization) — 11 widget types → 8 (now 11
-counting the pre-existing 1.9-side-work additions untouched by this pass):
-`at_a_glance`/`mini_month_calendar`/`habit_checkin`/`contact_list`
-unchanged; `today_agenda`/`weekly_overview`/`upcoming_events`/
-`overdue_tasks` → one configurable **Agenda** (`config["range"]`/
-`config["show"]`); `project_preview`/`filled_cards` → one **Spaces &
-Projects** (`config["style"]`, List/Cards); `calendar_agenda` cut
-(reproducible by placing Mini Calendar next to Agenda); **Streak** and
-**Next Deadline** are new. One `app_meta`-guarded migration
-(`_migrate_widget_consolidation`) rewrote every existing dashboard's
-widget rows in place, nothing lost (one visual trade-off: every migrated
-Agenda widget now renders at Agenda's single "half" default width — see
-`features/dashboard.md`'s own Migration section for the full detail).
-See `features/dashboard.md`.
-
-Still open, not yet scoped into concrete slices — the three items added
-2026-08-15 by direct feedback, after the original design above:
-
-- **Project/Space links widget.** The consolidated **Spaces & Projects**
-  widget above already covers "a widget listing projects/spaces" on the
-  global Dashboard; what's new here is making the same widget type
-  placeable on a *Space's own* dashboard (not just the global one),
-  scoped to that Space's children (its projects, or its sub-Spaces) rather
-  than everything. Needs a design pass on what "available on any Space"
-  means concretely — likely a widget-instance-level scope setting
-  (this Space's children vs. everything), not a second widget type.
-- **"What needs organizing today" action widget.** A new widget type,
-  distinct from Agenda (Agenda lists what's scheduled; this one surfaces
-  what *isn't* yet and needs a decision) — pulls together: tasks with no
-  work allocation yet that are due soon (`db.task_work_hours`'s
-  `remaining` already identifies these, see Week Calendar's "Unscheduled
-  tasks" panel for a precedent), open tasks at Urgency=3 with no
-  allocation, and today's/tomorrow's events with no clear
-  location/meeting-format set (ties into "Event format for simple events"
-  below) — the widget's job is surfacing *decisions to make*, not just
-  *things scheduled*. Concrete action items and their exact selection
-  rules need a design pass before this is buildable; not decided yet.
-- **Widgets should be more customizable**, in general — no concrete spec
-  yet for what this covers beyond the Range/Show/List-Cards toggles the
-  original consolidation design already gives Agenda and Spaces & Projects.
-  Needs a follow-up conversation on what other widgets should expose (which
-  filters, per-widget label/Space scoping, etc.) before this becomes a
-  buildable item rather than a direction.
-
 ## Tasks page filter cleanup (small, 2026-08-15)
 
 **Status:** decision recorded for two of three pieces — no code.

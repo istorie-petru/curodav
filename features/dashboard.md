@@ -4,7 +4,7 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (11)
+## Widget types (12)
 
 2026-08-15 widget consolidation (`plans/open.md` § Widget consolidation):
 the original 11 types (`today_agenda`/`weekly_overview`/`upcoming_events`/
@@ -27,7 +27,7 @@ the one visual side effect (width).
 | `agenda` | Consolidated: Range (`today` / `next_7_days` / `next_30_days` / `all_upcoming`, `config["range"]`) picks how far out; Show (`config["show"]`, a subset of `overdue`/`tasks`/`events`, default all three) picks which sections render. `today`/`all_upcoming` render a flat list (Overdue always its own section regardless of Range); `next_7_days`/`next_30_days` render a day-by-day grid. `limit` applies to the `all_upcoming` Tasks/Events sections only. | half |
 | `at_a_glance` | 3-number stats strip (Overdue / Due today / Due this week), each linking to the matching filtered Tasks view | third |
 | `mini_month_calendar` | month grid, busy dots only, prev/next | half |
-| `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares per Space, linking to `/labels/{name}`) | third |
+| `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares per Space, linking to `/labels/{name}`). Scope (`config["scope"]`, `space` default or `everything`, Space/Project pages only) picks whether a page's own instance stays auto-scoped to that page's children (projects AND sub-Spaces both) or shows the app-wide list instead | third |
 | `habit_checkin` | check-off-today per active habit (checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
 | `contact_list` | contacts filtered by labels, `limit` | third |
 | `important_urgent` | open tasks flagged important/urgent that aren't already due/overdue (`limit`, default 8) — ported from the retired `/today` page (1.9 side work), see `features/today.md` | half |
@@ -35,16 +35,24 @@ the one visual side effect (width).
 | `quick_links` | visual tile grid of every Space + every open project (label icon/color, `spaces_projects`' Cards-style CSS reused) — Home-only, 1.9 side work | full |
 | `streak` | current + longest run of consecutive days with >=1 task completed (`tasks.completed_at`) | third |
 | `next_deadline` | the single soonest open task due date and the single soonest upcoming event | third |
+| `organize_today` | "what needs organizing" — open tasks due within 3 days with no work session yet, open Urgency=3 tasks with none (regardless of date), and today's/tomorrow's events with no location or meeting link set (a proxy for the not-yet-shipped Format field, `plans/open.md`). Task rows reuse the planning grids' own `_unscheduled_task_item.html` partial (project pill + title + a "+"/"−" session stepper, `POST /tasks/{uid}/work-allocations[...]`), so a session can be added right from the widget | half |
 
-`important_urgent`/`scheduled_work_today`/`streak`/`next_deadline` are
-addable through the existing Source/View picker (all under the
-`calendar_tasks` source); `quick_links` and `spaces_projects` each have
-their own source (`quick_links`/`spaces_projects`), since both read
-`label_config` directly and have no tasks/events filter (`uses: set()`).
-Agenda's own view (`agenda_view`, source `calendar_tasks`) is the one
-View that exposes both Range and Show controls in the builder form
-(`has_range`/`has_show` on its `WIDGET_VIEWS` entry); Spaces & Projects'
-view (`spaces_projects_view`) exposes the Style radio (`has_style`).
+`important_urgent`/`scheduled_work_today`/`streak`/`next_deadline`/
+`organize_today` are addable through the existing Source/View picker (all
+under the `calendar_tasks` source); `quick_links` and `spaces_projects`
+each have their own source (`quick_links`/`spaces_projects`), since both
+read `label_config` directly and have no tasks/events filter (`uses:
+set()`). Agenda's own view (`agenda_view`, source `calendar_tasks`) is
+the one View that exposes both Range and Show controls in the builder
+form (`has_range`/`has_show` on its `WIDGET_VIEWS` entry); Spaces &
+Projects' view (`spaces_projects_view`) exposes the Style radio
+(`has_style`) and, on a Space/Project page only, the Scope radio.
+`has_limit` (2026-08-15, expanded scope) marks which Views expose the
+Limit field at all — `agenda_view`, `contact_list_view`, and
+`important_urgent_view` (the three render functions that actually read
+`config["limit"]`); generalized from an earlier hardcoded single-view
+check once `contact_list`/`important_urgent` turned out to already
+support a limit with no way to set one.
 
 Plus the `stack` container type (not in the registry): drag a widget onto another
 card → one shared-width card with both stacked; members share `group_uid`; stacks
@@ -77,6 +85,17 @@ members).
   `quick_links` (`quick_links`'s "every Space + every project" view, and
   `spaces_projects`' whole-registry-of-labels view, are both meaningless
   once you're already inside one page).
+- `spaces_projects`' own **Scope** (2026-08-15, expanded scope,
+  `plans/open.md` § Widget consolidation) is a widget-*instance* setting,
+  not a second widget type — a Space/Project page's own instance is
+  auto-scoped to that page via `config["label_name"]` by default
+  (`scope: "space"`, or the key absent), same as every other filtered
+  widget type; `scope: "everything"` opts just that one instance out,
+  rendering the app-wide list instead (ignoring `label_name` entirely
+  inside `_render_spaces_projects`). The Scope field only appears in the
+  builder/edit forms when the widget already belongs to a Space/Project
+  page (`space_uid`/`project_uid`/`widget.label_name`) — Home has nothing
+  to opt out of.
 
 ## Migration (2026-08-15 widget consolidation)
 

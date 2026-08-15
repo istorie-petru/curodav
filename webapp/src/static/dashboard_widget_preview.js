@@ -81,11 +81,12 @@ window.CCWidgetPreview = {
       const viewMs = form.querySelector(".widget-view-select");
       const rangeMs = form.querySelector(".widget-range-select");
       const rangeField = form.querySelector(".widget-range-field");
-      // "agenda_view" is the only View whose render function
-      // (_render_agenda) reads config.limit at all (2026-08-15 widget
-      // consolidation -- was "upcoming_list" before Agenda absorbed it).
-      // Hiding it here mirrors the server-side gate in the per-widget
-      // Filters form (_widget_edit_form.html: widget.type != 'agenda').
+      // Gated by the checked View's own data-has-limit (2026-08-15,
+      // expanded scope -- generalized from a single hardcoded view-name
+      // check so contact_list_view/important_urgent_view, whose render
+      // functions already read config.limit, can offer the field too; see
+      // WIDGET_VIEWS' own has_limit comment). Mirrors the server-side gate
+      // in the per-widget Filters form (_widget_edit_form.html).
       const limitField = form.querySelector(".widget-limit-field");
       // Show (2026-08-15 widget consolidation) -- Agenda's tasks/events/
       // overdue checkboxes, and Style (Spaces & Projects' List/Cards
@@ -96,6 +97,11 @@ window.CCWidgetPreview = {
       // _config_from_form's own style/show gating).
       const showField = form.querySelector(".widget-show-field");
       const styleField = form.querySelector(".widget-style-field");
+      // Scope (2026-08-15, expanded scope) -- only present in the DOM at
+      // all on a Space/Project page (see _widget_builder_fields.html's own
+      // {% if space_uid or project_uid %} -- Home has nothing to scope),
+      // so this is null and the toggle below is a safe no-op on Home.
+      const scopeField = form.querySelector(".widget-scope-field");
       if (!sourceGroup || !viewMs || !rangeMs) return;
 
       // 2026-08-08: reads via window.CCMultiselect.panelFor(ms) instead of
@@ -122,9 +128,10 @@ window.CCWidgetPreview = {
         const viewInput = checkedMsRadio(viewMs, "view");
         const hasRange = !!(viewInput && viewInput.dataset.hasRange);
         if (rangeField) rangeField.classList.toggle("is-hidden", !hasRange);
-        if (limitField) limitField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "agenda_view");
+        if (limitField) limitField.classList.toggle("is-hidden", !(viewInput && viewInput.dataset.hasLimit));
         if (showField) showField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "agenda_view");
         if (styleField) styleField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "spaces_projects_view");
+        if (scopeField) scopeField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "spaces_projects_view");
         if (!hasRange) return;
         const viewValue = viewInput.value;
         filterMsOptions(rangeMs, (input) => (input.dataset.views || "").split(",").includes(viewValue));

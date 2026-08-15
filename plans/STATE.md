@@ -1895,6 +1895,56 @@ session, right before the final commit of that session.
   sections (Phase B's other half) weren't part of this reprioritization;
   they're still fair game for a session that wants a change of pace, just
   not the default next pick anymore.
+- **Shipped:** side work — **Widget consolidation, expanded scope**,
+  complete (2026-08-15), the three items `plans/open.md` § Widget
+  consolidation left open after the original design shipped earlier the
+  same day, design-discussed with the user (AskUserQuestion) before
+  writing any code:
+  - **Spaces & Projects Scope toggle** — `config["scope"]` (`"space"`
+    default, or `"everything"`) on the consolidated `spaces_projects`
+    type, a per-widget-instance override rather than a second widget
+    type (per the user's own framing of this ask). A Space/Project page's
+    instance auto-scopes to that page via `config["label_name"]` as
+    before; `scope: "everything"` makes one instance ignore that and
+    render the app-wide list instead. `db.list_child_labels` already
+    doesn't distinguish project vs. Space children, so "This Space"
+    already included sub-Spaces with no code change needed there,
+    confirmed by a new test rather than assumed. New "Scope" field in the
+    builder/edit forms, shown only when the widget already belongs to a
+    Space/Project page (Home has nothing to opt out of).
+  - **New `organize_today` widget** ("What Needs Organizing") — due-soon
+    (3 days) open tasks with no work session yet, open Urgency=3 tasks
+    with none regardless of date, and today's/tomorrow's events with no
+    location or meeting link (a proxy for the not-yet-shipped Event
+    format field, `plans/open.md`'s own still-separate section — needs no
+    changes once that ships, since it'll keep reading the same
+    `location`/`meeting_url` columns). "No session yet" reuses
+    `routers/calendar.py::week_view`'s own unscheduled-task rule verbatim
+    (`db.work_allocation_panel_info`: no allocations at all, or at least
+    one still undated). Task rows reuse the shared
+    `_unscheduled_task_item.html` partial (project pill + title + the
+    "+"/"−" session stepper) directly, per the user's "inline quick
+    actions" choice, rather than plain links -- verified the exact
+    `{"task", "project", "sessions"}` item shape that partial expects by
+    reading `week_view`'s own construction of it, not guessing.
+  - **Limit field exposed for more Views** — investigated the user's
+    "widgets should be more customizable" ask concretely instead of
+    assuming a gap existed: per-widget Labels/Space filtering turned out
+    to already be universal across every task/event-backed widget type
+    (the Labels chip multiselect has never been gated by type). The real,
+    narrow gap found instead: `contact_list`/`important_urgent`'s own
+    render functions already read `config["limit"]`, but the builder's
+    Limit field was hardcoded to only ever show for one View. Generalized
+    to a `has_limit` flag on `WIDGET_VIEWS` (`agenda_view`,
+    `contact_list_view`, `important_urgent_view`), read by both the JS
+    gating (`dashboard_widget_preview.js`) and the per-widget edit form's
+    server-rendered gate.
+  See `features/dashboard.md` (widget-types table + Scope/Migration
+  sections), `plans/open.md`'s Widget consolidation section fully removed
+  (both the original design and the expanded-scope follow-ups are now
+  shipped). 19 new tests across `TestSpacesProjectsScope`/
+  `TestOrganizeTodayWidget`/`TestLimitFieldExposedForMoreViews`
+  (`test_dashboard_router.py`), full suite 1332 passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
