@@ -1945,6 +1945,45 @@ session, right before the final commit of that session.
   shipped). 19 new tests across `TestSpacesProjectsScope`/
   `TestOrganizeTodayWidget`/`TestLimitFieldExposedForMoreViews`
   (`test_dashboard_router.py`), full suite 1332 passed.
+- **Shipped:** two direct-feedback widget-picker polish items + a new
+  **Weekly Schedule** widget, complete (2026-08-15). Design-discussed via
+  AskUserQuestion before building (whether to merge Quick Links/Spaces &
+  Projects too -- declined, "leave both, just add new widget types").
+  - **Data source picker: two rows, not one** — `.widget-source-select`
+    switched from the shared `.tile-select`'s flex/nowrap to a 3-column
+    grid, so 4-5 sources wrap to a readable 2-row layout instead of
+    fighting for a shrinking equal share of one enforced row (the
+    2026-08-07 one-row decision was made for 4 sources, before Spaces &
+    Projects' source made it 5).
+  - **Tile icons keep their color when selected** — dropped `.tile-option:
+    has(.tile-radio:checked) .tile-icon`'s recolor-to-accent-neutral rule;
+    a selected tile is already clear from its border/background/label-text
+    change.
+  - **View/Range picker: non-applicable options actually hide, not just
+    disable** — root cause was the exact same `.field{display:flex}`-
+    beats-`[hidden]{display:none}` specificity footgun already hit twice
+    this app (`.field.holiday-field`/`.field.label-project-fields`):
+    `filterMsOptions` (`dashboard_widget_preview.js`) already set the
+    `hidden` attribute correctly, but `.multiselect-option{display:flex}`
+    silently won, so a non-applicable View just sat there visibly disabled
+    instead of disappearing. New `.multiselect-option[hidden]{display:
+    none}` fixes both View and Range (same shared component).
+  - **New `weekly_schedule` widget type** ("Weekly Schedule") — see
+    `features/dashboard.md`'s own table entry and
+    `_render_weekly_schedule`'s docstring for the full design (static
+    weekday+time-of-day grid straight off each qualifying event's own
+    `start_at`/`end_at`, not a real week's expanded occurrences; new
+    `_is_long_lived_recurrence` filters to recurring events whose own rule
+    spans >= 30 days first-to-last occurrence, via one `recurrence_expand.
+    expand_events` call per candidate over its own 2-year window). New
+    `src/recurrence_expand` import in `routers/dashboard.py` (previously
+    unused there). Deliberately does NOT revive the removed Schedule
+    module (`plans/abandoned.md`, dropped 2026-08-15 same day) — no course/
+    semester data model, purely a presentation over ordinary recurring
+    Calendar events that already exist.
+  See `features/dashboard.md`. 12 new tests (`TestIsLongLivedRecurrence`/
+  `TestWeeklyScheduleWidget` in `test_dashboard_router.py`), full suite
+  1344 passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

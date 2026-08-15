@@ -41,6 +41,15 @@ def _seed_event(conn, uid, start_at=None, tags=None):
     })
 
 
+def _seed_recurring_event(conn, uid, start_at, end_at=None, recurrence=None, tags=None):
+    db.upsert_event(conn, {
+        "uid": uid, "title": uid,
+        "description": "", "status": "active", "all_day": 0,
+        "start_at": start_at, "end_at": end_at, "recurrence": recurrence,
+        "tags": tags or [], "created_at": _now(),
+    })
+
+
 class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
@@ -1130,3 +1139,95 @@ class TestLimitFieldExposedForMoreViews:
             _seed_task(conn, f"t{i}", tags=["Important"])
         data = dashboard_router._render_important_urgent(conn, {"limit": 2})
         assert len(data["rows"]) == 2
+
+
+class TestIsLongLivedRecurrence:
+    """2026-08-15, new Weekly Schedule widget -- filters a short recurring
+    reminder out while keeping a real standing weekly pattern, purely from
+    the event's own recurrence rule (no DB, no "as of" date needed)."""
+
+    def test_open_ended_weekly_qualifies(self):
+        event = {"uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00", "recurrence": "FREQ=WEEKLY"}
+        assert dashboard_router._is_long_lived_recurrence(event) is True
+
+    def test_semester_long_until_qualifies(self):
+        event = {
+            "uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00",
+            "recurrence": "FREQ=WEEKLY;UNTIL=2026-12-15",
+        }
+        assert dashboard_router._is_long_lived_recurrence(event) is True
+
+    def test_short_count_reminder_does_not_qualify(self):
+        event = {
+            "uid": "e1", "start_at": "2026-09-01T08:00:00", "end_at": "2026-09-01T08:05:00",
+            "recurrence": "FREQ=DAILY;COUNT=3",
+        }
+        assert dashboard_router._is_long_lived_recurrence(event) is False
+
+    def test_non_recurring_does_not_qualify(self):
+        event = {"uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00"}
+        assert dashboard_router._is_long_lived_recurrence(event) is False
+
+    def test_no_start_at_does_not_qualify(self):
+        assert dashboard_router._is_long_lived_recurrence({"uid": "e1", "recurrence": "FREQ=WEEKLY"}) is False
+
+
+class TestWeeklyScheduleWidget:
+    """2026-08-15, new type -- a compact, static weekly-pattern view of a
+    label's long-lived recurring events; no revival of the removed
+    Schedule module, purely a presentation over ordinary recurring
+    Calendar events."""
+
+    def test_short_lived_recurrence_is_excluded(self, conn):
+        _seed_recurring_event(conn, "e1", "2026-09-01T10:00:00", "2026-09-01T10:30:00", recurrence="FREQ=DAILY;COUNT=3")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+        assert data["agenda_rows"] == []
+
+    def test_non_recurring_event_is_excluded(self, conn):
+        _seed_event(conn, "e1", start_at="2026-09-01T10:00:00")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+
+    def test_semester_long_weekly_event_produces_one_day_column(self, conn):
+        # 2026-09-01 is a Tuesday.
+        _seed_recurring_event(conn, "lecture", "2026-09-01T10:00:00", "2026-09-01T11:30:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert len(data["days"]) == 1
+        assert data["days"][0]["weekday"] == 1  # Tuesday, Monday=0
+        assert data["days"][0]["label"] == "Tue"
+        assert len(data["days"][0]["blocks"]) == 1
+        assert data["days"][0]["blocks"][0]["event"]["uid"] == "lecture"
+        assert data["agenda_rows"][0]["event"]["uid"] == "lecture"
+
+    def test_grid_is_only_as_tall_as_the_events_own_time_span(self, conn):
+        # Two lectures 10:00-11:00 and 14:00-15:00 -- the grid should be
+        # tightened to roughly 9:30-15:30, not the full 24h day, so a
+        # 10:00 block doesn't start near the very top of a mostly-empty
+        # column.
+        _seed_recurring_event(conn, "morning", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        _seed_recurring_event(conn, "afternoon", "2026-09-03T14:00:00", "2026-09-03T15:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        blocks = {b["event"]["uid"]: b for day in data["days"] for b in day["blocks"]}
+        assert blocks["morning"]["top_pct"] < blocks["afternoon"]["top_pct"]
+        # Neither block should be flush against the very top of its column
+        # (a 30-minute pad was added before the earliest start).
+        assert blocks["morning"]["top_pct"] > 0
+
+    def test_biweekly_event_is_flagged(self, conn):
+        _seed_recurring_event(conn, "lecture", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;INTERVAL=2")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"][0]["blocks"][0]["biweekly"] is True
+        assert data["agenda_rows"][0]["biweekly"] is True
+
+    def test_label_scoping(self, conn):
+        _seed_recurring_event(conn, "cs101", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15", tags=["CS101"])
+        _seed_recurring_event(conn, "other", "2026-09-02T10:00:00", "2026-09-02T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15", tags=["Other"])
+        data = dashboard_router._render_weekly_schedule(conn, {"tags": ["CS101"]})
+        agenda_uids = {row["event"]["uid"] for row in data["agenda_rows"]}
+        assert agenda_uids == {"cs101"}
+
+    def test_registered_in_widget_types_and_selection_tables(self, conn):
+        assert "weekly_schedule" in dashboard_router.WIDGET_TYPES
+        assert ("weekly_schedule_view", None) in dashboard_router._SELECTION_TO_TYPE
+        assert ("weekly_schedule", None) in dashboard_router._TYPE_TO_SELECTION

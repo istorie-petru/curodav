@@ -4,7 +4,7 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (12)
+## Widget types (13)
 
 2026-08-15 widget consolidation (`plans/open.md` § Widget consolidation):
 the original 11 types (`today_agenda`/`weekly_overview`/`upcoming_events`/
@@ -36,10 +36,12 @@ the one visual side effect (width).
 | `streak` | current + longest run of consecutive days with >=1 task completed (`tasks.completed_at`) | third |
 | `next_deadline` | the single soonest open task due date and the single soonest upcoming event | third |
 | `organize_today` | "what needs organizing" — open tasks due within 3 days with no work session yet, open Urgency=3 tasks with none (regardless of date), and today's/tomorrow's events with no location or meeting link set (a proxy for the not-yet-shipped Format field, `plans/open.md`). Task rows reuse the planning grids' own `_unscheduled_task_item.html` partial (project pill + title + a "+"/"−" session stepper, `POST /tasks/{uid}/work-allocations[...]`), so a session can be added right from the widget | half |
+| `weekly_schedule` | a compact, **static** weekly-pattern grid of a label's long-lived recurring events (a "university timetable" without reviving the removed Schedule module, `plans/abandoned.md`) — a recurring event qualifies once its own rule spans >= 30 days from first to last occurrence (`_is_long_lived_recurrence`, filters out a short recurring reminder while keeping a real standing pattern); every qualifying event's grid slot comes straight from its own `start_at`/`end_at` weekday+time-of-day, not from expanding any one real calendar week — holidays/manual exceptions are deliberately not reflected. Only weekdays with a block become columns, the vertical range is tightened to the events' own time span (not a full 24h day), and a plain agenda-style list renders below the grid for full readable detail | half |
 
 `important_urgent`/`scheduled_work_today`/`streak`/`next_deadline`/
-`organize_today` are addable through the existing Source/View picker (all
-under the `calendar_tasks` source); `quick_links` and `spaces_projects`
+`organize_today`/`weekly_schedule` are addable through the existing
+Source/View picker (all under the `calendar_tasks` source); `quick_links`
+and `spaces_projects`
 each have their own source (`quick_links`/`spaces_projects`), since both
 read `label_config` directly and have no tasks/events filter (`uses:
 set()`). Agenda's own view (`agenda_view`, source `calendar_tasks`) is

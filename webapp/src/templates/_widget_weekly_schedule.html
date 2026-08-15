@@ -1,0 +1,39 @@
+<!-- Data: {days: [{weekday, label, blocks: [{event, top_pct, height_pct,
+     biweekly}]}], agenda_rows: [{event, weekday, start_min, end_min,
+     biweekly}]} -- see routers/dashboard.py::_render_weekly_schedule.
+     Weekly Schedule widget (2026-08-15, new type) -- a compact, STATIC
+     weekly-pattern view of a label's long-lived recurring events (a
+     "university timetable" without reviving the removed Schedule
+     module): only weekdays that actually have a block become columns,
+     the vertical range is tightened to the events' own time span (not a
+     full 24h day), and a plain agenda-style list underneath gives the
+     full readable detail the grid's own truncated blocks can't. -->
+{% if data.days %}
+<div class="weekly-schedule-grid" style="grid-template-columns: repeat({{ data.days|length }}, 1fr);">
+    {% for day in data.days %}
+    <div class="weekly-schedule-col">
+        <div class="weekly-schedule-day-label">{{ day.label }}</div>
+        <div class="weekly-schedule-col-body">
+            {% for block in day.blocks %}
+            <a class="weekly-schedule-block" href="/events/{{ block.event.uid }}" data-modal
+               style="top:{{ block.top_pct }}%; height:{{ block.height_pct }}%;"
+               title="{{ block.event.title }}{% if block.biweekly %} (every 2 weeks){% endif %}">
+                <span class="weekly-schedule-block-title">{{ block.event.title }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<table class="weekly-schedule-agenda">
+    {% for row in data.agenda_rows %}
+    <tr>
+        <td class="text-muted" style="width:36px">{{ ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][row.weekday] }}</td>
+        <td class="text-muted" style="width:100px; white-space:nowrap">{{ row.event.start_at | fmt_time }}{% if row.event.end_at %}&ndash;{{ row.event.end_at | fmt_time }}{% endif %}</td>
+        <td><a href="/events/{{ row.event.uid }}" data-modal>{{ row.event.title }}</a>{% if row.biweekly %} <span class="text-muted">(every 2 weeks)</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">No standing weekly pattern yet -- add a recurring event that repeats for at least a month.</div>
+{% endif %}

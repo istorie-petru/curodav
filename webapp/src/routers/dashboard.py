@@ -26,7 +26,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, derived_state
+from .. import db, derived_state, recurrence_expand
 from ..deps import get_db, templates
 
 router = APIRouter(tags=["dashboard"])
@@ -622,6 +622,130 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
     return {"due_soon": due_soon, "urgent": urgent, "unclear_format": unclear_format}
 
 
+# The 2026-08-15 "Weekly Schedule" widget's own threshold for "this
+# recurring event is really a standing timetable pattern, not a short-
+# lived recurring reminder" -- see _render_weekly_schedule's own
+# docstring for how it's measured.
+_WEEKLY_SCHEDULE_MIN_SPAN_DAYS = 30
+_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _minutes_of_day(iso_dt: str) -> int:
+    """Minutes since midnight from an "...THH:MM..." string -- local copy
+    of grid_layout._minutes' own trivial slice (that module's own function
+    is private, and this is a one-line calculation, same "not worth
+    exposing a private helper across a module boundary" reasoning
+    _hours_between's own copy at the top of this file already used)."""
+    return int(iso_dt[11:13]) * 60 + int(iso_dt[14:16])
+
+
+def _is_long_lived_recurrence(event: dict) -> bool:
+    """Whether `event`'s own recurrence rule spans at least
+    `_WEEKLY_SCHEDULE_MIN_SPAN_DAYS` from its first to its last occurrence
+    -- filters a short-lived recurring reminder (e.g. a 3-day daily pill
+    reminder, COUNT=3) out of the Weekly Schedule widget, while keeping
+    anything that reads as a real standing pattern (a semester's worth of
+    twice-weekly lectures, or a literally open-ended recurring event).
+    Expands the event on its own, from its own start date out to a
+    generous 2-year cap (`recurrence_expand.expand_events` takes a shared
+    window, not a per-event one, so this calls it once per candidate
+    rather than trying to force every candidate through one shared window)
+    -- an open-ended rule (no UNTIL/COUNT) naturally produces occurrences
+    spanning nearly the whole 2-year window, so it qualifies without a
+    separate "has no end condition" branch; a rule that legitimately ends
+    within `_WEEKLY_SCHEDULE_MIN_SPAN_DAYS` of its own start is correctly
+    excluded either way. Malformed/unparseable rules degrade to `False`
+    (excluded, not crashed -- expand_events itself already degrades a
+    malformed row to a single non-expanded occurrence, which is 1 row,
+    below the "at least 2 occurrences" floor this function also checks)."""
+    if not event.get("start_at"):
+        return False
+    try:
+        start_date = date.fromisoformat(event["start_at"][:10])
+    except ValueError:
+        return False
+    window_end = start_date + timedelta(days=730)
+    occurrences = recurrence_expand.expand_events([event], start_date, window_end)
+    occ_dates = sorted({o["start_at"][:10] for o in occurrences if o.get("start_at")})
+    if len(occ_dates) < 2:
+        return False
+    span = (date.fromisoformat(occ_dates[-1]) - date.fromisoformat(occ_dates[0])).days
+    return span >= _WEEKLY_SCHEDULE_MIN_SPAN_DAYS
+
+
+def _render_weekly_schedule(conn, config: dict, nav: dict | None = None) -> dict:
+    """Weekly Schedule widget (2026-08-15, new type, plans/open.md's
+    "small schedule calendar... statically... a way to show the
+    university schedule" ask) -- a compact, STATIC weekly-pattern view of
+    a label's long-lived recurring events (see _is_long_lived_recurrence),
+    deliberately lighter than the removed Schedule module (plans/
+    abandoned.md, 2026-08-15): no new data model, no course/semester
+    fields, purely a presentation over ordinary recurring Calendar events
+    that already exist -- add a class as a normal weekly (optionally
+    every-2-weeks) recurring event and it shows up here automatically.
+
+    "Static" is the operative word: every qualifying event's grid slot
+    comes straight from its own `start_at`/`end_at` time-of-day and
+    `start_at`'s weekday, not from expanding any one real calendar week.
+    This is correct, not a shortcut -- `FREQ=WEEKLY` (optionally
+    `INTERVAL=2` for the odd/even-week presets, see recurrence_picker.js)
+    always recurs on the exact weekday/time of its own anchor, so no
+    occurrence expansion is needed for *display*, only for the long-lived
+    *qualification* check. A real week's holidays/manual exceptions are
+    deliberately not reflected -- this widget answers "what does my
+    typical week look like," not "what's actually on the calendar this
+    particular week" (that's Agenda's job).
+
+    Grid geometry is computed here, not via grid_layout.py's 24-hour Week/
+    Day grid math -- reusing that would render mostly empty space for a
+    widget whose whole point is showing just a handful of class-shaped
+    blocks; the grid's own vertical range is tightened to
+    (earliest start - 30min) .. (latest end + 30min) across every
+    qualifying event, and only weekdays that actually have a block become
+    columns (no blank Saturday/Sunday column for a Mon/Wed/Fri course
+    load). A companion agenda-style list (day + time + title, sorted by
+    weekday then time) renders below the grid -- the grid's blocks
+    necessarily truncate a longer title, and pairing it with a plain
+    readable list is what makes a handful of narrow colored blocks not
+    read as "a lot of dead space with three thin bars in it"."""
+    events = [e for e in _filtered_events(conn, config) if e.get("recurrence") and e.get("start_at")]
+    long_lived = [e for e in events if _is_long_lived_recurrence(e)]
+
+    items = []
+    for e in long_lived:
+        start_min = _minutes_of_day(e["start_at"])
+        end_min = _minutes_of_day(e["end_at"]) if e.get("end_at") else start_min + 60
+        if end_min <= start_min:
+            end_min = start_min + 60
+        items.append({
+            "event": e,
+            "weekday": date.fromisoformat(e["start_at"][:10]).weekday(),
+            "start_min": start_min,
+            "end_min": end_min,
+            "biweekly": "INTERVAL=2" in (e.get("recurrence") or ""),
+        })
+
+    if not items:
+        return {"days": [], "agenda_rows": []}
+
+    grid_start_min = max(0, min(i["start_min"] for i in items) - 30)
+    grid_end_min = min(24 * 60, max(i["end_min"] for i in items) + 30)
+    span_min = max(grid_end_min - grid_start_min, 60)
+
+    days = []
+    for wd in sorted({i["weekday"] for i in items}):
+        blocks = []
+        for i in sorted((i for i in items if i["weekday"] == wd), key=lambda i: i["start_min"]):
+            top_pct = round((i["start_min"] - grid_start_min) / span_min * 100, 2)
+            height_pct = max(round((i["end_min"] - i["start_min"]) / span_min * 100, 2), 4.0)
+            blocks.append({"event": i["event"], "top_pct": top_pct, "height_pct": height_pct, "biweekly": i["biweekly"]})
+        days.append({"weekday": wd, "label": _WEEKDAY_LABELS[wd], "blocks": blocks})
+
+    agenda_rows = sorted(items, key=lambda i: (i["weekday"], i["start_min"]))
+
+    return {"days": days, "agenda_rows": agenda_rows}
+
+
 def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
     """Contacts filtered by tags -- tags that match project names in the
     space's group (or any tags explicitly set in config["tags"]). Designed
@@ -993,6 +1117,17 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": {"tasks", "events"},
         "default_width": "half",
     },
+    # "weekly_schedule" (2026-08-15, new type) -- see
+    # _render_weekly_schedule's own docstring. "half" width: a compact
+    # grid + a short list, more content than a bare stat widget but not a
+    # full 6-column-wide grid either.
+    "weekly_schedule": {
+        "label": "Weekly Schedule",
+        "template": "_widget_weekly_schedule.html",
+        "render": _render_weekly_schedule,
+        "uses": {"events"},
+        "default_width": "half",
+    },
 }
 
 # --------------------------------------------------------------------- #
@@ -1070,6 +1205,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     "streak_view": {"label": "Streak", "source": "calendar_tasks", "has_range": False},
     "next_deadline_view": {"label": "Next deadline", "source": "calendar_tasks", "has_range": False},
     "organize_today_view": {"label": "What needs organizing", "source": "calendar_tasks", "has_range": False},
+    "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
@@ -1112,6 +1248,7 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("streak_view", None): ("streak", {}),
     ("next_deadline_view", None): ("next_deadline", {}),
     ("organize_today_view", None): ("organize_today", {}),
+    ("weekly_schedule_view", None): ("weekly_schedule", {}),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
@@ -1133,6 +1270,7 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("streak", None): ("calendar_tasks", "streak_view", None),
     ("next_deadline", None): ("calendar_tasks", "next_deadline_view", None),
     ("organize_today", None): ("calendar_tasks", "organize_today_view", None),
+    ("weekly_schedule", None): ("calendar_tasks", "weekly_schedule_view", None),
 }
 
 
