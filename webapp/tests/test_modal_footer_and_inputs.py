@@ -379,26 +379,29 @@ class TestContactFormAvatarUploadAndFieldOrder:
         ]:
             assert expected in js
 
-    def test_recurrence_picker_js_defines_odd_even_week_parity(self):
-        """2026-08-15 follow-up ("just implement odd week, even week
-        recurrence for events") -- Weekly recurrence gets its own "Repeats"
-        sub-dropdown (Every week / odd weeks / even weeks), a separate
-        `.multiselect` sibling of the FREQ preset dropdown, same shape as
-        Ends. Odd/even itself is never stored on the hidden recurrence
-        input -- only `INTERVAL=2` is -- so the picker also derives/snaps
-        the sibling `start_at` field's own ISO week parity client-side."""
+    def test_recurrence_picker_js_defines_every_2_weeks_preset(self):
+        """2026-08-15 ("just implement odd week, even week recurrence for
+        events"), reworked same-day on direct follow-up feedback ("just
+        have one more Recurrence rule that is Every 2 weeks, this is
+        cleaner") -- no separate odd/even sub-dropdown or date-snapping:
+        `FREQ=WEEKLY;INTERVAL=2` is just one more flat preset alongside
+        Daily/Weekly/Monthly/Yearly. Which weeks it lands on (odd/even ISO
+        week) is whatever the event's own start_at already is -- nothing
+        here computes or stores that separately."""
         js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
         js = js_path.read_text(encoding="utf-8")
         for expected in [
+            '{ value: "FREQ=WEEKLY;INTERVAL=2", label: "Every 2 weeks" }',
+        ]:
+            assert expected in js
+        # The odd/even sub-dropdown + ISO-week snapping from the first cut
+        # of this feature are gone.
+        for removed in [
             "recurrence-parity-select",
-            'parityWrap.className = "multiselect widget-list-multiselect recurrence-parity-select"',
-            '{ value: "odd", label: "Every 2 weeks (odd weeks)" }',
-            '{ value: "even", label: "Every 2 weeks (even weeks)" }',
-            "FREQ=WEEKLY;INTERVAL=2",
             "function isoWeekParity(",
             "function applyParitySnap(",
         ]:
-            assert expected in js
+            assert removed not in js
 
     def test_reminders_picker_js_defines_the_expected_presets(self):
         js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "reminders_picker.js"
