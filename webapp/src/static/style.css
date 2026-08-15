@@ -1543,8 +1543,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .tile-option:hover{box-shadow:var(--elevation-1);}
 .tile-option:has(.tile-radio:checked){border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:var(--elevation-1);}
+/* Direct feedback, 2026-08-15: "the tile icons should retain the color
+   even when one is selected" -- a checked tile used to recolor its icon
+   to --accent-neutral (the same blue the border/background/label text
+   already switch to), so the icon's own color wasn't stable across the
+   unselected/selected states. Selection is still clearly shown by the
+   border/background/label-text change on .tile-option itself just above
+   -- the icon simply no longer has its own separate recolor rule. */
 .tile-icon{color:var(--fg-secondary);}
-.tile-option:has(.tile-radio:checked) .tile-icon{color:var(--accent-neutral);}
 .tile-option-label{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
 
 /* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
