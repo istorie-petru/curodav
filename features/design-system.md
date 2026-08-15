@@ -25,3 +25,46 @@ Shared input patterns (the app's standard form vocabulary) — tile/card picker,
 segmented control, swatch-grid popover, chip multiselect, stepper — live in the
 modal/input components (`_modal_footer.html`, `_widget_list_multiselect.html`,
 `_widget_builder_fields.html`).
+
+## Modal windows (2026-08-15 uniformization)
+
+Every modal fragment in the app (`grep -l "modal-header\|modal-body"
+src/templates/*.html`) follows one set of rules now, closing out an audit
+that found three different hand-rolled footer implementations, an
+unconfirmed Delete, and a sizing bug (`plans/open.md`'s former Modal window
+uniformization section has the full before/after — removed from that file
+now that every slice has shipped, per its own "How open work gets tracked"
+convention).
+
+- **Footer:** always `{% include "_modal_footer.html" %}` — never hand-rolled
+  `.modal-footer` markup. The partial supports three shapes via its Jinja
+  variables (see its own docstring for the full contract): the default
+  back-link/spacer/delete/primary bar (`footer_back_url` + optional
+  `footer_delete_url` + `footer_primary_label`); a primary-only bar with no
+  back link at all, for a single "does its own thing and closes" action
+  (`_modal_widget_customize`'s "Add widget" — omit `footer_back_url`); and a
+  Back/Done-only bar with no primary at all, for a form whose real save
+  mechanism already lives in the body — autosave, an instant per-row action —
+  rather than the footer (`_widget_edit_modal`, `banner_editor` — omit
+  `footer_primary_label`).
+- **Delete confirmation is never optional.** Every destructive action reached
+  from a modal footer is `footer_delete_mode='undo'` (reversible, has a
+  toast-undo path) or `'confirm'` (irreversible, no undo destination) —
+  never a bare POST.
+- **Title:** a plain `<h1>text</h1>`, no icon prefix, for every create/edit
+  form and utility modal. The rich identity header (a status-colored
+  dot/avatar + large bold `.detail-title`, `.modal-header
+  h1.detail-title{font-weight:700}`) is reserved for real-entity detail/view
+  modals only (task/event/contact).
+- **Body layout:** two shapes cover a plain form or a plain read-only view —
+  `.modal-body > .card > .field-grid` (form) or a stack of `.detail-card`s
+  (detail/view). A modal may declare a third, custom shape (a two-pane
+  builder, a bespoke uploader) only when neither fits — it still gets a
+  footer via the rules above.
+- **Sizing:** two named dialog widths, `default` and `.modal.is-wide`
+  (`data-modal-size="wide"` on the *opening trigger link* — the fragment
+  itself can't set its own dialog width). `wide` is for any modal whose
+  content is a two-pane layout or a wide table; every trigger opening such a
+  fragment must carry the attribute. `.modal-stable-height` is for any modal
+  whose own content changes shape post-open without a full re-navigation (a
+  view↔edit cross-fade, a tab switch) — everything else free-heights.

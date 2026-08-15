@@ -1,4 +1,4 @@
-"""Tests for the 2026-08-15 Modal window uniformization slices (A-C,
+"""Tests for the 2026-08-15 Modal window uniformization slices (A-H,
 plans/open.md's own numbering):
 
 - Slice A/B: habit_form.html, habit_task_form.html, label_edit_modal.html,
@@ -16,7 +16,20 @@ plans/open.md's own numbering):
   open the same two-pane `.widget-builder` grid `_widget_edit_modal.html`'s
   own trigger already opens `data-modal-size="wide"` for -- they now carry
   the same attribute so the dialog doesn't squeeze the grid into the
-  default width."""
+  default width.
+- Slice D: `_modal_widget_customize.html` (the widget builder's "Add
+  widget" primary-only footer, no back link at all -- extended
+  `_modal_footer.html` to support omitting `footer_back_url` entirely).
+- Slice E: `_widget_edit_modal.html` gets a Back/Done-only footer (no
+  primary -- extended the partial to support omitting
+  `footer_primary_label`); the real Save stays in the body as
+  `_widget_edit_form.html`'s own progressive-enhancement fallback button
+  for the no-JS/autosave-failed path.
+- Slice F: `banner_editor.html` gets a Back/Done-only footer using the
+  real `page_url` (this template also renders as a standalone no-JS page).
+- Slice G: the icon prefix is dropped from `banner_editor.html`'s and
+  `_widget_edit_modal.html`'s `<h1>` to match every other utility modal's
+  plain-title convention."""
 
 from __future__ import annotations
 
@@ -26,6 +39,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db
+from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
@@ -141,3 +155,66 @@ class TestNewWidgetTriggerWideSizing:
         idx = body.index("/dashboard/customize")
         surrounding = body[max(0, idx - 40) : idx + 200]
         assert 'data-modal-size="wide"' in surrounding
+
+
+class TestWidgetCustomizeModalFooter:
+    def test_customize_modal_is_primary_only_no_back_link(self, conn):
+        body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
+        assert 'class="modal-footer"' in body
+        assert 'form="widget-builder-form"' in body
+        assert "Add widget" in body
+        # deliberately no back/cancel link at all -- the dialog's own X
+        # closes it (2026-08-07 "one button" decision, preserved by slice D).
+        assert "data-modal-cancel" not in body
+        assert "detail-delete-link" not in body
+        # plain title, no icon prefix -- rule 3.
+        assert "<h1>Customize" in body
+
+
+class TestWidgetEditModalFooter:
+    def test_widget_edit_modal_has_done_only_footer(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="", project_uid="",
+            tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        widget = db.list_dashboard_widgets(conn)[-1]
+        body = dashboard_router.widget_edit_form(_request(), widget["uid"], conn=conn).body.decode()
+        assert 'class="modal-footer"' in body
+        assert "Done" in body
+        # no second Save in the footer -- the real one is still the body's
+        # own progressive-enhancement fallback button (widget-save-filters-btn).
+        assert 'form="widget-builder-form"' not in body
+        assert "widget-save-filters-btn" in body
+        # plain title, no icon prefix -- rule 3.
+        assert "<h1>Edit widget</h1>" in body
+
+
+class TestBannerEditorFooter:
+    def test_banner_editor_has_done_only_footer_with_real_page_url(self, conn):
+        body = banners_router.banner_editor(_request(), scope="", page_url="/dashboard", conn=conn).body.decode()
+        assert 'class="modal-footer"' in body
+        assert 'href="/dashboard"' in body
+        assert "Done" in body
+        assert "detail-delete-link" not in body
+        # plain title, no icon prefix -- rule 3.
+        assert "<h1>Page banner</h1>" in body
+
+
+class TestFullAppModalSweep:
+    """Slice H: regression guard that every modal fragment in the app
+    routes its footer through `_modal_footer.html` -- no leftover
+    hand-rolled `.modal-footer` markup anywhere."""
+
+    def test_every_modal_template_includes_shared_footer(self):
+        from pathlib import Path
+
+        templates_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
+        modal_files = [
+            "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
+            "habit_form.html", "habit_task_form.html", "label_edit_modal.html", "label_merge_modal.html",
+            "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
+            "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
+        ]
+        for name in modal_files:
+            text = (templates_dir / name).read_text()
+            assert '{% include "_modal_footer.html" %}' in text, f"{name} doesn't use the shared footer partial"

@@ -2380,6 +2380,42 @@ session, right before the final commit of that session.
   made to that uncommitted work to get the suite green (`_widget_edit_
   modal.html`'s Jinja comment ending `-->` instead of `#}`; a too-strict
   assertion in `test_modal_uniformization.py`).
+- **Shipped:** side work — **Modal window uniformization, slices D-H (all
+  slices now shipped)**, complete (2026-08-15), continuing straight on
+  from slices A-C (`cc31141`) once the concurrent Async CRUD work above
+  had committed and the tree was green again (session paused mid-slice
+  waiting on that, per its own direct instruction — see this file's git
+  log for the gap). Four small slices closing out the 8-slice (A-H)
+  breakdown from `plans/open.md`'s former Modal window uniformization
+  section (now removed — every slice shipped, folded into
+  `features/design-system.md`'s new "Modal windows" section instead, per
+  this repo's "ships -> describe the outcome, remove the section"
+  convention):
+  - **D** — `_modal_widget_customize.html`'s "Add widget" onto
+    `_modal_footer.html` in a new primary-only mode (no back link at all,
+    the dialog's own X still closes it, preserving the 2026-08-07
+    "one button" decision) — `_modal_footer.html` gained a second small
+    extension, `footer_back_url` can now be omitted entirely.
+  - **E** — `_widget_edit_modal.html` gets a Back/Done-only footer.
+    Checked `static/dashboard_widget_preview.js` directly before touching
+    anything (per this file's own "verify, don't guess" habit): the body's
+    inline "Save filters" button isn't vestigial, it's a real
+    progressive-enhancement fallback JS hides once autosave takes over and
+    un-hides again on failure, so it stays in the body untouched — the
+    partial gained a third small extension, `footer_primary_label` can now
+    be omitted for a footer with no primary button at all.
+  - **F** — `banner_editor.html` gets a Back/Done-only footer using the
+    real `page_url` (this template also renders standalone for a no-JS
+    visit, so the back link needs a real navigable target, not `#`).
+  - **G** — dropped the inconsistent icon prefix from `banner_editor`'s
+    and `_widget_edit_modal`'s `<h1>` to match every other utility modal.
+  - **H** — re-grepped all 15 modal fragments: every one now includes
+    `_modal_footer.html`, no leftover hand-rolled footer markup anywhere.
+    Added a standing regression test (`TestFullAppModalSweep`) that greps
+    the same 15 files for the include, so a future modal skipping the
+    partial fails CI instead of waiting for another manual audit.
+  4 new tests extending `test_modal_uniformization.py` (13 total), full
+  suite 1524 passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

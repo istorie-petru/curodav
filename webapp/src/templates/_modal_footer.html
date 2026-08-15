@@ -8,7 +8,16 @@
    to the body's form by id) -- on the right.
 
    Set these Jinja variables before `{% include %}`:
-     footer_back_url        -- where the back/cancel link navigates
+     footer_back_url        -- where the back/cancel link navigates; omit
+                               entirely for a primary-only footer with no
+                               back/cancel link at all (2026-08-15 modal
+                               uniformization slice D -- the widget
+                               Customize modal's "Add widget" is
+                               deliberately the only button, relying on the
+                               dialog's own X to close; the spacer still
+                               renders so the lone primary button sits on
+                               the right like every other modal's primary,
+                               instead of stranded on the left)
      footer_back_mode       -- "cancel" (data-modal-cancel, closes the
                                modal; the view's "Done", and an edit form
                                with no view to go back to) or "modal"
@@ -21,7 +30,7 @@
      footer_delete_mode     -- "undo" (data-delete-undo) or "confirm"
                                (data-confirm-sheet); default "undo"
      footer_delete_label    -- undo label / confirm-sheet message
-     footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
+      footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
       footer_delete_cc_change -- when set (e.g. "task"), the undo-mode
                                 delete form opts into the async-CRUD
                                 cc-entity-changed event instead of the
@@ -29,7 +38,16 @@
      footer_primary_href    -- Edit link (view modals); when set the primary
                                is an <a>, otherwise a submit <button>
      footer_primary_form    -- id of the body <form> the Save button submits
-     footer_primary_label   -- "Edit" / "Save"
+     footer_primary_label   -- "Edit" / "Save"; omit entirely for a
+                               Back/Done-only footer with no primary button
+                               at all (2026-08-15 modal uniformization
+                               slice E -- `_widget_edit_modal.html`'s own
+                               Save already lives in the body as a real
+                               progressive-enhancement fallback button for
+                               the no-JS/autosave-failed path,
+                               static/dashboard_widget_preview.js's
+                               autosave hides it once JS takes over; the
+                               footer doesn't need a second one)
      footer_primary_icon    -- sprite icon name; default "edit" for a link,
                                "check-square" for a submit button
      footer_primary_id      -- optional id on the primary <button>/<a>; only
@@ -39,10 +57,12 @@
                                via getElementById -- 2026-08-15 modal
                                uniformization) #}
 <div class="modal-footer">
+{% if footer_back_url %}
 {% if footer_back_mode == 'modal' %}
 <a href="{{ footer_back_url }}" class="btn ghost" data-modal>{{ icon('chevron-left', 'icon-sm') }} {{ footer_back_label|default('Done') }}</a>
 {% else %}
 <a href="{{ footer_back_url }}" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} {{ footer_back_label|default('Done') }}</a>
+{% endif %}
 {% endif %}
 <span class="spacer"></span>
 {% if footer_delete_url %}
@@ -56,9 +76,11 @@
 </form>
 {% endif %}
 {% endif %}
+{% if footer_primary_label %}
 {% if footer_primary_href %}
 <a class="btn primary"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
 {% else %}
 <button type="submit"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} form="{{ footer_primary_form }}" class="btn primary">{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
+{% endif %}
 {% endif %}
 </div>
