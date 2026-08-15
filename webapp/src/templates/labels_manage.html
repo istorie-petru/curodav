@@ -21,7 +21,6 @@
         {{ l.name }}
         {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
     </span>
-    <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
     <span class="spacer"></span>
     {% if show_merge %}
     <a href="/labels/{{ l.name }}/merge-modal" class="icon-btn" title="Merge into another label" data-modal>{{ icon('git-pull-request', 'icon-sm') }}</a>
