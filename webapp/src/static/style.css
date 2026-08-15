@@ -3497,27 +3497,27 @@ body.command-palette-open{overflow:hidden;}
 /* Weekly Schedule widget (2026-08-15, _widget_weekly_schedule.html) -- a
    compact STATIC weekly-pattern grid, deliberately not the 24-hour Week/
    Day grid's own math (grid_layout.py): only weekdays with a block become
-   columns, and the vertical range is whatever routers/dashboard.py's
-   _render_weekly_schedule already tightened to the events' own time span,
-   expressed here as plain top/height percentages of one fixed-height
-   column rather than a px-per-hour scale. The agenda table below reuses
-   this app's plain <table> widget convention (see _widget_agenda.html
-   etc.), just with a leading weekday column. */
-.weekly-schedule-grid{display:grid; gap:6px; margin-bottom:10px;}
+   columns, stacked chronologically rather than positioned by proportional
+   top/height percentages on a time axis -- fixed-size, legible cards
+   instead of a mini calendar grid. The agenda table below reuses this
+   app's plain <table> widget convention (see _widget_agenda.html etc.),
+   just with a leading weekday column. */
+.weekly-schedule-grid{display:grid; gap:14px; margin-bottom:14px;}
 .weekly-schedule-col{display:flex; flex-direction:column; min-width:0;}
 .weekly-schedule-day-label{
-  font-size:12px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px; text-align:center;
+  font-size:13px; font-weight:600; color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
 }
 .weekly-schedule-col-body{
-  position:relative; height:120px; background:var(--surface-container-high);
-  border-radius:var(--radius-sm); border:1px solid var(--separator);
+  display:flex; flex-direction:column; gap:8px;
 }
 .weekly-schedule-block{
-  position:absolute; left:2px; right:2px; overflow:hidden;
+  overflow:hidden; min-height:56px;
+  display:flex; flex-direction:column; justify-content:center; gap:3px;
   background:var(--accent-neutral-subtle); border-left:3px solid var(--accent-neutral);
-  border-radius:4px; padding:2px 4px; text-decoration:none; color:var(--fg-primary);
+  border-radius:var(--radius-sm); padding:10px 12px; text-decoration:none; color:var(--fg-primary);
 }
-.weekly-schedule-block-title{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
+.weekly-schedule-block-time{font-size:11px; font-weight:500; color:var(--fg-tertiary);}
+.weekly-schedule-block-title{font-size:13px; font-weight:600; line-height:1.3; word-break:break-word;}
 .weekly-schedule-agenda{width:100%;}
 
 /* Schedule > Export modal (routers/schedule.py, schedule_export.html):

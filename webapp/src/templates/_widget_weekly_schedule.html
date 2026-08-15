@@ -4,10 +4,13 @@
      Weekly Schedule widget (2026-08-15, new type) -- a compact, STATIC
      weekly-pattern view of a label's long-lived recurring events (a
      "university timetable" without reviving the removed Schedule
-     module): only weekdays that actually have a block become columns,
-     the vertical range is tightened to the events' own time span (not a
-     full 24h day), and a plain agenda-style list underneath gives the
-     full readable detail the grid's own truncated blocks can't. -->
+     module): only weekdays that actually have a block become columns.
+     Blocks stack in chronological order (day.blocks is already sorted by
+     start time) rather than being positioned by top_pct/height_pct on a
+     proportional time axis -- legible fixed-size cards, not a mini
+     calendar grid -- and each card shows its own time interval directly,
+     so the plain agenda-style list underneath is a secondary, fuller
+     reference rather than the only place the time appears. -->
 {% if data.days %}
 <div class="weekly-schedule-grid" style="grid-template-columns: repeat({{ data.days|length }}, 1fr);">
     {% for day in data.days %}
@@ -16,8 +19,8 @@
         <div class="weekly-schedule-col-body">
             {% for block in day.blocks %}
             <a class="weekly-schedule-block" href="/events/{{ block.event.uid }}" data-modal
-               style="top:{{ block.top_pct }}%; height:{{ block.height_pct }}%;"
                title="{{ block.event.title }}{% if block.biweekly %} (every 2 weeks){% endif %}">
+                <span class="weekly-schedule-block-time">{{ block.event.start_at | fmt_time }}{% if block.event.end_at %}&ndash;{{ block.event.end_at | fmt_time }}{% endif %}{% if block.biweekly %} <span class="text-muted">(every 2 weeks)</span>{% endif %}</span>
                 <span class="weekly-schedule-block-title">{{ block.event.title }}</span>
             </a>
             {% endfor %}
