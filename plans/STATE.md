@@ -2136,6 +2136,37 @@ session, right before the final commit of that session.
   order:** Website (multi-value), then Birthday, Address, Social network —
   see `open.md`'s Contacts field parity section.
 
+- **Designed:** side work — **Modal window uniformization, audit + rules**
+  (docs only, no code), complete (2026-08-15), direct user request to jump
+  ahead of Project check-in in the 2026-08-15 reprioritized queue and start
+  this now. Read every modal template in the app
+  (`grep -l "modal-header\|modal-body" src/templates/*.html`, 15 real modal
+  fragments) against `_modal_footer.html`'s existing convention, per this
+  file's own standing "audit before assuming a from-scratch build" habit.
+  Found: three different footer implementations in use (the shared
+  `_modal_footer.html` partial — core three entities only; hand-rolled
+  `.modal-footer` markup with small pointless differences — habit_form/
+  habit_task_form/label_edit_modal/label_merge_modal/note_form/quick_add/
+  _modal_widget_customize; no footer at all, Save embedded in the body form
+  — `_widget_edit_modal`/`banner_editor`); a real safety bug
+  (`note_form.html`'s Delete has neither confirm-sheet nor undo — the only
+  unconfirmed delete action in the app); an inconsistent icon-prefixed `<h1>`
+  on 2 of 12 utility-modal titles; and one real sizing bug
+  (`_modal_widget_customize`'s two-pane widget-builder grid never gets
+  `data-modal-size="wide"` on its trigger links, unlike the visually
+  identical `_widget_edit_modal`, so it squeezes into the default width).
+  Wrote the "real uniform modal windows" rules (footer always through
+  `_modal_footer.html`, delete confirmation never optional, plain-`<h1>`
+  titles reserved for utility modals vs. the rich identity header for
+  entity detail views, two allowed body shapes plus a documented custom
+  exception, two named dialog sizes) and an 8-slice (A-H) implementation
+  breakdown, ordered safety-fix-first. See `plans/open.md`'s Modal window
+  uniformization section for the full audit + rules + slice list.
+  **Deliberately no code changed this session** — slices A-C are small and
+  independent, but slices D-H should still wait for Contacts field parity
+  (4 of 6 sub-slices open) and Project check-in to finish touching the
+  entity/widget modals first, per the section's own updated note.
+
 ## Breadcrumbs for 1.4's two still-deferred items
 
 1.4's main line (work allocations + both project views) is fully shipped.

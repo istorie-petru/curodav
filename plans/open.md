@@ -35,6 +35,14 @@ remaining pieces (collapsible sections, DAVx5 — see `roadmap.md`'s 1.9 row)
 weren't mentioned in the reprioritization and stay parked at the back of the
 queue.
 
+**Second direct steer, 2026-08-15 (later the same day):** start Modal
+window uniformization's audit-then-write-rules pass now, ahead of Project
+check-in — see its own section below for the completed audit + rules.
+Contacts field parity (4 of 6 sub-slices still open) is untouched by this
+steer and still comes before Modal uniformization's *implementation*
+slices D-H (not its design pass, which doesn't touch live modals) — see
+that section's own note on why.
+
 1. ~~**Command palette actions**~~ — **shipped 2026-08-15**, see
    `features/tasks.md` § Search & the command surface.
 2. ~~**Dashboard widgets: new widgets + real customization**~~ — **shipped
@@ -183,30 +191,187 @@ Databases were removed; see `abandoned.md`.)
 
 ## Modal window uniformization (2026-08-15)
 
-**Status:** decision recorded, no spec written yet — needs a dedicated
-design pass before it's buildable. Last in the reprioritized queue
-(2026-08-15) deliberately: this cuts across every entity's create/edit
-modal, so sequencing it after the items above (which still touch modals —
-Event format's Format field ~~shipped 2026-08-15~~, see
-`features/calendar.md` § Event CRUD & fields; Contacts parity adds several
-to the contact modal) avoids uniformizing a modal now and then immediately
-having to redo the touch-up when those items land their own new fields.
+**Status:** audit complete, rules written below (2026-08-15) — **no code
+changed yet**. Jumped ahead of Project check-in in the reprioritized queue
+at direct user request (2026-08-15); the "sequence it last" reasoning below
+still explains *why* it was originally queued last, it just no longer
+gates when the design pass itself happens (design work doesn't touch live
+modals, so nothing here needed the other items to land first — only the
+eventual *implementation* slices do, see the build order at the bottom).
 
-Direct feedback, 2026-08-15: modal windows across the app don't currently
-follow one consistent set of rules for footer layout, title treatment, and
-body layout — particularly the difference between a body that's a stack of
-cards (`.card`-per-section, e.g. `settings_data_health.html`'s pattern) vs.
-a body drawing more directly onto the modal surface (plain field rows, e.g.
-`task_form.html`), plus modal height/width sizing overall. `_modal_footer.html`
-already exists as one shared footer partial (Back/Cancel + Delete + Save,
-see its own docstring), so this isn't starting from zero, but it isn't
-consistently used or complete as a spec — some modals may have grown their
-own footer markup instead. When this slice starts: audit every modal
-template (`grep -l data-modal src/templates/*.html` is the rough entry
-point) against `_modal_footer.html`'s existing convention, catalog where
-footers/titles/body layout actually diverge, and only then write the "real
-uniform modal windows" rules the feedback is asking for — this doc entry is
-the placeholder for that pass, not the pass itself.
+Original reasoning for the "last" placement, still true for
+implementation: this cuts across every entity's create/edit modal, so
+touching it before the items above (which still touch modals — Event
+format's Format field, shipped 2026-08-15, see `features/calendar.md` §
+Event CRUD & fields; Contacts parity adds several fields to the contact
+modal, 4 of 6 sub-slices still open) risks uniformizing a modal now and
+then immediately redoing the touch-up when those items land new fields.
+Implementation slices D-H below should still wait for Contacts field
+parity and Project check-in to finish touching the entity modals; slices
+A-C are narrow enough (one file, or a one-line trigger attribute) that
+there's nothing left for a later feature to collide with.
+
+### Audit (every modal template against `_modal_footer.html`'s convention)
+
+Every template with a `.modal-header`/`.modal-body` pair
+(`grep -l "modal-header\|modal-body" src/templates/*.html`) was read in
+full. 15 real modal fragments exist: `task_form`/`task_detail`,
+`event_form`/`event_detail`, `contact_form`/`contact_detail` (the "core
+three", already uniform with each other — see their own 2026-08-08 "one
+cohesive stroke" comments), `habit_form`, `habit_task_form`,
+`label_edit_modal`, `label_merge_modal`, `note_form`, `quick_add`,
+`banner_editor`, `_widget_edit_modal`, `_modal_widget_customize`.
+
+**Footer — three different implementations, not one:**
+
+1. **`_modal_footer.html` (the shared partial)** — used only by the core
+   three's detail/edit pairs. Back-left (chevron icon) / spacer / demoted
+   `.detail-delete-link` text-link (undo or confirm-sheet mode) / primary
+   `.btn.primary` (icon + label) on the right.
+2. **Hand-rolled `.modal-footer` markup** — `habit_form`, `habit_task_form`,
+   `label_edit_modal`, `label_merge_modal`, `note_form`, `quick_add`,
+   `_modal_widget_customize`. Each reinvents the same bar with small,
+   pointless differences: Delete rendered as a filled `.btn.danger` button
+   (habit_form, label_edit_modal, note_form) instead of the core three's
+   demoted text-link; Cancel/Save sometimes carry icons (quick_add,
+   label_edit_modal, label_merge_modal) and sometimes don't (habit_form,
+   habit_task_form, note_form); Delete confirmation is `data-confirm-sheet`
+   in some (habit_form, label_edit_modal, label_merge_modal) and **entirely
+   absent** in one — see the safety issue below.
+3. **No footer at all, Save embedded in the body form instead** —
+   `_widget_edit_modal.html` (its `_widget_edit_form.html` already carries
+   `widget-filters-autosave` — the inline "Save filters" button may already
+   be vestigial) and `banner_editor.html` (every action there — upload,
+   remove — is instant/auto-submitting, so there's arguably nothing for a
+   footer to do, but that's a judgment call this doc is now making
+   explicit rather than an accident).
+
+**Safety issue found, not just cosmetic:** `note_form.html`'s Delete form
+has neither `data-confirm-sheet` nor `data-delete-undo` — clicking it
+deletes the note immediately and irreversibly, the only entity delete
+action anywhere in the app with zero confirmation or undo. Worth fixing on
+its own, independent of the rest of this uniformization (see slice A).
+
+**Title treatment — two legitimate shapes, correctly split, but a stray
+third:** detail/view modals (core three only) get the rich identity header
+— a status-colored dot/avatar + large bold `.detail-title`
+(`.modal-header h1.detail-title{font-weight:700}` is the only CSS rule
+that applies this). Every create/edit form and small utility modal gets a
+plain `<h1>text</h1>`, no identity, no icon — *except* `banner_editor.html`
+and `_widget_edit_modal.html`, which icon-prefix their plain h1
+(`{{ icon('image') }} Page banner`, `{{ icon('edit') }} Edit widget`) for
+no documented reason while every sibling utility modal
+(`_modal_widget_customize`, `label_edit_modal`, `note_form`, ...) doesn't.
+
+**Body layout — mostly already consistent, one real gap:** the "form"
+shape (`.modal-body > .card > .field-grid`, the card flattened
+borderless/chromeless by `.modal-body .card{border:none; box-shadow:none}`)
+is used correctly and consistently by every plain create/edit form —
+core three, `habit_form`, `habit_task_form`, `label_edit_modal`,
+`label_merge_modal`, `note_form`. The "detail" shape (a stack of
+`.detail-card`s) is used correctly and consistently by the core three's
+view modals. Two modals are legitimately a third shape — a two-pane
+`.widget-builder` grid (config pane + live preview,
+`_widget_edit_modal.html` and `_modal_widget_customize.html`) — and
+`banner_editor.html` is a legitimate fourth, bespoke, one-off layout
+(image preview + upload control, not a field-grid at all). None of these
+three are wrong to diverge from "form"/"detail" — a two-pane builder or an
+image uploader genuinely isn't either shape — but see sizing below for
+where this bites.
+
+**Sizing — the one real functional bug found:** `data-modal-size="wide"`
+is set on the *opening trigger link*, not derived from the fragment's own
+content, and only 2 of the 3 wide-shaped surfaces opt in
+(`banner_editor.html`'s trigger, `_widget_edit_modal.html`'s trigger both
+carry it). `_modal_widget_customize.html` — the exact same
+`.widget-builder` two-pane grid — is opened via `dashboard.html`'s and
+`label_detail.html`'s "New widget" links, **neither of which sets
+`data-modal-size="wide"`**, so the identical two-column config+preview
+layout squeezes into the default ~narrow width there while the
+per-widget-edit version of the same layout gets the wide dialog. This is a
+real, fixable inconsistency, not a style preference.
+`.modal-stable-height` (a fixed, capped-at-720px height so a view↔edit
+cross-fade or a tab switch doesn't jump/resize the dialog) is opted into
+by the core three's pairs and by `quick_add` (its task/event tab switch);
+every other modal free-heights to its own content, which is correct for a
+single-state form — this one isn't actually inconsistent, just never
+written down as a rule until now.
+
+### Rules ("real uniform modal windows")
+
+1. **Footer:** every modal renders its footer through `_modal_footer.html`
+   — no more hand-rolled `.modal-footer` markup anywhere. The partial needs
+   two small extensions to cover the legitimate non-CRUD shapes found
+   above: (a) a primary-only mode with no back/cancel link and no Delete
+   (`_modal_widget_customize`'s "Add widget"), (b) confirming that
+   `footer_delete_mode='confirm'` (already supported) is the right choice
+   wherever an action has no natural undo destination (note_form, whose
+   notes list has no per-row undo-toast precedent the way tasks/events/
+   contacts do). A modal whose form autosaves with no discrete save step
+   (`_widget_edit_modal`) still gets a footer — just Back/Done only, no
+   primary button — rather than an embedded button and no footer.
+2. **Delete confirmation is never optional.** Every destructive action
+   reachable from a modal footer must be `undo` or `confirm` mode, never a
+   bare POST. Fixes note_form immediately (slice A, small and independent
+   of the rest).
+3. **Title:** plain `<h1>` for every create/edit form and utility modal, no
+   icon prefix, no identity treatment — keep the rich identity header
+   (dot/avatar + bold `.detail-title`) exclusive to real-entity detail/view
+   modals, matching what's already consistently true today. Drop the
+   inconsistent icon-prefix on `banner_editor`/`_widget_edit_modal`'s `<h1>`
+   to match every other utility modal, rather than adding icons everywhere
+   else to match them — smaller diff, and a plain title is already the
+   overwhelming majority convention.
+4. **Body layout:** exactly two shapes for anything that's a plain form or
+   a plain read-only view — "form" (`.modal-body > .card > .field-grid`)
+   and "detail" (a stack of `.detail-card`s) — already correctly applied
+   everywhere they belong. A modal may declare a third, custom shape
+   (two-pane builder, bespoke uploader) only when neither shape fits, and
+   doing so doesn't exempt it from rule 1's footer requirement.
+5. **Sizing:** two named sizes, `default` and `wide` (`.modal`/
+   `.modal.is-wide`, already exist). `wide` is for any modal whose content
+   is a two-pane layout or a wide table; every trigger opening such a
+   fragment must carry `data-modal-size="wide"` — no exceptions, since the
+   fragment can't set its own dialog width. Fixes the Add-widget/Customize
+   trigger gap (slice C). `.modal-stable-height` is for any modal whose own
+   content changes shape post-open without a full re-navigation (a view↔edit
+   cross-fade, or `quick_add`'s tab switch) — everything else free-heights,
+   which is already how every other modal behaves today.
+
+### Implementation slices (small, pick off independently, in this order)
+
+- **A. Fix `note_form.html`'s unconfirmed Delete** — add
+  `data-confirm-sheet` (or wire it through `_modal_footer.html` directly,
+  folding this into slice B). Safety fix, do first, tiny, no dependency on
+  anything else here.
+- **B. Migrate the hand-rolled-footer modals onto `_modal_footer.html`** —
+  `habit_form`, `habit_task_form`, `label_edit_modal`, `label_merge_modal`,
+  `note_form`, `quick_add`; extend the partial for the primary-only mode
+  first if `_modal_widget_customize` is done in the same slice, otherwise
+  defer that one case to slice D.
+- **C. Add `data-modal-size="wide"` to the "New widget" triggers**
+  (`dashboard.html`, `label_detail.html`) so `_modal_widget_customize`
+  matches `_widget_edit_modal`'s sizing. One-line-per-trigger, no template
+  restructuring.
+- **D. `_modal_widget_customize.html` onto `_modal_footer.html`**
+  (primary-only mode) — do after C so the sizing fix is visible during
+  testing.
+- **E. Resolve `_widget_edit_modal`'s embedded Save vs. its footer** —
+  either drop the inline "Save filters" button (rely purely on the
+  existing autosave) and add a Done-only footer, or keep an explicit Save
+  and move it into the footer instead of the body; needs a quick direct
+  check with the user on which behavior autosave actually already
+  delivers before picking (do not guess).
+- **F. `banner_editor.html`: decide footer or no-footer as a documented
+  exception** — either add a plain Done-only footer for consistency with
+  rule 1, or record it explicitly as the one allowed no-footer case
+  (a modal where literally every body action is a complete, instant
+  operation) so it isn't rediscovered as a "bug" later.
+- **G. Drop the icon prefix from `banner_editor`/`_widget_edit_modal`'s
+  `<h1>`** to match rule 3.
+- **H. Full-app modal sweep** — after A-G ship, re-grep every modal
+  template once more to confirm no leftover hand-rolled footer/title
+  pattern survived (this file's own audit list above is the checklist).
 
 ## Known open risks
 
