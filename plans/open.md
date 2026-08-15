@@ -41,6 +41,8 @@ step is sized to ship on its own; nothing here blocks the work in
    project stack; ships whenever, without blocking the rework.
 7. **Command palette actions (optional follow-up)** — see below; small,
    self-contained, no model changes.
+8. **Retire the standalone `/projects` page** — presentation-only, no model
+   changes; small and self-contained, see below.
 
 ## Command palette actions (optional follow-up)
 
@@ -96,6 +98,61 @@ lets the user review the state of an active project without treating the
 check-in as a task. The exact workflow stays deliberately lightweight and must
 not introduce another hierarchy of objects — it is a review action on a project,
 not a new entity type.
+
+## Retire the standalone `/projects` page (and its two child views)
+
+**Status:** decision recorded — no code. Scoped 2026-08-15, direct feedback
+("the projects page and pages derived from it... are not worth existing").
+**Presentation-only** — confirmed explicitly with the user: nothing about
+the label/project data model, the Settings > Labels admin page, or the
+`promote`/`set_dates`/`demote`/`archive` endpoints changes. This removes
+only the dedicated pages built to *view* a project; the backend and every
+other project feature (Settings > Labels, the label-config `is_project`
+lifecycle, work allocations) stay exactly as they are.
+
+**What goes away:**
+- `GET /projects` (`routers/projects.py::list_projects`, `templates/
+  projects.html`'s square cards) — the project listing page.
+- `GET /projects/{name}` and its two tabs — Tasks view and Week Calendar
+  view (`routers/projects.py::project_detail`/`project_calendar`,
+  `templates/project_detail.html`/`project_calendar.html`). Both are
+  redundant with capability that already exists elsewhere: the Tasks view
+  duplicates `/tasks?group_by=project` (1.5, already shipped); the Week
+  Calendar view duplicates the merged `/calendar/week` grid (2026-08-14
+  side work) filtered to one project, which already shows every work
+  allocation regardless of project — the same "third copy of the same
+  thing" reasoning that retired the standalone `/week` page.
+
+**What stays untouched:** every label/project field and endpoint in
+`routers/projects.py`/`db.py` (`promote`, `set_dates`, `demote`, `archive`,
+`project_status`, `find_overlapping_project`), Settings > Labels
+(`routers/labels.py`, `labels_manage.html`/`label_edit_modal.html`), and
+the Dashboard `project_preview` widget (repointed, not removed — below).
+
+**What removing the pages cleanly requires:**
+- `base.html`'s tabbar "Projects" entry (`href="/projects"`) dropped —
+  same treatment as the `/today`/`/week` tabbar entries.
+- `_widget_project_preview.html`'s per-project row link changes from
+  `/labels/{name}` to `/tasks?label={name}` (plain filtered Table view, no
+  `group_by` — confirmed with the user: grouping is meaningless once
+  already filtered to a single label).
+- `dashboard.py`'s `quick_links` widget (currently links each project tile
+  to `/projects/{name}`) repointed to the same `/tasks?label={name}`
+  target, for consistency between the two Dashboard project surfaces.
+- `GET /projects` and `GET /projects/{name}` become redirects, not 404s —
+  same "any bookmark still lands somewhere real" precedent already used
+  for `/today`, `/week`, and `/calendar/timetable`'s own retirements:
+  `/projects` -> `/tasks?group_by=project`, `/projects/{name}` ->
+  `/tasks?label={name}`.
+- `tests/test_project_detail.py` and `tests/test_project_calendar.py`
+  deleted (nothing left for their page-content assertions to cover);
+  `tests/test_project_stack.py` needs no changes — already router-level
+  only, never asserts on `/projects` specifically.
+
+**Not decided yet, flag before implementing:** whether `_task_row.html`'s
+project-scoped extraction (pulled out for the project detail Tasks view,
+1.4 slice 2) is still worth keeping as a shared macro once its only other
+caller is the global Tasks page, or should just be inlined there again.
 
 ## Widget consolidation + Streak + Next Deadline
 

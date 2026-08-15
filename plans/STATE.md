@@ -1574,8 +1574,10 @@ session, right before the final commit of that session.
   items are fair game for a session that wants a break from that: `open.md`'s
   Command palette actions follow-up (1.2 side work), 1.4's optional Project
   check-in, 1.6's optional "Configurable views + optional Schedule module",
-  and 1.8's own Pagination/collapsible-sections side work (Phase B of
-  webapp usability, `roadmap.md`'s 1.8 row).
+  1.8's own Pagination/collapsible-sections side work (Phase B of
+  webapp usability, `roadmap.md`'s 1.8 row), and `open.md`'s newly-recorded
+  "Retire the standalone `/projects` page" (2026-08-15, presentation-only —
+  label/project backend and Settings > Labels untouched).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
