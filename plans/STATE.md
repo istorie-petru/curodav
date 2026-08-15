@@ -1733,17 +1733,29 @@ session, right before the final commit of that session.
   (the DAVx5 Phase C piece is unrelated and still blocked on infra); see
   `features/tasks.md` § Views. 13 new tests (`test_tasks_pagination.py`),
   full suite 1239 passed.
-- **Next slice:** nothing queued yet toward the rest of `1.9` — DAVx5
-  mobile hosting (`open.md` § Webapp usability + DAVx5 hosting, Phase C) is
-  pure infra, blocked on an external domain + server the user doesn't have
-  yet (confirmed directly, 2026-08-15) — don't start it until that changes.
-  In the meantime, any of these smaller, self-contained side-work items are
-  fair game for a session that wants a break: `open.md`'s Command palette
-  actions follow-up (1.2 side work), 1.4's optional Project check-in, and
-  1.6's optional "Configurable views" (the Schedule half of that side-work
-  item no longer applies — Schedule is gone). Collapsible sections (the
-  other half of Webapp usability Phase B) also remains open if a session
-  wants to stay in that area.
+- **Reprioritized (direct steer, 2026-08-15):** the next sessions should
+  work Track B (`open.md`) in this order, not pick arbitrarily: (1)
+  **Command palette actions** (`open.md` § Command palette actions —
+  turning the search overlay into a real command surface, decision already
+  recorded), (2) **Dashboard widgets, expanded scope** (`open.md` § Widget
+  consolidation... — original consolidation design plus three new,
+  not-yet-fully-scoped asks: a per-Space Project/Space links widget, a new
+  "what needs organizing today" action widget, and widgets being more
+  customizable in general — needs a design pass before slice 2 starts),
+  (3) two small items, either order: **Tasks page filter cleanup**
+  (`open.md`, new section — Important/Urgent move into their own dropdowns,
+  Overdue needs a new home, not decided) and **Event format for simple
+  events** (`open.md`, new section — a Format: In person/Online field on
+  events replacing the always-both-shown Location/Meeting URL fields), (4)
+  **Contacts field parity**, (5) **Project check-in**, (6) **Modal window
+  uniformization** (`open.md`, new section — deliberately last since it
+  cuts across every modal the items above still touch). DAVx5 mobile
+  hosting (Phase C of Webapp usability) stays blocked on an external
+  domain + server the user doesn't have yet — don't start it until that
+  changes. Configurable views + optional Schedule module and collapsible
+  sections (Phase B's other half) weren't part of this reprioritization;
+  they're still fair game for a session that wants a change of pace, just
+  not the default next pick anymore.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
