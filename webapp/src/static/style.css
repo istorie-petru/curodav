@@ -1510,6 +1510,17 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    higher-specificity override -- same reason .event-start-end-field above
    can't just rely on `hidden` either. */
 .field.holiday-field[hidden]{display:none;}
+/* Format field (2026-08-15, "Event format for simple events") --
+   Location/Meeting URL (_event_form_fields.html) both start hidden;
+   picking a Format radio reveals only its own field. Same
+   #event-form:has() progressive-disclosure pattern as #all_day above --
+   plain `display:none`/`:flex` rather than the `hidden` attribute, for the
+   same `.field{display:flex}`-beats-bare-`[hidden]` reason
+   .field.holiday-field's own comment explains. */
+.field.field-format-location,
+.field.field-format-meeting{display:none;}
+#event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}
+#event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}
 /* label_edit_modal.html's Project date fields, toggled via `hidden` by
    static/label_role_picker.js -- same `.field{display:flex}`-beats-bare-
    `[hidden]` fight as .field.holiday-field right above; same fix. */

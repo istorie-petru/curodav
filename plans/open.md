@@ -28,12 +28,12 @@ step is sized to ship on its own; nothing here blocks the work in
 below the line): ~~Command palette actions~~ **shipped 2026-08-15** (see
 `features/tasks.md` § Search & the command surface), then the expanded
 Dashboard widgets work (~~shipped 2026-08-15~~), then the small Tasks-filter
-cleanup (~~shipped 2026-08-15~~) and Event format items (both small, no
-particular urgency, slot in wherever convenient), then Contacts field parity,
-then Project check-in, then Modal window uniformization. Configurable views +
-optional Schedule module and Webapp usability's remaining pieces (collapsible
-sections, DAVx5 — see `roadmap.md`'s 1.9 row) weren't mentioned in the
-reprioritization and stay parked at the back of the queue.
+cleanup and Event format items (~~both shipped 2026-08-15~~), then Contacts
+field parity, then Project check-in, then Modal window uniformization.
+Configurable views + optional Schedule module and Webapp usability's
+remaining pieces (collapsible sections, DAVx5 — see `roadmap.md`'s 1.9 row)
+weren't mentioned in the reprioritization and stay parked at the back of the
+queue.
 
 1. ~~**Command palette actions**~~ — **shipped 2026-08-15**, see
    `features/tasks.md` § Search & the command surface.
@@ -41,7 +41,8 @@ reprioritization and stay parked at the back of the queue.
    2026-08-15**, see `features/dashboard.md`.
 3. ~~**Tasks page filter cleanup**~~ (small) — **shipped 2026-08-15**, see
    `features/tasks.md` § Tasks page filter cleanup.
-4. **Event format for simple events** (small) — see below. **Next up now.**
+4. ~~**Event format for simple events**~~ (small) — **shipped 2026-08-15**,
+   see `features/calendar.md` § Event CRUD & fields.
 5. **Contacts field parity** — isolated to the Contacts entity and its vCard
    round-trip.
 6. **Project check-in (optional)** — a lightweight, app-local addition to the
@@ -149,38 +150,14 @@ open piece remains:
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)
 
-## Event format for simple events (small, 2026-08-15)
-
-**Status:** decision recorded — no code.
-
-`_event_form_fields.html` currently always shows both Location and Meeting
-URL fields on every event, unconditionally (`events.location`/
-`events.meeting_url` columns, both nullable, both already exist — this is a
-form-visibility change, not a schema change). Direct feedback, 2026-08-15:
-most events are simple and don't need either field visible by default —
-add a **Format** field with two options, **In person** / **Online**, that
-reveals only the relevant field (In person → Location; Online → Meeting
-URL) instead of showing both always. Naming decided directly: "Format",
-not "type"/"kind"/whatever else this could have been called. Whether
-"neither picked" is a valid third state (an event with no format at all,
-both fields hidden — the common case for e.g. an all-day reminder) or
-Format defaults to one of the two isn't decided yet; default to "neither
-picked, both hidden until chosen" unless that turns out awkward once
-someone's looking at the actual form.
-
-No backing column needed for "Format" itself if it's derived (In person if
-`location` is set, Online if `meeting_url` is set, neither if both are
-empty) rather than stored — cheaper than a new column and can't drift out
-of sync with the two fields it's switching between. Decide this the same
-way when the slice starts, not now.
-
 ## Modal window uniformization (2026-08-15)
 
 **Status:** decision recorded, no spec written yet — needs a dedicated
 design pass before it's buildable. Last in the reprioritized queue
 (2026-08-15) deliberately: this cuts across every entity's create/edit
 modal, so sequencing it after the items above (which still touch modals —
-Event format adds a field to the event modal, Contacts parity adds several
+Event format's Format field ~~shipped 2026-08-15~~, see
+`features/calendar.md` § Event CRUD & fields; Contacts parity adds several
 to the contact modal) avoids uniformizing a modal now and then immediately
 having to redo the touch-up when those items land their own new fields.
 
@@ -205,10 +182,8 @@ the placeholder for that pass, not the pass itself.
 Model- and architecture-level risks are tracked in
 [`open-priority.md`](open-priority.md). Nothing in this file currently carries a
 known open risk beyond the blockers noted inline: Contacts field parity's five
-open questions and the `X-SOCIALPROFILE` portability question, DAVx5's
-domain + server requirement, and the two open sub-decisions in "Tasks page
-filter cleanup" (Overdue's new home) and "Event format for simple events"
-(whether a third "neither" Format state stays post-implementation).
+open questions and the `X-SOCIALPROFILE` portability question, and DAVx5's
+domain + server requirement.
 
 ---
 

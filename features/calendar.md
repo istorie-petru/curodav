@@ -276,6 +276,19 @@ Routes: `/events/new`, `POST /events`, `/events/{uid}` (read-only detail page),
 location, meeting URL, labels, recurrence, reminders (minutes before). `_NONE_LIKE`
 cleanup normalizes literal "None"/"Nothing" strings.
 
+**Format field (2026-08-15, "Event format for simple events"):** the form
+shows a Format choice (In person / Online) instead of always showing both
+Location and Meeting URL — picking one reveals only its own field (In person
+→ Location, Online → Meeting URL); picking neither (the default, including
+every brand-new event) hides both. Format has no backing column — it's
+derived purely from which of `location`/`meeting_url` already has a value
+(Location wins if a legacy row somehow has both), so the two columns and
+their semantics are unchanged; only the form's visibility rules are new.
+Show/hide is plain CSS (`#event-form:has(#event_format_in_person:checked)`,
+`style.css`); `static/event_format_toggle.js` clears the other field's value
+on switch so a hidden stale value can't silently resubmit and repopulate
+both columns.
+
 ## Relations & education
 
 - **Event ↔ task links** (`event_task_relations`): link existing, or "+ New

@@ -2016,6 +2016,38 @@ session, right before the final commit of that session.
   FilterCleanup`, `test_overdue_is_a_virtual_pseudo_status`,
   `test_important_any_level_option`/`test_urgent_any_level_option`, etc. in
   `test_tasks_view_rework.py`), full suite 1352 passed.
+- **Shipped:** side work — **Event format for simple events**, complete
+  (2026-08-15), `plans/open.md` § Event format for simple events (build-order
+  item 4 of the 2026-08-15 reprioritization). `_event_form_fields.html`
+  gained a Format field (`.event-format-segmented`, the same `.seg-btn`/
+  `.seg-radio`/`:has()` radio pattern `label_edit_modal.html`'s Role picker
+  already established) with two options, **In person** / **Online**, that
+  reveals only the relevant field (In person → Location, Online → Meeting
+  URL) instead of always showing both — resolving the one open sub-decision
+  left in the spec: "neither picked" (both fields hidden) is a real, default
+  third state, not just a fallback — a brand-new event starts with neither
+  radio checked. No backing column — Format is derived from which of
+  `events.location`/`events.meeting_url` already has a value (an existing
+  event with only Location set opens with In person pre-checked, etc.;
+  Location wins the tie for legacy rows that somehow have both set, since
+  there's no real "both" state in the new model); `create_event`/
+  `update_event` are completely unchanged. Show/hide is plain CSS
+  (`#event-form:has(#event_format_in_person:checked) .field-format-location`,
+  `style.css`, same `:has()` progressive-disclosure pattern as `#all_day`/
+  `.holiday-field` above); new `static/event_format_toggle.js` (loaded
+  globally in `base.html`, re-initialized on modal-injected content via
+  `modal.js`'s `wireContent()`, same convention as `task_habit_field_
+  toggle.js`) clears the *other* field's value on switch, so a hidden stale
+  value (e.g. a Meeting URL typed in before switching to In person) can't
+  silently resubmit and repopulate both columns behind the derivation's
+  back. `sw.js`'s precache list gained the new script (`cc-shell-v7`). No
+  changes needed to `event_detail.html` (already conditionally shows
+  Location/Meeting only when set) or the `organize_today` dashboard widget
+  (already reads the same two columns, per its own 2026-08-15 slice note).
+  See `features/calendar.md` § Event CRUD & fields, `plans/open.md`'s Event
+  format section removed. 13 new tests (`test_event_format_field.py`), plus
+  `test_pwa_shell.py`'s cache-name pin updated to v7, full suite 1365
+  passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
