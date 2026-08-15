@@ -242,13 +242,21 @@ def _render_weekly_overview(conn, config: dict, nav: dict | None = None) -> dict
 
     tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and today.isoformat() <= t["due_at"][:10] <= end.isoformat()]
     events = _filtered_events(conn, config, start=f"{today.isoformat()}T00:00:00", end=f"{end.isoformat()}T23:59:59")
+    # Importance/Urgency are computed, not stored columns (side work,
+    # post-1.1, src/derived_state.py) -- resolved once per widget render
+    # rather than per task, same "resolve label rules once" convention
+    # every other importance/urgency call site in this app follows.
+    label_rules = db.list_label_rules(conn)
 
     by_day = []
     for d in days:
         iso = d.isoformat()
         day_tasks = sorted(
             [t for t in tasks if t["due_at"][:10] == iso],
-            key=lambda t: (-(t.get("importance") or 0), -(t.get("urgency") or 0)),
+            key=lambda t: (
+                -derived_state.effective_importance(t, label_rules),
+                -derived_state.effective_urgency(t, label_rules, today),
+            ),
         )
         day_events = sorted([e for e in events if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
         by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today.isoformat(), "tasks": day_tasks, "events": day_events})
@@ -1478,7 +1486,7 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
     # event option lists are imported lazily from .tasks so this module
     # (which .tasks itself imports at load time) doesn't create a
     # circular import.
-    from .tasks import IMPORTANCE_ITEMS, URGENCY_ITEMS, STATUS_ITEMS, STATUSES
+    from .tasks import STATUS_ITEMS, STATUSES
 
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
@@ -1489,10 +1497,10 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
             # Task-side context -- the shared field-grid partial
             # (_task_form_fields.html) needs the same items new_task_form
             # passes; task is None, so the edit-only branches don't render.
+            # (Importance/Urgency have no items here anymore -- side work,
+            # post-1.1, both are computed, not manually set.)
             "task": None,
             "statuses": STATUSES,
-            "importance_items": IMPORTANCE_ITEMS,
-            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],

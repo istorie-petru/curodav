@@ -26,11 +26,28 @@ def _now() -> str:
 
 
 def _seed_task(conn, uid, due_at=None, tags=None, status="active", importance=None, urgency=None):
+    """importance/urgency are computed, not stored columns (side work,
+    post-1.1, src/derived_state.py) -- to get a task to *effectively* carry
+    a given level, this seeds a dedicated per-task label with that
+    label_config rule and tags the task with it, instead of writing the
+    (now nonexistent) explicit columns directly."""
+    all_tags = list(tags or [])
+    if importance is not None:
+        label = f"{uid}-imp-label"
+        db.upsert_label_config(conn, {"name": label, "importance": importance})
+        all_tags.append(label)
+    if urgency is not None:
+        # No direct "explicit urgency" label rule exists -- urgency_threshold_
+        # days implies URGENCY_HIGH (3) once due_at falls inside the window,
+        # so this only faithfully reproduces urgency=3 callers; nothing in
+        # this file currently asks for 1/2, so that's not implemented here.
+        label = f"{uid}-urg-label"
+        db.upsert_label_config(conn, {"name": label, "urgency_threshold_days": 9999})
+        all_tags.append(label)
     db.upsert_task(conn, {
         "uid": uid,
         "title": uid, "description": "", "status": status, "due_at": due_at,
-        "tags": tags or [], "created_at": _now(),
-        "importance": importance, "urgency": urgency,
+        "tags": all_tags, "created_at": _now(),
     })
 
 

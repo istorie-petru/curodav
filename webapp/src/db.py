@@ -122,14 +122,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_at TEXT,
     due_at TEXT,
     -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
-    -- derived states): Importance/Urgency replace the old WebDAV `priority`
-    -- concept. Two explicit semantic axes, each 1..3 (higher = more
-    -- important/urgent); NULL = unset. Their effective values are derived
-    -- deterministically from explicit values + label rules + temporal state
-    -- (src/derived_state.py); the old `priority` column stays physically on
-    -- disk for pre-1.1 databases but is no longer referenced by app code.
-    importance INTEGER,
-    urgency INTEGER,
+    -- derived states) introduced Importance/Urgency as two explicit 1..3
+    -- axes, replacing the old WebDAV `priority` concept. A later rework
+    -- (side work, see this file's `_drop_column` calls below) removed the
+    -- explicit axes entirely -- both are now purely computed
+    -- (src/derived_state.py) from label rules + temporal state, never
+    -- manually set, so the `importance`/`urgency` columns no longer exist
+    -- on new databases. The old `priority` column stays physically on disk
+    -- for pre-1.1 databases but is no longer referenced by app code.
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
@@ -748,6 +748,21 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: st
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coldef}")
 
 
+def _drop_column(conn: sqlite3.Connection, table: str, column: str) -> None:
+    """Inverse of `_ensure_column`, for the rare case a column's data
+    should actually be discarded rather than left inert (see this app's
+    usual "never force-drop old data" convention -- this is a deliberate
+    exception, decided per-column, not the default). Plain `ALTER TABLE
+    ... DROP COLUMN` (SQLite 3.35+, no shadow-table rebuild needed since
+    nothing here has an index/generated-column dependency on these
+    columns). Guarded the same way `_ensure_column` is guarded, so it's
+    safe to call on every startup: a no-op once the column is already
+    gone."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column in existing:
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+
+
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", (name,)
@@ -909,13 +924,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # Timeline a label-based grouping to replace it (see
     # routers/timeline.py).
     _ensure_column(conn, "tasks", "timeline_lane", "INTEGER")
-    # 1.1 (virtual & derived states) -- Importance/Urgency replace the old
-    # `priority` concept (see the `tasks` CREATE TABLE comment above). Same
-    # "column added after the table already existed on disk" situation as
-    # every other _ensure_column here; the old `priority` column stays
-    # physically present, unused.
-    _ensure_column(conn, "tasks", "importance", "INTEGER")
-    _ensure_column(conn, "tasks", "urgency", "INTEGER")
+    # Side work (post-1.1) -- Importance/Urgency's explicit per-task axes
+    # are gone: both are now purely computed from label rules + temporal
+    # state (src/derived_state.py), never manually set, so a database that
+    # still physically carries the 1.1 `importance`/`urgency` columns has
+    # them dropped outright here -- a deliberate exception to this file's
+    # usual "never force-drop old data" convention (see `_drop_column`'s
+    # own docstring), decided because a stale explicit value left inert
+    # would otherwise keep influencing filters/sort through the ORDER BY
+    # clauses below if a future change ever re-read it by accident.
+    _drop_column(conn, "tasks", "importance")
+    _drop_column(conn, "tasks", "urgency")
     # Streak widget (2026-08-07) -- see the `tasks` CREATE TABLE comment
     # above for the full rationale.
     _ensure_column(conn, "tasks", "completed_at", "TEXT")
@@ -1361,7 +1380,7 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # to carry it through.
     cols = [
         "uid", "title", "description",
-        "start_at", "due_at", "importance", "urgency", "status", "progress",
+        "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
     ]
@@ -1526,7 +1545,12 @@ def list_tasks(
             params.extend(excluded_uids)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
+    # Importance/Urgency no longer sort here -- both are purely computed
+    # (src/derived_state.py, label rules + temporal state), not raw
+    # columns SQL can order by; a caller that needs importance/urgency
+    # ordering does it in Python via derived_state's effective values
+    # (see routers/tasks.py's _SORT_KEYS).
+    query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
 
@@ -1608,12 +1632,13 @@ def list_event_task_relations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[dict[str, Any]]:
     """Every task currently linked to `event_uid`, ordered the same way
-    list_tasks orders (undated last, then due date, then importance/
-    urgency) so a Relations card's list reads like every other task list
-    in the app."""
+    list_tasks orders (undated last, then due date -- importance/urgency
+    are computed, not SQL-orderable columns, see list_tasks' own comment)
+    so a Relations card's list reads like every other task list in the
+    app."""
     rows = conn.execute(
         "SELECT tasks.* FROM tasks JOIN event_task_relations r ON r.task_uid = tasks.uid "
-        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC, tasks.importance DESC, tasks.urgency DESC",
+        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC",
         (event_uid,),
     ).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
@@ -2109,7 +2134,12 @@ def _search_tasks(
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
+    # Importance/Urgency no longer sort here -- both are purely computed
+    # (src/derived_state.py, label rules + temporal state), not raw
+    # columns SQL can order by; a caller that needs importance/urgency
+    # ordering does it in Python via derived_state's effective values
+    # (see routers/tasks.py's _SORT_KEYS).
+    query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:

@@ -38,10 +38,13 @@ class TestTaskRow:
         assert result["description"] == row["description"]
         assert result["start_at"] == row["start_at"]
         assert result["due_at"] == row["due_at"]
-        # 1.1: PRIORITY carries urgency (urgency-dominant export), so the
-        # urgency axis round-trips exactly; importance survives only in this
-        # app's own DB, not in iCal -- see ical_rows.py's recorded decision.
-        assert result["urgency"] == row["urgency"]
+        # Side work (post-1.1): PRIORITY export still carries the effective
+        # urgency-dominant value (callers attach it before calling
+        # task_row_to_ical), but import no longer maps PRIORITY back to
+        # anything -- there's no explicit field left to write it to, see
+        # ical_rows.py's recorded decision.
+        assert "urgency" not in result
+        assert "importance" not in result
         assert result["status"] == row["status"]
         assert result["progress"] == row["progress"]
         assert set(result["tags"]) == set(row["tags"])

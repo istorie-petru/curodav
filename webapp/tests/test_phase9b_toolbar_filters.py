@@ -59,6 +59,21 @@ def _request(path="/"):
 
 
 def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None, tags=None):
+    """importance/urgency are computed, not stored columns (side work,
+    post-1.1, src/derived_state.py) -- a given importance level is
+    reproduced via a dedicated per-task label with that label_config rule.
+    urgency only ever supports level 3 here (due today, temporal) --
+    that's the only level every call site in this file actually needs;
+    level 1 has no source at all in the purely-computed model (label
+    thresholds only ever imply URGENCY_HIGH, temporal state only ever
+    yields 0/2/3), so it isn't reproducible via seeding."""
+    all_tags = list(tags or [])
+    if importance is not None:
+        label = f"{uid}-imp-label"
+        db.upsert_label_config(conn, {"name": label, "importance": importance})
+        all_tags.append(label)
+    if urgency == 3 and due_at is None:
+        due_at = date.today().isoformat()
     db.upsert_task(
         conn,
         {
@@ -67,9 +82,7 @@ def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency
             "description": "",
             "status": status,
             "due_at": due_at,
-            "importance": importance,
-            "urgency": urgency,
-            "tags": tags or [],
+            "tags": all_tags,
             "created_at": _now(),
         },
     )
@@ -137,7 +150,7 @@ class TestBoardTimelineFiltersRespected:
 
     def test_board_respects_urgency_filter(self, conn):
         _seed_task(conn, "now", status="active", urgency=3)
-        _seed_task(conn, "later", status="active", urgency=1)
+        _seed_task(conn, "later", status="active", due_at=(date.today() + timedelta(days=20)).isoformat())
         resp = tasks_router.board_view(_request("/tasks/board"), urgency_filter="3", conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"now"}

@@ -14,9 +14,13 @@
             {% for t in columns[status] %}
             <div class="kanban-card" data-uid="{{ t.uid }}">
                 <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                {# Importance/Urgency computed, read-only -- see
+                   task_detail.html's comment on the same globals. #}
+                {% set _imp = effective_importance(request, t) %}
+                {% set _urg = effective_urgency(request, t) %}
                 <div class="kanban-card-meta">
-                    {% if t.importance %}<span class="cell-tag tag-{{ importance_colors[t.importance] }}" title="Importance">{{ importance_labels[t.importance] }}</span>{% endif %}
-                    {% if t.urgency %}<span class="cell-tag tag-{{ urgency_colors[t.urgency] }}" title="Urgency">{{ urgency_labels[t.urgency] }}</span>{% endif %}
+                    {% if _imp %}<span class="cell-tag tag-{{ importance_colors[_imp] }}" title="Importance">{{ importance_labels[_imp] }}</span>{% endif %}
+                    {% if _urg %}<span class="cell-tag tag-{{ urgency_colors[_urg] }}" title="Urgency">{{ urgency_labels[_urg] }}</span>{% endif %}
                     {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
                     {% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}
                 </div>

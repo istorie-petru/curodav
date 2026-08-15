@@ -7,13 +7,17 @@
    The surrounding <form> (with its own action/id) lives in the parent
    template; this partial just fills it in. Parent must provide:
      task         -- the task being edited, or None for a new task
-     importance_items, urgency_items, status_items, tag_name_items --
-                    multiselect items
+     status_items, tag_name_items -- multiselect items
      tag_names    -- (unused directly; tag_name_items is derived from it)
      today        -- ISO date for the Start date default
      habit_label  -- the habit label name (Daily target field's toggle)
    ms_form_id is set inside the partial (it's always this form's own id),
-   and carries into the included _widget_list_multiselect.html instances. #}
+   and carries into the included _widget_list_multiselect.html instances.
+
+   Importance/Urgency (side work, post-1.1) have no field here anymore --
+   both are purely computed from label rules + temporal state
+   (src/derived_state.py), never manually set; task_detail.html shows the
+   computed values (read-only) instead. #}
     {% set ms_form_id = 'task-form' %}
     <div class="field-grid">
         <div class="field field-wide">
@@ -37,32 +41,17 @@
             <label>Start date</label>
             <input type="date" name="start_at" value="{{ task.start_at[:10] if task and task.start_at else today }}">
         </div>
-        <!-- Importance/Urgency/Status -- 2026-08-08 direct feedback
-             ("rework the drop down menus for priority, status, Recurrence
-             to look the same as ... range, view, labels") -- single-mode
+        <!-- Status -- 2026-08-08 direct feedback ("rework the drop down
+             menus for priority, status, Recurrence to look the same as
+             ... range, view, labels") -- single-mode
              _widget_list_multiselect.html instead of a plain <select>,
              same component View/Range already use and for the same
              reason (a native <select>'s open dropdown is unstyleable
-             browser chrome, see that partial's own header comment). 1.1
-             (virtual & derived states): the old single Priority field is
-             now two independent axes -- Importance and Urgency (each
-             1..3; 0/None = unset). -->
-        {% set ms_name = 'importance' %}
-        {% set ms_mode = 'single' %}
-        {% set ms_label = 'Importance' %}
-        {% set ms_items = importance_items %}
-        {% set ms_selected = task.importance|string if task and task.importance else '' %}
-        {% set ms_wide = false %}
-        {% set ms_form_id = 'task-form' %}
-        {% include "_widget_list_multiselect.html" %}
-        {% set ms_name = 'urgency' %}
-        {% set ms_mode = 'single' %}
-        {% set ms_label = 'Urgency' %}
-        {% set ms_items = urgency_items %}
-        {% set ms_selected = task.urgency|string if task and task.urgency else '' %}
-        {% set ms_wide = false %}
-        {% set ms_form_id = 'task-form' %}
-        {% include "_widget_list_multiselect.html" %}
+             browser chrome, see that partial's own header comment).
+             Importance/Urgency used to have their own fields right here
+             (1.1's two independent 1..3 axes); side work (post-1.1)
+             removed them -- both are now purely computed, see this
+             partial's own header comment. -->
         {% set ms_name = 'status' %}
         {% set ms_mode = 'single' %}
         {% set ms_label = 'Status' %}

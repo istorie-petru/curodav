@@ -117,8 +117,8 @@ def _build_context(
     label_rules = _task_label_rules(conn)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
     tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_importance_filter(tasks, importance_filter)
-    tasks = _apply_urgency_filter(tasks, urgency_filter)
+    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
+    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     tasks = _apply_label_filter(tasks, label)
 
     start, end = tl.compute_range(tasks)

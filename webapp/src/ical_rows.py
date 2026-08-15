@@ -17,21 +17,22 @@ from typing import Any
 from icalendar import Alarm, Event, Todo
 
 # --------------------------------------------------------------------- #
-# Importance/Urgency <-> iCal PRIORITY (1.1, plans/open-priority.md
+# Importance/Urgency -> iCal PRIORITY (1.1, plans/open-priority.md
 # § Virtual & derived states -- "Importance and urgency (replacing WebDAV
-# priority)").
+# priority)"; export direction only since a later, post-1.1 side work
+# rework removed the explicit per-task axes -- see src/derived_state.py's
+# module docstring).
 #
 # Recorded decision: PRIORITY is the single WebDAV channel for the two
 # semantic axes. Export combines Importance and Urgency into one PRIORITY
-# via a deterministic, urgency-dominant precedence table; import maps
-# PRIORITY back to explicit *urgency* only. That asymmetry is deliberate:
-# this app is the write-source for its own tasks, and foreign CalDAV
-# clients render PRIORITY (and may re-author it) without understanding the
-# app's importance axis -- so the urgency axis (the time-sensitive one a
-# calendar client's red-flag PRIORITY is actually about) round-trips
-# faithfully, importance is preserved in this app's own DB, and no
-# incompatible second model or made-up X- property is introduced. See the
-# phase spec slice 4.
+# via a deterministic, urgency-dominant precedence table -- callers pass in
+# the *effective* (computed) values, since there's no explicit column left
+# to read directly (see routers/export.py's tasks.ics/published_lists.py's
+# materialize, which resolve label rules once and attach the effective
+# values before calling task_row_to_ical). Import no longer maps PRIORITY
+# back to anything (ical_to_task_row below) -- there is no field left to
+# write it to; this app is the write-source for its own tasks, so a
+# foreign CalDAV client's own PRIORITY edits are simply not read back.
 #
 # Export table (importance, urgency) -> PRIORITY, urgency dominant:
 #   urgency 3 -> 1    urgency 2 -> 3    urgency 1 -> 5
@@ -56,20 +57,6 @@ def _priority_to_ical(importance: int | None, urgency: int | None) -> int:
     if importance:
         return _IMPORTANCE_ONLY_TO_ICAL[importance]
     return 0
-
-
-def _priority_from_ical(v: int | None) -> int | None:
-    """iCal PRIORITY -> explicit urgency (1..3), per the recorded decision.
-    0/absent -> None (unset). Urgency-dominant export means a client that
-    re-writes PRIORITY changes the urgency axis; importance is untouched by
-    import either way."""
-    if not v:
-        return None
-    if v <= 2:
-        return 3
-    if v <= 5:
-        return 2
-    return 1
 
 
 _STATUS_TO_VTODO = {
@@ -214,9 +201,14 @@ def ical_to_task_row(todo: Todo) -> dict[str, Any]:
         row["start_at"] = _dt_to_field(todo.get("DTSTART").dt)
     if "DUE" in todo:
         row["due_at"] = _dt_to_field(todo.get("DUE").dt)
-    row["urgency"] = _priority_from_ical(
-        int(todo.get("PRIORITY")) if "PRIORITY" in todo else None
-    )
+    # Side work (post-1.1): incoming PRIORITY is no longer imported at all
+    # -- there is no explicit urgency field left to write it to (Importance
+    # /Urgency are purely computed, see src/derived_state.py's module
+    # docstring). Deliberately silent: the rest of the VTODO still parses
+    # normally, this one property is simply dropped on the floor. Export
+    # (task_row_to_ical above) still writes PRIORITY out from the
+    # *effective* urgency-dominant value, so external CalDAV clients keep
+    # seeing it -- this app just never reads it back.
     row["status"] = _VTODO_TO_STATUS.get(str(todo.get("STATUS", "")), "active")
     if "PERCENT-COMPLETE" in todo:
         row["progress"] = int(todo.get("PERCENT-COMPLETE")) / 100

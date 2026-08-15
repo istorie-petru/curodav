@@ -1262,6 +1262,15 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;
 }
+/* Read-only sibling of .pill-select (side work, post-1.1) -- for values
+   that are displayed but no longer manually editable, e.g. the computed
+   Importance/Urgency columns in _task_row.html. Same box metrics as
+   .pill-select minus the dropdown-chrome padding/background-position, so
+   the column doesn't visibly shift width next to other pill-selects. */
+.pill-static{
+  display:inline-block; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-caption);
+  font-weight:600;
+}
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
 .pill-green{background-color:var(--tag-green-bg); color:var(--tag-green-fg);}
@@ -3494,7 +3503,14 @@ body.command-palette-open{overflow:hidden;}
    .settings-row/.calendar-row already are. */
 .settings-field-row{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-2);}
 .settings-field-row + .settings-field-row{border-top:1px solid var(--separator);}
-.settings-field-row .settings-field-label{font-weight:500;}
+/* max-width, not a media-query-gated one -- a half-width desktop window
+   (e.g. ~960px, half of a 1920 display) is still well above the 720px
+   "mobile" breakpoint below, so a rule that only capped the label under
+   720px never applied to it at all. The label doesn't need a breakpoint:
+   without a cap it's a plain flex item free to claim however much of the
+   row it wants, leaving the control (segmented/select) whatever sliver is
+   left over at any width where the row is tight, not just narrow ones. */
+.settings-field-row .settings-field-label{font-weight:500; max-width:55%;}
 .settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-footnote); margin-top:2px;}
 .settings-field-row .spacer{flex:1;}
 .settings-field-row input[type="text"]{max-width:220px;}
@@ -3504,10 +3520,6 @@ body.command-palette-open{overflow:hidden;}
    bespoke style. */
 .settings-search{margin-bottom:12px;}
 .settings-search input{width:100%; max-width:320px;}
-/* Narrower list -- direct feedback, "make the list more narrow" -- this
-   page's own card no longer needs the full content width now the table's
-   per-column layout is gone. */
-.label-list{max-width:480px;}
 
 /* Labels manage list (labels_manage.html, reworked 2026-08-15 from a
    <table> into a plain scannable list -- side work, direct feedback: "the
@@ -3551,7 +3563,6 @@ body.command-palette-open{overflow:hidden;}
 .label-list-icon{display:inline-flex; color:var(--fg-tertiary);}
 .label-list-icon .icon{width:19px; height:19px;}
 .label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.label-list-row .tag-usage-count{flex:none;}
 /* Every row -- the Space itself included -- indents at the same level
    under its group's plain-text heading. */
 .label-list-row.is-child{padding-left:28px;}
@@ -3585,6 +3596,45 @@ body.command-palette-open{overflow:hidden;}
   .field-grid .field-wide{grid-column:span 1;}
   /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
   main{padding-top:14px; padding-left:12px; padding-right:12px;}
+
+  /* Inline "add a row" forms (.calendar-new-form -- Holidays, Sleep &
+     Leisure Time) have the same problem one level down: several fields
+     side by side with no labels of their own (a date picker, a bare title
+     input, a calendar dropdown), so wrapping them plain left them in an
+     order that reads like nothing groups with anything else. Stack them
+     into one field per line instead, each full width, so what each field
+     is is legible from its own placeholder/native chrome without a label. */
+  .calendar-new-form{flex-direction:column; align-items:stretch;}
+  .calendar-new-form input,
+  .calendar-new-form select,
+  .calendar-new-form .multiselect{width:100%; min-width:0;}
+}
+
+/* Segmented control (.segmented/.seg-btn) many-option overflow, app-wide --
+   same root cause as .settings-field-row above, one level further down:
+   .segmented's compact look (transparent buttons floating on one shared
+   grey pill, only the checked one getting a real surface) only reads as
+   "a row of N clickable choices" when every option fits on one line. Once
+   a control with 3+ options (4-Week view's First/Second/Third/Fourth,
+   Calendar's Month/4-Week/Week/Day/Timetable subnav, ...) doesn't fit and
+   wraps, every *unchecked* option has no visible border/background of its
+   own and reads as inert disabled text stacked under the one real-looking
+   button -- confirmed live, not just from the screenshot, this is the
+   exact failure `.segmented-list` (widget builder's View/Range field,
+   2026-08-07) was already built to fix, just opted into per-template
+   instead of applied automatically. Below this width, give every
+   .segmented control that same always-visible-surface treatment instead
+   of requiring each caller to opt in with a second class. */
+@media (max-width:560px){
+  .segmented{flex-direction:column; background:none; padding:0; gap:6px; border-radius:0; width:100%;}
+  .seg-btn{
+    display:block; text-align:left; border:1.5px solid var(--control-border);
+    border-radius:var(--radius-md); background:var(--surface-container-high); padding:8px 12px;
+  }
+  .seg-btn.active,
+  label.seg-btn:has(.seg-radio:checked){
+    border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:none;
+  }
 }
 
 /* --------------------------------------------------------------------- */

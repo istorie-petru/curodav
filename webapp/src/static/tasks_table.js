@@ -1,7 +1,10 @@
 // Inline editing for the Tasks table view (templates/tasks_list.html) --
-// status/importance/urgency render as native <select> elements styled to
-// look like colored pills (pill-select, see style.css), due date as a
-// plain <input type="date">. Changing any of them fires a single-field
+// status renders as a native <select> element styled to look like a
+// colored pill (pill-select, see style.css), due date as a plain
+// <input type="date">. (Importance/Urgency used to be inline-editable
+// pill-selects too -- side work, post-1.1, removed them: both are purely
+// computed now, rendered as read-only .pill-static spans instead, see
+// _task_row.html.) Changing any of them fires a single-field
 // PATCH-ish call to POST /tasks/{uid}/update-field (routers/tasks.py)
 // instead of a full form submit, so editing a row never re-navigates the
 // page or loses scroll position -- only the edited cell's own pill color

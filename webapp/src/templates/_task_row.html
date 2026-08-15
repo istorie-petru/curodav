@@ -1,15 +1,21 @@
 {# Shared task-table row (extracted 2026-08-14, 1.4 Project pages & views'
    Tasks view) -- originally a local macro inside tasks_list.html; the
-   project detail page's own Tasks view needed the exact same row (status/
-   importance/urgency pill-selects driven by static/tasks_table.js, the
-   inline due-date input, the delete-with-undo form) without duplicating
-   ~50 lines of markup, so it moved here and both pages `{% from
-   "_task_row.html" import task_row with context %}` -- `with context` so
-   the macro still reads `statuses`/`status_colors`/`status_labels`/
-   `importance_labels`/`importance_colors`/`urgency_labels`/
-   `urgency_colors` straight from whichever page's context provides them
-   (both tasks.py's `_task_context` and projects.py's project_detail route
-   supply the same keys), same as when this was an inline macro.
+   project detail page's own Tasks view needed the exact same row (status
+   pill-select driven by static/tasks_table.js, the inline due-date input,
+   the delete-with-undo form) without duplicating ~50 lines of markup, so
+   it moved here and both pages `{% from "_task_row.html" import task_row
+   with context %}` -- `with context` so the macro still reads
+   `statuses`/`status_colors`/`status_labels`/`importance_labels`/
+   `importance_colors`/`urgency_labels`/`urgency_colors` straight from
+   whichever page's context provides them (both tasks.py's `_task_context`
+   and projects.py's project_detail route supply the same keys), same as
+   when this was an inline macro.
+
+   Importance/Urgency (side work, post-1.1) are read-only here -- both
+   columns render via the `effective_importance`/`effective_urgency`
+   template globals (deps.py) instead of a pill-select, since there is no
+   manual per-task value left to edit (src/derived_state.py's module
+   docstring: purely computed from label rules + temporal state).
 
    `show_select` (default true) gates the row-select checkbox column --
    only the global Tasks page's bulk-actions bar (static/tasks_table.js)
@@ -33,21 +39,13 @@
             {% endfor %}
         </select>
     </td>
+    {% set _imp = effective_importance(request, t) %}
     <td>
-        <select class="pill-select {% if t.importance %}pill-{{ importance_colors[t.importance] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="importance">
-            <option value="" data-color="gray" {% if not t.importance %}selected{% endif %}>&mdash;</option>
-            {% for v, label in importance_labels.items() %}
-            <option value="{{ v }}" data-color="{{ importance_colors[v] }}" {% if t.importance == v %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
+        <span class="pill-static {% if _imp %}pill-{{ importance_colors[_imp] }}{% else %}pill-gray{% endif %}">{{ importance_labels[_imp] if _imp else "—" }}</span>
     </td>
+    {% set _urg = effective_urgency(request, t) %}
     <td>
-        <select class="pill-select {% if t.urgency %}pill-{{ urgency_colors[t.urgency] }}{% else %}pill-gray{% endif %}" data-uid="{{ t.uid }}" data-field="urgency">
-            <option value="" data-color="gray" {% if not t.urgency %}selected{% endif %}>&mdash;</option>
-            {% for v, label in urgency_labels.items() %}
-            <option value="{{ v }}" data-color="{{ urgency_colors[v] }}" {% if t.urgency == v %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
+        <span class="pill-static {% if _urg %}pill-{{ urgency_colors[_urg] }}{% else %}pill-gray{% endif %}">{{ urgency_labels[_urg] if _urg else "—" }}</span>
     </td>
     <td>
         <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">

@@ -123,7 +123,7 @@ class TestFormsRenderChipMultiselectNotTextInput:
 class TestCreateWithTwoLabelsStoresBoth:
     def test_create_task_with_two_labels(self, conn):
         tasks_router.create_task(
-            title="Water plants", description="", due_at="", importance="", urgency="", status="active",
+            title="Water plants", description="", due_at="", status="active",
             tags="", tags_labels=["Home", "Chores"], recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Water plants")
@@ -159,7 +159,7 @@ class TestEditAddOrRemoveLabel:
     def test_update_task_adds_and_removes_labels(self, conn):
         _seed_task(conn, "t1", tags=["Old"])
         tasks_router.update_task(
-            uid="t1", title="t1", description="", due_at="", start_at="", importance="", urgency="",
+            uid="t1", title="t1", description="", due_at="", start_at="",
             status="active", tags="", tags_labels=["New"], recurrence="", conn=conn,
         )
         assert db.get_task(conn, "t1")["tags"] == ["New"]
@@ -267,7 +267,7 @@ class TestDirectCallsWithoutTagsLabelsStillWork:
 
     def test_create_task_without_tags_labels_kwarg(self, conn):
         tasks_router.create_task(
-            title="Plain", description="", due_at="", importance="", urgency="", status="active",
+            title="Plain", description="", due_at="", status="active",
             tags="Legacy", recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Plain")

@@ -1620,6 +1620,49 @@ session, right before the final commit of that session.
     project detail Tasks view, 1.4 slice 2) is still worth keeping as a
     shared macro now its only caller is the global Tasks page — left as-is,
     still works fine either way.
+- **Shipped:** side work — **Importance/Urgency: explicit per-task axes
+  removed, purely computed now**, complete (2026-08-15), direct feedback
+  ("I want them to just be calculated automatically. No manual input").
+  1.1 shipped the two axes as *explicit* fields combined with label rules
+  via max-precedence; this slice drops the explicit half entirely.
+  `tasks.importance`/`tasks.urgency` columns dropped from the schema
+  outright (`db._drop_column`, new — a deliberate, narrow exception to
+  this file's usual "never force-drop old data" convention, confirmed with
+  the user before implementing; existing manually-set values are
+  discarded, not migrated). `src/derived_state.py`: `effective_importance`
+  = label-derived only, `effective_urgency` = max(label-derived, temporal)
+  — no more `explicit` term anywhere in that module. No form field, no
+  inline pill-select, exists for either axis anywhere in the app anymore;
+  Table/Board/Detail render them read-only via two new Jinja globals
+  (`effective_importance`/`effective_urgency`, `deps.py`, label rules
+  memoized per request the same way `label_icon` already is) instead of
+  reading a stored column, so no router needs to precompute/attach the
+  value onto every task dict just to display a pill. `_task_row.html`'s
+  Importance/Urgency pill-selects became read-only `.pill-static` spans;
+  `_task_form_fields.html` dropped the two multiselect fields outright.
+  Filters/sort (`routers/tasks.py`) switched from matching the raw stored
+  value to matching the *computed* one (`_sort_keys` is now a factory
+  taking `label_rules`, since sorting needs it); `_UPDATABLE_FIELDS` no
+  longer accepts either axis via the inline-edit endpoint (400 if tried).
+  WebDAV/CSV export still writes the *effective* value (routers/export.py,
+  published_lists.py resolve label rules once and attach the computed
+  values onto a row copy before calling `ical_rows.task_row_to_ical`,
+  which itself stays DB-free); import no longer maps iCal `PRIORITY` back
+  to anything (confirmed with the user: silently dropped, this app is the
+  write-source) — `ical_rows._priority_from_ical` deleted as dead code.
+  One real behavior consequence, not papered over: urgency level 1
+  ("Low") has no source left under the purely-computed model (label
+  thresholds only ever imply level 3, temporal state only ever yields
+  0/2/3) and is effectively unreachable now — flagged in
+  `features/tasks.md`, not fixed as out of this slice's scope. See
+  `features/tasks.md` § Importance, Urgency, and the virtual states.
+  Touched ~15 source files and 9 test files (mostly seed-helper rewrites:
+  a manually-set axis is now reproduced in tests via a dedicated per-task
+  label + label_config rule, not a raw stored field); full suite 1291
+  passed (down from 1301 — one whole obsolete test class covering the
+  removed manual-input UI deleted outright, several schema/round-trip
+  tests rewritten to assert the opposite of before, not a coverage
+  regression).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

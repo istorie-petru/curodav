@@ -9,14 +9,16 @@ Callers resolve label rules once (db.effective_label_config_ci per tag) and
 pass a {label_name: cfg} mapping in; this module never touches the database.
 
 Values are 1..3 on each axis (higher = more important / more urgent), with 0
-meaning "none". The effective value is derived deterministically from all
-applicable sources -- explicit user configuration, label-based rules, temporal
-state -- using max-precedence rather than physically created chains of labels
-(per the plan: `effective importance = max(explicit, label-derived)`), and is
-never stored: derived classifications must never go stale, so nothing is
-persisted that can be calculated reliably from current data. The two persistent
-exceptions (explicit importance/urgency and label config rules) live in the DB
-as real columns; see db.py's `tasks` / `label_config` comments.
+meaning "none". A later rework (post-1.1 side work) removed the per-task
+*explicit* axes entirely -- there is no manual "set this task's importance/
+urgency" input anywhere in the app anymore. The effective value is now
+derived purely from label-based rules and temporal state, using
+max-precedence: `effective importance = label-derived`, `effective urgency =
+max(label-derived, temporal)`. Nothing derived is ever stored. The one
+persistent exception is the label config rules themselves
+(`label_config.importance`/`urgency_threshold_days`) -- configured once per
+label, not per task -- which live in the DB as real columns; see db.py's
+`label_config` comment.
 
 The virtual states this derives (`Important`, `Urgent`, and the temporal
 `Today` / `Tomorrow` / `This Week` / `This Month` / `Overdue`) are query
@@ -65,11 +67,11 @@ def _max_int(values: list) -> int:
 
 
 def effective_importance(task: dict, label_rules: dict) -> int:
-    """Deterministic effective importance = max(explicit, label-derived).
-    Returns 0..3 (0 = no importance anywhere)."""
-    explicit = int(task.get("importance") or 0)
-    derived = _max_int(rule.get("importance") for rule in label_rules_for(task, label_rules))
-    return max(explicit, derived)
+    """Deterministic effective importance = label-derived only (no manual
+    per-task input, see this module's docstring). Returns 0..3 (0 = no
+    importance anywhere -- correct for a task carrying no importance-rule
+    label, not a gap to fill)."""
+    return _max_int(rule.get("importance") for rule in label_rules_for(task, label_rules))
 
 
 def _due_date(task: dict) -> date | None:
@@ -125,15 +127,14 @@ def _temporal_urgency(task: dict, today: date) -> int:
 
 
 def effective_urgency(task: dict, label_rules: dict, today: date | None = None) -> int:
-    """Deterministic effective urgency = max(explicit, label-derived,
-    temporal). Returns 0..3. `today` defaults to the current date; callers
-    that need a fixed reference date (tests, dashboard "as of" views) pass
-    their own."""
+    """Deterministic effective urgency = max(label-derived, temporal) (no
+    manual per-task input, see this module's docstring). Returns 0..3.
+    `today` defaults to the current date; callers that need a fixed
+    reference date (tests, dashboard "as of" views) pass their own."""
     if today is None:
         today = date.today()
-    explicit = int(task.get("urgency") or 0)
     rules = label_rules_for(task, label_rules)
-    return max(explicit, _label_urgency(rules, task, today), _temporal_urgency(task, today))
+    return max(_label_urgency(rules, task, today), _temporal_urgency(task, today))
 
 
 def is_important(task: dict, label_rules: dict) -> bool:

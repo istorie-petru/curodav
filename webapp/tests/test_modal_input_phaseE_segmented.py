@@ -62,107 +62,13 @@ def _request(path="/"):
 
 
 # --------------------------------------------------------------------- #
-# Task Importance / Urgency
+# Task Importance / Urgency -- the multiselect fields these tests used to
+# cover (TestTaskImportanceUrgencySegmented) are gone (side work, post-
+# 1.1): both axes are purely computed from label rules + temporal state
+# now, never manually set, so there's no form field left to test here.
+# See src/derived_state.py's module docstring and _task_form_fields.html's
+# header comment.
 # --------------------------------------------------------------------- #
-
-
-class TestTaskImportanceUrgencySegmented:
-    # 2026-08-08 follow-up ("rework Priority/Status/Recurrence to look the
-    # same as Range/View/Labels") -- the field moved again, this time from
-    # the plain `<select>` the 2026-08-07 pass above put it in, to the same
-    # single-mode _widget_list_multiselect.html panel View/Range/Labels
-    # already share (see routers/tasks.py's IMPORTANCE_ITEMS/URGENCY_ITEMS).
-    # 1.1 (virtual & derived states): the single Priority axis became two
-    # independent 1-3 axes -- Importance and Urgency. These tests assert on
-    # that markup instead of `<option>`.
-    def test_new_task_form_renders_importance_and_urgency_multiselects(self, conn):
-        resp = tasks_router.new_task_form(_request(), conn=conn)
-        body = resp.body.decode()
-        assert 'data-ms-label="importance"' in body
-        assert 'name="importance" value=""' in body
-        assert 'name="importance" value="1"' in body
-        assert 'name="importance" value="3"' in body
-        assert 'data-ms-label="urgency"' in body
-        assert 'name="urgency" value=""' in body
-        assert 'name="urgency" value="1"' in body
-        assert 'name="urgency" value="3"' in body
-        # No trace of the old single priority axis.
-        assert 'name="priority"' not in body
-
-    def test_creating_a_task_with_each_importance_and_urgency_stores_the_right_int(self, conn):
-        for value in ["1", "2", "3"]:
-            tasks_router.create_task(
-                title=f"Task {value}",
-                description="",
-                due_at="",
-                importance=value,
-                urgency=value,
-                status="active",
-                tags="",
-                tags_labels=[],
-                recurrence="",
-                conn=conn,
-            )
-        tasks = db.list_tasks(conn)
-        stored = {t["title"]: (t["importance"], t["urgency"]) for t in tasks}
-        assert stored["Task 1"] == (1, 1)
-        assert stored["Task 2"] == (2, 2)
-        assert stored["Task 3"] == (3, 3)
-
-    def test_creating_a_task_with_none_importance_or_urgency_stores_null(self, conn):
-        tasks_router.create_task(
-            title="No axes",
-            description="",
-            due_at="",
-            importance="",
-            urgency="",
-            status="active",
-            tags="",
-            tags_labels=[],
-            recurrence="",
-            conn=conn,
-        )
-        tasks = db.list_tasks(conn)
-        assert tasks[0]["importance"] is None
-        assert tasks[0]["urgency"] is None
-
-    def test_axes_are_stored_independently(self, conn):
-        tasks_router.create_task(
-            title="Mixed",
-            description="",
-            due_at="",
-            importance="3",
-            urgency="1",
-            status="active",
-            tags="",
-            tags_labels=[],
-            recurrence="",
-            conn=conn,
-        )
-        tasks = db.list_tasks(conn)
-        assert tasks[0]["importance"] == 3
-        assert tasks[0]["urgency"] == 1
-
-    def test_editing_a_task_preserves_its_importance_and_urgency_as_checked(self, conn):
-        now = _now()
-        db.upsert_task(
-            conn,
-            {
-                "uid": "t1", "title": "X", "description": "", "due_at": None, "start_at": None,
-                "importance": 3, "urgency": 2, "status": "active", "progress": 0, "tags": [],
-                "recurrence": None, "created_at": now, "updated_at": now,
-            },
-        )
-        resp = tasks_router.edit_task_form("t1", _request(), conn=conn)
-        body = resp.body.decode()
-        assert 'name="importance" value="3"' in body
-        assert 'name="urgency" value="2"' in body
-        # radio, not <select>/<option> any more -- confirm they're actually
-        # checked, not just present in the options list.
-        m = re.search(r'<input type="radio" name="importance" value="3"[^>]*>', body)
-        assert m and "checked" in m.group(0)
-        m = re.search(r'<input type="radio" name="urgency" value="2"[^>]*>', body)
-        assert m and "checked" in m.group(0)
 
 
 # --------------------------------------------------------------------- #

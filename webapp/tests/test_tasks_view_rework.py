@@ -27,11 +27,22 @@ def _now() -> str:
 
 
 def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None):
+    """importance/urgency are computed, not stored columns (side work,
+    post-1.1, src/derived_state.py) -- importance is reproduced via a
+    dedicated per-task label with that label_config rule; urgency only
+    supports level 3 (due today, temporal), the only level this file
+    needs."""
+    tags = []
+    if importance is not None:
+        label = f"{uid}-imp-label"
+        db.upsert_label_config(conn, {"name": label, "importance": importance})
+        tags.append(label)
+    if urgency == 3 and due_at is None:
+        due_at = date.today().isoformat()
     db.upsert_task(conn, {
         "uid": uid, "title": uid,
         "description": "", "status": status, "due_at": due_at,
-        "importance": importance, "urgency": urgency,
-        "tags": [], "created_at": _now(),
+        "tags": tags, "created_at": _now(),
     })
 
 
@@ -85,28 +96,43 @@ class TestStatusFilter:
 
 
 class TestImportanceUrgencyFilters:
+    """importance/urgency are computed (label rules + temporal state, see
+    src/derived_state.py), so these filters now need `label_rules` and
+    real tags/due dates instead of a raw stored value -- "all" still
+    passes anything straight through with no computation, so those two
+    keep working on bare dicts unchanged."""
+
     def test_importance_all_passes_everything(self):
-        tasks = [{"importance": 1}, {"importance": None}]
+        tasks = [{"tags": ["Exam"]}, {"tags": []}]
         assert len(tasks_router._apply_importance_filter(tasks, "all")) == 2
 
     def test_urgency_all_passes_everything(self):
-        tasks = [{"urgency": 3}, {"urgency": None}]
+        tasks = [{"due_at": "2026-01-01"}, {"due_at": None}]
         assert len(tasks_router._apply_urgency_filter(tasks, "all")) == 2
 
     def test_specific_importance(self):
-        tasks = [{"uid": "a", "importance": 1}, {"uid": "b", "importance": 2}]
-        result = tasks_router._apply_importance_filter(tasks, "1")
+        tasks = [{"uid": "a", "tags": ["Hi"]}, {"uid": "b", "tags": ["Lo"]}]
+        rules = {"Hi": {"importance": 1}, "Lo": {"importance": 2}}
+        result = tasks_router._apply_importance_filter(tasks, "1", rules)
         assert {t["uid"] for t in result} == {"a"}
 
     def test_specific_urgency(self):
-        tasks = [{"uid": "a", "urgency": 3}, {"uid": "b", "urgency": 1}]
+        today = date.today().isoformat()
+        far_out = (date.today() + timedelta(days=30)).isoformat()
+        tasks = [{"uid": "a", "due_at": today}, {"uid": "b", "due_at": far_out}]
         result = tasks_router._apply_urgency_filter(tasks, "3")
         assert {t["uid"] for t in result} == {"a"}
 
     def test_importance_and_urgency_are_independent_axes(self):
-        tasks = [{"uid": "a", "importance": 3, "urgency": 1}, {"uid": "b", "importance": 1, "urgency": 3}]
-        assert {t["uid"] for t in tasks_router._apply_importance_filter(tasks, "3")} == {"a"}
-        assert {t["uid"] for t in tasks_router._apply_urgency_filter(tasks, "3")} == {"b"}
+        today = date.today().isoformat()
+        far_out = (date.today() + timedelta(days=30)).isoformat()
+        tasks = [
+            {"uid": "a", "tags": ["Hi"], "due_at": far_out},
+            {"uid": "b", "tags": ["Lo"], "due_at": today},
+        ]
+        rules = {"Hi": {"importance": 3}, "Lo": {"importance": 1}}
+        assert {t["uid"] for t in tasks_router._apply_importance_filter(tasks, "3", rules)} == {"a"}
+        assert {t["uid"] for t in tasks_router._apply_urgency_filter(tasks, "3", rules)} == {"b"}
 
 
 class TestFiltersAreIndependentAndCombine:
@@ -119,10 +145,11 @@ class TestFiltersAreIndependentAndCombine:
         _seed_task(conn, "wrong_importance", due_at=today.isoformat(), status="waiting", importance=1)
         _seed_task(conn, "wrong_date", due_at=(today + timedelta(days=10)).isoformat(), status="waiting", importance=3)
 
+        label_rules = db.list_label_rules(conn)
         tasks = db.list_tasks(conn)
         tasks = tasks_router._apply_date_filter(tasks, "this_week")
         tasks = tasks_router._apply_status_filter(tasks, "waiting")
-        tasks = tasks_router._apply_importance_filter(tasks, "3")
+        tasks = tasks_router._apply_importance_filter(tasks, "3", label_rules)
         assert {t["uid"] for t in tasks} == {"match"}
 
 
@@ -182,7 +209,7 @@ class TestStartDateConfigurableAtCreation:
     # (this suite's other direct create_task() calls) keeps the old
     # "starts today" behavior.
     def test_create_task_defaults_to_today_when_start_at_omitted(self, conn):
-        tasks_router.create_task(title="Test", description="", due_at="", importance="", urgency="", status="active",
+        tasks_router.create_task(title="Test", description="", due_at="", status="active",
                                    tags="", recurrence="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
@@ -190,7 +217,7 @@ class TestStartDateConfigurableAtCreation:
 
     def test_create_task_honors_an_explicit_start_at(self, conn):
         tasks_router.create_task(title="Test", description="", due_at="", start_at="2026-09-01",
-                                   importance="", urgency="", status="active", tags="", recurrence="",
+                                   status="active", tags="", recurrence="",
                                    conn=conn)
         task = db.list_tasks(conn)[0]
         assert task["start_at"] == "2026-09-01"

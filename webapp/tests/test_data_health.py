@@ -34,7 +34,7 @@ def _seed_task(conn, uid="t1"):
         conn,
         {
             "uid": uid, "title": "Write bibliography", "description": "",
-            "status": "todo", "due_at": None, "importance": None, "urgency": None,
+            "status": "todo", "due_at": None,
             "created_at": _now(), "updated_at": _now(),
         },
     )

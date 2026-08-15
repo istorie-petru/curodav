@@ -455,7 +455,7 @@ class TestSubmissionUnaffectedByPickerUI:
 
     def test_create_task_recurrence_reaches_db_unchanged(self, conn):
         tasks_router.create_task(
-            title="Water plants", description="", due_at="", importance="", urgency="", status="active",
+            title="Water plants", description="", due_at="", status="active",
             tags="", recurrence="FREQ=DAILY", conn=conn,
         )
         tasks = [t for t in db.list_tasks(conn) if t["title"] == "Water plants"]
@@ -466,7 +466,7 @@ class TestSubmissionUnaffectedByPickerUI:
         _seed_task(conn, "t1")
         tasks_router.update_task(
             uid="t1", title="Water plants", description="", due_at="", start_at="",
-            importance="", urgency="", status="active", tags="", recurrence="FREQ=YEARLY", conn=conn,
+            status="active", tags="", recurrence="FREQ=YEARLY", conn=conn,
         )
         updated = db.get_task(conn, "t1")
         assert updated["recurrence"] == "FREQ=YEARLY"

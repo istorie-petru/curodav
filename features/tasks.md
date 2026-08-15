@@ -4,16 +4,21 @@
 `active / in_progress / waiting / done / archived`; two 1–3 axes — **Importance**
 and **Urgency** (0/None = unset) — replace the old single WebDAV priority (1.1,
 see [`open-priority.md`](open-priority.md) § Virtual & derived states); progress
-is derived from status (`_progress_for_status`).
+is derived from status (`_progress_for_status`). Side work (post-1.1, direct
+feedback: "just calculated automatically, no manual input") later removed the
+per-task *explicit* axes entirely — both are now purely computed, see the
+section below.
 
 ## Views (shared `_tasks_toolbar.html`)
 
 - **Table** (`/tasks`) — open/completed split into two tbody sections; sortable
-  (title/due/importance/urgency/status); inline pill-selects for
-  status/importance/urgency + date cell → `POST /tasks/{uid}/update-field`
-  (JSON, single field, no reload); bulk-actions bar (checkbox select → `POST
-  /tasks/bulk` with `delete`/`status`/`tag` add-remove). Every task delete is
-  the undo path — tasks are flat (1.2), so no delete cascades.
+  (title/due/importance/urgency/status, the axes sorting by their *computed*
+  value); status has an inline pill-select + inline date cell →
+  `POST /tasks/{uid}/update-field` (JSON, single field, no reload); Importance/
+  Urgency render as read-only pills (`.pill-static`) instead — no field to
+  edit; bulk-actions bar (checkbox select → `POST /tasks/bulk` with
+  `delete`/`status`/`tag` add-remove). Every task delete is the undo path —
+  tasks are flat (1.2), so no delete cascades.
 - **Board** (`/tasks/board`) — kanban columns per status (archived excluded),
   pointer-event drag-drop (`DRAG_THRESHOLD=6`), optimistic move via the same
   `update-field` endpoint. Cards carry both axes as pills.
@@ -31,23 +36,48 @@ together. The Date dropdown also carries the virtual states `overdue` / `today` 
 `tomorrow` / `this_week` / `this_month` / `important` / `urgent` — query
 projections over the derived values, not labels (see below).
 
-## Importance, Urgency, and the virtual states (1.1)
+## Importance, Urgency, and the virtual states (1.1; explicit axes removed, side work)
 
-Two explicit 1–3 axes replace the single priority. Effective values are computed
-deterministically in `src/derived_state.py`:
-`effective importance = max(explicit, label-derived)` (a label's
-`label_config.importance` rule), `effective urgency = max(explicit,
-label-threshold, time-remaining)` — urgency rises as the due/end date
+Two 1–3 axes replace the single priority. 1.1 shipped them as *explicit*
+per-task fields (`tasks.importance`/`tasks.urgency`) combined with label
+rules via max-precedence; a later side-work slice (direct feedback: "just
+calculated automatically, no manual input") removed the explicit axes
+outright — the `tasks.importance`/`urgency` columns are dropped from the
+schema (`db._drop_column`, a deliberate exception to this file's usual
+"never force-drop old data" convention), and there is no manual "set this
+task's importance/urgency" input anywhere in the app (no form field, no
+inline pill-select). Effective values are now computed purely in
+`src/derived_state.py`: `effective importance = label-derived` (a label's
+`label_config.importance` rule — configured once per label, not per task,
+so this is *not* a manual per-task input), `effective urgency =
+max(label-threshold, time-remaining)` — urgency rises as the due date
 approaches and hits level 3 once overdue or due today (a label's
-`urgency_threshold_days` rule implies urgency inside its window). Nothing
-derived is ever stored. The `Important` / `Urgent` virtual states trigger at
-level 3 and behave exactly like the other `DATE_FILTERS` values; the shared
-aggregation service (`derived_state.count_by_state`, `dashboard.py`'s
-at-a-glance widget) reads the same derivation, so every surface agrees.
-WebDAV export (`ical_rows.py`) maps the combined axes to iCal `PRIORITY` via a
-fixed urgency-dominant table; import maps `PRIORITY` back to explicit urgency
-only (this app is the write-source). Tasks CSV export emits `Importance` /
-`Urgency` columns. Sorting (`_SORT_KEYS`) orders higher axes first.
+`urgency_threshold_days` rule implies urgency inside its window). A
+consequence of dropping the explicit axis: urgency level 1 ("Low") has no
+source left and is effectively unreachable (label thresholds only ever
+imply level 3, temporal state only ever yields 0/2/3) — not something this
+slice added a workaround for. Nothing derived is ever stored. The
+`Important` / `Urgent` virtual states trigger at level 3 and behave exactly
+like the other `DATE_FILTERS` values; the shared aggregation service
+(`derived_state.count_by_state`, `dashboard.py`'s at-a-glance widget) reads
+the same derivation, so every surface agrees.
+
+Display everywhere (Table/Board/Detail) reads the computed value via two
+new Jinja globals, `effective_importance(request, task)` /
+`effective_urgency(request, task)` (`deps.py`, label rules memoized per
+request the same way `label_icon` is) — the one template-facing entry
+point, so no router needs to precompute/attach the value onto every task
+dict just to render a pill. WebDAV export (`ical_rows.py`) still maps the
+combined *effective* axes to iCal `PRIORITY` via the same fixed
+urgency-dominant table (callers — `routers/export.py`'s tasks.ics,
+`published_lists.py`'s materialize — resolve label rules once and attach
+the effective values onto a row copy before calling
+`task_row_to_ical`, since that module itself stays DB-free); import no
+longer maps `PRIORITY` back to anything (dropped silently, this app is the
+write-source for its own tasks). Tasks CSV export emits `Importance` /
+`Urgency` columns populated with the effective values. Sorting
+(`routers/tasks.py::_sort_keys`, a factory now — it needs `label_rules` to
+compute the value) orders higher axes first.
 
 ## Recurring tasks / completions
 

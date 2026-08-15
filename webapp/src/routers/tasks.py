@@ -62,19 +62,15 @@ IMPORTANCE_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 
 # 2026-08-08 direct feedback ("rework Priority/Status/Recurrence to look
-# the same as Range/View/Labels") -- task_form.html's Importance/Urgency/
-# Status fields moved from plain `<select>`s (a browser's own unstyleable
-# open-dropdown chrome, the same problem View/Range had before their
-# 2026-08-07 rework -- see _widget_list_multiselect.html's header comment)
-# to the same single-mode multiselect panel View/Range/Labels already
-# share. {uid, name} pairs, the same shape that partial expects
-# everywhere else.
-IMPORTANCE_ITEMS = [{"uid": "", "name": "(none)"}] + [
-    {"uid": str(v), "name": f"{v} - {label}"} for v, label in IMPORTANCE_LABELS.items()
-]
-URGENCY_ITEMS = [{"uid": "", "name": "(none)"}] + [
-    {"uid": str(v), "name": f"{v} - {label}"} for v, label in URGENCY_LABELS.items()
-]
+# the same as Range/View/Labels") -- task_form.html's Status field moved
+# from a plain `<select>` (a browser's own unstyleable open-dropdown
+# chrome, the same problem View/Range had before their 2026-08-07 rework
+# -- see _widget_list_multiselect.html's header comment) to the same
+# single-mode multiselect panel View/Range/Labels already share. {uid,
+# name} pairs, the same shape that partial expects everywhere else.
+# Importance/Urgency used to have their own *_ITEMS lists here too (the
+# 1.1 manual multiselect fields); side work (post-1.1) removed the fields
+# entirely -- see _task_form_fields.html's header comment.
 STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 
 # Reworked 2026-08-01: the single "smart filter" dropdown above (Today /
@@ -148,30 +144,35 @@ def _apply_status_filter(tasks: list[dict], status_filter: str) -> list[dict]:
     return [t for t in tasks if t["status"] == status_filter]
 
 
-def _apply_importance_filter(tasks: list[dict], importance_filter: str) -> list[dict]:
-    """Explicit importance-level filter (toolbar Importance dropdown) --
-    matches the stored explicit importance value (1..3), independent of
-    the derived-state `important` filter in DATE_FILTERS (which projects
-    through label rules + temporal state via src/derived_state.py)."""
+def _apply_importance_filter(tasks: list[dict], importance_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Importance-level filter (toolbar Importance dropdown) -- matches
+    the *computed* effective importance value (1..3, src/derived_state.py:
+    label-derived, no manual per-task value exists anymore). Distinct from
+    the derived-state `important` filter in DATE_FILTERS only in that this
+    one lets you pick an exact level (1/2/3) rather than "at/above the
+    Important threshold"."""
     if importance_filter == "all":
         return tasks
     try:
         wanted = int(importance_filter)
     except ValueError:
         return tasks
-    return [t for t in tasks if t.get("importance") == wanted]
+    label_rules = label_rules or {}
+    return [t for t in tasks if derived_state.effective_importance(t, label_rules) == wanted]
 
 
-def _apply_urgency_filter(tasks: list[dict], urgency_filter: str) -> list[dict]:
-    """Explicit urgency-level filter (toolbar Urgency dropdown) -- the
-    urgency-axis sibling of _apply_importance_filter."""
+def _apply_urgency_filter(tasks: list[dict], urgency_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Urgency-level filter (toolbar Urgency dropdown) -- the urgency-axis
+    sibling of _apply_importance_filter, same "exact computed level"
+    semantics."""
     if urgency_filter == "all":
         return tasks
     try:
         wanted = int(urgency_filter)
     except ValueError:
         return tasks
-    return [t for t in tasks if t.get("urgency") == wanted]
+    label_rules = label_rules or {}
+    return [t for t in tasks if derived_state.effective_urgency(t, label_rules) == wanted]
 
 
 def _apply_label_filter(tasks: list[dict], label: str | None) -> list[dict]:
@@ -289,13 +290,20 @@ def _task_context(request: Request) -> dict:
     }
 
 
-_SORT_KEYS = {
-    "title": lambda t: (t.get("title") or "").lower(),
-    "due_at": lambda t: t.get("due_at") or "9999",
-    "importance": lambda t: t.get("importance") if t.get("importance") is not None else 0,
-    "urgency": lambda t: t.get("urgency") if t.get("urgency") is not None else 0,
-    "status": lambda t: STATUSES.index(t["status"]) if t["status"] in STATUSES else 99,
-}
+def _sort_keys(label_rules: dict) -> dict:
+    """Factory, not a plain module-level dict: the importance/urgency sort
+    keys need `label_rules` to compute the effective value (side work,
+    post-1.1 -- there's no stored column to sort by anymore, see
+    src/derived_state.py). Every other key is unaffected by label rules,
+    kept here rather than split out so `list_tasks` has one dict to look
+    `sort` up in either way."""
+    return {
+        "title": lambda t: (t.get("title") or "").lower(),
+        "due_at": lambda t: t.get("due_at") or "9999",
+        "importance": lambda t: derived_state.effective_importance(t, label_rules),
+        "urgency": lambda t: derived_state.effective_urgency(t, label_rules),
+        "status": lambda t: STATUSES.index(t["status"]) if t["status"] in STATUSES else 99,
+    }
 
 
 def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
@@ -345,15 +353,16 @@ def list_tasks(
     tasks = db.list_tasks(conn, q=q)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
     tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_importance_filter(tasks, importance_filter)
-    tasks = _apply_urgency_filter(tasks, urgency_filter)
+    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
+    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     # Phase 9b toolbar rework: label filter, the real replacement for the
     # old dead Space/Project dropdowns (see routers/labels.py and
     # db.list_task_label_names) -- narrows by object_labels membership
     # (object_type='task'), same case-insensitive single-label match
     # Contacts' `?tag=` filter already uses.
     tasks = _apply_label_filter(tasks, label)
-    key_fn = _SORT_KEYS.get(sort, _SORT_KEYS["due_at"])
+    sort_keys = _sort_keys(label_rules)
+    key_fn = sort_keys.get(sort, sort_keys["due_at"])
     tasks.sort(key=key_fn, reverse=(dir == "desc"))
 
     # Completed tasks (done/archived) stay visible in every view -- Today,
@@ -452,8 +461,8 @@ def board_view(
     label_rules = _task_label_rules(conn)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
     tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_importance_filter(tasks, importance_filter)
-    tasks = _apply_urgency_filter(tasks, urgency_filter)
+    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
+    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     tasks = _apply_label_filter(tasks, label)
     columns = {s: [] for s in STATUSES if s != "archived"}
     for t in tasks:
@@ -601,8 +610,6 @@ def new_task_form(request: Request, habit: bool = False, project: str = "", conn
             "active_tab": "tasks",
             "task": None,
             "statuses": STATUSES,
-            "importance_items": IMPORTANCE_ITEMS,
-            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
@@ -628,8 +635,6 @@ def create_task(
     description: str = Form(""),
     due_at: str = Form(""),
     start_at: str = Form(""),
-    importance: str = Form(""),
-    urgency: str = Form(""),
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -672,8 +677,6 @@ def create_task(
         # in routers/calendar.py -- keeps the old "starts today" behavior
         # unchanged).
         "start_at": start_at or date.today().isoformat(),
-        "importance": int(importance) if importance else None,
-        "urgency": int(urgency) if urgency else None,
         "status": status,
         "progress": _progress_for_status(status),
         "tags": _tags_list(tags),
@@ -836,8 +839,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "active_tab": "tasks",
             "task": task,
             "statuses": STATUSES,
-            "importance_items": IMPORTANCE_ITEMS,
-            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
@@ -904,8 +905,6 @@ def update_task(
     description: str = Form(""),
     due_at: str = Form(""),
     start_at: str = Form(""),
-    importance: str = Form(""),
-    urgency: str = Form(""),
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -931,8 +930,6 @@ def update_task(
             "description": description,
             "due_at": due_at or None,
             "start_at": start_at or None,
-            "importance": int(importance) if importance else None,
-            "urgency": int(urgency) if urgency else None,
             "status": status,
             "progress": _progress_for_status(status),
             "tags": _tags_list(tags),
@@ -948,7 +945,7 @@ def update_task(
     return RedirectResponse(url="/tasks", status_code=303)
 
 
-_UPDATABLE_FIELDS = {"status", "importance", "urgency", "due_at", "title"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title"}
 
 
 @router.post("/{uid}/update-field")
@@ -968,11 +965,7 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     if existing is None:
         return JSONResponse({"error": "task not found"}, status_code=404)
     row = dict(existing)
-    if field == "importance":
-        row["importance"] = int(value) if value else None
-    elif field == "urgency":
-        row["urgency"] = int(value) if value else None
-    elif field == "due_at":
+    if field == "due_at":
         row["due_at"] = value or None
     elif field == "status":
         row["status"] = value
