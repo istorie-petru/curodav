@@ -188,8 +188,12 @@ class TestCreateEndpointContact:
         data = _json.loads(resp.body.decode())
         contact = db.get_contact(conn, data["uid"])
         assert contact["full_name"] == "Maria Popescu"
-        assert contact["phone"] == "+40712345678"
-        assert contact["email"] == "maria@example.com"
+        # Contacts field parity slice 2 of 6: phone/email are multi-value
+        # now -- Quick Capture stores whatever it parsed as one "Other"-
+        # typed entry each (routers/quick_capture.py), not the now-dead
+        # flat `phone`/`email` columns.
+        assert [(p["type"], p["value"]) for p in contact["phones"]] == [("Other", "+40712345678")]
+        assert [(e["type"], e["value"]) for e in contact["emails"]] == [("Other", "maria@example.com")]
         assert contact["tags"] == ["university"]
 
 

@@ -42,27 +42,33 @@
 </div>
 
 <div class="modal-body">
-{% if contact.phone or contact.email %}
+<!-- Contacts field parity slice 2 of 6: phone/email are multi-value now
+     (contact.phones/contact.emails, each {"type", "value"}) -- quick
+     actions (Call/Email) use just the first entry of each, same "concise
+     first entry" convention contacts_list.html's row subtitle uses; the
+     meta grid below lists every entry with its type label, same tel:/
+     mailto: links as before, just repeated per row. -->
+{% if contact.phones or contact.emails %}
 <div class="contact-quick-actions">
-    {% if contact.phone %}<a class="btn" href="tel:{{ contact.phone }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
-    {% if contact.email %}<a class="btn" href="mailto:{{ contact.email }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
+    {% if contact.phones %}<a class="btn" href="tel:{{ contact.phones[0].value }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
+    {% if contact.emails %}<a class="btn" href="mailto:{{ contact.emails[0].value }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
 </div>
 {% endif %}
 
 <div class="detail-card">
     <div class="detail-meta-grid">
-        {% if contact.phone %}
+        {% for p in contact.phones %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Phone</span>
-            <span class="detail-meta-value"><a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></span>
+            <span class="detail-meta-label">Phone{% if p.type %} ({{ p.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="tel:{{ p.value }}">{{ p.value }}</a></span>
         </div>
-        {% endif %}
-        {% if contact.email %}
+        {% endfor %}
+        {% for e in contact.emails %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Email</span>
-            <span class="detail-meta-value"><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></span>
+            <span class="detail-meta-label">Email{% if e.type %} ({{ e.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="mailto:{{ e.value }}">{{ e.value }}</a></span>
         </div>
-        {% endif %}
+        {% endfor %}
         {% if contact.address %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Address</span>
@@ -82,7 +88,7 @@
         <p>{{ contact.notes }}</p>
     </div>
     {% endif %}
-    {% if not (contact.phone or contact.email or contact.address or contact.tags or contact.notes) %}
+    {% if not (contact.phones or contact.emails or contact.address or contact.tags or contact.notes) %}
     <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
     {% endif %}
 </div>

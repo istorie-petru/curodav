@@ -105,13 +105,21 @@ def _create_from_capture(conn, result: ParsedCapture) -> dict:
         return {"type": "event", "uid": uid, "title": result.title}
 
     if result.type == "contact":
+        # Contacts field parity slice 2 of 6: Quick Capture has no way to
+        # specify a phone/email TYPE from free text, so a captured number/
+        # address goes straight into the new multi-value tables typed
+        # "Other" -- the same default the legacy-column auto-migration uses
+        # for the same reason (an unqualified single value). Writing the now
+        # -dead `phone`/`email` columns instead would silently lose the
+        # capture the instant it's viewed anywhere in the UI, which no
+        # longer reads them.
         db.upsert_contact(
             conn,
             {
                 "uid": uid,
                 "full_name": result.title,
-                "phone": result.phone,
-                "email": result.email,
+                "phones": [{"type": "Other", "value": result.phone}] if result.phone else [],
+                "emails": [{"type": "Other", "value": result.email}] if result.email else [],
                 "tags": resolved_labels,
                 "created_at": now,
             },

@@ -118,7 +118,8 @@ class TestCreateEditFlow:
     def test_create_contact_stores_title(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="Rear Admiral", org="Navy",
-            phone="", email="", address="", tags="", notes="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[],
+            address="", tags="", notes="",
             photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -126,7 +127,8 @@ class TestCreateEditFlow:
 
     def test_create_contact_blank_title_stores_none(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="No Title", title="", org="", phone="", email="",
+            full_name="No Title", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[],
             address="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -136,7 +138,8 @@ class TestCreateEditFlow:
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="Senior Engineer",
-            org="", phone="", email="", address="", tags="", notes="",
+            org="", phone_type=[], phone_value=[], email_type=[], email_value=[],
+            address="", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -145,8 +148,9 @@ class TestCreateEditFlow:
     def test_update_contact_can_clear_title(self, conn):
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="", phone="",
-            email="", address="", tags="", notes="", photo=None,
+            uid=uid, full_name="Ada Lovelace", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[],
+            address="", tags="", notes="", photo=None,
             remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)

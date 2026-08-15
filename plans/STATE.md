@@ -2073,6 +2073,68 @@ session, right before the final commit of that session.
   new tests), full suite 1382 passed. **Next in this build order:** Phone/
   Email (multi-value), then Website, Birthday, Address, Social network — see
   `open.md`'s Contacts field parity section.
+- **Shipped:** `Contacts field parity` slice 2 of 6 — **Phone/Email**,
+  complete (2026-08-15), build-order item 5 of the 2026-08-15
+  reprioritization, following slice 1's Title. New `contact_phones`/
+  `contact_emails` tables (`db.py`) give a contact any number of phone
+  numbers/email addresses, each typed from the vCard/Nextcloud vocabulary
+  green-lit in slice 1's own session (Home/Work/Cell/Fax/Pager/Other for
+  phone, Home/Work/Other for email) — owned child rows keyed by
+  `contact_uid`, no FOREIGN KEY constraint (confirmed via grep that
+  nothing in `SCHEMA_SQL` uses them), `position` a float sort key, same
+  shape as `task_checklist_items`. The old flat `contacts.phone`/
+  `contacts.email` columns are never dropped (this file's standing
+  convention) but are now dead by design, not kept live: reconciling two
+  sources of truth (a flat column plus a real multi-value list) on every
+  write would need an arbitrary "which one is primary" rule for no benefit
+  once nothing reads the column anymore, so it's simplest to freeze it as a
+  one-time migration source. `db.migrate_legacy_contact_phone_email` copies
+  a still-legacy value into the new table as a single "Other"-typed row,
+  gated on "zero existing child rows for this contact" so it's idempotent
+  and never overwrites real typed data a user already entered — runs
+  automatically in `init_schema`, same place every other migration in this
+  file lives. vCard round-trips as multiple TEL/EMAIL lines with a `TYPE=`
+  param (`vobject`'s `card.add("tel")`/`.type_param`, read back via
+  `tel_list`/`email_list` — the plural API, confirmed via a live vobject
+  round-trip that `card.tel`/`card.email` only ever surface the first
+  line); "Other" deliberately gets no `TYPE=` param at all since vCard has
+  no standard token for it, in either direction. Router: `create_contact`/
+  `update_contact` swapped their flat `phone`/`email` Form fields for
+  parallel `phone_type[]`/`phone_value[]` (`email_type[]`/`email_value[]`)
+  arrays (`list[str] = Form([])`, the same shape `tags_labels` already
+  uses) — chosen over `_task_work_allocations.html`'s own-POST-endpoints-
+  per-row pattern because a phone/email list is small and edited as a
+  whole on the form's one existing Save button, not a separate persistent
+  sub-resource like a work session. Rows are added/removed purely client-
+  side (new `static/contact_phone_email_rows.js`, clones a `<template>`
+  row, same `wireContent()` re-init idiom as `label_role_picker.js`) since
+  nothing is written until Save either way; the type picker is a plain
+  `<select>` (matching `habit_form.html`'s Project picker/`label_edit_
+  modal.html`'s Parent picker for "one of a short fixed list", not the
+  segmented `.seg-btn` control reserved for 2-3-way toggles). Detail page
+  lists every phone/email with its type label and a tel:/mailto: link
+  (repeated per row); the contacts-list row subtitle and the dashboard
+  Contact List widget both stay concise, showing only the first
+  (lowest-position) entry of each — no new "primary" flag, "first" is
+  simply creation/submission order. `db.list_contacts`'s `q` search and the
+  global `db._search_contacts` now also match the new child tables (the
+  dead legacy columns are still searched too — harmless redundancy, and
+  correct since the migration always runs before any query executes).
+  Also updated: `routers/export.py`'s contacts.csv (reads the first phone/
+  email instead of the dead columns) and `routers/quick_capture.py`'s `!c`
+  contact capture (stores its single parsed phone/email as one "Other"-
+  typed entry instead of writing the dead columns). See
+  `features/contacts.md`. 40 new tests
+  (`test_contacts_field_parity_phone_email.py`), plus 7 existing contact-
+  route call sites across `test_phase5_contacts.py`/
+  `test_phase1_universal_pool.py`/`test_modal_input_phaseB_chip_
+  multiselect.py`/`test_contacts_field_parity_title.py` updated for the new
+  `phone_type`/`phone_value`/`email_type`/`email_value` params, plus
+  `test_quick_capture.py`/`test_row_translators.py` updated off the now-
+  dead flat `phone`/`email` row keys (caught by the full suite, not this
+  slice's own new tests), full suite 1422 passed. **Next in this build
+  order:** Website (multi-value), then Birthday, Address, Social network —
+  see `open.md`'s Contacts field parity section.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

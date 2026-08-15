@@ -49,6 +49,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -183,6 +184,53 @@ CREATE TABLE IF NOT EXISTS contacts (
     photo_type TEXT,
     created_at TEXT,
     updated_at TEXT
+);
+
+
+-- Contacts field parity with Nextcloud Contacts (plans/open.md), slice 2 of
+-- 6 (Phone/Email, following slice 1's Title). `contacts.phone`/`contacts.
+-- email` above are single-value and stay physically present (never
+-- force-dropped, this file's standing convention) but are DEAD from this
+-- slice forward -- nothing here writes them anymore. A real person routinely
+-- has more than one phone number or email address, each meaningfully typed
+-- (home vs. work vs. cell), so a flat column was always going to need this
+-- rework eventually; keeping it "live" as a synced mirror of some
+-- designated-primary child row would mean reconciling two sources of truth
+-- on every write for no real benefit (nothing left reads the flat column),
+-- so it's simplest to just freeze it as a migration source (see
+-- migrate_legacy_contact_phone_email below) and stop touching it. Same
+-- natural-key-less "real owned child row" shape as task_checklist_items
+-- (plain TEXT uid PK, no FOREIGN KEY constraint -- this app doesn't use
+-- them anywhere, see _ensure_column's own docstring for the "no force-drop"
+-- convention this table's dead-column choice above still honors) --
+-- `contact_uid` is a real ownership column, not a natural key, since a
+-- contact can have several phones/emails of the very same type ("Home" and
+-- a second "Home" number is a real, if rare, case a natural key couldn't
+-- represent). `type` is free text at the storage layer (vCard/Nextcloud's
+-- vocabulary -- Home/Work/Cell/Fax/Pager for phone, Home/Work for email,
+-- plus Other for both -- is enforced by the `<select>` in contact_form.html
+-- and CONTACT_PHONE_TYPES/CONTACT_EMAIL_TYPES below, not a CHECK
+-- constraint, matching this file's general preference for validating in
+-- Python over SQL). `position` is the same float sort key task_checklist_
+-- items uses so display order survives a full replace-on-save without
+-- needing per-row uid tracking across an edit (see set_contact_phones/
+-- set_contact_emails).
+CREATE TABLE IF NOT EXISTS contact_phones (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contact_emails (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
 );
 
 
@@ -337,6 +385,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(full_name);
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_phones_contact ON contact_phones(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_emails_contact ON contact_emails(contact_uid);
 
 -- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` was
 -- dropped from a brand-new database's schema then -- a university class
@@ -854,6 +904,49 @@ def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[
     logger.info("Relaxed legacy NOT NULL constraints on %s%s", table, f" ({', '.join(columns)})")
 
 
+def migrate_legacy_contact_phone_email(conn: sqlite3.Connection) -> None:
+    """Contacts field parity slice 2 of 6 (plans/open.md) -- the green-lit
+    auto-migration: a contact whose legacy `phone`/`email` column already
+    has a value gets that value copied into the new `contact_phones`/
+    `contact_emails` table as a single row typed "Other" (the vocabulary's
+    catch-all, since the old flat column never recorded which kind of
+    number/address it was).
+
+    Idempotent by construction, not by a separate "have I run" flag: a
+    contact is only migrated if it has a legacy value AND zero existing
+    child rows for that field, so running this again after the first row
+    exists is a no-op for that contact -- covers both "called twice in a
+    row" (schema setup runs on every `db.connect`) and "the contact
+    already has real typed rows a user entered" (per this slice's own test
+    list: a contact with real post-migration rows must be left alone even
+    if the legacy column somehow still has a stale value, since nothing
+    writes to the legacy column anymore -- see the contacts CREATE TABLE
+    comment for why it's frozen, not kept live). A contact with no legacy
+    value gets no rows at all -- no spurious "Other" entry from an empty
+    field."""
+    now = datetime.now(timezone.utc).isoformat()
+    phone_rows = conn.execute(
+        "SELECT uid, phone FROM contacts WHERE phone IS NOT NULL AND TRIM(phone) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_phones)"
+    ).fetchall()
+    for row in phone_rows:
+        conn.execute(
+            "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", row["phone"], 0, now),
+        )
+    email_rows = conn.execute(
+        "SELECT uid, email FROM contacts WHERE email IS NOT NULL AND TRIM(email) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_emails)"
+    ).fetchall()
+    for row in email_rows:
+        conn.execute(
+            "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", row["email"], 0, now),
+        )
+    if phone_rows or email_rows:
+        conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
@@ -899,6 +992,18 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # "column added after the table already existed on disk" situation as
     # photo_b64/photo_type immediately above.
     _ensure_column(conn, "contacts", "title", "TEXT")
+    # Contacts field parity slice 2 of 6 -- Phone/Email. contact_phones/
+    # contact_emails (SCHEMA_SQL above) are brand-new tables, so `CREATE
+    # TABLE IF NOT EXISTS` already handles a pre-slice-2 database (unlike a
+    # column added to an existing table, no _ensure_column needed for the
+    # tables themselves). What DOES need a migration is the *data*: a
+    # pre-slice-2 database has real values sitting in the now-dead
+    # `contacts.phone`/`contacts.email` columns that would otherwise vanish
+    # from view the moment the UI stops reading them. Runs on every
+    # connect, same as every other migration in this function -- see
+    # migrate_legacy_contact_phone_email's own docstring for why it's safe
+    # to call unconditionally (idempotent).
+    migrate_legacy_contact_phone_email(conn)
     # Schedule class -> contact link, same "column added after the table
     # already existed on disk" situation as the others above. Guarded on
     # table existence (unlike every other _ensure_column call here) because
@@ -2229,12 +2334,16 @@ def _search_contacts(
     clauses: list[str] = []
 
     if q:
+        # Same "search both the dead legacy columns and the new child
+        # tables" reasoning as list_contacts above.
         like = f"%{q}%"
         clauses.append(
             "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
-            "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?))"
+            "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_phones WHERE value LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_emails WHERE value LIKE ?))"
         )
-        params.extend([like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like])
     if labels:
         placeholders = ", ".join("?" for _ in labels)
         clauses.append(
@@ -2252,8 +2361,10 @@ def _search_contacts(
     rows = conn.execute(query, params).fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:
-        d = _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))
-        subtitle = d.get("org") or d.get("title") or d.get("email") or d.get("phone") or ""
+        d = _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+        first_email = d["emails"][0]["value"] if d.get("emails") else d.get("email")
+        first_phone = d["phones"][0]["value"] if d.get("phones") else d.get("phone")
+        subtitle = d.get("org") or d.get("title") or first_email or first_phone or ""
         out.append(
             {
                 "type": "contact",
@@ -2349,10 +2460,30 @@ def delete_checklist_items_for_task(conn: sqlite3.Connection, task_uid: str) -> 
 
 _CONTACT_JSON_FIELDS: tuple[str, ...] = ()
 
+# Contacts field parity slice 2 of 6 -- the vCard/Nextcloud type vocabulary,
+# green-lit exactly as-is (AskUserQuestion, 2026-08-15): phone gets the full
+# Home/Work/Cell/Fax/Pager/Other set, email the narrower Home/Work/Other
+# (vCard has no CELL/FAX/PAGER concept for EMAIL). "Other" is also the type
+# every legacy single-value phone/email auto-migrates to (see
+# migrate_legacy_contact_phone_email). Used by contact_form.html to render
+# the type `<select>` and by routers/contacts.py to fall back to "Other" for
+# an unrecognized/blank type rather than rejecting the save outright -- kept
+# permissive (not a CHECK constraint) since a hand-edited vCard from another
+# CardDAV client could carry a TYPE token outside this list.
+CONTACT_PHONE_TYPES: tuple[str, ...] = ("Home", "Work", "Cell", "Fax", "Pager", "Other")
+CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+
 
 def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
+    # `phones`/`emails` (the new multi-value lists) are handled separately
+    # below, same "pop the non-column keys, write the base row, then attach
+    # the related rows" shape `tags` already used -- upsert_contact stays
+    # the single call site every router/test uses to save a contact, it just
+    # now also owns writing the child tables when the caller supplies them.
+    phones = data.pop("phones", None)
+    emails = data.pop("emails", None)
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "notes",
@@ -2368,18 +2499,40 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     )
     if tags is not None:
         set_object_labels(conn, "contact", data["uid"], tags)
+    if phones is not None:
+        set_contact_phones(conn, data["uid"], phones)
+    if emails is not None:
+        set_contact_emails(conn, data["uid"], emails)
     conn.commit()
 
 
 def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM contacts WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ?", (uid,))
+    # Same cascade-cleanup reasoning as delete_checklist_items_for_task --
+    # never actually reachable via a reused uid (uuid4), but an orphaned
+    # phone/email row pointing at a gone contact serves no purpose either.
+    conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (uid,))
     conn.commit()
 
 
 def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM contacts WHERE uid = ?", (uid,)).fetchone()
-    return _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS)) if row else None
+    if not row:
+        return None
+    d = _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS))
+    return _attach_contact_phones_emails(conn, d)
+
+
+def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
+    """Attaches `phones`/`emails` (each a list of {"uid", "type", "value"}
+    dicts, position-ordered) the same way `_attach_tags` attaches `tags` --
+    computed live from the child tables at read time, never a stored JSON
+    blob on the contacts row itself."""
+    d["phones"] = list_contact_phones(conn, d["uid"])
+    d["emails"] = list_contact_emails(conn, d["uid"])
+    return d
 
 
 def list_contacts(
@@ -2390,17 +2543,135 @@ def list_contacts(
     params: list[str] = []
     clauses = []
     if q:
-        # Matches name, org, phone, or email -- a single search box covering
-        # every field someone's likely to actually remember about a contact,
-        # rather than separate name-only vs. org-only inputs.
-        clauses.append("(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ?)")
+        # Matches name, org, title, or any phone/email -- both the legacy
+        # flat columns (harmless redundancy; a pre-migration value can only
+        # exist there if migrate_legacy_contact_phone_email somehow hasn't
+        # run yet, which it always has by the time any query executes -- see
+        # that function's own call site in init_schema) and the new
+        # multi-value child tables, so a search for a number/address still
+        # finds the contact no matter which type it's tagged with.
+        clauses.append(
+            "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? "
+            "OR uid IN (SELECT contact_uid FROM contact_phones WHERE value LIKE ?) "
+            "OR uid IN (SELECT contact_uid FROM contact_emails WHERE value LIKE ?))"
+        )
         like = f"%{q}%"
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like])
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)) for r in rows]
+    return [
+        _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+        for r in rows
+    ]
+
+
+# --------------------------------------------------------------------- #
+# Contact phones / emails -- Contacts field parity slice 2 of 6 (plans/
+# open.md). Per-parent child-table CRUD, closest precedent is work
+# allocations' list_work_allocations_for_task/create_work_allocation/
+# delete_work_allocation trio -- but a contact's phone/email list is edited
+# as a whole via one Save button (contact_form.html submits every row
+# together as parallel phone_type[]/phone_value[] form arrays, same shape
+# `tags_labels: list[str] = Form([])` already uses on this router), not
+# through separate per-row add/remove endpoints the way work sessions or
+# checklist items are -- so the primary write operation here is
+# set_contact_phones/set_contact_emails ("replace everything for this
+# contact with this ordered list"), not incremental add/update/delete
+# calls. add_contact_phone/add_contact_email still exist standalone because
+# migrate_legacy_contact_phone_email needs to insert exactly one row without
+# disturbing anything else already there.
+# --------------------------------------------------------------------- #
+
+
+def list_contact_phones(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_phones WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_contact_emails(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_emails WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_contact_phone(conn: sqlite3.Connection, contact_uid: str, type_: str, value: str) -> str:
+    """Appends one phone row after whatever's already there. Used by
+    migrate_legacy_contact_phone_email (a single-row, non-destructive
+    insert); the create/edit form uses set_contact_phones instead, since it
+    always submits the full list at once."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM contact_phones WHERE contact_uid = ?",
+        (contact_uid,),
+    ).fetchone()
+    new_uid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (new_uid, contact_uid, type_ or "Other", value, row["p"], datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return new_uid
+
+
+def add_contact_email(conn: sqlite3.Connection, contact_uid: str, type_: str, value: str) -> str:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM contact_emails WHERE contact_uid = ?",
+        (contact_uid,),
+    ).fetchone()
+    new_uid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (new_uid, contact_uid, type_ or "Other", value, row["p"], datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return new_uid
+
+
+def set_contact_phones(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every phone row for `contact_uid` with `items` (each a
+    {"type", "value"} dict), in the given order. The create/edit form always
+    submits its whole ordered phone list together (one Save button, per
+    plans/open.md's own reasoning for choosing form-array fields over
+    per-row endpoints) so "delete everything, re-insert in submitted order"
+    is simpler and just as correct as diffing against the previous set by
+    uid -- position is always just the item's index, so display order keeps
+    matching submission order. Blank values are dropped silently (an empty
+    row in the form is "no phone here", not a phone with an empty number)."""
+    conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+def set_contact_emails(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
 
 
 # --------------------------------------------------------------------- #

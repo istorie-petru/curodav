@@ -232,8 +232,12 @@ def parse_event(tokens: list[str], today: date) -> ParsedCapture:
 def parse_contact(tokens: list[str], today: date) -> ParsedCapture:
     """`!c` -- plans/quick-capture.md § Contacts. Every recognized phone/
     email token is stripped from the name regardless of position; only the
-    first of each is kept (contacts.phone/contacts.email are single-value
-    columns -- see db.py)."""
+    first of each is kept -- Quick Capture's free-text grammar has no way to
+    express "this is a second phone number" or a type for either, so it
+    deliberately stays single-value even though contacts themselves are
+    multi-value as of Contacts field parity slice 2 of 6 (routers/
+    quick_capture.py stores whatever's captured here as one "Other"-typed
+    entry -- see that module for why)."""
     labels, label_idx = _extract_labels(tokens)
     consumed = set(label_idx)
     phone: str | None = None

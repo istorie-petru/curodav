@@ -282,6 +282,12 @@
      which never runs <script> tags, so modal.js's wireContent() calls
      CCAvatarCropper.init(body) against the freshly-injected content. -->
 <script src="{{ static_url('avatar_cropper.js') }}"></script>
+<!-- contact_form.html's Phone/Email rows (Contacts field parity slice 2 of
+     6) -- same reason as the scripts above: contact_form.html is normally
+     injected into the modal via innerHTML, so modal.js's wireContent()
+     calls CCContactPhoneEmailRows.init(body) against the freshly-injected
+     content. -->
+<script src="{{ static_url('contact_phone_email_rows.js') }}"></script>
 <!-- task_form.html's Daily target field (2026-08-08) -- loaded globally
      for the same reason as the scripts above: task_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()

@@ -59,13 +59,71 @@
             <label class="field-toggle field avatar-remove-toggle"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
             {% endif %}
         </div>
-        <div class="field">
-            <label>Email</label>
-            <input type="email" name="email" value="{{ contact.email if contact else '' }}">
-        </div>
-        <div class="field">
+        <!-- Contacts field parity slice 2 of 6 (plans/open.md): phone/email
+             are multi-value now (contact_phones/contact_emails, db.py), each
+             row typed from the vCard/Nextcloud vocabulary
+             (db.CONTACT_PHONE_TYPES/CONTACT_EMAIL_TYPES -- a plain <select>,
+             same convention as habit_form.html's Project picker/
+             label_edit_modal.html's Parent picker for "one of a short fixed
+             list", not the segmented .seg-btn control reserved for 2-3-way
+             toggles). Rows post together as parallel phone_type[]/
+             phone_value[] form arrays on the same Save button as the rest of
+             the contact (list[str] = Form([]), same shape tags_labels
+             already uses on this router) rather than through dedicated add-
+             row endpoints like _task_work_allocations.html's Work sessions
+             card -- a phone/email list is small and edited as a whole, so
+             one submit is simpler than a full page round trip per row.
+             Rows are added/removed purely client-side
+             (static/contact_phone_email_rows.js, clones a <template> row,
+             same wireContent() re-init idiom as label_role_picker.js) since
+             nothing is persisted until Save either way. -->
+        <div class="field field-wide" data-repeatable-rows-scope>
             <label>Phone</label>
-            <input type="text" name="phone" value="{{ contact.phone if contact else '' }}">
+            <div id="phone-rows" class="contact-multi-rows">
+                {% for p in (contact.phones if contact else []) %}
+                <div class="contact-multi-row">
+                    <select name="phone_type">
+                        {% for t in phone_types %}<option value="{{ t }}" {% if p.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="phone_value" value="{{ p.value }}" placeholder="Phone number">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="phone-row-template">
+                <div class="contact-multi-row">
+                    <select name="phone_type">
+                        {% for t in phone_types %}<option value="{{ t }}" {% if t == 'Other' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="phone_value" value="" placeholder="Phone number">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
+                </div>
+            </template>
+            <button type="button" class="btn btn-sm" data-repeatable-add="phone-rows" data-repeatable-template="phone-row-template">{{ icon('plus', 'icon-sm') }} Add phone</button>
+        </div>
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <label>Email</label>
+            <div id="email-rows" class="contact-multi-rows">
+                {% for e in (contact.emails if contact else []) %}
+                <div class="contact-multi-row">
+                    <select name="email_type">
+                        {% for t in email_types %}<option value="{{ t }}" {% if e.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="email" name="email_value" value="{{ e.value }}" placeholder="Email address">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="email-row-template">
+                <div class="contact-multi-row">
+                    <select name="email_type">
+                        {% for t in email_types %}<option value="{{ t }}" {% if t == 'Other' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="email" name="email_value" value="" placeholder="Email address">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
+                </div>
+            </template>
+            <button type="button" class="btn btn-sm" data-repeatable-add="email-rows" data-repeatable-template="email-row-template">{{ icon('plus', 'icon-sm') }} Add email</button>
         </div>
         <!-- Address book selector removed -- contacts now always live in
              Active or Archived, toggled via the Archive/Unarchive button on

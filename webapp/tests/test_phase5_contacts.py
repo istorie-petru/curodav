@@ -89,7 +89,8 @@ class TestNoCategoryColumn:
 class TestCreateEditFlowHasNoCategory:
     def test_create_contact_flow_never_touches_category(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", title="", org="Navy", phone="", email="",
+            full_name="Grace Hopper", title="", org="Navy",
+            phone_type=[], phone_value=[], email_type=[], email_value=[],
             address="", tags="Professor, CS", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -99,7 +100,8 @@ class TestCreateEditFlowHasNoCategory:
     def test_update_contact_flow_never_touches_category(self, conn):
         uid = _make_contact(conn, tags=["Old"])
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="", phone="", email="",
+            uid=uid, full_name="Ada Lovelace", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[],
             address="", tags="Mathematician", notes="", photo=None,
             remove_photo="", conn=conn,
         ))

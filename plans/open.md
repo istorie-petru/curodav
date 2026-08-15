@@ -140,8 +140,23 @@ its own test file).
   back to whichever is present); search (`/contacts?q=`) matches title too.
   See `features/contacts.md`. 17 new tests
   (`test_contacts_field_parity_title.py`), full suite 1382 passed.
-- **Phone/Email** (multi-value, vCard/Nextcloud type vocabulary) — not
-  started.
+- ~~**Phone/Email**~~ — **shipped 2026-08-15** — multi-value, vCard/
+  Nextcloud type vocabulary (Home/Work/Cell/Fax/Pager/Other for phone,
+  Home/Work/Other for email), new `contact_phones`/`contact_emails` tables
+  (owned child rows, no FK constraint, same convention as
+  `task_checklist_items`); the old flat `contacts.phone`/`contacts.email`
+  columns stay physically present but are dead (never written to again),
+  and auto-migrate once, idempotently, into the new tables as a single
+  "Other"-typed entry (`db.migrate_legacy_contact_phone_email`, runs at
+  schema setup). vCard round-trips as multiple TEL/EMAIL lines with
+  `TYPE=` (Other omits the param, vCard has no token for it); create/edit
+  form submits parallel `phone_type[]`/`phone_value[]` (`email_type[]`/
+  `email_value[]`) arrays on the one Save button, rows added/removed
+  client-side (`static/contact_phone_email_rows.js`); detail page lists
+  every entry with its type + tel:/mailto: link, list row/dashboard widget
+  show only the first entry. Search matches the new tables too. See
+  `features/contacts.md`. 40 new tests
+  (`test_contacts_field_parity_phone_email.py`), full suite 1422 passed.
 - **Website** (multi-value) — not started.
 - **Birthday** (full or year-less date) — not started.
 - **Address** (structured multi-value, full vCard ADR) — not started.

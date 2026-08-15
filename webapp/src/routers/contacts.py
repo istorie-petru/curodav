@@ -62,6 +62,22 @@ def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
+def _phone_email_list(types: list[str], values: list[str]) -> list[dict]:
+    """Zips a create/edit form's parallel `*_type[]`/`*_value[]` arrays
+    into the {"type", "value"} shape db.set_contact_phones/
+    set_contact_emails expects. A blank type (a row where the browser
+    submitted the field but nothing was picked -- shouldn't normally
+    happen with a `<select>` that always has a value, but a hand-built
+    POST could) falls back to "Other", same default the legacy-column
+    migration uses. Blank values are left in -- db.set_contact_phones/
+    set_contact_emails already drop them, same place every other blank-row
+    filtering happens for this feature."""
+    return [
+        {"type": (t or "").strip() or "Other", "value": v}
+        for t, v in zip(types, values)
+    ]
+
+
 @router.get("")
 def list_contacts(
     request: Request,
@@ -105,6 +121,8 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
             "contact": None,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "phone_types": db.CONTACT_PHONE_TYPES,
+            "email_types": db.CONTACT_EMAIL_TYPES,
         },
     )
 
@@ -114,8 +132,10 @@ async def create_contact(
     full_name: str = Form(...),
     title: str = Form(""),
     org: str = Form(""),
-    phone: str = Form(""),
-    email: str = Form(""),
+    phone_type: list[str] = Form([]),
+    phone_value: list[str] = Form([]),
+    email_type: list[str] = Form([]),
+    email_value: list[str] = Form([]),
     address: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -132,8 +152,16 @@ async def create_contact(
         "full_name": full_name,
         "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
-        "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
-        "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
+        # Contacts field parity slice 2 of 6 -- phone/email are multi-value
+        # now (contact_phones/contact_emails), submitted as parallel
+        # phone_type[]/phone_value[] (email_type[]/email_value[]) form
+        # arrays, same `list[str] = Form([])` shape `tags_labels` already
+        # uses on this router -- one Save button, no separate per-row
+        # endpoints (see plans/STATE.md's slice entry for the full
+        # reasoning). The old flat `phone`/`email` columns are no longer
+        # written here at all (db.py's contacts CREATE TABLE comment).
+        "phones": _phone_email_list(phone_type, phone_value),
+        "emails": _phone_email_list(email_type, email_value),
         "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
         "tags": _tags_list(tags),
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
@@ -171,6 +199,8 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "contact": contact,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "phone_types": db.CONTACT_PHONE_TYPES,
+            "email_types": db.CONTACT_EMAIL_TYPES,
         },
     )
 
@@ -181,8 +211,10 @@ async def update_contact(
     full_name: str = Form(...),
     title: str = Form(""),
     org: str = Form(""),
-    phone: str = Form(""),
-    email: str = Form(""),
+    phone_type: list[str] = Form([]),
+    phone_value: list[str] = Form([]),
+    email_type: list[str] = Form([]),
+    email_value: list[str] = Form([]),
     address: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -200,8 +232,13 @@ async def update_contact(
             "full_name": full_name,
             "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
             "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
-            "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
-            "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
+            # Same multi-value replace-on-save as create_contact above --
+            # the submitted arrays are the full, ordered set, so this
+            # always overwrites `existing`'s phones/emails rather than
+            # merging with them (`db.upsert_contact` -> `set_contact_
+            # phones`/`set_contact_emails`, a full delete-then-reinsert).
+            "phones": _phone_email_list(phone_type, phone_value),
+            "emails": _phone_email_list(email_type, email_value),
             "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
             "tags": _tags_list(tags),
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,

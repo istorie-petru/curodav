@@ -249,6 +249,9 @@
 
     // Contact photo cropper (contact_form.html) -- same re-init reasoning.
     if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
+    // contact_form.html's Phone/Email add/remove rows (Contacts field
+    // parity slice 2 of 6) -- same re-init reasoning.
+    if (window.CCContactPhoneEmailRows) window.CCContactPhoneEmailRows.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
     if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
     // label_edit_modal.html's Role picker (Space/Project date-field

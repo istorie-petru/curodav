@@ -182,8 +182,21 @@ def export_tasks_csv(conn=Depends(get_db)):
 
 @router.get("/contacts.csv")
 def export_contacts_csv(conn=Depends(get_db)):
+    # Contacts field parity slice 2 of 6: `c["phone"]`/`c["email"]` (the
+    # legacy flat columns) are dead going forward -- a contact saved after
+    # this slice always has NULL there even with real phones/emails, so a
+    # plain CSV export needs its own "first entry" read, same convention
+    # contacts_list.html's row subtitle and db._search_contacts' subtitle
+    # use (oldest/lowest-position row, no separate "primary" flag).
+    def _first(items: list[dict] | None) -> str:
+        return items[0]["value"] if items else ""
+
     rows = [
-        [c["uid"], c["full_name"], c["org"] or "", c["phone"] or "", c["email"] or "", c["address"] or "", ", ".join(c.get("tags") or [])]
+        [
+            c["uid"], c["full_name"], c["org"] or "",
+            _first(c.get("phones")), _first(c.get("emails")),
+            c["address"] or "", ", ".join(c.get("tags") or []),
+        ]
         for c in db.list_contacts(conn)
     ]
     return _csv_response("contacts.csv", ["UID", "Name", "Organization", "Phone", "Email", "Address", "Tags"], rows)

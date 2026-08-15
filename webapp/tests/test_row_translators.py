@@ -116,8 +116,12 @@ class TestContactRow:
             "full_name": "Jane Doe",
             "title": "Product Manager",
             "org": "Acme",
-            "phone": "+15550100",
-            "email": "jane@example.com",
+            # Contacts field parity slice 2 of 6: phone/email are multi-
+            # value now (contact_row_to_vcard no longer reads the old flat
+            # "phone"/"email" keys at all -- see vcard_rows.py's module
+            # docstring).
+            "phones": [{"type": "Cell", "value": "+15550100"}],
+            "emails": [{"type": "Work", "value": "jane@example.com"}],
             "address": "123 Main St",
             "tags": ["friend", "vip"],
             "notes": "met at a conference",
@@ -129,8 +133,8 @@ class TestContactRow:
         assert result["full_name"] == row["full_name"]
         assert result["title"] == row["title"]
         assert result["org"] == row["org"]
-        assert result["phone"] == row["phone"]
-        assert result["email"] == row["email"]
+        assert result["phones"] == row["phones"]
+        assert result["emails"] == row["emails"]
         assert result["address"] == row["address"]
         assert set(result["tags"]) == set(row["tags"])
         assert result["notes"] == row["notes"]

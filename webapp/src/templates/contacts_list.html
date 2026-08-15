@@ -46,13 +46,19 @@
         {{ avatar(c) }}
         <span class="contact-row-main">
             <span class="contact-row-name">{{ c.full_name }}</span>
+            <!-- Contacts field parity slice 2 of 6: c.phone/c.email are
+                 dead (see db.py's contacts CREATE TABLE comment) -- this row
+                 stays concise by showing just the first (lowest-position)
+                 phone/email, same as before there could be more than one;
+                 no separate "primary" flag needed, "first" is simply
+                 whichever entry was entered/synced first. -->
             <span class="contact-row-sub">
                 {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
                 {%- elif c.title %}{{ c.title }}
                 {%- elif c.org %}{{ c.org }}{% endif %}
-                {% if (c.title or c.org) and c.phone %}&middot;{% endif %}
-                {% if c.phone %}{{ c.phone }}{% endif %}
-                {% if not c.title and not c.org and not c.phone and c.email %}{{ c.email }}{% endif %}
+                {% if (c.title or c.org) and c.phones %}&middot;{% endif %}
+                {% if c.phones %}{{ c.phones[0].value }}{% endif %}
+                {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
             </span>
         </span>
         {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
