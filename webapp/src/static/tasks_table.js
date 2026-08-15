@@ -15,10 +15,28 @@
 // make the table feel like a page of static links rather than an editable
 // grid. It only reloads if the request actually fails, so the row falls
 // back to whatever's on the server rather than silently drifting from it.
+//
+// async-CRUD (features/async-crud.md): all interaction here is delegated
+// at the document level against #task-table rather than bound to the rows
+// present at load, because a mutation-triggered cc-entity-changed event
+// causes ccApi.refreshRegion() to swap #tasks-body (a new #task-table)
+// in place -- delegated listeners keep working across the swap, and the
+// bulk-selection state is reconciled to the fresh rows. The page's one
+// listener for task changes lives here too.
 
 (function () {
-  const table = document.getElementById("task-table");
-  if (!table) return;
+  const initialTable = document.getElementById("task-table");
+  if (!initialTable) return;
+
+  function currentTable() {
+    return document.getElementById("task-table");
+  }
+
+  function regionUrl() {
+    // Forward the page's own query string so the refreshed region honors
+    // the active filters/sort/page (design §5).
+    return "/tasks/regions?region=table" + (window.location.search || "");
+  }
 
   async function updateField(uid, field, value, el) {
     try {
@@ -36,25 +54,24 @@
     }
   }
 
-  table.querySelectorAll("select.pill-select").forEach((select) => {
-    select.addEventListener("change", async () => {
-      const uid = select.dataset.uid;
-      const field = select.dataset.field;
-      const opt = select.options[select.selectedIndex];
+  // Inline status-pill / due-date changes -- delegated so they survive a
+  // region swap. These stay optimistic with NO region refresh (the design's
+  // explicit choice): a swap after every dropdown change would lose the
+  // table's scroll/focus for no benefit.
+  document.addEventListener("change", (e) => {
+    const target = e.target;
+    if (!target || !target.matches) return;
+    if (target.matches("#task-table select.pill-select")) {
+      const uid = target.dataset.uid;
+      const opt = target.options[target.selectedIndex];
       const color = opt.dataset.color || "gray";
       // Optimistic: repaint the pill color immediately, don't wait on the
-      // network round-trip -- the field is a single native <select>, so
-      // there's no separate "editor" to close first the way a Qt
-      // QComboBox-in-a-delegate needs.
-      select.className = "pill-select pill-" + color;
-      await updateField(uid, field, opt.value, select);
-    });
-  });
-
-  table.querySelectorAll("input.inline-date").forEach((input) => {
-    input.addEventListener("change", async () => {
-      await updateField(input.dataset.uid, input.dataset.field, input.value, input);
-    });
+      // network round-trip.
+      target.className = "pill-select pill-" + color;
+      updateField(uid, target.dataset.field, opt.value, target);
+    } else if (target.matches("#task-table input.inline-date")) {
+      updateField(target.dataset.uid, target.dataset.field, target.value, target);
+    }
   });
 
   // ------------------------------------------------------------------ //
@@ -75,11 +92,14 @@
   const selected = new Set();
   const bar = document.getElementById("bulk-actions-bar");
   const countEl = document.getElementById("bulk-count");
-  const checkboxes = Array.from(table.querySelectorAll(".row-select"));
   let lastClickedIdx = null;
 
   function checkboxRow(cb) {
     return cb.closest("tr");
+  }
+
+  function allCheckboxes() {
+    return Array.from(currentTable().querySelectorAll(".row-select"));
   }
 
   function setSelected(cb, on) {
@@ -105,18 +125,40 @@
     }
   }
 
-  checkboxes.forEach((cb, idx) => {
-    cb.addEventListener("click", (e) => {
-      if (e.shiftKey && lastClickedIdx !== null) {
-        const [lo, hi] = idx < lastClickedIdx ? [idx, lastClickedIdx] : [lastClickedIdx, idx];
-        const targetState = cb.checked;
-        for (let i = lo; i <= hi; i++) setSelected(checkboxes[i], targetState);
-      } else {
-        setSelected(cb, cb.checked);
-      }
-      lastClickedIdx = idx;
-      updateBar();
+  // Selection lives by uid in `selected`; after a region swap the fresh
+  // checkboxes start unchecked, so re-check any that were still selected
+  // and drop uids that no longer exist (deleted / moved off the page).
+  function reconcileAfterSwap() {
+    const present = new Set(allCheckboxes().map((cb) => cb.dataset.uid));
+    Array.from(selected).forEach((uid) => {
+      if (!present.has(uid)) selected.delete(uid);
     });
+    allCheckboxes().forEach((cb) => {
+      const on = selected.has(cb.dataset.uid);
+      cb.checked = on;
+      const row = checkboxRow(cb);
+      if (row) row.classList.toggle("is-selected", on);
+    });
+    updateBar();
+  }
+
+  // Row-select checkbox clicks -- delegated (document) so they survive a
+  // region swap; the checkbox list is re-queried per interaction so
+  // shift-click range selection indexes the live rows.
+  document.addEventListener("click", (e) => {
+    const cb = e.target.closest && e.target.closest("#task-table .row-select");
+    if (!cb) return;
+    const checkboxes = allCheckboxes();
+    const idx = checkboxes.indexOf(cb);
+    if (e.shiftKey && lastClickedIdx !== null && idx !== -1) {
+      const [lo, hi] = idx < lastClickedIdx ? [idx, lastClickedIdx] : [lastClickedIdx, idx];
+      const targetState = cb.checked;
+      for (let i = lo; i <= hi; i++) setSelected(checkboxes[i], targetState);
+    } else {
+      setSelected(cb, cb.checked);
+    }
+    lastClickedIdx = idx;
+    updateBar();
   });
 
   // Drag-select across the checkbox column -- Pointer Events (mouse +
@@ -126,21 +168,21 @@
   let painting = false;
   let paintValue = true;
 
-  table.addEventListener("pointerdown", (e) => {
-    const cb = e.target.closest(".row-select");
+  document.addEventListener("pointerdown", (e) => {
+    const cb = e.target.closest && e.target.closest("#task-table .row-select");
     if (!cb) return;
     painting = true;
     paintValue = !cb.checked;
     setSelected(cb, paintValue);
-    lastClickedIdx = checkboxes.indexOf(cb);
+    lastClickedIdx = allCheckboxes().indexOf(cb);
     updateBar();
   });
 
   document.addEventListener("pointermove", (e) => {
     if (!painting) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    const cb = el && el.closest && el.closest(".row-select");
-    if (cb && checkboxes.includes(cb) && cb.checked !== paintValue) {
+    const cb = el && el.closest && el.closest("#task-table .row-select");
+    if (cb && currentTable().contains(cb) && cb.checked !== paintValue) {
       setSelected(cb, paintValue);
       updateBar();
     }
@@ -151,7 +193,7 @@
   });
 
   document.getElementById("bulk-clear")?.addEventListener("click", () => {
-    checkboxes.forEach((cb) => setSelected(cb, false));
+    allCheckboxes().forEach((cb) => setSelected(cb, false));
     lastClickedIdx = null;
     updateBar();
   });
@@ -170,6 +212,15 @@
     return uids;
   }
 
+  // A completed bulk mutation dispatches the same cc-entity-changed event
+  // every other task mutation uses, so the single listener below refreshes
+  // #tasks-body and the divider counts / sort order / empty state catch up.
+  function dispatchTaskChange(action) {
+    document.dispatchEvent(
+      new CustomEvent("cc-entity-changed", { detail: { type: "task", action } })
+    );
+  }
+
   document.getElementById("bulk-delete")?.addEventListener("click", () => {
     const count = selected.size;
     if (!count) return;
@@ -180,12 +231,13 @@
         try {
           const uids = await bulkPost("delete");
           uids.forEach((uid) => {
-            const row = table.querySelector(`tr[data-uid="${uid}"]`);
+            const row = currentTable().querySelector(`tr[data-uid="${uid}"]`);
             if (row) row.remove();
           });
           selected.clear();
           updateBar();
           window.ccToast({ message: `Deleted ${uids.length} task${uids.length === 1 ? "" : "s"}` });
+          dispatchTaskChange("delete");
         } catch (err) {
           window.ccToast({ message: "Could not delete the selected tasks.", variant: "error" });
         }
@@ -199,7 +251,7 @@
     try {
       await bulkPost("status", { status });
       window.ccToast({ message: "Status updated. Reloading to show the new sort order..." });
-      window.location.reload();
+      dispatchTaskChange("status");
     } catch (err) {
       window.ccToast({ message: "Could not update status for the selected tasks.", variant: "error" });
     } finally {
@@ -236,11 +288,30 @@
     if (!tags.length) return;
     bulkPost("tag", { tags, mode })
       .then(() => {
-        window.ccToast({ message: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}. Reloading...` });
-        window.location.reload();
+        window.ccToast({ message: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}.` });
+        dispatchTaskChange("tag");
       })
       .catch(() => window.ccToast({ message: "Could not update labels for the selected tasks.", variant: "error" }));
   }
   document.getElementById("bulk-tag-add")?.addEventListener("click", () => bulkTag("add"));
   document.getElementById("bulk-tag-remove")?.addEventListener("click", () => bulkTag("remove"));
+
+  // ------------------------------------------------------------------ //
+  // The page's one listener for task changes (async-CRUD design §5) --
+  // every task mutation surface (modal create/edit, row delete, bulk
+  // actions, command palette) dispatches cc-entity-changed; this refreshes
+  // the #tasks-body region from the server. Falls back to a full reload if
+  // the fragment fetch itself fails after the mutation already succeeded.
+  // ------------------------------------------------------------------ //
+  document.addEventListener("cc-entity-changed", (e) => {
+    const detail = e.detail || {};
+    if (detail.type !== "task") return;
+    window.ccApi
+      .refreshRegion(regionUrl(), "tasks-body")
+      .catch(() => window.location.reload());
+  });
+
+  document.addEventListener("cc-region-swapped", (e) => {
+    if (e.detail && e.detail.id === "tasks-body") reconcileAfterSwap();
+  });
 })();

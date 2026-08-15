@@ -67,121 +67,13 @@
     <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
 </div>
 
-{% macro sort_link(key, label) %}
-<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&importance_filter={{ active_importance_filter }}&urgency_filter={{ active_urgency_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}{% if group_by and group_by != 'none' %}&group_by={{ group_by }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
-{% endmacro %}
-
-{% if open_tasks or completed_tasks %}
-<div class="card table-scroll">
-<table class="task-table" id="task-table">
-    <thead>
-        <tr>
-            <th style="width:26px"></th>
-            <th>{{ sort_link('title', 'Title') }}</th>
-            <th>{{ sort_link('status', 'Status') }}</th>
-            <th>{{ sort_link('due_at', 'Due') }}</th>
-            <th>Scheduled</th>
-            <th>Labels</th>
-            <th style="width:40px"></th>
-        </tr>
-    </thead>
-    {# Row-select checkbox for bulk actions (static/tasks_table.js) --
-       2026-08-01. This column used to be a "Mark done" checkbox, but it
-       duplicated the Status pill two columns over (which already covers
-       "set to Done" inline, no reload) -- one control per outcome, not
-       two. Marking a task done is now the pill's job exclusively; this
-       checkbox's only job is selection.
-
-       WARNING for whoever edits this comment next: Jinja comments end at
-       the FIRST close-marker found, full stop, no nesting -- so this
-       comment block must never contain that literal two-character close
-       marker (hash immediately followed by a closing curly brace)
-       anywhere in its text, not even inside quotes, or everything after
-       it renders as visible page text above every row (this happened
-       twice already: 2026-08-01 and again 2026-08-02, both times from
-       this same comment describing its own delimiters using the actual
-       characters instead of avoiding them). If you need to talk about
-       Jinja comment syntax here, describe it, do not type it. #}
-    <!-- Row markup moved to _task_row.html (2026-08-14, 1.4 Project pages
-         & views' Tasks view) -- the project detail page's Tasks view needs
-         the identical row (pill-selects, inline due date, delete-with-undo,
-         see plans/webapp-action-pipelines-audit.md for why delete here is
-         undo-based with no confirm sheet), so it's a shared macro now
-         instead of a duplicated inline one. -->
-    <!-- 1.5 slice ("Tasks page as a table groupable by project",
-         plans/open-priority.md § Task model): group_by='project' clusters
-         each of the open/completed sections under project-header rows
-         (routers/tasks.py's _group_tasks_by_project, reusing
-         db.project_label_for) instead of one flat tbody -- ungrouped mode
-         (group_by=='none', the default) renders exactly as before, pixel
-         for pixel, so a bookmarked/existing URL without the param is
-         unaffected. Grouping only adds header <tr>s and splits the same
-         task_row() output across more <tbody> elements; it never changes
-         a row's own markup, so static/tasks_table.js's `tr[data-uid]`/
-         `.row-select`/`select.pill-select` selectors keep working
-         unmodified. -->
-    {% if group_by == 'project' %}
-    {% for grp in open_groups %}
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
-    </tbody>
-    <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% if paginated and total_pages > 1 %}
-    <tbody>
-        <tr class="task-pager-row"><td colspan="9">{% include "_tasks_pager.html" %}</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks and open_tasks %}
-    <!-- Completed tasks stay visible rather than vanishing on check-off,
-         but are clearly separated and pushed to the bottom -- a dedicated
-         header row (not just a CSS class) makes the boundary obvious even
-         scrolling through a long table. -->
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">Completed ({{ completed_tasks|length }})</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks %}
-    {% if group_by == 'project' %}
-    {% for grp in completed_groups %}
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
-    </tbody>
-    <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in completed_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% endif %}
-</table>
-</div>
-{% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_importance_filter != 'all' or active_urgency_filter != 'all' or _apuid or _aguid %}
-    <div class="empty-state-title">No tasks match this filter</div>
-    <div class="empty-state-text">Try a different label, or clear the search and filters above.</div>
-    {% elif is_inbox %}
-    <div class="empty-state-title">Nothing to triage</div>
-    <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>
-    {% else %}
-    <div class="empty-state-title">No tasks yet</div>
-    <div class="empty-state-text">Add your first task to get started.</div>
-    <a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
-    {% endif %}
-</div>
-{% endif %}
+{# Table body + empty state (open_tasks/completed_tasks/grouping/pager) --
+   shared with the async-CRUD region fragment (GET /tasks/regions?region=table)
+   via _tasks_body.html, so a mutation-triggered region refresh re-renders
+   the exact same markup as the full page (features/async-crud.md). The
+   _aguid/_apuid sets above stay here at block scope -- the include inherits
+   them, and the fragment route supplies its own defaults. #}
+{% include "_tasks_body.html" %}
 
 {# "Habits & Recurring" section removed 2026-08-08 -- superseded by the
    real Tasks > Habits tab (tasks_habits.html), which shows every

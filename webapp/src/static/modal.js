@@ -339,6 +339,7 @@
         try {
           const resp = await fetch(form.action, {
             method: form.method || "POST",
+            headers: { "X-Requested-With": "fetch" },
             body: new FormData(form),
           });
           if (resp.ok) {
@@ -347,7 +348,23 @@
               await refreshModalContent(); // re-render in place, modal stays open
             } else {
               closeModal();
-              window.location.reload();
+              // async-CRUD (features/async-crud.md): a form marked
+              // data-cc-change opts out of the full-page reload -- on
+              // success we dispatch a document-level cc-entity-changed event
+              // and let the page underneath refresh just its own region.
+              const changeType = form.getAttribute("data-cc-change");
+              if (changeType) {
+                document.dispatchEvent(
+                  new CustomEvent("cc-entity-changed", {
+                    detail: {
+                      type: changeType,
+                      action: form.getAttribute("data-cc-action") || "edit",
+                    },
+                  })
+                );
+              } else {
+                window.location.reload();
+              }
             }
           } else {
             const text = await resp.text().catch(() => "");

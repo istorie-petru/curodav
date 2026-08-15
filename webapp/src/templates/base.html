@@ -255,6 +255,11 @@
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
+<!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
+     cc-entity-changed event bus + the generic data-cc-complete handler.
+     Loaded before every page/extra script so modal.js, app.js and each
+     page's own listeners can rely on window.ccApi existing. -->
+<script src="{{ static_url('async_crud.js') }}"></script>
 <script src="{{ static_url('tag_input.js') }}"></script>
 <script src="{{ static_url('recurrence_picker.js') }}"></script>
 <script src="{{ static_url('reminders_picker.js') }}"></script>

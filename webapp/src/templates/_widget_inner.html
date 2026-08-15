@@ -1,0 +1,58 @@
+{# The one widget-inner macro (header + content) shared by the workspace
+   grid (_widget_workspace.html, which imports it) and the async-CRUD
+   single-widget region fragment (_widget_card.html, GET
+   /dashboard/widgets/{uid}) -- so a mutation-triggered card refresh
+   re-renders the exact same markup as the full grid
+   (features/async-crud.md). Expects `wc` (a widget context dict from
+   routers/dashboard.py's _widget_context/_build_widget_contexts),
+   `edit_mode`, and -- only relevant in edit mode -- `space_uid`/
+   `project_uid` for the Edit link. Both consumers must import it WITH
+   context (`with context`) so the macro sees the render context: the
+   page context when included inside _widget_workspace.html, and the
+   fragment route's explicit {request, edit_mode, space_uid, project_uid,
+   wc} when rendered via _widget_card.html. #}
+{% macro widget_inner(wc, in_stack) %}
+{% set widget = wc.widget %}
+{% set spec = wc.spec %}
+{% set data = wc.data %}
+<div class="widget-header">
+    {% if edit_mode and not in_stack %}
+    <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
+    {% elif edit_mode and in_stack %}
+    <button type="button" class="icon-btn widget-stack-drag-handle" title="Drag to reorder within this stack" aria-label="Drag to reorder within this stack">{{ icon('move', 'icon-sm') }}</button>
+    {% endif %}
+    <h2>{{ widget.title or (spec.label if spec else widget.type) }}</h2>
+    <div class="spacer"></div>
+    {% if edit_mode %}
+    {% if in_stack %}
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/unstack" class="form-inline" data-confirm-sheet="Unstack this widget?">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="icon-btn" title="Move out of this stack">{{ icon('corner-down-right', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+    <a href="/dashboard/widgets/{{ widget.uid }}/edit?space_uid={{ space_uid or '' }}&amp;project_uid={{ project_uid or '' }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit</a>
+    <form method="post" action="/dashboard/widgets/{{ widget.uid }}/delete" class="form-inline" data-confirm-sheet="Remove this widget?">
+        <input type="hidden" name="edit" value="1">
+        <button type="submit" class="icon-btn" title="Remove widget">{{ icon('x', 'icon-sm') }}</button>
+    </form>
+    {% endif %}
+</div>
+
+<!-- Content height (2026-08-07 -- manual height editor/drag-resize
+     removed per direct feedback: a widget's height should just be
+     "how much content it is", no scrollbar, unless it goes over a
+     max height. .widget-content's CSS max-height (static/style.css)
+     is one flat value shared by every widget type, a backstop only --
+     each widget's own item-count limit (e.g. _render_contact_list's
+     `limit`) is what normally keeps content within bounds. Applied to
+     just this data area, not the whole card, so the header above and
+     the Filters panel below always stay their own natural size. -->
+<div class="widget-content">
+{% if spec %}
+{% include spec.template %}
+{% else %}
+<div class="empty-state">Unknown widget type &ldquo;{{ widget.type }}&rdquo;.</div>
+{% endif %}
+</div>
+
+{% endmacro %}

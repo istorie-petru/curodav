@@ -22,6 +22,10 @@
                                (data-confirm-sheet); default "undo"
      footer_delete_label    -- undo label / confirm-sheet message
      footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
+      footer_delete_cc_change -- when set (e.g. "task"), the undo-mode
+                                delete form opts into the async-CRUD
+                                cc-entity-changed event instead of the
+                                full-page reload (features/async-crud.md)
      footer_primary_href    -- Edit link (view modals); when set the primary
                                is an <a>, otherwise a submit <button>
      footer_primary_form    -- id of the body <form> the Save button submits
@@ -47,7 +51,7 @@
     <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
 {% else %}
-<form method="post" action="{{ footer_delete_url }}" data-delete-undo="{{ footer_delete_label }}" data-delete-undo-redirect="{{ footer_delete_redirect }}">
+<form method="post" action="{{ footer_delete_url }}" data-delete-undo="{{ footer_delete_label }}" data-delete-undo-redirect="{{ footer_delete_redirect }}"{% if footer_delete_cc_change %} data-cc-change="{{ footer_delete_cc_change }}"{% endif %}>
     <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
 {% endif %}

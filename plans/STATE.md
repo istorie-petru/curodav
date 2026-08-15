@@ -2321,6 +2321,66 @@ session, right before the final commit of that session.
   no visual-regression harness) — verified by reading the rendered rule
   against `.detail-delete-link`'s own precedent.
 
+- **Shipped:** `1.9` slice — **Async CRUD: task create/edit/complete/delete
+  without a page reload**, complete (2026-08-16) — progressive-enhancement
+  async layer over the existing plain-form flows, per `features/async-crud.md`.
+  Every mutation endpoint keeps its `303 Redirect` for a non-JS client; with
+  the fetch header (`X-Requested-With: fetch`) it returns JSON instead
+  (`201 {"ok": true, "uid": …}` on create, `200 {"ok": true}` on the rest) —
+  detected via `x_requested_with: str | None = Header(default=None)` (a
+  `Request | None` param breaks FastAPI with "Invalid args for response
+  field"), shared by `routers/tasks.py`'s `_wants_json`/`_respond`.
+  - New `static/async_crud.js` (loaded globally in `base.html` after
+    `modal.js`): `window.ccApi.post` (the only `fetch` path every mutating
+    form goes through, so 1.8's future outbox interception has one hook —
+    `_send`), `window.ccApi.refreshRegion`, a generic `data-cc-complete`
+    submit handler (posts, then dispatches the event; it does *not* refresh
+    — the owner does), and the `cc-entity-changed` event bus for
+    cross-surface sync.
+  - Tasks page: new `GET /tasks/regions?region=table` fragment endpoint
+    (`routers/tasks.py::tasks_regions`, unknown region -> 400 JSON) renders
+    the shared `_tasks_body.html` (extracted from `tasks_list.html`, which
+    now just includes it — the partial self-imports `task_row` and defines
+    `sort_link` so it renders standalone). It accepts the same query params
+    as `list_tasks`; the client forwards the page's own `location.search`
+    so filters/sort/page carry over. `tasks_table.js` was refactored to
+    document-level delegation (region swaps replace `#task-table`), and
+    listens for `cc-entity-changed` to refresh `#tasks-body` (reload
+    fallback on failure); inline pill/date edits stay optimistic with no
+    region refresh, by design. Bulk status/tag/delete dispatch the event
+    instead of reloading; bulk list-select stays a reload.
+  - Modals/other JS: `modal.js` sends the fetch header and, on a
+    non-keep-open success of a `data-cc-change` form (action from
+    `data-cc-action`), dispatches `cc-entity-changed` instead of
+    reloading; `task_form.html` uses `data-cc-change="task"` +
+    `data-cc-action`, `task_detail.html` opts its footer delete into the
+    same via `_modal_footer.html`'s new `footer_delete_cc_change`.
+    `app.js`'s delete-with-undo and list-row timer paths do the same when
+    the form carries `data-cc-change`; `command_palette.js`'s task
+    complete/delete send the header + dispatch (notes/events unchanged).
+  - Dashboard: new `GET /dashboard/widgets/{uid}` (`routers/dashboard.py::
+    widget_card_region`, 404 on unknown uid) renders the single-card
+    `_widget_card.html` (widget markup extracted into the shared
+    `widget_inner` macro in new `_widget_inner.html`); cards carry
+    `data-widget-uses="tasks"` and the dashboard listener refreshes
+    `.widget-card[data-widget-uses*="tasks"]` on `cc-entity-changed` but
+    skips while `#dashboard-grid.is-editing` (the fragment renders
+    `edit_mode=False` and would drop drag chrome). `_widget_agenda.html`'s
+    complete forms got `data-cc-complete`. Stack children have no
+    `#widget-<uid>` container so `refreshRegion` no-ops there (documented
+    scope cut).
+  17 new tests (`test_async_crud.py`): region-fragment parity with the full
+  page (rows, filters/pagination, pager, empty state, unknown region 400),
+  dual-mode mutations (JSON 201/200 with header, 303 without, recurring
+  completion history, two-project 400), widget card region (marker +
+  content + 404), detail delete-form opt-in. Full suite 1524 passed.
+  *Note:* the working tree also still carries the pre-existing uncommitted
+  Modal window uniformization slices D–H (modal-uniformization audit +
+  rules were committed as slices A–C in `cc31141`); two small fixes were
+  made to that uncommitted work to get the suite green (`_widget_edit_
+  modal.html`'s Jinja comment ending `-->` instead of `#}`; a too-strict
+  assertion in `test_modal_uniformization.py`).
+
 ## Breadcrumbs for 1.4's two still-deferred items
 
 1.4's main line (work allocations + both project views) is fully shipped.

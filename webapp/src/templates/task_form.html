@@ -21,7 +21,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}">
+<form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     {% include "_task_form_fields.html" %}
 </form>
 <!-- 2026-08-08 ("remove Recurrence, add a way to add subtasks in place of

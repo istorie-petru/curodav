@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, recurrence_expand
 from ..deps import get_db, templates
@@ -1995,6 +1995,35 @@ def dashboard_customize(request: Request, space_uid: str = "", project_uid: str 
         }
     )
     return templates.TemplateResponse("dashboard_customize.html", ctx)
+
+
+@router.get("/dashboard/widgets/{uid}")
+def widget_card_region(request: Request, uid: str, conn=Depends(get_db)):
+    """Async-CRUD single-widget region fragment (features/async-crud.md) --
+    re-renders one plain widget's card (the .widget-card with
+    id="widget-{uid}") so static/async_crud.js's refreshRegion() can swap
+    it in place after a task change instead of reloading the whole page.
+    Shares _widget_card.html/_widget_inner.html with the full grid, so the
+    fragment is pixel-identical to what widget_page_context renders (one
+    source of truth). A stack (or stack child) returns the same card
+    markup, but a stack child has no #widget-<uid> container on the page,
+    so refreshRegion() no-ops for those -- documented scope cut, see
+    _widget_card.html's own comment."""
+    widget = db.get_dashboard_widget(conn, uid)
+    if widget is None:
+        raise HTTPException(status_code=404, detail=f"widget not found: {uid}")
+    wc = _widget_context(conn, widget, None)
+    label_name = widget.get("label_name") or ""
+    ctx = {
+        "request": request,
+        "edit_mode": False,
+        "space_uid": label_name,
+        "project_uid": label_name,
+        "label_name": label_name,
+        "wc": wc,
+    }
+    html = templates.env.get_template("_widget_card.html").render(ctx)
+    return HTMLResponse(html)
 
 
 @router.get("/dashboard/widgets/{uid}/edit")

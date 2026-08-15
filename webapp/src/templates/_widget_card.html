@@ -1,0 +1,15 @@
+{# Async-CRUD single-widget region fragment (features/async-crud.md) --
+   rendered by GET /dashboard/widgets/{uid} and swapped in place over the
+   page's own `.widget-card` (matched by id) after a mutation. Renders a
+   plain (non-stack) widget only: a stack child has no `#widget-<uid>`
+   container on the page (it lives inside `.widget-stack-item`), so
+   refreshRegion() safely no-ops for those -- documented scope cut, not a
+   bug (the region endpoint returns the same card markup either way; the
+   caller just won't find the container).
+   Expects the same {wc, edit_mode, space_uid, project_uid, request}
+   context the full grid uses, so the markup is identical to
+   _widget_workspace.html's card -- one source of truth. #}
+{% from "_widget_inner.html" import widget_inner with context %}
+<div class="card widget-card" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
+    {{ widget_inner(wc, false) }}
+</div>

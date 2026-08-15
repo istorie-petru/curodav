@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
 from ..deps import get_db, templates
@@ -33,6 +33,26 @@ def _auto_archive_if_configured(conn) -> None:
         days = 0
     if days > 0:
         db.delete_old_completed_tasks(conn, days)
+
+
+# --------------------------------------------------------------------- #
+# Dual-mode responses (async-CRUD design, features/async-crud.md) --
+# every task mutation endpoint keeps its plain-HTML 303 Redirect default
+# (so a form still works with no JS at all), but returns JSON when the
+# request carries `X-Requested-With: fetch` (static/async_crud.js always
+# sends it). Read via a FastAPI Header param (default None) rather than a
+# Request object because this suite's direct-call tests invoke the router
+# functions as plain Python functions without building a Request -- those
+# keep getting the redirect default.
+# --------------------------------------------------------------------- #
+def _wants_json(x_requested_with: str | None) -> bool:
+    return x_requested_with == "fetch"
+
+
+def _respond(x_requested_with: str | None, redirect_url: str, *, status_code: int = 200, **payload) -> JSONResponse | RedirectResponse:
+    if _wants_json(x_requested_with):
+        return JSONResponse({"ok": True, **payload}, status_code=status_code)
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 STATUSES = ["active", "in_progress", "waiting", "done", "archived"]
@@ -365,8 +385,8 @@ def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
     return groups
 
 
-@router.get("")
-def list_tasks(
+def _tasks_list_context(
+    conn,
     request: Request,
     date_filter: str = "all",
     status_filter: str = "all",
@@ -379,8 +399,13 @@ def list_tasks(
     group_by: str = "none",
     page: int = 1,
     limit: int = 50,
-    conn=Depends(get_db),
-):
+) -> dict:
+    """Build the full render context for the Table view. Shared between the
+    full page (list_tasks) and the async-CRUD region fragment
+    (tasks_regions, GET /tasks/regions?region=table) so a mutation-triggered
+    region refresh re-renders the exact same markup as the full page --
+    _tasks_body.html is the single source of truth either way
+    (features/async-crud.md)."""
     _auto_archive_if_configured(conn)
     label_rules = _task_label_rules(conn)
     tasks = db.list_tasks(conn, q=q)
@@ -499,9 +524,72 @@ def list_tasks(
             "limit": limit,
             "open_total": open_total,
             "total_pages": total_pages,
+            # The dead Space/Project filter helpers (_aguid/_apuid, see
+            # tasks_list.html) are always empty today; the page sets them via
+            # `default('')` at block scope, so the fragment route must supply
+            # the same empty values for the shared _tasks_body.html partial.
+            "_aguid": "",
+            "_apuid": "",
         }
     )
+    return ctx
+
+
+@router.get("")
+def list_tasks(
+    request: Request,
+    date_filter: str = "all",
+    status_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
+    label: str | None = None,
+    q: str | None = None,
+    sort: str = "due_at",
+    dir: str = "asc",
+    group_by: str = "none",
+    page: int = 1,
+    limit: int = 50,
+    conn=Depends(get_db),
+):
+    ctx = _tasks_list_context(
+        conn, request, date_filter, status_filter, importance_filter,
+        urgency_filter, label, q, sort, dir, group_by, page, limit,
+    )
     return templates.TemplateResponse("tasks_list.html", ctx)
+
+
+@router.get("/regions")
+def tasks_regions(
+    request: Request,
+    region: str = "table",
+    date_filter: str = "all",
+    status_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
+    label: str | None = None,
+    q: str | None = None,
+    sort: str = "due_at",
+    dir: str = "asc",
+    group_by: str = "none",
+    page: int = 1,
+    limit: int = 50,
+    conn=Depends(get_db),
+):
+    """Async-CRUD region fragment (features/async-crud.md): renders a single
+    named region of the Table view -- currently `region=table`, the
+    #tasks-body div shared with tasks_list.html -- so static/async_crud.js's
+    refreshRegion() can swap it in place after a mutation instead of a full
+    page reload. Takes the same query params as list_tasks; the client
+    forwards the page's own query string so the refreshed region honors the
+    active filters/sort/page."""
+    if region != "table":
+        return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
+    ctx = _tasks_list_context(
+        conn, request, date_filter, status_filter, importance_filter,
+        urgency_filter, label, q, sort, dir, group_by, page, limit,
+    )
+    html = templates.env.get_template("_tasks_body.html").render(ctx)
+    return HTMLResponse(html)
 
 
 @router.get("/board")
@@ -716,6 +804,7 @@ def create_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -774,7 +863,7 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
 # --------------------------------------------------------------------- #
@@ -986,6 +1075,7 @@ def update_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -1018,7 +1108,7 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
 _UPDATABLE_FIELDS = {"status", "due_at", "title"}
@@ -1054,7 +1144,7 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
 
 
 @router.post("/{uid}/complete")
-def complete_task(uid: str, conn=Depends(get_db)):
+def complete_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     row = db.get_task(conn, uid)
     if row:
         row["status"] = "done"
@@ -1066,7 +1156,7 @@ def complete_task(uid: str, conn=Depends(get_db)):
         # again tomorrow. Plain tasks just flip to done, no history row.
         if row.get("recurrence"):
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
 def _completion_streaks(completions: dict[str, str], today: date | None = None) -> tuple[int, int]:
@@ -1191,7 +1281,7 @@ def set_task_completion(
 
 
 @router.post("/{uid}/delete")
-def delete_task(uid: str, conn=Depends(get_db)):
+def delete_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     # Tasks are flat (1.2, task-model decision) -- a task is an independent
     # unit of work, so this deletes exactly the one task (plus its labels
     # and relation links, via db.delete_task's own cleanup). The checklist-
@@ -1199,7 +1289,7 @@ def delete_task(uid: str, conn=Depends(get_db)):
     # checklist/subtask removal still physically has.
     db.delete_task(conn, uid)
     db.delete_checklist_items_for_task(conn, uid)
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
 # --------------------------------------------------------------------- #

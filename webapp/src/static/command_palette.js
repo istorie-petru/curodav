@@ -422,11 +422,16 @@
   }
 
   function completeTask(r) {
-    fetch("/tasks/" + r.uid + "/complete", { method: "POST" })
+    fetch("/tasks/" + r.uid + "/complete", { method: "POST", headers: { "X-Requested-With": "fetch" } })
       .then(function (resp) {
         if (!resp.ok) throw new Error("failed");
         toast({ message: 'Marked "' + r.title + '" done.' });
         close();
+        // async-CRUD (features/async-crud.md): tell the page underneath to
+        // refresh its own regions instead of leaving it stale.
+        document.dispatchEvent(
+          new CustomEvent("cc-entity-changed", { detail: { type: "task", action: "complete", uid: r.uid } })
+        );
       })
       .catch(function () {
         toast({ message: "Could not mark that task done.", variant: "error" });
@@ -439,11 +444,20 @@
       anchor: anchorBtn,
       message: 'Delete "' + r.title + '"? This cannot be undone.',
       onConfirm: function () {
-        fetch(deleteUrl(r), { method: "POST" })
+        fetch(deleteUrl(r), { method: "POST", headers: { "X-Requested-With": "fetch" } })
           .then(function (resp) {
             if (!resp.ok) throw new Error("failed");
             toast({ message: 'Deleted "' + r.title + '".' });
             close();
+            // async-CRUD (features/async-crud.md) -- refresh the page
+            // underneath rather than leaving it stale. Only task deletes
+            // opt into the region-refresh bus; notes/events still just
+            // reload the palette (their own pages are unchanged today).
+            if (r.type === "task") {
+              document.dispatchEvent(
+                new CustomEvent("cc-entity-changed", { detail: { type: "task", action: "delete", uid: r.uid } })
+              );
+            }
           })
           .catch(function () {
             toast({ message: "Could not delete that item.", variant: "error" });
