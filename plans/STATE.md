@@ -2167,6 +2167,37 @@ session, right before the final commit of that session.
   (4 of 6 sub-slices open) and Project check-in to finish touching the
   entity/widget modals first, per the section's own updated note.
 
+- **Shipped:** side work — **Modal window uniformization, slices A-C**,
+  complete (2026-08-15), direct follow-up to the same-day audit + rules
+  pass above ("start work uniforming their look"). Three small,
+  independent slices from `plans/open.md`'s 8-slice (A-H) breakdown:
+  - **A+B — hand-rolled footers migrated onto `_modal_footer.html`**:
+    `habit_form`, `habit_task_form`, `label_edit_modal`,
+    `label_merge_modal`, `note_form`, `quick_add` all render their footer
+    through the shared partial now, matching the core three entities
+    (task/event/contact). Folded slice A's safety fix into the same
+    change: `note_form.html`'s Delete had neither `data-confirm-sheet` nor
+    `data-delete-undo` before this — the only unconfirmed destructive
+    action anywhere in the app — and now goes through the partial's
+    `confirm` mode like every other migrated modal's Delete.
+    `_modal_footer.html` gained one small, backward-compatible extension:
+    an optional `footer_primary_id` (`quick_add.html`'s tab switch
+    retargets the Save button's `form` attribute via
+    `getElementById("quick-add-save")`, `static/quick_add.js` — the
+    partial didn't expose a stable id for that before).
+  - **C — "New widget" triggers sized to match their content**:
+    `dashboard.html`/`label_detail.html`'s "New widget" links now carry
+    `data-modal-size="wide"`, matching `_widget_edit_modal.html`'s own
+    trigger — both open the identical `.widget-builder` two-pane grid, but
+    only one used to get the wide dialog.
+  Slices D-H (the remaining footer-less/icon-prefixed utility modals —
+  `_modal_widget_customize`, `_widget_edit_modal`, `banner_editor`) are
+  deliberately deferred per `open.md`'s own note: they touch modals
+  Contacts field parity (4 of 6 sub-slices open) and Project check-in
+  haven't finished adding fields to yet. See `plans/open.md`'s Modal
+  window uniformization section. 9 new tests
+  (`test_modal_uniformization.py`), full suite 1431 passed.
+
 ## Breadcrumbs for 1.4's two still-deferred items
 
 1.4's main line (work allocations + both project views) is fully shipped.

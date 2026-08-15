@@ -191,13 +191,16 @@ Databases were removed; see `abandoned.md`.)
 
 ## Modal window uniformization (2026-08-15)
 
-**Status:** audit complete, rules written below (2026-08-15) — **no code
-changed yet**. Jumped ahead of Project check-in in the reprioritized queue
-at direct user request (2026-08-15); the "sequence it last" reasoning below
-still explains *why* it was originally queued last, it just no longer
-gates when the design pass itself happens (design work doesn't touch live
-modals, so nothing here needed the other items to land first — only the
-eventual *implementation* slices do, see the build order at the bottom).
+**Status:** audit + rules written 2026-08-15; **slices A, B, C shipped
+2026-08-15** (see the implementation-slices list below) — every hand-
+rolled `.modal-footer` is now `_modal_footer.html`, note_form's Delete is
+confirmed, and the widget-builder's two "New widget" triggers are wide.
+Slices D-H are still open. Jumped ahead of Project check-in in the
+reprioritized queue at direct user request (2026-08-15); the "sequence it
+last" reasoning below still explains *why* it was originally queued last,
+it just didn't gate the design pass or slices A-C (none of the three
+touched a modal the still-open Contacts/Project-check-in work is adding
+fields to) — only D-H still wait on those, per the note below.
 
 Original reasoning for the "last" placement, still true for
 implementation: this cuts across every entity's create/edit modal, so
@@ -340,19 +343,28 @@ written down as a rule until now.
 
 ### Implementation slices (small, pick off independently, in this order)
 
-- **A. Fix `note_form.html`'s unconfirmed Delete** — add
-  `data-confirm-sheet` (or wire it through `_modal_footer.html` directly,
-  folding this into slice B). Safety fix, do first, tiny, no dependency on
-  anything else here.
-- **B. Migrate the hand-rolled-footer modals onto `_modal_footer.html`** —
-  `habit_form`, `habit_task_form`, `label_edit_modal`, `label_merge_modal`,
-  `note_form`, `quick_add`; extend the partial for the primary-only mode
-  first if `_modal_widget_customize` is done in the same slice, otherwise
-  defer that one case to slice D.
-- **C. Add `data-modal-size="wide"` to the "New widget" triggers**
-  (`dashboard.html`, `label_detail.html`) so `_modal_widget_customize`
-  matches `_widget_edit_modal`'s sizing. One-line-per-trigger, no template
-  restructuring.
+- ~~**A. Fix `note_form.html`'s unconfirmed Delete**~~ — **shipped
+  2026-08-15**, folded into slice B (below) rather than done separately —
+  `note_form.html`'s Delete now goes through `_modal_footer.html`'s
+  `confirm` mode like every other migrated modal's Delete.
+- ~~**B. Migrate the hand-rolled-footer modals onto `_modal_footer.html`**~~
+  — **shipped 2026-08-15** — `habit_form`, `habit_task_form`,
+  `label_edit_modal`, `label_merge_modal`, `note_form`, `quick_add` all now
+  render their footer through the shared partial; no hand-rolled
+  `.modal-footer` markup remains outside `_modal_widget_customize`/
+  `_widget_edit_modal`/`banner_editor` (slices D-F). `_modal_footer.html`
+  gained one small extension along the way: an optional `footer_primary_id`
+  (only `quick_add.html` needs it — `static/quick_add.js`'s tab switch
+  retargets the Save button's `form` attribute via `getElementById`, which
+  needs a stable id the partial didn't expose before). 9 new tests
+  (`test_modal_uniformization.py`), full suite 1431 passed.
+- ~~**C. Add `data-modal-size="wide"` to the "New widget" triggers**~~ —
+  **shipped 2026-08-15** — `dashboard.html`'s and `label_detail.html`'s
+  "New widget" links now carry `data-modal-size="wide"`, matching
+  `_widget_edit_modal`'s trigger; the identical `.widget-builder` two-pane
+  grid no longer squeezes into the default width from either entry point.
+  Covered by `test_modal_uniformization.py`'s
+  `TestNewWidgetTriggerWideSizing`.
 - **D. `_modal_widget_customize.html` onto `_modal_footer.html`**
   (primary-only mode) — do after C so the sizing fix is visible during
   testing.

@@ -117,14 +117,15 @@
 </form>
 </div>
 </div>
-<div class="modal-footer">
-<form method="post" action="/labels/{{ l.name }}/clear" data-confirm-sheet="Remove &quot;{{ l.name }}&quot; from every object that carries it? This doesn't delete anything else.">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
-</form>
-<span class="spacer"></span>
-<a href="/labels" class="btn ghost" data-modal-cancel>Cancel</a>
-<button type="submit" form="label-edit-form" class="btn primary">{{ icon('check-square', 'icon-sm') }} Save</button>
-</div>
+{% set footer_back_url = '/labels' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_delete_url = '/labels/' ~ l.name ~ '/clear' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Remove &quot;' ~ l.name ~ '&quot; from every object that carries it? This doesn&#39;t delete anything else.' %}
+{% set footer_primary_form = 'label-edit-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}
 <!-- No extra_scripts block here -- this page is only ever opened via

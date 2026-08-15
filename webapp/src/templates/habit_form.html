@@ -102,15 +102,16 @@
 </form>
 </div>
 </div>
-<div class="modal-footer">
+{% set footer_back_url = '/habits' %}
+{% set footer_back_label = 'Cancel' %}
 {% if habit %}
-<form method="post" action="/habits/{{ habit.uid }}/delete" data-confirm-sheet="Delete &quot;{{ habit.name }}&quot; and all its logged history? This cannot be undone.">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
-</form>
-<span class="spacer"></span>
+{% set footer_delete_url = '/habits/' ~ habit.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete &quot;' ~ habit.name ~ '&quot; and all its logged history? This cannot be undone.' %}
 {% endif %}
-<a href="{% if habit %}/habits/{{ habit.uid }}{% else %}/habits{% endif %}" class="btn ghost" data-modal-cancel>Cancel</a>
-<button type="submit" form="habit-form" class="btn primary">Save</button>
-</div>
+{% set footer_primary_form = 'habit-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

@@ -28,10 +28,11 @@
 </form>
 </div>
 </div>
-<div class="modal-footer">
-<a href="/labels" class="btn ghost" data-modal-cancel>Cancel</a>
-<span class="spacer"></span>
-<button type="submit" form="label-merge-form" class="btn primary">{{ icon('git-pull-request', 'icon-sm') }} Merge</button>
-</div>
+{% set footer_back_url = '/labels' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'label-merge-form' %}
+{% set footer_primary_label = 'Merge' %}
+{% set footer_primary_icon = 'git-pull-request' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

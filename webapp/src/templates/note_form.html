@@ -32,15 +32,19 @@
 </form>
 </div>
 </div>
-<div class="modal-footer">
+{% set footer_back_url = '/notes' %}
+{% set footer_back_label = 'Cancel' %}
 {% if note %}
-<form method="post" action="/notes/{{ note.uid }}/delete">
-    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
-</form>
-<span class="spacer"></span>
+{# 2026-08-15 modal uniformization: this delete had no confirmation or undo
+   at all before -- the only unconfirmed destructive action in the app.
+   Given confirm mode like every other hand-rolled-footer migration. #}
+{% set footer_delete_url = '/notes/' ~ note.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete this note? This cannot be undone.' %}
 {% endif %}
-<a href="/notes" class="btn ghost" data-modal-cancel>Cancel</a>
-<button type="submit" form="note-form" class="btn primary">Save</button>
-</div>
+{% set footer_primary_form = 'note-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

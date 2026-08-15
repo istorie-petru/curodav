@@ -27,7 +27,13 @@
      footer_primary_form    -- id of the body <form> the Save button submits
      footer_primary_label   -- "Edit" / "Save"
      footer_primary_icon    -- sprite icon name; default "edit" for a link,
-                               "check-square" for a submit button #}
+                               "check-square" for a submit button
+     footer_primary_id      -- optional id on the primary <button>/<a>; only
+                               needed when a script must locate/retarget it
+                               after render (quick_add.html's tab switch
+                               re-points the Save button's `form` attribute
+                               via getElementById -- 2026-08-15 modal
+                               uniformization) #}
 <div class="modal-footer">
 {% if footer_back_mode == 'modal' %}
 <a href="{{ footer_back_url }}" class="btn ghost" data-modal>{{ icon('chevron-left', 'icon-sm') }} {{ footer_back_label|default('Done') }}</a>
@@ -47,8 +53,8 @@
 {% endif %}
 {% endif %}
 {% if footer_primary_href %}
-<a class="btn primary" href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
+<a class="btn primary"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
 {% else %}
-<button type="submit" form="{{ footer_primary_form }}" class="btn primary">{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
+<button type="submit"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} form="{{ footer_primary_form }}" class="btn primary">{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
 {% endif %}
 </div>
