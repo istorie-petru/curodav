@@ -264,6 +264,9 @@
     if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
     if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
+    // label_edit_modal.html's Role picker (Space/Project date-field
+    // reveal + switch-away confirm) -- same re-init reasoning.
+    if (window.CCLabelRolePicker) window.CCLabelRolePicker.init(body);
     // Relations cards' add-row picker (1.2 side work, static/
     // command_palette.js) needs no re-init call here -- its entry points
     // are document-level delegated listeners, which already cover content

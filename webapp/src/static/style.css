@@ -3501,47 +3501,41 @@ body.command-palette-open{overflow:hidden;}
 .settings-search{margin-bottom:12px;}
 .settings-search input{width:100%; max-width:320px;}
 
-/* Labels manage table (labels_manage.html, 2026-08-08 follow-up) -- was a
-   flex-row list with no fixed columns (Color/Icon/Space/Sections/Merge/
-   Remove each landed at a different horizontal position row to row,
-   depending on that row's own name/usage-count text length, and wrapped
-   unpredictably below a very wide viewport). Reuses the Tasks table view's
-   own `table`/`thead th`/`tbody tr`/.table-scroll rules as-is -- this is
-   the same "real columns, one header per control" component, not a second
-   table system. These are just this table's own deltas. This is a
-   management list meant to be scanned row after row (rename, recolor,
-   remove, repeat), not read -- every row/column gets tighter padding and
-   smaller controls than Tasks' own table, which mixes in real content
-   (titles, due dates) that needs more breathing room. */
-.label-table td, .label-table th{padding:5px 8px;}
-.label-table td{vertical-align:middle;}
-/* A handful of this table's own per-label forms (Rename/Merge/Remove) are
-   small enough to live entirely inside one <td> -- unlike Color, which
-   owns the shared "set" form other cells attach to via `form="..."` (see
-   labels_manage.html's own comment), these three need no cross-cell
-   reach, so each is just a plain inline form scoped to its own cell. */
-.label-cell-inline{display:flex; align-items:center; gap:6px;}
+/* Labels manage list (labels_manage.html, reworked 2026-08-15 from a
+   <table> into a plain scannable list -- side work, direct feedback: "the
+   table should be transformed into a simple list, showing data about
+   them"). Every per-label control (rename/color/icon/parent/abbreviation/
+   Space/Project/merge/remove) that used to be one column each moved into
+   the Edit button's modal (label_edit_modal.html) -- a row here is
+   read-only display plus one action, not an editor, so it no longer
+   needs the table's fixed-column layout at all: one flex row per label
+   with a consistent left-to-right reading order (color, icon, name,
+   usage, role badge, Edit). */
+.label-list-group-header{
+  padding:10px 8px 4px; font-size:var(--text-caption); font-weight:600;
+  color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
+}
+.label-list-row{
+  display:flex; align-items:center; gap:10px; padding:8px;
+  border-radius:var(--radius-md);
+}
+.label-list-row:hover{background:var(--bg-secondary);}
+.label-list-row + .label-list-row{border-top:1px solid var(--separator);}
+.label-list-icon{display:inline-flex; color:var(--fg-tertiary);}
+.label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.label-list-row .tag-usage-count{flex:none;}
+.label-list-row .cell-tag{flex:none; white-space:nowrap;}
 
-/* Open/Merge/Remove (2026-08-08 follow-up) -- the actions cell's own row
-   wrapper: without this, its three children (a plain `<a>` plus two
-   `display:flex` forms) had no shared flex context, and a flex container
-   is block-level by default, so each form broke onto its own line inside
-   the cell instead of sitting next to the Open link. `justify-content:
-   flex-end` keeps everything right-aligned, matching the <td>'s own
-   text-align:right the rest of this table uses for its trailing column. */
-.label-actions{display:inline-flex; align-items:center; gap:6px; justify-content:flex-end;}
+/* Reused by label_edit_modal.html's Merge form (a small inline form that
+   doesn't need the modal's own .field-grid) -- same "one plain inline
+   form, no cross-cell reach" idiom this class has had since the old table. */
+.label-cell-inline{display:flex; align-items:center; gap:6px;}
 .label-cell-inline input[type="text"]{min-width:0; width:150px; padding:4px 7px;}
-.label-table .tag-usage-count{flex:none; white-space:nowrap;}
-.label-table .filter-select{max-width:110px; padding:4px 22px 4px 8px; font-size:var(--text-caption);}
-.label-table .color-swatch-current{width:18px; height:18px;}
-.label-table .icon-picker-current{width:22px; height:22px;}
-.label-table .icon-btn{width:24px; height:24px;}
-.label-table .icon-btn .icon{width:14px; height:14px;}
-.label-table .btn-sm{padding:3px 8px; font-size:var(--text-caption);}
-.label-table details > summary{list-style:none; width:fit-content;}
-.label-table details > summary::-webkit-details-marker{display:none;}
-.label-table details[open] summary{color:var(--fg-primary);}
-.label-table input[type="checkbox"]{width:15px; height:15px;}
+
+/* label_edit_modal.html's Role control (segmented, .segmented/.seg-btn
+   base already defined elsewhere) and the Project date fields it reveals. */
+.label-role-segmented{margin-bottom:6px;}
+.label-project-fields{margin-top:10px; padding-top:10px; border-top:1px solid var(--separator);}
 
 /* Small on-off switch (app preferences).
     MD3 Switch: track is a rounded rectangle, thumb is a circle

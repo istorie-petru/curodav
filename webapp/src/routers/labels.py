@@ -242,6 +242,132 @@ def manage_labels(request: Request, conn=Depends(get_db)):
     )
 
 
+def _label_role(cfg: dict) -> str:
+    """"none" / "space" / "project" -- the mutually-exclusive Role a label
+    can have (side work, 2026-08-15 direct feedback: "becoming a project
+    should be mutually exclusive to a space"). `is_project` wins if a
+    pre-existing label somehow still has both flags set (from before this
+    rework) -- a label edited through this page from now on can never
+    reach that state again, see update_label below, but nothing here
+    forces a one-time migration of old rows that were never re-saved."""
+    if cfg.get("is_project"):
+        return "project"
+    if cfg.get("generate_space"):
+        return "space"
+    return "none"
+
+
+@router.get("/{name}/edit")
+def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
+    """The label edit modal (side work, 2026-08-15 direct feedback: "a
+    button that opens a modal window to edit labels with all the colors,
+    icons, etc."). Replaces labels_manage.html's old per-row inline forms
+    (rename/color/icon/parent/abbreviation/space-checkbox) AND the Project
+    <details> popover (promote/dates/archive/demote) that had briefly
+    lived there (2026-08-15, same day) -- both now live in one form here,
+    submitted together to update_label below."""
+    cfg = db.effective_label_config(conn, name)
+    role = _label_role(cfg)
+    has_children = bool(db.list_child_labels(conn, name))
+    project_status = db.project_status(conn, cfg) if role == "project" else None
+    other_names = [l["name"] for l in db.list_labels(conn) if l["name"] != name]
+    return templates.TemplateResponse(
+        "label_edit_modal.html",
+        {
+            "request": request,
+            "l": cfg,
+            "role": role,
+            "has_children": has_children,
+            "project_status": project_status,
+            "colors": COLORS,
+            "icon_groups": ICON_GROUPS,
+            "other_label_names": other_names,
+        },
+    )
+
+
+@router.post("/{name}/update")
+def update_label(
+    name: str,
+    new_name: str = Form(""),
+    color: str = Form("blue"),
+    icon: str = Form(""),
+    description: str = Form(""),
+    parent_name: str = Form(""),
+    abbreviation: str = Form(""),
+    role: str = Form("none"),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    confirm_overlap: str = Form(""),
+    conn=Depends(get_db),
+):
+    """The label edit modal's single Save button -- one endpoint for every
+    field the old rename/set/promote/dates/demote endpoints each handled
+    separately, since they're now one form instead of five small ones.
+    Those older endpoints (this file's rename_label/set_label,
+    routers/projects.py's promote/set_dates/demote/archive) are untouched
+    and still work standalone -- nothing else in the app calls them, but
+    removing them isn't this slice's job and `tests/test_project_stack.py`
+    still exercises routers/projects.py's directly.
+
+    Role replaces the old independent generate_space checkbox + is_project
+    promote flow with one mutually-exclusive choice (side work, 2026-08-15
+    direct feedback) -- picking "project" always clears generate_space and
+    picking "space" always clears is_project/dates/archived_at, so a label
+    saved through this form can never end up with both set at once."""
+    new_name = (new_name or "").strip() or name
+    abbreviation = abbreviation if isinstance(abbreviation, str) else ""
+    abbreviation = abbreviation.strip()[:5] or None
+    start_date = start_date.strip() if isinstance(start_date, str) else ""
+    end_date = end_date.strip() if isinstance(end_date, str) else ""
+    role = role if role in ("space", "project") else "none"
+
+    if role == "project":
+        if not start_date or not end_date:
+            raise HTTPException(400, "A project needs both a start and end date.")
+        conflict = db.find_overlapping_project(conn, name, start_date, end_date)
+        if conflict and confirm_overlap not in ("1", "true", "on"):
+            raise HTTPException(
+                409,
+                f'Overlaps the existing project "{conflict["name"]}" '
+                f'({conflict.get("start_date")} to {conflict.get("end_date")}) -- '
+                f'check "Allow this period to overlap" to save anyway.',
+            )
+
+    if new_name != name:
+        db.rename_label(conn, name, new_name)
+        # rename_label merges into new_name if it already names a
+        # different existing label (see its own docstring) -- either way,
+        # every field below now belongs under new_name.
+        name = new_name
+
+    existing = db.get_label_config(conn, name) or {}
+    row = {
+        "name": name,
+        "color": color or "blue",
+        "icon": icon.strip() or None,
+        "description": description,
+        "parent_name": parent_name.strip() or None,
+        "abbreviation": abbreviation,
+        "generate_space": 1 if role == "space" else 0,
+        "is_project": 1 if role == "project" else 0,
+        "created_at": existing.get("created_at") or _now(),
+    }
+    if role == "project":
+        row["start_date"] = start_date
+        row["end_date"] = end_date
+        # Keep an existing project's archived_at as-is (editing dates on an
+        # archived project shouldn't quietly unarchive it); a fresh
+        # promotion (wasn't already is_project) always starts unarchived.
+        row["archived_at"] = existing.get("archived_at") if existing.get("is_project") else None
+    else:
+        row["start_date"] = None
+        row["end_date"] = None
+        row["archived_at"] = None
+    db.upsert_label_config(conn, row)
+    return RedirectResponse(url="/labels", status_code=303)
+
+
 @router.post("/{name}/rename")
 def rename_label(name: str, new_name: str = Form(...), conn=Depends(get_db)):
     db.rename_label(conn, name, new_name)

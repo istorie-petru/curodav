@@ -1409,6 +1409,73 @@ session, right before the final commit of that session.
   only assert on `resp.context`, not `resp.body`. Full suite still 1337
   passed (no test count change — this was a display/relocation change, not
   new behavior needing new coverage).
+- **Shipped:** side work — **Settings > Labels: table replaced by a
+  simple list + full edit modal, Space/Project made mutually exclusive**,
+  complete (2026-08-15), direct feedback ("the table should be
+  transform[ed] into a simple list... a button that opens a modal window
+  to edit labels with all the colors, icons, etc... becoming a project
+  should be mutual exclusive to a space — selected via a fancy dropdown
+  menu. Spaces or project settings appear only after being selected").
+  `templates/labels_manage.html`'s `<table>` (one column per control) is
+  now `.label-list` (`static/style.css`): one flex row per label showing
+  a color dot, icon, name/abbreviation, usage count, a Space/Project role
+  badge, and a single Edit button (`data-modal="/labels/{name}/edit"`).
+  Every per-label control that used to be its own column — rename,
+  color, icon, parent, abbreviation, description, Space, Project
+  (promote/dates/archive/demote, which had briefly landed as this page's
+  own `<details>` popover earlier the same day, see this file's prior
+  entry), Merge, Remove — moved into one new modal (`templates/
+  label_edit_modal.html`) with a single Save button
+  (`routers/labels.py`'s new `GET /labels/{name}/edit` +
+  `POST /labels/{name}/update`, replacing that popover's calls into
+  `routers/projects.py` for the UI's own purposes — those endpoints are
+  untouched and still directly tested by `tests/test_project_stack.py`,
+  just no longer linked to from anywhere).
+
+  **Space and Project are now one mutually-exclusive Role** (segmented
+  radio: Plain / Space / Project — `routers/labels.py::_label_role`),
+  not two independent checkboxes: picking "Project" always clears
+  `generate_space`, picking "Space" always clears `is_project`/dates/
+  `archived_at`, so a label saved through this form can never end up
+  with both set (a pre-existing label saved before this rework that
+  somehow has both keeps `is_project` winning until next edited — no
+  migration script, matching this app's usual "correct going forward,
+  don't rewrite history" convention). The Project date fields render
+  `hidden` until "Project" is selected and reveal with no page reload
+  (new `static/label_role_picker.js`, same `init(root)`-called-by-
+  `modal.js` pattern `task_habit_field_toggle.js` established, loaded
+  globally in `base.html` since this page is only ever opened via
+  `data-modal`). Switching *away* from a role with real data asks for
+  confirmation first (`data-confirm-sheet`, purely client-side, computed
+  once at GET time into `data-original-role`/`data-warn-role` and kept
+  in sync with the live radio selection) — a Project always (loses its
+  period + lifecycle), a Space only if it actually has child labels
+  grouped under it (`db.list_child_labels`); switching between two roles
+  that both had nothing to lose (e.g. Plain → Space) asks nothing.
+  Promoting to Project still runs the existing overlap check
+  (`db.find_overlapping_project`) — inside a modal there's no clean way
+  to show the old page's rich "Save anyway" warning card (`modal.js`'s
+  keep-open forms re-fetch their own URL on success and never render a
+  POST's own response body), so a conflict is a 409 + toast instead, with
+  a plain "Allow this period to overlap" checkbox in the form
+  (`confirm_overlap`) as the override — a real UX simplification, not
+  just a stopgap, noted here in case a future session wants to revisit
+  it. `static/label_search.js` generalized from table/tbody-specific
+  selectors to the new div-based list (same `data-label-group`/
+  `data-label-row`/`data-label-group-header` attributes, only the
+  container id changed). Four `tests/test_modal_input_phaseC_swatch_
+  grid.py` tests that asserted the color/icon picker markup on the old
+  table rows updated to assert it on the new edit modal instead (same
+  intent, moved surface) — one split in two for the "no picker on the
+  list, has one in the modal" distinction, net +1 test. Full suite
+  **1338 passed**, plus a one-off script exercising both pages end-to-end
+  (list rendering, all three role states' modal markup, missing-dates
+  400, overlap 409, successful promote, the mutual-exclusivity clear on
+  a Project→Space switch, and rename-through-Save) — router-function-
+  call tests alone don't prove the client-side confirm/reveal JS
+  actually gates anything, so that part is reasoned from reading
+  `label_role_picker.js` and `modal.js`'s own submit-handling code
+  directly rather than executed (no browser in this sandbox).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

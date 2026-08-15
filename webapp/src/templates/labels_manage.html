@@ -5,12 +5,16 @@
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Labels</h1>
-<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and flip "Generate a Space page" on to aggregate its child labels into their own page. The Project column below promotes a label to a project (bounded period + lifecycle); see <a href="/projects">Projects</a> for the read-only card view.</p>
+<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and turn it into a Space (aggregates its child labels onto their own page) or a Project (a bounded period + lifecycle). Click Edit on a label below to change any of that.</p>
 
-<!-- Overlap warning -- moved from the old /projects page (side work,
-     2026-08-15): routers/projects.py's promote/dates handlers now
-     redirect back here with the same query params on a period conflict,
-     since that's the only place those forms live anymore. -->
+<!-- Overlap warning -- routers/projects.py's promote/set_dates still
+     redirect here with these query params on a period conflict (kept for
+     that endpoint's own sake, see routers/projects.py's
+     _redirect_with_conflict); the label edit modal's own Save handles
+     the same conflict itself now (routers/labels.py::update_label, a 409
+     + toast + "Allow this period to overlap" checkbox), so this banner
+     is dormant for that path but still correct if anything else ever
+     posts to /projects/promote directly. -->
 {% if overlap_name and pending %}
 <div class="card" style="border-color:var(--accent-warning, #b58900)">
     <p><strong>{{ icon('activity', 'icon-sm') }} "{{ pending.name }}" ({{ pending.start_date }} &ndash; {{ pending.end_date }}) overlaps the existing project "{{ overlap_name }}".</strong></p>
@@ -27,228 +31,50 @@
 {% endif %}
 
 {% if labels %}
-<!-- Search (2026-08-08 redesign) -- client-side only, same "everything's
-     already server-rendered, JS just filters what's visible" approach as
-     app.js's multiselect summaries: no round trip needed for a list this
-     size, and it keeps every row's own inline forms (rename/color/icon/
-     merge/clear) working completely unchanged underneath. Filters on
-     label name only, case-insensitive; a group's divider row hides itself
-     too once every label in that group is filtered out (static/label_search.js). -->
+<!-- Search (2026-08-08 redesign, generalized off a <table> 2026-08-15
+     when this page became a plain list -- see static/label_search.js's
+     own comment) -- client-side only, no round trip for a page this
+     size. Filters on label name only, case-insensitive; a group's
+     divider hides itself too once every label in it is filtered out. -->
 <div class="settings-search">
     <input type="search" id="label-search-input" placeholder="Search labels..." aria-label="Search labels">
 </div>
 
-<!-- Real table, not a flex row list (2026-08-08 follow-up) -- the previous
-     flex-row layout had no fixed columns, so Color/Icon/Space/Sections/
-     Merge/Remove landed at a different horizontal position on every row
-     depending on how long that row's name/rename-input/usage-count text
-     happened to be, and wrapped unpredictably on anything narrower than a
-     very wide viewport. Reuses the exact same base `table`/`thead th`/
-     `tbody tr` rules and `.table-scroll` horizontal-scroll-fade wrapper as
-     the Tasks table view (tasks_list.html) -- one column per control, a
-     header labeling each, real alignment -- rather than inventing a
-     second table-ish layout system for this one page. `.label-table` adds
-     its own tighter row padding on top of that shared base (see
-     style.css) -- this page is a management list meant to be scanned row
-     after row, not a content table, so it earns a denser row height than
-     Tasks' own. -->
-<div class="card table-scroll">
-<table class="task-table label-table" id="label-table">
-    <thead>
-        <tr>
-            <th>Label</th>
-            <th style="text-align:center">Abbrev.</th>
-            <th>Color</th>
-            <th>Icon</th>
-            <th style="text-align:center">Space</th>
-            <th style="text-align:center">Project</th>
-            <th style="width:1%"></th>
-        </tr>
-    </thead>
+<!-- Simple list (side work, 2026-08-15 direct feedback: "the table
+     should be transformed into a simple list, showing data about them").
+     One row per label -- color, icon, name/abbreviation, usage count,
+     and a Space/Project role badge -- with a single Edit button opening
+     the full editor as a modal (label_edit_modal.html) instead of the
+     old table's one-control-per-column inline forms. Every field that
+     used to live in its own cell (rename/color/icon/parent/abbreviation/
+     Space/Project/merge/remove) moved there; this page is now purely a
+     scannable index + entry point into editing, not an editor itself. -->
+<div class="card">
+<div class="label-list" id="label-list">
 {% for parent_name, group_labels in labels|groupby('parent_display') %}
-<!-- `outer_index` captured here, before the inner per-label loop below
-     redefines Jinja's own `loop` variable for its own scope -- used by
-     the per-row color/icon-picker's form id further down, since a plain
-     inner-loop index alone would repeat across groups (labels are
-     grouped by parent) and collide. -->
-{% set outer_index = loop.index0 %}
-<tbody data-label-group>
-    <tr class="task-section-divider" data-label-group-header><td colspan="7">{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</td></tr>
+<div data-label-group>
+    <div class="label-list-group-header" data-label-group-header>{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</div>
     {% for l in group_labels %}
-    <!-- `label_index` captured immediately on entering this loop, before
-         any of the nested per-color/per-icon/per-module loops below
-         redefine Jinja's own `loop` variable for their own scope -- this
-         is THE bug fix (2026-08-08 follow-up): every `form="label-set-
-         {{ outer_index }}-{{ loop.index0 }}"` reference inside those
-         nested loops used to read `loop.index0` *after* it had already
-         been rebound to that inner loop's own index (0,1,2... over
-         colors/icons/modules, not over labels) -- so only the row where
-         a control's inner-loop position happened to coincide with its
-         label's own position (in practice: the very first label in each
-         group, only for that control's very first option) ever pointed
-         at a form id that actually existed. Every other color swatch,
-         every other icon, and Space/Sections on any label past the first
-         in its group silently posted to a form id nothing on the page
-         had -- `radio.form`/`this.form` resolved to `null`, so
-         static/modal.js's autosubmit (`radio.form.requestSubmit()`) and
-         the plain `onchange="this.form.requestSubmit()"` handlers below
-         both silently did nothing. Capturing the label's own index once,
-         under its own name, before it can be shadowed, is what makes
-         every reference below actually point at this row's real form. -->
-    {% set label_index = loop.index0 %}
-    <tr data-label-row data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
-        <!-- Rename -- self-contained in this cell, own small form; typing
-             a new name and tabbing/clicking away autosubmits (onchange),
-             no separate Save step for the single fastest-changing field
-             on this page. Usage count sits right next to the name
-             (2026-08-08 follow-up) rather than its own column -- it's
-             read-only context about *this* label, not a control, so it
-             belongs next to the thing it describes, not spread across
-             the table. The color swatch that used to sit here too is
-             gone -- Color is its own column now, showing the chip a
-             second time next to the name was pure repetition. -->
-        <td>
-            <form method="post" action="/labels/{{ l.name }}/rename" class="label-cell-inline" data-modal-keep-open>
-                <input type="text" name="new_name" value="{{ l.name }}" onchange="this.form.requestSubmit()">
-                <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
-            </form>
-        </td>
-        <!-- Abbreviation (2026-08-09) -- a short synonym (max 5 chars)
-             shown as this Space's label in the nav rail (base.html) and
-             accepted wherever a label name is typed, resolving to the
-             full name (see db.set_object_labels). Like Icon/Space below,
-             it lives in its own cell but submits into the row's real
-             "set" form (id label-set-...) via the form attribute. -->
-        <td style="text-align:center">
-            <input type="text" name="abbreviation" maxlength="5" value="{{ l.abbreviation or '' }}"
-                   form="label-set-{{ outer_index }}-{{ label_index }}"
-                   title="Abbreviation (max 5 characters)"
-                   onchange="this.form.requestSubmit()">
-        </td>
-        <!-- Color -- the actual "set" form for this row lives here (id
-             lets Icon/Space/Sections cells below, which are visually
-             separate <td>s, still submit into it via `form="..."`, the
-             same attribute-based ownership modal.js's color/icon popovers
-             already rely on to keep a reparented swatch grid part of its
-             real form). -->
-        <td>
-            <form method="post" action="/labels/{{ l.name }}/set" id="label-set-{{ outer_index }}-{{ label_index }}" data-modal-keep-open>
-                <input type="hidden" name="description" value="{{ l.description or '' }}">
-                <input type="hidden" name="parent_name" value="{{ l.parent_name or '' }}">
-                {% set cp_current = l.color %}
-                {% set cp_colors = colors %}
-                {% set cp_form_id = "label-set-" ~ outer_index ~ "-" ~ label_index %}
-                {% set cp_autosubmit = true %}
-                {% include "_color_swatch_picker.html" %}
-            </form>
-        </td>
-        <!-- Icon (2026-08-08 redesign) -- was only reachable one label at
-             a time via each label's own /labels/{name} detail page
-             (label_detail.html); a proper label-management view shouldn't
-             make you open every label individually just to set its icon,
-             so this is the same portal-based picker, inline in the row
-             like color already was. Same #icon-popover portal (base.html)
-             modal.js's swatch-picker wiring already drives. -->
-        <td>
-            {% set ip_current = l.icon %}
-            {% set ip_groups = icon_groups %}
-            {% set ip_form_id = "label-set-" ~ outer_index ~ "-" ~ label_index %}
-            {% set ip_default_icon = "tag" %}
-            {% set ip_autosubmit = true %}
-            {% include "_icon_swatch_picker.html" %}
-        </td>
-        <!-- Space -- generate_space is the only thing that decides both
-             whether this label appears as a Space in the sidebar rail
-             (base.html/deps.py's sidebar_spaces(), unconditionally --
-             2026-08-08 removed the separate pin/unpin step that used to
-             sit here too, per direct feedback: a label worth turning
-             into a Space is a label worth finding quickly, so a second
-             manual step to also show it in the rail was friction with no
-             real benefit) and whether it groups child labels as
-             "Projects" on its own page. -->
-        <td style="text-align:center">
-            <input type="checkbox" name="generate_space" value="1" title="Generate a Space page" {% if l.generate_space %}checked{% endif %} onchange="this.form.requestSubmit()" form="label-set-{{ outer_index }}-{{ label_index }}">
-        </td>
-        <!-- Project (1.3, Project-enabled label stack; moved fully into
-             this row 2026-08-15 direct feedback -- the /projects page is
-             now a pure read-only display of square cards, so promote/
-             edit-dates/archive/demote all live here instead, the same
-             "every per-label control lives in its own cell on this row"
-             shape the rest of the table already uses. A project needs a
-             start/end period the moment it's created (§ Project period:
-             "a project has exactly one start date and one end date") and
-             its own overlap check, so both promote and edit-dates are a
-             small inline <details> form rather than a bare checkbox like
-             Space -- .label-table details styling above already exists
-             for exactly this. -->
-        <td style="text-align:center">
-            {% if l.is_project %}
-            <details>
-                <summary class="icon-btn" title="Project ({{ l.start_date }} to {{ l.end_date }}) -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }}</summary>
-                <div class="label-cell-inline" style="flex-wrap:wrap; margin-top:6px; justify-content:flex-end">
-                    <span class="tag-usage-count" title="Lifecycle status">{{ l.project_status }}</span>
-                    <form method="post" action="/projects/{{ l.name }}/dates" class="label-cell-inline">
-                        <label class="settings-hint">Start <input type="date" name="start_date" value="{{ l.start_date }}"></label>
-                        <label class="settings-hint">End <input type="date" name="end_date" value="{{ l.end_date }}"></label>
-                        <button type="submit" class="icon-btn" title="Save dates">{{ icon('check-square', 'icon-sm') }}</button>
-                    </form>
-                    {% if l.project_status == "Pending Archiving" %}
-                    <form method="post" action="/projects/{{ l.name }}/archive" data-confirm-sheet="Archive &quot;{{ l.name }}&quot;? This confirms the project is finished -- the label and its history stay intact.">
-                        <button type="submit" class="btn ghost btn-sm">{{ icon('archive', 'icon-sm') }} Archive</button>
-                    </form>
-                    {% endif %}
-                    <form method="post" action="/projects/{{ l.name }}/demote" data-confirm-sheet="Remove Project behavior from &quot;{{ l.name }}&quot;? The label and everything tagged with it stay exactly as they are -- only the project period/lifecycle/cards go away.">
-                        <button type="submit" class="icon-btn" title="Demote back to a plain label">{{ icon('x', 'icon-sm') }}</button>
-                    </form>
-                </div>
-            </details>
-            {% else %}
-            <details>
-                <summary class="icon-btn" title="Not a project -- click to promote">{{ icon('folder-plus', 'icon-sm') }}</summary>
-                <form method="post" action="/projects/promote" class="label-cell-inline" style="flex-wrap:wrap; margin-top:6px; justify-content:flex-end">
-                    <input type="hidden" name="name" value="{{ l.name }}">
-                    <label class="settings-hint">Start <input type="date" name="start_date" required></label>
-                    <label class="settings-hint">End <input type="date" name="end_date" required></label>
-                    <button type="submit" class="btn primary btn-sm">{{ icon('plus', 'icon-sm') }} Make it a project</button>
-                </form>
-            </details>
-            {% endif %}
-        </td>
-        <!-- Open/Merge/Remove, one line (2026-08-08 follow-up) -- each of
-             the three lived in its own <form>, and `.label-cell-inline`
-             is `display:flex`, which is block-level by default: with no
-             shared flex wrapper around the three of them, each form
-             started its own line inside the cell (Open, then Merge, then
-             Remove stacked vertically) instead of sitting side by side --
-             `white-space:nowrap` on the <td> only ever affects text, not
-             block-level children, so it did nothing for this. One
-             `.label-actions` flex row around all three fixes it; the two
-             forms inside keep `.label-cell-inline` (still needed on the
-             merge form specifically, to lay its own label+select out) but
-             no longer have to *also* carry the whole row's own layout. -->
-        <td style="text-align:right">
-            <div class="label-actions">
-                <a href="/labels/{{ l.name }}" class="icon-btn" title="Open">{{ icon('external-link', 'icon-sm') }}</a>
-                {% if labels|length > 1 %}
-                <form method="post" action="/labels/{{ l.name }}/merge" class="label-cell-inline" data-modal-keep-open>
-                    <select name="dest_name" class="filter-select" aria-label="Merge into" onchange="this.form.requestSubmit()">
-                        <option value="" disabled selected>Merge into&hellip;</option>
-                        {% for other in labels if other.name != l.name %}
-                        <option value="{{ other.name }}">{{ other.name }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-                {% endif %}
-                <form method="post" action="/labels/{{ l.name }}/clear" data-modal-keep-open data-confirm-sheet="Remove &quot;{{ l.name }}&quot; from every object that carries it? This doesn't delete anything else.">
-                    <button type="submit" class="icon-btn" title="Remove (strip from everything)">{{ icon('x', 'icon-sm') }}</button>
-                </form>
-            </div>
-        </td>
-    </tr>
+    <div class="label-list-row" data-label-row data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
+        <span class="color-dot cal-{{ l.color }}" title="{{ l.color|capitalize }}"></span>
+        <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon, 'icon-sm') }}{% else %}{{ icon('tag', 'icon-sm') }}{% endif %}</span>
+        <span class="label-list-name">
+            {{ l.name }}
+            {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
+        </span>
+        <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
+        {% if l.is_project %}
+        <span class="cell-tag cal-{{ l.color }}" title="Project -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }} Project &middot; {{ l.project_status }}</span>
+        {% elif l.generate_space %}
+        <span class="cell-tag" title="Space">{{ icon('layers', 'icon-sm') }} Space</span>
+        {% endif %}
+        <span class="spacer"></span>
+        <a href="/labels/{{ l.name }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    </div>
     {% endfor %}
-</tbody>
+</div>
 {% endfor %}
-</table>
+</div>
 </div>
 <p class="empty-state" id="label-search-empty" hidden>No labels match "<span id="label-search-empty-query"></span>".</p>
 {% else %}

@@ -3,9 +3,11 @@
 pre-rework calendars/projects pages, then orphaned when those templates
 were deleted -- see features/design-system.md §1 pattern 3) into
 habit_form.html (color select + free-text emoji icon input) and
-labels_manage.html (per-row color select). label_detail.html's own inline
-"Edit label" form once offered the same pickers but was removed (the
-manage page is the one place to edit a label now).
+labels_manage.html (originally a per-row color select; 2026-08-15 side
+work moved it into the label edit modal instead -- see
+label_edit_modal.html and routers/labels.py::edit_label_modal). label_
+detail.html's own inline "Edit label" form once offered the same pickers
+but was removed (the edit modal is the one place to edit a label now).
 
 Markup-shape assertions mirror test_modal_input_phaseB_chip_multiselect.py's
 own style: assert the old plain `<select name="...">`/free-text-input shape
@@ -100,28 +102,41 @@ class TestHabitCreateEditStoresColorAndIcon:
 
 
 class TestLabelsManageRowRendersSwatchGridNotSelect:
-    def test_manage_page_has_no_color_select_but_has_picker(self, conn):
+    """2026-08-15 side work moved every per-label editing control (Color/
+    Icon included) off the manage list's own rows and into the label edit
+    modal (label_edit_modal.html, routers/labels.py::edit_label_modal) --
+    the list itself is now read-only display + an Edit button. These
+    assertions moved with it: the manage page (`manage_labels`) no longer
+    renders any picker at all, and the modal's own single Save form (id
+    `label-edit-form`) is what the color/icon radios' `form="..."` now
+    points at, not a per-row `label-set-...` id (there's only ever one
+    form per modal, not one per table row)."""
+
+    def test_manage_page_has_no_color_picker_at_all(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
         resp = labels_router.manage_labels(_request("/labels"), conn=conn)
         body = resp.body.decode()
         assert '<select name="color" class="filter-select"' not in body
-        assert 'class="color-picker" data-autosubmit' in body
+        assert 'class="color-picker"' not in body
+
+    def test_edit_modal_has_color_picker_not_select(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="color" class="filter-select"' not in body
+        assert 'class="color-picker"' in body
         assert 'color-swatch-current cal-blue' in body
 
-    def test_row_color_radio_form_attr_matches_its_own_set_form_id(self, conn):
+    def test_edit_modal_color_radio_form_attr_matches_the_one_edit_form(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "green", "created_at": _now()})
-        resp = labels_router.manage_labels(_request("/labels"), conn=conn)
+        resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         # The radio's form="..." must reference an id that actually exists
-        # on the /set form for this same row (the picker's grid gets
-        # reparented out to #color-popover on open, and only the explicit
-        # form="" attribute keeps it part of this form's submission).
-        import re
-
-        form_id_match = re.search(r'id="(label-set-[^"]+)"', body)
-        assert form_id_match, "expected a label-set-... form id in the page"
-        form_id = form_id_match.group(1)
-        assert f'form="{form_id}"' in body
+        # on the page (the picker's grid gets reparented out to
+        # #color-popover on open, and only the explicit form="" attribute
+        # keeps it part of the real form's submission).
+        assert 'id="label-edit-form"' in body
+        assert 'form="label-edit-form"' in body
 
 
 class TestLabelsManageRowColorAutoSubmit:
@@ -176,17 +191,20 @@ class TestExpandedPaletteAndGroupedIcons:
         missing = set(labels_router.LABEL_ICONS) - sprite_ids
         assert not missing, f"icons referenced but not in the sprite: {missing}"
 
-    def test_labels_manage_page_shows_all_sixteen_colors_with_names(self, conn):
+    def test_label_edit_modal_shows_all_sixteen_colors_with_names(self, conn):
+        # Moved off the manage-list page onto the edit modal, 2026-08-15
+        # side work -- see TestLabelsManageRowRendersSwatchGridNotSelect's
+        # own class docstring above.
         db.upsert_label_config(conn, {"name": "Uni", "color": "teal", "created_at": _now()})
-        resp = labels_router.manage_labels(_request("/labels"), conn=conn)
+        resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         assert body.count('class="color-swatch-label"') == 16
         for name in ("Red", "Lime", "Mint", "Teal", "Cyan", "Indigo", "Magenta", "Brown", "Slate"):
             assert f">{name}<" in body
 
-    def test_labels_manage_page_groups_icons_with_headers(self, conn):
+    def test_label_edit_modal_groups_icons_with_headers(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
-        resp = labels_router.manage_labels(_request("/labels"), conn=conn)
+        resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         for group_name in labels_router.ICON_GROUPS:
             escaped = group_name.replace("&", "&amp;")
