@@ -22,7 +22,7 @@
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
-            <input type="text" name="title" required value="{{ task.title if task else '' }}">
+            <input type="text" name="title" required value="{{ task.title if task else (prefill_title or '') }}">
         </div>
         <div class="field field-wide">
             <label>Description</label>

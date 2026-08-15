@@ -921,6 +921,7 @@ def new_event_form(
     start_time: str | None = None,
     end_time: str | None = None,
     end_date: str | None = None,
+    title: str = "",
     conn=Depends(get_db),
 ):
     # `end_date` (no start_time/end_time) is the month-view click-and-hold
@@ -945,6 +946,9 @@ def new_event_form(
             "request": request,
             "active_tab": "calendar",
             "event": None,
+            # Command palette actions (open.md) -- see new_task_form's
+            # identical prefill_title comment; blank for every other caller.
+            "prefill_title": title,
             "prefill_start": prefill_start,
             "prefill_end": prefill_end,
             "prefill_all_day": prefill_all_day,

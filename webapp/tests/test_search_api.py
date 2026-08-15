@@ -105,9 +105,13 @@ class TestGlobalMode:
         data = json.loads(body)
         assert len(data["results"]) == 1
         row = data["results"][0]
-        assert set(row.keys()) == {"type", "uid", "title", "subtitle", "tags"}
+        # "status" (2026-08-15, Command palette actions) rides along too --
+        # the palette's own action buttons need it to hide "Mark done" on
+        # an already-done task; every other consumer of this shape ignores it.
+        assert set(row.keys()) == {"type", "uid", "title", "subtitle", "tags", "status"}
         assert row["type"] == "task"
         assert row["uid"] == "t1"
+        assert row["status"] == "active"
 
     def test_searches_across_all_three_types(self, conn):
         _seed_task(conn, "t1", title="Shared name")

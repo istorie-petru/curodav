@@ -2476,6 +2476,30 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-row-subtitle{font-size:var(--text-caption); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-footnote); text-align:center;}
 
+/* Command palette actions (open.md § Command palette actions) -- a result
+   row can now carry per-type action buttons (complete/label/delete)
+   alongside the "click to open" main area, so .command-palette-row (a
+   <div> for these rows, not a <button> -- can't nest a <button> in a
+   <button>) wraps two children instead of being the sole clickable
+   surface: .command-palette-row-main (the original title/subtitle
+   button, flex:1) and .command-palette-row-actions (the new buttons).
+   Every other row kind (plain results in relation mode, "Create new...",
+   label options) still has .command-palette-row itself as the one
+   clickable element, unchanged from before. */
+.command-palette-row-main{
+  display:flex; align-items:center; gap:var(--space-3); flex:1; min-width:0;
+  border:none; background:transparent; padding:0; margin:0;
+  font:inherit; text-align:left; color:inherit; cursor:pointer;
+}
+.command-palette-row-actions{display:flex; align-items:center; gap:2px; flex:none;}
+.command-palette-action{
+  display:flex; align-items:center; justify-content:center; width:28px; height:28px;
+  border:none; background:transparent; border-radius:var(--radius-control);
+  color:var(--fg-tertiary); cursor:pointer; flex:none;
+}
+.command-palette-action:hover{background:var(--bg-tertiary); color:var(--fg-primary);}
+.command-palette-action.is-danger:hover{color:var(--danger);}
+
 /* Standalone /search page (search.html) -- the same result-row language
    as .command-palette-row above, laid over the app's ordinary .checklist
    card styling (search.html's results list is a plain .checklist) rather

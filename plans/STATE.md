@@ -1733,6 +1733,42 @@ session, right before the final commit of that session.
   (the DAVx5 Phase C piece is unrelated and still blocked on infra); see
   `features/tasks.md` § Views. 13 new tests (`test_tasks_pagination.py`),
   full suite 1239 passed.
+- **Shipped:** side work — **Command palette actions**, complete
+  (2026-08-15), Track B's top-priority item (`open.md` § Command palette
+  actions, now removed from that file per its own "ships -> describe outcome,
+  remove the section" convention). Turns the Ctrl-K/Cmd-K overlay (1.2 side
+  work: `db.search_entities`, `GET /api/search`, `static/command_palette.js`)
+  from search-and-navigate-only into a real command surface, additive
+  throughout — the query layer and the Relations-picker wiring are
+  unchanged. Global-mode result rows (not relation-mode rows, which exist to
+  be picked as a link target, not acted on) now carry action buttons:
+  **Mark done** (tasks, posts to the existing `POST /tasks/{uid}/complete`),
+  **Delete** (any type, confirmed via `window.ccConfirmSheet` before posting
+  to the existing per-type `/{uid}/delete` route — no new delete endpoints
+  needed, every one already existed), and **Add label**, which retargets the
+  overlay into a new third mode (label mode, alongside the existing global/
+  relation modes) backed by two new endpoints: `GET /api/labels` (type-to-
+  filter over `db.list_tag_names_in_use`) and `POST
+  /api/entities/{task,event,contact}/{uid}/labels`. A task's add goes
+  through `db.upsert_task`'s full tags list rather than
+  `db.add_object_label` directly, so 1.5's single-project-per-task guard
+  (`db.MultipleProjectLabelsError`) still applies — confirmed by test, the
+  palette is a fourth write path onto `tasks.tags`, not a bypass; events/
+  contacts have no such constraint and use `db.add_object_label` directly.
+  Global mode also gained **Create task/event: "\<query>"** rows (mirroring
+  relation mode's pre-existing "Create new" row), opening the ordinary new-
+  task/event form prefilled via a new `title` query param on
+  `new_task_form`/`new_event_form` (`prefill_title` in the template context,
+  a fallback added to `_task_form_fields.html`/`_event_form_fields.html`'s
+  title `value=`, blank for every other existing caller of either route).
+  `_picker_result` (routers/search.py) gained one new field, `status` (a
+  task's status, `None` for the other two types) so the palette can hide
+  "Mark done" on an already-done task — every other consumer of that shape
+  (search.html, the Relations picker) ignores the extra key. See
+  `features/tasks.md` § Search & the command surface. 28 new/updated tests
+  (`test_command_palette_actions.py`, plus one pre-existing
+  `test_search_api.py` assertion updated for the new `status` field), full
+  suite 1253 passed.
 - **Reprioritized (direct steer, 2026-08-15):** the next sessions should
   work Track B (`open.md`) in this order, not pick arbitrarily: (1)
   **Command palette actions** (`open.md` § Command palette actions —

@@ -68,8 +68,9 @@ Side work (independent): **Universal command surface** (search / picker /
 command palette) — **shipped 2026-08-13**: `db.search_entities` query layer,
 `GET /api/search` + `/search`, Ctrl-K/Cmd-K, and the Relations-card picker
 (`features/tasks.md` § Search & the command surface). Command-palette
-*actions* (create/complete/delete/label from the overlay) didn't ship —
-tracked as an optional follow-up in `open.md` § Command palette actions.
+*actions* (create/complete/delete/label from the overlay) — **shipped
+2026-08-15** as its own side-work slice, additive to the above; see the same
+`features/tasks.md` section.
 
 ### 1.3 — The project stack
 

@@ -611,7 +611,9 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_task_form(request: Request, habit: bool = False, project: str = "", conn=Depends(get_db)):
+def new_task_form(
+    request: Request, habit: bool = False, project: str = "", title: str = "", conn=Depends(get_db)
+):
     # 2026-08-08 follow-up: Tasks > Habits' own "New" button (?habit=1)
     # renders a real, separate, stripped-down form now -- not task_form.html
     # with a field pre-checked -- direct feedback that a habit doesn't need
@@ -647,6 +649,11 @@ def new_task_form(request: Request, habit: bool = False, project: str = "", conn
             "request": request,
             "active_tab": "tasks",
             "task": None,
+            # Command palette actions (open.md) -- the palette's "Create
+            # task: '<query>'" row opens this form with ?title=<query> so
+            # the typed text isn't lost; blank for every other caller of
+            # this route, same as prefill_start/prefill_end below.
+            "prefill_title": title,
             "statuses": STATUSES,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,

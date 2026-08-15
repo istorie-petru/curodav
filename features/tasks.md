@@ -326,12 +326,45 @@ the Relations card's picker described above — one implementation for both
 invocation modes, not two independent search UIs.
 
 **What's shipped:** the query layer, `/api/search`, `/search`, Ctrl-K,
-navigate-to-result, and the Relations picker wiring (`plans/open.md`'s
-Universal command surface steps 1–4 and 6). **Not yet built:** context-
-dependent commands/actions beyond navigation — creating, completing,
-deleting, or labeling an entity directly from the palette, with destructive-
-action confirmation (step 5's fuller scope). The overlay searches and
-navigates today; it isn't a full command palette yet.
+navigate-to-result, the Relations picker wiring (`plans/open.md`'s Universal
+command surface steps 1–4 and 6), and — **Command palette actions**, complete
+2026-08-15 — step 5's context-dependent commands, additive to all of the
+above:
+
+- **Mark done** — a task result (not already `done`) gets a "Mark done"
+  action button; posts to the existing `POST /tasks/{uid}/complete`
+  unchanged.
+- **Add label** — every result type gets an "Add label" button that
+  retargets the same overlay into a third mode (label mode, alongside
+  global/relation): type-to-filter over `GET /api/labels` (every label
+  already in use — new, thin wrapper around `db.list_tag_names_in_use`),
+  or type a brand-new name. Picking one posts `POST
+  /api/entities/{task,event,contact}/{uid}/labels` (new; `{"label": ...}`).
+  A task's add still goes through `db.upsert_task`'s full tags list (not
+  `db.add_object_label` directly), so 1.5's single-project-per-task guard
+  (`db.MultipleProjectLabelsError`) still applies — the palette is a fourth
+  write path onto `tasks.tags`, not a bypass of the rule; events/contacts
+  have no such constraint and use `db.add_object_label` directly.
+- **Delete** — every result type gets a "Delete" action, confirmed via
+  `window.ccConfirmSheet` (the same destructive-action convention as the
+  rest of the app) before posting to the existing per-type delete route
+  (`/tasks/{uid}/delete`, `/events/{uid}/delete`, `/contacts/{uid}/delete`).
+- **Create** — global mode (not relation mode) now appends "Create task:
+  '\<query>'" / "Create event: '\<query>'" rows whenever there's a query,
+  mirroring relation mode's pre-existing "Create new" row. Picking one opens
+  the ordinary new-task/new-event form (`CCModal.open`) with the typed text
+  prefilled — `new_task_form`/`new_event_form` gained a `title` query param
+  for this (`prefill_title` in the template context, `(task.title if task
+  else (prefill_title or ''))` in `_task_form_fields.html`/
+  `_event_form_fields.html`), blank for every other existing caller.
+
+Action buttons only render in global mode — relation-picker rows exist to be
+picked as a link target, not acted on. See `static/command_palette.js`'s own
+header comment for the full three-mode shape. 28 new/updated tests
+(`test_command_palette_actions.py`, plus one `test_search_api.py` assertion
+updated for `_picker_result`'s new `status` field — a task's status, `None`
+for the other two types, needed so the palette can hide "Mark done" on an
+already-done task).
 
 ## Auto-archive
 

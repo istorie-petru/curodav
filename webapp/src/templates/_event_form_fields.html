@@ -14,7 +14,7 @@
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
-            <input type="text" name="title" required value="{{ event.title if event else '' }}">
+            <input type="text" name="title" required value="{{ event.title if event else (prefill_title or '') }}">
         </div>
         <div class="field field-wide">
             <label>Description</label>

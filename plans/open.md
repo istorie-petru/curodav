@@ -25,20 +25,21 @@ step is sized to ship on its own; nothing here blocks the work in
 [`open-priority.md`](open-priority.md) or vice versa.
 
 **Reprioritized 2026-08-15** (direct steer, supersedes the old ordering
-below the line): Command palette actions is next up, then the expanded
-Dashboard widgets work, then the small Tasks-filter cleanup and Event
-format items (both small, no particular urgency, slot in wherever
+below the line): ~~Command palette actions~~ **shipped 2026-08-15** (see
+`features/tasks.md` § Search & the command surface), then the expanded
+Dashboard widgets work (next up now), then the small Tasks-filter cleanup and
+Event format items (both small, no particular urgency, slot in wherever
 convenient), then Contacts field parity, then Project check-in, then Modal
 window uniformization. Configurable views + optional Schedule module and
 Webapp usability's remaining pieces (collapsible sections, DAVx5 — see
 `roadmap.md`'s 1.9 row) weren't mentioned in the reprioritization and stay
 parked at the back of the queue.
 
-1. **Command palette actions** — see below; small, self-contained, no model
-   changes. **Top priority right now** (direct steer, 2026-08-15).
+1. ~~**Command palette actions**~~ — **shipped 2026-08-15**, see
+   `features/tasks.md` § Search & the command surface.
 2. **Dashboard widgets: new widgets + real customization** — see "Widget
-   consolidation + Streak + Next Deadline, expanded scope" below. Next after
-   Command palette.
+   consolidation + Streak + Next Deadline, expanded scope" below. **Next up
+   now.**
 3. **Tasks page filter cleanup** (small) — see below.
 4. **Event format for simple events** (small) — see below.
 5. **Contacts field parity** — isolated to the Contacts entity and its vCard
@@ -62,30 +63,6 @@ parked at the back of the queue.
     ~~shipped 2026-08-15~~ (see `features/tasks.md` § Views); collapsible
     sections and Phase C (DAVx5, blocked on domain + server) are what's left,
     neither part of the 2026-08-15 reprioritization.
-
-## Command palette actions (optional follow-up)
-
-**Status:** decision recorded — no code. **Top priority for the next
-session** (direct steer, 2026-08-15) — "optional follow-up" in this
-section's own title is now stale framing, kept as-is below since the
-description itself is still accurate; only its priority changed. The
-Universal command surface's
-query layer, HTTP API, global search/navigation, and the Relations-card
-picker all shipped as 1.2 side work — see `features/tasks.md` § Search & the
-command surface for what exists (`db.search_entities`, `GET /api/search`,
-`/search`, Ctrl-K/Cmd-K, `static/command_palette.js`). What's described here
-is only the piece that didn't ship: turning the overlay from search-and-
-navigate into an actual **command** palette.
-
-Today picking a result opens it; nothing else. This item would add
-context-dependent commands/actions on top of the same overlay and query
-layer — opening entities is already covered, so the new surface is
-creation, assigning labels, completing tasks, and deleting entities where
-appropriate, each scoped to what makes sense for the result's type.
-Destructive actions require confirmation the same way other destructive
-actions in the app do (`data-confirm-sheet`, see static/modal.js). This is
-additive to the shipped overlay, not a rework of it — the query layer,
-`/api/search`, and the Relations-picker wiring are unaffected either way.
 
 ## Configurable views & optional Schedule module
 
