@@ -1542,6 +1542,30 @@ session, right before the final commit of that session.
   the above against real seeded data (grouping/nesting, overlap no longer
   blocking, Group's Space-only enforcement both directions, the edit
   modal's shape, the merge modal, and the CSS fix's presence).
+- **Fixed:** side work — **Labels list: gray group titles instead of
+  tree-like grouping, bigger icons, no cell-tag/color-dot, narrower
+  list**, complete (2026-08-15), direct follow-up feedback on the row
+  above's "a Space's own row IS its group's heading" design ("I would
+  preffer to not have tree like grouping, but grouping like it was
+  before"). `labels_manage.html`'s `label_row` macro dropped its
+  `is_space`/`is_header` params entirely: a group's heading is now always
+  a plain gray `.label-list-group-header` text title (the Space's name,
+  or "Ungrouped"), and the Space itself renders as an ordinary
+  non-bold `.is-child` row directly under its own heading, at the same
+  indent as its children — no row doubles as both a heading and a list
+  item anymore. Also dropped the per-row `.color-dot` and the
+  Project/Space `.cell-tag` role badge (direct feedback, "remove their
+  cell-tag") — a row is icon + name + usage count only now, role/color
+  still live in the Edit modal. Icons bumped from the default 15px to
+  19px (`.label-list-icon .icon`, direct feedback, "the icons a bit
+  bigger") since the icon is now the only per-row color/identity cue
+  left. `.label-list` capped at `max-width:480px` (direct feedback,
+  "make the list more narrow"). `static/label_search.js` needed no
+  changes — the new plain-text header still carries `data-label-group-
+  header` + a lowercased `data-label-name` for the same "searching a
+  Space's own name keeps it visible" behavior. Full suite still 1338
+  passed (no test-count change, same reasoning as the row above — pure
+  CSS/markup rework, no new testable surface).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

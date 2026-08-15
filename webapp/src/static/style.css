@@ -3504,6 +3504,10 @@ body.command-palette-open{overflow:hidden;}
    bespoke style. */
 .settings-search{margin-bottom:12px;}
 .settings-search input{width:100%; max-width:320px;}
+/* Narrower list -- direct feedback, "make the list more narrow" -- this
+   page's own card no longer needs the full content width now the table's
+   per-column layout is gone. */
+.label-list{max-width:480px;}
 
 /* Labels manage list (labels_manage.html, reworked 2026-08-15 from a
    <table> into a plain scannable list -- side work, direct feedback: "the
@@ -3517,37 +3521,39 @@ body.command-palette-open{overflow:hidden;}
    left-to-right reading order (color, icon, name, usage, role badge,
    Merge, Edit).
 
-   Same-day follow-up: a Space's own row doubles as its group's heading
-   (`.is-space`, routers/labels.py::manage_labels builds spaces/ungrouped
-   instead of a flat parent_display groupby) -- direct feedback: "the
-   spaces list should be displayed differently and all their children be
-   always in their group." `.label-list-group-header` below now only
-   styles the plain-text "Ungrouped" divider; a Space's heading look
-   comes from `.is-space` instead, since that row is a real label row,
-   not a bare divider. */
+   Reworked again 2026-08-15 (direct feedback: "I would preffer to not
+   have tree like grouping, but grouping like it was before") away from a
+   Space's own row doubling as its group's bold/tinted heading. Now
+   `.label-list-group-header` is a plain gray "[space name]" text title
+   (same look for every group, Space or "Ungrouped"), and the Space
+   itself renders as an ordinary, non-bold `.is-child` row directly under
+   its own heading, at the same indent as its children -- "always in
+   their group" still reads visually via the shared indent, without the
+   heading-doubles-as-a-row tree look. Also dropped the per-row
+   `.color-dot` and `.cell-tag` role badge (Project/Space) the row used
+   to carry -- direct feedback, "remove their cell-tag" -- a row is just
+   icon + name + usage count now; role/color still live in the Edit
+   modal. */
 .label-list-group-header{
   padding:10px 8px 4px; font-size:var(--text-caption); font-weight:600;
   color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
 }
+[data-label-group] + [data-label-group] .label-list-group-header{margin-top:6px;}
 .label-list-row{
   display:flex; align-items:center; gap:10px; padding:8px;
   border-radius:var(--radius-md);
 }
 .label-list-row:hover{background:var(--bg-secondary);}
 .label-list-row + .label-list-row{border-top:1px solid var(--separator);}
+/* A bit bigger than the default 15px icon -- direct feedback, "the icons
+   a bit bigger for them in the list" -- since this row no longer carries
+   a `.color-dot`, the icon is the only visual color/identity cue left. */
 .label-list-icon{display:inline-flex; color:var(--fg-tertiary);}
+.label-list-icon .icon{width:19px; height:19px;}
 .label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .label-list-row .tag-usage-count{flex:none;}
-.label-list-row .cell-tag{flex:none; white-space:nowrap;}
-/* A Space's own row reads as a heading for the child rows under it --
-   bold name, tinted background, a touch more vertical room -- rather
-   than looking like just one more label among its own children. */
-.label-list-row.is-space{background:var(--bg-secondary); margin-top:10px;}
-.label-list-row.is-space:first-child{margin-top:0;}
-.label-list-row.is-space .label-list-name{font-weight:700;}
-.label-list-row.is-space:hover{background:var(--bg-tertiary, var(--bg-secondary));}
-/* A Space's children indent under it -- "always in their group" reads
-   visually, not just via list order. */
+/* Every row -- the Space itself included -- indents at the same level
+   under its group's plain-text heading. */
 .label-list-row.is-child{padding-left:28px;}
 
 /* label_edit_modal.html's Role control (segmented, .segmented/.seg-btn

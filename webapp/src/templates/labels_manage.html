@@ -12,22 +12,16 @@
    before the original passed-in context dict) -- found live, the hard
    way: this page rendered its "No labels yet" empty state even with
    real, populated `spaces` in the router's own returned context. #}
-{% macro label_row(l, show_merge, is_space=false, is_child=false, is_header=false) %}
-<div class="label-list-row{% if is_space %} is-space{% endif %}{% if is_child %} is-child{% endif %}"
-     data-label-row {% if is_header %}data-label-group-header{% endif %}
+{% macro label_row(l, show_merge, is_child=false) %}
+<div class="label-list-row{% if is_child %} is-child{% endif %}"
+     data-label-row
      data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
-    <span class="color-dot cal-{{ l.color }}" title="{{ l.color|capitalize }}"></span>
-    <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon, 'icon-sm') }}{% else %}{{ icon('tag', 'icon-sm') }}{% endif %}</span>
+    <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon) }}{% else %}{{ icon('tag') }}{% endif %}</span>
     <span class="label-list-name">
         {{ l.name }}
         {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
     </span>
     <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
-    {% if l.is_project %}
-    <span class="cell-tag cal-{{ l.color }}" title="Project -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }} Project &middot; {{ l.project_status }}</span>
-    {% elif l.generate_space %}
-    <span class="cell-tag" title="Space">{{ icon('layers', 'icon-sm') }} Space</span>
-    {% endif %}
     <span class="spacer"></span>
     {% if show_merge %}
     <a href="/labels/{{ l.name }}/merge-modal" class="icon-btn" title="Merge into another label" data-modal>{{ icon('git-pull-request', 'icon-sm') }}</a>
@@ -54,23 +48,25 @@
 
 <!-- Simple list (side work, 2026-08-15 direct feedback: "the table
      should be transformed into a simple list, showing data about them"),
-     grouped by Space (2026-08-15 follow-up: "the spaces list should be
-     displayed differently and all their children be always in their
-     group") -- see routers/labels.py::manage_labels for how the
-     spaces/ungrouped grouping is built. A Space's own row (`.is-space`,
-     bold/tinted) doubles as its group's heading; its children render
-     directly under it (`.is-child`, indented), so there's no separate,
-     disconnected "divider row naming a string" the old parent_display
-     grouping used. Every field that used to live in its own table column
-     (rename/color/icon/Group/abbreviation/Space/Project/merge/remove)
-     moved into the Edit button's modal (label_edit_modal.html) or, for
-     Merge, its own small modal (label_merge_modal.html) -- a row here is
-     read-only display plus two actions, not an editor itself. -->
+     grouped by Space (2026-08-15 follow-up, then reworked again the same
+     day away from a tree look: "I would preffer to not have tree like
+     grouping, but grouping like it was before" -- a plain gray "[space
+     name]" text title as the group heading, with the Space itself listed
+     as a normal, non-bold item directly under its own heading, at the
+     same indent as its children -- rather than the Space's own row
+     doubling as a bold/tinted heading). See routers/labels.py::
+     manage_labels for how the spaces/ungrouped grouping is built. Every
+     field that used to live in its own table column (rename/color/icon/
+     Group/abbreviation/Space/Project/merge/remove) moved into the Edit
+     button's modal (label_edit_modal.html) or, for Merge, its own small
+     modal (label_merge_modal.html) -- a row here is read-only display
+     plus two actions, not an editor itself. -->
 <div class="card">
 <div class="label-list" id="label-list">
 {% for s in space_groups %}
 <div data-label-group>
-    {{ label_row(s, has_multiple_labels, is_space=true, is_header=true) }}
+    <div class="label-list-group-header" data-label-group-header data-label-name="{{ s.name|lower }}">{{ s.name }}</div>
+    {{ label_row(s, has_multiple_labels, is_child=true) }}
     {% for c in s.children %}
     {{ label_row(c, has_multiple_labels, is_child=true) }}
     {% endfor %}
