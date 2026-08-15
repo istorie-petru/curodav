@@ -1197,6 +1197,19 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
+/* Direct feedback, 2026-08-15: "depending on the data source, some Views
+   should simply not be visible, not unselectable" -- dashboard_widget_
+   preview.js's filterMsOptions already sets the `hidden` attribute on a
+   row that doesn't apply to the current Source/View (and separately
+   disables its input), but `.multiselect-option{display:flex}` (author
+   CSS) is the same specificity as the browser's own `[hidden]{display:
+   none}` UA rule, and author styles always win that fight regardless of
+   selector order -- so the row never actually disappeared, it just sat
+   there fully visible with a disabled (grayed-out, unselectable) input,
+   reading as "can't pick this" rather than "isn't offered here". Same
+   footgun, same fix, as `.field.holiday-field[hidden]`/`.field.label-
+   project-fields[hidden]` elsewhere in this file. */
+.multiselect-option[hidden]{display:none;}
 /* Separator before `ms_extra_checkboxes` (2026-08-14, event form's Holiday
    calendar dropdown folding in Exclude Saturday/Sunday) -- visually splits
    the picker's own radios/checkboxes above from the unrelated boolean
