@@ -60,8 +60,8 @@
        work must finish by, Scheduled is how much time is actually
        allocated on the calendar toward it. `t.work_hours` is set by the
        router (db.task_work_hours_bulk, a batched query -- see
-       routers/tasks.py::list_tasks / routers/projects.py::project_detail)
-       rather than computed here, so a caller that forgets to attach it
+       routers/tasks.py::list_tasks) rather than computed here, so a
+       caller that forgets to attach it
        gets an empty cell instead of a per-row query -- `default` guards
        that case defensively. #}
     {% set _wh = t.work_hours | default({'scheduled': 0, 'completed': 0, 'remaining': 0}) %}

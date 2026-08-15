@@ -103,11 +103,11 @@ between the two.
 
 **UI shipped:** a "Work sessions" card on the task detail/edit modals
 (`_task_work_allocations.html`, `POST /tasks/{uid}/work-allocations` +
-`/work-allocations/remove`); and (1.4 slice 3) the project's own Week
-Calendar view (`GET /projects/{name}/calendar`) — the drag-and-drop surface
-the spec describes, dragging a task onto the grid to create an allocation,
-dragging/resizing an existing block to move it. See § Projects' "Week
-Calendar view" below for the full shape.
+`/work-allocations/remove`); and drag-and-drop scheduling on the merged
+`/calendar/week` grid (`static/project_calendar.js`) — dragging a task onto
+the grid to create an allocation, dragging/resizing an existing block to
+move it. (1.4 slice 3 originally shipped this as the project's own,
+now-retired Week Calendar view — see § Projects below.)
 
 **Add-undated-sessions (2026-08-14):** the card's start/end datetime inputs
 are gone — a single "+" button in the card's header adds a session with no
@@ -243,22 +243,23 @@ See `tests/test_tasks_grouping.py`.
 deadline (`due_at`, "the work must be completed by a particular time") and a
 work allocation (`db.task_work_hours`, "the user intends to spend a
 particular amount of time on it at a particular time") already existed as
-separate fields/mechanisms, but the global Tasks table and the project
-detail page's Tasks view (both rendering the shared `_task_row.html` macro)
-only showed "Due" — work-allocation status was invisible on the primary
-task-management surface unless the detail modal was opened. A "Scheduled"
-column was added next to "Due": `{completed}/{scheduled}h` (rounded to one
-decimal) when the task has at least one work allocation, an em-dash
-otherwise — plain text, not an editable input, and a distinct header label,
-so it can't be mistaken for the same kind of thing as the editable "Due"
-date cell. `db.task_work_hours_bulk(conn, task_uids)` computes it for every
-row on a page in one query (grouped by `task_uid`) instead of one
-`list_work_allocations_for_task` query per row — wired into both
-`routers/tasks.py::list_tasks` and `routers/projects.py::project_detail`,
-which attach each task's totals as `task["work_hours"]` before rendering.
-`db.task_work_hours` itself (single-task call sites: task detail/edit
-modals) is unchanged. See `tests/test_task_scheduled_column.py`. **This was
-1.5's last piece — 1.5 is now fully shipped.**
+separate fields/mechanisms, but the global Tasks table (rendering the
+shared `_task_row.html` macro) only showed "Due" — work-allocation status
+was invisible on the primary task-management surface unless the detail
+modal was opened. A "Scheduled" column was added next to "Due":
+`{completed}/{scheduled}h` (rounded to one decimal) when the task has at
+least one work allocation, an em-dash otherwise — plain text, not an
+editable input, and a distinct header label, so it can't be mistaken for
+the same kind of thing as the editable "Due" date cell.
+`db.task_work_hours_bulk(conn, task_uids)` computes it for every row on a
+page in one query (grouped by `task_uid`) instead of one
+`list_work_allocations_for_task` query per row — wired into
+`routers/tasks.py::list_tasks`, which attaches each task's totals as
+`task["work_hours"]` before rendering (originally also wired into the now-
+retired project detail page's Tasks view, which shared the same macro; see
+§ Projects below). `db.task_work_hours` itself (single-task call sites: task
+detail/edit modals) is unchanged. See `tests/test_task_scheduled_column.py`.
+**This was 1.5's last piece — 1.5 is now fully shipped.**
 
 ## Search & the command surface
 
@@ -316,72 +317,34 @@ wins outright; falls back to the pre-1.3 "first non-Space label,
 alphabetical" heuristic only when nothing attached is explicitly
 project-enabled (data written before 1.3).
 
-**Cards** (`/projects`, `_project_card`) — status, `start_date`/`end_date`,
-task count, completed/remaining, nearest incomplete due date, and
-`progress` = completed/total *task count* (not hours — work allocations
-don't exist until 1.4, so there's no scheduled-work total to compute a real
-hour-based percentage from yet).
+**Viewing pages — retired (2026-08-15 side work).** `/projects` (the square
+card listing), `/projects/{name}` (the Tasks view), and
+`/projects/{name}/calendar` (the Week Calendar view) are all **gone** —
+direct feedback that they were redundant with capability that already
+existed elsewhere: the Tasks view duplicated `/tasks?group_by=project`
+(1.5); the Week Calendar view duplicated the merged `/calendar/week` grid
+(2026-08-14 side work) filtered to one project, which already shows every
+work allocation regardless of project. **Presentation-only** — every
+lifecycle field/endpoint above (`promote`/`set_dates`/`demote`/`archive`,
+`db.project_status`, `db.find_overlapping_project`, `project_label_for`'s
+supersession) is completely unchanged, still reached from Settings > Labels.
+All three old paths now just redirect (`routers/projects.py::
+list_projects_redirect`/`project_detail_redirect`/`project_calendar_redirect`
+— `GET /projects` → `/tasks?group_by=project`, `GET /projects/{name}[/
+calendar]` → `/tasks?label={name}`), so any bookmark still lands somewhere
+real, same precedent as `/today`/`/week`/`/calendar/timetable`'s own
+retirements (`features/today.md`, `features/week.md`). `base.html`'s
+"Projects" tabbar entry is gone; the Dashboard's `quick_links` widget tiles
+and `_widget_project_preview.html`'s per-project rows both now link to
+`/tasks?label={name}` instead of the old detail page. `_project_card` (the
+card-data helper the deleted pages used) was removed along with them —
+project progress as a Dashboard-visible number still exists via the
+`project_preview` widget's own independent tasks-done/total computation
+(`routers/dashboard.py::_render_project_preview`), unaffected by this.
 
-**Project detail page + Tasks view (1.4 slice 2)** — `GET /projects/{name}`
-(`routers/projects.py::project_detail`) is the project's own page the spec
-calls for ("opening a project provides two principal views"); a card's
-"Open" link and title now go here instead of the label's generated page
-(`routers/labels.py`'s `label_detail`, which stays reachable directly but is
-no longer what a project links to). Ships the **Tasks view**: every task
-carrying the project's label, open/completed split same as the global Tasks
-page, with the identical interactive row — status/importance/urgency
-pill-selects and inline due date driven by `static/tasks_table.js`,
-delete-with-undo — extracted into a shared macro (`_task_row.html`, `{% from
-"_task_row.html" import task_row with context %}`) so both pages render the
-exact same markup instead of two copies. "+ New task" opens
-`/tasks/new?project=<name>`; `new_task_form` pre-checks that label on the
-form's chip multiselect (still removable) — including for a brand-new,
-empty project whose label has no `object_labels` rows yet, which
-`list_tag_names_in_use` alone wouldn't offer.
-
-No sort links or bulk-action bar on this table yet (the global Tasks page's
-`_tasks_toolbar.html` is tightly coupled to `/tasks*` routes/params — not
-reused here). No project-scoped filtering either; every project task shows.
-The project detail page now has a Tasks/Week Calendar tab switcher
-(`.segmented.calendar-subnav`, same plain-link pattern
-`calendar_week.html`'s own subnav uses) linking to the Week Calendar view
-below.
-
-**Week Calendar view (1.4 slice 3)** — `GET /projects/{name}/calendar`
-(`routers/projects.py::project_calendar`) is the project's scheduling
-surface: the current week's grid (reusing `grid_layout.layout_day`, the
-same function `routers/calendar.py::week_view` calls, rather than a second
-copy of that math), with an "Unscheduled tasks" list beside it (open
-project tasks with no work allocation yet — since the 2026-08-14 panel
-rework each item is the shared `_unscheduled_task_item.html` partial: the
-`{project} > {task}` title with a scheduled/total-hours x/y and a −/count/+
-session stepper). Dragging a list item onto the grid
-POSTs `task_uid`/`start_at`/`end_at` to `POST
-/projects/{name}/calendar/allocations` (`create_allocation`), which
-defensively re-checks the task actually carries this project's label
-before calling `db.create_work_allocation` — or placing the task's oldest
-undated session (`db.set_work_allocation_times`, for a session the Work
-sessions "+" added without a date) — the same helpers the task-detail
-"Work sessions" card's own endpoint already calls, kept as the alongside
-fallback, not replaced. Dragging or resizing an existing block
-POSTs to `POST /projects/{name}/calendar/allocations/{event_uid}/move`
-(`move_allocation`) — a plain `start_at`/`end_at` edit via `db.upsert_event`,
-the same technique `routers/calendar.py::reschedule_event` already uses for
-the global grid's own drag, just a form-POST/redirect endpoint instead of
-that route's JSON/fetch contract, to match this page's other actions. Each
-block's delete button POSTs to `.../{event_uid}/delete`
-(`delete_allocation` -> `db.unschedule_work_allocation`) — clears only that
-one session's start/end back to undated; the task's other sessions, the
-task itself, and the task's total session count are all untouched. Ordinary
-calendar events (and any other project's own work allocations) render as
-visually subdued context (`.context-event`, reduced opacity); only this
-project's own work allocations (`.work-allocation`) are prominent and
-interactive.
-
-**Still open, deferred** (doesn't block 1.5+): hour-based project-card
-progress (`_project_card`'s `progress` is still completed/total task
-count — `db.task_work_hours` exists per-task since slice 1 but nothing
-aggregates it to project level). Hiding a completed task's future
-allocations from the active calendar (the Week Calendar view now exists
-but doesn't filter for this yet). The global Tasks page's project grouping
-(1.5's job).
+**Still open, deferred:** hour-based project progress (every remaining
+progress readout — `project_preview`'s widget — is still completed/total
+*task count*; `db.task_work_hours` exists per-task since 1.4 slice 1 but
+nothing aggregates it to project level). Hiding a completed task's future
+allocations from the active calendar. Both pre-date this retirement and
+are unaffected by it.

@@ -4,12 +4,15 @@ plans/roadmap.md's 1.3 subsection. Covers: label_config's new is_project/
 start_date/end_date/archived_at columns, the computed lifecycle
 (db.project_status), the overlap rule (db.find_overlapping_project),
 project_label_for's 1.3 supersession of the old generate_space=0
-heuristic, and routers/projects.py's promote/dates/demote/archive actions
-plus the Projects page's card data.
+heuristic, and routers/projects.py's promote/dates/demote/archive actions.
 
-Work allocations and the project's own Tasks/Week Calendar views are 1.4's
-job (not covered here) -- card progress is completed/total task count, the
-interim proxy STATE.md's 1.3 breadcrumb calls for.
+Work allocations and the project's own Tasks/Week Calendar views were 1.4's
+job. Both, plus the original `/projects` listing page itself, were later
+retired as redundant, presentation-only pages (2026-08-15 -- see
+routers/projects.py's module docstring and plans/open.md's "Retire the
+standalone /projects page" decision record); the three now-redirect-only
+routes are covered by TestProjectPageRedirects below. promote/set_dates/
+demote/archive are untouched by that removal and still covered fully here.
 """
 
 from __future__ import annotations
@@ -17,7 +20,6 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
-from starlette.requests import Request
 
 from src import db
 from src.routers import projects as projects_router
@@ -32,21 +34,6 @@ def conn(tmp_path):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _request(path="/projects", query_string=b""):
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": query_string,
-            "scheme": "http",
-            "server": ("testserver", 80),
-            "root_path": "",
-            "headers": [],
-        }
-    )
 
 
 def _task(conn, uid, tags, status="active", due_at=None):
@@ -248,24 +235,24 @@ class TestPromoteDemoteArchive:
         assert cfg["start_date"] == "2026-03-01" and cfg["end_date"] == "2026-04-01"
 
 
-class TestProjectsPage:
-    def test_lists_project_cards_with_progress(self, conn):
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
-        _task(conn, "t1", ["Trip"], status="done")
-        _task(conn, "t2", ["Trip"], status="active", due_at="2026-06-01T00:00:00")
-        resp = projects_router.list_projects(_request(), conn=conn)
-        assert resp.status_code == 200
-        cards = resp.context["projects"]
-        assert len(cards) == 1
-        card = cards[0]
-        assert card["task_count"] == 2
-        assert card["completed_count"] == 1
-        assert card["remaining_count"] == 1
-        assert card["progress"] == 50
-        assert card["upcoming_deadline"] == "2026-06-01T00:00:00"
-        assert card["status"] == "Open"
+class TestProjectPageRedirects:
+    """The /projects listing page and its two child views are gone
+    (2026-08-15, presentation-only -- see routers/projects.py's module
+    docstring and plans/open.md's "Retire the standalone /projects page"
+    decision record). These three routes now just redirect; the actual
+    promote/set_dates/demote/archive behavior above is unchanged."""
 
-    def test_non_project_labels_are_not_listed(self, conn):
-        db.upsert_label_config(conn, {"name": "Plain", "created_at": _now()})
-        resp = projects_router.list_projects(_request(), conn=conn)
-        assert resp.context["projects"] == []
+    def test_list_projects_redirects_to_grouped_tasks_table(self, conn):
+        resp = projects_router.list_projects_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks?group_by=project"
+
+    def test_project_detail_redirects_to_filtered_tasks_table(self, conn):
+        resp = projects_router.project_detail_redirect("Trip")
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks?label=Trip"
+
+    def test_project_calendar_redirects_to_filtered_tasks_table(self, conn):
+        resp = projects_router.project_calendar_redirect("Trip")
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks?label=Trip"

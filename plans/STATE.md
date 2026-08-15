@@ -1566,6 +1566,60 @@ session, right before the final commit of that session.
   Space's own name keeps it visible" behavior. Full suite still 1338
   passed (no test-count change, same reasoning as the row above — pure
   CSS/markup rework, no new testable surface).
+- **Shipped:** side work — **`/projects` page retired, folded into the
+  Tasks table**, complete (2026-08-15), direct feedback ("the projects page
+  and pages derived from it... are not worth existing... Task view for
+  projects could just be a way to group tasks in the Table view"). Scoped
+  first via `plans/open.md`'s decision record (now removed from that file
+  per its own "ships -> describe outcome, remove the section" convention),
+  then implemented same session. **Presentation-only**, confirmed explicitly
+  with the user: the label/project data model, Settings > Labels, and
+  `promote`/`set_dates`/`demote`/`archive` are completely untouched — only
+  the dedicated pages built to *view* a project are gone, both redundant
+  with capability that already existed: the Tasks view duplicated
+  `/tasks?group_by=project` (1.5, already shipped); the Week Calendar view
+  duplicated the merged `/calendar/week` grid (2026-08-14 side work)
+  filtered to one project, which already shows every work allocation
+  regardless of project — the same "third copy of the same thing" reasoning
+  that retired the standalone `/week` page.
+  - `routers/projects.py::list_projects`/`project_detail`/`project_calendar`
+    (and that page's own `create_allocation`/`move_allocation`/
+    `delete_allocation` -- its own drag-and-drop backend, unused anywhere
+    else since `/calendar/week` has its own independent, cross-project
+    allocation endpoints) replaced by three thin redirects:
+    `list_projects_redirect` (`GET /projects` -> `/tasks?group_by=project`)
+    and `project_detail_redirect`/`project_calendar_redirect` (`GET
+    /projects/{name}[/calendar]` -> `/tasks?label={name}`) — any bookmark
+    still lands somewhere real, same precedent as `/today`/`/week`/
+    `/calendar/timetable`'s own retirements. `_project_card` (now unused
+    outside the deleted page routes) removed too.
+  - `templates/projects.html`/`project_detail.html`/`project_calendar.html`
+    deleted; `base.html`'s tabbar "Projects" entry dropped (Jinja comment,
+    not HTML, in its place — same "no stale path text in rendered markup"
+    reasoning as the `/today`/`/week` tabbar removals).
+  - The two other Dashboard surfaces that linked to `/projects/{name}`
+    repointed to `/tasks?label={name}` instead: `dashboard.py`'s
+    `quick_links` widget tiles, and `_widget_project_preview.html`'s
+    per-project rows (which used to go to `/labels/{name}`, the label's
+    generated widget-grid page — confirmed with the user this should be
+    the plain filtered Tasks table instead, no `group_by`, since grouping
+    is meaningless once already filtered to one label).
+  - `tests/test_project_detail.py` (12 tests) and `tests/
+    test_project_calendar.py` (24 tests) deleted; `test_project_stack.py`'s
+    `TestProjectsPage` (2 tests, called `list_projects` for its card data)
+    replaced with `TestProjectPageRedirects` (3 tests, asserting the three
+    redirect targets) — `promote`/`set_dates`/`demote`/`archive` coverage
+    in that file untouched; `test_task_scheduled_column.py`'s
+    `TestProjectDetailPage` (2 tests, called `project_detail` directly)
+    removed, its "Scheduled column" coverage still intact via
+    `TestGlobalTasksPage`. Net **1301 passed** (was 1338; -37 removed +3
+    added, confirmed exactly matches the deleted-test count, not a
+    regression).
+  - **Not implemented, flagged for later if it matters:** whether
+    `_task_row.html`'s project-scoped extraction (built for the now-gone
+    project detail Tasks view, 1.4 slice 2) is still worth keeping as a
+    shared macro now its only caller is the global Tasks page — left as-is,
+    still works fine either way.
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
@@ -1574,10 +1628,8 @@ session, right before the final commit of that session.
   items are fair game for a session that wants a break from that: `open.md`'s
   Command palette actions follow-up (1.2 side work), 1.4's optional Project
   check-in, 1.6's optional "Configurable views + optional Schedule module",
-  1.8's own Pagination/collapsible-sections side work (Phase B of
-  webapp usability, `roadmap.md`'s 1.8 row), and `open.md`'s newly-recorded
-  "Retire the standalone `/projects` page" (2026-08-15, presentation-only —
-  label/project backend and Settings > Labels untouched).
+  and 1.8's own Pagination/collapsible-sections side work (Phase B of
+  webapp usability, `roadmap.md`'s 1.8 row).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

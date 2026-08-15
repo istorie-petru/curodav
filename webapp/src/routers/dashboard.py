@@ -21,6 +21,7 @@ from __future__ import annotations
 import calendar as py_calendar
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -643,7 +644,10 @@ def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
         if lbl.get("archived_at"):
             continue
         tiles.append({
-            "name": lbl["name"], "href": f"/projects/{lbl['name']}",
+            # 2026-08-15: /projects/{name} is gone (see routers/projects.py's
+            # module docstring) -- points at the Tasks table filtered to this
+            # project's label instead, the closest existing equivalent.
+            "name": lbl["name"], "href": f"/tasks?label={quote(lbl['name'])}",
             "icon": lbl.get("icon") or "folder", "color": lbl.get("color") or "blue",
             "kind": "Project",
         })
