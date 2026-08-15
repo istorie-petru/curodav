@@ -1482,6 +1482,10 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    higher-specificity override -- same reason .event-start-end-field above
    can't just rely on `hidden` either. */
 .field.holiday-field[hidden]{display:none;}
+/* label_edit_modal.html's Project date fields, toggled via `hidden` by
+   static/label_role_picker.js -- same `.field{display:flex}`-beats-bare-
+   `[hidden]` fight as .field.holiday-field right above; same fix. */
+.field.label-project-fields[hidden]{display:none;}
 
 /* Tile/card picker (2026-08-07, modal-input-design pattern 1) -- a row of
    large tappable cards (icon + label), one visibly selected, for a
@@ -3504,13 +3508,23 @@ body.command-palette-open{overflow:hidden;}
 /* Labels manage list (labels_manage.html, reworked 2026-08-15 from a
    <table> into a plain scannable list -- side work, direct feedback: "the
    table should be transformed into a simple list, showing data about
-   them"). Every per-label control (rename/color/icon/parent/abbreviation/
+   them"). Every per-label control (rename/color/icon/Group/abbreviation/
    Space/Project/merge/remove) that used to be one column each moved into
-   the Edit button's modal (label_edit_modal.html) -- a row here is
-   read-only display plus one action, not an editor, so it no longer
-   needs the table's fixed-column layout at all: one flex row per label
-   with a consistent left-to-right reading order (color, icon, name,
-   usage, role badge, Edit). */
+   the Edit button's modal (label_edit_modal.html) or, for Merge, its own
+   small modal (label_merge_modal.html) -- a row here is read-only display
+   plus two actions, not an editor, so it no longer needs the table's
+   fixed-column layout at all: one flex row per label with a consistent
+   left-to-right reading order (color, icon, name, usage, role badge,
+   Merge, Edit).
+
+   Same-day follow-up: a Space's own row doubles as its group's heading
+   (`.is-space`, routers/labels.py::manage_labels builds spaces/ungrouped
+   instead of a flat parent_display groupby) -- direct feedback: "the
+   spaces list should be displayed differently and all their children be
+   always in their group." `.label-list-group-header` below now only
+   styles the plain-text "Ungrouped" divider; a Space's heading look
+   comes from `.is-space` instead, since that row is a real label row,
+   not a bare divider. */
 .label-list-group-header{
   padding:10px 8px 4px; font-size:var(--text-caption); font-weight:600;
   color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
@@ -3525,12 +3539,16 @@ body.command-palette-open{overflow:hidden;}
 .label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .label-list-row .tag-usage-count{flex:none;}
 .label-list-row .cell-tag{flex:none; white-space:nowrap;}
-
-/* Reused by label_edit_modal.html's Merge form (a small inline form that
-   doesn't need the modal's own .field-grid) -- same "one plain inline
-   form, no cross-cell reach" idiom this class has had since the old table. */
-.label-cell-inline{display:flex; align-items:center; gap:6px;}
-.label-cell-inline input[type="text"]{min-width:0; width:150px; padding:4px 7px;}
+/* A Space's own row reads as a heading for the child rows under it --
+   bold name, tinted background, a touch more vertical room -- rather
+   than looking like just one more label among its own children. */
+.label-list-row.is-space{background:var(--bg-secondary); margin-top:10px;}
+.label-list-row.is-space:first-child{margin-top:0;}
+.label-list-row.is-space .label-list-name{font-weight:700;}
+.label-list-row.is-space:hover{background:var(--bg-tertiary, var(--bg-secondary));}
+/* A Space's children indent under it -- "always in their group" reads
+   visually, not just via list order. */
+.label-list-row.is-child{padding-left:28px;}
 
 /* label_edit_modal.html's Role control (segmented, .segmented/.seg-btn
    base already defined elsewhere) and the Project date fields it reveals. */

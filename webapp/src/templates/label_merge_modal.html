@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Merge label{% endblock %}
+{% block content %}
+<!-- Small standalone modal (side work, 2026-08-15 follow-up direct
+     feedback: "Merge should be a button in the list... it should open a
+     small modal window where the user selects") -- just the destination
+     picker, posting to the unchanged /labels/{name}/merge
+     (routers/labels.py::merge_label, db.merge_labels does the actual
+     work: every object tagged with `name` moves to the destination and
+     `name`'s own label_config row is removed). -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Merge "{{ name }}"</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<p class="settings-hint">Every object tagged "{{ name }}" moves to the label you pick below, and "{{ name }}" is removed. This can't be undone.</p>
+<form method="post" id="label-merge-form" action="/labels/{{ name }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another label? Every object tagged with it moves to the destination and this label is removed.">
+    <div class="field">
+        <label>Merge into</label>
+        <select name="dest_name" required autofocus>
+            <option value="" disabled selected>Choose a label&hellip;</option>
+            {% for other_name in other_label_names %}
+            <option value="{{ other_name }}">{{ other_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+</div>
+</div>
+<div class="modal-footer">
+<a href="/labels" class="btn ghost" data-modal-cancel>Cancel</a>
+<span class="spacer"></span>
+<button type="submit" form="label-merge-form" class="btn primary">{{ icon('git-pull-request', 'icon-sm') }} Merge</button>
+</div>
+</div>
+{% endblock %}

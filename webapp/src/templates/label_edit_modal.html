@@ -2,8 +2,8 @@
 {% block title %}Edit label{% endblock %}
 {% block content %}
 <!-- Everything the old labels_manage.html table did per-row (rename,
-     color, icon, abbreviation, parent, Space/Project) plus what used to
-     be routers/projects.py's own dedicated promote/dates/archive/demote
+     color, icon, abbreviation, Group, Space/Project) plus what used to be
+     routers/projects.py's own dedicated promote/dates/archive/demote
      page, now one form + one Save button (side work, 2026-08-15 direct
      feedback: "a button that opens a modal window to edit labels with
      all the colors, icons, etc."). See routers/labels.py's edit_label_
@@ -12,8 +12,10 @@
      what static/label_role_picker.js toggles purely client-side (the
      project date fields' visibility, and the confirm-before-switching
      warning) as the Role radios are played with, before ever hitting
-     Save -- same "no round trip needed" reasoning label_search.js's own
-     header comment gives for this page's search box. -->
+     Save. Merge lives in its own small modal now (label_merge_modal.html,
+     opened from a row button on labels_manage.html) -- 2026-08-15
+     follow-up direct feedback reversed the earlier "Merge belongs in this
+     editor" call. -->
 <div id="modal-target">
 <div class="modal-header">
 <h1>Edit label</h1>
@@ -30,12 +32,21 @@
             <label>Abbreviation</label>
             <input type="text" name="abbreviation" maxlength="5" value="{{ l.abbreviation or '' }}" title="Shown in the nav rail instead of the full name (max 5 characters)">
         </div>
+        <!-- Group (was "Parent label" -- 2026-08-15 follow-up direct
+             feedback: its only real job is grouping labels on this
+             Settings list under a Space, so it's renamed to say that and
+             limited to actually only doing that -- a plain dropdown of
+             existing Spaces, not a free-text field that could name
+             anything. See routers/labels.py::edit_label_modal/
+             update_label for the same constraint enforced server-side. -->
         <div class="field">
-            <label>Parent label</label>
-            <input type="text" name="parent_name" list="label-edit-parent-options" value="{{ l.parent_name or '' }}" placeholder="(none)">
-            <datalist id="label-edit-parent-options">
-                {% for other_name in other_label_names %}<option value="{{ other_name }}">{% endfor %}
-            </datalist>
+            <label>Group</label>
+            <select name="parent_name">
+                <option value="">(none)</option>
+                {% for space_name in space_label_names %}
+                <option value="{{ space_name }}" {% if l.parent_name == space_name %}selected{% endif %}>{{ space_name }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="field">
             <label>Color</label>
@@ -78,7 +89,6 @@
                 <label class="seg-btn"><input type="radio" name="role" value="space" class="seg-radio" {% if role == 'space' %}checked{% endif %}> {{ icon('layers', 'icon-sm') }} Space</label>
                 <label class="seg-btn"><input type="radio" name="role" value="project" class="seg-radio" {% if role == 'project' %}checked{% endif %}> {{ icon('folder', 'icon-sm') }} Project</label>
             </div>
-            <p class="settings-hint">A Space aggregates its child labels (Parent above) onto their own page. A Project adds a bounded start/end period and lifecycle tracking (Open &rarr; Pending &rarr; Pending Archiving &rarr; Archived). A label is one or the other, never both.</p>
         </div>
 
         <!-- Project period -- only meaningful once "Project" is picked
@@ -86,7 +96,10 @@
              block as the Role radios change, so it "appears only after
              being selected" with no extra page load. Stays in the DOM
              (not re-rendered) either way, so its values survive toggling
-             back and forth before Save. -->
+             back and forth before Save. Overlapping another project's
+             period is always allowed (2026-08-15 follow-up direct
+             feedback removed the old confirm-overlap checkbox/409
+             conflict flow entirely -- see update_label's docstring). -->
         <div class="field field-wide label-project-fields" {% if role != 'project' %}hidden{% endif %}>
             <div class="field-grid">
                 <div class="field">
@@ -99,34 +112,14 @@
                 </div>
             </div>
             {% if role == 'project' %}<p class="settings-hint">Status: {{ project_status }}</p>{% endif %}
-            <label class="settings-hint" style="display:flex; align-items:center; gap:6px">
-                <input type="checkbox" name="confirm_overlap" value="1">
-                Allow this period to overlap another project
-            </label>
         </div>
     </div>
 </form>
-
-<!-- Merge -- moves into this modal from the old table row (side work,
-     2026-08-15 direct feedback: Merge/Remove belong in the editor, not
-     as quick row actions). A destructive rename-by-absorption, so it
-     gets its own confirm rather than riding Save's. -->
-{% if other_label_names %}
-<form method="post" action="/labels/{{ l.name }}/merge" class="label-cell-inline" style="margin-top:16px" data-confirm-sheet="Merge &quot;{{ l.name }}&quot; into another label? Every object tagged with it moves to the destination and this label is removed.">
-    <select name="dest_name" class="filter-select" required aria-label="Merge into">
-        <option value="" disabled selected>Merge into&hellip;</option>
-        {% for other_name in other_label_names %}
-        <option value="{{ other_name }}">{{ other_name }}</option>
-        {% endfor %}
-    </select>
-    <button type="submit" class="btn ghost btn-sm">{{ icon('git-pull-request', 'icon-sm') }} Merge</button>
-</form>
-{% endif %}
 </div>
 </div>
 <div class="modal-footer">
 <form method="post" action="/labels/{{ l.name }}/clear" data-confirm-sheet="Remove &quot;{{ l.name }}&quot; from every object that carries it? This doesn't delete anything else.">
-    <button type="submit" class="detail-delete-link">{{ icon('x', 'icon-sm') }} Remove from everything</button>
+    <button type="submit" class="btn danger">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
 <span class="spacer"></span>
 <a href="/labels" class="btn ghost" data-modal-cancel>Cancel</a>

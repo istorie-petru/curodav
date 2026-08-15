@@ -1476,6 +1476,72 @@ session, right before the final commit of that session.
   actually gates anything, so that part is reasoned from reading
   `label_role_picker.js` and `modal.js`'s own submit-handling code
   directly rather than executed (no browser in this sandbox).
+- **Fixed/reworked:** side work — **Settings > Labels follow-up: fixed
+  the Role reveal bug, Group limited to Spaces only, overlap always
+  allowed, Merge moved back to the list, footer is Cancel/Delete/Save**,
+  complete (2026-08-15), same-day direct feedback on the slice above.
+  - **Bug, found and fixed:** the Project date fields never actually
+    appeared when picking "Project" in the Role control. Root cause:
+    `.field{display:flex}` (style.css) is author CSS of equal specificity
+    to the browser's own `[hidden]{display:none}` UA rule, and author
+    always wins that fight regardless of specificity — the exact
+    pre-existing footgun `.field.holiday-field[hidden]{display:none}`
+    was already added to work around once (recurrence_picker.js's
+    holiday-calendar fields, see that rule's own comment). Same fix:
+    `.field.label-project-fields[hidden]{display:none}`.
+  - **Overlapping project periods are always allowed now** — "shouldn't
+    exist because it should always be true" — the `confirm_overlap`
+    checkbox and the whole 409-conflict path removed from
+    `update_label`/`label_edit_modal.html` entirely. `db.find_
+    overlapping_project` and routers/projects.py's own promote/set_dates
+    (still directly tested) are untouched; nothing in the UI calls the
+    check anymore.
+  - **"Parent label" renamed to "Group" and limited to Spaces only** —
+    confirmed with the user this should stay wording-only for what
+    Group *does* (still both the Settings-list grouping key and what
+    feeds a Space's generated page), but *how it's set* changed: a
+    `<select>` of existing Space labels only (`edit_label_modal`'s new
+    `space_label_names`, plus the label's own current parent even if
+    stale/non-Space, so Save can never silently drop it), not a free-text
+    field that could name anything. `update_label` enforces the same
+    constraint server-side (400 if `parent_name` isn't blank or an actual
+    `generate_space` label). Direct follow-up ask: "the list UI should
+    display Spaces differently and always keep their children in their
+    group" — `manage_labels` rewritten to build `space_groups` (each a
+    Space label plus its resolved `children`, i.e. every label whose
+    `parent_name` names it) and `ungrouped` instead of a flat
+    `parent_display` groupby; a Space's own row IS its group's heading now
+    (`.is-space`, bold/tinted) with children rendered directly under it
+    indented (`.is-child`), not a disconnected text divider naming the
+    same string. **Named the context variable `space_groups`, not
+    `spaces`** — found live, the hard way: `base.html`'s nav rail already
+    does `{% set spaces = sidebar_spaces(request) %}` at its own top
+    level, which silently shadows a same-named context variable for the
+    rest of that render (Jinja `{% set %}` writes to shared `Context.vars`,
+    checked before the original context dict) — the page rendered its
+    empty state even with a correctly populated `spaces` sitting right
+    there in the router's own returned context, extremely confusing to
+    debug until traced to this collision. `static/label_search.js`
+    updated for "a group's header can itself be a real, searchable label
+    row" (a Space's own name now matches too, not just its children).
+  - **Merge reverted back out of the edit modal to its own small modal**
+    (direct follow-up: "I was wrong about that") — new `GET /labels/
+    {name}/merge-modal` + `label_merge_modal.html` (just the destination
+    picker + confirm, posting to the unchanged `/labels/{name}/merge`), a
+    Merge icon-button added back to each list row (hidden when there's
+    only one label total, nothing to merge into).
+  - **Edit modal footer is now exactly Cancel / Delete / Save** — the old
+    "Remove from everything" wording relabeled to "Delete" (same
+    `/labels/{name}/clear` action underneath, `btn danger` styling
+    matching `habit_form.html`'s own Delete convention). Also dropped the
+    explanatory paragraph under Role per direct feedback ("remove the
+    abundant labels").
+  Full suite still **1338 passed** (no test-count change — every change
+  here is UI/validation-shape, not new testable surface within this
+  session's scope), plus a fresh end-to-end script re-verifying all of
+  the above against real seeded data (grouping/nesting, overlap no longer
+  blocking, Group's Space-only enforcement both directions, the edit
+  modal's shape, the merge modal, and the CSS fix's presence).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked

@@ -1,79 +1,89 @@
 {% extends "base.html" %}
 {% block title %}Labels{% endblock %}
+{# Jinja macros don't inherit the calling template's render context (only
+   globals like icon() do) -- has_multiple_labels must be passed in
+   explicitly as show_merge, or the merge button silently never renders
+   regardless of how many labels actually exist. #}
+{# The router's grouping context is named `space_groups`, NOT `spaces` --
+   base.html's own nav rail does `{% set spaces = sidebar_spaces(request) %}`
+   at its top level (outside any block), which silently shadows a
+   same-named `spaces` context variable for the rest of the render (Jinja
+   `{% set %}` writes to the shared Context.vars, which resolve() checks
+   before the original passed-in context dict) -- found live, the hard
+   way: this page rendered its "No labels yet" empty state even with
+   real, populated `spaces` in the router's own returned context. #}
+{% macro label_row(l, show_merge, is_space=false, is_child=false, is_header=false) %}
+<div class="label-list-row{% if is_space %} is-space{% endif %}{% if is_child %} is-child{% endif %}"
+     data-label-row {% if is_header %}data-label-group-header{% endif %}
+     data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
+    <span class="color-dot cal-{{ l.color }}" title="{{ l.color|capitalize }}"></span>
+    <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon, 'icon-sm') }}{% else %}{{ icon('tag', 'icon-sm') }}{% endif %}</span>
+    <span class="label-list-name">
+        {{ l.name }}
+        {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
+    </span>
+    <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
+    {% if l.is_project %}
+    <span class="cell-tag cal-{{ l.color }}" title="Project -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }} Project &middot; {{ l.project_status }}</span>
+    {% elif l.generate_space %}
+    <span class="cell-tag" title="Space">{{ icon('layers', 'icon-sm') }} Space</span>
+    {% endif %}
+    <span class="spacer"></span>
+    {% if show_merge %}
+    <a href="/labels/{{ l.name }}/merge-modal" class="icon-btn" title="Merge into another label" data-modal>{{ icon('git-pull-request', 'icon-sm') }}</a>
+    {% endif %}
+    <a href="/labels/{{ l.name }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+</div>
+{% endmacro %}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Labels</h1>
-<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/parent, and turn it into a Space (aggregates its child labels onto their own page) or a Project (a bounded period + lifecycle). Click Edit on a label below to change any of that.</p>
+<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/group, and turn it into a Space (aggregates its child labels onto their own page) or a Project (a bounded period + lifecycle). Click Edit on a label below to change any of that.</p>
 
-<!-- Overlap warning -- routers/projects.py's promote/set_dates still
-     redirect here with these query params on a period conflict (kept for
-     that endpoint's own sake, see routers/projects.py's
-     _redirect_with_conflict); the label edit modal's own Save handles
-     the same conflict itself now (routers/labels.py::update_label, a 409
-     + toast + "Allow this period to overlap" checkbox), so this banner
-     is dormant for that path but still correct if anything else ever
-     posts to /projects/promote directly. -->
-{% if overlap_name and pending %}
-<div class="card" style="border-color:var(--accent-warning, #b58900)">
-    <p><strong>{{ icon('activity', 'icon-sm') }} "{{ pending.name }}" ({{ pending.start_date }} &ndash; {{ pending.end_date }}) overlaps the existing project "{{ overlap_name }}".</strong></p>
-    <p class="settings-hint">Projects can't share an overlapping period. Resolve the conflict (change one project's dates) or confirm you want them to overlap anyway.</p>
-    <form method="post" action="/projects/promote" class="form-inline">
-        <input type="hidden" name="name" value="{{ pending.name }}">
-        <input type="hidden" name="start_date" value="{{ pending.start_date }}">
-        <input type="hidden" name="end_date" value="{{ pending.end_date }}">
-        <input type="hidden" name="confirm_overlap" value="1">
-        <button type="submit" class="btn ghost">Save anyway</button>
-        <a href="/labels" class="btn ghost">Cancel</a>
-    </form>
-</div>
-{% endif %}
-
-{% if labels %}
-<!-- Search (2026-08-08 redesign, generalized off a <table> 2026-08-15
-     when this page became a plain list -- see static/label_search.js's
-     own comment) -- client-side only, no round trip for a page this
-     size. Filters on label name only, case-insensitive; a group's
-     divider hides itself too once every label in it is filtered out. -->
+{% if space_groups or ungrouped %}
+<!-- Search (2026-08-08 redesign, generalized 2026-08-15 when this page
+     became a plain list, and again the same day when Spaces became real
+     group headers instead of plain text dividers -- see
+     static/label_search.js's own comment) -- client-side only, no round
+     trip for a page this size. -->
 <div class="settings-search">
     <input type="search" id="label-search-input" placeholder="Search labels..." aria-label="Search labels">
 </div>
 
 <!-- Simple list (side work, 2026-08-15 direct feedback: "the table
-     should be transformed into a simple list, showing data about them").
-     One row per label -- color, icon, name/abbreviation, usage count,
-     and a Space/Project role badge -- with a single Edit button opening
-     the full editor as a modal (label_edit_modal.html) instead of the
-     old table's one-control-per-column inline forms. Every field that
-     used to live in its own cell (rename/color/icon/parent/abbreviation/
-     Space/Project/merge/remove) moved there; this page is now purely a
-     scannable index + entry point into editing, not an editor itself. -->
+     should be transformed into a simple list, showing data about them"),
+     grouped by Space (2026-08-15 follow-up: "the spaces list should be
+     displayed differently and all their children be always in their
+     group") -- see routers/labels.py::manage_labels for how the
+     spaces/ungrouped grouping is built. A Space's own row (`.is-space`,
+     bold/tinted) doubles as its group's heading; its children render
+     directly under it (`.is-child`, indented), so there's no separate,
+     disconnected "divider row naming a string" the old parent_display
+     grouping used. Every field that used to live in its own table column
+     (rename/color/icon/Group/abbreviation/Space/Project/merge/remove)
+     moved into the Edit button's modal (label_edit_modal.html) or, for
+     Merge, its own small modal (label_merge_modal.html) -- a row here is
+     read-only display plus two actions, not an editor itself. -->
 <div class="card">
 <div class="label-list" id="label-list">
-{% for parent_name, group_labels in labels|groupby('parent_display') %}
+{% for s in space_groups %}
 <div data-label-group>
-    <div class="label-list-group-header" data-label-group-header>{{ "Ungrouped" if parent_name == "~ Ungrouped" else parent_name }}</div>
-    {% for l in group_labels %}
-    <div class="label-list-row" data-label-row data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
-        <span class="color-dot cal-{{ l.color }}" title="{{ l.color|capitalize }}"></span>
-        <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon, 'icon-sm') }}{% else %}{{ icon('tag', 'icon-sm') }}{% endif %}</span>
-        <span class="label-list-name">
-            {{ l.name }}
-            {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
-        </span>
-        <span class="tag-usage-count" title="Used on this many objects">{{ l.usage_count }}&times;</span>
-        {% if l.is_project %}
-        <span class="cell-tag cal-{{ l.color }}" title="Project -- {{ l.project_status }}">{{ icon('folder', 'icon-sm') }} Project &middot; {{ l.project_status }}</span>
-        {% elif l.generate_space %}
-        <span class="cell-tag" title="Space">{{ icon('layers', 'icon-sm') }} Space</span>
-        {% endif %}
-        <span class="spacer"></span>
-        <a href="/labels/{{ l.name }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
-    </div>
+    {{ label_row(s, has_multiple_labels, is_space=true, is_header=true) }}
+    {% for c in s.children %}
+    {{ label_row(c, has_multiple_labels, is_child=true) }}
     {% endfor %}
 </div>
 {% endfor %}
+{% if ungrouped %}
+<div data-label-group>
+    <div class="label-list-group-header" data-label-group-header>Ungrouped</div>
+    {% for l in ungrouped %}
+    {{ label_row(l, has_multiple_labels) }}
+    {% endfor %}
+</div>
+{% endif %}
 </div>
 </div>
 <p class="empty-state" id="label-search-empty" hidden>No labels match "<span id="label-search-empty-query"></span>".</p>
