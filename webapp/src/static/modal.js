@@ -247,19 +247,6 @@
        });
      }
 
-    // Schedule opened as a modal (2026-08-01, from _calendar_nav.html) --
-    // its Table/Calendar views have their own interactive JS
-    // (schedule_table.js's inline-edit, schedule_grid.js's drag-to-move),
-    // but a modal's content is injected via innerHTML, which never
-    // executes <script> tags and never re-runs a script that already
-    // finished loading on whatever page opened the modal. Both files are
-    // loaded globally now (base.html) specifically so they're available
-    // here to re-run against the freshly-injected content -- each no-ops
-    // instantly if its target elements aren't present, so calling both
-    // unconditionally on every modal open is harmless for modals that
-    // aren't Schedule.
-    if (window.CCScheduleTable) window.CCScheduleTable.init(body);
-    if (window.CCScheduleGrid) window.CCScheduleGrid.init(body);
     // Contact photo cropper (contact_form.html) -- same re-init reasoning.
     if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
@@ -446,9 +433,9 @@
    }
 
   document.addEventListener("click", (e) => {
-    // Event/class blocks on the Calendar and Schedule time-grids
-    // (calendar.js, schedule_grid.js) are both `[data-modal]` links AND
-    // drag targets -- their own click handler already calls
+    // Event blocks on the Calendar time-grid (calendar.js) are both
+    // `[data-modal]` links AND drag targets -- their own click handler
+    // already calls
     // preventDefault() when a click turns out to have been a real drag,
     // specifically to stop the "open this" navigation from firing. This
     // listener runs after that one (bubble order: element before

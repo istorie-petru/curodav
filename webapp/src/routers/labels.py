@@ -4,8 +4,7 @@ entirely and the Space/Project-management half of the old
 for the full model: a label is not an entity with a lifecycle (no
 create/delete workflow, no cascading-delete concerns) -- it's a name that
 tasks/events/contacts/habits point at via the one `object_labels` join
-table (1.6 dropped schedule_classes from that list -- a class is a real
-event now, see schedule.py's module docstring). Any color/icon/behavior config is a thin,
+table. Any color/icon/behavior config is a thin,
 optional dict keyed by the label's name (`label_config`), not a row other
 tables hold a hard foreign key into.
 
@@ -25,14 +24,14 @@ This router owns:
 -- the Databases feature (and Grades, built on it) is removed entirely.
 
 2026-08-08: the Phase 4 `enabled_modules`/"Sections" checkbox group is
-gone -- Course info/Homework on a Space's page (_project_university_
-section.html) now always render whenever there's matching data, exactly
-what leaving every checkbox unchecked already did for everyone who never
-touched the control. The checkboxes only ever let someone deliberately
-*hide* a section that had real data (nobody did), and two of its five
-options (Tasks/Events/Contacts) never gated anything to begin with -- not
-a real setting, just unused surface area. See label_modules.py's own
-removal note for where the gating logic used to live.
+gone. See label_modules.py's own removal note for where the gating logic
+used to live.
+
+2026-08-15: the University module (Course info/Homework,
+`_project_university_section.html`) is removed entirely, alongside the
+whole Schedule module it depended on for its only source of data (a
+"class" was a Schedule-created recurring event) -- see plans/STATE.md's
+removal entry. A label's scope is just tasks/events/contacts again.
 
 No delete endpoint anywhere in this file, per §0.1: "removing" a label in
 the UI is `clear_label` -- it empties `object_labels` for that name, not a
@@ -42,16 +41,14 @@ pointing at it; that's harmless and expected, not cleaned up here.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from .. import db, schedule
+from .. import db
 from ..deps import get_db, templates
 from . import dashboard as dashboard_router
-from . import schedule as schedule_router
-from .tasks import STATUS_COLORS, STATUS_LABELS
 
 router = APIRouter(prefix="/labels", tags=["labels"])
 
@@ -489,38 +486,27 @@ def set_label(
 
 
 def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact/class directly tagged with `name` -- the
-    "centralizes all tasks, events, contacts, classes" behavior the old
+    """Every task/event/contact directly tagged with `name` -- the
+    "centralizes all tasks, events, contacts" behavior the old
     project/space detail pages had, now driven off object_labels instead
     of project_uid/task_lists/calendars/addressbooks.
 
     2026-08-07: no more `databases` key here -- the Databases feature (and
     Grades, which was built on it) is removed entirely, not just
-    unlinked. See _project_university_section.html's own removal note.
+    unlinked.
 
-    1.6 (Schedule & recurrence rework): `classes` is no longer a dedicated
-    schedule_classes query -- a class is a real recurring event tagged with
-    both the Schedule system label and this course label
-    (db.list_schedule_class_events), enriched into the same day/acronym/
-    professor/credits/parity shape routers/schedule.py's Table view uses
-    (schedule_router._class_row) so _project_university_section.html and
-    schedule.next_occurrence needed no changes at all."""
+    2026-08-15: no more `classes` key here -- the Schedule module (and the
+    University module built on it) is removed entirely, see this file's
+    header comment."""
     tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
     events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
     contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
-    class_events = db.list_schedule_class_events(conn, course_label=name)
-    classes = [schedule_router._class_row(conn, e) for e in class_events]
 
     return {
         "tasks": tasks,
         "events": events,
         "contacts": contacts,
-        "classes": classes,
     }
-
-
-def _next_label(next_date: date, today: date) -> str:
-    return schedule.next_label(next_date, today)
 
 
 @router.get("/{name}")
@@ -552,46 +538,7 @@ def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(g
             # button read.
             "banner": db.get_page_banner(conn, name),
             "banner_scope": name,
-            # status_labels/status_colors drive the Homework table inside
-            # _project_university_section.html. color/icon/parent editing
-            # moved to the manage page (/labels) with the old inline
-            # "Edit label" block's removal, so colors/icon_groups/
-            # all_labels are no longer needed here.
-            "status_labels": STATUS_LABELS,
-            "status_colors": STATUS_COLORS,
         }
     )
-
-    # §5 University module (preserved from the old project_detail):
-    # Homework tasks, professor contacts, next-lecture badges -- unchanged
-    # logic, just sourced from this label's own scope. 2026-08-07: no more
-    # `project_databases`/linked-databases context -- the Databases
-    # feature (and Grades, which was built on it) is removed entirely, see
-    # _project_university_section.html's own removal note.
-    ctx["homework_tasks"] = [
-        t for t in scope["tasks"] if any(tag.lower() == "homework" for tag in (t.get("tags") or []))
-    ]
-    professor_contacts: dict[str, dict] = {}
-    for cl in scope["classes"]:
-        puid = cl.get("professor_contact_uid")
-        if puid and puid not in professor_contacts:
-            contact = db.get_contact(conn, puid)
-            if contact:
-                professor_contacts[puid] = contact
-    ctx["professor_contacts"] = professor_contacts
-
-    # 1.6: next-occurrence is read straight off each class's own recurring
-    # event (RRULE + EXDATE), not re-derived from settings/holidays --
-    # schedule.next_occurrence_for_event reuses the same recurrence_expand
-    # machinery the Calendar tab itself expands with.
-    next_lecture: dict[str, dict] = {}
-    today = date.today()
-    holiday_calendars = db.list_holidays_by_calendar(conn)
-    for cl in scope["classes"]:
-        event = db.get_event(conn, cl["uid"])
-        next_date = schedule.next_occurrence_for_event(event, today, holiday_calendars=holiday_calendars) if event else None
-        if next_date:
-            next_lecture[cl["uid"]] = {"date": next_date, "label": _next_label(next_date, today)}
-    ctx["class_next_lecture"] = next_lecture
 
     return templates.TemplateResponse("label_detail.html", ctx)

@@ -3,7 +3,7 @@
 {% block content %}
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Advanced</h1>
-<p class="settings-hint">Real capability, deliberately not surfaced casually.</p>
+<p class="settings-hint">Export, import, and permanently delete your data.</p>
 
 <!-- Export & backup (2026-08-08) -- was a link out to its own /export
      page, then a link-row here; now the whole thing (standard-format
@@ -59,12 +59,6 @@
             <span class="settings-row-name">Labels (JSON)</span>
             <span class="spacer"></span>
             <span class="tag-usage-count">Every label, its config, and its membership</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/schedule.json">
-            <span class="settings-row-icon">{{ icon('clock', 'icon-sm') }}</span>
-            <span class="settings-row-name">Schedule (JSON)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">Classes, holidays, settings</span>
         </a>
         <a class="calendar-row settings-row" href="/export/data.json">
             <span class="settings-row-icon">{{ icon('archive', 'icon-sm') }}</span>

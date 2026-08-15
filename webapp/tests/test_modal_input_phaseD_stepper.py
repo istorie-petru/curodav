@@ -1,15 +1,19 @@
 """Tests for modal-input-design Phase D: wrapping the remaining bounded
-number inputs (habit Daily target, habit log-entry Value, schedule class
-Credits, schedule settings Credits needed) in the `.stepper` component
-already built in Phase A for the widget builder's Limit field
-(_widget_builder_fields.html) and wired generically by static/stepper.js.
+number inputs (habit Daily target, habit log-entry Value) in the
+`.stepper` component already built in Phase A for the widget builder's
+Limit field (_widget_builder_fields.html) and wired generically by
+static/stepper.js.
 
 This phase is purely a markup wrap -- stepper.js already scans for any
 `.stepper` on the page (not hardcoded to the widget builder) and already
 reads the input's own `step` attribute (falling back to 1 only when
-`step` is absent/"any"), so half-step fields like these four don't need
+`step` is absent/"any"), so half-step fields like these don't need
 any JS change. These tests just confirm the wrap happened and that each
-input's `name`/`min`/`step`/`value` were preserved exactly."""
+input's `name`/`min`/`step`/`value` were preserved exactly.
+
+2026-08-15: `TestScheduleClassCreditsStepper`/
+`TestScheduleSettingsCreditsNeededStepper` removed along with the whole
+Schedule module -- see plans/STATE.md's removal entry."""
 
 from __future__ import annotations
 
@@ -19,7 +23,6 @@ import pytest
 
 from src import db
 from src.routers import habits as habits_router
-from src.routers import schedule as schedule_router
 
 
 @pytest.fixture()
@@ -94,42 +97,3 @@ class TestHabitLogValueStepper:
         )
 
 
-class TestScheduleClassCreditsStepper:
-    def test_new_class_form_wraps_credits_in_a_stepper(self, conn):
-        resp = schedule_router.new_class_form(_request(), conn=conn)
-        body = resp.body.decode()
-        _assert_stepper_wraps(
-            body,
-            '<input type="number" name="credits" class="stepper-input" min="0" step="0.5" value="0">',
-        )
-
-
-class TestScheduleSettingsCreditsNeededStepper:
-    # 2026-08-08: Settings (semester dates/credits/reminder/event label)
-    # moved from its own /schedule/settings page back onto schedule_classes.html
-    # as a <details> block (see routers/schedule.py's classes_view/
-    # save_settings) -- these now render via classes_view, not the removed
-    # settings_view.
-    def test_settings_view_wraps_credits_needed_in_a_stepper(self, conn):
-        resp = schedule_router.classes_view(_request(), conn=conn)
-        body = resp.body.decode()
-        _assert_stepper_wraps(
-            body,
-            '<input type="number" name="credits_needed" class="stepper-input" min="0" step="1" value="">',
-        )
-
-    def test_settings_view_preserves_existing_credits_needed_value(self, conn):
-        db.save_schedule_settings(
-            conn,
-            {
-                "semester_start": None,
-                "semester_end": None,
-                "credits_needed": 120,
-                "reminder_minutes": 0,
-            },
-        )
-        resp = schedule_router.classes_view(_request(), conn=conn)
-        body = resp.body.decode()
-        assert 'class="stepper"' in body
-        assert 'name="credits_needed"' in body
-        assert 'value="120' in body

@@ -305,9 +305,11 @@ class TestLocalWritePath:
         # manifest precache entry (was "/manifest.webmanifest", a path that
         # 404s -- the file is only served at "/static/manifest.webmanifest"
         # -- which made cache.addAll() reject and the whole shell precache
-        # fail on install).
+        # fail on install); v6 (2026-08-15) dropped schedule_table.js/
+        # schedule_grid.js from the precache list along with the whole
+        # Schedule module, see plans/STATE.md's removal entry.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v5"' in script
+        assert 'CACHE_NAME = "cc-shell-v6"' in script
 
 
 class TestSyncEngine:

@@ -5,15 +5,20 @@ Radicale server (CalDAV/CardDAV), which is the source of truth, and the
 SQLite cache this app reads/writes is exactly that: a cache. That fact is
 the whole reason this page exists. A CalDAV client (the phone's calendar
 app, a desktop client) can already read all of it without this app's help;
-the exports here make sure the *local-only* data -- Spaces, Projects,
-Schedule, Tag metadata -- is portable too, and provide a full JSON
-backup/restore round-trip so nobody is ever trapped in this app's cache.
-Each standard-format export also double-checks that the synced objects
-survive an app-independent round-trip (ICS/VCF re-parse cleanly).
+the exports here make sure the *local-only* data -- Spaces, Projects, Tag
+metadata -- is portable too, and provide a full JSON backup/restore
+round-trip so nobody is ever trapped in this app's cache. Each standard-
+format export also double-checks that the synced objects survive an
+app-independent round-trip (ICS/VCF re-parse cleanly).
 
 2026-08-07: the Grades export (/export/grades.csv) is gone along with the
 rest of the Databases/Grades feature -- see features/architecture.md's
 removal note.
+
+2026-08-15: the dedicated /export/schedule.json export is gone along with
+the whole Schedule module -- see plans/STATE.md's removal entry. A class
+was already a real recurring event by 1.6, so nothing schedule-specific
+survives outside the ordinary events/labels exports.
 
 2026-08-08: every db.list_tasks(conn) call here passes
 include_habit_tasks=True -- db.list_tasks defaults to hiding habit-labeled
@@ -55,12 +60,11 @@ def _attachment(filename: str, body: bytes, media_type: str) -> Response:
     )
 
 
-# Phase 1 (label-space rework, 2026-08-06): the app no longer mirrors
-# Schedule's class VEVENTs into a separate "target calendar" to exclude --
-# there's just one universal `events` pool now (see db.py's Phase 1
-# comments and routers/schedule.py). Every class's mirrored event is a
-# real row in that pool, uid-stable, and (until Phase 2 gives labels a way
-# to exclude it) is included in exports like any other event.
+# Phase 1 (label-space rework, 2026-08-06): the app no longer mirrors a
+# class's VEVENT into a separate "target calendar" to exclude -- there's
+# just one universal `events` pool now (see db.py's Phase 1 comments).
+# Every class's mirrored event is a real row in that pool, uid-stable, and
+# is included in exports like any other event.
 
 
 @router.get("")
@@ -221,25 +225,8 @@ def _export_object_labels(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-@router.get("/schedule.json")
-def export_schedule_json(conn=Depends(get_db)):
-    return _json_response(
-        "schedule.json",
-        {
-            "settings": db.get_schedule_settings(conn),
-            # 1.6: a class is a real recurring event now (tagged with the
-            # Schedule system label) -- db.list_schedule_class_events reads
-            # exactly those, in place of the old dedicated schedule_classes
-            # table this key used to be a straight dump of.
-            "classes": db.list_schedule_class_events(conn),
-            "holidays": db.list_holidays(conn),
-        },
-    )
-
-
 def build_backup_payload(conn) -> dict[str, Any]:
-    """The full-backup dict -- every synced object (minus the rebuildable
-    Schedule mirror -- schedule.json covers the source) plus all local-only
+    """The full-backup dict -- every synced object plus all local-only
     data. Factored out of export_data_json (below) so it has exactly one
     definition: the download route wraps it as a JSON response,
     `src/data_health.py`'s create_backup writes the identical dict straight
@@ -249,7 +236,15 @@ def build_backup_payload(conn) -> dict[str, Any]:
 
     2026-08-07: no more "grades" key -- the `grades` table (and the rest
     of Databases/Grades) is removed entirely, not just excluded from the
-    backup."""
+    backup.
+
+    2026-08-15: no more "schedule_settings" key or dedicated /schedule.json
+    export -- the whole Schedule module (and its `schedule_settings` table)
+    is removed, see plans/STATE.md's removal entry. "schedule_holidays"
+    stays -- named holiday calendars are a generic mechanism any recurring
+    event can use, unrelated to Schedule specifically. No more
+    "schedule_classes" key either -- a class was already a real event by
+    1.6, already covered by the "events" key above."""
     return {
         "exported_at": _now(),
         "events": db.list_events(conn),
@@ -257,10 +252,7 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "contacts": db.list_contacts(conn),
         "labels": db.list_labels(conn),
         "object_labels": _export_object_labels(conn),
-        # 1.6: no more "schedule_classes" key -- a class is a real
-        # event now, already covered by the "events" key above.
         "schedule_holidays": db.list_holidays(conn),
-        "schedule_settings": db.get_schedule_settings(conn),
         "task_completions": db.list_task_completions(conn),
         # 2026-08-09 Relations -- deliberate user-made links, same
         # local-only-data backup treatment as task_completions.
@@ -385,16 +377,19 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         db.add_object_label(conn, row["object_type"], row["object_id"], row["label_name"])
     # 1.6 (Schedule & recurrence rework): no more `payload.get(
     # "schedule_classes", [])` restore loop -- a class is a real event now
-    # (already restored by the "events" loop above), and db.upsert_
-    # schedule_class no longer exists. A backup file from before this
-    # rework that still carries a "schedule_classes" key simply has that
-    # key ignored on restore now, same "old key silently ignored" treatment
-    # every other removed feature gets here (see the "grades" note below).
+    # (already restored by the "events" loop above). A backup file from
+    # before this rework that still carries a "schedule_classes" key simply
+    # has that key ignored on restore now, same "old key silently ignored"
+    # treatment every other removed feature gets here (see the "grades"
+    # note below).
     for row in payload.get("schedule_holidays", []):
         db.upsert_holiday(conn, row)
-    settings = payload.get("schedule_settings")
-    if settings:
-        db.save_schedule_settings(conn, settings)
+    # 2026-08-15: no more `payload.get("schedule_settings")` restore step --
+    # the whole Schedule module (and `schedule_settings`) is removed, see
+    # plans/STATE.md's removal entry. A backup file from before this
+    # removal that still carries a "schedule_settings" key simply has it
+    # ignored on restore now, same treatment as "grades" below.
+    #
     # 2026-08-07: no more `payload.get("grades", [])` restore loop here --
     # the `grades` table (and db.upsert_grade) is gone. A backup file from
     # before this removal that still carries a "grades" key simply has

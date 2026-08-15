@@ -142,8 +142,8 @@ _ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced
 
 # Which schedule_holidays fields the Holidays table's inline edit
 # (static/settings_holidays.js) is allowed to touch -- same allowlist
-# convention as routers/tasks.py's _UPDATABLE_FIELDS / routers/schedule.py's
-# update_class_field, so a crafted request can't write an arbitrary column.
+# convention as routers/tasks.py's _UPDATABLE_FIELDS, so a crafted request
+# can't write an arbitrary column.
 _HOLIDAY_UPDATABLE_FIELDS = {"calendar_name", "label", "date_from", "date_to"}
 
 # "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
@@ -390,10 +390,7 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
 # via static/settings_holidays.js's update-field call, same shape as
 # static/tasks_table.js) rather than the old compact add-form-plus-plain-
 # table pair, so editing an existing holiday's dates no longer requires
-# delete-and-re-add. Schedule's own Settings panel (routers/schedule.py's
-# save_settings) still picks *which* named calendar a semester's classes
-# respect via `holiday_calendar` -- only the calendars' own contents (the
-# individual date ranges) moved.
+# delete-and-re-add.
 # --------------------------------------------------------------------- #
 
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
@@ -441,8 +438,8 @@ def create_holiday(
 @router.post("/settings/holidays/{uid}/update-field")
 async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db)):
     """Single-field inline edit for the Holidays table -- mirrors
-    routers/tasks.py's/routers/schedule.py's identical update-field
-    endpoints. Merges the one changed field onto the existing row and
+    routers/tasks.py's identical update-field endpoint. Merges the one
+    changed field onto the existing row and
     round-trips through upsert_holiday (there's no separate "update"
     helper in db.py -- a holiday's uid never changes, so upsert-by-uid
     already is the update)."""

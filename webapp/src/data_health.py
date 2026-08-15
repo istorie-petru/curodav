@@ -50,7 +50,10 @@ _REQUIRED_LIST_KEYS = (
     "events", "tasks", "contacts", "labels", "object_labels",
     "schedule_holidays", "task_completions", "event_task_relations",
 )
-_REQUIRED_SCALAR_KEYS = ("exported_at", "schedule_settings")
+# 2026-08-15: "schedule_settings" dropped -- the whole Schedule module (and
+# its `schedule_settings` table) is removed, see plans/STATE.md's removal
+# entry; `build_backup_payload` no longer produces that key at all.
+_REQUIRED_SCALAR_KEYS = ("exported_at",)
 
 # Every collection row that carries its own stable identifier is expected
 # to have a non-empty "uid" -- object_labels/task_completions/

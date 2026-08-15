@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, recurrence_expand, schedule
+from .. import db, grid_layout, recurrence_expand
 from ..deps import _four_week_position, _week_start, get_db, templates
 from . import dashboard as dashboard_router
 
@@ -184,57 +184,6 @@ def _related_context(conn, event: dict | None) -> dict:
     for t in related:
         t["status_color"] = _TASK_STATUS_DOT_COLORS.get(t["status"], "blue")
     return {"related_tasks": related}
-
-
-def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
-    """Phase 6 -- the education "next lecture" badge strip for a Space-
-    filtered calendar. Phase 2 (label-space rework) dropped project_groups'
-    `kind='education'` column -- there's no dedicated "education space"
-    flag anymore, so this now just checks whether the filtered Space
-    (a generate_space=1 label) has any class events among its child
-    labels' members at all; any other filter renders no badges. 1.6
-    (Schedule & recurrence rework): a "class" is now a real recurring
-    event carrying the Schedule system label plus a course label
-    (db.list_schedule_class_events), not its own schedule_classes row --
-    each entry's "class" key is that event dict now, and the next
-    occurrence is read straight off the event's own RRULE/EXDATE
-    (schedule.next_occurrence_for_event) instead of being re-derived from
-    settings/holidays. Phase 9b toolbar rework: the calendar's filter is a
-    plain event label filter (`label`, see month_view/week_view/day_view/
-    agenda_view below), not a dedicated Space/Project picker -- this still
-    works unchanged since a Space is just a label like any other, `label`
-    here plays the same role `group_uid` used to. Each entry: {"class":
-    <event row>, "date": <next date>, "label": "today"|"tomorrow"|"in N
-    days"}."""
-    from datetime import date as _date
-
-    if not label:
-        return []
-    cfg = db.get_label_config(conn, label)
-    if not cfg or not cfg.get("generate_space"):
-        return []
-    child_names = {c["name"] for c in db.list_child_labels(conn, label)}
-    classes = [
-        c for c in db.list_schedule_class_events(conn) if child_names & set(c.get("tags") or [])
-    ]
-    if not classes:
-        return []
-    today = _date.today()
-    holiday_calendars = db.list_holidays_by_calendar(conn)
-    badges = []
-    for cl in classes:
-        nxt = schedule.next_occurrence_for_event(cl, today, holiday_calendars=holiday_calendars)
-        if not nxt:
-            continue
-        # The badge's acronym is the course's own label_config.course_acronym
-        # now (see db.py's label_config CREATE TABLE comment) -- an event
-        # itself has no acronym field, only its title.
-        course_name = db.project_label_for(conn, "event", cl["uid"])
-        course_cfg = db.get_label_config(conn, course_name) if course_name else None
-        cl = dict(cl)
-        cl["acronym"] = (course_cfg or {}).get("course_acronym")
-        badges.append({"class": cl, "date": nxt, "label": schedule.next_label(nxt, today)})
-    return badges
 
 
 def _apply_event_label_filter(events: list[dict], label: str | None) -> list[dict]:
@@ -575,7 +524,6 @@ def month_view(
             "next_month": next_month,
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -635,7 +583,6 @@ def four_week_view(
             "next_start": (view_start + timedelta(days=7)).isoformat(),
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -773,7 +720,6 @@ def week_view(
             "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
             "time_blocks_json": _time_blocks_client_payload(time_blocks),
         },
     )
@@ -947,7 +893,6 @@ def day_view(
             "px_per_hour": grid_layout.PX_PER_HOUR,
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
             "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
         },
     )

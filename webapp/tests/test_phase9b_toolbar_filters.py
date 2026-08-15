@@ -428,51 +428,6 @@ class TestIconOnlyFiltersNextToAdd:
         assert "toolbar-filters-body" not in body
 
 
-class TestScheduleToolbarConsistency:
-    """Schedule brought into the same .toolbar.top-app-bar.toolbar-2row/
-    .toolbar-row shell as Calendar/Tasks/Contacts (Phase 9c), including a
-    visible search box for the `q` param routers/schedule.py already
-    accepted but had no input for."""
-
-    def test_schedule_uses_the_shared_toolbar_shell(self, conn):
-        from src.routers import schedule as schedule_router
-
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        body = resp.body.decode()
-        assert 'class="toolbar top-app-bar toolbar-2row"' in body
-        assert 'class="toolbar-row"' in body
-
-    def test_schedule_table_view_has_a_search_box(self, conn):
-        from src.routers import schedule as schedule_router
-
-        # 2026-08-08: the toolbar search box and the Table-view body's own
-        # duplicate search box merged into one -- see schedule_classes.html's
-        # comment. Placeholder describes the columns classes_view actually
-        # searches (name/acronym/professor/room).
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        body = resp.body.decode()
-        assert 'name="q"' in body
-        assert 'placeholder="Search course, professor, room..."' in body
-        assert body.count('name="q"') == 1
-
-    def test_schedule_search_actually_filters(self, conn):
-        from src import schedule as schedule_logic
-        from src.routers import schedule as schedule_router
-
-        # 1.6: a class is a real recurring event now (see schedule_
-        # router's module docstring) -- seeded straight via db.upsert_event
-        # (like the pre-1.6 db.upsert_schedule_class call this replaces),
-        # tagged with only the Schedule system label and deliberately no
-        # course label, so this stays a search-vs-table test and doesn't
-        # also exercise the (separate, label-driven) filter dropdown.
-        for uid, name, day in (("cl1", "Algorithms", "Monday"), ("cl2", "History", "Tuesday")):
-            row = schedule_logic.build_class_event_row(
-                {"uid": uid, "day": day, "start_time": "09:00", "end_time": "10:00", "title": name, "room": "", "parity": "all", "enrolled": True},
-                {}, [],
-            )
-            db.upsert_event(conn, row)
-            db.set_object_labels(conn, "event", uid, ["Schedule"])
-        resp = schedule_router.classes_view(_request("/schedule?q=Algo"), q="Algo", conn=conn)
-        body = resp.body.decode()
-        assert "Algorithms" in body
-        assert "History" not in body
+# 2026-08-15: TestScheduleToolbarConsistency is deleted -- the whole
+# Schedule module (routers/schedule.py, schedule_classes.html) is removed,
+# see plans/STATE.md's removal entry.

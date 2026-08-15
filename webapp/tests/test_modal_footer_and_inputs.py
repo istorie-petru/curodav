@@ -2,7 +2,6 @@
 (direct user feedback with screenshots of the Edit Event modal):
 
 1. `event_form.html`/`task_form.html`/`contact_form.html`/`habit_form.html`
-   (and `schedule_class_form.html`, found sharing the exact same shape)
    now split their `#modal-target` content into `.modal-header`/
    `.modal-body`/`.modal-footer` sections instead of dumping every field
    plus the Save/Cancel/Delete buttons flat into the body -- so the action
@@ -34,7 +33,6 @@ from src import db
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
 from src.routers import habits as habits_router
-from src.routers import schedule as schedule_router
 from src.routers import tasks as tasks_router
 
 
@@ -119,25 +117,6 @@ def _seed_habit(conn, uid, **overrides):
     return db.get_habit(conn, uid)
 
 
-def _seed_class(conn, uid, **overrides):
-    """1.6: a class is a real recurring event now (see schedule_router's
-    module docstring) -- goes through the actual create_class router
-    function (day/parity default to Monday/all) rather than a removed
-    db.upsert_schedule_class call, then the resulting event's uid is
-    looked up by title (create_class always mints its own uuid, it
-    doesn't take a caller-supplied uid)."""
-    fields = {
-        "day": "Monday", "start_time": "09:00", "end_time": "10:00",
-        "name": uid, "acronym": "", "class_type_select": "", "class_type_other": "",
-        "professor_select": "", "professor_new": "", "room": "", "credits": "0",
-        "parity": "all", "enrolled": "on", "project_uid": "",
-    }
-    fields.update(overrides)
-    schedule_router.create_class(conn=conn, **fields)
-    event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == uid)
-    return schedule_router._class_row(conn, event)
-
-
 def _index(body: str, needle: str) -> int:
     idx = body.find(needle)
     assert idx != -1, f"{needle!r} not found in body"
@@ -192,16 +171,6 @@ class TestModalHeaderBodyFooterSections:
         _seed_habit(conn, "h1")
         resp = habits_router.edit_habit_form("h1", _request("/habits/h1/edit"), conn=conn)
         self._assert_sections(resp.body.decode())
-
-    def test_schedule_class_form_new(self, conn):
-        resp = schedule_router.new_class_form(_request("/schedule/classes/new"), conn=conn)
-        self._assert_sections(resp.body.decode())
-
-    def test_schedule_class_form_edit(self, conn):
-        cls = _seed_class(conn, "cl1")
-        resp = schedule_router.edit_class_form(cls["uid"], _request(f"/schedule/classes/{cls['uid']}/edit"), conn=conn)
-        self._assert_sections(resp.body.decode())
-
 
 class TestFooterButtonPlacement:
     """Save/Cancel(/Delete) must actually sit inside the footer markup,
@@ -407,6 +376,27 @@ class TestContactFormAvatarUploadAndFieldOrder:
         for expected in [
             'recurrence-ends-select',
             'endsWrap.className = "multiselect widget-list-multiselect recurrence-ends-select"',
+        ]:
+            assert expected in js
+
+    def test_recurrence_picker_js_defines_odd_even_week_parity(self):
+        """2026-08-15 follow-up ("just implement odd week, even week
+        recurrence for events") -- Weekly recurrence gets its own "Repeats"
+        sub-dropdown (Every week / odd weeks / even weeks), a separate
+        `.multiselect` sibling of the FREQ preset dropdown, same shape as
+        Ends. Odd/even itself is never stored on the hidden recurrence
+        input -- only `INTERVAL=2` is -- so the picker also derives/snaps
+        the sibling `start_at` field's own ISO week parity client-side."""
+        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
+        js = js_path.read_text(encoding="utf-8")
+        for expected in [
+            "recurrence-parity-select",
+            'parityWrap.className = "multiselect widget-list-multiselect recurrence-parity-select"',
+            '{ value: "odd", label: "Every 2 weeks (odd weeks)" }',
+            '{ value: "even", label: "Every 2 weeks (even weeks)" }',
+            "FREQ=WEEKLY;INTERVAL=2",
+            "function isoWeekParity(",
+            "function applyParitySnap(",
         ]:
             assert expected in js
 

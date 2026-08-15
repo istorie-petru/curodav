@@ -34,7 +34,7 @@ never hold Track A up.
 | `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
-| `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14** | Configurable views + optional Schedule (not started — optional, doesn't block 1.7+) | 1.3 |
+| `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14, Schedule module itself removed 2026-08-15** | Configurable views (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
 | `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | Pagination (not started — optional, doesn't block 1.9+) | 1.1 (WebDAV) + ~~data health~~ (shipped) |
 | `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
@@ -196,14 +196,25 @@ and configurable terminology. `pyproject.toml` bumped to `1.6.0`.
   same pattern as Week starts on/Time format). Presentation-layer only: the
   underlying `holiday_calendar`/`exclude_saturday`/`exclude_sunday` field
   names and semantics never change, only the on-screen label
-  (`_event_form_fields.html`/`schedule_classes.html`, gated by `deps.py`'s
+  (`_event_form_fields.html`, gated by `deps.py`'s
   `recurrence_terminology()` Jinja global) — "Holiday calendar" / "Exclude
   Saturday" / "Exclude Sunday" in standard mode, "Respects Labor Laws" /
   "Marx Weekend: Saturday" / "Marx Weekend: Sunday" in playful mode. **1.6
   is now fully shipped.**
 
-Side work: **Configurable views + optional Schedule module** — best landed now
-that the reworked views are stable, since it toggles them.
+**REMOVED 2026-08-15:** the Schedule module itself (`/schedule`,
+day/time/parity class blocks, semester settings, credits, conflicts) is
+dropped entirely, at explicit request — its one distinguishing feature
+(odd/even-week recurrence) is now available directly on ordinary
+Calendar/Task events, making the dedicated module redundant. The Spaces
+"University module" (Course info/next-lecture badges/Homework table) is
+removed alongside it, since it had no other data source. See
+`plans/abandoned.md` and `plans/STATE.md`'s removal entry;
+`features/schedule.md` is deleted.
+
+Side work: **Configurable views** — best landed now that the reworked
+views are stable, since it toggles them. (The "optional Schedule module"
+half of this side-work item no longer applies — Schedule is gone.)
 
 ### ~~1.7 — New surfaces~~ — shipped 2026-08-14
 

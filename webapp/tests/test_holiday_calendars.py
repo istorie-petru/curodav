@@ -1,11 +1,12 @@
 """1.6 ("Generalized recurrence and the non-working-day policy") -- router-
-level coverage on top of test_recurrence_expand.py's pure-logic tests and
-test_schedule.py's build_class_event_row tests. Covers: named holiday
-calendars round-tripping through db.py, an ordinary Calendar event's
-holiday_calendar/exclude_saturday/exclude_sunday fields surviving create/
-update, and Schedule's class events picking up schedule_settings'
-holiday_calendar (replacing the old per-write EXDATE-stuffing) so a holiday
-add/delete takes effect without touching any event row.
+level coverage on top of test_recurrence_expand.py's pure-logic tests.
+Covers: named holiday calendars round-tripping through db.py, and an
+ordinary Calendar event's holiday_calendar/exclude_saturday/exclude_sunday
+fields surviving create/update.
+
+2026-08-15: `TestScheduleUsesTheGeneralizedMechanism` (Schedule's own class
+events picking up schedule_settings' holiday_calendar) removed along with
+the whole Schedule module -- see plans/STATE.md's removal entry.
 """
 
 from __future__ import annotations
@@ -16,8 +17,6 @@ import pytest
 
 from src import db
 from src.routers import calendar as calendar_router
-from src.routers import schedule as schedule_router
-from src.routers import settings as settings_router
 
 
 @pytest.fixture()
@@ -135,60 +134,3 @@ class TestOrdinaryEventHolidayPolicy:
         # is the excluded holiday -- so the event must not appear at all.
         body = resp.body.decode()
         assert "Class" not in body
-
-
-class TestScheduleUsesTheGeneralizedMechanism:
-    """Schedule's own class events stop computing a static per-holiday
-    EXDATE at write time -- they just carry schedule_settings'
-    holiday_calendar, applied generically at read time."""
-
-    def test_new_class_event_carries_the_configured_holiday_calendar(self, conn):
-        db.save_schedule_settings(conn, {"semester_start": "2026-09-01", "semester_end": "2026-12-20", "holiday_calendar": "University"})
-        schedule_router.create_class(
-            day="Tuesday", start_time="10:00", end_time="12:00", name="Algorithms",
-            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
-            room="", credits="0", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        event = db.list_schedule_class_events(conn)[0]
-        assert event["holiday_calendar"] == "University"
-
-    def test_adding_a_holiday_excludes_the_occurrence_without_regenerating(self, conn):
-        db.save_schedule_settings(conn, {"semester_start": "2026-09-01", "semester_end": "2026-09-22", "holiday_calendar": "University"})
-        schedule_router.create_class(
-            day="Tuesday", start_time="10:00", end_time="12:00", name="Algorithms",
-            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
-            room="", credits="0", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        event_before = db.list_schedule_class_events(conn)[0]
-
-        settings_router.create_holiday(calendar_name="University", label="Break", date_from="2026-09-14", date_to="2026-09-16", conn=conn)
-
-        # The event row itself is untouched (no _regenerate_all call
-        # anymore) -- same recurrence/exdates as before the holiday.
-        event_after = db.list_schedule_class_events(conn)[0]
-        assert event_after["recurrence"] == event_before["recurrence"]
-        assert event_after["exdates"] == event_before["exdates"]
-
-        # But the exclusion is real at read time.
-        from src import recurrence_expand
-
-        expanded = recurrence_expand.expand_events(
-            [event_after], date(2026, 9, 1), date(2026, 9, 30), db.list_holidays_by_calendar(conn)
-        )
-        starts = {e["start_at"] for e in expanded}
-        assert "2026-09-15T10:00:00" not in starts
-
-    def test_renaming_the_settings_holiday_calendar_regenerates_class_events(self, conn):
-        db.save_schedule_settings(conn, {"semester_start": "2026-09-01", "semester_end": "2026-12-20", "holiday_calendar": "Default"})
-        schedule_router.create_class(
-            day="Tuesday", start_time="10:00", end_time="12:00", name="Algorithms",
-            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
-            room="", credits="0", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        schedule_router.save_settings(
-            semester_start="2026-09-01", semester_end="2026-12-20", credits_needed="",
-            reminder_minutes="15", schedule_label="Schedule", holiday_calendar="University",
-            conn=conn,
-        )
-        event = db.list_schedule_class_events(conn)[0]
-        assert event["holiday_calendar"] == "University"

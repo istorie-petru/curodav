@@ -78,6 +78,30 @@ versioning:
   only. Shipped: `open.md` § Universal command surface removed (its remaining
   scope, if wanted later, would need to be re-opened as its own section).
 
+- **Schedule module + University Space section, dropped 2026-08-15.** The
+  university-timetable "classes" feature (`/schedule`, day/time/parity
+  blocks, semester settings, credits, conflicts — `routers/schedule.py`,
+  `src/schedule.py`, `schedule_classes.html`/`schedule_class_form.html`,
+  `schedule_grid.js`/`schedule_table.js`) is removed entirely, your
+  explicit call ("I just want to drop Schedule entirely. It doesn't have a
+  function right now.") — 1.6's odd/even-week recurrence is now available
+  directly on ordinary Calendar/Task events (`recurrence_picker.js`),
+  which fully superseded Schedule's one distinguishing feature. The
+  Spaces "University module" (`_project_university_section.html`'s
+  Course info/next-lecture badges/Homework table) is removed alongside it
+  — confirmed with you directly — since it only ever got its data from
+  Schedule's class-creation form and would be permanently empty
+  otherwise. `db.schedule_settings` (table + `get_schedule_settings`/
+  `save_schedule_settings`/`set_schedule_target_calendar`) and
+  `label_config`'s `course_acronym`/`course_type`/`course_credits`/
+  `course_professor_contact_uid` columns are gone; `schedule_holidays`
+  (named holiday calendars, 1.6 "Generalized non-working-day policy") and
+  everything under "scheduled work"/work allocations
+  (`db.task_work_hours`, the Week Calendar's Unscheduled-work panel,
+  `routers/week.py`, `routers/projects.py`'s calendar, the Timetable
+  sub-view) are unrelated and untouched. See `plans/STATE.md`'s removal
+  entry.
+
 Open work in `open-priority.md` and `open.md` ships as the minor releases
 `1.1` … `1.9` (see [`roadmap.md`](roadmap.md)); once all of it is implemented,
 the next full release is **2.0**.

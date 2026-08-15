@@ -15,7 +15,7 @@
 // CACHE_NAME is bumped whenever this file's own precache list changes --
 // activate's cleanup below deletes any previous cc-shell-* cache, so an
 // old shell version never lingers once a new one has installed.
-const CACHE_NAME = "cc-shell-v5";
+const CACHE_NAME = "cc-shell-v6";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -28,8 +28,6 @@ const SHELL_ASSETS = [
   "/static/recurrence_picker.js",
   "/static/reminders_picker.js",
   "/static/stepper.js",
-  "/static/schedule_table.js",
-  "/static/schedule_grid.js",
   "/static/dashboard_widget_preview.js",
   "/static/avatar_cropper.js",
   "/static/task_habit_field_toggle.js",

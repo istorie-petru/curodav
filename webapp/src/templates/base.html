@@ -71,20 +71,21 @@
          to the new /settings section, reached via the gear icon below
          rather than a tab.
 
-         2026-08-07: Schedule and Contacts restored as primary tabbar
-         destinations (both are fully working, frequently-visited routers
-         that were previously reachable only via the Settings hub) --
-         Databases removed entirely in the same pass (see plans/
-         label-space-rework.md's Grades/Databases deactivation-and-removal
-         note; the feature and every route/table under it is gone, not
-         just unlinked). Schedule's day-to-day Blocks/Holidays view
-         (schedule_classes.html) sets active_tab="schedule" (routers/
-         schedule.py) and highlights this tab. 2026-08-08: Schedule's
-         Settings page was folded back into schedule_classes.html itself
-         (a <details> block, same as Holidays) -- active_tab="schedule_settings"
-         no longer exists, so the tab check below only needs "schedule".
-         Contacts' own sub-pages (detail/edit) all set active_tab="contacts"
-         (routers/contacts.py), unchanged by this rework. -->
+         2026-08-07: Contacts restored as a primary tabbar destination (a
+         fully working, frequently-visited router that was previously
+         reachable only via the Settings hub) -- Databases removed entirely
+         in the same pass (see plans/label-space-rework.md's Grades/
+         Databases deactivation-and-removal note; the feature and every
+         route/table under it is gone, not just unlinked). Contacts' own
+         sub-pages (detail/edit) all set active_tab="contacts" (routers/
+         contacts.py), unchanged by this rework.
+
+         2026-08-15: the Schedule tab (and the whole Schedule module --
+         `/schedule`, day/time/parity class blocks, semester settings) is
+         gone -- odd/even-week recurrence is now available on ordinary
+         Calendar events (`recurrence_picker.js`), which fully superseded
+         Schedule's one distinguishing feature; see plans/STATE.md's
+         removal entry. -->
     <nav class="tabbar" role="navigation" aria-label="Main">
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
@@ -118,7 +119,6 @@
            here, not an HTML comment, for the same reason as the /today//week
            note above -- no stale path text should leak into rendered
            markup. #}
-        <a href="/schedule" data-tab="schedule" class="tab-btn {% if active_tab == 'schedule' %}active{% endif %}">{{ icon('repeat') }}<span>Schedule</span></a>
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
         <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
              user-defined list in the same rail, directly below the five
@@ -259,21 +259,13 @@
 <script src="{{ static_url('recurrence_picker.js') }}"></script>
 <script src="{{ static_url('reminders_picker.js') }}"></script>
 <script src="{{ static_url('stepper.js') }}"></script>
-<!-- Loaded on every page (not just schedule_classes.html's own
-     extra_scripts, as before 2026-08-01) so modal.js's wireContent() can
-     call CCScheduleTable.init()/CCScheduleGrid.init() when Schedule is
-     opened as a modal from somewhere else (_calendar_nav.html) -- see
-     modal.js's wireContent() comment. Both no-op immediately if their
-     target elements aren't on the page, so this is harmless everywhere
-     Schedule isn't involved. -->
-<script src="{{ static_url('schedule_table.js') }}"></script>
-<script src="{{ static_url('schedule_grid.js') }}"></script>
 {#
-    Widget scripts (2026-08-03) -- loaded globally for the same reason as
-    Schedule's above: the Customize modal's Widget Builder and live preview
-    are injected via innerHTML, which never runs <script> tags, so modal.js's
-    wireContent() calls CCWidgetPreview.init against the freshly-injected
-    content. It no-ops instantly when its target elements aren't present.
+    Widget scripts (2026-08-03) -- loaded globally (not just the Customize
+    modal's own extra_scripts) so modal.js's wireContent() can call
+    CCWidgetPreview.init against the freshly-injected content when the
+    Widget Builder/live preview are injected via innerHTML, which never
+    runs <script> tags. It no-ops instantly when its target elements aren't
+    present.
     dashboard_widget_preview.js also self-initializes over the whole page
     for the workspace's own inline Add-widget form.
 
@@ -285,7 +277,7 @@
 #}
 <script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
 <!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
-     -- loaded globally for the same reason as Schedule's own scripts above:
+     -- loaded globally for the same reason as the Widget scripts above:
      contact_form.html is normally injected into the modal via innerHTML,
      which never runs <script> tags, so modal.js's wireContent() calls
      CCAvatarCropper.init(body) against the freshly-injected content. -->

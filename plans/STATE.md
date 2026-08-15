@@ -1680,6 +1680,40 @@ session, right before the final commit of that session.
   gone while the toolbar filters remain). Full suite 1291 passed (no
   count change — a markup-only removal, same reasoning as other pure-
   presentation slices in this file).
+- **Removed:** the **Schedule module + Spaces University module**,
+  complete (2026-08-15), direct user request ("I just want to drop
+  Schedule entirely. It doesn't have a function right now.") — the
+  university-timetable "classes" feature (`/schedule`, day/time/parity
+  blocks, semester settings, credits, conflicts) is dropped entirely:
+  `routers/schedule.py`, `src/schedule.py`, `schedule_classes.html`/
+  `schedule_class_form.html`, `schedule_grid.js`/`schedule_table.js`,
+  `scripts/migrate_schedule_classes_to_events.py`, and their dedicated
+  tests are deleted outright; `main.py`'s router registration and
+  `base.html`'s tabbar entry/scripts are removed. `db.py`'s
+  `schedule_settings` table (+ `get_schedule_settings`/
+  `save_schedule_settings`/`set_schedule_target_calendar`,
+  `list_schedule_class_events`, `list_course_types`) and
+  `label_config`'s `course_acronym`/`course_type`/`course_credits`/
+  `course_professor_contact_uid` columns are gone. The Spaces
+  "University module" (`_project_university_section.html`'s Course
+  info/next-lecture badges/Homework table, `_education_next_lectures.html`,
+  `routers/calendar.py::_group_education_next_lectures`) is removed
+  alongside it — confirmed with the user directly — since it only ever
+  got its data from Schedule's class-creation form and would be
+  permanently empty otherwise; `routers/labels.py::label_detail`'s scope
+  is back to plain tasks/events/contacts. Why now, not deferred:
+  1.6's odd/even-week recurrence (`recurrence_picker.js`) is already
+  available on ordinary Calendar/Task events, which was Schedule's one
+  distinguishing feature — the dedicated module had nothing left to
+  offer. `schedule_holidays` (named holiday calendars) and everything
+  under "scheduled work"/work allocations (`db.task_work_hours`, the Week
+  Calendar's Unscheduled-work panel, `routers/week.py`,
+  `routers/projects.py`'s calendar, the Timetable sub-view) are unrelated
+  and untouched — see `CLAUDE.md`'s own "what NOT to touch" note for this
+  session. `features/schedule.md` deleted; see `plans/abandoned.md` for
+  the full removal record. Full suite 1226 passed (net count: several
+  Schedule-only test files/classes deleted, a couple of nav/export tests
+  extended to assert Schedule's absence).
 - **Next slice:** nothing queued yet toward `1.9` — the next session should
   open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
   the first real slice there (DAVx5 mobile hosting is pure infra, blocked
@@ -1687,9 +1721,10 @@ session, right before the final commit of that session.
   up). In the meantime, any of these smaller, self-contained side-work
   items are fair game for a session that wants a break from that: `open.md`'s
   Command palette actions follow-up (1.2 side work), 1.4's optional Project
-  check-in, 1.6's optional "Configurable views + optional Schedule module",
-  and 1.8's own Pagination/collapsible-sections side work (Phase B of
-  webapp usability, `roadmap.md`'s 1.8 row).
+  check-in, 1.6's optional "Configurable views" (the Schedule half of that
+  side-work item no longer applies — Schedule is gone), and 1.8's own
+  Pagination/collapsible-sections side work (Phase B of webapp usability,
+  `roadmap.md`'s 1.8 row).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

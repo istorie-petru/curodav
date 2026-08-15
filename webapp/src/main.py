@@ -122,7 +122,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, pwa, schedule, search, settings, sync_api, tasks, timeline
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, pwa, search, settings, sync_api, tasks, timeline
 
     app.include_router(dashboard.router)
     app.include_router(search.router)
@@ -139,7 +139,6 @@ def create_app() -> FastAPI:
     app.include_router(pwa.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
-    app.include_router(schedule.router)
     # timeline.router's literal routes (/tasks/timeline, /tasks/timeline/
     # create) must be registered BEFORE tasks.router -- tasks.router
     # defines a catch-all GET /tasks/{uid} (task_detail) that would
