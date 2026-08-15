@@ -19,6 +19,26 @@
 // clobber a recurrence rule this picker doesn't understand. Selecting any
 // preset does replace it, same as picking a different preset always has.
 //
+// 2026-08-15 follow-up ("just implement odd week, even week recurrence for
+// events") -- a "Weekly" recurrence now has its own "Repeats" sub-dropdown
+// (Every week / Every 2 weeks, odd weeks / Every 2 weeks, even weeks),
+// visible only while the Weekly preset is selected, same shape as the
+// "Ends" dropdown right below it. There's no ODD/EVEN keyword in RFC 5545
+// -- an every-2-weeks RRULE (`INTERVAL=2`) already alternates weeks all by
+// itself, and *which* weeks (odd/even ISO week number) is entirely
+// determined by whichever week the event's own `start_at` falls in --
+// exactly how schedule.py's `event_parity` already derives a class's
+// odd/even label from a real event, never a separately stored field (see
+// that module's own docstring). So picking "odd weeks" here does two
+// things: it writes the same `INTERVAL=2` onto the hidden recurrence input,
+// and it snaps the sibling `start_at`(/`end_at`) field forward by 7 days if
+// its current date doesn't already fall in an odd ISO week -- otherwise
+// "odd weeks" starting on an even week would silently mean "even weeks."
+// Reused by both event and task forms (both have a `start_at` field);
+// harmless no-op on any other form the picker also enhances (habit_task_
+// form.html) since the parity snap just does nothing without a sibling
+// `start_at` input to read/write.
+//
 // The underlying real `<input name="recurrence">` is permanently hidden
 // (not conditionally shown/hidden the way it used to be) and keeps its
 // name/value contract exactly as-is -- neither routers/tasks.py's
@@ -54,17 +74,51 @@
     const parts = (value || "").split(";").filter(Boolean);
     let until = "";
     let count = "";
+    let interval2 = false;
     const baseParts = [];
     parts.forEach((part) => {
       if (/^UNTIL=/i.test(part)) {
         until = part.slice(6);
       } else if (/^COUNT=/i.test(part)) {
         count = part.slice(6);
+      } else if (/^INTERVAL=2$/i.test(part)) {
+        interval2 = true;
       } else {
         baseParts.push(part);
       }
     });
-    return { base: baseParts.join(";"), until: until, count: count };
+    return { base: baseParts.join(";"), until: until, count: count, interval2: interval2 };
+  }
+
+  // ISO-8601 week number parity ('odd'/'even') -- mirrors schedule.py's
+  // `iso_week_parity` (Python's `date.isocalendar()[1] % 2`) exactly, so a
+  // date picked here and the same date read back through schedule.py agree
+  // on which weeks it's "odd"/"even" in.
+  function isoWeekParity(dateStr) {
+    if (!dateStr || dateStr.length < 10) return null;
+    const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+    if (!y || !m || !d) return null;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    const dayNum = date.getUTCDay() || 7; // Mon=1..Sun=7
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum); // nearest Thursday
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+    return weekNo % 2 === 1 ? "odd" : "even";
+  }
+
+  // Shifts a `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM` string by `days` calendar
+  // days, keeping whatever time-of-day suffix it already had.
+  function shiftDateStr(dateStr, days) {
+    if (!dateStr || dateStr.length < 10) return dateStr;
+    const datePart = dateStr.slice(0, 10);
+    const rest = dateStr.slice(10);
+    const [y, m, d] = datePart.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    const ny = dt.getUTCFullYear();
+    const nm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const nd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${ny}-${nm}-${nd}${rest}`;
   }
 
   function enhance(input) {
@@ -202,6 +256,75 @@
       neverRadio.checked = true;
     }
 
+    // "Repeats" -- odd/even-week parity, only meaningful for the Weekly
+    // preset (see file header comment). Own dropdown, same shape as
+    // "Ends" right above -- direct feedback established that pattern for
+    // any secondary recurrence choice ("could we make ends another drop
+    // down menu?").
+    const parityRadioName = "recurrence-parity-" + uid; // group only, never submitted
+    const parityWrap = document.createElement("div");
+    parityWrap.className = "multiselect widget-list-multiselect recurrence-parity-select";
+    parityWrap.setAttribute("data-ms", "");
+    parityWrap.setAttribute("data-ms-mode", "single");
+    parityWrap.setAttribute("data-ms-label", "repeats");
+    parityWrap.hidden = true; // toggled by sync() below
+
+    const parityTrigger = document.createElement("button");
+    parityTrigger.type = "button";
+    parityTrigger.className = "multiselect-trigger ms-trigger";
+    parityTrigger.setAttribute("aria-haspopup", "true");
+    parityTrigger.setAttribute("aria-expanded", "false");
+    const paritySummary = document.createElement("span");
+    paritySummary.className = "ms-summary";
+    parityTrigger.appendChild(paritySummary);
+    const parityCaret = document.createElement("span");
+    parityCaret.className = "filter-caret";
+    parityCaret.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>';
+    parityTrigger.appendChild(parityCaret);
+    parityWrap.appendChild(parityTrigger);
+
+    const parityPanel = document.createElement("div");
+    parityPanel.className = "multiselect-panel ms-panel";
+    parityWrap.appendChild(parityPanel);
+
+    const PARITY_OPTIONS = [
+      { value: "", label: "Every week" },
+      { value: "odd", label: "Every 2 weeks (odd weeks)" },
+      { value: "even", label: "Every 2 weeks (even weeks)" },
+    ];
+    const parityRadios = [];
+    PARITY_OPTIONS.forEach((opt) => {
+      const label = document.createElement("label");
+      label.className = "multiselect-option";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = parityRadioName;
+      radio.value = opt.value;
+      label.appendChild(radio);
+      const span = document.createElement("span");
+      span.textContent = opt.label;
+      label.appendChild(span);
+      parityPanel.appendChild(label);
+      parityRadios.push(radio);
+    });
+
+    // Initial parity radio: if the stored recurrence already carries
+    // INTERVAL=2, the sibling start_at field's own ISO week tells us which
+    // of odd/even it currently reads as (schedule.py's `event_parity`
+    // computes the exact same thing off a real event) -- default to "odd"
+    // only if there's no start_at value yet to read (a blank new-event
+    // form).
+    const formEl = input.closest("form");
+    const startInputEl = formEl ? formEl.querySelector('[name="start_at"]') : null;
+    if (parsedCurrent.interval2) {
+      const currentParity = startInputEl ? isoWeekParity(startInputEl.value) : null;
+      const want = currentParity || "odd";
+      const r = parityRadios.find((r) => r.value === want);
+      if (r) r.checked = true;
+    } else {
+      parityRadios[0].checked = true;
+    }
+
     // Both dropdowns are siblings of the same original parent -- insert
     // `endsWrap` before `input` (still a plain child of that parent at
     // this point) so it lands right after `wrap`, *then* move `input`
@@ -211,6 +334,7 @@
     input.setAttribute("autocomplete", "off");
     input.style.display = "none";
     originalParent.insertBefore(wrap, input);
+    originalParent.insertBefore(parityWrap, input);
     originalParent.insertBefore(endsWrap, input);
     wrap.appendChild(input);
 
@@ -227,15 +351,50 @@
       return radios.find((r) => r.checked);
     }
 
+    function checkedParity() {
+      return parityRadios.find((r) => r.checked);
+    }
+
     function isRecurring() {
       const checked = checkedPreset();
       return checked ? !!checked.value : !!currentValue;
+    }
+
+    // The stored base value: the checked preset as-is, except Weekly +
+    // an odd/even parity choice adds `INTERVAL=2` (see file header
+    // comment -- odd vs. even itself is never stored, only implied by
+    // start_at's own ISO week).
+    function baseValue() {
+      const checked = checkedPreset();
+      if (!checked) return null;
+      if (checked.value === "FREQ=WEEKLY") {
+        const parity = checkedParity();
+        return parity && parity.value ? "FREQ=WEEKLY;INTERVAL=2" : "FREQ=WEEKLY";
+      }
+      return checked.value;
     }
 
     function endsSuffix() {
       if (untilRadio.checked && untilInput.value) return ";UNTIL=" + untilInput.value;
       if (countRadio.checked && countInput.value) return ";COUNT=" + countInput.value;
       return "";
+    }
+
+    // Keeps start_at (and end_at, by the same day delta) glued to whichever
+    // ISO-week parity was just picked -- "odd weeks" starting on an even
+    // week would otherwise silently mean "even weeks" the moment it's read
+    // back (see file header comment).
+    function applyParitySnap() {
+      const parity = checkedParity();
+      if (!parity || !parity.value || !startInputEl || !startInputEl.value) return;
+      const current = isoWeekParity(startInputEl.value);
+      if (current && current !== parity.value) {
+        startInputEl.value = shiftDateStr(startInputEl.value, 7);
+        const endInputEl = formEl.querySelector('[name="end_at"]');
+        if (endInputEl && endInputEl.value) {
+          endInputEl.value = shiftDateStr(endInputEl.value, 7);
+        }
+      }
     }
 
     function updateEndsSummary() {
@@ -259,22 +418,34 @@
       summary.textContent = PRESETS.find((p) => p.value === checked.value).label;
     }
 
+    function updateParitySummary() {
+      const parity = checkedParity();
+      paritySummary.textContent = (parity && PARITY_OPTIONS.find((o) => o.value === parity.value).label) || "Every week";
+    }
+
     function sync() {
       const checked = checkedPreset();
       if (checked) {
-        input.value = checked.value ? checked.value + endsSuffix() : "";
+        const base = baseValue();
+        input.value = base ? base + endsSuffix() : "";
       }
       // else: nothing checked (unmatched existing value) -- leave the
       // hidden input's value untouched until the user actually picks a
       // preset.
       endsWrap.hidden = !checked || !checked.value;
+      parityWrap.hidden = !checked || checked.value !== "FREQ=WEEKLY";
       holidayFields.forEach((el) => { el.hidden = !isRecurring(); });
       updateSummary();
       updateEndsSummary();
+      updateParitySummary();
     }
     sync();
 
     radios.forEach((r) => r.addEventListener("change", sync));
+    parityRadios.forEach((r) => r.addEventListener("change", () => {
+      applyParitySnap();
+      sync();
+    }));
     [neverRadio, untilRadio, countRadio].forEach((r) => r.addEventListener("change", sync));
     untilInput.addEventListener("focus", () => {
       untilRadio.checked = true;
