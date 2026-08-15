@@ -36,8 +36,8 @@ never hold Track A up.
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14, Schedule module itself removed 2026-08-15** | Configurable views (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | Pagination (not started — optional, doesn't block 1.9+) | 1.1 (WebDAV) + ~~data health~~ (shipped) |
-| `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
+| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | ~~Pagination~~ **shipped 2026-08-15 (as 1.9 slice)** | 1.1 (WebDAV) + ~~data health~~ (shipped) |
+| `1.9` | ~~Pagination (Tasks table)~~ **shipped 2026-08-15**; Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
 | `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
 
 ## Release detail
@@ -278,9 +278,16 @@ resolution, protocol, PWA shell, GC) now that the open-priority.md design
 section has been marked shipped/struck-through per this repo's own "How
 open work gets tracked" convention.
 
-Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
+Side work: ~~**Pagination / collapsible sections** (Phase B of webapp
+usability)~~ **shipped 2026-08-15, as a 1.9 slice** — see 1.9 below;
+collapsible sections weren't part of that slice's scope.
 
 ### 1.9 — Deployment & polish
+
+**Pagination (Tasks table)** — shipped 2026-08-15: `GET /tasks?page=&limit=`
+paginates the Table view's Open section (highest-traffic target), ungrouped
+view only. See `features/tasks.md` § Views. Collapsible sections and other
+lower-traffic surfaces remain open, not part of this slice.
 
 **DAVx5 mobile hosting** (`open.md` § Webapp usability + DAVx5 hosting) —
 CalDAV/CardDAV sync to a phone via a public HTTPS reverse proxy. Pure infra, no

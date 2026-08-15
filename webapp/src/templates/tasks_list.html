@@ -134,6 +134,11 @@
         {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
     </tbody>
     {% endif %}
+    {% if paginated and total_pages > 1 %}
+    <tbody>
+        <tr class="task-pager-row"><td colspan="9">{% include "_tasks_pager.html" %}</td></tr>
+    </tbody>
+    {% endif %}
     {% if completed_tasks and open_tasks %}
     <!-- Completed tasks stay visible rather than vanishing on check-off,
          but are clearly separated and pushed to the bottom -- a dedicated

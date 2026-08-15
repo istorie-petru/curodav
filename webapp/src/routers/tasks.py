@@ -346,6 +346,8 @@ def list_tasks(
     sort: str = "due_at",
     dir: str = "asc",
     group_by: str = "none",
+    page: int = 1,
+    limit: int = 50,
     conn=Depends(get_db),
 ):
     _auto_archive_if_configured(conn)
@@ -378,14 +380,45 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
+    # 1.9 slice (Webapp usability Phase B, plans/open.md § Webapp usability +
+    # DAVx5 mobile hosting): paginate the open section of the Table view --
+    # the highest-traffic surface named in that doc as the first pagination
+    # target. Applies only in the default ungrouped view (group_by=='none');
+    # group_by=project clusters tasks under per-project header rows, and a
+    # flat page boundary would split a project's own tasks arbitrarily
+    # across pages, so grouped mode is left showing everything, same as
+    # before this slice -- a deliberate, documented scope cut, not an
+    # oversight. limit is clamped to a sane range so a stray ?limit=0 or
+    # ?limit=100000 can't produce a zero-division or an effectively
+    # unpaginated "page". Completed tasks are never paginated: they're
+    # already visually separated below Open, and bounded in practice by the
+    # "Auto-archive completed tasks" setting (_auto_archive_if_configured
+    # above) -- if that turns out wrong at real volume, it's a follow-up,
+    # not a blocker for this slice (open.md's own "live-volume verification
+    # required" note).
+    limit = min(max(limit, 1), 200)
+    page = max(page, 1)
+    paginated = group_by == "none"
+    open_total = len(open_tasks)
+    total_pages = max(1, -(-open_total // limit)) if paginated else 1
+    if paginated:
+        page = min(page, total_pages)
+        open_tasks = open_tasks[(page - 1) * limit : page * limit]
+    else:
+        page = 1
+
     # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
     # plans/open-priority.md § Task model): attach each visible task's
     # scheduled/completed/remaining hours so _task_row.html can render a
     # "Scheduled" column distinct from "Due" -- one batched query
     # (db.task_work_hours_bulk) for the whole page instead of one query per
-    # row, since this list can be every task in the app.
-    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in tasks])
-    for t in tasks:
+    # row. Scoped to open_tasks + completed_tasks (i.e. after the 1.9
+    # pagination slice above) rather than the full filtered `tasks` list, so
+    # a large filtered set only pays for the hours of rows it actually
+    # renders.
+    _rendered = open_tasks + completed_tasks
+    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in _rendered])
+    for t in _rendered:
         t["work_hours"] = _hours[t["uid"]]
 
     # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
@@ -430,6 +463,11 @@ def list_tasks(
             "dir": dir,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "paginated": paginated,
+            "page": page,
+            "limit": limit,
+            "open_total": open_total,
+            "total_pages": total_pages,
         }
     )
     return templates.TemplateResponse("tasks_list.html", ctx)

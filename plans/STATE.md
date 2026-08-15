@@ -1714,17 +1714,36 @@ session, right before the final commit of that session.
   the full removal record. Full suite 1226 passed (net count: several
   Schedule-only test files/classes deleted, a couple of nav/export tests
   extended to assert Schedule's absence).
-- **Next slice:** nothing queued yet toward `1.9` — the next session should
-  open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
-  the first real slice there (DAVx5 mobile hosting is pure infra, blocked
-  on an external domain + server, so likely not the first thing to pick
-  up). In the meantime, any of these smaller, self-contained side-work
-  items are fair game for a session that wants a break from that: `open.md`'s
-  Command palette actions follow-up (1.2 side work), 1.4's optional Project
-  check-in, 1.6's optional "Configurable views" (the Schedule half of that
-  side-work item no longer applies — Schedule is gone), and 1.8's own
-  Pagination/collapsible-sections side work (Phase B of webapp usability,
-  `roadmap.md`'s 1.8 row).
+- **Shipped:** `1.9` slice — **Tasks table pagination**, complete
+  (2026-08-15) — `GET /tasks?page=&limit=` (`routers/tasks.py::list_tasks`)
+  paginates the Open section, default 50/page, `limit` clamped to 1-200,
+  applied after every existing filter/sort. Ungrouped view only
+  (`group_by=none`, the default): `group_by=project` clusters tasks under
+  per-project header rows where a flat page boundary would split a
+  project's own tasks arbitrarily, so grouped mode still shows everything,
+  unpaginated — a deliberate, documented scope cut, not an oversight.
+  Completed tasks are never paginated (already visually separated below
+  Open, bounded in practice by the auto-archive setting). New
+  `_tasks_pager.html` partial (Prev/Next `.icon-btn`s, preserves every
+  active filter/sort/search param), `.pager`/`.pager-summary` styles in
+  `style.css`. `db.task_work_hours_bulk`'s call site was also narrowed to
+  only the tasks actually rendered post-pagination (open page + all
+  completed) instead of the whole filtered set, a small efficiency
+  side-benefit of the same change. This was Webapp usability's Phase B
+  (the DAVx5 Phase C piece is unrelated and still blocked on infra); see
+  `features/tasks.md` § Views. 13 new tests (`test_tasks_pagination.py`),
+  full suite 1239 passed.
+- **Next slice:** nothing queued yet toward the rest of `1.9` — DAVx5
+  mobile hosting (`open.md` § Webapp usability + DAVx5 hosting, Phase C) is
+  pure infra, blocked on an external domain + server the user doesn't have
+  yet (confirmed directly, 2026-08-15) — don't start it until that changes.
+  In the meantime, any of these smaller, self-contained side-work items are
+  fair game for a session that wants a break: `open.md`'s Command palette
+  actions follow-up (1.2 side work), 1.4's optional Project check-in, and
+  1.6's optional "Configurable views" (the Schedule half of that side-work
+  item no longer applies — Schedule is gone). Collapsible sections (the
+  other half of Webapp usability Phase B) also remains open if a session
+  wants to stay in that area.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

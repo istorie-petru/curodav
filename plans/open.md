@@ -126,12 +126,14 @@ form/detail/list UI → its own test file).
 
 ## Webapp usability + DAVx5 mobile hosting
 
-**Status:** Phase A shipped. Two genuinely open pieces:
+**Status:** Phase A shipped. ~~Pagination / collapsible sections (Phase B)~~
+**shipped 2026-08-15** — the Tasks table's Open section, the highest-traffic
+target named here; see `features/tasks.md` § Views, "Pagination (1.9,
+Webapp usability Phase B)". Collapsible sections and other lower-traffic
+surfaces (Schedule/etc., to the extent they still apply post-Schedule-
+removal) are deliberately deferred — not part of this slice. One genuinely
+open piece remains:
 
-- **Pagination / collapsible sections** (Phase B): no `?page=`/`?limit=`
-  convention or pager partial exists; the Tasks table is the highest-traffic
-  target, then Schedule/etc. Live-volume verification required, not just
-  "the template renders."
 - **DAVx5 mobile access** (Phase C): a phone running DAVx5 syncs CalDAV/CardDAV
   against Radicale through a public HTTPS reverse proxy (Caddy) with real bcrypt
   auth — pure infra (a `deploy/` directory: Caddyfile, firewall rules, prod

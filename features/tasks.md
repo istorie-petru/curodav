@@ -25,7 +25,16 @@ section below.
   it's just not linked from a Table column header anymore. Bulk-actions bar
   (checkbox select → `POST /tasks/bulk` with `delete`/`status`/`tag`
   add-remove). Every task delete is the undo path — tasks are flat (1.2), so
-  no delete cascades.
+  no delete cascades. **Pagination (1.9, Webapp usability Phase B)** — the
+  Open section pages via `?page=`/`?limit=` (default 50/page, clamped
+  1-200), applied after filtering/sorting; a `_tasks_pager.html` Prev/Next
+  bar renders below Open when there's more than one page, preserving every
+  active filter/sort/search param. Ungrouped view only (`group_by=none`,
+  the default): `group_by=project` clusters tasks under per-project header
+  rows where a flat page boundary would arbitrarily split a project's own
+  tasks, so grouped mode still shows everything, unpaginated. Completed
+  tasks are never paginated (already visually separated below Open, and
+  bounded in practice by the auto-archive setting).
 - **Board** (`/tasks/board`) — kanban columns per status (archived excluded),
   pointer-event drag-drop (`DRAG_THRESHOLD=6`), optimistic move via the same
   `update-field` endpoint. Cards carry both axes as pills.

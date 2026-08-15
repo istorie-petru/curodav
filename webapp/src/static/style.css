@@ -1258,6 +1258,12 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   padding:8px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
 }
+/* Tasks Table view's Open-section pager (1.9, Webapp usability Phase B,
+   _tasks_pager.html) -- one row spanning the table, reusing .icon-btn for
+   Prev/Next rather than introducing a new button variant. */
+.task-pager-row td{padding:6px 10px; border-bottom:none;}
+.pager{display:flex; align-items:center; gap:4px;}
+.pager-summary{font-size:var(--text-caption); color:var(--fg-tertiary);}
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;
