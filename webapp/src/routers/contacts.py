@@ -62,6 +62,23 @@ def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
+def _parse_birthday_field(birthday: str) -> str | None:
+    """Contacts field parity slice 4 of 6 -- validates a create/edit form's
+    raw `birthday` text against db.parse_contact_birthday's two accepted
+    shapes (full "YYYY-MM-DD" or year-less "--MM-DD"), same "reject with a
+    clear 400 rather than silently storing garbage" convention this app's
+    other plain-form validation (e.g. single-project-per-task) already
+    uses. A blank field is "no birthday," not an error -- same as every
+    other optional contact field on this router."""
+    v = (birthday or "").strip()
+    if not v:
+        return None
+    try:
+        return db.parse_contact_birthday(v)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 def _phone_email_list(types: list[str], values: list[str]) -> list[dict]:
     """Zips a create/edit form's parallel `*_type[]`/`*_value[]` arrays
     into the {"type", "value"} shape db.set_contact_phones/
@@ -152,6 +169,7 @@ async def create_contact(
     website_type: list[str] = Form([]),
     website_url: list[str] = Form([]),
     address: str = Form(""),
+    birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
@@ -159,6 +177,7 @@ async def create_contact(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
     now = datetime.now(timezone.utc).isoformat()
@@ -183,6 +202,11 @@ async def create_contact(
         # contact_websites column naming, not "value").
         "websites": _website_list(website_type, website_url),
         "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+        # Contacts field parity slice 4 of 6 -- Birthday, single-value (no
+        # form-array shape like phone/email/website above -- a contact has
+        # at most one). `_parse_birthday_field` already validated/
+        # normalized it (or raised a 400) before this dict is built.
+        "birthday": birthday_value,
         "tags": _tags_list(tags),
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
         "photo_b64": photo_b64,
@@ -239,6 +263,7 @@ async def update_contact(
     website_type: list[str] = Form([]),
     website_url: list[str] = Form([]),
     address: str = Form(""),
+    birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
@@ -247,6 +272,7 @@ async def update_contact(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
     row = dict(existing)
     row.update(
@@ -264,6 +290,7 @@ async def update_contact(
             "emails": _phone_email_list(email_type, email_value),
             "websites": _website_list(website_type, website_url),
             "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+            "birthday": birthday_value,
             "tags": _tags_list(tags),
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),

@@ -178,6 +178,23 @@
             <label>Address</label>
             <input type="text" name="address" value="{{ contact.address if contact else '' }}">
         </div>
+        <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
+             single-value (unlike Phone/Email/Website above -- a contact has
+             at most one, no add/remove rows). Plain text input rather than
+             a native `<input type="date">`, since a year-less birthday
+             (green-lit, AskUserQuestion, 2026-08-15) has no HTML date-input
+             equivalent -- a `<input type="date">` always requires a year.
+             `pattern` is a client-side hint only; routers/contacts.py's
+             `_parse_birthday_field` (db.parse_contact_birthday) is the real
+             validation, same "plain form, server validates" convention as
+             every other field on this form (see e.g. the phone/email type
+             `<select>`s falling back to "Other" server-side rather than a
+             stricter client-only guard). -->
+        <div class="field">
+            <label>Birthday</label>
+            <input type="text" name="birthday" value="{{ contact.birthday if contact else '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
+            <span class="field-hint">Full date, or --MM-DD if you don't know the year.</span>
+        </div>
         <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
              Phase B), same pattern as task_form.html -- see that
              template's own comment. -->

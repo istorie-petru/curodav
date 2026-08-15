@@ -87,6 +87,17 @@
             <span class="detail-meta-value">{{ contact.address }}</span>
         </div>
         {% endif %}
+        <!-- Contacts field parity slice 4 of 6: Birthday, single-value, the
+             stored raw "YYYY-MM-DD"/"--MM-DD" text rendered human-readable
+             via the fmt_birthday filter (deps.py -> db.format_contact_
+             birthday) -- "May 17, 1990" for a full date, "May 17" (no
+             year) for a year-less one. -->
+        {% if contact.birthday %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Birthday</span>
+            <span class="detail-meta-value">{{ contact.birthday | fmt_birthday }}</span>
+        </div>
+        {% endif %}
         {% if contact.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
@@ -100,7 +111,7 @@
         <p>{{ contact.notes }}</p>
     </div>
     {% endif %}
-    {% if not (contact.phones or contact.emails or contact.websites or contact.address or contact.tags or contact.notes) %}
+    {% if not (contact.phones or contact.emails or contact.websites or contact.address or contact.birthday or contact.tags or contact.notes) %}
     <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
     {% endif %}
 </div>

@@ -443,6 +443,19 @@ def _fmt_hour(ctx, hour: int) -> str:
 templates.env.filters["fmt_hour"] = _fmt_hour
 
 
+def _fmt_birthday(value: str | None) -> str:
+    """Jinja filter for Contacts field parity slice 4 of 6 (Birthday) --
+    `{{ contact.birthday | fmt_birthday }}` to render the stored raw
+    "YYYY-MM-DD"/"--MM-DD" string as "May 17, 1990"/"May 17". No @pass_context
+    needed (unlike fmt_time/fmt_hour) -- birthday display has no per-request
+    Settings preference the way 24h/12h time format does, it's a pure
+    function of the stored value (db.format_contact_birthday)."""
+    return db.format_contact_birthday(value)
+
+
+templates.env.filters["fmt_birthday"] = _fmt_birthday
+
+
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     with db.connect(request.app.state.settings.db_path) as conn:
         yield conn

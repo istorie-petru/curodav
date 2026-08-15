@@ -91,7 +91,7 @@ class TestCreateEditFlowHasNoCategory:
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="Navy",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="Professor, CS", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="Professor, CS", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert "category" not in row
@@ -102,7 +102,7 @@ class TestCreateEditFlowHasNoCategory:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="Mathematician", notes="", photo=None,
+            address="", birthday="", tags="Mathematician", notes="", photo=None,
             remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)

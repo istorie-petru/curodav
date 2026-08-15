@@ -2238,6 +2238,48 @@ session, right before the final commit of that session.
   the new arrays at every existing call site" step Phone/Email's own
   slice needed. Full suite 1457 passed. **Next in this build order:
   Birthday** (full or year-less date, 4 of 6).
+- **Shipped:** **Contacts field parity slice 4 of 6 — Birthday**, complete
+  (2026-08-16) — single-value (unlike Phone/Email/Website above — a
+  contact has at most one birthday), so a plain `contacts.birthday`
+  column (`_ensure_column`), not a child table. Stores vCard's own BDAY
+  text verbatim: a full `YYYY-MM-DD` date, or a year-less `--MM-DD` date
+  (green-lit alongside the other Contacts field parity decisions,
+  2026-08-15). New `db.parse_contact_birthday` validates a create/edit
+  form's raw text against both shapes using real calendar-date rules
+  (`datetime.strptime`, not just a regex — rejects e.g. `1990-02-30`; a
+  year-less date is checked against a dummy leap year, 2000, so `--02-29`
+  validates) — `routers/contacts.py`'s one call site before
+  `db.upsert_contact` ever runs, raising a 400 on anything else so a
+  rejected save never partially writes (same convention
+  single-project-per-task's `MultipleProjectLabelsError` handling uses).
+  New `db.format_contact_birthday` is the display side ("May 17, 1990" /
+  "May 17"), falling back to the raw stored value unchanged for a shape
+  this app didn't write itself. vCard round-trips through one BDAY line —
+  confirmed directly against vobject before writing `vcard_rows.py` that a
+  plain string `.value` (not a `date` object) round-trips both shapes
+  byte-for-byte on both write and read, so no date-parsing is needed
+  anywhere in this app. The create/edit form uses a plain text input
+  (`contact_form.html`, new `.field-hint` CSS shared with any future
+  plain-form hint text), not a native `<input type="date">`, since a
+  year-less birthday has no HTML date-input equivalent — `pattern` is a
+  client-side hint only, the router's `_parse_birthday_field` is the real
+  validation. The detail page renders it through a new `fmt_birthday`
+  Jinja filter (`deps.py`). Deliberately not searched
+  (`db._search_contacts`/`list_contacts`) — same precedent as Address, the
+  other single-value field, which isn't searched either. See
+  `features/contacts.md`. 35 new tests
+  (`test_contacts_field_parity_birthday.py`); updated 20 existing
+  contact-route call sites across 6 test files
+  (`test_contacts_field_parity_phone_email.py`,
+  `test_contacts_field_parity_title.py`,
+  `test_contacts_field_parity_website.py`,
+  `test_modal_input_phaseB_chip_multiselect.py`,
+  `test_phase1_universal_pool.py`, `test_phase5_contacts.py`) that call
+  `contacts_router.create_contact`/`update_contact` directly, off the new
+  required `birthday` form param — same "wire up the new field at every
+  existing call site" step Website's own slice needed. Full suite 1492
+  passed. **Next in this build order: Address** (structured multi-value,
+  full vCard ADR, 5 of 6).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

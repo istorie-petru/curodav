@@ -184,7 +184,32 @@ its own test file).
   subtitle fields). Search matches website URLs too. See
   `features/contacts.md`. 26 new tests
   (`test_contacts_field_parity_website.py`), full suite 1457 passed.
-- **Birthday** (full or year-less date) — not started.
+- ~~**Birthday**~~ — **shipped 2026-08-16** — single-value (unlike Phone/
+  Email/Website — a contact has at most one), new `contacts.birthday`
+  column storing vCard's own BDAY text verbatim: a full "YYYY-MM-DD" date,
+  or a year-less "--MM-DD" date (green-lit, AskUserQuestion, 2026-08-15).
+  `db.parse_contact_birthday` validates a create/edit form's raw text
+  against both shapes (real calendar-date validation via `datetime.strptime`,
+  not just a regex — rejects e.g. `1990-02-30`; a year-less date validates
+  against a dummy leap year so `--02-29` is accepted) and is the one call
+  site `routers/contacts.py` uses before ever reaching `upsert_contact`,
+  400 on anything else. `db.format_contact_birthday` is the reverse: "May
+  17, 1990" / "May 17" for display, falling back to the raw stored value
+  unchanged for a shape this app didn't write itself (e.g. a bare
+  `19900517` from another CardDAV client). vCard round-trips through a
+  single BDAY line — vobject treats a string `.value` as opaque text on
+  both write and read, confirmed directly against vobject before writing
+  `vcard_rows.py`, so no `date`-object parsing is needed anywhere in this
+  app just to round-trip either shape. Plain text input on the create/edit
+  form (`contact_form.html`, new `.field-hint` CSS), not a native
+  `<input type="date">`, since a year-less birthday has no HTML date-input
+  equivalent; the detail page shows it formatted via a new `fmt_birthday`
+  Jinja filter (`deps.py`). Not searched (`db._search_contacts`/
+  `list_contacts`) — same precedent as Address, the other single-value
+  field, which isn't searched either. See `features/contacts.md`. 35 new
+  tests (`test_contacts_field_parity_birthday.py`); 20 existing call sites
+  across 6 test files updated for the new `birthday` form param, full suite
+  1492 passed.
 - **Address** (structured multi-value, full vCard ADR) — not started.
 - **Social network** (`X-SOCIALPROFILE`) — not started.
 

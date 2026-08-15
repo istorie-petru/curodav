@@ -3875,6 +3875,12 @@ body.command-palette-open{overflow:hidden;}
 .banner-upload-input{display:none;}
 .banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
 
+/* Generic plain-form field hint (contact_form.html's Birthday field,
+   Contacts field parity slice 4 of 6) -- same footnote-size/tertiary-color
+   shape as .settings-field-hint/.banner-upload-hint above, just not scoped
+   to Settings or the banner uploader specifically. */
+.field-hint{display:block; font-size:var(--text-footnote); color:var(--fg-tertiary); margin-top:2px;}
+
 /* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
    upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,
    when a photo exists, the sibling Remove button. The two forms sit side by

@@ -263,7 +263,7 @@ class TestCreateEditFlow:
             full_name="Grace Hopper", title="", org="",
             phone_type=["Cell", "Work"], phone_value=["555-1111", "555-2222"],
             email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert [(p["type"], p["value"]) for p in row["phones"]] == [("Cell", "555-1111"), ("Work", "555-2222")]
@@ -274,7 +274,7 @@ class TestCreateEditFlow:
             phone_type=[], phone_value=[],
             email_type=["Home", "Work"], email_value=["g@home.com", "g@work.com"],
             website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert [(e["type"], e["value"]) for e in row["emails"]] == [("Home", "g@home.com"), ("Work", "g@work.com")]
@@ -283,7 +283,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="No Contact Info", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["phones"] == []
@@ -294,7 +294,7 @@ class TestCreateEditFlow:
             full_name="Blank Row", title="", org="",
             phone_type=["Home"], phone_value=[""],
             email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["phones"] == []
@@ -306,7 +306,7 @@ class TestCreateEditFlow:
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=["Cell"], phone_value=["555-9999"],
             email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, remove_photo="", conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
         assert [(p["type"], p["value"]) for p in row["phones"]] == [("Cell", "555-9999")]
@@ -317,7 +317,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, remove_photo="", conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
         assert row["phones"] == []

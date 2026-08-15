@@ -31,7 +31,17 @@ a `card.url_list` read-back identically to tel/email -- confirmed directly
 against vobject (not assumed) before writing this: building a card with two
 `card.add("url")` calls round-trips as two `URL;TYPE=...:` lines and
 `card.url_list` returns both, `type_param` included, the exact same shape
-as `tel_list`/`email_list`."""
+as `tel_list`/`email_list`.
+
+Contacts field parity slice 4 of 6 (Birthday): `birthday` is a single raw
+text value (db.py's `contacts.birthday` column -- no child table, unlike
+phone/email/website, since a contact has at most one), round-tripped
+through vCard's single-instance BDAY property. Stored either as a full
+"YYYY-MM-DD" or a year-less "--MM-DD" (db.parse_contact_birthday/
+format_contact_birthday own that validation/display split); vobject
+treats a string BDAY value as opaque text on both write and read, so
+either shape passes through unchanged -- confirmed directly against
+vobject before writing this."""
 
 from __future__ import annotations
 
@@ -104,6 +114,17 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
         vcard_type = _TYPE_TO_VCARD.get(website.get("type") or "Other")
         if vcard_type:
             prop.type_param = vcard_type
+    # Birthday (Contacts field parity slice 4 of 6): stored and emitted as
+    # a raw text BDAY value -- either a full "YYYY-MM-DD" or a year-less
+    # "--MM-DD" (db.parse_contact_birthday/format_contact_birthday). Setting
+    # `.value` to a plain string (not a `date`/`datetime` object) is what
+    # keeps vobject from trying to parse/reformat it -- confirmed directly
+    # against vobject (both shapes round-trip byte-for-byte through
+    # serialize()/readOne()) before writing this, not assumed; see the
+    # module docstring's phone/email/website precedent for the same
+    # "confirmed against vobject" habit.
+    if row.get("birthday"):
+        card.add("bday").value = row["birthday"]
     if row.get("address"):
         card.add("adr").value = vobject.vcard.Address(street=row["address"])
     if row.get("tags"):
@@ -172,6 +193,15 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
         for url in getattr(card, "url_list", [])
         if url.value
     ]
+    # Birthday (Contacts field parity slice 4 of 6): `.value` comes back as
+    # whatever raw text was on the BDAY line -- vobject never parses it into
+    # a `date` on read either (confirmed the same way as the write side
+    # above), so this is a plain string copy, not a reformat. A BDAY from
+    # another CardDAV client in some other shape (e.g. bare `19900517`, no
+    # dashes) is stored as-is too; db.format_contact_birthday falls back to
+    # showing it unchanged rather than guessing at a reformat.
+    if hasattr(card, "bday") and card.bday.value:
+        row["birthday"] = str(card.bday.value)
     if hasattr(card, "adr"):
         adr = card.adr.value
         row["address"] = getattr(adr, "street", "") or str(adr)

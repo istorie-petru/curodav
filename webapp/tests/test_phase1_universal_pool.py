@@ -109,7 +109,7 @@ class TestContactCrudNeverTouchesBridge:
 
         asyncio.run(contacts_router.create_contact(
             full_name="Ada Lovelace", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address="", birthday="",
             tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]

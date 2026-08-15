@@ -48,6 +48,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -1027,6 +1028,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # migrate_legacy_contact_phone_email's own docstring for why it's safe
     # to call unconditionally (idempotent).
     migrate_legacy_contact_phone_email(conn)
+    # Contacts field parity slice 4 of 6 -- Birthday. Single-value (unlike
+    # Phone/Email/Website), so no child table -- just one more column, same
+    # "added after the table already existed on disk" situation as title/
+    # photo_b64/photo_type above. Stores the vCard BDAY value verbatim as
+    # text: a full date "YYYY-MM-DD", or a year-less date "--MM-DD" (green-
+    # lit 2026-08-15, AskUserQuestion) -- vobject treats a string BDAY value
+    # as opaque text and serializes/reads it back unchanged either way
+    # (confirmed directly against vobject before writing vcard_rows.py, not
+    # assumed -- see that module's docstring), so there's no need to parse
+    # into a `date` object anywhere in this app just to round-trip it.
+    _ensure_column(conn, "contacts", "birthday", "TEXT")
     # Schedule class -> contact link, same "column added after the table
     # already existed on disk" situation as the others above. Guarded on
     # table existence (unlike every other _ensure_column call here) because
@@ -2501,6 +2513,63 @@ CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 # has no CELL/FAX/PAGER concept either.
 CONTACT_WEBSITE_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 
+# Contacts field parity slice 4 of 6 -- Birthday. Single-value, so there's
+# no *_TYPES vocabulary the way phone/email/website have one -- just the
+# two accepted storage shapes (see upsert_contact's ensure_column comment
+# for why raw text, not a `date`). `parse_contact_birthday` is what
+# routers/contacts.py calls to validate a create/edit form's raw
+# `birthday` field before it ever reaches upsert_contact -- returns the
+# canonical stored string, or raises ValueError on anything else (leading/
+# trailing whitespace tolerated, an empty string is the caller's job to
+# treat as "no birthday" before calling this at all).
+_BIRTHDAY_FULL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_BIRTHDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
+
+
+def parse_contact_birthday(value: str) -> str:
+    v = (value or "").strip()
+    if _BIRTHDAY_FULL_RE.match(v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'") from exc
+        return v
+    if _BIRTHDAY_YEARLESS_RE.match(v):
+        month, day = v[2:4], v[5:7]
+        try:
+            # 2000 is a leap year -- lets a real "--02-29" (Feb 29, no
+            # year) validate, same as it would for someone born in an
+            # actual leap year, without this function needing to know
+            # which specific years were leap years.
+            datetime.strptime(f"2000-{month}-{day}", "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'") from exc
+        return v
+    raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'")
+
+
+_BIRTHDAY_MONTHS = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+
+
+def format_contact_birthday(value: str | None) -> str:
+    """Human-readable display form for a stored birthday string --
+    "May 17, 1990" for a full date, "May 17" (no year) for a year-less
+    one. Returns the raw stored value unchanged if it doesn't match either
+    known shape (a hand-edited vCard from another CardDAV client could
+    carry a BDAY this app didn't write, e.g. a bare `19900517` -- showing
+    the original text is safer than guessing at a reformat)."""
+    v = (value or "").strip()
+    if _BIRTHDAY_FULL_RE.match(v):
+        year, month, day = v.split("-")
+        return f"{_BIRTHDAY_MONTHS[int(month) - 1]} {int(day)}, {year}"
+    if _BIRTHDAY_YEARLESS_RE.match(v):
+        month, day = v[2:4], v[5:7]
+        return f"{_BIRTHDAY_MONTHS[int(month) - 1]} {int(day)}"
+    return v
+
 
 def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
@@ -2517,7 +2586,7 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     websites = data.pop("websites", None)
     cols = [
         "uid", "full_name", "title", "org",
-        "phone", "email", "address", "notes",
+        "phone", "email", "address", "birthday", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]

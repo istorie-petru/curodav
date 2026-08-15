@@ -66,6 +66,30 @@
   compact-row fields. Search matches website URLs too. See `plans/
   open.md` for the remaining fields (structured Address, Birthday, Social
   network).
+- **Birthday (single-value)** — Contacts field parity slice 4 of 6,
+  2026-08-16. Unlike Phone/Email/Website, a contact has at most one
+  birthday, so this is a plain `contacts.birthday` column, not a child
+  table. Stores vCard's own BDAY text verbatim — a full `YYYY-MM-DD` date,
+  or a year-less `--MM-DD` date (green-lit, AskUserQuestion, 2026-08-15).
+  `db.parse_contact_birthday` validates a create/edit form's raw text
+  against both shapes using real calendar-date rules (`datetime.strptime`,
+  not just a regex — rejects e.g. `1990-02-30`; a year-less date is
+  checked against a dummy leap year so `--02-29` validates), the one call
+  site `routers/contacts.py` uses before ever reaching `db.upsert_contact`
+  — a 400 on anything else, never a partial write. `db.format_contact_
+  birthday` is the display side: "May 17, 1990" / "May 17", falling back
+  to the raw stored value unchanged for a shape this app didn't write
+  itself (e.g. a bare `19900517` from another CardDAV client). vCard
+  round-trips through a single BDAY line — vobject treats a string
+  `.value` as opaque text on both write and read (confirmed directly
+  against vobject before writing `vcard_rows.py`), so neither shape needs
+  parsing into a `date` object anywhere in this app. The create/edit form
+  uses a plain text input (`contact_form.html`), not a native
+  `<input type="date">`, since a year-less birthday has no HTML
+  date-input equivalent; the detail page renders it through a new
+  `fmt_birthday` Jinja filter (`deps.py`). Not searched — same precedent
+  as Address, the other single-value field. See `plans/open.md` for the
+  remaining fields (structured Address, Social network).
 - **Routes** — `/contacts`, `/contacts/new`, `POST /contacts`,
   `/contacts/{uid}`, `/contacts/{uid}/edit`, `POST /contacts/{uid}`,
   `/contacts/{uid}/delete`.

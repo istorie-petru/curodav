@@ -119,7 +119,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="Rear Admiral", org="Navy",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="",
+            address="", birthday="", tags="", notes="",
             photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -129,7 +129,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="No Title", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None, conn=conn,
+            address="", birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["title"] is None
@@ -139,7 +139,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="Senior Engineer",
             org="", phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="",
+            address="", birthday="", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -150,7 +150,7 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", tags="", notes="", photo=None,
+            address="", birthday="", tags="", notes="", photo=None,
             remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
