@@ -19,6 +19,8 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
     name = card.add("n")
     name.value = vobject.vcard.Name(given=row.get("full_name") or "")
 
+    if row.get("title"):
+        card.add("title").value = row["title"]
     if row.get("org"):
         card.add("org").value = [row["org"]]
     if row.get("phone"):
@@ -62,6 +64,8 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
     # branch below now checks the actual value is truthy before storing it,
     # same as every other optional field here (adr/categories/note already
     # did this implicitly via `or`/isinstance guards).
+    if hasattr(card, "title") and card.title.value:
+        row["title"] = str(card.title.value)
     if hasattr(card, "org") and card.org.value:
         org_val = card.org.value
         row["org"] = org_val[0] if isinstance(org_val, list) else str(org_val)

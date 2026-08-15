@@ -112,6 +112,7 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
 @router.post("")
 async def create_contact(
     full_name: str = Form(...),
+    title: str = Form(""),
     org: str = Form(""),
     phone: str = Form(""),
     email: str = Form(""),
@@ -129,6 +130,7 @@ async def create_contact(
     row = {
         "uid": str(uuid.uuid4()),
         "full_name": full_name,
+        "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
         "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
         "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
@@ -177,6 +179,7 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
 async def update_contact(
     uid: str,
     full_name: str = Form(...),
+    title: str = Form(""),
     org: str = Form(""),
     phone: str = Form(""),
     email: str = Form(""),
@@ -195,6 +198,7 @@ async def update_contact(
         {
             "uid": uid,
             "full_name": full_name,
+            "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
             "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
             "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
             "email": email if email and email.strip().lower() not in ("none", "nothing") else None,

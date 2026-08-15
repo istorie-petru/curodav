@@ -73,6 +73,10 @@
              Category field removed (Phase 5, label-space rework) --
              grouping is now purely via the Tags field below. -->
         <div class="field">
+            <label>Title</label>
+            <input type="text" name="title" value="{{ contact.title if contact else '' }}">
+        </div>
+        <div class="field">
             <label>Organization</label>
             <input type="text" name="org" value="{{ contact.org if contact else '' }}">
         </div>

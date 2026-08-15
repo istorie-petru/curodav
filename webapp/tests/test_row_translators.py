@@ -114,6 +114,7 @@ class TestContactRow:
         row = {
             "uid": "person-1",
             "full_name": "Jane Doe",
+            "title": "Product Manager",
             "org": "Acme",
             "phone": "+15550100",
             "email": "jane@example.com",
@@ -126,6 +127,7 @@ class TestContactRow:
         result = vcard_to_contact_row(card)
 
         assert result["full_name"] == row["full_name"]
+        assert result["title"] == row["title"]
         assert result["org"] == row["org"]
         assert result["phone"] == row["phone"]
         assert result["email"] == row["email"]

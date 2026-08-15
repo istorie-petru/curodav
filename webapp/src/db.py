@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS contacts (
     uid TEXT PRIMARY KEY,
     full_name TEXT NOT NULL DEFAULT '',
+    title TEXT,
     org TEXT,
     phone TEXT,
     email TEXT,
@@ -890,6 +891,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # (never queried by, just read/written per-row), so no landmine here.
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
+    # Contacts field parity with Nextcloud Contacts (open.md), slice 1 of 6
+    # (Title -> Phone/Email -> Website -> Birthday -> Address -> Social
+    # network, per the build order recorded there). Title is the vCard
+    # TITLE property (a person's job title, e.g. "Software Engineer") --
+    # distinct from `org` (their organization's name, vCard ORG). Same
+    # "column added after the table already existed on disk" situation as
+    # photo_b64/photo_type immediately above.
+    _ensure_column(conn, "contacts", "title", "TEXT")
     # Schedule class -> contact link, same "column added after the table
     # already existed on disk" situation as the others above. Guarded on
     # table existence (unlike every other _ensure_column call here) because
@@ -2222,10 +2231,10 @@ def _search_contacts(
     if q:
         like = f"%{q}%"
         clauses.append(
-            "(full_name LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
+            "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
             "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?))"
         )
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like, like, like])
     if labels:
         placeholders = ", ".join("?" for _ in labels)
         clauses.append(
@@ -2244,7 +2253,7 @@ def _search_contacts(
     out: list[dict[str, Any]] = []
     for r in rows:
         d = _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))
-        subtitle = d.get("org") or d.get("email") or d.get("phone") or ""
+        subtitle = d.get("org") or d.get("title") or d.get("email") or d.get("phone") or ""
         out.append(
             {
                 "type": "contact",
@@ -2345,7 +2354,7 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
     cols = [
-        "uid", "full_name", "org",
+        "uid", "full_name", "title", "org",
         "phone", "email", "address", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at",
     ]
@@ -2384,9 +2393,9 @@ def list_contacts(
         # Matches name, org, phone, or email -- a single search box covering
         # every field someone's likely to actually remember about a contact,
         # rather than separate name-only vs. org-only inputs.
-        clauses.append("(full_name LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ?)")
+        clauses.append("(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ?)")
         like = f"%{q}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like])
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"

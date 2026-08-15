@@ -27,7 +27,17 @@
     {{ avatar(contact, 'avatar-large') }}
     <div class="detail-heading-text">
         <h1 class="detail-title">{{ contact.full_name }}</h1>
-        {% if contact.org %}<div class="detail-heading-sub">{{ contact.org }}</div>{% endif %}
+        {% if contact.title or contact.org %}
+        <div class="detail-heading-sub">
+            {%- if contact.title and contact.org -%}
+            {{ contact.title }} at {{ contact.org }}
+            {%- elif contact.title -%}
+            {{ contact.title }}
+            {%- else -%}
+            {{ contact.org }}
+            {%- endif -%}
+        </div>
+        {% endif %}
     </div>
 </div>
 

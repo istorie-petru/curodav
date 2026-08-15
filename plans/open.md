@@ -119,17 +119,33 @@ styling.
 
 ## Contacts field parity with Nextcloud Contacts
 
-**Status:** Planning only — no code written. A full design exists; three of the
-target fields are already covered by labels and two should be deliberately
-skipped (Address book and Archive — straight reversals of the label model).
-Real scope when it starts: Title, multi-value Phone/Email, structured multi-value
-Address, Birthday, multi-value Website, and Social network (the last one has a
-portability question to settle first — `X-SOCIALPROFILE` vs. app-only).
-Five open questions need your call before implementation (type vocabulary,
-data migration, address-form UX, date types, social vCard property).
-**Build order when green-lit:** Title → Phone/Email → Website → Birthday →
-Address → Social network, each a full slice (schema → vCard round-trip →
-form/detail/list UI → its own test file).
+**Status:** In progress. Green-lit 2026-08-15 (AskUserQuestion, all five open
+questions answered): type vocabulary matches vCard/Nextcloud exactly (Home/
+Work/Cell/Fax/Pager/Other for phone, Home/Work/Other for email/address/
+website); existing single-value data auto-migrates as a first entry typed
+"Other"; Address uses the full vCard ADR structure (PO Box, Extended, Street,
+City, Region, Postal code, Country); Birthday supports both full and
+year-less (`--MMDD`) dates; Social network round-trips via the standard
+`X-SOCIALPROFILE` vCard property. Two of the original target fields stay
+deliberately skipped (Address book and Archive — straight reversals of the
+label model already covered by labels).
+
+**Build order:** Title → Phone/Email → Website → Birthday → Address → Social
+network, each a full slice (schema → vCard round-trip → form/detail/list UI →
+its own test file).
+
+- ~~**Title**~~ — **shipped 2026-08-15** — `contacts.title` column (vCard
+  TITLE, distinct from `org`/vCard ORG); create/edit form field; contact
+  detail header and the contacts-list row now show "Title at Org" (falling
+  back to whichever is present); search (`/contacts?q=`) matches title too.
+  See `features/contacts.md`. 17 new tests
+  (`test_contacts_field_parity_title.py`), full suite 1382 passed.
+- **Phone/Email** (multi-value, vCard/Nextcloud type vocabulary) — not
+  started.
+- **Website** (multi-value) — not started.
+- **Birthday** (full or year-less date) — not started.
+- **Address** (structured multi-value, full vCard ADR) — not started.
+- **Social network** (`X-SOCIALPROFILE`) — not started.
 
 ## Webapp usability + DAVx5 mobile hosting
 
@@ -181,9 +197,9 @@ the placeholder for that pass, not the pass itself.
 
 Model- and architecture-level risks are tracked in
 [`open-priority.md`](open-priority.md). Nothing in this file currently carries a
-known open risk beyond the blockers noted inline: Contacts field parity's five
-open questions and the `X-SOCIALPROFILE` portability question, and DAVx5's
-domain + server requirement.
+known open risk beyond the blockers noted inline: DAVx5's domain + server
+requirement. (Contacts field parity's five open questions were resolved
+2026-08-15 — see that section.)
 
 ---
 

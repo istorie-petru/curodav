@@ -2048,6 +2048,31 @@ session, right before the final commit of that session.
   format section removed. 13 new tests (`test_event_format_field.py`), plus
   `test_pwa_shell.py`'s cache-name pin updated to v7, full suite 1365
   passed.
+- **Shipped:** `Contacts field parity` slice 1 of 6 — **Title**, complete
+  (2026-08-15), build-order item 5 of the 2026-08-15 reprioritization.
+  Green-lit this session via AskUserQuestion (all five of `open.md`'s open
+  questions answered: vCard/Nextcloud type vocabulary, auto-migrate-as-
+  "Other" for existing single-value data, full vCard ADR structure for
+  Address, both full and year-less Birthday dates, `X-SOCIALPROFILE` for
+  Social network — recorded in `open.md`'s Contacts field parity section for
+  the 5 slices still to come). This slice: new `contacts.title` column
+  (`db.py`, `_ensure_column` migration for pre-existing databases), vCard
+  TITLE round-trip (`vcard_rows.py`), `title` Form field on
+  `create_contact`/`update_contact` (`routers/contacts.py`, same `"none"`/
+  `"nothing"` sentinel-clearing convention as `org`/`phone`/etc.), a Title
+  input on `contact_form.html`, and "Title at Org" (falling back to
+  whichever is present) on both `contact_detail.html`'s header and
+  `contacts_list.html`'s row subtitle. Contact search (`db.list_contacts`/
+  `db._search_contacts`) now matches `title` too. See `features/contacts.md`.
+  17 new tests (`test_contacts_field_parity_title.py`), plus 5 existing
+  contact-route call sites across `test_phase5_contacts.py`/
+  `test_phase1_universal_pool.py`/`test_modal_input_phaseB_chip_
+  multiselect.py` updated to pass the new `title` param (calling the router
+  function directly with a param omitted binds FastAPI's raw `Form(...)`
+  sentinel object, not `""` — caught by the full suite, not this slice's own
+  new tests), full suite 1382 passed. **Next in this build order:** Phone/
+  Email (multi-value), then Website, Birthday, Address, Social network — see
+  `open.md`'s Contacts field parity section.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

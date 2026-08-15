@@ -21,7 +21,7 @@
         <h1 class="sr-only">Contacts</h1>
         <div class="spacer"></div>
         <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
-            <input type="search" name="q" placeholder="Search name, org, phone, email..." value="{{ q }}">
+            <input type="search" name="q" placeholder="Search name, title, org, phone, email..." value="{{ q }}">
         </form>
         {% if contact_tags %}
         {% set _lf_items = [{'value': '', 'name': 'All labels'}] %}
@@ -47,10 +47,12 @@
         <span class="contact-row-main">
             <span class="contact-row-name">{{ c.full_name }}</span>
             <span class="contact-row-sub">
-                {% if c.org %}{{ c.org }}{% endif %}
-                {% if c.org and c.phone %}&middot;{% endif %}
+                {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
+                {%- elif c.title %}{{ c.title }}
+                {%- elif c.org %}{{ c.org }}{% endif %}
+                {% if (c.title or c.org) and c.phone %}&middot;{% endif %}
                 {% if c.phone %}{{ c.phone }}{% endif %}
-                {% if not c.org and not c.phone and c.email %}{{ c.email }}{% endif %}
+                {% if not c.title and not c.org and not c.phone and c.email %}{{ c.email }}{% endif %}
             </span>
         </span>
         {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
