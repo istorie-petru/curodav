@@ -31,7 +31,7 @@ never hold Track A up.
 |---|---|---|---|
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | ~~Data health~~ **shipped 2026-08-14**; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
-| `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
+| `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | ~~Widget consolidation~~ **shipped 2026-08-15** (expanded-scope follow-ups still open, `plans/open.md`) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14, Schedule module itself removed 2026-08-15** | Configurable views (not started — optional, doesn't block 1.7+) | 1.3 |

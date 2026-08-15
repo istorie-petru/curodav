@@ -243,7 +243,7 @@ class TestUpcomingEventsDoubleLineFix:
         # Structural check (no browser to measure real wrapping) -- same
         # ceiling this app's other CSS-shape tests already accept.
         import pathlib
-        partial = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates" / "_widget_upcoming_events.html"
+        partial = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates" / "_widget_agenda.html"
         source = partial.read_text()
         assert "width:150px" in source
         assert "white-space:nowrap" in source

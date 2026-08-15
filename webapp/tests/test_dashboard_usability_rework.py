@@ -81,7 +81,7 @@ class TestScopingBugFix:
         today = date.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
-        data = dashboard_router._render_today_agenda(conn, {"label_name": "CS101"})
+        data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "today", "show": ["tasks"]})
         uids = {t["uid"] for t in data["tasks"]}
         assert uids == {"in_scope"}
 
@@ -90,8 +90,8 @@ class TestScopingBugFix:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         _seed_task(conn, "in_scope", due_at=yesterday, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=yesterday)
-        data = dashboard_router._render_overdue_tasks(conn, {"label_name": "CS101"})
-        uids = {t["uid"] for t in data["tasks"]}
+        data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "today", "show": ["overdue"]})
+        uids = {t["uid"] for t in data["overdue_tasks"]}
         assert uids == {"in_scope"}
 
     def test_weekly_overview_scoped_to_project_label(self, conn):
@@ -99,7 +99,7 @@ class TestScopingBugFix:
         today = date.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
-        data = dashboard_router._render_weekly_overview(conn, {"label_name": "CS101"})
+        data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "next_7_days", "show": ["tasks"]})
         all_uids = {t["uid"] for day in data["days"] for t in day["tasks"]}
         assert all_uids == {"in_scope"}
 
@@ -116,7 +116,7 @@ class TestScopingBugFix:
             "all_day": 0, "start_at": (now + timedelta(days=1)).isoformat(),
             "tags": [], "created_at": _now(),
         })
-        data = dashboard_router._render_upcoming_events(conn, {"label_name": "CS101"})
+        data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "all_upcoming", "show": ["events"]})
         uids = {e["uid"] for e in data["events"]}
         assert uids == {"in_scope"}
 
@@ -126,7 +126,7 @@ class TestScopingBugFix:
         today = date.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
-        data = dashboard_router._render_today_agenda(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_agenda(conn, {"label_name": "Uni", "range": "today", "show": ["tasks"]})
         uids = {t["uid"] for t in data["tasks"]}
         assert uids == {"in_scope"}
 
@@ -136,7 +136,7 @@ class TestScopingBugFix:
         today = date.today().isoformat()
         _seed_task(conn, "t1", due_at=today, tags=["personal"])
         _seed_task(conn, "t2", due_at=today)
-        data = dashboard_router._render_today_agenda(conn, {})
+        data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["tasks"]})
         assert {t["uid"] for t in data["tasks"]} == {"t1", "t2"}
 
     def test_effective_tags_filter_combines_explicit_tags_with_label_name(self, conn):
@@ -224,34 +224,39 @@ class TestDefaultSeedIncludesNewWidgets:
         # screenshot leads with Today's Agenda, with At a Glance/Overdue
         # Tasks now nested inside the stack beside it, not standalone
         # full-width top-level entries.
+        # 2026-08-15 widget consolidation: "Overdue Tasks" is now an
+        # `agenda` widget configured with show=["overdue"] rather than its
+        # own type -- see _DEFAULT_STACK_MEMBER_TYPES.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert "overdue_tasks" in types
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
-        assert top_level[0]["type"] == "today_agenda"
+        assert top_level[0]["type"] == "agenda"
 
     def test_fresh_project_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_project(conn, "CS101")
         dashboard_router._ensure_default_label_widgets(conn, "CS101")
-        types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
+        widgets = db.list_dashboard_widgets(conn, label_name="CS101")
+        types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert "overdue_tasks" in types
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
 
     def test_fresh_space_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_space(conn, "Uni")
         dashboard_router._ensure_default_label_widgets(conn, "Uni")
-        types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="Uni")]
+        widgets = db.list_dashboard_widgets(conn, label_name="Uni")
+        types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert "overdue_tasks" in types
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
 
     def test_new_label_widgets_auto_scoped_with_label_name(self, conn):
         _make_project(conn, "CS101")
         dashboard_router._ensure_default_label_widgets(conn, "CS101")
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         at_a_glance = next(w for w in widgets if w["type"] == "at_a_glance")
-        overdue = next(w for w in widgets if w["type"] == "overdue_tasks")
+        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue"])
         assert at_a_glance["config"]["label_name"] == "CS101"
         assert overdue["config"]["label_name"] == "CS101"
 
@@ -274,7 +279,7 @@ def _canonical_default_type_order(widgets):
     return order
 
 
-_DEFAULT_LAYOUT_TYPE_ORDER = ["today_agenda", "stack", "at_a_glance", "upcoming_events", "overdue_tasks"]
+_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda", "agenda"]
 
 
 class TestResetToDefault:

@@ -115,6 +115,32 @@
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
         </div>
     </div>
+    <!-- Show -- Agenda-only (2026-08-15 widget consolidation), gated by
+         static/dashboard_widget_preview.js the same way Range/Limit are
+         (hidden unless the current View is agenda_view, never removed/
+         disabled, so a no-JS submission still works). Replaces the old
+         "agenda"/"upcoming_list"/"overdue_list" View choices -- which
+         sections render is now these three independent checkboxes
+         instead of a fourth name in the View picker. All three default
+         checked (today_agenda's own old default content). -->
+    <div class="field widget-show-field">
+        <label>Show</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="checkbox" name="show_overdue" value="1" checked> Overdue</label>
+            <label class="field-toggle"><input type="checkbox" name="show_tasks" value="1" checked> Tasks</label>
+            <label class="field-toggle"><input type="checkbox" name="show_events" value="1" checked> Events</label>
+        </div>
+    </div>
+    <!-- Style -- Spaces & Projects-only (2026-08-15 widget consolidation),
+         same gating idea as Show above -- List (the old project_preview
+         default) or Cards (the old filled_cards look). -->
+    <div class="field widget-style-field">
+        <label>Style</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="radio" name="style" value="list" checked> List</label>
+            <label class="field-toggle"><input type="radio" name="style" value="cards"> Cards</label>
+        </div>
+    </div>
 </div>
 <!-- Labels/Task lists/Calendars -- used to be wrapped in a visually
      distinct "Advanced" group (background/heading/its own field-grid);

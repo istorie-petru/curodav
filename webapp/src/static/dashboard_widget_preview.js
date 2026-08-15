@@ -81,14 +81,21 @@ window.CCWidgetPreview = {
       const viewMs = form.querySelector(".widget-view-select");
       const rangeMs = form.querySelector(".widget-range-select");
       const rangeField = form.querySelector(".widget-range-field");
-      // "upcoming_list" is the only View whose render function
-      // (_render_upcoming_events) reads config.limit at all -- Today's
-      // Agenda/Weekly Overview/Mini Calendar all happened to satisfy the
-      // old, looser 'events' in spec.uses check too, so Limit showed up
-      // for them and visibly did nothing, which read as broken. Hiding it
-      // here mirrors the server-side gate in the Filters form
-      // (dashboard.html: widget.type != 'upcoming_events').
+      // "agenda_view" is the only View whose render function
+      // (_render_agenda) reads config.limit at all (2026-08-15 widget
+      // consolidation -- was "upcoming_list" before Agenda absorbed it).
+      // Hiding it here mirrors the server-side gate in the per-widget
+      // Filters form (_widget_edit_form.html: widget.type != 'agenda').
       const limitField = form.querySelector(".widget-limit-field");
+      // Show (2026-08-15 widget consolidation) -- Agenda's tasks/events/
+      // overdue checkboxes, and Style (Spaces & Projects' List/Cards
+      // radio) -- both only make sense once their own View is picked,
+      // same "real inputs, JS only hides" contract Range/Limit already
+      // use (a no-JS submission still posts every field either way, and
+      // the server tolerates an inapplicable one -- see
+      // _config_from_form's own style/show gating).
+      const showField = form.querySelector(".widget-show-field");
+      const styleField = form.querySelector(".widget-style-field");
       if (!sourceGroup || !viewMs || !rangeMs) return;
 
       // 2026-08-08: reads via window.CCMultiselect.panelFor(ms) instead of
@@ -115,7 +122,9 @@ window.CCWidgetPreview = {
         const viewInput = checkedMsRadio(viewMs, "view");
         const hasRange = !!(viewInput && viewInput.dataset.hasRange);
         if (rangeField) rangeField.classList.toggle("is-hidden", !hasRange);
-        if (limitField) limitField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "upcoming_list");
+        if (limitField) limitField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "agenda_view");
+        if (showField) showField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "agenda_view");
+        if (styleField) styleField.classList.toggle("is-hidden", !viewInput || viewInput.value !== "spaces_projects_view");
         if (!hasRange) return;
         const viewValue = viewInput.value;
         filterMsOptions(rangeMs, (input) => (input.dataset.views || "").split(",").includes(viewValue));

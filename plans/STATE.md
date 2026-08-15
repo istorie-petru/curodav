@@ -1826,6 +1826,52 @@ session, right before the final commit of that session.
   total (`test_quick_capture_parser.py`, `test_quick_capture.py`, plus
   `TestPageNavigation` in `test_search_api.py` and one added case in
   `test_command_palette_actions.py`), full suite 1317 passed.
+- **Shipped:** side work — **Widget consolidation (original design)**,
+  complete (2026-08-15), `plans/open.md` § Widget consolidation — the
+  next scoped priority per the reprioritization below, confirmed with the
+  user before starting since that section was explicitly marked "waiting
+  on your go-ahead" (the three newer expanded-scope asks stay unbuilt,
+  still needing a design pass, per the user's own choice). 11 widget
+  types → 8 (11 counting the untouched 1.9-side-work additions):
+  `today_agenda`/`weekly_overview`/`upcoming_events`/`overdue_tasks` → one
+  configurable `agenda` type (`config["range"]`: today/next_7_days/
+  next_30_days/all_upcoming, `config["show"]`: a subset of overdue/tasks/
+  events); `project_preview`/`filled_cards` → one `spaces_projects` type
+  (`config["style"]`: list/cards); `calendar_agenda` cut outright (no
+  replacement type — reproduce it by placing Mini Calendar next to
+  Agenda); new `streak` (current/longest run of consecutive days with
+  >=1 task completed, reading `tasks.completed_at`) and `next_deadline`
+  (soonest open task due date + soonest upcoming event) types. New
+  `_migrate_widget_consolidation` (`app_meta`-guarded, runs from
+  `widget_page_context` so it covers Home + every label page) rewrites
+  every existing `dashboard_widgets` row's type/config in place —
+  confirmed no dashboard loses a widget, though every migrated (and
+  newly default-seeded) Agenda widget now renders at Agenda's one static
+  `default_width` ("half") regardless of which of the four old types'
+  own width it used to carry, an unavoidable trade-off once 4 types
+  collapse into 1 with no per-instance width override (removed
+  2026-08-07). The Source/View/Range picker's `_SELECTION_TO_TYPE`/
+  `_TYPE_TO_SELECTION` value shape changed from `(type, range_days:
+  int|None)` to `(type, extra_config: dict)` to carry Agenda's string
+  `range` (and, via `_config_from_form`'s new `style`/`show` params, the
+  Style radio/Show checkboxes threaded through `add_widget`/
+  `edit_widget`/`preview_widget`) — a real internal-shape change, not
+  just new registry entries, documented in `_resolve_selection`'s/
+  `_selection_from_widget`'s own updated docstrings. `calendar_agenda`'s
+  old (view, range) dead-mapping precedent ("cards"/"filled_cards_view",
+  2026-08-07) was deliberately NOT repeated here — every real row is
+  rewritten by the migration, so no live widget can still carry a type
+  the registry no longer resolves. See `features/dashboard.md` (rewritten
+  widget-types table + new Migration section), `plans/open.md`'s section
+  trimmed to just the still-open expanded-scope bullets,
+  `plans/roadmap.md`'s 1.3 side-work row marked shipped. Test-file rewrite
+  delegated to a subagent given the scope (type renames + config-shape
+  fixes across `test_dashboard_router.py`/`test_dashboard_usability_
+  rework.py`/`test_dashboard_today_week_widgets.py`, one whole obsolete
+  test class deleted — `TestCalendarAgendaWidget`, no surviving intent
+  once that type was cut with no replacement); full suite 1313 passed (net
+  -6 from the deleted class, confirmed against the pre-slice 1319-total
+  baseline, not a coverage regression).
 - **Reprioritized (direct steer, 2026-08-15):** the next sessions should
   work Track B (`open.md`) in this order, not pick arbitrarily: (1)
   **Command palette actions** (`open.md` § Command palette actions —

@@ -4,31 +4,47 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (14)
+## Widget types (11)
+
+2026-08-15 widget consolidation (`plans/open.md` § Widget consolidation):
+the original 11 types (`today_agenda`/`weekly_overview`/`upcoming_events`/
+`overdue_tasks`/`project_preview`/`filled_cards`/`calendar_agenda` plus
+`at_a_glance`/`mini_month_calendar`/`habit_checkin`/`contact_list`)
+collapsed to 8 — four Agenda-family types merged into one configurable
+`agenda`, two Projects-family types merged into one `spaces_projects`,
+`calendar_agenda` cut outright (reproduce it by placing Mini Calendar next
+to Agenda), plus two brand-new types, Streak and Next Deadline. The three
+1.9-side-work additions (`important_urgent`/`scheduled_work_today`/
+`quick_links`) were untouched by this pass, so the live registry is 11
+types today. A one-time `app_meta`-guarded migration
+(`_migrate_widget_consolidation`) rewrote every existing dashboard's
+stored widget rows in place — nothing was lost, see its own docstring for
+the exact old-type -> new-config translation, and "Migration" below for
+the one visual side effect (width).
 
 | Type | Shows | Default width |
 |---|---|---|
-| `today_agenda` | Today's Agenda — overdue + due-today tasks and today's events | half |
-| `weekly_overview` | next-N-days day-by-day breakdown (`range_days`: 7/30) | full |
-| `upcoming_events` | next events from now (`limit` + optional `range_days`) | third |
-| `overdue_tasks` | open tasks past due, most-overdue first | third |
+| `agenda` | Consolidated: Range (`today` / `next_7_days` / `next_30_days` / `all_upcoming`, `config["range"]`) picks how far out; Show (`config["show"]`, a subset of `overdue`/`tasks`/`events`, default all three) picks which sections render. `today`/`all_upcoming` render a flat list (Overdue always its own section regardless of Range); `next_7_days`/`next_30_days` render a day-by-day grid. `limit` applies to the `all_upcoming` Tasks/Events sections only. | half |
 | `at_a_glance` | 3-number stats strip (Overdue / Due today / Due this week), each linking to the matching filtered Tasks view | third |
 | `mini_month_calendar` | month grid, busy dots only, prev/next | half |
-| `calendar_agenda` | mini calendar + 7-day agenda combined | third |
+| `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares per Space, linking to `/labels/{name}`) | third |
 | `habit_checkin` | check-off-today per active habit (checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
-| `project_preview` | child-label progress bars | third |
 | `contact_list` | contacts filtered by labels, `limit` | third |
-| `filled_cards` | Material-You filled squares per Space, linking to `/labels/{name}` | full |
 | `important_urgent` | open tasks flagged important/urgent that aren't already due/overdue (`limit`, default 8) — ported from the retired `/today` page (1.9 side work), see `features/today.md` | half |
 | `scheduled_work_today` | today's work-allocation sessions + a completed-hours total — ported from the retired `/today` page (1.9 side work) | third |
-| `quick_links` | visual tile grid of every Space + every open project (label icon/color, `filled_cards`' own CSS reused) — Home-only, 1.9 side work | full |
+| `quick_links` | visual tile grid of every Space + every open project (label icon/color, `spaces_projects`' Cards-style CSS reused) — Home-only, 1.9 side work | full |
+| `streak` | current + longest run of consecutive days with >=1 task completed (`tasks.completed_at`) | third |
+| `next_deadline` | the single soonest open task due date and the single soonest upcoming event | third |
 
-`important_urgent`/`scheduled_work_today` are addable through the existing
-Source/View picker (both under the `calendar_tasks` source, as
-`important_urgent_view`/`scheduled_work_view`); `quick_links` has its own
-`quick_links` source/`quick_links_view` view, since it reads `label_config`
-directly and has no tasks/events filter (`uses: set()`, same as
-`project_preview`/`filled_cards`).
+`important_urgent`/`scheduled_work_today`/`streak`/`next_deadline` are
+addable through the existing Source/View picker (all under the
+`calendar_tasks` source); `quick_links` and `spaces_projects` each have
+their own source (`quick_links`/`spaces_projects`), since both read
+`label_config` directly and have no tasks/events filter (`uses: set()`).
+Agenda's own view (`agenda_view`, source `calendar_tasks`) is the one
+View that exposes both Range and Show controls in the builder form
+(`has_range`/`has_show` on its `WIDGET_VIEWS` entry); Spaces & Projects'
+view (`spaces_projects_view`) exposes the Style radio (`has_style`).
 
 Plus the `stack` container type (not in the registry): drag a widget onto another
 card → one shared-width card with both stacked; members share `group_uid`; stacks
@@ -50,16 +66,40 @@ members).
 
 ## Seeding & scope
 
-- One-time per page (`app_meta` keys): `_seed_agenda_stack_layout` (Today's
-  Agenda + stacked At a Glance/Upcoming Events/Overdue Tasks) for Home and every
-  label page; `_backfill_mini_calendar_widget` one-time migration. Reset layout
+- One-time per page (`app_meta` keys): `_seed_agenda_stack_layout` — an
+  `agenda` (range=today) beside a stack of At a Glance / `agenda`
+  (range=all_upcoming, show=[events]) / `agenda` (range=today,
+  show=[overdue]) — for Home and every label page;
+  `_backfill_mini_calendar_widget` one-time migration. Reset layout
   re-seeds.
 - Scope rules: Home offers all types; a generated Space page excludes
-  `filled_cards` + `quick_links`; a plain label (Project) page excludes
-  `filled_cards` + `project_preview` + `quick_links` (`quick_links`'s "every
-  Space + every project" view is meaningless once you're already inside
-  one, same reasoning `filled_cards`/`project_preview` were already excluded
-  for).
+  `quick_links`; a plain label (Project) page excludes `spaces_projects` +
+  `quick_links` (`quick_links`'s "every Space + every project" view, and
+  `spaces_projects`' whole-registry-of-labels view, are both meaningless
+  once you're already inside one page).
+
+## Migration (2026-08-15 widget consolidation)
+
+`_migrate_widget_consolidation` runs once (`app_meta`-guarded, from
+`widget_page_context` so it covers Home + every label page) and rewrites
+every existing `dashboard_widgets` row in place: `today_agenda` ->
+`agenda`/today/show-all-three; `weekly_overview` -> `agenda`/next_7 or
+next_30/show=[tasks,events]; `upcoming_events` -> `agenda`/matching
+range/show=[events]; `overdue_tasks` -> `agenda`/today/show=[overdue];
+`project_preview`/`filled_cards` -> `spaces_projects`/style
+list-or-cards; `calendar_agenda` splits into two rows (the old row
+becomes an `agenda`/next_7_days/show=[tasks,events], a brand-new
+`mini_month_calendar` row is inserted beside it sharing the same
+`group_uid` so a stacked calendar_agenda keeps both halves stacked
+together). One deliberate visual trade-off: every migrated (and
+newly-added) Agenda widget now renders at `agenda`'s single
+`default_width` ("half") regardless of which of the four old types it
+used to be — `weekly_overview`/`overdue_tasks`/`upcoming_events` used to
+render at "full"/"third"/"third" respectively; a consolidated type can
+only have one static default width (manual per-instance width was
+already removed, 2026-08-07), and "half" (the most commonly seeded case,
+Today's Agenda) was chosen as the safer default over "full" for a
+typical flat/today-range widget.
 
 ## Page chrome
 
@@ -72,14 +112,14 @@ members).
 
 ## Display fixes (1.9 side work)
 
-- `_widget_upcoming_events.html`'s date+time column was a fixed 110px `<td>`
-  holding both an ISO date and a time on the same line, which wrapped onto
-  two lines at that width — widened to 150px + `white-space:nowrap`. Audited
-  every other `_widget_*.html` partial for the same fixed-narrow-column
-  date+time pattern; none of the rest combine a date and a time in one
-  column (most show just a time, e.g. `today_agenda`'s event rows, or just a
-  date, e.g. `overdue_tasks`'s due-date cell), so this was the only fix
-  needed.
+- The old `_widget_upcoming_events.html`'s date+time column was a fixed
+  110px `<td>` holding both an ISO date and a time on the same line, which
+  wrapped onto two lines at that width — widened to 150px +
+  `white-space:nowrap`. That column now lives in `_widget_agenda.html`'s
+  own all_upcoming Events section (2026-08-15 consolidation carried the
+  fix forward unchanged); audited every other `_widget_*.html` partial for
+  the same fixed-narrow-column date+time pattern at the time, none of the
+  rest combine a date and a time in one column.
 
 ## Endpoints
 

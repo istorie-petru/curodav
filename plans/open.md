@@ -99,26 +99,26 @@ check-in as a task. The exact workflow stays deliberately lightweight and must
 not introduce another hierarchy of objects — it is a review action on a project,
 not a new entity type.
 
-## Widget consolidation + Streak + Next Deadline (expanded scope, 2026-08-15)
+## Widget consolidation, expanded scope (2026-08-15)
 
-**Status:** Design only, waiting on your go-ahead — original consolidation
-design still stands, scope grew with direct feedback 2026-08-15 (see the
-three new bullets below). **Second priority right now**, right after
-Command palette actions.
+**Status:** the original consolidation design shipped 2026-08-15 (side
+work, same day as this reprioritization) — 11 widget types → 8 (now 11
+counting the pre-existing 1.9-side-work additions untouched by this pass):
+`at_a_glance`/`mini_month_calendar`/`habit_checkin`/`contact_list`
+unchanged; `today_agenda`/`weekly_overview`/`upcoming_events`/
+`overdue_tasks` → one configurable **Agenda** (`config["range"]`/
+`config["show"]`); `project_preview`/`filled_cards` → one **Spaces &
+Projects** (`config["style"]`, List/Cards); `calendar_agenda` cut
+(reproducible by placing Mini Calendar next to Agenda); **Streak** and
+**Next Deadline** are new. One `app_meta`-guarded migration
+(`_migrate_widget_consolidation`) rewrote every existing dashboard's
+widget rows in place, nothing lost (one visual trade-off: every migrated
+Agenda widget now renders at Agenda's single "half" default width — see
+`features/dashboard.md`'s own Migration section for the full detail).
+See `features/dashboard.md`.
 
-**Original consolidation design** (unchanged): 11 widget types → 8:
-`at_a_glance` unchanged; `today_agenda`/`weekly_overview`/`upcoming_events`/
-`overdue_tasks` → one configurable **Agenda** (Range + Show toggles);
-`project_preview`/`filled_cards` → one **Spaces & Projects** (List/Cards style
-toggle); `calendar_agenda` cut (reproducible by placing Mini Calendar next to
-Agenda); **Streak** and **Next Deadline** are new. One migration
-(`app_meta`-guarded, rewrites existing rows in place, nothing lost).
-**Already shipped ahead of the rest:** `tasks.completed_at`
-(auto-managed in `db.upsert_task`, `test_task_completed_at.py`) — the schema
-change the Streak widget reads.
-
-**New, added 2026-08-15 (direct feedback, not yet scoped into concrete
-slices):**
+Still open, not yet scoped into concrete slices — the three items added
+2026-08-15 by direct feedback, after the original design above:
 
 - **Project/Space links widget.** The consolidated **Spaces & Projects**
   widget above already covers "a widget listing projects/spaces" on the

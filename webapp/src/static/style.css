@@ -3425,6 +3425,10 @@ body.command-palette-open{overflow:hidden;}
 }
 
 .widget-limit-field.is-hidden{display:none;}
+/* Show (Agenda)/Style (Spaces & Projects) fields -- 2026-08-15 widget
+   consolidation, same hide-via-class convention as .widget-limit-field/
+   .widget-range-field above. */
+.widget-show-field.is-hidden, .widget-style-field.is-hidden{display:none;}
 .widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2);}
 .widget-save-filters-btn.is-hidden{display:none;}
 .widget-save-status{font-size:.85em; color:var(--fg-secondary); opacity:0; transition:opacity .2s ease;}

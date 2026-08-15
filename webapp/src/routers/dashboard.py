@@ -217,89 +217,126 @@ def _filtered_events(conn, config: dict, start: str | None = None, end: str | No
 # --------------------------------------------------------------------- #
 
 
-def _render_today_agenda(conn, config: dict, nav: dict | None = None) -> dict:
-    """Overdue + due-today tasks (open only), and today's events -- the
-    single most common "what does today look like" view."""
-    today = date.today().isoformat()
-    tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] <= today]
-    tasks.sort(key=lambda t: t["due_at"])
-    events = [e for e in _filtered_events(conn, config) if e.get("start_at") and e["start_at"][:10] == today]
-    events.sort(key=lambda e: e.get("start_at") or "")
-    return {"tasks": tasks, "events": events, "today": today}
+AGENDA_RANGES: tuple[str, ...] = ("today", "next_7_days", "next_30_days", "all_upcoming")
+AGENDA_SHOWS: tuple[str, ...] = ("overdue", "tasks", "events")
+AGENDA_DEFAULT_SHOW: list[str] = ["overdue", "tasks", "events"]
 
 
-def _render_weekly_overview(conn, config: dict, nav: dict | None = None) -> dict:
-    """The next N days (including today), tasks and events grouped by
-    date -- a day-by-day breakdown rather than agenda's single-day focus
-    or a flat list. N defaults to 7 (the original "weekly" overview) but
-    is itself a config knob now (`range_days`, 2026-08-02's Source/View/
-    Range rework -- see WIDGET_RANGES below) so the same day-grouped
-    rendering serves both a "next 7 days" and a "next 30 days" widget."""
-    range_days = int(config.get("range_days") or 7)
-    today = date.today()
-    end = today + timedelta(days=range_days - 1)
-    days = [(today + timedelta(days=i)) for i in range(range_days)]
-
-    tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and today.isoformat() <= t["due_at"][:10] <= end.isoformat()]
-    events = _filtered_events(conn, config, start=f"{today.isoformat()}T00:00:00", end=f"{end.isoformat()}T23:59:59")
-    # Importance/Urgency are computed, not stored columns (side work,
-    # post-1.1, src/derived_state.py) -- resolved once per widget render
-    # rather than per task, same "resolve label rules once" convention
-    # every other importance/urgency call site in this app follows.
-    label_rules = db.list_label_rules(conn)
-
-    by_day = []
-    for d in days:
-        iso = d.isoformat()
-        day_tasks = sorted(
-            [t for t in tasks if t["due_at"][:10] == iso],
-            key=lambda t: (
-                -derived_state.effective_importance(t, label_rules),
-                -derived_state.effective_urgency(t, label_rules, today),
-            ),
-        )
-        day_events = sorted([e for e in events if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
-        by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today.isoformat(), "tasks": day_tasks, "events": day_events})
-    return {"days": by_day}
+def _agenda_show(config: dict) -> set[str]:
+    show = config.get("show")
+    return set(show) if show is not None else set(AGENDA_DEFAULT_SHOW)
 
 
-def _render_upcoming_events(conn, config: dict, nav: dict | None = None) -> dict:
-    """The next events from right now onward, chronological, optionally
-    bounded to `range_days` out (2026-08-02's Source/View/Range rework --
-    unset/None means the original unbounded "just take the next `limit`
-    events, however far out" behavior). `limit` still caps the list
-    either way, so a widget can be a short "what's next" strip or a
-    longer look-ahead within whatever range it's scoped to."""
-    limit = int(config.get("limit") or 10)
+def _agenda_range(config: dict) -> str:
+    range_ = config.get("range")
+    if range_ in AGENDA_RANGES:
+        return range_
+    # Tolerates a not-yet-migrated or hand-built config that only has the
+    # legacy `range_days` key (e.g. a preview call built before the range
+    # string is resolved) -- best-effort translation, "today" is the safe
+    # fallback for anything else.
     range_days = config.get("range_days")
-    now_iso = datetime.now(timezone.utc).isoformat()
-    end_iso = None
-    if range_days:
-        end_iso = f"{(date.today() + timedelta(days=int(range_days))).isoformat()}T23:59:59"
-    # db.list_events' own `start` filter is "(end_at IS NULL OR end_at >=
-    # start)" -- deliberately permissive so an ongoing/no-end-date event
-    # doesn't disappear from a filtered range it's still "within". That's
-    # the right behavior for a calendar view, but wrong for "upcoming":
-    # an event that already started (no end date) shouldn't count as
-    # upcoming just because it has no end. Filter on start_at explicitly
-    # here rather than relying on list_events' own start param alone.
-    events = [
-        e
-        for e in _filtered_events(conn, config, start=now_iso, end=end_iso)
-        if e.get("start_at") and e["start_at"] >= now_iso
-    ]
-    events.sort(key=lambda e: e.get("start_at") or "")
-    return {"events": events[:limit]}
+    if range_days == 7:
+        return "next_7_days"
+    if range_days == 30:
+        return "next_30_days"
+    if range_days is None and "range_days" in config:
+        return "all_upcoming"
+    return "today"
 
 
-def _render_overdue_tasks(conn, config: dict, nav: dict | None = None) -> dict:
-    """Bonus widget beyond the three explicitly named ones, proving the
-    registry is genuinely extensible and not just three hardcoded
-    branches -- open tasks whose due date has passed, most-overdue first."""
-    today = date.today().isoformat()
-    tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] < today]
-    tasks.sort(key=lambda t: t["due_at"])
-    return {"tasks": tasks, "today": today}
+def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
+    """Consolidated Agenda widget (2026-08-15 widget consolidation,
+    plans/open.md § Widget consolidation) -- replaces the four separate
+    today_agenda/weekly_overview/upcoming_events/overdue_tasks types with
+    one configurable widget: Range (today / next 7 days / next 30 days /
+    all upcoming) picks how far out to look, Show (overdue / tasks /
+    events, independent checkboxes) picks which sections render.
+
+    "Overdue" is always every currently-open overdue task regardless of
+    Range -- Range only bounds the forward-looking Tasks/Events sections.
+    Today renders a flat single-day list (`mode: "flat"`, same shape
+    today_agenda used); Next 7/30 days renders day-by-day
+    (`mode: "days"`, same shape weekly_overview used, plus an Overdue
+    section ahead of the grid when that's shown too); All upcoming
+    renders a flat, `limit`-capped forward list for whichever of
+    Tasks/Events are shown (Tasks: every open task with due_at >= today;
+    Events: every future event, unbounded -- upcoming_events' own
+    semantics)."""
+    show = _agenda_show(config)
+    range_ = _agenda_range(config)
+    today = date.today()
+    today_iso = today.isoformat()
+    limit = int(config.get("limit") or 10)
+
+    overdue_tasks: list[dict] = []
+    if "overdue" in show:
+        overdue_tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] < today_iso]
+        overdue_tasks.sort(key=lambda t: t["due_at"])
+
+    if range_ == "today":
+        tasks = []
+        if "tasks" in show:
+            tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] == today_iso]
+            tasks.sort(key=lambda t: t["due_at"])
+        events = []
+        if "events" in show:
+            events = [e for e in _filtered_events(conn, config) if e.get("start_at") and e["start_at"][:10] == today_iso]
+            events.sort(key=lambda e: e.get("start_at") or "")
+        return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
+
+    if range_ in ("next_7_days", "next_30_days"):
+        range_days = 7 if range_ == "next_7_days" else 30
+        end = today + timedelta(days=range_days - 1)
+        days = [(today + timedelta(days=i)) for i in range(range_days)]
+
+        tasks_pool: list[dict] = []
+        if "tasks" in show:
+            tasks_pool = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and today_iso <= t["due_at"][:10] <= end.isoformat()]
+        events_pool: list[dict] = []
+        if "events" in show:
+            events_pool = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{end.isoformat()}T23:59:59")
+        # Importance/Urgency are computed, not stored columns (side work,
+        # post-1.1, src/derived_state.py) -- resolved once per widget
+        # render, same convention every other importance/urgency call
+        # site in this app follows.
+        label_rules = db.list_label_rules(conn)
+
+        by_day = []
+        for d in days:
+            iso = d.isoformat()
+            day_tasks = sorted(
+                [t for t in tasks_pool if t["due_at"][:10] == iso],
+                key=lambda t: (
+                    -derived_state.effective_importance(t, label_rules),
+                    -derived_state.effective_urgency(t, label_rules, today),
+                ),
+            )
+            day_events = sorted([e for e in events_pool if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
+            by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today_iso, "tasks": day_tasks, "events": day_events})
+        return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso}
+
+    # all_upcoming
+    tasks = []
+    if "tasks" in show:
+        tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] >= today_iso]
+        tasks.sort(key=lambda t: t["due_at"])
+        tasks = tasks[:limit]
+    events = []
+    if "events" in show:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # db.list_events' own `start` filter is "(end_at IS NULL OR end_at
+        # >= start)" -- deliberately permissive so an ongoing/no-end-date
+        # event doesn't disappear from a filtered range it's still
+        # "within". That's the right behavior for a calendar view, but
+        # wrong for "upcoming": an event that already started (no end
+        # date) shouldn't count as upcoming just because it has no end.
+        # Filter on start_at explicitly here rather than relying on
+        # list_events' own start param alone.
+        events = [e for e in _filtered_events(conn, config, start=now_iso) if e.get("start_at") and e["start_at"] >= now_iso]
+        events.sort(key=lambda e: e.get("start_at") or "")
+        events = events[:limit]
+    return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
 
 
 def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
@@ -405,22 +442,42 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     }
 
 
-def _render_project_preview(conn, config: dict, nav: dict | None = None) -> dict:
-    """Quick links/progress for one label's page's child labels
-    (config["label_name"] set and that label has children -- the former
-    "a Space's own projects" preview) or every plain (non-Space) label
-    (unset) -- the Dashboard-side half of Projects' management living in
-    Settings: the *content* still belongs on the Dashboard, as a
-    lighter-weight preview. Progress is derived from direct object_labels
-    membership (tasks tagged with that label) -- direct assignment only,
-    same "not transitive through parent_name" rule every label-page query
-    in this app follows."""
+def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict:
+    """Consolidated Spaces & Projects widget (2026-08-15 widget
+    consolidation, plans/open.md § Widget consolidation) -- replaces the
+    two separate project_preview/filled_cards types with one, switched by
+    `config["style"]` ("list", the default, or "cards"). List reuses
+    project_preview's own rows (a project/label + progress bar); Cards
+    reuses filled_cards' own Material-You-style filled squares (one per
+    Space). Both styles honor `config["label_name"]` the same way
+    project_preview always did -- scoped to that label's own children on
+    a Space/Project page, every top-level label/Space on Home."""
+    style = config.get("style") or "list"
     label_name = config.get("label_name")
     if label_name:
         labels = db.list_child_labels(conn, label_name)
+    elif style == "cards":
+        labels = db.list_space_labels(conn)
     else:
         labels = [lbl for lbl in db.list_labels(conn) if not lbl.get("generate_space")]
 
+    if style == "cards":
+        cards = []
+        for lbl in labels:
+            children = db.list_child_labels(conn, lbl["name"])
+            cards.append({
+                "uid": lbl["name"],
+                "name": lbl["name"],
+                "color": lbl.get("color") or "blue",
+                "description": lbl.get("description") or "",
+                "project_count": len(children),
+            })
+        return {"style": "cards", "cards": cards}
+
+    # Progress is derived from direct object_labels membership (tasks
+    # tagged with that label) -- direct assignment only, same "not
+    # transitive through parent_name" rule every label-page query in this
+    # app follows.
     previews = []
     for lbl in labels:
         tasks = [t for t in db.list_tasks(conn) if lbl["name"] in (t.get("tags") or [])]
@@ -428,48 +485,68 @@ def _render_project_preview(conn, config: dict, nav: dict | None = None) -> dict
         done = len([t for t in tasks if t["status"] in ("done", "archived")])
         progress = round(100 * done / total) if total else None
         previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total})
-    return {"previews": previews}
+    return {"style": "list", "previews": previews}
 
 
-def _render_filled_cards(conn, config: dict, nav: dict | None = None) -> dict:
-    """Filled cards widget -- Material You style filled rounded squares
-    for each Space (a label with generate_space=1), with the Space's
-    color as the fill, showing the name and description. Each card is a
-    link to the Space's generated page (/labels/{name})."""
-    cards = []
-    for lbl in db.list_space_labels(conn):
-        children = db.list_child_labels(conn, lbl["name"])
-        cards.append({
-            "uid": lbl["name"],
-            "name": lbl["name"],
-            "color": lbl.get("color") or "blue",
-            "description": lbl.get("description") or "",
-            "project_count": len(children),
-        })
-    return {"cards": cards}
+def _render_streak(conn, config: dict, nav: dict | None = None) -> dict:
+    """Streak widget (2026-08-15 widget consolidation, new type) -- current
+    and longest run of consecutive days with at least one task completed,
+    read from `tasks.completed_at` (already shipped ahead of this slice,
+    auto-managed in db.upsert_task). "Current" counts back from today, but
+    treats today as not yet breaking the streak if nothing's been
+    completed today (the day isn't over) -- it counts back from yesterday
+    instead in that case, same "don't punish for the day not being over
+    yet" reasoning a habit tracker would use."""
+    tasks = _filtered_tasks(conn, config, open_only=False)
+    completed_days = {t["completed_at"][:10] for t in tasks if t.get("completed_at")}
+    today = date.today()
+
+    def _done(d: date) -> bool:
+        return d.isoformat() in completed_days
+
+    cursor = today if _done(today) else today - timedelta(days=1)
+    current = 0
+    while _done(cursor):
+        current += 1
+        cursor -= timedelta(days=1)
+
+    longest = 0
+    if completed_days:
+        ordered = sorted(date.fromisoformat(d) for d in completed_days)
+        run = 1
+        longest = 1
+        for prev, cur in zip(ordered, ordered[1:]):
+            run = run + 1 if (cur - prev).days == 1 else 1
+            longest = max(longest, run)
+
+    return {"current_streak": current, "longest_streak": longest, "completed_today": _done(today)}
 
 
-def _render_calendar_agenda(conn, config: dict, nav: dict | None = None) -> dict:
-    """Combined Calendar+Agenda widget -- the mini month calendar on top
-    and a 7-day day-by-day agenda below it, both scoped by the same config
-    (group_uid, project_uid, tags, etc.). Designed to sit at a third width
-    (2 of 6 columns) next to a Today's Agenda at two-thirds, giving a
-    compact "where am I this month / what's this week" panel without
-    needing two separate widgets stacked. The two sub-renders share the
-    same config (filters apply to both calendar and tasks), same nav (month
-    arrow links work the same way they do on the standalone mini calendar),
-    and the same data shape as their standalone counterparts so the
-    template can just delegate to the same rendering logic.
+def _render_next_deadline(conn, config: dict, nav: dict | None = None) -> dict:
+    """Next Deadline widget (2026-08-15 widget consolidation, new type) --
+    the single soonest open task due date and the single soonest upcoming
+    event, a focused "what's next" stat distinct from Agenda's fuller
+    list."""
+    today = date.today()
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    2026-08-03 (§1 Dashboard / §2 Spaces v2 rework): new type added to
-    the registry as "calendar_agenda", source "calendar_tasks", view
-    "calendar_agenda_view", has_range False -- it doesn't expose a Range
-    picker because the month is always the current month (nav-able via
-    prev/next) and the agenda is always 7 days from today, same as the
-    standalone weekly_overview default."""
-    calendar_data = _render_mini_month_calendar(conn, config, nav)
-    agenda_data = _render_weekly_overview(conn, {**config, "range_days": 7}, nav)
-    return {"calendar": calendar_data, "agenda": agenda_data}
+    tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at")]
+    tasks.sort(key=lambda t: t["due_at"])
+    next_task = tasks[0] if tasks else None
+
+    events = [e for e in _filtered_events(conn, config, start=now_iso) if e.get("start_at") and e["start_at"] >= now_iso]
+    events.sort(key=lambda e: e["start_at"])
+    next_event = events[0] if events else None
+
+    def _days_until(iso: str) -> int:
+        return (date.fromisoformat(iso[:10]) - today).days
+
+    return {
+        "next_task": next_task,
+        "next_task_days": _days_until(next_task["due_at"]) if next_task else None,
+        "next_event": next_event,
+        "next_event_days": _days_until(next_event["start_at"]) if next_event else None,
+    }
 
 
 def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
@@ -747,10 +824,19 @@ WIDGET_TYPES: dict[str, dict] = {
         # otherwise unreachable dead CSS as long as this default was "full".
         "default_width": "third",
     },
-    "today_agenda": {
-        "label": "Today's Agenda",
-        "template": "_widget_today_agenda.html",
-        "render": _render_today_agenda,
+    # "agenda" (2026-08-15 widget consolidation, plans/open.md § Widget
+    # consolidation) -- replaces today_agenda/weekly_overview/
+    # upcoming_events/overdue_tasks (4 types -> 1, Range + Show config
+    # toggles instead of 4 separate names). "half" (today_agenda's own
+    # old default) rather than weekly_overview's old "full" -- the
+    # flat/today mode most widgets use (including the seeded default) is
+    # the common case; a multi-day grouped Range still renders fine, just
+    # a little tighter, with no manual per-instance width override to
+    # reach for either way (see _widget_width's own docstring).
+    "agenda": {
+        "label": "Agenda",
+        "template": "_widget_agenda.html",
+        "render": _render_agenda,
         "uses": {"tasks", "events"},
         "default_width": "half",
     },
@@ -761,31 +847,13 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": {"tasks", "events"},
         "default_width": "half",
     },
-    "weekly_overview": {
-        "label": "Weekly Overview",
-        "template": "_widget_weekly_overview.html",
-        "render": _render_weekly_overview,
-        "uses": {"tasks", "events"},
-        "default_width": "full",
-    },
-    "upcoming_events": {
-        "label": "Upcoming Events",
-        "template": "_widget_upcoming_events.html",
-        "render": _render_upcoming_events,
-        "uses": {"events"},
-        "default_width": "third",
-    },
-    "overdue_tasks": {
-        "label": "Overdue Tasks",
-        "template": "_widget_overdue_tasks.html",
-        "render": _render_overdue_tasks,
-        "uses": {"tasks"},
-        "default_width": "third",
-    },
-    "project_preview": {
-        "label": "Project Preview",
-        "template": "_widget_project_preview.html",
-        "render": _render_project_preview,
+    # "spaces_projects" (2026-08-15 widget consolidation) -- replaces
+    # project_preview/filled_cards (2 types -> 1, a List/Cards style
+    # toggle instead of 2 separate names).
+    "spaces_projects": {
+        "label": "Spaces & Projects",
+        "template": "_widget_spaces_projects.html",
+        "render": _render_spaces_projects,
         "uses": set(),
         "default_width": "third",
     },
@@ -796,26 +864,12 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": set(),
         "default_width": "half",
     },
-    "calendar_agenda": {
-        "label": "Calendar + Agenda",
-        "template": "_widget_calendar_agenda.html",
-        "render": _render_calendar_agenda,
-        "uses": {"tasks", "events"},
-        "default_width": "third",
-    },
     "contact_list": {
         "label": "Contact List",
         "template": "_widget_contact_list.html",
         "render": _render_contact_list,
         "uses": set(),
         "default_width": "third",
-    },
-    "filled_cards": {
-        "label": "Filled Cards",
-        "template": "_widget_filled_cards.html",
-        "render": _render_filled_cards,
-        "uses": set(),
-        "default_width": "full",
     },
     "important_urgent": {
         "label": "Important & Urgent",
@@ -838,24 +892,35 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": set(),
         "default_width": "full",
     },
+    # "streak"/"next_deadline" (2026-08-15 widget consolidation, new
+    # types) -- see _render_streak/_render_next_deadline.
+    "streak": {
+        "label": "Streak",
+        "template": "_widget_streak.html",
+        "render": _render_streak,
+        "uses": {"tasks"},
+        "default_width": "third",
+    },
+    "next_deadline": {
+        "label": "Next Deadline",
+        "template": "_widget_next_deadline.html",
+        "render": _render_next_deadline,
+        "uses": {"tasks", "events"},
+        "default_width": "third",
+    },
 }
 
 # --------------------------------------------------------------------- #
 # Source / View / Range -- 2026-08-02 rework of how a widget gets picked.
 # WIDGET_TYPES above is unchanged and still the actual storage/rendering
-# mechanism (every widget row's `type` column is still one of its 7 keys,
-# no migration needed for existing dashboards) -- what changed is the
-# *picker* in front of it. Choosing a widget used to be one flat list
-# ("Today's Agenda", "Weekly Overview", "Upcoming Events", ... -- seven
-# names that don't obviously relate to each other even though four of
-# them are really the same underlying data, tasks+events, just sliced
-# differently). Now it's three independent choices -- what data
-# (Source), how far out (Range, only where it means something), and how
-# it's laid out (View) -- and _resolve_selection below maps that triple
-# onto one of the existing seven `type` keys plus a `range_days` config
-# value where relevant. _selection_from_widget does the reverse, so the
+# mechanism -- what changed is the *picker* in front of it: three
+# independent choices, what data (Source), how it's laid out (View), and
+# how far out (Range, only where it means something) -- and
+# _resolve_selection below maps that triple onto one of WIDGET_TYPES'
+# `type` keys plus whatever extra config that type needs (e.g. Agenda's
+# `range`/`show`). _selection_from_widget does the reverse, so the
 # per-widget Filters form can show an existing widget's Source/View/Range
-# pre-selected instead of just its opaque legacy type name.
+# pre-selected instead of just its opaque type name.
 # --------------------------------------------------------------------- #
 
 WIDGET_SOURCES: dict[str, dict] = {
@@ -869,125 +934,114 @@ WIDGET_SOURCES: dict[str, dict] = {
     # dict key stays as-is since it's an internal id threaded through
     # _SELECTION_TO_TYPE/config, not user-facing.
     "calendar_tasks": {"label": "WebDAV", "icon": "calendar"},
-    # "projects" removed entirely (2026-08-07, "purge all remains of
-    # projects" from this modal) -- no Projects tile in the Data source
-    # picker any more. The underlying widget types (project_preview/
-    # filled_cards) and their render functions are NOT deleted -- an
-    # already-placed widget of either type keeps rendering via WIDGET_TYPES
-    # exactly as before; this only stops the builder from offering a new
-    # one. See _TYPE_TO_SELECTION/_selection_from_widget below and
-    # edit_widget's own comment for how an already-placed widget's Filters
-    # form still saves safely despite its source no longer being a valid
-    # picker option.
     "habits": {"label": "Habits", "icon": "activity"},
     "contacts": {"label": "Contacts", "icon": "users"},
     # "quick_links" (1.9 side work) -- its own source rather than folded
     # under "calendar_tasks", since it reads label_config directly (no
-    # tasks/events at all, same "uses: set()" shape project_preview/
-    # filled_cards already have) -- see _render_quick_links.
+    # tasks/events at all, same "uses: set()" shape spaces_projects
+    # already has) -- see _render_quick_links.
     "quick_links": {"label": "Quick Links", "icon": "link"},
+    # "spaces_projects" (2026-08-15 widget consolidation) -- re-added to
+    # the builder as its own source now that it's one clean List/Cards
+    # widget instead of two ("projects" was purged from the picker
+    # entirely 2026-08-07 while project_preview/filled_cards were still
+    # two separate, harder-to-explain types; see that comment's own
+    # history in this file's git log). Reads label_config directly, same
+    # "uses: set()" shape as quick_links.
+    "spaces_projects": {"label": "Spaces & Projects", "icon": "layers"},
 }
 
 # Which views exist per source, and which of those views take a Range.
+# `has_show` (2026-08-15) marks the one view (Agenda) whose builder form
+# also exposes the Show checkboxes (tasks/events/overdue); absent/False
+# everywhere else, read via `.get("has_show")` so existing entries don't
+# all need the key added.
 WIDGET_VIEWS: dict[str, dict] = {
-    "agenda": {"label": "Agenda (grouped by day)", "source": "calendar_tasks", "has_range": True},
-    "upcoming_list": {"label": "Upcoming list", "source": "calendar_tasks", "has_range": True},
-    "overdue_list": {"label": "Overdue list", "source": "calendar_tasks", "has_range": False},
+    # "agenda_view" (2026-08-15 widget consolidation) -- replaces the
+    # three separate "agenda"/"upcoming_list"/"overdue_list" views; which
+    # of those three the old picker offered is now the Show checkboxes
+    # inside this one view instead (see _widget_builder_fields.html).
+    "agenda_view": {"label": "Agenda", "source": "calendar_tasks", "has_range": True, "has_show": True},
     "at_a_glance_view": {"label": "At a glance (stats)", "source": "calendar_tasks", "has_range": False},
     "mini_calendar": {"label": "Mini calendar", "source": "calendar_tasks", "has_range": False},
-    # "cards"/"filled_cards_view" removed with the "projects" source above
-    # -- neither is offered in the View picker any more.
     "checklist": {"label": "Checklist", "source": "habits", "has_range": False},
-    "calendar_agenda_view": {"label": "Calendar + Agenda", "source": "calendar_tasks", "has_range": False},
     "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False},
-    # 1.9 side work -- porting /today's two sections into the Dashboard
-    # registry (see _render_important_urgent/_render_scheduled_work_today)
-    # and a new visual "Quick Links" tile grid (see _render_quick_links),
-    # each offered through the same Source/View picker every other widget
-    # type is, not just registered in WIDGET_TYPES with no way to add one.
     "important_urgent_view": {"label": "Important & urgent", "source": "calendar_tasks", "has_range": False},
     "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
     "quick_links_view": {"label": "Quick links (tiles)", "source": "quick_links", "has_range": False},
+    # "spaces_projects_view"/"streak_view"/"next_deadline_view"
+    # (2026-08-15 widget consolidation) -- spaces_projects_view exposes
+    # the List/Cards Style radio (see _widget_builder_fields.html), same
+    # gating idea as Agenda's has_show.
+    "spaces_projects_view": {"label": "Spaces & Projects", "source": "spaces_projects", "has_range": False, "has_style": True},
+    "streak_view": {"label": "Streak", "source": "calendar_tasks", "has_range": False},
+    "next_deadline_view": {"label": "Next deadline", "source": "calendar_tasks", "has_range": False},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
-    "today": {"label": "Today", "views": {"agenda"}},
-    "next_7_days": {"label": "Next 7 days", "views": {"agenda", "upcoming_list"}},
-    "next_30_days": {"label": "Next 30 days", "views": {"agenda", "upcoming_list"}},
-    "all_upcoming": {"label": "All upcoming", "views": {"upcoming_list"}},
+    "today": {"label": "Today", "views": {"agenda_view"}},
+    "next_7_days": {"label": "Next 7 days", "views": {"agenda_view"}},
+    "next_30_days": {"label": "Next 30 days", "views": {"agenda_view"}},
+    "all_upcoming": {"label": "All upcoming", "views": {"agenda_view"}},
 }
 
-# (view, range) -> (type, range_days). `range` is only ever looked up for
-# views where WIDGET_VIEWS[view]["has_range"] is True; the other views
-# have exactly one valid mapping regardless of whatever range came in.
-# "cards"/"filled_cards_view" stay in this dict even though WIDGET_VIEWS no
-# longer offers them (2026-08-07 Projects purge) -- harmless dead forward-
-# lookup data; nothing ever submits those view values any more except
-# _widget_edit_form.html's own hidden-field fallback for an already-placed
-# Projects-sourced widget (see edit_widget's own comment), which needs
-# _resolve_selection to keep resolving them correctly rather than 404ing.
-_SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, int | None]] = {
-    ("agenda", "today"): ("today_agenda", None),
-    ("agenda", "next_7_days"): ("weekly_overview", 7),
-    ("agenda", "next_30_days"): ("weekly_overview", 30),
-    ("upcoming_list", "next_7_days"): ("upcoming_events", 7),
-    ("upcoming_list", "next_30_days"): ("upcoming_events", 30),
-    ("upcoming_list", "all_upcoming"): ("upcoming_events", None),
-    ("overdue_list", None): ("overdue_tasks", None),
-    ("at_a_glance_view", None): ("at_a_glance", None),
-    ("mini_calendar", None): ("mini_month_calendar", None),
-    ("cards", None): ("project_preview", None),
-    ("filled_cards_view", None): ("filled_cards", None),
-    ("checklist", None): ("habit_checkin", None),
-    ("calendar_agenda_view", None): ("calendar_agenda", None),
-    ("contact_list_view", None): ("contact_list", None),
-    ("important_urgent_view", None): ("important_urgent", None),
-    ("scheduled_work_view", None): ("scheduled_work_today", None),
-    ("quick_links_view", None): ("quick_links", None),
+# (view, range) -> (type, extra_config). `range` is only ever looked up
+# for views where WIDGET_VIEWS[view]["has_range"] is True; the other
+# views have exactly one valid mapping regardless of whatever range came
+# in. `extra_config` is merged into the widget's stored config on top of
+# whatever _config_from_form already built from Title/Labels/Limit/Style/
+# Show -- Agenda's own `range`/(default) `show` land here so a fresh
+# widget starts with sane defaults even before any Show checkbox is
+# touched.
+#
+# The pre-consolidation (view, range) keys ("agenda"/"upcoming_list"/
+# "overdue_list"/"cards"/"filled_cards_view"/"calendar_agenda_view") are
+# NOT kept as dead entries here (unlike the 2026-08-07 Projects-purge
+# precedent) -- every dashboard row using them is rewritten in place by
+# `_migrate_widget_consolidation` the moment this version runs, so no
+# live widget can still be carrying one; _resolve_selection's own
+# fallback (an unrecognized view resolves to the first valid view for
+# the source) covers any stale/forged submission just as safely.
+_SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
+    ("agenda_view", "today"): ("agenda", {"range": "today"}),
+    ("agenda_view", "next_7_days"): ("agenda", {"range": "next_7_days"}),
+    ("agenda_view", "next_30_days"): ("agenda", {"range": "next_30_days"}),
+    ("agenda_view", "all_upcoming"): ("agenda", {"range": "all_upcoming"}),
+    ("at_a_glance_view", None): ("at_a_glance", {}),
+    ("mini_calendar", None): ("mini_month_calendar", {}),
+    ("checklist", None): ("habit_checkin", {}),
+    ("contact_list_view", None): ("contact_list", {}),
+    ("important_urgent_view", None): ("important_urgent", {}),
+    ("scheduled_work_view", None): ("scheduled_work_today", {}),
+    ("quick_links_view", None): ("quick_links", {}),
+    ("spaces_projects_view", None): ("spaces_projects", {}),
+    ("streak_view", None): ("streak", {}),
+    ("next_deadline_view", None): ("next_deadline", {}),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
-# widget's stored `type` + `config.range_days`. Stores the full (source,
-# view, range) triple directly (2026-08-07 Projects purge) rather than just
-# (view, range) + a WIDGET_VIEWS[view]["source"] lookup -- "cards"/
-# "filled_cards_view" no longer exist as WIDGET_VIEWS keys, so that lookup
-# would KeyError the moment an already-placed Projects-sourced widget's
-# Filters panel was opened. Kept as harmless dead reverse-lookup data for
-# exactly that case; see _selection_from_widget and edit_widget's own
-# comments for how the rest of the round-trip stays safe.
-_TYPE_TO_SELECTION: dict[tuple[str, int | None], tuple[str, str, str | None]] = {
-    ("today_agenda", None): ("calendar_tasks", "agenda", "today"),
-    # weekly_overview's own render function defaults range_days to 7 when
-    # config doesn't have one at all (_render_weekly_overview) -- true for
-    # every dashboard that had this widget seeded before 2026-08-02, back
-    # when config was just `{}`. (weekly_overview, None) has to reverse-
-    # map to the *same* selection as (weekly_overview, 7), or every
-    # pre-existing Weekly Overview widget would show as "next_7_days"
-    # when you look at it but silently jump to the generic
-    # calendar_tasks/agenda/today fallback the moment you opened its
-    # Filters panel, changing its actual behavior the instant you saved.
-    ("weekly_overview", None): ("calendar_tasks", "agenda", "next_7_days"),
-    ("weekly_overview", 7): ("calendar_tasks", "agenda", "next_7_days"),
-    ("weekly_overview", 30): ("calendar_tasks", "agenda", "next_30_days"),
-    ("upcoming_events", 7): ("calendar_tasks", "upcoming_list", "next_7_days"),
-    ("upcoming_events", 30): ("calendar_tasks", "upcoming_list", "next_30_days"),
-    ("upcoming_events", None): ("calendar_tasks", "upcoming_list", "all_upcoming"),
-    ("overdue_tasks", None): ("calendar_tasks", "overdue_list", None),
+# widget's stored `type` (+ `config.range` for Agenda). See
+# _selection_from_widget for the type-aware key it builds.
+_TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = {
+    ("agenda", "today"): ("calendar_tasks", "agenda_view", "today"),
+    ("agenda", "next_7_days"): ("calendar_tasks", "agenda_view", "next_7_days"),
+    ("agenda", "next_30_days"): ("calendar_tasks", "agenda_view", "next_30_days"),
+    ("agenda", "all_upcoming"): ("calendar_tasks", "agenda_view", "all_upcoming"),
     ("at_a_glance", None): ("calendar_tasks", "at_a_glance_view", None),
     ("mini_month_calendar", None): ("calendar_tasks", "mini_calendar", None),
-    ("project_preview", None): ("projects", "cards", None),
-    ("filled_cards", None): ("projects", "filled_cards_view", None),
+    ("spaces_projects", None): ("spaces_projects", "spaces_projects_view", None),
     ("habit_checkin", None): ("habits", "checklist", None),
-    ("calendar_agenda", None): ("calendar_tasks", "calendar_agenda_view", None),
     ("contact_list", None): ("contacts", "contact_list_view", None),
     ("important_urgent", None): ("calendar_tasks", "important_urgent_view", None),
     ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
     ("quick_links", None): ("quick_links", "quick_links_view", None),
+    ("streak", None): ("calendar_tasks", "streak_view", None),
+    ("next_deadline", None): ("calendar_tasks", "next_deadline_view", None),
 }
 
 
-def _resolve_selection(source: str, view: str, range_: str | None) -> tuple[str, int | None]:
-    """(source, view, range) from the form -> (type, range_days) to
+def _resolve_selection(source: str, view: str, range_: str | None) -> tuple[str, dict]:
+    """(source, view, range) from the form -> (type, extra_config) to
     actually store/render. Falls back to the first valid view for the
     source (and drops an inapplicable range) on anything malformed or
     stale rather than erroring -- a selector that's out of sync with its
@@ -1004,23 +1058,23 @@ def _resolve_selection(source: str, view: str, range_: str | None) -> tuple[str,
 
 
 def _selection_from_widget(widget: dict) -> tuple[str, str, str | None]:
-    """(type, range_days) stored on a widget -> (source, view, range) to
-    pre-select in the form. Unknown/legacy types (shouldn't happen, but
-    _widget_context already tolerates a None spec for exactly this kind
-    of "the type on disk doesn't match anything live" case) fall back to
-    the first source/view rather than crashing the edit form. Returns the
-    (source, view, range) triple straight from _TYPE_TO_SELECTION -- for a
-    type whose source/view are no longer offered by the builder (Projects,
-    2026-08-07 purge), this still returns "projects"/"cards" (or
-    "filled_cards_view") correctly instead of KeyError-ing on a
-    WIDGET_VIEWS lookup that key no longer has; _widget_edit_form.html
-    checks whether the returned source is still in `widget_sources` before
-    deciding whether to render it as a picker or fall back to read-only
-    hidden fields (see that template's own comment)."""
-    range_days = (widget.get("config") or {}).get("range_days")
-    key = (widget["type"], int(range_days) if range_days else None)
+    """Stored widget -> (source, view, range) to pre-select in the form.
+    Agenda is keyed on its own `config["range"]` string (defaulting to
+    "today" for a not-yet-migrated/hand-built config, via `_agenda_range`
+    -- same tolerant fallback the render function itself uses); every
+    other type has exactly one selection regardless of config. Unknown/
+    legacy types (shouldn't happen once `_migrate_widget_consolidation`
+    has run, but _widget_context already tolerates a None spec for
+    exactly this kind of "the type on disk doesn't match anything live"
+    case) fall back to the first source/view rather than crashing the
+    edit form."""
+    wtype = widget["type"]
+    if wtype == "agenda":
+        key = (wtype, _agenda_range(widget.get("config") or {}))
+    else:
+        key = (wtype, None)
     if key not in _TYPE_TO_SELECTION:
-        return "calendar_tasks", "agenda", "today"
+        return "calendar_tasks", "agenda_view", "today"
     return _TYPE_TO_SELECTION[key]
 
 
@@ -1045,8 +1099,8 @@ def _selection_from_widget(widget: dict) -> tuple[str, str, str | None]:
 # --------------------------------------------------------------------- #
 
 _SCOPE_EXCLUDED_TYPES: dict[str, set[str]] = {
-    "space": {"filled_cards", "quick_links"},
-    "project": {"filled_cards", "project_preview", "quick_links"},
+    "space": {"quick_links"},
+    "project": {"spaces_projects", "quick_links"},
 }
 
 
@@ -1129,9 +1183,18 @@ def _scoped_collections(conn, label_name: str | None) -> tuple[list[dict], list[
 # at it via group_uid), not a bespoke seed-only mechanism, so a seeded
 # stack is indistinguishable at render time from one a user built by
 # dragging one widget onto another.
-_DEFAULT_TODAY_AGENDA_CONFIG: dict = {"width": "half"}
+_DEFAULT_TODAY_AGENDA_CONFIG: dict = {"width": "half", "range": "today"}
 _DEFAULT_STACK_CONFIG: dict = {"width": "half"}
-_DEFAULT_STACK_MEMBER_TYPES: list[str] = ["at_a_glance", "upcoming_events", "overdue_tasks"]
+# (2026-08-15 widget consolidation) -- upcoming_events/overdue_tasks no
+# longer exist as their own types; the stacked card's other two members
+# are now Agenda widgets configured to show just one Show section each
+# (Events-only/all-upcoming, Overdue-only), reproducing the exact same
+# two panes the old seed showed.
+_DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict]] = [
+    ("at_a_glance", {}),
+    ("agenda", {"range": "all_upcoming", "show": ["events"]}),
+    ("agenda", {"range": "today", "show": ["overdue"]}),
+]
 
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"
 _HOME_SEEDED_KEY = "dashboard_home_seeded_v1"
@@ -1143,9 +1206,9 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     page -- shared by _ensure_default_widgets and
     _ensure_default_label_widgets so both seed with the identical
     screenshot-driven look: Today's Agenda beside a stack of At a
-    Glance / Upcoming Events / Overdue Tasks. Building the stack this way
-    (a `type="stack"` row + group_uid members) mirrors stack_widget()'s
-    own shape exactly, not a new mechanism.
+    Glance / Upcoming events / Overdue. Building the stack this way (a
+    `type="stack"` row + group_uid members) mirrors stack_widget()'s own
+    shape exactly, not a new mechanism.
 
     Every widget/stack row is scoped to this page via the `label_name`
     column (None means Home -- see db.upsert_dashboard_widget), and each
@@ -1158,7 +1221,7 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     db.upsert_dashboard_widget(
         conn,
         {
-            "uid": str(uuid.uuid4()), "type": "today_agenda", "title": None,
+            "uid": str(uuid.uuid4()), "type": "agenda", "title": None,
             "config": agenda_config, "position": 0.0, "created_at": now, "label_name": label_name,
         },
     )
@@ -1170,8 +1233,10 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
             "config": dict(_DEFAULT_STACK_CONFIG), "position": 1.0, "created_at": now, "label_name": label_name,
         },
     )
-    for i, wtype in enumerate(_DEFAULT_STACK_MEMBER_TYPES):
-        member_config = {"label_name": label_name} if label_name else {}
+    for i, (wtype, extra_config) in enumerate(_DEFAULT_STACK_MEMBER_TYPES):
+        member_config = dict(extra_config)
+        if label_name:
+            member_config["label_name"] = label_name
         db.upsert_dashboard_widget(
             conn,
             {
@@ -1322,6 +1387,95 @@ def _backfill_mini_calendar_widget(conn) -> None:
     db.set_app_meta(conn, _MINI_CALENDAR_BACKFILL_KEY, "1")
 
 
+_WIDGET_CONSOLIDATION_KEY = "dashboard_widget_consolidation_v1"
+
+
+def _migrate_widget_consolidation(conn) -> None:
+    """One-time migration (2026-08-15 widget consolidation, plans/open.md
+    § Widget consolidation) -- rewrites every existing dashboard_widgets
+    row still carrying one of the seven now-removed types in place, so no
+    existing dashboard silently loses a widget just because this version
+    is running. Runs exactly once (tracked in app_meta), same
+    non-idempotent-forever pattern _backfill_mini_calendar_widget uses
+    below (this only ever needs to run once, not "until the condition is
+    no longer true").
+
+    - today_agenda/weekly_overview/upcoming_events/overdue_tasks all
+      become "agenda", each config translated to the exact Range/Show
+      combination that reproduces its old content -- every one of these
+      four preserves the underlying task/event set unchanged, just under
+      the new registry (see AGENDA_RANGES/AGENDA_SHOWS and _render_agenda's
+      own docstring for what each combination renders).
+    - project_preview/filled_cards become "spaces_projects" with
+      style="list"/"cards" respectively.
+    - calendar_agenda splits into two widgets in its old row's place: the
+      row itself becomes an "agenda" (range=next_7_days,
+      show=[tasks, events], matching the old embedded 7-day agenda), and
+      a brand-new "mini_month_calendar" row is inserted right beside it,
+      sharing the same group_uid -- a calendar_agenda that was already
+      inside a stack keeps both halves stacked together; a standalone one
+      gets two standalone widgets at (roughly) the same position. Doesn't
+      nest a new stack around them -- stacks aren't nestable (see
+      stack_widget's own comment), and reusing calendar_agenda's existing
+      group_uid (None or a real stack) sidesteps that restriction
+      entirely."""
+    if db.get_app_meta(conn, _WIDGET_CONSOLIDATION_KEY):
+        return
+    now = _now()
+    for w in db.list_all_dashboard_widgets(conn):
+        wtype = w["type"]
+        cfg = dict(w.get("config") or {})
+        if wtype in ("today_agenda", "weekly_overview", "upcoming_events", "overdue_tasks"):
+            range_days = cfg.pop("range_days", None)
+            if wtype == "today_agenda":
+                cfg.update({"range": "today", "show": ["overdue", "tasks", "events"]})
+            elif wtype == "weekly_overview":
+                cfg.update({"range": "next_30_days" if range_days == 30 else "next_7_days", "show": ["tasks", "events"]})
+            elif wtype == "upcoming_events":
+                if range_days == 7:
+                    cfg["range"] = "next_7_days"
+                elif range_days == 30:
+                    cfg["range"] = "next_30_days"
+                else:
+                    cfg["range"] = "all_upcoming"
+                cfg["show"] = ["events"]
+            else:  # overdue_tasks
+                cfg.update({"range": "today", "show": ["overdue"]})
+            row = dict(w)
+            row["type"], row["config"] = "agenda", cfg
+            db.upsert_dashboard_widget(conn, row)
+        elif wtype in ("project_preview", "filled_cards"):
+            cfg["style"] = "list" if wtype == "project_preview" else "cards"
+            row = dict(w)
+            row["type"], row["config"] = "spaces_projects", cfg
+            db.upsert_dashboard_widget(conn, row)
+        elif wtype == "calendar_agenda":
+            agenda_cfg = dict(cfg)
+            agenda_cfg.update({"range": "next_7_days", "show": ["tasks", "events"]})
+            row = dict(w)
+            row["type"], row["config"] = "agenda", agenda_cfg
+            db.upsert_dashboard_widget(conn, row)
+            cal_cfg = {}
+            if cfg.get("tags"):
+                cal_cfg["tags"] = cfg["tags"]
+            if cfg.get("label_name"):
+                cal_cfg["label_name"] = cfg["label_name"]
+            db.upsert_dashboard_widget(
+                conn,
+                {
+                    "uid": str(uuid.uuid4()),
+                    "type": "mini_month_calendar",
+                    "title": None,
+                    "config": cal_cfg,
+                    "position": w["position"] - 0.001,
+                    "created_at": now,
+                    "group_uid": w.get("group_uid"),
+                    "label_name": w.get("label_name"),
+                },
+            )
+    db.set_app_meta(conn, _WIDGET_CONSOLIDATION_KEY, "1")
+
+
 def _widget_context(conn, widget: dict, nav: dict | None = None) -> dict:
     spec = WIDGET_TYPES.get(widget["type"])
     width = _widget_width(widget, spec)
@@ -1397,6 +1551,7 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
     _widget_sources_for_scope and the collection dropdowns by
     _scoped_collections, so a label page never offers widgets or filters
     that can't mean anything there."""
+    _migrate_widget_consolidation(conn)
     label_name = project_uid or space_uid
     widgets = db.list_dashboard_widgets(conn, label_name=label_name)
     widget_contexts = _build_widget_contexts(conn, widgets, nav)
@@ -1630,7 +1785,9 @@ def _config_from_form(
     task_list_uids: list[str],
     calendar_uids: list[str],
     limit: str,
-    range_days: int | None = None,
+    extra: dict | None = None,
+    style: str = "",
+    show: list[str] | None = None,
 ) -> dict:
     config: dict = {}
     tag_list = _tags_list(tags)
@@ -1655,12 +1812,25 @@ def _config_from_form(
             config["limit"] = int(limit)
         except ValueError:
             pass
-    # Range (2026-08-02's Source/View/Range rework) -- resolved server-side
-    # by _resolve_selection before this is ever called, never trusted
-    # as-is from the client.
-    if range_days:
-        config["range_days"] = range_days
+    # `extra` (2026-08-15 widget consolidation) -- whatever
+    # _resolve_selection decided a fresh Agenda widget's `range` (and, by
+    # omission, its default `show`) should be; merged in before `style`/
+    # `show` below so an explicit Style/Show submission still wins.
+    if extra:
+        config.update(extra)
+    # `style` (2026-08-15, Spaces & Projects) / `show` (2026-08-15, Agenda)
+    # -- only ever passed by callers that already know the resolved type
+    # is spaces_projects/agenda respectively, so these never pollute any
+    # other type's stored config.
+    if style:
+        config["style"] = style
+    if show is not None:
+        config["show"] = show
     return config
+
+
+def _agenda_show_from_form(show_overdue: bool, show_tasks: bool, show_events: bool) -> list[str]:
+    return [name for name, on in (("overdue", show_overdue), ("tasks", show_tasks), ("events", show_events)) if on]
 
 
 @router.post("/dashboard/widgets/preview")
@@ -1676,6 +1846,10 @@ def preview_widget(
     task_list_uids: list[str] = Form([]),
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
+    style: str = Form(""),
+    show_overdue: bool = Form(False),
+    show_tasks: bool = Form(False),
+    show_events: bool = Form(False),
     space_uid: str = Form(""),
     conn=Depends(get_db),
 ):
@@ -1692,15 +1866,22 @@ def preview_widget(
     only ever present when previewing from a Space/Project page's own
     Customize form -- see add_widget below for why the preview has to
     auto-scope the same way the real save does. `tags_labels` (2026-08-07)
-    is the Labels chip multiselect's checkboxes -- see _combine_tags."""
+    is the Labels chip multiselect's checkboxes -- see _combine_tags.
+    `style`/`show_*` (2026-08-15 widget consolidation) are Spaces &
+    Projects' Style radio and Agenda's Show checkboxes -- see
+    _config_from_form."""
     if source not in WIDGET_SOURCES:
         return templates.TemplateResponse(
             "_dashboard_widget_preview.html",
             {"request": request, "widget": {"uid": "preview", "title": title}, "spec": None, "data": None},
         )
-    wtype, range_days = _resolve_selection(source, view, range or None)
+    wtype, extra = _resolve_selection(source, view, range or None)
     spec = WIDGET_TYPES[wtype]
-    config = _config_from_form(project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit, range_days=range_days)
+    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    config = _config_from_form(
+        project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
+        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+    )
     page_label = space_uid or project_uid
     if page_label:
         config["label_name"] = page_label
@@ -1723,6 +1904,10 @@ def add_widget(
     task_list_uids: list[str] = Form([]),
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
+    style: str = Form(""),
+    show_overdue: bool = Form(False),
+    show_tasks: bool = Form(False),
+    show_events: bool = Form(False),
     space_uid: str = Form(""),
     edit: bool = Form(False),
     conn=Depends(get_db),
@@ -1738,17 +1923,21 @@ def add_widget(
     config["project_uid"] (the answered "auto-scope" design question,
     2026-08-02) -- the user never has to pick a Project filter just to
     keep a widget from leaking other spaces'/projects' data. Widget types
-    excluded for the page's scope (e.g. Filled Cards on a Space, Project
-    Preview on a project page) are rejected as a no-op the same way an
-    unknown source is, so a stale/excluded combo never silently creates a
-    widget that can't mean anything on the page."""
+    excluded for the page's scope (e.g. Spaces & Projects on a project
+    page) are rejected as a no-op the same way an unknown source is, so a
+    stale/excluded combo never silently creates a widget that can't mean
+    anything on the page."""
     page_label = space_uid or project_uid or None
     if source not in WIDGET_SOURCES:
         return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
-    wtype, range_days = _resolve_selection(source, view, range or None)
+    wtype, extra = _resolve_selection(source, view, range or None)
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
         return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
-    config = _config_from_form(project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit, range_days)
+    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    config = _config_from_form(
+        project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
+        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+    )
     if page_label:
         config["label_name"] = page_label
     db.upsert_dashboard_widget(
@@ -1779,6 +1968,10 @@ def edit_widget(
     task_list_uids: list[str] = Form([]),
     calendar_uids: list[str] = Form([]),
     limit: str = Form(""),
+    style: str = Form(""),
+    show_overdue: bool = Form(False),
+    show_tasks: bool = Form(False),
+    show_events: bool = Form(False),
     edit: bool = Form(False),
     conn=Depends(get_db),
 ):
@@ -1787,24 +1980,24 @@ def edit_widget(
         return RedirectResponse(url="/", status_code=303)
     page_label = existing.get("label_name")
     # Already-placed widget of a source/view no longer offered by the
-    # builder (2026-08-07 Projects purge -- "projects"/"cards"/
-    # "filled_cards_view") -- _widget_edit_form.html can't render a picker
-    # for a source that isn't in `widget_sources` any more, so it falls
-    # back to submitting the widget's own current selection unchanged via
-    # hidden fields (see that template's own comment). Recognize that
-    # exact "nothing about Source/View/Range actually changed" case here
-    # and keep the widget's existing type/range_days as-is, *before* the
-    # `source not in WIDGET_SOURCES` guard below would otherwise reject
-    # the whole save -- without this, simply editing the Title or Labels
-    # on an old Projects widget would silently fail to save anything.
+    # builder (2026-08-07 Projects purge) -- _widget_edit_form.html can't
+    # render a picker for a source that isn't in `widget_sources` any
+    # more, so it falls back to submitting the widget's own current
+    # selection unchanged via hidden fields (see that template's own
+    # comment). Recognize that exact "nothing about Source/View/Range
+    # actually changed" case here and keep the widget's existing type/
+    # extra config as-is, *before* the `source not in WIDGET_SOURCES`
+    # guard below would otherwise reject the whole save -- without this,
+    # simply editing the Title or Labels on such a widget would silently
+    # fail to save anything.
     orig_source, orig_view, orig_range = _selection_from_widget(existing)
     if source == orig_source and view == orig_view and (range or None) == orig_range and source not in WIDGET_SOURCES:
         wtype = existing["type"]
-        range_days = (existing.get("config") or {}).get("range_days")
+        extra = {}
     elif source not in WIDGET_SOURCES:
         return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
     else:
-        wtype, range_days = _resolve_selection(source, view, range or None)
+        wtype, extra = _resolve_selection(source, view, range or None)
     # Scope guard (2026-08-05) -- an excluded type can only arrive from a
     # stale/forged submission (the builder no longer offers it), so refuse
     # it the same way an unknown source is refused rather than silently
@@ -1813,7 +2006,11 @@ def edit_widget(
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
         return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
     row = dict(existing)
-    new_config = _config_from_form(project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit, range_days=range_days)
+    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    new_config = _config_from_form(
+        project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
+        extra=extra, style=style if wtype == "spaces_projects" else "", show=show,
+    )
     # Width isn't a field on this form (2026-08-07 removal of the manual
     # width picker/drag-resize) -- there's no per-widget-instance width
     # left to carry over at all any more; a widget's width is always just

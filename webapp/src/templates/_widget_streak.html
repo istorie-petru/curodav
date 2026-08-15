@@ -1,0 +1,17 @@
+<!-- Data: {current_streak, longest_streak, completed_today} -- see
+     routers/dashboard.py::_render_streak. Reads tasks.completed_at (auto-
+     managed in db.upsert_task) -- current/longest run of consecutive days
+     with at least one task completed. -->
+<div class="at-a-glance-row">
+    <div class="at-a-glance-stat">
+        <div class="at-a-glance-number">{{ data.current_streak }}</div>
+        <div class="widget-section-label">Day streak</div>
+    </div>
+    <div class="at-a-glance-stat">
+        <div class="at-a-glance-number">{{ data.longest_streak }}</div>
+        <div class="widget-section-label">Longest streak</div>
+    </div>
+</div>
+{% if not data.completed_today %}
+<div class="empty-state">Complete a task today to keep your streak going.</div>
+{% endif %}
