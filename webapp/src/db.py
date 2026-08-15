@@ -2571,6 +2571,70 @@ def format_contact_birthday(value: str | None) -> str:
     return v
 
 
+def _birthday_event_uid(contact_uid: str) -> str:
+    return f"birthday::{contact_uid}"
+
+
+def sync_contact_birthday_event(conn: sqlite3.Connection, contact_uid: str, full_name: str | None, birthday: str | None) -> None:
+    """Direct follow-up (2026-08-16) to Contacts field parity slice 4 of 6:
+    a contact's Birthday shows up on the Calendar itself, as a real all-day
+    event recurring yearly, tagged with the "Birthday" label -- not a
+    separate widget. Called from upsert_contact on every save (so the
+    event's title/date always tracks the contact's current full_name/
+    birthday) and from delete_contact.
+
+    The event's uid is deterministic (`_birthday_event_uid`), not a fresh
+    uuid4 -- lets this function find-and-replace it idempotently without a
+    separate contact<->event relation column/table, the same "derive the
+    id instead of storing a relation" shape event_occurrence_overrides'
+    `master_uid::occurrence_date` composite key already uses. A cleared
+    birthday (`None`) deletes the event outright via `delete_event` (which
+    also clears its `object_labels` row) rather than leaving a dangling
+    dateless event around.
+
+    A year-less "--MM-DD" birthday has no real year to anchor DTSTART on,
+    so it uses a fixed placeholder year (1900) far enough in the past that
+    `FREQ=YEARLY` always has a "this year" occurrence to expand, regardless
+    of when the calendar is viewed -- RRULE recurrence only ever generates
+    occurrences forward from DTSTART, never before it, which is also
+    exactly correct for a *full* birthday date: recurrence naturally starts
+    at the real birth year and never fires an occurrence before someone was
+    born."""
+    event_uid = _birthday_event_uid(contact_uid)
+    if not birthday:
+        delete_event(conn, event_uid)
+        return
+    v = birthday.strip()
+    if v.startswith("--"):
+        start_at = f"1900-{v[2:4]}-{v[5:7]}"
+    else:
+        start_at = v
+    existing = get_event(conn, event_uid)
+    now = datetime.now(timezone.utc).isoformat()
+    upsert_event(
+        conn,
+        {
+            "uid": event_uid,
+            "title": f"{full_name}'s Birthday" if full_name else "Birthday",
+            "description": "",
+            "start_at": start_at,
+            "end_at": None,
+            "all_day": True,
+            "location": None,
+            "meeting_url": None,
+            "status": "active",
+            "recurrence": "FREQ=YEARLY",
+            "tags": ["Birthday"],
+            "reminders": [],
+            "holiday_calendar": None,
+            "exclude_saturday": False,
+            "exclude_sunday": False,
+            "created_at": existing["created_at"] if existing else now,
+            "updated_at": now,
+        },
+    )
+
+
 def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
@@ -2606,6 +2670,15 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     if websites is not None:
         set_contact_websites(conn, data["uid"], websites)
     conn.commit()
+    # Direct follow-up (2026-08-16): keep the generated Birthday calendar
+    # event in sync with every save -- see sync_contact_birthday_event's
+    # own docstring. Runs unconditionally (not gated on "birthday" being in
+    # `data`) since a hand-built row dict that omits the key entirely
+    # (`data.get("birthday")` -> None) should behave exactly like an
+    # explicit clear -- the same "missing key means no value" convention
+    # `format_contact_birthday`/every other optional contact field here
+    # already follows.
+    sync_contact_birthday_event(conn, data["uid"], data.get("full_name"), data.get("birthday"))
 
 
 def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
@@ -2618,6 +2691,11 @@ def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (uid,))
     conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (uid,))
     conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (uid,))
+    # Deletes the generated Birthday event (if one exists) along with the
+    # contact itself -- see sync_contact_birthday_event's docstring for why
+    # this is a plain delete_event on the deterministic uid, not a lookup
+    # through any relation table.
+    delete_event(conn, _birthday_event_uid(uid))
     conn.commit()
 
 

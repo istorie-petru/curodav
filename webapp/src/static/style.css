@@ -1361,7 +1361,23 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .checklist-check{background:none; border:none; cursor:pointer; font-size:15px; padding:0; width:20px; color:var(--fg-secondary);}
 .checklist-check.is-done{color:var(--success);}
 .checklist-text{flex:1;}
-.checklist-delete{margin-left:auto;}
+/* Icon-only remove button (checklist rows, Relations card unlink, Work
+   sessions/Phone/Email/Website row remove) -- previously unstyled (just
+   margin-left:auto), which left it rendering as a bare native <button>
+   with default browser chrome. Now the same quiet-by-default,
+   red-on-hover/focus treatment .detail-delete-link already uses for the
+   footer's demoted Delete action, just sized for an inline row rather
+   than a footer link. */
+.checklist-delete{
+  margin-left:auto;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:none; border:none; cursor:pointer; padding:5px;
+  color:var(--fg-tertiary); border-radius:var(--radius-control);
+  transition:color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.checklist-delete:hover{color:var(--danger); background:var(--tag-red-bg);}
+.checklist-delete:focus-visible{outline:2px solid var(--danger); outline-offset:-2px;}
+.checklist-delete .icon{width:14px; height:14px;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
 /* Work sessions card (task_detail.html/task_form.html, _task_work_allocations

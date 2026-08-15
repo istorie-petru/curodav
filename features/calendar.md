@@ -289,6 +289,22 @@ Show/hide is plain CSS (`#event-form:has(#event_format_in_person:checked)`,
 on switch so a hidden stale value can't silently resubmit and repopulate
 both columns.
 
+**Generated Birthday events (2026-08-16, direct follow-up to Contacts field
+parity slice 4 of 6):** a contact with a Birthday set (`db.parse_contact_
+birthday`) shows up on the Calendar itself as a real all-day event,
+recurring `FREQ=YEARLY`, tagged with the "Birthday" label — not a separate
+widget. `db.sync_contact_birthday_event` (called from `upsert_contact` on
+every save, and from `delete_contact`) owns one such event per contact, at
+the deterministic uid `f"birthday::{contact_uid}"` — found and replaced
+idempotently on every contact save rather than tracked through a separate
+relation table. A year-less birthday (`--MM-DD`) has no real year to anchor
+`DTSTART` on, so it uses a fixed placeholder year (1900) far enough in the
+past that `FREQ=YEARLY` always has a "this year" occurrence, since RRULE
+recurrence only ever generates forward from DTSTART — which is also exactly
+correct for a *full* birthday date, where DTSTART is the real birth year and
+no occurrence is generated before it. Clearing a contact's birthday deletes
+the generated event; deleting the contact does too.
+
 ## Relations & education
 
 - **Event ↔ task links** (`event_task_relations`): link existing, or "+ New

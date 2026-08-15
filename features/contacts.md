@@ -88,8 +88,11 @@
   `<input type="date">`, since a year-less birthday has no HTML
   date-input equivalent; the detail page renders it through a new
   `fmt_birthday` Jinja filter (`deps.py`). Not searched — same precedent
-  as Address, the other single-value field. See `plans/open.md` for the
-  remaining fields (structured Address, Social network).
+  as Address, the other single-value field. A contact with a birthday also
+  gets a generated all-day, yearly-recurring Calendar event tagged
+  "Birthday" (`db.sync_contact_birthday_event`) — see `features/
+  calendar.md`'s own entry for how that's kept in sync. See `plans/
+  open.md` for the remaining fields (structured Address, Social network).
 - **Routes** — `/contacts`, `/contacts/new`, `POST /contacts`,
   `/contacts/{uid}`, `/contacts/{uid}/edit`, `POST /contacts/{uid}`,
   `/contacts/{uid}/delete`.

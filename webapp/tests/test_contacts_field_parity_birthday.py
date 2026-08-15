@@ -269,3 +269,105 @@ class TestRenderedMarkup:
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
         assert ">Birthday<" not in body
+
+
+class TestBirthdayCalendarEvent:
+    """Direct follow-up (2026-08-16): a contact's Birthday is a real,
+    generated all-day yearly-recurring calendar event tagged "Birthday",
+    kept in sync by db.upsert_contact/delete_contact -- see
+    db.sync_contact_birthday_event's own docstring for the deterministic-
+    uid design."""
+
+    def test_create_contact_with_full_birthday_creates_all_day_yearly_event(self, conn):
+        uid = _make_contact(conn, full_name="Grace Hopper", birthday="1906-12-09")
+        event = db.get_event(conn, f"birthday::{uid}")
+        assert event is not None
+        assert event["all_day"] == 1 or event["all_day"] is True
+        assert event["start_at"] == "1906-12-09"
+        assert event["recurrence"] == "FREQ=YEARLY"
+        assert event["tags"] == ["Birthday"]
+        assert event["title"] == "Grace Hopper's Birthday"
+
+    def test_create_contact_with_yearless_birthday_uses_placeholder_year(self, conn):
+        uid = _make_contact(conn, full_name="Anon", birthday="--05-17")
+        event = db.get_event(conn, f"birthday::{uid}")
+        assert event["start_at"] == "1900-05-17"
+        assert event["recurrence"] == "FREQ=YEARLY"
+
+    def test_create_contact_without_birthday_creates_no_event(self, conn):
+        uid = _make_contact(conn)
+        assert db.get_event(conn, f"birthday::{uid}") is None
+
+    def test_update_contact_birthday_updates_event_date(self, conn):
+        uid = _make_contact(conn, birthday="1990-01-01")
+        db.upsert_contact(conn, {"uid": uid, "full_name": "Ada Lovelace", "birthday": "1985-06-30"})
+        event = db.get_event(conn, f"birthday::{uid}")
+        assert event["start_at"] == "1985-06-30"
+
+    def test_update_contact_name_updates_event_title(self, conn):
+        uid = _make_contact(conn, full_name="Old Name", birthday="1990-01-01")
+        db.upsert_contact(conn, {"uid": uid, "full_name": "New Name", "birthday": "1990-01-01"})
+        event = db.get_event(conn, f"birthday::{uid}")
+        assert event["title"] == "New Name's Birthday"
+
+    def test_clearing_birthday_deletes_the_event(self, conn):
+        uid = _make_contact(conn, birthday="1990-01-01")
+        assert db.get_event(conn, f"birthday::{uid}") is not None
+        db.upsert_contact(conn, {"uid": uid, "full_name": "Ada Lovelace", "birthday": None})
+        assert db.get_event(conn, f"birthday::{uid}") is None
+
+    def test_deleting_contact_deletes_its_birthday_event(self, conn):
+        uid = _make_contact(conn, birthday="1990-01-01")
+        db.delete_contact(conn, uid)
+        assert db.get_event(conn, f"birthday::{uid}") is None
+
+    def test_deleting_contact_without_birthday_is_a_harmless_noop(self, conn):
+        uid = _make_contact(conn)
+        db.delete_contact(conn, uid)  # must not raise
+
+    def test_birthday_event_expands_to_an_occurrence_this_year(self, conn):
+        # End-to-end through the same recurrence_expand pipeline the
+        # Calendar page itself uses -- confirms the generated event isn't
+        # just a row in the table but actually renders as a real
+        # occurrence, not just structurally plausible.
+        from datetime import date
+
+        from src.recurrence_expand import expand_events
+
+        uid = _make_contact(conn, full_name="Grace Hopper", birthday="1906-12-09")
+        rows = db.list_events(conn)
+        this_year = date.today().year
+        window_start = date(this_year, 1, 1)
+        window_end = date(this_year, 12, 31)
+        occurrences = expand_events(rows, window_start, window_end)
+        birthday_occurrences = [o for o in occurrences if o["uid"] == f"birthday::{uid}"]
+        assert len(birthday_occurrences) == 1
+        occ = birthday_occurrences[0]
+        assert occ["start_at"][:10] == f"{this_year}-12-09"
+        assert occ["all_day"]
+
+    def test_yearless_birthday_event_expands_to_an_occurrence_this_year(self, conn):
+        from datetime import date
+
+        from src.recurrence_expand import expand_events
+
+        uid = _make_contact(conn, full_name="Anon", birthday="--05-17")
+        rows = db.list_events(conn)
+        this_year = date.today().year
+        occurrences = expand_events(rows, date(this_year, 1, 1), date(this_year, 12, 31))
+        birthday_occurrences = [o for o in occurrences if o["uid"] == f"birthday::{uid}"]
+        assert len(birthday_occurrences) == 1
+        assert birthday_occurrences[0]["start_at"][:10] == f"{this_year}-05-17"
+
+    def test_router_create_contact_flow_creates_birthday_event(self, conn):
+        import asyncio
+
+        asyncio.run(contacts_router.create_contact(
+            full_name="Grace Hopper", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
+            address="", birthday="1906-12-09", tags="", notes="", photo=None, conn=conn,
+        ))
+        uid = db.list_contacts(conn)[0]["uid"]
+        event = db.get_event(conn, f"birthday::{uid}")
+        assert event is not None
+        assert event["tags"] == ["Birthday"]

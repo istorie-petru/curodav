@@ -2280,6 +2280,46 @@ session, right before the final commit of that session.
   existing call site" step Website's own slice needed. Full suite 1492
   passed. **Next in this build order: Address** (structured multi-value,
   full vCard ADR, 5 of 6).
+- **Shipped:** side work — **Birthdays as generated Calendar events + a
+  real `.checklist-delete` style**, complete (2026-08-16), direct feedback
+  on the Birthday slice above. Two independent pieces:
+  - A contact with a Birthday now shows up on the Calendar itself as a
+    real all-day event, recurring `FREQ=YEARLY`, tagged with the
+    "Birthday" label — not a separate widget. New `db.sync_contact_
+    birthday_event(conn, contact_uid, full_name, birthday)`, called from
+    `upsert_contact` on every save and from `delete_contact`, owns exactly
+    one such event per contact at the deterministic uid
+    `f"birthday::{contact_uid}"` — found-and-replaced idempotently on
+    every save rather than tracked through a new relation table (same
+    "derive the id instead of storing a relation" shape
+    `event_occurrence_overrides`' `master_uid::occurrence_date` composite
+    key already uses). A year-less `--MM-DD` birthday has no real year to
+    anchor `DTSTART` on, so it uses a fixed placeholder year (1900) far
+    enough in the past that `FREQ=YEARLY` always has a "this year"
+    occurrence — RRULE recurrence only ever generates forward from
+    DTSTART, which is also exactly correct for a *full* birthday date
+    (DTSTART = the real birth year, no occurrence before someone was
+    born). Clearing a birthday deletes the generated event; deleting the
+    contact does too. Verified end-to-end through the real
+    `recurrence_expand.expand_events` pipeline the Calendar page itself
+    uses (not just that the row exists) — both a full-date and a
+    year-less birthday actually expand to one occurrence in the current
+    year's window. See `features/calendar.md`'s new "Generated Birthday
+    events" note and `features/contacts.md`'s Birthday entry.
+  - `.checklist-delete` (the icon-only remove button used by checklist
+    rows, the Relations card's unlink action, and Work sessions/Phone/
+    Email/Website row removal) was previously unstyled beyond
+    `margin-left:auto` — it rendered as a bare native `<button>` with
+    default browser chrome. Now styled with the same quiet-by-default,
+    red-on-hover/focus treatment `.detail-delete-link` already uses for
+    the footer's demoted Delete action (`color:var(--fg-tertiary)` ->
+    `var(--danger)` + `var(--tag-red-bg)` on hover/focus), just sized for
+    an inline row instead of a footer link.
+  11 new tests extending `test_contacts_field_parity_birthday.py`
+  (`TestBirthdayCalendarEvent`, 46 total in that file), full suite 1503
+  passed. No CSS-only test coverage for `.checklist-delete` (this app has
+  no visual-regression harness) — verified by reading the rendered rule
+  against `.detail-delete-link`'s own precedent.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
