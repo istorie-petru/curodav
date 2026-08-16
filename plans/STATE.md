@@ -2590,6 +2590,23 @@ session, right before the final commit of that session.
   Day grid + the standalone `/week`/Timetable pages, which keep reload
   behavior. 5 new tests (`TestWeekGridAsyncCrud`), full suite **1590
   passed**.
+- **Removed:** side work — **Week/Day grid no longer auto-scrolls off
+  12 AM**, complete (2026-08-16), direct request ("remove the action that
+  moves the calendar week and day view from anywhere besides 12 AM. No
+  moving despide sleep time or whatever"). The "never open scrolled to a
+  Sleep hour" initial-scroll behavior (side work, 2026-08-15) is gone:
+  `static/time_blocks.js`'s whole "Initial scroll" section deleted (the
+  `clearMin`/`Math.max` loop over visible day columns, the
+  `.time-grid-wrap` scrollTop write). The Week and Day grids now always
+  open at the top (12 AM) regardless of any configured Sleep block
+  covering midnight. Everything else in that file is untouched —
+  `findOverlap`/`warnIfOverlapping` and the `cc-time-blocks` payload still
+  drive the overlap warning toast exactly as before (Sleep Time / Leisure
+  Time guidance stays purely advisory, never a scroll).
+  `features/calendar.md`'s Sleep/Leisure section's "Initial scroll" note
+  rewritten to say the grid always opens at 12 AM;
+  `TestSleepAwareInitialScroll` (4 structural JS-source checks) removed
+  from `test_settings_time_blocks.py`. Full suite 1586 passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

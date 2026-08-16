@@ -156,7 +156,7 @@ source = { virtual = "." }
 
 [[package]]
 name = "command-center-web"
-version = "1.8.0"
+version = "1.9.0"
 source = { virtual = "webapp" }
 dependencies = [
     { name = "caldav" },

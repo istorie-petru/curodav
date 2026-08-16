@@ -60,47 +60,4 @@
   }
 
   window.ccTimeBlocks = { findOverlap, warnIfOverlapping };
-
-  // ------------------------------------------------------------------ //
-  // Initial scroll: never open the Week/Day grid scrolled to an hour
-  // marked as Sleep Time (direct feedback: "if sleep from 00-06 AM, the
-  // week/day views should start from 6 AM, not 12 AM"). Looks at every
-  // visible day column's own date -- Week has up to 7, Day has 1 -- and,
-  // if ANY of them has a Sleep block covering midnight (start_min <= 0 <
-  // end_min), scrolls down to clear the LATEST such block's end time, so
-  // no visible day's sleep hours sit at the very top. A no-op when no
-  // Sleep block covers midnight on any visible day -- the grid opens at
-  // the top exactly as before this existed. Leisure Time is deliberately
-  // excluded here -- the feedback named Sleep specifically, and a Leisure
-  // block is never long/early enough to be "the start of the day" the way
-  // a night's sleep is.
-  // ------------------------------------------------------------------ //
-  const wrap = document.querySelector(".time-grid-wrap");
-  const bodyEl = document.querySelector(".time-grid-body");
-  const dayCols = Array.from(document.querySelectorAll(".time-col[data-date]"));
-  if (wrap && bodyEl && dayCols.length && BLOCKS.length) {
-    let clearMin = null;
-    dayCols.forEach((col) => {
-      const dateStr = col.dataset.date;
-      if (!dateStr) return;
-      const day = weekdayName(dateStr);
-      BLOCKS.forEach((b) => {
-        if (b.kind !== "sleep" || !b.days.includes(day)) return;
-        if (b.start_min <= 0 && b.end_min > 0) {
-          clearMin = clearMin === null ? b.end_min : Math.max(clearMin, b.end_min);
-        }
-      });
-    });
-    if (clearMin !== null) {
-      const pxPerHour = Number(document.body.dataset.pxPerHour || 48);
-      // .time-grid-body's own top padding is half an hour (style.css) --
-      // the same offset the hour gutter labels and every event already
-      // render at -- and .time-grid-top/.time-grid-head sit sticky ABOVE
-      // it in normal flow, so measuring the body's real rendered offset
-      // (rather than assuming a fixed header height) keeps this correct
-      // even if that header's own height ever changes.
-      const bodyOffset = bodyEl.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop;
-      wrap.scrollTop = Math.max(0, bodyOffset + pxPerHour * 0.5 + (clearMin / 60) * pxPerHour);
-    }
-  }
 })();
