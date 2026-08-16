@@ -327,8 +327,22 @@ class TestSettingsAdvanced:
         assert db.get_app_meta(conn, "some_flag") is None
 
     def test_purge_all_route_redirects_to_advanced_page(self, conn):
+        from types import SimpleNamespace
+
         _make_task(conn, "t1")
-        resp = settings_router.purge_all(conn=conn)
+        # purge_all reads request.app.state (to drop the memoized auth
+        # secret, see test_auth.py::TestPurgeAllInvalidatesSession), so it
+        # needs a request whose scope carries an `app` -- the bare _request
+        # helper doesn't have one.
+        fake_app = SimpleNamespace(state=SimpleNamespace())
+        req = Request(
+            {
+                "type": "http", "method": "POST", "path": "/settings/purge-all",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [], "app": fake_app,
+            }
+        )
+        resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/advanced"
         assert db.list_tasks(conn) == []

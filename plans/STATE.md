@@ -2730,6 +2730,21 @@ session, right before the final commit of that session.
   **1631 passed** (was 1593, +38), plus an end-to-end smoke of the real
   app under `CC_AUTH_*` env (signed-out 302, API 401, form render, bad/
   good login, cookie round-trip, signed-in 200) and of the no-auth default.
+- **Fixed:** auth follow-up (2026-08-16) — **Settings > Purge all now
+  forces a re-login.** The session signing secret lives in `app_meta`, so
+  a purge (which wipes that table) left the auto-generated secret deleted
+  while the in-process memoized one (`app.state._cc_auth_secret`) kept
+  existing cookies valid until the next restart — a reset and the auth
+  reset were out of sync. `routers/settings.py::purge_all` now drops the
+  memoized secret and clears the session cookie (the wipe itself already
+  happened), so the very next request re-mints a fresh secret and the old
+  cookie no longer verifies: signed-out again, straight back to `/login`.
+  With a stable `CC_AUTH_SECRET` configured the DB secret isn't involved,
+  but clearing the cookie forces the same re-login. Two new tests (the
+  route: drops cache + clears cookie + wipes app_meta; and a middleware
+  integration: auto-generated secret survives a valid pre-purge cookie,
+  purge drops it, the same cookie 302s to login) — full suite
+  **1633 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

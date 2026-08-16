@@ -100,7 +100,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import data_health, db, offline_sync
+from .. import auth, data_health, db, offline_sync
 from ..deps import (
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
@@ -757,9 +757,24 @@ def purge_completed(conn=Depends(get_db)):
 
 
 @router.post("/settings/purge-all")
-def purge_all(conn=Depends(get_db)):
+def purge_all(request: Request, conn=Depends(get_db)):
     db.purge_all_data(conn)
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    # A purge is a fresh install, and the auto-generated session signing
+    # secret lives in the just-wiped app_meta (see src/auth.py's
+    # session_secret). Drop the in-process memoized secret (AuthMiddleware
+    # caches it on app.state._cc_auth_secret) and clear the session cookie
+    # so the very next request re-mints a fresh secret and the old cookie
+    # no longer verifies -- with auth enabled that lands the user back on
+    # /login, the same state a brand-new install would be in. When a stable
+    # CC_AUTH_SECRET is configured instead, the secret isn't in the DB so
+    # it's unaffected, but clearing the cookie forces the re-login there
+    # too.
+    state = getattr(request.app, "state", None)
+    if state is not None:
+        state._cc_auth_secret = None
+    response = RedirectResponse(url="/settings/advanced", status_code=303)
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return response
 
 
 # --------------------------------------------------------------------- #

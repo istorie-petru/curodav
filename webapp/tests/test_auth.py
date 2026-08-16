@@ -36,6 +36,7 @@ from starlette.testclient import TestClient
 from src import auth, db
 from src.config import Settings
 from src.routers import auth as auth_router
+from src.routers import settings as settings_router
 
 
 def _settings(*, enabled=True, **overrides) -> Settings:
@@ -60,12 +61,13 @@ def _settings(*, enabled=True, **overrides) -> Settings:
     return replace(base, **overrides)
 
 
-def _request(settings, *, cookies=None, path="/login") -> Request:
+def _request(settings, *, cookies=None, path="/login", state_extra=None) -> Request:
     headers = []
     if cookies:
         cookie = "; ".join(f"{k}={v}" for k, v in cookies.items())
         headers.append((b"cookie", cookie.encode()))
-    fake_app = SimpleNamespace(state=SimpleNamespace(settings=settings))
+    state = SimpleNamespace(settings=settings, **(state_extra or {}))
+    fake_app = SimpleNamespace(state=state)
     return Request(
         {
             "type": "http",
@@ -393,3 +395,52 @@ class TestLogout:
         assert auth.SESSION_COOKIE in set_cookie
         # An expiry header (max-age=0 / expires in the past) means "clear".
         assert "max-age=0" in set_cookie.lower() or "expires=" in set_cookie.lower()
+
+
+# --------------------------------------------------------------------- #
+# Settings > Purge all + the session (Settings > Advanced). A purge wipes
+# app_meta -- where the auto-generated session signing secret lives -- so it
+# must behave like a fresh install: the memoized secret is dropped and the
+# cookie cleared, which forces a re-login when auth is enabled.
+# --------------------------------------------------------------------- #
+
+
+class TestPurgeAllInvalidatesSession:
+    def test_drops_secret_cache_and_clears_cookie(self, conn):
+        req = _request(_settings(), state_extra={"_cc_auth_secret": "old-secret"})
+        resp = settings_router.purge_all(req, conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/advanced"
+        # The session cookie is cleared and the memoized secret dropped.
+        header = resp.headers["set-cookie"]
+        assert auth.SESSION_COOKIE in header
+        assert "max-age=0" in header.lower()
+        assert req.app.state._cc_auth_secret is None
+        # app_meta is wiped, so an auto-generated secret is gone with it.
+        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+
+    def test_auto_generated_secret_re_mints_after_purge(self, tmp_path):
+        settings = _settings(auth_session_secret=None, db_path=tmp_path / "cache.sqlite")
+        app = _auth_app(settings)
+        client = TestClient(app, follow_redirects=False)
+
+        # The login flow mints the secret once and persists it to app_meta.
+        with db.connect(settings.db_path) as conn:
+            old_secret = auth.session_secret(settings, conn)
+        client.cookies.set(auth.SESSION_COOKIE, auth.make_session_token(old_secret, "alice"))
+
+        # A valid pre-purge cookie passes through (and primes the cache).
+        assert client.get("/hello").json() == {"hello": "world"}
+
+        # Purge all: wipe every table (incl. app_meta) and drop the
+        # memoized secret -- exactly what purge_all now does.
+        with db.connect(settings.db_path) as conn:
+            db.purge_all_data(conn)
+        app.state._cc_auth_secret = None
+
+        # The same cookie no longer verifies against the freshly re-minted
+        # secret, so the signed-in browser is back at /login.
+        assert client.get("/hello").status_code == 302
+        with db.connect(settings.db_path) as conn:
+            new_secret = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+        assert new_secret and new_secret != old_secret
