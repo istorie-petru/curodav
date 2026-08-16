@@ -82,25 +82,28 @@
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":00";
   }
 
-  function submitForm(action, fields) {
-    const form = document.createElement("form");
-    form.method = "post";
-    form.action = action;
-    form.style.display = "none";
-    Object.entries(fields).forEach(([name, value]) => {
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    });
-    document.body.appendChild(form);
-    form.submit();
+  // async-CRUD (features/async-crud.md): work-allocation create/move/
+  // delete used to submit a real hidden <form> and let the 303 redirect
+  // reload the whole page. Now they POST through ccApi (X-Requested-With:
+  // fetch -> the mutation endpoint returns JSON) and dispatch the change
+  // event; the week view's listener (async_calendar.js) re-renders the
+  // #week-grid region and re-inits these bindings instead of reloading.
+  // `change.type` is "task" -- an allocation is a task's scheduling, and
+  // the week grid re-renders from the task/event tables together.
+  function postAction(action, fields, actionName) {
+    const body = new FormData();
+    Object.entries(fields).forEach(([name, value]) => body.append(name, value));
+    window.ccApi
+      .post(action, body, { change: { type: "task", action: actionName } })
+      .catch((err) => {
+        window.ccToast({ message: err.message || "Could not save that change.", variant: "error" });
+      });
   }
 
   // The planning grids' scroll container. Auto-scroll reads its viewport
-  // rect for the edge test and scrolls it by .scrollTop.
-  const scroller = document.querySelector(".time-grid-wrap");
+  // rect for the edge test and scrolls it by .scrollTop. `let`, re-queried
+  // by init() -- a region swap detaches the old .time-grid-wrap.
+  let scroller = document.querySelector(".time-grid-wrap");
 
   // Shared edge auto-scroll for both drag systems. requestAnimationFrame
   // loop only while the pointer is inside an edge band; stopping (or a
@@ -136,7 +139,7 @@
   // 1. Drag an unscheduled task onto the grid -> create a work allocation
   // ------------------------------------------------------------------ //
 
-  document.querySelectorAll(".unscheduled-task-item").forEach((item) => {
+  function setupUnscheduledItem(item) {
     let drag = null; // active create-drag state, or null when idle
 
     function begin(e) {
@@ -243,12 +246,12 @@
       // the page renders no cc-time-blocks tag (only calendar_week.html/
       // calendar_day.html do -- /week and the project Week Calendar don't).
       if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
-      submitForm(cfg.createUrl, {
+      postAction(cfg.createUrl, {
         task_uid: item.dataset.taskUid,
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
         end_at: `${day}T${minutesToHHMMSS(endMin)}`,
         date_: cfg.weekDate,
-      });
+      }, "create");
     }
 
     function cancel() {
@@ -256,7 +259,7 @@
     }
 
     item.addEventListener("pointerdown", begin);
-  });
+  }
 
   // ------------------------------------------------------------------ //
   // 2. Move / resize an existing work-allocation block
@@ -408,12 +411,13 @@
 
       // Released over the unscheduled-work panel -> unschedule this one
       // block (clears its start/end back to undated, doesn't delete it --
-      // see routers/*.py's delete_allocation), so the reload shows the task
-      // back in the "Unscheduled work" list at the SAME session count.
+      // see routers/*.py's delete_allocation), so the region refresh shows
+      // the task back in the "Unscheduled work" list at the SAME session
+      // count.
       if (wasOverUnscheduled && cfg.deleteUrlBase) {
-        submitForm(cfg.deleteUrlBase + el.dataset.uid + "/delete", {
+        postAction(cfg.deleteUrlBase + el.dataset.uid + "/delete", {
           date_: cfg.weekDate,
-        });
+        }, "unschedule");
         return;
       }
 
@@ -424,11 +428,11 @@
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
       if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
-      submitForm(cfg.moveUrlBase + uid + "/move", {
+      postAction(cfg.moveUrlBase + uid + "/move", {
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
         end_at: `${day}T${minutesToHHMMSS(endMin)}`,
         date_: cfg.weekDate,
-      });
+      }, "move");
     }
 
     el.addEventListener("pointerdown", (e) => {
@@ -446,5 +450,31 @@
     });
   }
 
-  document.querySelectorAll(".work-allocation").forEach(setupBlock);
+  // init() is re-invocable: async_calendar.js re-runs it after swapping in
+  // a fresh #week-grid region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered unscheduled-task items and work-allocation blocks get
+  // their pointerdown bindings again, and the scroll container is re-read
+  // (a swap detaches the old one). Must only ever run over fresh DOM --
+  // running twice on the same elements would double-attach handlers.
+  // The per-block "unschedule" X button posts the same endpoint as the
+  // drag-onto-panel gesture, so it gets the same async treatment -- without
+  // intercepting here, its native submit would 303-reload the whole page,
+  // breaking the async week grid's no-reload contract (features/
+  // async-crud.md). data-confirmed="1" already exempts it from app.js's
+  // generic "/delete" confirm sheet, so only this interception + the region
+  // refresh is left.
+  function init() {
+    scroller = document.querySelector(".time-grid-wrap");
+    document.querySelectorAll(".unscheduled-task-item").forEach(setupUnscheduledItem);
+    document.querySelectorAll(".work-allocation").forEach(setupBlock);
+    document.querySelectorAll(".work-allocation-delete").forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        postAction(form.action, { date_: cfg.weekDate }, "unschedule");
+      });
+    });
+  }
+
+  init();
+  window.CCProjectCalendar = { init: init };
 })();

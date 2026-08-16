@@ -538,6 +538,7 @@ def calendar_regions(
     region: str,
     year: int | None = None,
     month: int | None = None,
+    date_: str | None = None,
     label: str | None = None,
     conn=Depends(get_db),
 ):
@@ -547,6 +548,10 @@ def calendar_regions(
     if region == "month":
         return templates.TemplateResponse(
             "_calendar_month_grid.html", _month_view_context(conn, request, year, month, label)
+        )
+    if region == "week":
+        return templates.TemplateResponse(
+            "_calendar_week_grid.html", _week_view_context(conn, request, date_, label)
         )
     return JSONResponse({"error": f"unknown calendar region: {region}"}, status_code=400)
 
@@ -637,6 +642,16 @@ def week_view(
     per-event `is_allocation`/`task_uid` annotation and the unscheduled-work
     list (`db.work_allocation_panel_info`), on top of the plain Week grid's
     own geometry (`grid_layout.layout_day`) and color annotation."""
+    return templates.TemplateResponse(
+        "calendar_week.html", _week_view_context(conn, request, date_, label)
+    )
+
+
+def _week_view_context(conn, request, date_, label):
+    """Everything the Week view needs, in one dict -- shared by week_view
+    (full page) and the async `#week-grid` region (features/async-crud.md),
+    which re-renders just the `.project-calendar-layout` grid after a
+    work-allocation create/move/delete or an event change on the week page."""
     anchor = date.fromisoformat(date_) if date_ else date.today()
     week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
 
@@ -719,33 +734,30 @@ def week_view(
         unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
-    return templates.TemplateResponse(
-        "calendar_week.html",
-        {
-            "request": request,
-            "active_tab": "calendar",
-            "calendar_view": "week",
-            "today_iso": date.today().isoformat(),
-            "days": days,
-            "hours": list(range(grid_layout.GRID_HOURS)),
-            "px_per_hour": grid_layout.PX_PER_HOUR,
-            # Context keys kept as "monday"/"sunday" for calendar_week.html
-            # (unchanged template contract) even though the actual first
-            # day of the displayed week is now whichever "Week starts on"
-            # (Settings > General) names -- these are just "first/last
-            # displayed day of the week," same as before this preference
-            # existed.
-            "monday": week_start_date,
-            "sunday": week_end_date,
-            "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
-            "next_week": (week_start_date + timedelta(days=7)).isoformat(),
-            "unscheduled_tasks": unscheduled_tasks,
-            "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
-            "event_label_names": db.list_event_label_names(conn),
-            "active_label": label or "",
-            "time_blocks_json": _time_blocks_client_payload(time_blocks),
-        },
-    )
+    return {
+        "request": request,
+        "active_tab": "calendar",
+        "calendar_view": "week",
+        "today_iso": date.today().isoformat(),
+        "days": days,
+        "hours": list(range(grid_layout.GRID_HOURS)),
+        "px_per_hour": grid_layout.PX_PER_HOUR,
+        # Context keys kept as "monday"/"sunday" for calendar_week.html
+        # (unchanged template contract) even though the actual first
+        # day of the displayed week is now whichever "Week starts on"
+        # (Settings > General) names -- these are just "first/last
+        # displayed day of the week," same as before this preference
+        # existed.
+        "monday": week_start_date,
+        "sunday": week_end_date,
+        "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
+        "next_week": (week_start_date + timedelta(days=7)).isoformat(),
+        "unscheduled_tasks": unscheduled_tasks,
+        "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
+        "event_label_names": db.list_event_label_names(conn),
+        "active_label": label or "",
+        "time_blocks_json": _time_blocks_client_payload(time_blocks),
+    }
 
 
 @events_router.get("/week")
@@ -791,12 +803,23 @@ def _week_redirect(date_: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=303)
 
 
+def _week_respond(x_requested_with: str | None, date_: str):
+    """Dual-mode return for the work-allocation create/move/delete trio:
+    plain 303 redirect to the Week view without the fetch header, JSON when
+    the async drag path (project_calendar.js -> ccApi.post) is driving."""
+    url = "/calendar/week"
+    if date_:
+        url += f"?date_={date_}"
+    return respond(x_requested_with, url, ok=True)
+
+
 @router.post("/week/allocations")
 def create_week_allocation(
     task_uid: str = Form(...),
     start_at: str = Form(...),
     end_at: str = Form(...),
     date_: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """Drag a task from the "Unscheduled work" list onto the Week grid to
@@ -819,7 +842,7 @@ def create_week_allocation(
             db.set_work_allocation_times(conn, undated["uid"], start_at, end_at)
         else:
             db.create_work_allocation(conn, task_uid, start_at, end_at)
-    return _week_redirect(date_)
+    return _week_respond(x_requested_with, date_)
 
 
 @router.post("/week/allocations/{event_uid}/move")
@@ -828,6 +851,7 @@ def move_week_allocation(
     start_at: str = Form(...),
     end_at: str = Form(...),
     date_: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """Drag-to-move / drag-to-resize a work-allocation block on Week -- only
@@ -842,11 +866,16 @@ def move_week_allocation(
             row["end_at"] = end_at
             row["updated_at"] = _now()
             db.upsert_event(conn, row)
-    return _week_redirect(date_)
+    return _week_respond(x_requested_with, date_)
 
 
 @router.post("/week/allocations/{event_uid}/delete")
-def delete_week_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
+def delete_week_allocation(
+    event_uid: str,
+    date_: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     """Unschedule a block -- clears this ONE session back to undated
     (`db.unschedule_work_allocation`) instead of deleting it; the task's
     total session count never changes just from unscheduling. Same fixed
@@ -855,7 +884,7 @@ def delete_week_allocation(event_uid: str, date_: str = Form(""), conn=Depends(g
     to-one, then a hard delete, both wrong)."""
     if not db.unschedule_work_allocation(conn, event_uid):
         db.delete_work_allocation(conn, event_uid)
-    return _week_redirect(date_)
+    return _week_respond(x_requested_with, date_)
 
 
 @router.get("/day/{day}")

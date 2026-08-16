@@ -55,7 +55,10 @@
   // change event with opts.change = {type, action, uid}.
   function post(url, form, opts) {
     var o = opts || {};
-    var body = form instanceof HTMLFormElement ? new FormData(form) : new FormData();
+    // Accept a FormData body directly as well as an <form> element (the
+    // calendar drag paths -- work-allocation create/move/delete -- build
+    // their payloads from JS, no form in the DOM to submit).
+    var body = form instanceof FormData ? form : form instanceof HTMLFormElement ? new FormData(form) : new FormData();
     var resp;
     return _send(url, "POST", body)
       .then(function (r) {

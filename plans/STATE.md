@@ -2561,6 +2561,35 @@ session, right before the final commit of that session.
     a Board column region, and async work-allocation create/move/delete.
   - 13 new tests across the surface suites (contacts 63, notes,
     habits 71, calendar 141, full suite **1586 passed**).
+- **Shipped:** `1.9` follow-up slice — **Async CRUD: the Week grid region +
+  async work-allocation create/move/delete**, complete (2026-08-16) — the
+  "week-grid region + work allocations" deferred item from the expansion
+  slice above (reported directly against the merged Week view: "in the
+  calendar week view, moving task timeblocks refreshes the page"). The
+  planning grid's block-level create/move/delete now goes through
+  `static/project_calendar.js`'s new `postAction` (a FormData body posted
+  via `ccApi.post`, `change.type = "task"`) instead of `submitForm` (a
+  hidden form + real submit -> 303 -> full reload); the three
+  `/calendar/week/allocations[...]` endpoints are dual-mode (`_week_respond`,
+  same `respond` helper as the rest of async-CRUD). The block's ✕-button
+  delete form is intercepted the same way, so the whole grid is reload-free.
+  `ccApi.post` now accepts a `FormData` instance directly (the drag paths
+  build their payload in JS, no `<form>` in the DOM) alongside `<form>`.
+  The week region is `GET /calendar/regions?region=week&date_=...` rendering
+  a new `_calendar_week_grid.html` partial — the `.project-calendar-layout`
+  wrapped as `#week-grid` (with `data-date`/`data-label`), extracted from
+  `calendar_week.html` and shared as the single source of truth, driven by
+  `_week_view_context` factored out of `week_view`. `async_calendar.js` now
+  handles both regions (month `#month-grid`, week `#week-grid`) and re-runs
+  the swapped-in grid's bindings: `calendar.js`/`project_calendar.js`/
+  `unscheduled_panel_toggle.js` all expose re-invocable `init()`s
+  (`window.CCWeekGrid`/`CCProjectCalendar`/`CCUnscheduledPanel`; the scroll
+  container and all per-element selectors are re-queried per init, and
+  project_calendar.js binds the ✕-delete forms there too). The Week/Day/
+  Timetable reload-fallback note from the expansion slice is now only the
+  Day grid + the standalone `/week`/Timetable pages, which keep reload
+  behavior. 5 new tests (`TestWeekGridAsyncCrud`), full suite **1590
+  passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

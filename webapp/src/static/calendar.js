@@ -196,7 +196,16 @@
   // (move/resize/delete-to-unschedule, plus click-to-open-task). Without
   // this exclusion both scripts would attach a competing pointerdown
   // handler to the same element.
-  document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
+  //
+  // init() is re-invocable: async_calendar.js re-runs it after swapping in
+  // a fresh #week-grid region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered event blocks and create-cols get bound again. It must
+  // only ever run over fresh DOM (the region swap guarantees that) --
+  // running it twice on the same elements would double-attach handlers.
+  function init() {
+    document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
+    document.querySelectorAll(".calendar-create-col").forEach(setupCreateCol);
+  }
 
   // ---------------------------------------------------------------- //
   // Hover-preview + click / click-drag-release to CREATE a new event on
@@ -254,7 +263,7 @@
   // stationary tap as a scroll gesture) -- only the "drag to pick a
   // custom length" refinement stays mouse-only, since touch genuinely
   // can't do both a scroll and a drag-create on the same surface at once.
-  document.querySelectorAll(".calendar-create-col").forEach((col) => {
+  function setupCreateCol(col) {
     const ghost = document.createElement("div");
     ghost.className = "schedule-ghost";
     ghost.style.display = "none";
@@ -348,5 +357,8 @@
       creating = false;
       ghost.style.display = "none";
     });
-  });
+  }
+
+  init();
+  window.CCWeekGrid = { init: init };
 })();

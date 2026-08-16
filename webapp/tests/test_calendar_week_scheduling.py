@@ -432,3 +432,56 @@ class TestGridDragConflictFix:
         assert "slotGhost" in script
         assert "DEFAULT_BLOCK_MINUTES" in script
         assert 'slotGhost.className = "schedule-ghost"' in script
+
+
+class TestWeekGridAsyncCrud:
+    """async-CRUD (features/async-crud.md) for the merged Week grid: the
+    work-allocation create/move/delete endpoints stay dual-mode -- plain 303
+    redirect to /calendar/week without the fetch header (no-JS forms keep
+    working), JSON when `X-Requested-With: fetch` (project_calendar.js now
+    POSTs through ccApi instead of submitting a hidden form), so a drag no
+    longer reloads the page. And `GET /calendar/regions?region=week` renders
+    the #week-grid fragment async_calendar.js swaps in after such a change."""
+
+    def test_create_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        resp = calendar_router.create_week_allocation(
+            task_uid="t1",
+            start_at=f"{_MONDAY}T16:00:00",
+            end_at=f"{_MONDAY}T18:00:00",
+            date_=_MONDAY,
+            x_requested_with="fetch",
+            conn=conn,
+        )
+        assert resp.status_code == 200
+        assert resp.body.decode() == '{"ok":true}'
+        assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
+
+    def test_move_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        resp = calendar_router.move_week_allocation(
+            event_uid=uid,
+            start_at=f"{_MONDAY}T09:00:00",
+            end_at=f"{_MONDAY}T10:00:00",
+            date_=_MONDAY,
+            x_requested_with="fetch",
+            conn=conn,
+        )
+        assert resp.status_code == 200
+        assert db.get_event(conn, uid)["start_at"] == f"{_MONDAY}T09:00:00"
+
+    def test_delete_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        resp = calendar_router.delete_week_allocation(event_uid=uid, date_=_MONDAY, x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert db.get_event(conn, uid)["start_at"] is None  # unscheduled, not deleted
+
+    def test_week_region_renders_the_week_grid_fragment(self, conn):
+        _task(conn, "t1", title="Research")
+        resp = calendar_router.calendar_regions(_request(query_string=b"region=week&date_=" + _MONDAY.encode()), region="week", date_=_MONDAY, conn=conn)
+        body = resp.body.decode()
+        assert 'id="week-grid"' in body
+        assert 'id="unscheduled-panel"' in body
+        assert 'time-col calendar-create-col project-calendar-col' in body
