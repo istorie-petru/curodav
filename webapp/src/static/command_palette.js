@@ -298,7 +298,7 @@
           return {};
         });
         if (!resp.ok) throw new Error(data.error || "Could not capture that.");
-        toast({ message: (CAPTURE_TYPE_LABEL[data.type] || "Item") + ' created: "' + (data.title || "") + '".' });
+        toast({ title: (CAPTURE_TYPE_LABEL[data.type] || "Item") + " created", message: '"' + (data.title || "") + '"' });
         // async-CRUD (features/async-crud.md): the page underneath should
         // refresh its own region for the created entity instead of staying
         // stale -- this is the only thing the palette adds to the flow (it
@@ -432,7 +432,7 @@
     fetch("/tasks/" + r.uid + "/complete", { method: "POST", headers: { "X-Requested-With": "fetch" } })
       .then(function (resp) {
         if (!resp.ok) throw new Error("failed");
-        toast({ message: 'Marked "' + r.title + '" done.' });
+        toast({ title: "Task done", message: '"' + r.title + '"' });
         close();
         // async-CRUD (features/async-crud.md): tell the page underneath to
         // refresh its own regions instead of leaving it stale.
@@ -454,7 +454,7 @@
         fetch(deleteUrl(r), { method: "POST", headers: { "X-Requested-With": "fetch" } })
           .then(function (resp) {
             if (!resp.ok) throw new Error("failed");
-            toast({ message: 'Deleted "' + r.title + '".' });
+            toast({ title: "Deleted", message: '"' + r.title + '"' });
             close();
             // async-CRUD (features/async-crud.md) -- refresh the page
             // underneath rather than leaving it stale. Only task deletes
@@ -488,7 +488,7 @@
           });
           throw new Error(data.error || "failed");
         }
-        toast({ message: 'Added label "' + name + '" to "' + ctx.title + '".' });
+        toast({ title: "Label added", message: '"' + name + '" to "' + ctx.title + '"' });
         close();
       })
       .catch(function (err) {

@@ -234,7 +234,7 @@
           });
           selected.clear();
           updateBar();
-          window.ccToast({ message: `Deleted ${uids.length} task${uids.length === 1 ? "" : "s"}` });
+          window.ccToast({ title: "Deleted", message: `${uids.length} task${uids.length === 1 ? "" : "s"}` });
           dispatchTaskChange("delete");
         } catch (err) {
           window.ccToast({ message: "Could not delete the selected tasks.", variant: "error" });
@@ -248,7 +248,7 @@
     if (!status) return;
     try {
       await bulkPost("status", { status });
-      window.ccToast({ message: "Status updated. Reloading to show the new sort order..." });
+      window.ccToast({ title: "Status updated", message: "Reloading to show the new sort order..." });
       dispatchTaskChange("status");
     } catch (err) {
       window.ccToast({ message: "Could not update status for the selected tasks.", variant: "error" });
@@ -262,7 +262,7 @@
     if (!listPath) return;
     try {
       await bulkPost("move_list", { list_path: listPath });
-      window.ccToast({ message: "Moved. Reloading..." });
+      window.ccToast({ title: "Moved", message: "Reloading..." });
       window.location.reload();
     } catch (err) {
       window.ccToast({ message: "Could not move the selected tasks.", variant: "error" });
@@ -286,7 +286,7 @@
     if (!tags.length) return;
     bulkPost("tag", { tags, mode })
       .then(() => {
-        window.ccToast({ message: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}.` });
+        window.ccToast({ title: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}`, message: tags.join(", ") });
         dispatchTaskChange("tag");
       })
       .catch(() => window.ccToast({ message: "Could not update labels for the selected tasks.", variant: "error" }));

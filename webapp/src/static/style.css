@@ -2295,7 +2295,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    + transparent and animates in via .is-in, same enter pattern as the
    modal. Bottom-center on mobile (thumb-reachable, doesn't collide with a
    FAB which lives bottom-*right*), bottom-right on desktop where a corner
-   toast is the established convention and there's no FAB to avoid. */
+   toast is the established convention and there's no FAB to avoid.
+   2026-08-16 rework: each toast is an elevated card -- a tinted status
+   icon chip (.toast-icon, colored per variant via the --tag-* pairs) + a
+   bold .toast-title header + an optional .toast-body + an accent-colored
+   action button + a quiet ✕. A thin .toast-progress bar along the bottom
+   edge drains 100% -> 0% over the auto-dismiss countdown (freezing while
+   hovered, like the countdown itself -- see toast.js). */
 /* Mobile FAB (static/app.js clones whatever [data-fab] link/button exists
     in the page's own toolbar -- each page keeps exactly one source of
     truth for its primary create action's href/data-modal target, this
@@ -2359,34 +2365,43 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   padding:0 var(--space-4);
 }
 .toast{
-  pointer-events:auto; display:flex; align-items:center; gap:var(--space-3);
-  background:var(--fg-primary); color:var(--bg-base); padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  border-radius:var(--radius-control); font-size:var(--text-footnote); box-shadow:var(--shadow-popover);
+  pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:flex-start; gap:var(--space-3);
+  background:var(--bg-elevated); color:var(--fg-primary); border:1px solid var(--border);
+  padding:var(--space-3); border-radius:var(--radius-md); box-shadow:var(--shadow-popover);
   max-width:420px; opacity:0; transform:translateY(8px) scale(.98);
   transition:opacity var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
 .toast.is-in{opacity:1; transform:translateY(0) scale(1);}
-.toast-message{flex:1;}
-.toast-action{
-  flex:none; background:none; border:none; color:var(--accent-neutral-hover); font-weight:600; font-size:var(--text-footnote);
-  cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
+/* Expiry bar -- a 2px line along the bottom edge that drains 100% -> 0% in
+   lockstep with the auto-dismiss countdown (driven by toast.js's rAF loop;
+   freezes with the countdown while hovered). ScaleX from the left edge so
+   it visibly "runs out" right-to-left. */
+.toast-progress{
+  position:absolute; left:0; bottom:0; width:100%; height:2px;
+  transform-origin:left; background:var(--tag-green-fg); opacity:.5;
 }
-[data-theme="dark"] .toast-action{color:#b0b0b6;}
-.toast-action:hover{background:rgba(255,255,255,.1);}
+.toast-error .toast-progress{background:var(--tag-red-fg);}
+.toast-warning .toast-progress{background:var(--tag-orange-fg);}
+.toast-icon{
+  flex:none; width:34px; height:34px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--tag-green-bg); color:var(--tag-green-fg);
+}
+.toast-error .toast-icon{background:var(--tag-red-bg); color:var(--tag-red-fg);}
+.toast-warning .toast-icon{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.toast-content{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding-top:5px;}
+.toast-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-primary);}
+.toast-body{font-size:var(--text-caption); color:var(--fg-secondary); line-height:1.35;}
+.toast-action{
+  flex:none; align-self:center; background:none; border:none; color:var(--accent); font-weight:600;
+  font-size:var(--text-footnote); cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
+}
+.toast-action:hover{background:var(--accent-subtle);}
 .toast-close{
   flex:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
-  background:none; border:none; color:var(--bg-base); opacity:.6; cursor:pointer; border-radius:50%; padding:0;
+  background:none; border:none; color:var(--fg-tertiary); opacity:.7; cursor:pointer; border-radius:50%; padding:0;
 }
-.toast-close:hover{opacity:1; background:rgba(255,255,255,.12);}
-.toast-error{background:var(--danger);}
-.toast-error .toast-close{color:#fff;}
-/* Sleep/Leisure Time scheduling warning (static/time_blocks.js) -- a
-   caution, not a failure, so it gets --warning (the same amber the app
-   already uses for that meaning) rather than --danger's red. Dark text,
-   not the base toast's light color, since --warning is a light/mid amber
-   in both themes and white text on it fails contrast. */
-.toast-warning{background:var(--warning); color:#1a1a1a;}
-.toast-warning .toast-close{color:#1a1a1a;}
+.toast-close:hover{opacity:1; background:var(--row-alt);}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */

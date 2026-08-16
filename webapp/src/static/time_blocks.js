@@ -53,7 +53,8 @@
     if (!hit || !window.ccToast) return;
     const kindLabel = hit.kind === "sleep" ? "Sleep Time" : "Leisure Time";
     window.ccToast({
-      message: `Heads up: this overlaps ${kindLabel}${hit.label ? ` (${hit.label})` : ""}.`,
+      title: "Heads up",
+      message: `This overlaps ${kindLabel}${hit.label ? ` (${hit.label})` : ""}.`,
       variant: "warning",
       duration: 3500,
     });

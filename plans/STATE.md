@@ -2607,6 +2607,34 @@ session, right before the final commit of that session.
   rewritten to say the grid always opens at 12 AM;
   `TestSleepAwareInitialScroll` (4 structural JS-source checks) removed
   from `test_settings_time_blocks.py`. Full suite 1586 passed.
+- **Shipped:** side work — **Toast/snackbar rework**, complete (2026-08-16)
+  — direct feedback asks on `ccToast` (static/toast.js): "don't show
+  duplicate toasts (small time barrier)", "more appealing: icon + clear
+  header + short body", "hovering must not make them disappear; leaving
+  makes them disappear after a few seconds", "consistent look", and
+  "actionable (revert/confirm)". Each toast is now an elevated card -- a
+  tinted status-icon chip (`.toast-icon`), a bold title header
+  (`.toast-title`), an optional short body (`.toast-body`), an optional
+  accent-colored action button (`.toast-action`), and a quiet close ✕.
+  Chip icon + default title derive from `variant`
+  (`default` → check-circle/"Done", `error` → alert-circle/"Something went
+  wrong", `warning` → alert-triangle/"Heads up"), colored via the shared
+  `--tag-green/-red/-orange` pairs; the four glyphs are new
+  `_icons_sprite.html` symbols. Duplicate suppression: the same
+  variant+title+message shown again within `BARRIER_MS` (4s) is dropped,
+  so a burst of identical save errors collapses to one toast. Hover pauses
+  the auto-dismiss countdown; leaving restarts it capped at a short grace
+  (`HOVER_GRACE_MS`, 2.5s). A thin `.toast-progress` bar along the toast's
+  bottom edge drains 100% → 0% in lockstep with that countdown (a rAF loop,
+  so "how long until this goes away" is always visible, and it freezes with
+  the countdown while hovered). Success/warning call sites now pass an explicit
+  `title` + short `message` (app.js's archive/delete undo,
+  tasks_table.js's bulk ops, command_palette.js's created/done/deleted/
+  label-added, and time_blocks.js's overlap warning whose old "Heads up: "
+  message prefix became the title); the pure `variant: "error"` call sites
+  are untouched and pick up the default error title for free. New
+  structural JS-source checks (`test_toast_rework.py`, same style as
+  `test_pwa_shell.py`), full suite **1593 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

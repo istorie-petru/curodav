@@ -149,7 +149,8 @@ document.addEventListener("submit", (event) => {
         if (!r.ok) throw new Error("archive failed");
         if (row) row.style.display = "none";
         window.ccToast({
-          message: `Archived "${label}"`,
+          title: "Archived",
+          message: `"${label}"`,
           actionLabel: unarchiveUrl ? "Undo" : undefined,
           onAction: unarchiveUrl
             ? () => {
@@ -232,7 +233,8 @@ document.addEventListener("submit", (event) => {
         });
     }, 4500);
     window.ccToast({
-      message: `Deleted "${label}"`,
+      title: "Deleted",
+      message: `"${label}"`,
       actionLabel: "Undo",
       onAction: () => {
         cancelled = true;
