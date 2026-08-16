@@ -54,7 +54,9 @@ representation settled here — the sync work in 1.8 builds on it).
 
 Side work (independent): ~~**Data health & maintenance**~~ (verified backups —
 the prerequisite for trusting offline sync in 1.8 — **shipped 2026-08-14**,
-see `features/settings.md`) and **Contacts field parity**.
+see `features/settings.md`) and ~~**Contacts field parity**~~ (Nextcloud
+Contacts field parity, all six slices — **shipped 2026-08-16**, see
+`features/contacts.md`).
 
 ### 1.2 — Task model settled
 

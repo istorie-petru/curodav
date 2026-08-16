@@ -456,6 +456,18 @@ def _fmt_birthday(value: str | None) -> str:
 templates.env.filters["fmt_birthday"] = _fmt_birthday
 
 
+def _fmt_address(addr: dict) -> str:
+    """Jinja filter for Contacts field parity slice 5 of 6 (Address) --
+    `{{ a | fmt_address }}` to render one structured {"po_box", "extended",
+    "street", "city", "region", "postal_code", "country"} dict as vCard's
+    own multi-line address layout. Same "pure function of the stored
+    value, no per-request Settings preference" shape as fmt_birthday above."""
+    return db.format_contact_address(addr)
+
+
+templates.env.filters["fmt_address"] = _fmt_address
+
+
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     with db.connect(request.app.state.settings.db_path) as conn:
         yield conn

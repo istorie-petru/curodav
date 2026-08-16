@@ -107,6 +107,40 @@ def _website_list(types: list[str], urls: list[str]) -> list[dict]:
     ]
 
 
+def _address_list(
+    types: list[str], po_boxes: list[str], extendeds: list[str], streets: list[str],
+    cities: list[str], regions: list[str], postal_codes: list[str], countries: list[str],
+) -> list[dict]:
+    """Contacts field parity slice 5 of 6 -- zips a create/edit form's eight
+    parallel `address_*[]` arrays into db.set_contact_addresses' per-row
+    shape. Unlike `_phone_email_list`/`_website_list` (one value field), a
+    structured address has seven -- `zip` over eight equal-length lists
+    (the form always submits every field for every row, even ones left
+    blank, since they're all part of the same repeatable-row template) is
+    still the simplest correct way to reconstruct each row; db.
+    set_contact_addresses itself is what actually drops an all-blank row."""
+    return [
+        {
+            "type": (t or "").strip() or "Other",
+            "po_box": po_box, "extended": extended, "street": street,
+            "city": city, "region": region, "postal_code": postal_code, "country": country,
+        }
+        for t, po_box, extended, street, city, region, postal_code, country in zip(
+            types, po_boxes, extendeds, streets, cities, regions, postal_codes, countries
+        )
+    ]
+
+
+def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
+    """Contacts field parity slice 6 of 6 -- same zip shape as
+    `_phone_email_list`, for the `social_type[]`/`social_value[]` form
+    arrays into db.set_contact_social_profiles' {"type", "value"} shape."""
+    return [
+        {"type": (t or "").strip() or "Other", "value": v}
+        for t, v in zip(types, values)
+    ]
+
+
 @router.get("")
 def list_contacts(
     request: Request,
@@ -153,6 +187,8 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
             "website_types": db.CONTACT_WEBSITE_TYPES,
+            "address_types": db.CONTACT_ADDRESS_TYPES,
+            "social_types": db.CONTACT_SOCIAL_TYPES,
         },
     )
 
@@ -168,7 +204,16 @@ async def create_contact(
     email_value: list[str] = Form([]),
     website_type: list[str] = Form([]),
     website_url: list[str] = Form([]),
-    address: str = Form(""),
+    address_type: list[str] = Form([]),
+    address_po_box: list[str] = Form([]),
+    address_extended: list[str] = Form([]),
+    address_street: list[str] = Form([]),
+    address_city: list[str] = Form([]),
+    address_region: list[str] = Form([]),
+    address_postal_code: list[str] = Form([]),
+    address_country: list[str] = Form([]),
+    social_type: list[str] = Form([]),
+    social_value: list[str] = Form([]),
     birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -201,7 +246,20 @@ async def create_contact(
         # website_url[]; the value key is "url" to match db.py's
         # contact_websites column naming, not "value").
         "websites": _website_list(website_type, website_url),
-        "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+        # Contacts field parity slice 5 of 6 -- Address is now the full
+        # structured, multi-value vCard ADR (contact_addresses), submitted
+        # as eight parallel address_*[] form arrays (see _address_list).
+        # The old flat `address` column is no longer written here at all,
+        # same "legacy column frozen, not kept live" convention phone/email
+        # already established.
+        "addresses": _address_list(
+            address_type, address_po_box, address_extended, address_street,
+            address_city, address_region, address_postal_code, address_country,
+        ),
+        # Contacts field parity slice 6 of 6 -- Social network
+        # (contact_social_profiles), same multi-value form-array shape as
+        # phone/email/website above.
+        "social_profiles": _social_profile_list(social_type, social_value),
         # Contacts field parity slice 4 of 6 -- Birthday, single-value (no
         # form-array shape like phone/email/website above -- a contact has
         # at most one). `_parse_birthday_field` already validated/
@@ -246,6 +304,8 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
             "website_types": db.CONTACT_WEBSITE_TYPES,
+            "address_types": db.CONTACT_ADDRESS_TYPES,
+            "social_types": db.CONTACT_SOCIAL_TYPES,
         },
     )
 
@@ -262,7 +322,16 @@ async def update_contact(
     email_value: list[str] = Form([]),
     website_type: list[str] = Form([]),
     website_url: list[str] = Form([]),
-    address: str = Form(""),
+    address_type: list[str] = Form([]),
+    address_po_box: list[str] = Form([]),
+    address_extended: list[str] = Form([]),
+    address_street: list[str] = Form([]),
+    address_city: list[str] = Form([]),
+    address_region: list[str] = Form([]),
+    address_postal_code: list[str] = Form([]),
+    address_country: list[str] = Form([]),
+    social_type: list[str] = Form([]),
+    social_value: list[str] = Form([]),
     birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
@@ -289,7 +358,11 @@ async def update_contact(
             "phones": _phone_email_list(phone_type, phone_value),
             "emails": _phone_email_list(email_type, email_value),
             "websites": _website_list(website_type, website_url),
-            "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+            "addresses": _address_list(
+                address_type, address_po_box, address_extended, address_street,
+                address_city, address_region, address_postal_code, address_country,
+            ),
+            "social_profiles": _social_profile_list(social_type, social_value),
             "birthday": birthday_value,
             "tags": _tags_list(tags),
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,

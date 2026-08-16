@@ -118,8 +118,8 @@ class TestCreateEditFlow:
     def test_create_contact_stores_title(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="Rear Admiral", org="Navy",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="",
             photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -128,8 +128,8 @@ class TestCreateEditFlow:
     def test_create_contact_blank_title_stores_none(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="No Title", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="", photo=None, conn=conn,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["title"] is None
@@ -138,8 +138,8 @@ class TestCreateEditFlow:
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="Senior Engineer",
-            org="", phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="",
+            org="", phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -149,8 +149,8 @@ class TestCreateEditFlow:
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="", photo=None,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None,
             remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)

@@ -2416,6 +2416,78 @@ session, right before the final commit of that session.
     partial fails CI instead of waiting for another manual audit.
   4 new tests extending `test_modal_uniformization.py` (13 total), full
   suite 1524 passed.
+- **Shipped:** side work — **Contacts field parity slice 5 of 6, Address
+  (structured multi-value, full vCard ADR)**, complete (2026-08-16) — the
+  old `contacts.address` free-text column is now `contact_addresses`, a
+  full structured, multi-value vCard ADR (PO Box, Extended, Street, City,
+  Region, Postal code, Country), each entry typed Home/Work/Other (same
+  vocabulary as email/website). Same owned-child-row shape as
+  `contact_phones`/`contact_emails`/`contact_websites`
+  (`db.list_contact_addresses`/`set_contact_addresses`), just seven value
+  columns instead of one — a row is dropped on save only when every one
+  of the seven fields is blank, unlike the sibling tables' single-value
+  blank check. The old flat value auto-migrates once, idempotently, into
+  a single "Other"-typed entry (the whole legacy string placed in
+  `street`, every other field left blank —
+  `db.migrate_legacy_contact_address`, same shape as
+  `migrate_legacy_contact_phone_email`). vCard round-trips as multiple
+  `ADR` lines with `TYPE=` (Other omits it) via vobject's `card.add
+  ("adr")`/`adr_list` — ADR is one of RFC 2426/6350's own typed multi-
+  instance properties (unlike Website's URL workaround), confirmed
+  directly against vobject before writing `vcard_rows.py`. The create/
+  edit form renders each address as its own card (new
+  `.contact-address-row`/`.contact-address-fields` CSS, a 2-column field
+  grid) rather than the single-line rows phone/email/website use — more
+  fields per entry than a one-line layout could hold; still reuses
+  `static/contact_phone_email_rows.js`'s generic add/remove-row wiring
+  verbatim. The detail page renders each entry through a new
+  `fmt_address` Jinja filter (`deps.py` -> `db.format_contact_address`),
+  vCard's own multi-line layout (PO Box/Extended/Street each own line,
+  then "City, Region PostalCode", then Country). Not searched, same
+  precedent Birthday established. See `features/contacts.md`. 37 new
+  tests (`test_contacts_field_parity_address.py`); ~28 existing call
+  sites across 8 test files updated for the removed bare `address` form
+  param (superseded by eight `address_*[]` arrays), full suite 1560
+  passed.
+- **Shipped:** side work — **Contacts field parity slice 6 of 6, Social
+  network (`X-SOCIALPROFILE`)**, complete (2026-08-16) — closes out the
+  6-slice Contacts field parity effort (`plans/open.md`, Title -> Phone/
+  Email -> Website -> Birthday -> Address -> Social network). Multi-
+  value, each entry tagged with a network name (`db.CONTACT_SOCIAL_
+  TYPES` — Twitter/Facebook/Instagram/LinkedIn/Mastodon/GitHub/Other),
+  deliberately not the Home/Work/Other vocabulary every other typed
+  contact field uses, since "which network" is the meaningful
+  distinction here, not "which location/context." New
+  `contact_social_profiles` table, same owned-child-row shape as
+  `contact_phones`/`contact_emails`/`contact_websites` (single `value`
+  column, `db.list_contact_social_profiles`/`set_contact_social_
+  profiles`). No pre-existing single-value column ever existed, so no
+  auto-migration was needed (same situation as Website, confirmed by
+  grep first). vCard round-trips as multiple `X-SOCIALPROFILE` lines
+  with `TYPE=` naming the network (Other omits it) — an X- extension
+  property, not core RFC 2426/6350, but vobject treats it identically to
+  a typed core property (repeatable `card.add`, plural `_list` read-
+  back), confirmed directly against vobject before writing
+  `vcard_rows.py`. Create/edit form uses the same one-line multi-row
+  shape as Phone/Email/Website (`social_type[]`/`social_value[]`,
+  `static/contact_phone_email_rows.js` reused verbatim). The detail page
+  renders a URL-shaped value (`http://`/`https://`) as an external link,
+  matching website's own convention; a bare handle/username renders as
+  plain text, since X-SOCIALPROFILE doesn't guarantee either shape. See
+  `features/contacts.md`. 25 new tests
+  (`test_contacts_field_parity_social.py`), full suite 1586 passed.
+  **Contacts field parity with Nextcloud Contacts is now fully shipped**
+  (`plans/open.md`'s section closed out, `plans/roadmap.md`'s 1.1 side-
+  work row marked shipped).
+  *Note on session discipline:* both slices above were built and
+  committed together in this one session, at the user's explicit
+  request (normally one slice per session, per this file's own "How to
+  run a session" section below) — Address and Social network touch the
+  same handful of files (`db.py`, `vcard_rows.py`,
+  `routers/contacts.py`, `contact_form.html`/`contact_detail.html`) in
+  ways that were simplest to write and verify together as one pass, even
+  though their docs/tests/STATE.md entries are still kept fully separate
+  above.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

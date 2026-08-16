@@ -41,7 +41,34 @@ through vCard's single-instance BDAY property. Stored either as a full
 format_contact_birthday own that validation/display split); vobject
 treats a string BDAY value as opaque text on both write and read, so
 either shape passes through unchanged -- confirmed directly against
-vobject before writing this."""
+vobject before writing this.
+
+Contacts field parity slice 5 of 6 (Address): `addresses` is a list of
+{"type", "po_box", "extended", "street", "city", "region", "postal_code",
+"country"} dicts (db.py's contact_addresses table), round-tripped as
+multiple `ADR` vCard lines, one per entry, each carrying a TYPE= param --
+same Home/Work-carries-TYPE=/Other-omits-it convention as tel/email/url
+above. ADR *is* one of RFC 2426/6350's core typed multi-instance
+properties (same standing as TEL/EMAIL, unlike URL's website-slice
+workaround), and vobject's `vcard.Address` namedtuple-like value object
+maps directly onto its seven-part structure (box/extended/street/city/
+region/code/country -- `code` is this module's/db.py's `postal_code`,
+purely a naming choice). Multi-instance behavior (`card.add("adr")`
+repeatable, `card.adr_list` reading every line back with its own
+`type_param`) confirmed directly against vobject before writing this, same
+habit as every other field group in this module.
+
+Contacts field parity slice 6 of 6 (Social network): `social_profiles` is a
+list of {"type", "value"} dicts (db.py's contact_social_profiles table),
+round-tripped as multiple `X-SOCIALPROFILE` vCard lines, one per entry,
+each carrying a TYPE= param naming the network (Twitter/Facebook/etc.).
+X-SOCIALPROFILE is an X- extension property, not part of the vCard 3.0
+core RFC, but vobject treats any `X-...` contentline generically -- the
+same `card.add("x-socialprofile")`/`card.x_socialprofile_list` shape as
+every typed core property here, confirmed directly against vobject before
+writing this (a bare X- property still gets `.type_param`/plural `_list`
+read-back for free, since vobject's contentline handling doesn't special-
+case X- properties differently from registered ones)."""
 
 from __future__ import annotations
 
@@ -59,6 +86,17 @@ _TYPE_TO_VCARD: dict[str, str] = {
     "Home": "HOME", "Work": "WORK", "Cell": "CELL", "Fax": "FAX", "Pager": "PAGER",
 }
 _VCARD_TO_TYPE: dict[str, str] = {v: k for k, v in _TYPE_TO_VCARD.items()}
+
+# Contacts field parity slice 6 of 6 -- Social network's own vocabulary
+# (db.CONTACT_SOCIAL_TYPES) is network names, not Home/Work/etc., so it gets
+# its own TYPE= mapping rather than reusing _TYPE_TO_VCARD above. Same
+# "Other omits TYPE= entirely" convention as every other typed field in this
+# module.
+_SOCIAL_TYPE_TO_VCARD: dict[str, str] = {
+    "Twitter": "TWITTER", "Facebook": "FACEBOOK", "Instagram": "INSTAGRAM",
+    "LinkedIn": "LINKEDIN", "Mastodon": "MASTODON", "GitHub": "GITHUB",
+}
+_VCARD_TO_SOCIAL_TYPE: dict[str, str] = {v: k for k, v in _SOCIAL_TYPE_TO_VCARD.items()}
 
 
 def contact_row_to_vcard(row: dict[str, Any]) -> str:
@@ -125,8 +163,37 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
     # "confirmed against vobject" habit.
     if row.get("birthday"):
         card.add("bday").value = row["birthday"]
-    if row.get("address"):
-        card.add("adr").value = vobject.vcard.Address(street=row["address"])
+    # Multi-value structured Address (Contacts field parity slice 5 of 6) --
+    # same TYPE=/omission convention as phone/email/website above, via
+    # vobject's repeatable `card.add("adr")` (confirmed directly against
+    # vobject -- see the module docstring). `row.get("address")` (the
+    # legacy single-value column) is deliberately NOT read here anymore,
+    # same "only the canonical multi-value shape" convention slice 2's TEL/
+    # EMAIL rework already established for phone/email.
+    for addr in row.get("addresses") or []:
+        fields = {f: (addr.get(f) or "") for f in ("po_box", "extended", "street", "city", "region", "postal_code", "country")}
+        if not any(fields.values()):
+            continue
+        prop = card.add("adr")
+        prop.value = vobject.vcard.Address(
+            box=fields["po_box"], extended=fields["extended"], street=fields["street"],
+            city=fields["city"], region=fields["region"], code=fields["postal_code"], country=fields["country"],
+        )
+        vcard_type = _TYPE_TO_VCARD.get(addr.get("type") or "Other")
+        if vcard_type:
+            prop.type_param = vcard_type
+    # Social network (Contacts field parity slice 6 of 6) -- multiple
+    # X-SOCIALPROFILE lines, one per entry, TYPE= naming the network (Other
+    # omits it, same convention as every other typed field here).
+    for profile in row.get("social_profiles") or []:
+        value = (profile.get("value") or "").strip()
+        if not value:
+            continue
+        prop = card.add("x-socialprofile")
+        prop.value = value
+        vcard_type = _SOCIAL_TYPE_TO_VCARD.get(profile.get("type") or "Other")
+        if vcard_type:
+            prop.type_param = vcard_type
     if row.get("tags"):
         card.add("categories").value = list(row["tags"])
     if row.get("notes"):
@@ -202,9 +269,37 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
     # showing it unchanged rather than guessing at a reformat.
     if hasattr(card, "bday") and card.bday.value:
         row["birthday"] = str(card.bday.value)
-    if hasattr(card, "adr"):
-        adr = card.adr.value
-        row["address"] = getattr(adr, "street", "") or str(adr)
+    # Multi-value structured Address (Contacts field parity slice 5 of 6) --
+    # every ADR line becomes one {"type", "po_box", "extended", "street",
+    # "city", "region", "postal_code", "country"} entry, via vobject's
+    # plural `adr_list` (see the module docstring).
+    row["addresses"] = [
+        {
+            "type": _VCARD_TO_TYPE.get(str(getattr(adr, "type_param", "") or "").upper(), "Other"),
+            "po_box": getattr(adr.value, "box", "") or "",
+            "extended": getattr(adr.value, "extended", "") or "",
+            "street": getattr(adr.value, "street", "") or "",
+            "city": getattr(adr.value, "city", "") or "",
+            "region": getattr(adr.value, "region", "") or "",
+            "postal_code": getattr(adr.value, "code", "") or "",
+            "country": getattr(adr.value, "country", "") or "",
+        }
+        for adr in getattr(card, "adr_list", [])
+        if adr.value
+    ]
+    # Social network (Contacts field parity slice 6 of 6) -- every
+    # X-SOCIALPROFILE line becomes one {"type", "value"} entry. An
+    # unrecognized TYPE= token (a network outside this app's own vocabulary,
+    # from another CardDAV client) maps to "Other", same catch-all
+    # convention as every other typed field here.
+    row["social_profiles"] = [
+        {
+            "type": _VCARD_TO_SOCIAL_TYPE.get(str(getattr(p, "type_param", "") or "").upper(), "Other"),
+            "value": str(p.value),
+        }
+        for p in getattr(card, "x_socialprofile_list", [])
+        if p.value
+    ]
     if hasattr(card, "categories"):
         cats = card.categories.value
         row["tags"] = list(cats) if isinstance(cats, list) else [str(cats)]

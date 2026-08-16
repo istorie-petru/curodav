@@ -919,6 +919,14 @@ label.seg-btn[hidden]{display:none;}
   font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
 }
 .detail-meta-value a{font-weight:600;}
+/* Contacts field parity slice 5 of 6 -- Address's fmt_address filter
+   returns a real multi-line string (PO Box/Extended/Street each own line,
+   then "City, Region PostalCode", then Country); .detail-meta-value's
+   default inline-flex/nowrap-ish layout is wrong for that, so this
+   override switches to a block with `white-space:pre-line` -- collapses
+   ordinary runs of spaces same as normal HTML, but preserves the `\n`s
+   fmt_address emits as real line breaks. */
+.detail-meta-multiline{display:block; white-space:pre-line;}
 
 /* Demoted Delete action in the detail modals' footer -- the old filled
    red .btn.danger was the loudest button on the view, outranking the
@@ -1402,6 +1410,22 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .field-wide .contact-multi-row select{width:110px; flex:none;}
 .field-wide .contact-multi-row input{width:auto; flex:1;}
 .contact-multi-row .checklist-delete{flex:none;}
+
+/* Contacts field parity slice 5 of 6 -- Address (contact_form.html). A
+   structured ADR row has seven value fields, not one, so it can't share
+   the single-line flex layout every other .contact-multi-row (phone/
+   email/website/social) uses -- it's its own taller card instead: type
+   select on top, a small 2-column field grid below, remove button pinned
+   to the top-right corner. Still a `.contact-multi-row` for
+   contact_phone_email_rows.js's generic remove-row targeting
+   (`.closest(".contact-multi-row")`), just with this additional class
+   overriding the shared row's own flex/align rules. */
+.contact-address-row{flex-direction:column; align-items:stretch; gap:8px; position:relative; padding:10px 36px 10px 10px; border:1px solid var(--separator); border-radius:8px;}
+.contact-address-row select{width:140px;}
+.contact-address-row .checklist-delete{position:absolute; top:8px; right:8px;}
+.contact-address-fields{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+.contact-address-fields input{width:auto;}
+.contact-address-full{grid-column:1 / -1;}
 
 /* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
    -- the merged Subtasks+relations detail card; 1.2 removed the Subtasks

@@ -163,8 +163,8 @@ class TestCreateEditFlow:
     def test_create_contact_stores_full_birthday(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="1906-12-09", tags="", notes="", photo=None, conn=conn,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="1906-12-09", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["birthday"] == "1906-12-09"
@@ -172,8 +172,8 @@ class TestCreateEditFlow:
     def test_create_contact_stores_yearless_birthday(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="Anon", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="--12-09", tags="", notes="", photo=None, conn=conn,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="--12-09", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["birthday"] == "--12-09"
@@ -181,8 +181,8 @@ class TestCreateEditFlow:
     def test_create_contact_blank_birthday_stores_none(self, conn):
         asyncio.run(contacts_router.create_contact(
             full_name="No Birthday", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="", photo=None, conn=conn,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["birthday"] is None
@@ -192,8 +192,8 @@ class TestCreateEditFlow:
         with pytest.raises(HTTPException) as exc_info:
             asyncio.run(contacts_router.create_contact(
                 full_name="Bad Date", title="", org="",
-                phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-                address="", birthday="not-a-date", tags="", notes="", photo=None, conn=conn,
+                phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+                birthday="not-a-date", tags="", notes="", photo=None, conn=conn,
             ))
         assert exc_info.value.status_code == 400
         # Never partially written -- rejected before upsert_contact runs.
@@ -203,8 +203,8 @@ class TestCreateEditFlow:
         uid = _make_contact(conn, birthday="1990-01-01")
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="1985-06-30", tags="", notes="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="1985-06-30", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -214,8 +214,8 @@ class TestCreateEditFlow:
         uid = _make_contact(conn, birthday="1990-01-01")
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
@@ -227,8 +227,8 @@ class TestCreateEditFlow:
         with pytest.raises(HTTPException):
             asyncio.run(contacts_router.update_contact(
                 uid=uid, full_name="Ada Lovelace", title="", org="",
-                phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-                address="", birthday="garbage", tags="", notes="",
+                phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+                birthday="garbage", tags="", notes="",
                 photo=None, remove_photo="", conn=conn,
             ))
         row = db.get_contact(conn, uid)
@@ -364,8 +364,8 @@ class TestBirthdayCalendarEvent:
 
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
-            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
-            address="", birthday="1906-12-09", tags="", notes="", photo=None, conn=conn,
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="1906-12-09", tags="", notes="", photo=None, conn=conn,
         ))
         uid = db.list_contacts(conn)[0]["uid"]
         event = db.get_event(conn, f"birthday::{uid}")

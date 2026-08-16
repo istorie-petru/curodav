@@ -256,6 +256,68 @@ CREATE TABLE IF NOT EXISTS contact_websites (
     created_at TEXT
 );
 
+-- Contacts field parity slice 5 of 6 -- Address (plans/open.md). The old
+-- `contacts.address` column above is a single free-text line; a real vCard
+-- ADR is a structured, typed, MULTI-instance property (RFC 2426/6350 --
+-- box/extended/street/city/region/postal code/country, same 7-part
+-- structure vobject.vcard.Address models directly), confirmed empirically
+-- against vobject before writing this table: `card.add("adr")` is
+-- repeatable and `card.adr_list` reads every line back, each with its own
+-- `.type_param`, identically to `tel_list`/`email_list`/`url_list` (see
+-- vcard_rows.py's module docstring). So this is the same owned-child-row
+-- shape as contact_phones/contact_emails/contact_websites immediately
+-- above (`contact_uid` ownership column, no FOREIGN KEY, float `position`
+-- sort key), just with seven value columns instead of one. Type vocabulary
+-- is Home/Work/Other (green-lit, AskUserQuestion, 2026-08-15 -- "same as
+-- email/address" -- see CONTACT_ADDRESS_TYPES below), matching email/
+-- website, not phone's wider Cell/Fax/Pager set (vCard's ADR has no
+-- concept of those). Column names follow vobject.vcard.Address's own
+-- attribute names (box/extended/street/city/region/code/country) except
+-- `code` is spelled out as `postal_code` here for readability at this
+-- table's own call sites -- purely a naming choice, no behavior
+-- difference. Unlike Website, there IS a legacy single-value column to
+-- migrate from (`contacts.address`) -- see migrate_legacy_contact_address
+-- below, same "auto-migrate the old flat value into a single 'Other'-typed
+-- entry" shape migrate_legacy_contact_phone_email already established.
+CREATE TABLE IF NOT EXISTS contact_addresses (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    po_box TEXT NOT NULL DEFAULT '',
+    extended TEXT NOT NULL DEFAULT '',
+    street TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '',
+    postal_code TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+-- Contacts field parity slice 6 of 6 -- Social network (plans/open.md), the
+-- last field in the build order. Round-trips via the standard X-
+-- SOCIALPROFILE vCard property (green-lit, AskUserQuestion, 2026-08-15).
+-- Same owned-child-row shape as contact_phones/contact_emails/
+-- contact_websites (single `value` column, `contact_uid` ownership, no
+-- FOREIGN KEY, float `position` sort key) -- unlike Address, X-
+-- SOCIALPROFILE has no internal structure to split into columns, it's a
+-- single value (a profile URL or handle) plus a TYPE= naming the network.
+-- No pre-existing single-value social-network column ever existed on this
+-- app (confirmed by grepping db.py/vcard_rows.py/contact_form.html before
+-- writing this), so -- same as Website -- there is nothing to auto-
+-- migrate. Type vocabulary is network names (db.CONTACT_SOCIAL_TYPES),
+-- not the Home/Work/Other set every other typed contact field uses --
+-- "which network" is the meaningful distinction here, not "which
+-- location/context."
+CREATE TABLE IF NOT EXISTS contact_social_profiles (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
 
 -- Local-only checklist items for a task -- see the module docstring above
 -- for why this is the one exception to "no graph/desktop-only tables."
@@ -411,6 +473,8 @@ CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
 CREATE INDEX IF NOT EXISTS idx_contact_phones_contact ON contact_phones(contact_uid);
 CREATE INDEX IF NOT EXISTS idx_contact_emails_contact ON contact_emails(contact_uid);
 CREATE INDEX IF NOT EXISTS idx_contact_websites_contact ON contact_websites(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_addresses_contact ON contact_addresses(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_social_profiles_contact ON contact_social_profiles(contact_uid);
 
 -- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` was
 -- dropped from a brand-new database's schema then -- a university class
@@ -971,6 +1035,40 @@ def migrate_legacy_contact_phone_email(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def migrate_legacy_contact_address(conn: sqlite3.Connection) -> None:
+    """Contacts field parity slice 5 of 6 -- the same green-lit auto-
+    migration shape as migrate_legacy_contact_phone_email above: a contact
+    whose legacy free-text `address` column already has a value gets that
+    value copied into the new `contact_addresses` table as a single row
+    typed "Other". Unlike phone/email (a single flat string that maps
+    directly onto TEL/EMAIL's own single `value`), the legacy `address`
+    column was never structured -- there's no reliable way to split an
+    arbitrary free-text address into PO Box/Street/City/Region/Postal code/
+    Country, so the whole legacy string is placed into `street` (the one
+    ADR line meant for a general street-level address) and every other
+    structured field is left blank; a user can split it into the real
+    fields by hand from the edit form afterward if they want to.
+
+    Same idempotence shape as migrate_legacy_contact_phone_email: only
+    migrates a contact that has a legacy value AND zero existing
+    contact_addresses rows, so a contact with real typed address rows
+    already (or a second call after the first migrated it) is left alone."""
+    now = datetime.now(timezone.utc).isoformat()
+    address_rows = conn.execute(
+        "SELECT uid, address FROM contacts WHERE address IS NOT NULL AND TRIM(address) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_addresses)"
+    ).fetchall()
+    for row in address_rows:
+        conn.execute(
+            "INSERT INTO contact_addresses "
+            "(uid, contact_uid, type, po_box, extended, street, city, region, postal_code, country, position, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", "", "", row["address"], "", "", "", "", 0, now),
+        )
+    if address_rows:
+        conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
@@ -1028,6 +1126,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # migrate_legacy_contact_phone_email's own docstring for why it's safe
     # to call unconditionally (idempotent).
     migrate_legacy_contact_phone_email(conn)
+    # Contacts field parity slice 5 of 6 -- Address. contact_addresses
+    # (SCHEMA_SQL above) is a brand-new table, same "CREATE TABLE IF NOT
+    # EXISTS already handles it" situation as contact_websites -- the
+    # migration below only needs to move the *data* sitting in the now-
+    # dead `contacts.address` column. Runs on every connect, same
+    # idempotence contract as migrate_legacy_contact_phone_email.
+    migrate_legacy_contact_address(conn)
     # Contacts field parity slice 4 of 6 -- Birthday. Single-value (unlike
     # Phone/Email/Website), so no child table -- just one more column, same
     # "added after the table already existed on disk" situation as title/
@@ -2512,6 +2617,15 @@ CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 # address (green-lit, AskUserQuestion, 2026-08-15) -- vCard's URL property
 # has no CELL/FAX/PAGER concept either.
 CONTACT_WEBSITE_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 5 of 6 -- Address. Same Home/Work/Other
+# vocabulary as email/website (green-lit, AskUserQuestion, 2026-08-15 --
+# "same as email/address"), not phone's wider set (vCard's ADR has no
+# CELL/FAX/PAGER concept either).
+CONTACT_ADDRESS_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 6 of 6 -- Social network. Network names, not
+# Home/Work/Other -- matches vcard_rows.py's own _SOCIAL_TYPE_TO_VCARD
+# mapping (every entry here except "Other" has a TYPE= token there).
+CONTACT_SOCIAL_TYPES: tuple[str, ...] = ("Twitter", "Facebook", "Instagram", "LinkedIn", "Mastodon", "GitHub", "Other")
 
 # Contacts field parity slice 4 of 6 -- Birthday. Single-value, so there's
 # no *_TYPES vocabulary the way phone/email/website have one -- just the
@@ -2648,6 +2762,14 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # Contacts field parity slice 3 of 6 -- Website, same "pop, write the
     # base row, then attach the related rows" shape as phones/emails above.
     websites = data.pop("websites", None)
+    # Contacts field parity slice 5 of 6 -- Address, same "pop, write the
+    # base row, then attach the related rows" shape as phones/emails/
+    # websites above.
+    addresses = data.pop("addresses", None)
+    # Contacts field parity slice 6 of 6 -- Social network, same "pop,
+    # write the base row, then attach the related rows" shape as phones/
+    # emails/websites/addresses above.
+    social_profiles = data.pop("social_profiles", None)
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "birthday", "notes",
@@ -2669,6 +2791,10 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         set_contact_emails(conn, data["uid"], emails)
     if websites is not None:
         set_contact_websites(conn, data["uid"], websites)
+    if addresses is not None:
+        set_contact_addresses(conn, data["uid"], addresses)
+    if social_profiles is not None:
+        set_contact_social_profiles(conn, data["uid"], social_profiles)
     conn.commit()
     # Direct follow-up (2026-08-16): keep the generated Birthday calendar
     # event in sync with every save -- see sync_contact_birthday_event's
@@ -2691,6 +2817,8 @@ def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (uid,))
     conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (uid,))
     conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_addresses WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_social_profiles WHERE contact_uid = ?", (uid,))
     # Deletes the generated Birthday event (if one exists) along with the
     # contact itself -- see sync_contact_birthday_event's docstring for why
     # this is a plain delete_event on the deterministic uid, not a lookup
@@ -2708,14 +2836,18 @@ def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 
 
 def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
-    """Attaches `phones`/`emails`/`websites` (each a list of position-ordered
-    dicts -- phones/emails are {"uid", "type", "value"}, websites {"uid",
-    "type", "url"}) the same way `_attach_tags` attaches `tags` -- computed
-    live from the child tables at read time, never a stored JSON blob on the
-    contacts row itself."""
+    """Attaches `phones`/`emails`/`websites`/`addresses` (each a list of
+    position-ordered dicts -- phones/emails are {"uid", "type", "value"},
+    websites {"uid", "type", "url"}, addresses {"uid", "type", "po_box",
+    "extended", "street", "city", "region", "postal_code", "country"},
+    social_profiles {"uid", "type", "value"}) the same way `_attach_tags`
+    attaches `tags` -- computed live from the child tables at read time,
+    never a stored JSON blob on the contacts row itself."""
     d["phones"] = list_contact_phones(conn, d["uid"])
     d["emails"] = list_contact_emails(conn, d["uid"])
     d["websites"] = list_contact_websites(conn, d["uid"])
+    d["addresses"] = list_contact_addresses(conn, d["uid"])
+    d["social_profiles"] = list_contact_social_profiles(conn, d["uid"])
     return d
 
 
@@ -2893,6 +3025,119 @@ def set_contact_websites(conn: sqlite3.Connection, contact_uid: str, items: list
         conn.execute(
             "INSERT INTO contact_websites (uid, contact_uid, type, url, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", url, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact addresses -- Contacts field parity slice 5 of 6 (plans/open.md).
+# Same shape as contact_phones/contact_emails/contact_websites above (one
+# Save-button replace-all write path, no separate add/remove endpoints),
+# just with seven value fields per row instead of one. A row counts as
+# "blank" (dropped on save) only when EVERY structured field is blank --
+# unlike phone/email/website's single `value`/`url`, a real address could
+# legitimately have e.g. only a city and country filled in, so there's no
+# single field whose blankness alone means "no address here."
+# --------------------------------------------------------------------- #
+
+_CONTACT_ADDRESS_FIELDS: tuple[str, ...] = (
+    "po_box", "extended", "street", "city", "region", "postal_code", "country",
+)
+
+
+def list_contact_addresses(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_addresses WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def format_contact_address(addr: dict[str, Any]) -> str:
+    """Human-readable multi-line display for one structured address dict
+    (contact_detail.html's `fmt_address` filter, deps.py) -- same line
+    ordering vCard's own `vobject.vcard.Address.__str__` uses (PO Box/
+    Extended/Street each get their own line if present, then "City, Region
+    PostalCode" on one line, then Country on its own line), reimplemented
+    here as a pure function of this app's dict shape rather than building a
+    throwaway `vobject.vcard.Address` object just to stringify it. Blank
+    fields are omitted entirely rather than leaving stray empty lines/
+    commas."""
+    lines = [addr.get(f) for f in ("po_box", "extended", "street") if (addr.get(f) or "").strip()]
+    city, region, postal_code = addr.get("city") or "", addr.get("region") or "", addr.get("postal_code") or ""
+    if city.strip() or region.strip() or postal_code.strip():
+        city_line = ", ".join(p for p in (city.strip(), " ".join(p for p in (region.strip(), postal_code.strip()) if p)) if p)
+        lines.append(city_line)
+    if (addr.get("country") or "").strip():
+        lines.append(addr["country"].strip())
+    return "\n".join(lines)
+
+
+def set_contact_addresses(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every address row for `contact_uid` with `items` (each a
+    {"type", "po_box", "extended", "street", "city", "region",
+    "postal_code", "country"} dict, any key may be omitted), in the given
+    order -- same "delete everything, re-insert in submitted order"
+    reasoning as set_contact_phones/set_contact_emails/set_contact_websites.
+    A row is dropped only when every one of the seven structured fields is
+    blank (see this section's own comment for why that's a 7-way check,
+    not a single-field one like the sibling setters)."""
+    conn.execute("DELETE FROM contact_addresses WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        values = {f: (item.get(f) or "").strip() for f in _CONTACT_ADDRESS_FIELDS}
+        if not any(values.values()):
+            continue
+        conn.execute(
+            "INSERT INTO contact_addresses "
+            "(uid, contact_uid, type, po_box, extended, street, city, region, postal_code, country, position, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()), contact_uid, item.get("type") or "Other",
+                values["po_box"], values["extended"], values["street"],
+                values["city"], values["region"], values["postal_code"], values["country"],
+                position, now,
+            ),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact social profiles -- Contacts field parity slice 6 of 6 (plans/
+# open.md). Same shape as contact_phones/contact_emails/contact_websites
+# (single `value` column, one Save-button replace-all write path, no
+# separate add/remove endpoints, no legacy column to migrate -- same
+# "confirmed by grep, nothing to migrate" situation as Website).
+# --------------------------------------------------------------------- #
+
+
+def list_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_social_profiles WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every social-profile row for `contact_uid` with `items`
+    (each a {"type", "value"} dict), in the given order -- same "delete
+    everything, re-insert in submitted order" reasoning as
+    set_contact_phones/set_contact_emails/set_contact_websites. Blank
+    values are dropped silently."""
+    conn.execute("DELETE FROM contact_social_profiles WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_social_profiles (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
         )
         position += 1
     conn.commit()

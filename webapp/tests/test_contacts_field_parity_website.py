@@ -175,8 +175,8 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
-            website_type=["Home", "Work"], website_url=["https://home.example.com", "https://work.example.com"],
-            address="", birthday="", tags="", notes="", photo=None, conn=conn,
+            website_type=["Home", "Work"], website_url=["https://home.example.com", "https://work.example.com"], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert [(w["type"], w["url"]) for w in row["websites"]] == [("Home", "https://home.example.com"), ("Work", "https://work.example.com")]
@@ -185,8 +185,8 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="No Website", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
-            website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="", photo=None, conn=conn,
+            website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["websites"] == []
@@ -195,8 +195,8 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.create_contact(
             full_name="Blank Row", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
-            website_type=["Home"], website_url=[""],
-            address="", birthday="", tags="", notes="", photo=None, conn=conn,
+            website_type=["Home"], website_url=[""], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert row["websites"] == []
@@ -207,8 +207,8 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
-            website_type=["Work"], website_url=["https://new.example.com"],
-            address="", birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
+            website_type=["Work"], website_url=["https://new.example.com"], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
         assert [(w["type"], w["url"]) for w in row["websites"]] == [("Work", "https://new.example.com")]
@@ -219,8 +219,8 @@ class TestCreateEditFlow:
         asyncio.run(contacts_router.update_contact(
             uid=uid, full_name="Ada Lovelace", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
-            website_type=[], website_url=[],
-            address="", birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
+            website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)
         assert row["websites"] == []

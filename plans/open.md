@@ -125,7 +125,7 @@ styling.
 
 ## Contacts field parity with Nextcloud Contacts
 
-**Status:** In progress. Green-lit 2026-08-15 (AskUserQuestion, all five open
+**Status:** Shipped 2026-08-16 (all six slices). Green-lit 2026-08-15 (AskUserQuestion, all five open
 questions answered): type vocabulary matches vCard/Nextcloud exactly (Home/
 Work/Cell/Fax/Pager/Other for phone, Home/Work/Other for email/address/
 website); existing single-value data auto-migrates as a first entry typed
@@ -208,8 +208,41 @@ its own test file).
   tests (`test_contacts_field_parity_birthday.py`); 20 existing call sites
   across 6 test files updated for the new `birthday` form param, full suite
   1492 passed.
-- **Address** (structured multi-value, full vCard ADR) — not started.
-- **Social network** (`X-SOCIALPROFILE`) — not started.
+- ~~**Address**~~ — **shipped 2026-08-16** — structured, multi-value, full
+  vCard ADR (PO Box/Extended/Street/City/Region/Postal code/Country), each
+  entry typed Home/Work/Other (same vocabulary as email/website). New
+  `contact_addresses` table (owned child rows, same shape as
+  `contact_phones`/`contact_emails`/`contact_websites`, seven value
+  columns instead of one — a row is dropped only when every field is
+  blank). The old flat `contacts.address` column auto-migrates once,
+  idempotently, into a single "Other"-typed entry (the whole legacy
+  string into `street`, `db.migrate_legacy_contact_address`). vCard
+  round-trips as multiple `ADR` lines with `TYPE=` (Other omits it) via
+  vobject's `card.add("adr")`/`adr_list` — ADR is one of RFC 2426/6350's
+  own typed multi-instance properties, confirmed directly against
+  vobject. Create/edit form renders each address as its own card
+  (`.contact-address-row`, a 2-column field grid, not the single-line
+  rows phone/email/website use); detail page renders each entry via a
+  new `fmt_address` Jinja filter (`db.format_contact_address`, vCard's
+  own multi-line layout). Not searched, same precedent as Birthday. See
+  `features/contacts.md`. 37 new tests
+  (`test_contacts_field_parity_address.py`), full suite 1560+ passed.
+- ~~**Social network**~~ (`X-SOCIALPROFILE`) — **shipped 2026-08-16**,
+  closing out this effort. Multi-value, tagged with a network name
+  (Twitter/Facebook/Instagram/LinkedIn/Mastodon/GitHub/Other —
+  `db.CONTACT_SOCIAL_TYPES`, not the Home/Work/Other vocabulary every
+  other typed field uses). New `contact_social_profiles` table, same
+  shape as `contact_phones`/`contact_emails`/`contact_websites` (single
+  `value` column). No pre-existing single-value column, so no auto-
+  migration (same situation as Website). vCard round-trips as multiple
+  `X-SOCIALPROFILE` lines with `TYPE=` naming the network (Other omits
+  it) — an X- extension property, but vobject treats it identically to a
+  core typed property, confirmed directly against vobject. Create/edit
+  form uses the same one-line multi-row shape as Phone/Email/Website;
+  detail page renders a URL-shaped value as an external link, a bare
+  handle as plain text. See `features/contacts.md`. 25 new tests
+  (`test_contacts_field_parity_social.py`), full suite 1586 passed.
+  **Contacts field parity with Nextcloud Contacts is now fully shipped.**
 
 ## Webapp usability + DAVx5 mobile hosting
 

@@ -81,12 +81,39 @@
             <span class="detail-meta-value"><a href="{{ w.url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ w.url }}</a></span>
         </div>
         {% endfor %}
-        {% if contact.address %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Address</span>
-            <span class="detail-meta-value">{{ contact.address }}</span>
+        <!-- Contacts field parity slice 5 of 6: Address is now structured
+             and multi-value (contact.addresses, each {"type", "po_box",
+             "extended", "street", "city", "region", "postal_code",
+             "country"}) -- listed same as phone/email/website above, one
+             row per entry with its type label, formatted through the
+             vCard-standard line ordering (PO Box/Extended/Street each own
+             line, then "City, Region PostalCode", then Country) via the
+             new fmt_address filter (deps.py) rather than re-deriving that
+             layout in the template. -->
+        {% for a in contact.addresses %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Address{% if a.type %} ({{ a.type }}){% endif %}</span>
+            <span class="detail-meta-value detail-meta-multiline">{{ a | fmt_address }}</span>
         </div>
-        {% endif %}
+        {% endfor %}
+        <!-- Contacts field parity slice 6 of 6: Social network
+             (contact.social_profiles, each {"type", "value"}) -- listed
+             same as phone/email/website above. A value that looks like a
+             URL renders as an external link (matching website's own
+             convention); a bare handle/username renders as plain text,
+             since X-SOCIALPROFILE doesn't guarantee either shape. -->
+        {% for s in contact.social_profiles %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Social{% if s.type %} ({{ s.type }}){% endif %}</span>
+            <span class="detail-meta-value">
+                {% if s.value.startswith('http://') or s.value.startswith('https://') %}
+                <a href="{{ s.value }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ s.value }}</a>
+                {% else %}
+                {{ s.value }}
+                {% endif %}
+            </span>
+        </div>
+        {% endfor %}
         <!-- Contacts field parity slice 4 of 6: Birthday, single-value, the
              stored raw "YYYY-MM-DD"/"--MM-DD" text rendered human-readable
              via the fmt_birthday filter (deps.py -> db.format_contact_
@@ -111,7 +138,7 @@
         <p>{{ contact.notes }}</p>
     </div>
     {% endif %}
-    {% if not (contact.phones or contact.emails or contact.websites or contact.address or contact.birthday or contact.tags or contact.notes) %}
+    {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
     <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
     {% endif %}
 </div>

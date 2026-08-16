@@ -122,7 +122,16 @@ class TestContactRow:
             # docstring).
             "phones": [{"type": "Cell", "value": "+15550100"}],
             "emails": [{"type": "Work", "value": "jane@example.com"}],
-            "address": "123 Main St",
+            # Contacts field parity slice 5 of 6: Address is multi-value/
+            # structured now (contact_row_to_vcard no longer reads the old
+            # flat "address" key -- see vcard_rows.py's module docstring).
+            "addresses": [{
+                "type": "Home", "po_box": "", "extended": "",
+                "street": "123 Main St", "city": "Springfield", "region": "IL",
+                "postal_code": "62704", "country": "USA",
+            }],
+            # Contacts field parity slice 6 of 6: Social network.
+            "social_profiles": [{"type": "Twitter", "value": "https://twitter.com/janedoe"}],
             "tags": ["friend", "vip"],
             "notes": "met at a conference",
         }
@@ -135,6 +144,7 @@ class TestContactRow:
         assert result["org"] == row["org"]
         assert result["phones"] == row["phones"]
         assert result["emails"] == row["emails"]
-        assert result["address"] == row["address"]
+        assert result["addresses"] == row["addresses"]
+        assert result["social_profiles"] == row["social_profiles"]
         assert set(result["tags"]) == set(row["tags"])
         assert result["notes"] == row["notes"]

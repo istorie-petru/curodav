@@ -174,9 +174,89 @@
             <label>Organization</label>
             <input type="text" name="org" value="{{ contact.org if contact else '' }}">
         </div>
-        <div class="field field-wide">
+        <!-- Contacts field parity slice 5 of 6 (plans/open.md): Address is
+             now the full structured, multi-value vCard ADR (db.
+             CONTACT_ADDRESS_TYPES -- Home/Work/Other, same vocabulary as
+             email/website), not a single free-text line. Each row is its
+             own card (`.contact-address-row`, a taller variant of
+             `.contact-multi-row` -- see style.css) holding the type
+             `<select>` plus the seven structured ADR fields (PO Box,
+             Extended, Street, City, Region, Postal code, Country), laid out
+             in `.contact-address-fields`' own small 2-column grid rather
+             than the single-value phone/email/website rows' one-line flex
+             layout -- there's simply more to show per row here. Reuses
+             `static/contact_phone_email_rows.js`'s generic add/remove-row
+             wiring verbatim (data-repeatable-*, same as every other
+             repeatable field group on this form) since it clones whatever
+             `<template>` markup it's given, regardless of field count. -->
+        <div class="field field-wide" data-repeatable-rows-scope>
             <label>Address</label>
-            <input type="text" name="address" value="{{ contact.address if contact else '' }}">
+            <div id="address-rows" class="contact-multi-rows">
+                {% for a in (contact.addresses if contact else []) %}
+                <div class="contact-multi-row contact-address-row">
+                    <select name="address_type">
+                        {% for t in address_types %}<option value="{{ t }}" {% if a.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <div class="contact-address-fields">
+                        <input type="text" name="address_po_box" value="{{ a.po_box }}" placeholder="PO Box">
+                        <input type="text" name="address_extended" value="{{ a.extended }}" placeholder="Extended address">
+                        <input type="text" name="address_street" value="{{ a.street }}" placeholder="Street" class="contact-address-full">
+                        <input type="text" name="address_city" value="{{ a.city }}" placeholder="City">
+                        <input type="text" name="address_region" value="{{ a.region }}" placeholder="Region / State">
+                        <input type="text" name="address_postal_code" value="{{ a.postal_code }}" placeholder="Postal code">
+                        <input type="text" name="address_country" value="{{ a.country }}" placeholder="Country">
+                    </div>
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="address-row-template">
+                <div class="contact-multi-row contact-address-row">
+                    <select name="address_type">
+                        {% for t in address_types %}<option value="{{ t }}" {% if t == 'Other' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <div class="contact-address-fields">
+                        <input type="text" name="address_po_box" value="" placeholder="PO Box">
+                        <input type="text" name="address_extended" value="" placeholder="Extended address">
+                        <input type="text" name="address_street" value="" placeholder="Street" class="contact-address-full">
+                        <input type="text" name="address_city" value="" placeholder="City">
+                        <input type="text" name="address_region" value="" placeholder="Region / State">
+                        <input type="text" name="address_postal_code" value="" placeholder="Postal code">
+                        <input type="text" name="address_country" value="" placeholder="Country">
+                    </div>
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
+                </div>
+            </template>
+            <button type="button" class="btn btn-sm" data-repeatable-add="address-rows" data-repeatable-template="address-row-template">{{ icon('plus', 'icon-sm') }} Add address</button>
+        </div>
+        <!-- Contacts field parity slice 6 of 6 (plans/open.md): Social
+             network, round-tripped through the standard X-SOCIALPROFILE
+             vCard property. Same one-line multi-row shape as Phone/Email/
+             Website above (db.CONTACT_SOCIAL_TYPES -- network names, not
+             Home/Work/Other), reusing the same generic repeatable-row JS. -->
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <label>Social network</label>
+            <div id="social-rows" class="contact-multi-rows">
+                {% for s in (contact.social_profiles if contact else []) %}
+                <div class="contact-multi-row">
+                    <select name="social_type">
+                        {% for t in social_types %}<option value="{{ t }}" {% if s.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="social_value" value="{{ s.value }}" placeholder="Profile URL or username">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="social-row-template">
+                <div class="contact-multi-row">
+                    <select name="social_type">
+                        {% for t in social_types %}<option value="{{ t }}" {% if t == 'Other' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="social_value" value="" placeholder="Profile URL or username">
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
+                </div>
+            </template>
+            <button type="button" class="btn btn-sm" data-repeatable-add="social-rows" data-repeatable-template="social-row-template">{{ icon('plus', 'icon-sm') }} Add social network</button>
         </div>
         <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
              single-value (unlike Phone/Email/Website above -- a contact has

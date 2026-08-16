@@ -87,12 +87,53 @@
   uses a plain text input (`contact_form.html`), not a native
   `<input type="date">`, since a year-less birthday has no HTML
   date-input equivalent; the detail page renders it through a new
-  `fmt_birthday` Jinja filter (`deps.py`). Not searched — same precedent
-  as Address, the other single-value field. A contact with a birthday also
-  gets a generated all-day, yearly-recurring Calendar event tagged
-  "Birthday" (`db.sync_contact_birthday_event`) — see `features/
-  calendar.md`'s own entry for how that's kept in sync. See `plans/
-  open.md` for the remaining fields (structured Address, Social network).
+  `fmt_birthday` Jinja filter (`deps.py`). Not searched (`db._search_contacts`/
+  `list_contacts`), a precedent Address (below) also follows. A contact with
+  a birthday also gets a generated all-day, yearly-recurring Calendar event
+  tagged "Birthday" (`db.sync_contact_birthday_event`) — see `features/
+  calendar.md`'s own entry for how that's kept in sync.
+- **Address (structured multi-value)** — Contacts field parity slice 5 of
+  6, 2026-08-16. The old `contacts.address` free-text column is now
+  `contact_addresses`, a full structured, multi-value vCard ADR (PO Box,
+  Extended, Street, City, Region, Postal code, Country), each entry typed
+  Home/Work/Other (same vocabulary as email/website). Same owned-child-
+  row shape as phone/email/website, just seven value columns instead of
+  one; a row is dropped on save only when every one of the seven fields
+  is blank (unlike phone/email/website's single-value blank check).
+  vCard round-trips as multiple `ADR` lines with `TYPE=` (Other omits
+  it), via vobject's `card.add("adr")`/`adr_list` — ADR is one of RFC
+  2426/6350's own typed multi-instance properties, confirmed directly
+  against vobject before writing `vcard_rows.py`. The old flat
+  `contacts.address` value auto-migrates once, idempotently, into a
+  single "Other"-typed entry (the whole legacy string placed in
+  `street`, every other structured field left blank —
+  `db.migrate_legacy_contact_address`). The create/edit form renders
+  each address as its own card (`.contact-address-row`, a 2-column field
+  grid) rather than the single-line rows phone/email/website use — more
+  fields per entry than a one-line layout could hold. The detail page
+  renders each entry through a new `fmt_address` Jinja filter
+  (`db.format_contact_address`), vCard's own multi-line layout (PO Box/
+  Extended/Street each own line, then "City, Region PostalCode", then
+  Country). Not searched — same precedent Birthday established.
+- **Social network (`X-SOCIALPROFILE`)** — Contacts field parity slice 6
+  of 6, 2026-08-16, closing out this effort. A contact can have any
+  number of social profiles, each tagged with a network name (Twitter/
+  Facebook/Instagram/LinkedIn/Mastodon/GitHub/Other —
+  `db.CONTACT_SOCIAL_TYPES`), not the Home/Work/Other vocabulary every
+  other typed contact field uses — "which network" is the meaningful
+  distinction here. New `contact_social_profiles` table, same owned-
+  child-row shape as phone/email/website (single `value` column). No
+  pre-existing single-value column ever existed, so no auto-migration
+  (same situation as Website). vCard round-trips as multiple
+  `X-SOCIALPROFILE` lines with `TYPE=` naming the network (Other omits
+  it) — an X- extension property, but vobject treats it identically to a
+  core typed property (repeatable `card.add`, plural `_list` read-back),
+  confirmed directly against vobject. The create/edit form uses the same
+  one-line multi-row shape as Phone/Email/Website. The detail page
+  renders a URL-shaped value (`http://`/`https://`) as an external link;
+  a bare handle/username renders as plain text, since X-SOCIALPROFILE
+  doesn't guarantee either shape. Contacts field parity with Nextcloud
+  Contacts (`plans/open.md`) is now fully shipped.
 - **Routes** — `/contacts`, `/contacts/new`, `POST /contacts`,
   `/contacts/{uid}`, `/contacts/{uid}/edit`, `POST /contacts/{uid}`,
   `/contacts/{uid}/delete`.
