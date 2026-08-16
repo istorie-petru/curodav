@@ -14,8 +14,8 @@ offline. Installed as a PWA, it opens directly into its normal interface with
 no network — a local IndexedDB mirror is the primary data source for the
 installed app's own views, kept warm by ordinary online browsing. Local
 changes queue as operations and sync automatically once connectivity returns,
-with a small, mostly-invisible status indicator (offline / synchronizing /
-pending changes / synchronized) and no user action required.
+with a status indicator (offline / synchronizing / pending changes /
+synchronized) rendered as bottom-right toasts and no user action required.
 
 This is additive, not a replacement: the plain browser-tab experience (no
 install, no service worker) is untouched, fully online-only, server-rendered
@@ -84,8 +84,14 @@ retry uses exponential backoff with jitter (capped 30s), reset on the
 browser's `online` event or any successful round. A local write
 (`offline_write.js`) triggers an immediate sync attempt via `requestSync()`
 if already online. Status (`static/offline_status.js`) is computed live from
-`{navigator.onLine, in-flight, outbox size}`, never stored — hidden entirely
-once synced, a small pill otherwise.
+`{navigator.onLine, in-flight, outbox size}`, never stored. It renders as
+bottom-right toasts in the same `ccToast` stack as the app's warnings/errors/
+confirmations (2026-08-16 follow-up, was a small top-right pill): the
+offline / pending / synchronizing states stay as a persistent toast (no
+auto-dismiss countdown, updated in place as the state changes, dismissible
+via its ✕), while a successful sync is announced with a brief "Synced" toast
+only on a real non-synced → synced transition — §8's "successful background
+sync stays unobtrusive, while errors are visible" line, unchanged.
 
 ## PWA shell & local data layer
 

@@ -2402,6 +2402,31 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   background:none; border:none; color:var(--fg-tertiary); opacity:.7; cursor:pointer; border-radius:50%; padding:0;
 }
 .toast-close:hover{opacity:1; background:var(--row-alt);}
+/* Multiple-action row (ccConfirmSheet's confirm toast) -- Cancel + the
+   danger-styled confirm button sit in a row under the message, right-
+   aligned. The buttons override .toast-action's accent look below. */
+.toast-actions{
+  display:flex; justify-content:flex-end; gap:var(--space-2); margin-top:var(--space-2);
+}
+/* Confirm toast (static/toast.js's ccConfirmSheet, 2026-08-16 follow-up) --
+   the "are you sure?" prompt for destructive, non-undoable actions is now a
+   persistent toast in the bottom-right stack instead of a button-anchored
+   popover, so every confirmation reads as part of the same notification
+   language as warnings/errors/undo toasts. Same error-variant anatomy
+   (red alert icon chip), plus the Cancel / confirmLabel button row. */
+.toast-confirm{max-width:380px;}
+.toast-confirm .toast-action{
+  font-size:var(--text-footnote); padding:5px 14px; border-radius:var(--radius-sm); align-self:center;
+}
+.toast-confirm .toast-action.toast-confirm-cancel{
+  background:none; border:1px solid var(--border); color:var(--fg-secondary);
+}
+.toast-confirm .toast-action.toast-confirm-cancel:hover{background:var(--row-alt);}
+.toast-confirm .toast-action.toast-confirm-ok{
+  background:var(--danger); border:1px solid var(--danger); color:#fff;
+}
+.toast-confirm .toast-action.toast-confirm-ok:hover{background:#d92c22;}
+[data-theme="dark"] .toast-confirm .toast-action.toast-confirm-ok:hover{background:#ff6259;}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */
@@ -2410,34 +2435,6 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 @media (max-width:720px){
   /* Toast above the bottom nav on mobile */
   .toast-stack{bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
-}
-
-/* Confirm sheet (static/toast.js's ccConfirmSheet) -- the in-app
-   replacement for native confirm() on genuinely destructive, non-undoable
-   actions (cascading deletes: a database's columns/rows, a habit's whole
-   history, a tag everywhere it's used). Anchored under the button that
-   opened it on desktop; becomes a full-width bottom sheet on mobile
-   (same breakpoint/treatment as .modal below) since a small floating
-   popover is easy to miss-tap around on a touchscreen. */
-.confirm-sheet{
-  position:absolute; z-index:160; width:260px; background:var(--bg-elevated); border:1px solid var(--border);
-  border-radius:var(--radius-md); box-shadow:var(--elevation-3); padding:var(--space-3);
-  opacity:0; transform:translateY(-4px) scale(.97);
-  transition:opacity var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
-}
-.confirm-sheet.is-open{opacity:1; transform:translateY(0) scale(1);}
-.confirm-sheet-text{margin:0 0 var(--space-3); font-size:var(--text-callout); color:var(--fg-primary); line-height:1.4;}
-.confirm-sheet-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
-@media (max-width:720px){
-  .confirm-sheet{
-    position:fixed; left:0; right:0; bottom:0; top:auto; width:100%; max-width:100%;
-    border-radius:var(--radius-lg) var(--radius-lg) 0 0; padding:var(--space-5) var(--space-4);
-    transform:translateY(100%);
-    padding-bottom:calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
-  }
-  .confirm-sheet.is-open{transform:translateY(0);}
-  .confirm-sheet-actions{justify-content:stretch;}
-  .confirm-sheet-actions .btn{flex:1;}
 }
 
 /* Footer removed (2026-08-03) -- it sat as a third flex child inside
@@ -3954,29 +3951,6 @@ body.command-palette-open{overflow:hidden;}
 .offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
 .offline-add-task-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
 .offline-add-task-form input[type="text"]{flex:1;}
-
-/* Sync status pill (offline_status.js, 1.8 slice 6) -- ofline-first-
-   pwa.md's "small status indicator." Hidden by default/when synced (only
-   `.is-visible` shows it -- successful background sync stays unobtrusive,
-   per §8); global, not /offline-specific, since a retry can be stuck
-   failing no matter which page is open. Top-right corner, same fixed-
-   overlay convention as .toast-stack/.fab but a small pill rather than a
-   stack, since there's ever only one of these at a time. */
-.sync-status-pill{
-  display:none; position:fixed; top:var(--space-3); right:var(--space-3); z-index:210;
-  align-items:center; gap:6px; background:var(--bg-elevated); border:1px solid var(--separator);
-  border-radius:var(--radius-pill); padding:5px 12px; font-size:var(--text-caption);
-  color:var(--fg-secondary); box-shadow:var(--elevation-2);
-}
-.sync-status-pill.is-visible{display:flex;}
-.sync-status-dot{width:7px; height:7px; border-radius:50%; background:var(--fg-tertiary); flex:none;}
-.sync-status-pill.is-offline .sync-status-dot{background:var(--warning);}
-.sync-status-pill.is-pending .sync-status-dot{background:var(--warning);}
-.sync-status-pill.is-synchronizing .sync-status-dot{background:var(--accent); animation:sync-status-pulse 1s ease-in-out infinite;}
-@keyframes sync-status-pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
-@media (max-width:720px){
-  .sync-status-pill{top:auto; bottom:calc(72px + env(safe-area-inset-bottom, 0px)); right:var(--space-3);}
-}
 
 /* --------------------------------------------------------------------- */
 /* Single-user login page (2026-08-16, src/auth.py + templates/login.html)

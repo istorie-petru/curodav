@@ -2745,6 +2745,54 @@ session, right before the final commit of that session.
   integration: auto-generated secret survives a valid pre-purge cookie,
   purge drops it, the same cookie 302s to login) — full suite
   **1633 passed**.
+- **Shipped:** side work — **sync announcements + delete confirmations use
+  the bottom-right toast style**, complete (2026-08-16), direct request
+  ("Sync announcements and status should have the bottom right announcement
+  like style like for warnings, errors confirmation messages etc. Also All
+  delete confirmations should be displayed there"). Both the sync status
+  indicator and every "are you sure?" delete confirmation now render in the
+  same bottom-right toast stack as warnings/errors/undo messages, so they
+  read as part of the app's normal notification language instead of
+  separate chrome:
+  - **`static/toast.js`** — `ccToast` gained a `persistent` mode (state
+    indicators, not event announcements): no auto-dismiss countdown (and so
+    no progress bar / hover-pause), the dedupe barrier is skipped (a state
+    that genuinely re-appears must re-show), and the returned handle gains
+    `set(newOpts)` (update title/message/variant/icon in place) +
+    `isAlive()`. Toasts can now carry an `actions` array (`.toast-actions`
+    row of buttons, each label/className/onAction) alongside the existing
+    single `actionLabel`/`onAction`. `ccConfirmSheet` was rewritten from a
+    button-anchored popover (`.confirm-sheet`, deleted) into a persistent
+    error-variant toast in the stack — `title: "Please confirm"`, `variant:
+    "error"`, `className: "toast-confirm"`, Cancel + confirmLabel buttons,
+    Escape/✕ cancels, one at a time. The `anchor` param is kept for API
+    compatibility with every existing caller but no longer positions
+    anything. (A Node smoke run caught a real bug here that the structural
+    tests couldn't: the confirm button wired `onAction` instead of
+    `onConfirm`, a ReferenceError that would have crashed every delete
+    confirmation the moment it opened — fixed, plus a regression assertion.)
+  - **`static/offline_status.js`** — the sync status is no longer a
+    top-right `.sync-status-pill` (deleted): `offline` / `pending` /
+    `synchronizing` now render as persistent toasts in the stack, updated
+    in place via `set()` as the state changes, dismissible via ✕; "Synced"
+    is transient — a brief toast only on a real non-synced -> synced
+    transition (a page load that was already synced stays quiet, per §8's
+    "successful background sync stays unobtrusive"). `synchronizing` with
+    `pendingCount > 0` keeps showing the pending message so a retry loop
+    doesn't flicker.
+  - **`static/style.css`** — new `.toast-actions` / `.toast-confirm` styles
+    (right-aligned action row; Cancel is a bordered ghost, the confirm
+    button is filled `--danger` with dark-theme hover); `.confirm-sheet`
+    and `.sync-status-pill` blocks removed.
+  - **`static/sw.js`** — shell cache bumped `cc-shell-v7` -> `v8` so no
+    precached copy of the reworked assets lingers.
+  Docs updated (`features/offline-sync.md`, `features/design-system.md`);
+  `test_pwa_shell.py`'s cache-name test updated; 6 new tests in
+  `test_toast_rework.py` (persistent mode, confirm toast anatomy incl. the
+  `onConfirm` wiring, sync-status toast titles, pill CSS gone) — full suite
+  **1639 passed**, plus a Node smoke run (22 checks) over toast.js with a
+  minimal DOM stub exercising persistent/set/isAlive/dedupe-bypass and the
+  confirm action/Escape paths.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

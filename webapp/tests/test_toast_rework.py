@@ -17,10 +17,18 @@ Covered here:
     mouseleave restarts it capped at a short grace).
   - The expiry bar (.toast-progress) draining 100% -> 0% in lockstep with
     that countdown.
+  - Persistent mode (`persistent: true`): no countdown/progress bar, no
+    dedupe, and the handle gains `set()`/`isAlive()` for in-place updates.
+  - ccConfirmSheet is now a persistent error toast in the bottom-right
+    stack (Cancel + confirmLabel action row) instead of a button-anchored
+    popover.
   - The main success/warning call sites were split into title + short body.
   - The four toast status icons exist in _icons_sprite.html so the chip's
     <use> references never dangle, and style.css still styles the new
-    anatomy while keeping the confirm-sheet rules.
+    anatomy while keeping the confirm-toast rules.
+  - The sync status indicator (static/offline_status.js) now renders as
+    bottom-right toasts -- persistent for offline/pending/synchronizing, a
+    brief "Synced" toast only on a real non-synced -> synced transition.
 """
 
 from pathlib import Path
@@ -88,7 +96,7 @@ class TestToastRework:
         for name in ("alert-triangle", "alert-circle", "info", "check-circle"):
             assert f'id="icon-{name}"' in sprite, name
 
-    def test_css_styles_new_anatomy_and_keeps_confirm_sheet(self):
+    def test_css_styles_new_anatomy_and_keeps_confirm_toast(self):
         css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
         for expected in [
             ".toast-icon{",
@@ -99,6 +107,94 @@ class TestToastRework:
             ".toast-progress{",
             ".toast-error .toast-progress{",
             ".toast-warning .toast-progress{",
-            ".confirm-sheet{",
+            ".toast-confirm{",
+            ".toast-actions{",
+            ".toast-confirm .toast-action.toast-confirm-ok{",
+            ".toast-confirm .toast-action.toast-confirm-cancel{",
         ]:
             assert expected in css, expected
+        # The old button-anchored confirm-sheet styles are gone -- replaced
+        # by the confirm toast above.
+        assert ".confirm-sheet{" not in css
+
+    def test_persistent_mode_skips_countdown_and_dedupe(self):
+        js = (_STATIC_DIR / "toast.js").read_text(encoding="utf-8")
+        for expected in [
+            "persistent = false",
+            "if (!persistent && recent.has(key)",
+            "if (!persistent) recent.set(key, now)",
+            "let progress = null",
+            "if (!persistent) {",
+            "if (!persistent) arm(duration)",
+            'return { dismiss, set, isAlive: () => !dismissed }',
+        ]:
+            assert expected in js, expected
+
+    def test_persistent_handle_gains_set_for_in_place_updates(self):
+        js = (_STATIC_DIR / "toast.js").read_text(encoding="utf-8")
+        for expected in [
+            "function set(newOpts) {",
+            "if (dismissed) return false",
+            "titleEl.textContent = newOpts.title || cfg.title",
+            "bodyEl.hidden = true",
+        ]:
+            assert expected in js, expected
+
+    def test_confirm_sheet_is_now_a_persistent_confirm_toast(self):
+        # ccConfirmSheet no longer builds a button-anchored popover: it is a
+        # persistent error toast in the bottom-right stack with a Cancel +
+        # confirmLabel action row.
+        js = (_STATIC_DIR / "toast.js").read_text(encoding="utf-8")
+        for expected in [
+            "title: \"Please confirm\"",
+            "variant: \"error\"",
+            "persistent: true",
+            'className: "toast-confirm"',
+            'className: "toast-confirm-cancel"',
+            'className: "toast-confirm-ok"',
+            "confirmLabel = \"Delete\"",
+            # The confirm action must run the caller's onConfirm -- an earlier
+            # draft wired `onAction` here, a name that doesn't exist in
+            # ccConfirmSheet's destructure, which made every confirm crash
+            # with a ReferenceError the moment it was opened (caught by the
+            # smoke run, not this suite's structure-level asserts).
+            "onAction: onConfirm",
+        ]:
+            assert expected in js, expected
+        assert '"confirm-sheet"' not in js
+        assert "getBoundingClientRect" not in js
+
+
+class TestSyncStatusToasts:
+    """2026-08-16 follow-up -- the sync status indicator (offline_status.js)
+    is now rendered as bottom-right toasts like every other announcement,
+    not a top-right pill: persistent for the offline/pending/synchronizing
+    states, a brief "Synced" toast only on a real non-synced -> synced
+    transition. Same structural-check level as the rest of this file."""
+
+    def test_status_renders_through_ccToast_as_persistent_toasts(self):
+        js = (_STATIC_DIR / "offline_status.js").read_text(encoding="utf-8")
+        for expected in [
+            "window.ccToast",
+            "persistent: true",
+            ".set(cfg)",
+            ".isAlive()",
+            'title: "You\'re offline"',
+            'title: "Changes pending"',
+            'title: "Syncing…"',
+            'title: "Synced"',
+        ]:
+            assert expected in js, expected
+
+    def test_synced_only_shows_a_brief_toast_on_a_real_transition(self):
+        js = (_STATIC_DIR / "offline_status.js").read_text(encoding="utf-8")
+        assert "wasNonSynced" in js
+        assert "duration: 3000" in js
+        # Still renderer-only -- no IndexedDB or network calls of its own.
+        assert "indexedDB.open" not in js
+        assert "fetch(" not in js
+
+    def test_pill_css_removed(self):
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        assert ".sync-status-pill" not in css
+        assert "sync-status-dot" not in css

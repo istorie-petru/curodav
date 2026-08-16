@@ -6,54 +6,70 @@
 // never touches IndexedDB or the network directly -- same read/render
 // split as offline_db.js (data) vs. offline_shell.js (UI).
 //
+// Rendered as bottom-right toasts (2026-08-16 follow-up: "sync
+// announcements and status should have the bottom right announcement
+// style"): it used to be a small pill in the top-right corner; now it
+// lives in the same ccToast stack as the app's warnings/errors/
+// confirmations, so sync state reads as part of the normal notification
+// language instead of a separate chrome widget.
+//
+//   - offline / pending / synchronizing are *persistent* states -- a
+//     persistent toast (no auto-dismiss countdown) stays in the stack for
+//     as long as the condition is true, updated in place as it changes,
+//     dismissible via its ✕. A sync engine stuck in a failing retry loop
+//     keeps "N changes waiting to sync" honestly visible the whole time.
+//   - "synced" is transient: the persistent toast goes away and, only
+//     when this is a real non-synced -> synced transition (never on a
+//     page load that was already synced), a brief confirmation toast
+//     announces it -- §8's "successful background sync stays unobtrusive,
+//     while errors are visible" line, unchanged.
+//
 // Loaded globally (base.html), not just on /offline -- sync can be
 // actively retrying (or genuinely stuck offline) no matter which page is
 // open, and the person should be able to tell that's happening without
 // navigating anywhere.
 (function () {
-  let pill = null;
+  let statusToast = null;
+  let wasNonSynced = false;
 
-  function ensurePill() {
-    if (pill) return pill;
-    pill = document.createElement("div");
-    pill.className = "sync-status-pill";
-    pill.setAttribute("aria-live", "polite");
-    const dot = document.createElement("span");
-    dot.className = "sync-status-dot";
-    const text = document.createElement("span");
-    text.className = "sync-status-text";
-    pill.appendChild(dot);
-    pill.appendChild(text);
-    document.body.appendChild(pill);
-    return pill;
+  function countLabel(n) {
+    return n + (n === 1 ? " change" : " changes") + " waiting to sync";
   }
 
-  function labelFor(detail) {
-    if (detail.status === "offline") return "Offline";
-    if (detail.status === "synchronizing") return "Syncing…";
-    if (detail.status === "pending") {
-      return detail.pendingCount + (detail.pendingCount === 1 ? " change pending" : " changes pending");
+  // The synchronizing state also carries the live outbox count; a round
+  // flushing queued changes (pendingCount > 0) keeps showing the pending
+  // message rather than flickering to "Syncing…" and back on every retry,
+  // so "Syncing…" only ever means a pull-only round with nothing queued.
+  function configFor(status, detail) {
+    if (status === "offline") {
+      return { title: "You're offline", message: "Changes will sync when you're back online.", variant: "warning" };
     }
-    return "";
+    if (status === "pending" || (status === "synchronizing" && detail.pendingCount > 0)) {
+      return { title: "Changes pending", message: countLabel(detail.pendingCount), variant: "warning" };
+    }
+    return { title: "Syncing…", message: "Pulling the latest changes.", variant: "default" };
   }
 
-  // §8's "successful background sync stays unobtrusive, while errors are
-  // visible" -- the "synced" state (nothing pending, nothing in flight,
-  // online) hides the pill entirely rather than showing a transient
-  // checkmark; every other state stays visible for as long as it's true,
-  // which is exactly how a stuck retry loop (still "pending" after
-  // several failed attempts) stays honestly visible without this file
-  // needing to know anything about retries itself.
   function render(detail) {
-    if (!detail || !("indexedDB" in window)) return;
-    const el = ensurePill();
-    el.classList.remove("is-offline", "is-synchronizing", "is-pending");
+    if (!detail || !window.ccToast || !("indexedDB" in window)) return;
     if (detail.status === "synced") {
-      el.classList.remove("is-visible");
+      if (statusToast) {
+        statusToast.dismiss();
+        statusToast = null;
+      }
+      if (wasNonSynced) {
+        window.ccToast({ title: "Synced", message: "All changes are up to date.", duration: 3000 });
+      }
+      wasNonSynced = false;
       return;
     }
-    el.classList.add("is-visible", "is-" + detail.status);
-    el.querySelector(".sync-status-text").textContent = labelFor(detail);
+    wasNonSynced = true;
+    const cfg = configFor(detail.status, detail);
+    if (statusToast && statusToast.isAlive()) {
+      statusToast.set(cfg);
+    } else {
+      statusToast = window.ccToast(Object.assign({}, cfg, { persistent: true }));
+    }
   }
 
   document.addEventListener("cc-offline-status-change", (event) => render(event.detail));

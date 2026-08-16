@@ -309,9 +309,12 @@ class TestLocalWritePath:
         # schedule_grid.js from the precache list along with the whole
         # Schedule module, see plans/STATE.md's removal entry; v7
         # (2026-08-15) added event_format_toggle.js, "Event format for
-        # simple events".
+        # simple events"; v8 (2026-08-16) reworked toast.js /
+        # offline_status.js / style.css (sync status + delete confirms as
+        # bottom-right toasts), forcing a fresh shell install so no
+        # precached copy of the old assets lingers.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v7"' in script
+        assert 'CACHE_NAME = "cc-shell-v8"' in script
 
 
 class TestSyncEngine:

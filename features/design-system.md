@@ -50,7 +50,13 @@ convention).
 - **Delete confirmation is never optional.** Every destructive action reached
   from a modal footer is `footer_delete_mode='undo'` (reversible, has a
   toast-undo path) or `'confirm'` (irreversible, no undo destination) —
-  never a bare POST.
+  never a bare POST. The `'confirm'` flow (`static/toast.js`'s
+  `ccConfirmSheet`) renders as a persistent bottom-right toast in the same
+  stack as warnings/errors/undo toasts — icon chip, the question as the
+  body, a Cancel + danger Confirm button row — rather than a separate
+  anchored popover, so every confirmation speaks the app's one notification
+  language. The sync status indicator (`static/offline_status.js`) uses the
+  same toast stack for its offline/pending/synchronizing states.
 - **Title:** a plain `<h1>text</h1>`, no icon prefix, for every create/edit
   form and utility modal. The rich identity header (a status-colored
   dot/avatar + large bold `.detail-title`, `.modal-header
