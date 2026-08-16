@@ -66,6 +66,9 @@ these pieces fit together.
 - **Offline-first PWA** — install the app and it opens with no network, using
   a local copy of your data; create/edit tasks offline and they sync
   automatically (with conflict-safe merging) once you're back online.
+- **Single-user login** — optional: set `CC_AUTH_USERNAME` +
+  `CC_AUTH_PASSWORD` and every page sits behind a login form (signed session
+  cookie); unset, the app stays open exactly as before.
 
 ## Per-feature docs
 
@@ -89,6 +92,7 @@ reference for development; the tour above is the plain-language version.
 | [`published-lists.md`](published-lists.md) | Radicale's only role — label-filtered CalDAV/CardDAV collections |
 | [`settings.md`](settings.md) | Hub + General/Appearance/Labels/Published lists/Advanced |
 | [`export.md`](export.md) | ICS/CSV/VCF exports, JSON backup, import/restore |
+| [`auth.md`](auth.md) | Single-user login (`CC_AUTH_USERNAME`/`CC_AUTH_PASSWORD`), signed session cookie, middleware gate |
 | [`banners.md`](banners.md) | Per-page cover images |
 | [`design-system.md`](design-system.md) | M3 tokens, theming, shared input patterns, favicon |
 | [`offline-sync.md`](offline-sync.md) | PWA shell, local IndexedDB mirror + write path, HLC sync engine, conflict resolution, tombstone GC |

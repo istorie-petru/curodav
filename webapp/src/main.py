@@ -15,6 +15,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from . import db, sync
+from .auth import AuthMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import load_settings
 
@@ -115,6 +116,14 @@ def create_app() -> FastAPI:
     # overhead would net-lose.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+    # Single-user login (2026-08-16, src/auth.py) -- a no-op gate when no
+    # CC_AUTH_USERNAME/CC_AUTH_PASSWORD are configured, otherwise every
+    # request except /login and /static needs a valid session cookie. The
+    # middleware reads its settings off `app.state.settings` (set by the
+    # lifespan below), so an unset pair keeps the app behaving exactly as
+    # it always has.
+    app.add_middleware(AuthMiddleware)
+
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
     # Phase 1 (label-space rework, 2026-08-06): routers/calendars.py,
@@ -134,8 +143,9 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, sync_api, tasks, timeline
 
+    app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,

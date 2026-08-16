@@ -2683,6 +2683,53 @@ session, right before the final commit of that session.
   Full suite 1593 passed (unchanged — no test files touched; the lifespan
   fix is on a code path this suite doesn't exercise, router-function-call
   convention).
+- **Shipped:** side work — **single-user authentication**, complete
+  (2026-08-16), direct request ("add authentification for one user only"),
+  design choice green-lit via AskUserQuestion: credentials via env vars,
+  auth enforced **only when configured**. The app still ships with no login
+  at all (its long-standing behavior, see deploy/README.md's old security
+  note); set both `CC_AUTH_USERNAME` and `CC_AUTH_PASSWORD` and every
+  request except `/login` and `/static` requires a signed session cookie.
+  - **`src/auth.py`** (new, stdlib-only — `hmac`/`hashlib`/`secrets`/
+    `base64`, no new runtime dependency and no schema change): `auth_enabled`
+    (both creds set, else the middleware is a no-op), `verify_credentials`
+    (constant-time on both fields), a **stateless signed session cookie**
+    (`base64url(json({"sub","exp"})) + HMAC-SHA256`, `HttpOnly` +
+    `SameSite=Lax` + 30-day max-age) with `make_session_token`/
+    `read_session_token`, the signing secret from `CC_AUTH_SECRET` or
+    auto-generated-and-persisted in `app_meta` (`session_secret`), and the
+    gate itself, `AuthMiddleware` — pure-ASGI, reads settings off
+    `scope["app"].state.settings` (set by the lifespan), 302-to-`/login?
+    next=<path>` for pages and **401 JSON** for anything that wants JSON
+    (`/api/*` paths, `X-Requested-With: fetch`, `Accept: application/json`)
+    so fetch-driven surfaces never try to parse the login page. A
+    middleware (not a per-router dependency) because it's the only layer
+    that provably covers routes registered in the future too.
+  - **`routers/auth.py`** (new): `GET /login` (minimal standalone
+    `login.html`, deliberately NOT extending base.html — no app chrome on
+    the sign-in screen; redirects away when auth is disabled or the visitor
+    is already authenticated), `POST /login` (generic 401 + error re-render
+    on wrong creds, no username-vs-password distinguisher; on success sets
+    the cookie and redirects to the `_safe_next`-validated `next` or `/`),
+    `POST /logout` (clears the cookie). `_safe_next` mirrors
+    routers/tasks.py's own open-redirect guard.
+  - **`config.py`**: `auth_username`/`auth_password`/`auth_session_secret`
+    on `Settings`, defaulted `None` (no existing construction breaks),
+    from `CC_AUTH_USERNAME`/`CC_AUTH_PASSWORD`/`CC_AUTH_SECRET`.
+  - **Deploy/docs**: `deploy/*/curodav.env.example` gained commented
+    `CC_AUTH_*` lines; `deploy/README.md`'s "no auth" security note
+    rewritten ("applies until you set CC_AUTH_*") + config-table rows;
+    `webapp/README.md` config table + Known gaps updated; new
+    `features/auth.md` outcome doc + `features/README.md` tour/table rows.
+    `/sw.js` kept public (a service worker can't update while signed out
+    otherwise, and its precache list holds no private data).
+  38 new tests (`test_auth.py` — config env parsing, every pure function
+  incl. tampered/wrong-secret/expired tokens, the middleware over a real
+  minimal FastAPI app via TestClient with a fixed test secret, and the
+  login/logout routes via the suite's direct-call convention), full suite
+  **1631 passed** (was 1593, +38), plus an end-to-end smoke of the real
+  app under `CC_AUTH_*` env (signed-out 302, API 401, form render, bad/
+  good login, cookie round-trip, signed-in 200) and of the no-auth default.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

@@ -22,6 +22,15 @@ class Settings:
     db_path: Path
     sync_interval_seconds: int
     backup_dir: Path
+    # Single-user authentication (2026-08-16, src/auth.py). Both
+    # auth_username AND auth_password must be non-empty for login to be
+    # enforced -- an unset pair keeps the app open exactly as it always
+    # was (local dev, trusted networks). auth_session_secret is optional:
+    # when unset, the session-signing secret is auto-generated once and
+    # persisted in app_meta, surviving restarts.
+    auth_username: str | None = None
+    auth_password: str | None = None
+    auth_session_secret: str | None = None
 
 
 def load_settings() -> Settings:
@@ -49,4 +58,7 @@ def load_settings() -> Settings:
         backup_dir=Path(
             os.environ.get("CC_BACKUP_DIR", str(db_path.parent / "backups"))
         ),
+        auth_username=os.environ.get("CC_AUTH_USERNAME") or None,
+        auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,
+        auth_session_secret=os.environ.get("CC_AUTH_SECRET") or None,
     )

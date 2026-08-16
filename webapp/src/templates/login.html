@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Log in — Command Center</title>
+    <!-- Deliberately NOT extending base.html: the login page is the one
+         surface a signed-out browser sees, and the app chrome (tabbar,
+         spaces rail, the command palette, the offline-sync scripts) has no
+         business rendering before authentication. Standalone head + the
+         same style.css so it inherits the app's theme/design tokens
+         without its shell. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script>
+      (function () {
+        var KEY = "commandCenterWeb.theme";
+        var stored = localStorage.getItem(KEY);
+        var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+      })();
+    </script>
+</head>
+<body>
+    <div class="auth-wrap">
+        <div class="auth-card">
+            <h1 class="auth-brand">{{ icon('command') }} Command Center</h1>
+            <p class="auth-subtitle text-muted">Log in to continue</p>
+            {% if error %}
+            <p class="auth-error" role="alert">{{ error }}</p>
+            {% endif %}
+            <form method="post" action="/login">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn primary auth-submit">Log in</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

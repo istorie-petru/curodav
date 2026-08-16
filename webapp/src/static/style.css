@@ -3977,3 +3977,28 @@ body.command-palette-open{overflow:hidden;}
 @media (max-width:720px){
   .sync-status-pill{top:auto; bottom:calc(72px + env(safe-area-inset-bottom, 0px)); right:var(--space-3);}
 }
+
+/* --------------------------------------------------------------------- */
+/* Single-user login page (2026-08-16, src/auth.py + templates/login.html)
+   -- the one surface a signed-out browser sees. Centered card on the app's
+   normal background, same design tokens, no app chrome. */
+.auth-wrap{
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  padding:var(--space-4);
+}
+.auth-card{
+  width:100%; max-width:340px; background:var(--surface-container-high);
+  border:none; border-radius:var(--radius-card); box-shadow:var(--elevation-2);
+  padding:var(--space-5) var(--space-4);
+}
+.auth-brand{
+  display:flex; align-items:center; gap:8px;
+  font-size:var(--text-title2); margin:0 0 2px;
+}
+.auth-brand .icon{width:22px; height:22px; color:var(--accent);}
+.auth-subtitle{margin:0 0 var(--space-4);}
+.auth-error{
+  margin:0 0 var(--space-3); padding:8px 10px; border-radius:var(--radius-sm);
+  background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-caption);
+}
+.auth-submit{width:100%; margin-top:var(--space-2);}

@@ -632,12 +632,18 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 | `CC_DB_PATH` | `~/.command_center_web/cache.sqlite` | SQLite cache path |
 | `CC_BACKUP_DIR` | `db_path.parent / "backups"` | Settings > Data health backups |
 | `CC_SYNC_INTERVAL` | `60` | Background pull interval, seconds |
+| `CC_AUTH_USERNAME` | *(none)* | Single-user login username — set together with `CC_AUTH_PASSWORD` to enable auth (see [`features/auth.md`](../features/auth.md)) |
+| `CC_AUTH_PASSWORD` | *(none)* | The one account's password (see above) |
+| `CC_AUTH_SECRET` | *(auto-generated)* | Session-cookie signing key; unset = auto-generated and stored in the DB |
 
 ## Known gaps
 
-- **No auth on this app itself.** Assumes it's reachable only over a
-  trusted network (e.g. Tailscale), matching the earlier decision to avoid
-  public exposure. Add auth before that assumption changes.
+- **No auth by default.** The app ships open; login is only enforced when
+  `CC_AUTH_USERNAME` + `CC_AUTH_PASSWORD` are both set (see
+  [`features/auth.md`](../features/auth.md)). Without them it assumes it's
+  reachable only over a trusted network (e.g. Tailscale) — matching the
+  earlier decision to avoid public exposure. Add auth (or a reverse proxy
+  that does) before that assumption changes.
 - **Full-refresh sync, not delta sync.** Every background poll re-lists
   everything from Radicale. Fine at personal-scale item counts; CalDAV's
   `sync-collection` REPORT (true delta sync) is a reasonable upgrade if
