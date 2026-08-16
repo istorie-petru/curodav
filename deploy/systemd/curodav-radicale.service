@@ -1,0 +1,27 @@
+# Command Center Radicale (CalDAV/CardDAV server) -- optional companion to
+# the curodav app, installed only when `install.sh --with-radicale` is used.
+#
+# Runs the radicale package from its own dedicated venv
+# (/opt/curodav-radicale/.venv) so a production `uv sync --no-dev` of the app
+# never drags it in, and its config lives in /etc/curodav/radicale/.
+[Unit]
+Description=Command Center Radicale (CalDAV/CardDAV) server
+Documentation=https://github.com/istorie-petru/curodav
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=curodav
+Group=curodav
+ExecStart=/opt/curodav-radicale/.venv/bin/python -m radicale --config /etc/curodav/radicale/config
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/curodav/radicale
+
+[Install]
+WantedBy=multi-user.target

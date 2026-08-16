@@ -1,0 +1,24 @@
+# Build-context exclusions for the deploy/docker/ image (build context =
+# repo root). Keep the context small and keep secrets out of it.
+
+# VCS / environment
+.git/
+.venv/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Dev-only Radicale data + credentials
+webapp/.dev/
+
+# Tests and docs are not needed in the runtime image
+webapp/tests/
+webapp/scripts/
+features/
+plans/
+
+# Runtime secrets -- never ship generated credentials into an image build
+deploy/docker/radicale/users
+deploy/systemd/radicale/users

@@ -84,6 +84,16 @@ def _delete_collection(bridge, entity_type: str, collection_path: str) -> None:
         bridge.delete_addressbook_collection(collection_path)
 
 
+def _require_bridge(bridge) -> None:
+    """Published Lists are materialized into a real Radicale collection, so
+    every mutating route needs the bridge -- but the app now boots without
+    one (main.py's lifespan sets bridge=None when Radicale is unreachable;
+    see routers/tasks.py's "no bridge in this path anymore" notes). Fail
+    cleanly instead of crashing on a None attribute."""
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="Sync server (Radicale) is not reachable")
+
+
 @router.get("")
 def list_index(request: Request, conn=Depends(get_db)):
     lists = db.list_published_lists(conn)
@@ -121,6 +131,7 @@ def create_list(
     name = (name or "").strip()
     if not name or entity_type not in ENTITY_TYPES:
         return RedirectResponse(url="/published-lists", status_code=303)
+    _require_bridge(bridge)
     list_id = uuid.uuid4().hex
     collection_path = _unique_collection_path(conn, name)
     row = {
@@ -151,6 +162,7 @@ def update_list(
     existing = db.get_published_list(conn, list_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Published list not found")
+    _require_bridge(bridge)
     name = (name or "").strip() or existing["name"]
     db.upsert_published_list(
         conn,
@@ -182,6 +194,7 @@ def delete_list(list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge)):
     membership and never deletes anything."""
     existing = db.get_published_list(conn, list_id)
     if existing is not None:
+        _require_bridge(bridge)
         _delete_collection(bridge, existing["entity_type"], existing["radicale_collection_path"])
         db.delete_published_list(conn, list_id)
     return RedirectResponse(url="/published-lists", status_code=303)
@@ -195,5 +208,6 @@ def resync_list(list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge)):
     the interval."""
     existing = db.get_published_list(conn, list_id)
     if existing is not None:
+        _require_bridge(bridge)
         materialize(conn, bridge, existing)
     return RedirectResponse(url="/published-lists", status_code=303)

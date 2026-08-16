@@ -1,0 +1,15 @@
+# Radicale htpasswd file for the curodav companion container.
+#
+# The compose "radicale" service mounts this whole directory read-only at
+# /etc/radicale, and the config expects a users file here. Copy this example
+# to `users` and set your own password (each line is "username:password",
+# plain text):
+#
+#   cp deploy/docker/radicale/users.example deploy/docker/radicale/users
+#   chmod 600 deploy/docker/radicale/users
+#   # edit, then: docker compose --profile sync up -d
+#
+# Use the SAME username/password in /etc/curodav/curodav.env's
+# CC_RADICALE_USER / CC_RADICALE_PASSWORD. The URL is
+# http://radicale:5232/<username>/ from inside the app container.
+curodav:changeme

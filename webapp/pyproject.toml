@@ -18,6 +18,13 @@ dependencies = [
     "caldav>=1.3",
     "icalendar>=6.0",
     "vobject>=0.9.7",
+    # httpx is a runtime import (caldav_bridge.py hand-rolls the CardDAV
+    # side with it), not just a test dependency -- it must ship with the
+    # production image/service. It used to live only in the dev group,
+    # which a `uv sync --no-dev` deploy silently skipped, making the app
+    # unbootable outside the dev environment (ModuleNotFoundError on
+    # import). See deploy/README.md.
+    "httpx>=0.27",
 ]
 
 [project.scripts]
@@ -29,6 +36,5 @@ pythonpath = ["src"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    "httpx>=0.27",
     "radicale>=3.3",
 ]

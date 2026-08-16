@@ -14,9 +14,8 @@ no subscription.
   over that pool, never a new kind of object.
 - **Runs entirely from one tree** with no external services beyond the optional
   Radicale sync server. Self-host it where you like.
-- **The current version is 1.0** — the first full release of the `webapp/`
-  client. The app's history (phases 0.1 → 1.0) and the versioning rules are in
-  [`plans/abandoned.md`](plans/abandoned.md).
+- **The current version is 1.9.0.** The app's history (phases 0.1 → 1.0)
+  and the versioning rules are in [`plans/abandoned.md`](plans/abandoned.md).
 
 ## The stack
 
@@ -56,10 +55,26 @@ deployment notes.
 Run the test suite:
 
 ```bash
-cd webapp && PYTHONPATH=src /home/peter/Claude/Projects/Dashboard/.venv/bin/python -m pytest -q
+cd webapp && PYTHONPATH=src ../.venv/bin/python -m pytest -q
 ```
 
 All tests green or a change isn't done.
+
+## Deployment
+
+Two one-command installers run the app on a real server — a native systemd
+service or Docker Compose — with an optional Radicale (CalDAV/CardDAV) server
+for phone sync:
+
+```bash
+sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/systemd/install.sh)
+sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/docker/install.sh) --with-radicale
+```
+
+See [`deploy/README.md`](deploy/README.md) for both deploy paths, the
+`/etc/curodav` config, and the update/uninstall commands. Note: the app has
+no authentication of its own — reach it over a trusted network (Tailscale)
+or behind an authenticated reverse proxy.
 
 ## Where docs live
 
@@ -84,7 +99,7 @@ back without being re-litigated.
 Versions track the phases the app has gone through, not semantic versioning: a
 `0.x` version was a development phase, `x.0` is a full release, and minor
 releases within a major version are numbered `1.1` … `1.9`. The app is at
-**1.0**; open work ships as `1.1` … `1.9` minor releases, and once all roadmap
-work is implemented the next full release is **2.0**. The full phase table
-(0.1 → 1.0) is in [`plans/abandoned.md`](plans/abandoned.md); the release order
-is in [`plans/roadmap.md`](plans/roadmap.md).
+**1.9.0**; the next full release, once all roadmap work is implemented, is
+**2.0**. The full phase table (0.1 → 1.0) is in
+[`plans/abandoned.md`](plans/abandoned.md); the release order is in
+[`plans/roadmap.md`](plans/roadmap.md).

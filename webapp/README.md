@@ -630,6 +630,7 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 | `CC_TASKS_COLLECTION` | `tasks` | Tasks (VTODO) collection name |
 | `CC_CONTACTS_COLLECTION` | `contacts` | Addressbook collection name |
 | `CC_DB_PATH` | `~/.command_center_web/cache.sqlite` | SQLite cache path |
+| `CC_BACKUP_DIR` | `db_path.parent / "backups"` | Settings > Data health backups |
 | `CC_SYNC_INTERVAL` | `60` | Background pull interval, seconds |
 
 ## Known gaps
@@ -650,10 +651,23 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 
 ## Deploying for real
 
-Not covered yet: running Radicale with real (non-plaintext) auth, and
-putting both Radicale and this app behind Tailscale. That's the next
-piece of work, not this one. (Older versions of this note also covered
-pointing a separate desktop app's CalDAV/CardDAV bridge at the same
-Radicale instance -- moot since `desktop/` was deleted 2026-08-07;
-`webapp/` is now the sole client, see `features/architecture.md`
-Phase 8.)
+The app runs standalone — all reads *and* writes live in its own SQLite
+store, and Radicale is only needed for phone/CalDAV sync. There are two
+one-command deploys (a native systemd service and Docker Compose), each with
+an optional `--with-radicale` flag, documented in
+[`deploy/README.md`](../deploy/README.md):
+
+```bash
+sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/systemd/install.sh)
+sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/docker/install.sh) --with-radicale
+```
+
+The app boots even when Radicale is unreachable: the sync bridge is created
+lazily-ish at startup and a failed connection logs
+`Radicale unreachable at startup; running without the sync bridge` and keeps
+serving — a Radicale outage never takes the app down (the `published-lists`
+mutating routes return 503 until it's back). See
+[`deploy/README.md`](../deploy/README.md) for the config file, the
+`CC_RADICALE_URL` shape (`http://host:5232/<user>/`), updating, and
+uninstalling. Remember: this app has no auth — run it over a trusted network
+(Tailscale) or behind an authenticated reverse proxy.

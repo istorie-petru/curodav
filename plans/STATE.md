@@ -2636,6 +2636,54 @@ session, right before the final commit of that session.
   structural JS-source checks (`test_toast_rework.py`, same style as
   `test_pwa_shell.py`), full suite **1593 passed**.
 
+- **Shipped:** side work — **Easy deployment: systemd + Docker Compose, with
+  install/update scripts and docs**, complete (2026-08-16) — a deploy slice,
+  not a feature slice. Two one-command installers under `deploy/` run the app
+  on a real server: `deploy/systemd/` (a native systemd service from a clone
+  of the repo at `/opt/curodav`, app data in `/var/lib/curodav`, config in
+  `/etc/curodav/curodav.env`) and `deploy/docker/` (a `python:3.12-slim` +
+  uv single image that runs both the app and, via the compose `sync` profile,
+  an optional Radicale companion; named volumes for all data). Both
+  installers are idempotent, never overwrite an existing env file, and take a
+  `--with-radicale` flag that generates sync credentials; both updaters pull
+  `main`, re-sync/rebuild, and restart. Docs: `deploy/README.md` (both paths,
+  config, `CC_RADICALE_URL` must end with the sync user's principal path,
+  update/uninstall, the no-auth/trusted-network warning), plus root
+  `README.md` and `webapp/README.md` deployment sections (and the stale
+  "current version is 1.0" line finally fixed to 1.9.0; the webapp config
+  table gained `CC_BACKUP_DIR`). The Dockerfile syncs from the `webapp/`
+  member (`cd webapp && uv sync --frozen --no-dev --no-install-project`),
+  matching `run.sh`'s own invocation — syncing from the workspace root
+  installs nothing (root project has no deps), the original bug this
+  production `uv sync` replaces.
+- **Fixed:** side work — **the app now boots when Radicale is unreachable**,
+  complete (2026-08-16), found by the deploy work above: `CalDavBridge`'s
+  constructor connects to Radicale eagerly (DAVClient principal + default
+  collection lookups), and `main.py`'s lifespan built it *outside* the
+  try/except that already isolated `sync.full_refresh` — so the container
+  run crashed with `ConnectionRefusedError -> "Application startup failed.
+  Exiting."` whenever no Radicale server was reachable, contradicting the
+  "runs with no external services" story. The bridge construction is now
+  wrapped (`main.py`): on failure it sets `app.state.bridge = None`, logs
+  `Radicale unreachable at startup; running without the sync bridge`, and the
+  app keeps serving (a restart re-attempts the connection). The one consumer
+  that can't degrade to `None`, `routers/published_lists.py`, gained a
+  `_require_bridge` guard on all four mutating routes (clean 503 instead of
+  an AttributeError). Since the Phase-1 label-space rework, tasks/events/
+  contacts writes are plain SQL to the local SQLite store — no bridge in
+  those paths — so a Radicale outage only costs background external-sync and
+  Published Lists, never the app's own CRUD. Also fixed the runtime-import
+  bug the container run exposed first: `caldav_bridge.py` does `import httpx`
+  but httpx was only in the dev dependency group, so the pinned production
+  `uv sync --no-dev` image failed at import; httpx moved into `dependencies`
+  in `webapp/pyproject.toml` (uv.lock regenerated). Verified end-to-end:
+  image builds, the app container boots standalone (HTTP 200, data survives
+  restart in the named volume), and the compose `sync` profile's app+Radicale
+  stack works together (collections auto-created under `/curodav/`).
+  Full suite 1593 passed (unchanged — no test files touched; the lifespan
+  fix is on a code path this suite doesn't exercise, router-function-call
+  convention).
+
 ## Breadcrumbs for 1.4's two still-deferred items
 
 1.4's main line (work allocations + both project views) is fully shipped.

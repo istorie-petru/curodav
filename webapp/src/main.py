@@ -47,7 +47,19 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     app.state.settings = settings
 
-    bridge = CalDavBridge(settings)
+    # The bridge's constructor connects to Radicale (DAVClient -> principal,
+    # plus eager default collection lookups). Radicale is OPTIONAL -- the app
+    # is fully usable standalone (writes are plain SQL to the local SQLite
+    # store; see routers/tasks.py's "no bridge in this path anymore" notes) --
+    # so an unreachable server must not refuse to boot. On failure the app
+    # keeps running without sync/published lists; the background thread and
+    # the Settings > Published lists surface both degrade gracefully on the
+    # None bridge, and a restart re-attempts the connection.
+    try:
+        bridge = CalDavBridge(settings)
+    except Exception:
+        bridge = None
+        logger.exception("Radicale unreachable at startup; running without the sync bridge")
     app.state.bridge = bridge
 
     # Populate the cache synchronously once at startup so the first page

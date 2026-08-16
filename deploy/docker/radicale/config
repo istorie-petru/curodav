@@ -1,0 +1,19 @@
+; Radicale config for the curodav companion container.
+; Mounted read-only at /etc/radicale/config by the compose "radicale" service.
+; Plain-text htpasswd auth -- same threat model as the app itself: only
+; expose this on a trusted network (Tailscale) or behind an authenticated
+; proxy. A hardened config (bcrypt htpasswd) is a drop-in replacement.
+
+[server]
+hosts = 0.0.0.0:5232
+
+[auth]
+type = htpasswd
+htpasswd_filename = /etc/radicale/users
+htpasswd_encryption = plain
+
+[storage]
+filesystem_folder = /var/lib/radicale/collections
+
+[rights]
+type = owner_only

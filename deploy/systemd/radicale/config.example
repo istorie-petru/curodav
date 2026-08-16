@@ -1,0 +1,20 @@
+; Radicale config for the curodav companion server (systemd deploy).
+; Copied to /etc/curodav/radicale/config by install.sh --with-radicale and
+; never overwritten afterwards. Plain-text htpasswd auth -- same threat
+; model as the app itself: only expose this on a trusted network
+; (Tailscale) or behind an authenticated proxy. A hardened config
+; (bcrypt htpasswd) is a drop-in replacement if that ever changes.
+
+[server]
+hosts = 127.0.0.1:5232
+
+[auth]
+type = htpasswd
+htpasswd_filename = /etc/curodav/radicale/users
+htpasswd_encryption = plain
+
+[storage]
+filesystem_folder = /var/lib/curodav/radicale/collections
+
+[rights]
+type = owner_only
