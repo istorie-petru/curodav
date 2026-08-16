@@ -2495,6 +2495,72 @@ session, right before the final commit of that session.
   No code changes — the 1.9 features (Tasks table pagination) shipped in
   the entries above; this commit only versions them. Full suite still 1586
   passed.
+- **Shipped:** `1.9` follow-up slice — **Async CRUD, expanded to the other
+  daily surfaces** (2026-08-16), the "wire the change event into the
+  Calendar/Board/Timeline/Habits and the remaining modal forms" follow-up
+  from the Async CRUD slice above, per `features/async-crud.md` §5/§7.
+  Session scope (user-chosen): core daily surfaces + the two stale-region
+  gaps; Settings/admin/published-lists/import stay reload-based.
+  - **Mechanism generalized**: `static/async_crud.js`'s change dispatch is
+    now `ccApi.dispatchChange({type, action, uid})` with a **claim
+    protocol** — the event carries `detail.claimed = false` and each
+    surface listener sets it `true` only when it actually owns a region on
+    the current page; `dispatchChange` returns `claimed` and `modal.js` /
+    `app.js` fall back to a reload when nothing claims it (backward
+    compatible). `routers/deps.py` gained the shared `wants_json()` /
+    `respond()` helpers (`tasks.py` refactored onto them). Design decision
+    recorded: **no generic plain-page `data-cc-change` submit handler** in
+    `async_crud.js` — it would strand standalone form pages (fetch + reload
+    instead of following the 303 redirect); plain-page forms are handled by
+    surface-specific listeners with `e.defaultPrevented` /
+    `#modal-overlay` guards.
+  - **Contacts**: `GET /contacts/regions?region=list` + shared
+    `_contacts_list_context` (matches the exact `list_contacts` filter/tag
+    params), `_contacts_body.html` partial, `create_contact` (201+uid) /
+    `update_contact` / `delete_contact` dual-mode, `data-cc-change="contact"`
+    on the form + footer delete, new `contacts_list.js` listener. 63 tests.
+  - **Notes**: `GET /notes/regions?region=list` + `_notes_body.html`,
+    dual-mode create/update/delete (404 -> JSON when fetch), `data-cc-change
+    = "note"` + confirm-mode footer delete opt-in (new
+    `footer_delete_cc_change` support in `_modal_footer.html`'s confirm
+    branch), new `notes_list.js` listener.
+  - **Habits**: `GET /habits/regions` (`region=list` -> `_habits_body.html`,
+    `region=detail&uid` -> `_habit_detail_body.html`, unknown -> 400),
+    dual-mode create (201+uid)/edit/archive/unarchive/delete +
+    `toggle_entry`/`add_entry` (referer redirect default), `data-cc-change
+    ="habit"` on the form + delete + archive/unarchive + backfill, new
+    `habits.js` listener claiming whichever habit region is present and
+    handling the heatmap cell / backfill / archive forms async. 71 tests.
+  - **Events**: `create_event` (201+uid) / `update_event` / `delete_event`
+    / `cancel|move|restore_occurrence` dual-mode (via `respond`),
+    `data-cc-change="event"` on the form + footer delete + the occurrence
+    actions (modal.js's per-form handler dispatches them inside the modal).
+    **Month view** is the wired event/task surface: `_calendar_month_grid
+    .html` partial + `GET /calendar/regions?region=month` (shared
+    `_month_view_context`), new `async_calendar.js` listener that refreshes
+    `#month-grid` and re-inits the drag bindings (`calendar_month.js` /
+    `calendar_month_drag.js` refactored to expose re-invocable `init()`s);
+    the month drag-to-move now dispatches the change event instead of
+    reloading. Week/Day/Timetable grids carry per-block drag bindings and
+    stay on the reload fallback for now (documented follow-up).
+  - **Labels**: `GET /labels/regions?region=list` + shared
+    `_labels_context`, `_labels_body.html` partial, `data-cc-change="label"`
+    on the edit + merge modals, new `labels_manage.js` listener
+    (`label_search.js` refactored to an exposed `init()` so the client-side
+    search re-binds after a region swap).
+  - **Opt-ins (reload fallback keeps them safe)**: `data-cc-change="banner"`
+    on the banner upload/remove forms; `data-cc-change="task"` on
+    `habit_task_form.html` (create) and on the tasks list-row delete
+    (`_task_row.html`) — closing the two stale-region gaps from the first
+    slice (list-row delete + command-palette quick capture now dispatch
+    `cc-entity-changed`).
+  - **Deliberately deferred follow-ups** (documented, not done): the
+    Week/Day/Timetable grid region (needs calendar.js + project_calendar.js
+    re-init, the merged grid's per-block bindings), the Timeline grid
+    region (timeline.js already POSTs JSON but `reload()`s for correctness),
+    a Board column region, and async work-allocation create/move/delete.
+  - 13 new tests across the surface suites (contacts 63, notes,
+    habits 71, calendar 141, full suite **1586 passed**).
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

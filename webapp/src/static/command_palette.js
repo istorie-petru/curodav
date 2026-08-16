@@ -299,6 +299,13 @@
         });
         if (!resp.ok) throw new Error(data.error || "Could not capture that.");
         toast({ message: (CAPTURE_TYPE_LABEL[data.type] || "Item") + ' created: "' + (data.title || "") + '".' });
+        // async-CRUD (features/async-crud.md): the page underneath should
+        // refresh its own region for the created entity instead of staying
+        // stale -- this is the only thing the palette adds to the flow (it
+        // already closed + toasted on its own).
+        if (data.type && window.ccApi && window.ccApi.dispatchChange) {
+          window.ccApi.dispatchChange({ type: data.type, action: "create" });
+        }
         close();
       })
       .catch(function (err) {

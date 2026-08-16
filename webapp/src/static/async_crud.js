@@ -31,6 +31,24 @@
     return fetch(url, { method: method, headers: FETCH_HEADER, body: body });
   }
 
+  // Dispatch the cross-surface change event synchronously and report whether
+  // any surface listener claimed it (i.e. actually owns a region on THIS page
+  // that it will refresh). Surfaces set detail.claimed = true when they are
+  // about to refresh a region they found on the page. modal.js uses the
+  // return value as its fallback: an unclaimed change means no live region
+  // exists here, so the page falls back to a full reload instead of going
+  // stale (progressive enhancement is preserved either way).
+  function dispatchChange(change) {
+    var detail = {
+      type: change.type,
+      action: change.action || "edit",
+      uid: change.uid !== undefined ? change.uid : undefined,
+    };
+    detail.claimed = false;
+    document.dispatchEvent(new CustomEvent("cc-entity-changed", { detail: detail }));
+    return detail.claimed;
+  }
+
   // POST a form to a mutation endpoint. Resolves with the parsed JSON body
   // on success; rejects with {message, status} on server/network errors so
   // callers can surface a ccToast and leave the form in place. Opt in to the
@@ -54,15 +72,8 @@
         }
         if (o.change) {
           var change = typeof o.change === "string" ? { type: o.change } : o.change;
-          document.dispatchEvent(
-            new CustomEvent("cc-entity-changed", {
-              detail: {
-                type: change.type,
-                action: change.action || "edit",
-                uid: change.uid !== undefined ? change.uid : uidFromUrl(url),
-              },
-            })
-          );
+          if (change.uid === undefined) change.uid = uidFromUrl(url);
+          dispatchChange(change);
         }
         return body;
       })
@@ -137,11 +148,13 @@
     var grid = document.getElementById("dashboard-grid");
     if (!grid || grid.classList.contains("is-editing")) return;
     var cards = Array.from(grid.querySelectorAll('.widget-card[data-widget-uses*="tasks"]'));
+    if (!cards.length) return;
+    detail.claimed = true;
     cards.forEach(function (card) {
       if (!card.id || !card.dataset.uid) return;
       window.ccApi.refreshRegion("/dashboard/widgets/" + card.dataset.uid, card.id).catch(function () {});
     });
   });
 
-  window.ccApi = { post: post, refreshRegion: refreshRegion };
+  window.ccApi = { post: post, dispatchChange: dispatchChange, refreshRegion: refreshRegion };
 })();

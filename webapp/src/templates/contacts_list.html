@@ -39,44 +39,7 @@
 </div>
 
 <div class="card">
-{% if contacts %}
-<div class="contact-list">
-    {% for c in contacts %}
-    <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
-        {{ avatar(c) }}
-        <span class="contact-row-main">
-            <span class="contact-row-name">{{ c.full_name }}</span>
-            <!-- Contacts field parity slice 2 of 6: c.phone/c.email are
-                 dead (see db.py's contacts CREATE TABLE comment) -- this row
-                 stays concise by showing just the first (lowest-position)
-                 phone/email, same as before there could be more than one;
-                 no separate "primary" flag needed, "first" is simply
-                 whichever entry was entered/synced first. -->
-            <span class="contact-row-sub">
-                {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
-                {%- elif c.title %}{{ c.title }}
-                {%- elif c.org %}{{ c.org }}{% endif %}
-                {% if (c.title or c.org) and c.phones %}&middot;{% endif %}
-                {% if c.phones %}{{ c.phones[0].value }}{% endif %}
-                {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
-            </span>
-        </span>
-        {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
-    </a>
-    {% endfor %}
-</div>
-{% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('address-book') }}</div>
-    {% if q or active_tag %}
-    <div class="empty-state-title">No contacts match</div>
-    <div class="empty-state-text">Try clearing the search or label filter.</div>
-    {% else %}
-    <div class="empty-state-title">No contacts yet</div>
-    <div class="empty-state-text">Add your first contact to get started.</div>
-    <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
-    {% endif %}
-</div>
-{% endif %}
+{% include "_contacts_body.html" %}
 </div>
 {% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('contacts_list.js') }}"></script>{% endblock %}

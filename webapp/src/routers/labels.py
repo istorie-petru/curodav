@@ -44,7 +44,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db
 from ..deps import get_db, templates
@@ -205,6 +205,19 @@ def manage_labels(request: Request, conn=Depends(get_db)):
     naming the same string. A Space that itself has another Space as its
     Group nests as a (still visually `.is-space`) child row rather than
     also getting its own top-level section, so it's never rendered twice."""
+    return templates.TemplateResponse("labels_manage.html", _labels_context(conn, request))
+
+
+@router.get("/regions")
+def labels_regions(region: str, request: Request, conn=Depends(get_db)):
+    """async-CRUD region fragment (features/async-crud.md): re-renders the
+    labels list body after a label edit/merge instead of a full reload."""
+    if region == "list":
+        return templates.TemplateResponse("_labels_body.html", _labels_context(conn, request))
+    return JSONResponse({"error": f"unknown labels region: {region}"}, status_code=400)
+
+
+def _labels_context(conn, request: Request) -> dict:
     labels = db.list_labels(conn)
     for lbl in labels:
         # Status is only needed for is_project rows (the badge shows it) --
@@ -235,24 +248,21 @@ def manage_labels(request: Request, conn=Depends(get_db)):
         children_of[name].sort(key=lambda l: l["name"].lower())
     space_groups = [dict(s, children=children_of.get(s["name"], [])) for s in top_level_spaces]
 
-    return templates.TemplateResponse(
-        "labels_manage.html",
-        {
-            "request": request,
-            "active_tab": "labels",
-            "crumbs": [{"url": "/settings", "name": "Settings"}],
-            "title": "Labels",
-            # Named `space_groups`, not `spaces` -- base.html's nav rail
-            # already binds a template-local `spaces` via `{% set %}` (the
-            # sidebar's own Space list), which would silently shadow a
-            # same-named context variable for this page's whole render.
-            # See labels_manage.html's own comment on this.
-            "space_groups": space_groups,
-            "has_multiple_labels": len(labels) > 1,
-            "ungrouped": ungrouped,
-            "has_labels": bool(labels),
-        },
-    )
+    return {
+        "request": request,
+        "active_tab": "labels",
+        "crumbs": [{"url": "/settings", "name": "Settings"}],
+        "title": "Labels",
+        # Named `space_groups`, not `spaces` -- base.html's nav rail
+        # already binds a template-local `spaces` via `{% set %}` (the
+        # sidebar's own Space list), which would silently shadow a
+        # same-named context variable for this page's whole render.
+        # See labels_manage.html's own comment on this.
+        "space_groups": space_groups,
+        "has_multiple_labels": len(labels) > 1,
+        "ungrouped": ungrouped,
+        "has_labels": bool(labels),
+    }
 
 
 def _label_role(cfg: dict) -> str:

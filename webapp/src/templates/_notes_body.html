@@ -1,0 +1,33 @@
+<div id="notes-body">
+<div class="card">
+{% if notes %}
+<div class="checklist">
+    {% for n in notes %}
+    <div class="checklist-row">
+        {{ icon('file-text', 'icon-sm') }}
+        <a class="checklist-text" href="/notes/{{ n.row.uid }}/edit" data-modal>
+            {{ n.title }}
+            {% if n.row.tags %}
+            <span class="search-result-subtitle">
+                {% for tag in n.row.tags %}{{ tag }}{% if not loop.last %}, {% endif %}{% endfor %}
+            </span>
+            {% endif %}
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('file-text') }}</div>
+    {% if q %}
+    <div class="empty-state-title">No notes match</div>
+    <div class="empty-state-text">Try clearing the search.</div>
+    {% else %}
+    <div class="empty-state-title">No notes yet</div>
+    <div class="empty-state-text">Capture one with Ctrl-K, <code>!n your text</code>, or add one here.</div>
+    <a class="btn primary" href="/notes/new" data-modal data-fab>{{ icon('plus') }} New note</a>
+    {% endif %}
+</div>
+{% endif %}
+</div>
+</div>

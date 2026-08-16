@@ -1,0 +1,50 @@
+<!-- 2026-08-08: fits the viewport instead of pushing the page taller and
+     letting the whole page scroll -- see style.css's own comment on
+     .calendar-viewport/.month-viewport for the "slight resize" mechanics
+     (each week row flexes to share whatever height is left, day cells
+     drop their fixed-height floor). Desktop only, see that same comment.
+
+     id="month-grid": the month view's async-CRUD region
+     (features/async-crud.md) -- calendar.js/async_calendar.js refresh this
+     element from GET /calendar/regions?region=month after an event change
+     instead of a full page reload, then re-run the drag-to-create /
+     drag-to-move bindings (calendar_month.js / calendar_month_drag.js). -->
+<div class="card calendar-viewport month-viewport" id="month-grid" data-year="{{ year }}" data-month="{{ month }}" data-label="{{ active_label | default('') }}">
+<div class="month-weekday-row">
+    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
+</div>
+{% for week in weeks %}
+<div class="month-week-grid">
+    {% for day in week.days %}
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
+        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
+        <div class="month-day-bottom">
+            <!-- 2026-08-08: one flat list per day, all three types, no
+                 overlap -- all-day events as full-width colored rows
+                 (.month-all-day), timed events as quiet time+dot text,
+                 tasks as square+title text (routers/calendar.py's
+                 _month_grid tags each with its `kind`). Everything past
+                 MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
+                 below, which directs to the day view. -->
+            {% for item in day.rows %}
+                {% if item.kind == "all_day" %}
+                    <a class="month-all-day month-event-item cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ item.event.title }}</a>
+                {% elif item.kind == "event" %}
+                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
+                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
+                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
+                        {{ item.event.title }}
+                    </a>
+                {% else %}
+                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ item.task.title }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if day.overflow_count %}
+                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+</div>

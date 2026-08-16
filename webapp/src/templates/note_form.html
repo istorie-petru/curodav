@@ -11,7 +11,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="note-form" action="{{ '/notes/' ~ note.uid if note else '/notes' }}">
+<form method="post" id="note-form" action="{{ '/notes/' ~ note.uid if note else '/notes' }}" data-cc-change="note" data-cc-action="{{ 'edit' if note else 'create' }}">
     <div class="field-grid">
         <div class="field field-wide">
             <label>Content</label>
@@ -41,6 +41,7 @@
 {% set footer_delete_url = '/notes/' ~ note.uid ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Delete this note? This cannot be undone.' %}
+{% set footer_delete_cc_change = 'note' %}
 {% endif %}
 {% set footer_primary_form = 'note-form' %}
 {% set footer_primary_label = 'Save' %}

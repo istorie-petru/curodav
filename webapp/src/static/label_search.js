@@ -21,13 +21,28 @@
 //      that child, not disappear along with an unrelated non-match on its
 //      own name.
 (function () {
-  const input = document.getElementById("label-search-input");
-  const list = document.getElementById("label-list");
-  if (!input || !list) return;
+  let input;
+  let list;
+  let groups = [];
+  let emptyState;
+  let emptyQuery;
 
-  const groups = Array.from(list.querySelectorAll("[data-label-group]"));
-  const emptyState = document.getElementById("label-search-empty");
-  const emptyQuery = document.getElementById("label-search-empty-query");
+  // init() is re-invocable: labels_manage.js re-runs it after swapping in
+  // a fresh #labels-body region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered search box and rows get bound again. The apply() closure
+  // reads the module-level `input`/`groups` references, which init()
+  // reassigns, so re-binding is the whole re-init.
+  function init() {
+    input = document.getElementById("label-search-input");
+    list = document.getElementById("label-list");
+    if (!input || !list) return;
+
+    groups = Array.from(list.querySelectorAll("[data-label-group]"));
+    emptyState = document.getElementById("label-search-empty");
+    emptyQuery = document.getElementById("label-search-empty-query");
+
+    input.addEventListener("input", apply);
+  }
 
   function apply() {
     const q = input.value.trim().toLowerCase();
@@ -54,5 +69,6 @@
     }
   }
 
-  input.addEventListener("input", apply);
+  init();
+  window.CCLabelSearch = { init: init };
 })();

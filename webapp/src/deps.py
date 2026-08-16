@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterator
 
 from fastapi import Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
@@ -475,3 +476,26 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
 
 def get_bridge(request: Request) -> CalDavBridge:
     return request.app.state.bridge
+
+
+# Async-CRUD dual-mode responses (features/async-crud.md): every mutation
+# endpoint keeps its plain-HTML 303 Redirect default (a form works with no
+# JS at all), but returns JSON when the request carries `X-Requested-With:
+# fetch` (static/async_crud.js always sends it). Read via a FastAPI Header
+# param (default None) rather than a Request object because this suite's
+# direct-call tests invoke the router functions as plain Python functions
+# without building a Request -- those keep getting the redirect default.
+def wants_json(x_requested_with: str | None) -> bool:
+    return x_requested_with == "fetch"
+
+
+def respond(
+    x_requested_with: str | None,
+    redirect_url: str,
+    *,
+    status_code: int = 200,
+    **payload,
+):
+    if wants_json(x_requested_with):
+        return JSONResponse({"ok": True, **payload}, status_code=status_code)
+    return RedirectResponse(url=redirect_url, status_code=303)

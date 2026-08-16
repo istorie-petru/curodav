@@ -187,14 +187,14 @@ document.addEventListener("submit", (event) => {
         .then(() => {
           // async-CRUD (features/async-crud.md): a form marked data-cc-change
           // opts out of the reload -- the page the modal was opened over
-          // refreshes just its own region on the cc-entity-changed event.
+          // refreshes just its own region on the cc-entity-changed event. If
+          // no surface listener claims it (no live region here), fall back
+          // to a reload/navigate so the page can't go stale.
           const changeType = form.getAttribute("data-cc-change");
-          if (inModal && changeType) {
-            document.dispatchEvent(
-              new CustomEvent("cc-entity-changed", {
-                detail: { type: changeType, action: "delete" },
-              })
-            );
+          if (inModal && changeType && window.ccApi && window.ccApi.dispatchChange) {
+            if (!window.ccApi.dispatchChange({ type: changeType, action: "delete" })) {
+              window.location.reload();
+            }
           } else if (inModal) window.location.reload();
           else window.location.href = redirect;
         })

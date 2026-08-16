@@ -352,16 +352,15 @@
               // data-cc-change opts out of the full-page reload -- on
               // success we dispatch a document-level cc-entity-changed event
               // and let the page underneath refresh just its own region.
+              // If no surface listener claims the event (this page has no
+              // live region for that entity type), fall back to a reload so
+              // the page can't silently go stale.
               const changeType = form.getAttribute("data-cc-change");
-              if (changeType) {
-                document.dispatchEvent(
-                  new CustomEvent("cc-entity-changed", {
-                    detail: {
-                      type: changeType,
-                      action: form.getAttribute("data-cc-action") || "edit",
-                    },
-                  })
-                );
+              const changeAction = form.getAttribute("data-cc-action") || "edit";
+              if (changeType && window.ccApi && window.ccApi.dispatchChange) {
+                if (!window.ccApi.dispatchChange({ type: changeType, action: changeAction })) {
+                  window.location.reload();
+                }
               } else {
                 window.location.reload();
               }

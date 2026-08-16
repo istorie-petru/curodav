@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates
 from . import dashboard as dashboard_router
 from . import calendar as calendar_router  # _annotate_calendar_colors, for related events' identity dots
 
@@ -43,16 +43,8 @@ def _auto_archive_if_configured(conn) -> None:
 # sends it). Read via a FastAPI Header param (default None) rather than a
 # Request object because this suite's direct-call tests invoke the router
 # functions as plain Python functions without building a Request -- those
-# keep getting the redirect default.
+# keep getting the redirect default. Shared helpers live in deps.py.
 # --------------------------------------------------------------------- #
-def _wants_json(x_requested_with: str | None) -> bool:
-    return x_requested_with == "fetch"
-
-
-def _respond(x_requested_with: str | None, redirect_url: str, *, status_code: int = 200, **payload) -> JSONResponse | RedirectResponse:
-    if _wants_json(x_requested_with):
-        return JSONResponse({"ok": True, **payload}, status_code=status_code)
-    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 STATUSES = ["active", "in_progress", "waiting", "done", "archived"]
@@ -863,7 +855,7 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return _respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
+    return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
 # --------------------------------------------------------------------- #
@@ -1108,7 +1100,7 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
 _UPDATABLE_FIELDS = {"status", "due_at", "title"}
@@ -1156,7 +1148,7 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
         # again tomorrow. Plain tasks just flip to done, no history row.
         if row.get("recurrence"):
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
 def _completion_streaks(completions: dict[str, str], today: date | None = None) -> tuple[int, int]:
@@ -1289,7 +1281,7 @@ def delete_task(uid: str, x_requested_with: str | None = Header(default=None), c
     # checklist/subtask removal still physically has.
     db.delete_task(conn, uid)
     db.delete_checklist_items_for_task(conn, uid)
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
 # --------------------------------------------------------------------- #

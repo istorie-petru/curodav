@@ -28,48 +28,6 @@
      .calendar-viewport/.month-viewport for the "slight resize" mechanics
      (each week row flexes to share whatever height is left, day cells
      drop their fixed-height floor). Desktop only, see that same comment. -->
-<div class="card calendar-viewport month-viewport">
-<!-- 2026-08-08: was hardcoded Mon..Sun -- now rotated by
-     routers/calendar.py's month_view to match whichever day "Week
-     starts on" (Settings > General) names, so this header always lines
-     up with weeks/_month_grid's own column order. -->
-<div class="month-weekday-row">
-    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
-</div>
-{% for week in weeks %}
-<div class="month-week-grid">
-    {% for day in week.days %}
-    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
-        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
-        <div class="month-day-bottom">
-            <!-- 2026-08-08: one flat list per day, all three types, no
-                 overlap -- all-day events as full-width colored rows
-                 (.month-all-day), timed events as quiet time+dot text,
-                 tasks as square+title text (routers/calendar.py's
-                 _month_grid tags each with its `kind`). Everything past
-                 MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
-                 below, which directs to the day view. -->
-            {% for item in day.rows %}
-                {% if item.kind == "all_day" %}
-                    <a class="month-all-day month-event-item cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ item.event.title }}</a>
-                {% elif item.kind == "event" %}
-                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
-                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
-                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
-                        {{ item.event.title }}
-                    </a>
-                {% else %}
-                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ item.task.title }}</a>
-                {% endif %}
-            {% endfor %}
-            {% if day.overflow_count %}
-                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
-            {% endif %}
-        </div>
-    </div>
-    {% endfor %}
-</div>
-{% endfor %}
-</div>
+{% include "_calendar_month_grid.html" %}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script><script src="{{ static_url('calendar_month_drag.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script><script src="{{ static_url('calendar_month_drag.js') }}"></script><script src="{{ static_url('async_calendar.js') }}"></script>{% endblock %}

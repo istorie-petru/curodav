@@ -1,0 +1,72 @@
+{# Jinja macros don't inherit the calling template's render context (only
+   globals like icon() do) -- has_multiple_labels must be passed in
+   explicitly as show_merge, or the merge button silently never renders
+   regardless of how many labels actually exist. #}
+{% macro label_row(l, show_merge, is_child=false) %}
+<div class="label-list-row{% if is_child %} is-child{% endif %}"
+     data-label-row
+     data-label-name="{{ (l.name ~ ' ' ~ (l.abbreviation or ''))|lower }}">
+    <span class="label-list-icon">{% if l.icon %}{{ icon(l.icon) }}{% else %}{{ icon('tag') }}{% endif %}</span>
+    <span class="label-list-name">
+        {{ l.name }}
+        {% if l.abbreviation %}<span class="settings-hint">({{ l.abbreviation }})</span>{% endif %}
+    </span>
+    <span class="spacer"></span>
+    {% if show_merge %}
+    <a href="/labels/{{ l.name }}/merge-modal" class="icon-btn" title="Merge into another label" data-modal>{{ icon('git-pull-request', 'icon-sm') }}</a>
+    {% endif %}
+    <a href="/labels/{{ l.name }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+</div>
+{% endmacro %}
+<div id="labels-body">
+{% if space_groups or ungrouped %}
+<!-- Search (2026-08-08 redesign, generalized 2026-08-15 when this page
+     became a plain list, and again the same day when Spaces became real
+     group headers instead of plain text dividers -- see
+     static/label_search.js's own comment) -- client-side only, no round
+     trip for a page this size. -->
+<div class="settings-search">
+    <input type="search" id="label-search-input" placeholder="Search labels..." aria-label="Search labels">
+</div>
+
+<!-- Simple list (side work, 2026-08-15 direct feedback: "the table
+     should be transformed into a simple list, showing data about them"),
+     grouped by Space (2026-08-15 follow-up, then reworked again the same
+     day away from a tree look: "I would preffer to not have tree like
+     grouping, but grouping like it was before" -- a plain gray "[space
+     name]" text title as the group heading, with the Space itself listed
+     as a normal, non-bold item directly under its own heading, at the
+     same indent as its children -- rather than the Space's own row
+     doubling as a bold/tinted heading). See routers/labels.py::
+     manage_labels for how the spaces/ungrouped grouping is built. Every
+     field that used to live in its own table column (rename/color/icon/
+     Group/abbreviation/Space/Project/merge/remove) moved into the Edit
+     button's modal (label_edit_modal.html) or, for Merge, its own small
+     modal (label_merge_modal.html) -- a row here is read-only display
+     plus two actions, not an editor itself. -->
+<div class="card">
+<div class="label-list" id="label-list">
+{% for s in space_groups %}
+<div data-label-group>
+    <div class="label-list-group-header" data-label-group-header data-label-name="{{ s.name|lower }}">{{ s.name }}</div>
+    {{ label_row(s, has_multiple_labels, is_child=true) }}
+    {% for c in s.children %}
+    {{ label_row(c, has_multiple_labels, is_child=true) }}
+    {% endfor %}
+</div>
+{% endfor %}
+{% if ungrouped %}
+<div data-label-group>
+    <div class="label-list-group-header" data-label-group-header>Ungrouped</div>
+    {% for l in ungrouped %}
+    {{ label_row(l, has_multiple_labels) }}
+    {% endfor %}
+</div>
+{% endif %}
+</div>
+</div>
+<p class="empty-state" id="label-search-empty" hidden>No labels match "<span id="label-search-empty-query"></span>".</p>
+{% else %}
+<div class="empty-state">No labels yet -- labels are created automatically the first time you apply one on a task, event, or contact.</div>
+{% endif %}
+</div>

@@ -20,11 +20,11 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Form, Header, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates, wants_json
 from .. import habit_heatmap
 from . import dashboard as dashboard_router
 from .labels import COLORS, ICON_GROUPS, LABEL_ICONS
@@ -77,11 +77,9 @@ def _streaks(entries_by_date: dict[str, float], today: date | None = None) -> tu
     return habit_heatmap.streaks(entries_by_date, today)
 
 
-@router.get("")
-def list_habits(request: Request, conn=Depends(get_db)):
-    habits = db.list_habits(conn)
+def _habits_cards(conn) -> list[dict]:
     cards = []
-    for h in habits:
+    for h in db.list_habits(conn):
         entries = db.habit_entries_by_date(conn, h["uid"])
         current, longest = _streaks(entries)
         cards.append(
@@ -92,19 +90,67 @@ def list_habits(request: Request, conn=Depends(get_db)):
                 "longest_streak": longest,
             }
         )
-    return templates.TemplateResponse(
-        "habits_list.html",
-        {
-            "request": request,
-            "active_tab": "habits",
-            # 2026-08-08: promoted to a direct Settings hub category (was
-            # nested under "Data & backup," now deleted -- see
-            # routers/settings.py's module docstring).
-            "crumbs": [{"url": "/settings", "name": "Settings"}],
-            "title": "Habits",
-            "cards": cards,
-        },
-    )
+    return cards
+
+
+def _habits_list_context(conn, request: Request) -> dict:
+    return {
+        "request": request,
+        "active_tab": "habits",
+        # 2026-08-08: promoted to a direct Settings hub category (was
+        # nested under "Data & backup," now deleted -- see
+        # routers/settings.py's module docstring).
+        "crumbs": [{"url": "/settings", "name": "Settings"}],
+        "title": "Habits",
+        "cards": _habits_cards(conn),
+    }
+
+
+@router.get("")
+def list_habits(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse("habits_list.html", _habits_list_context(conn, request))
+
+
+def _habit_detail_context(conn, request: Request, uid: str) -> dict:
+    habit = db.get_habit(conn, uid)
+    ctx = {"request": request, "active_tab": "habits", "habit": habit, "today": date.today().isoformat()}
+    if habit:
+        entries = db.habit_entries_by_date(conn, uid)
+        current, longest = _streaks(entries)
+        total_logged = len([v for v in entries.values() if v > 0])
+        ctx.update(
+            {
+                "weeks": _heatmap_weeks(entries, habit["target_per_day"], DETAIL_WEEKS),
+                "current_streak": current,
+                "longest_streak": longest,
+                "total_logged": total_logged,
+                "project": db.effective_label_config(conn, habit["project_uid"]) if habit.get("project_uid") else None,
+            }
+        )
+    return ctx
+
+
+@router.get("/regions")
+def habits_regions(
+    request: Request,
+    region: str = "list",
+    uid: str = "",
+    conn=Depends(get_db),
+):
+    """Async-CRUD region fragments (features/async-crud.md) -- `region=list`
+    renders the #habits-body div shared with habits_list.html; `region=detail`
+    (with uid) renders the #habit-detail-body div shared with
+    habit_detail.html. Lets refreshRegion() swap a habit surface in place
+    after a mutation instead of a full reload."""
+    if region == "list":
+        ctx = _habits_list_context(conn, request)
+        html = templates.env.get_template("_habits_body.html").render(ctx)
+        return HTMLResponse(html)
+    if region == "detail":
+        ctx = _habit_detail_context(conn, request, uid)
+        html = templates.env.get_template("_habit_detail_body.html").render(ctx)
+        return HTMLResponse(html)
+    return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
 
 
 @router.get("/new")
@@ -140,17 +186,19 @@ def create_habit(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     name = name.strip()
     if not name:
-        return RedirectResponse(url="/habits", status_code=303)
+        return respond(x_requested_with, "/habits")
     now = _now()
     tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
+    uid = str(uuid.uuid4())
     db.upsert_habit(
         conn,
         {
-            "uid": str(uuid.uuid4()),
+            "uid": uid,
             "name": name,
             "description": description,
             "color": color,
@@ -162,7 +210,7 @@ def create_habit(
             "updated_at": now,
         },
     )
-    return RedirectResponse(url="/habits", status_code=303)
+    return respond(x_requested_with, "/habits", status_code=201, uid=uid)
 
 
 @router.get("/{uid}/edit")
@@ -196,10 +244,13 @@ def edit_habit(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     existing = db.get_habit(conn, uid)
     if existing is None:
+        if wants_json(x_requested_with):
+            return JSONResponse({"error": "habit not found"}, status_code=404)
         return RedirectResponse(url="/habits", status_code=303)
     tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     row = dict(existing)
@@ -216,50 +267,55 @@ def edit_habit(
         }
     )
     db.upsert_habit(conn, row)
-    return RedirectResponse(url=f"/habits/{uid}", status_code=303)
+    return respond(x_requested_with, f"/habits/{uid}")
 
 
 @router.post("/{uid}/archive")
-def archive_habit(uid: str, conn=Depends(get_db)):
+def archive_habit(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.archive_habit(conn, uid, _now())
-    return RedirectResponse(url="/habits", status_code=303)
+    return respond(x_requested_with, "/habits")
 
 
 @router.post("/{uid}/unarchive")
-def unarchive_habit(uid: str, conn=Depends(get_db)):
+def unarchive_habit(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.unarchive_habit(conn, uid)
-    return RedirectResponse(url="/habits", status_code=303)
+    return respond(x_requested_with, "/habits")
 
 
 @router.post("/{uid}/delete")
-def delete_habit(uid: str, conn=Depends(get_db)):
+def delete_habit(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.delete_habit(conn, uid)
-    return RedirectResponse(url="/habits", status_code=303)
+    return respond(x_requested_with, "/habits")
 
 
 @router.get("/{uid}")
 def habit_detail(uid: str, request: Request, conn=Depends(get_db)):
-    habit = db.get_habit(conn, uid)
-    ctx = {"request": request, "active_tab": "habits", "habit": habit, "today": date.today().isoformat()}
-    if habit:
-        entries = db.habit_entries_by_date(conn, uid)
-        current, longest = _streaks(entries)
-        total_logged = len([v for v in entries.values() if v > 0])
-        ctx.update(
-            {
-                "weeks": _heatmap_weeks(entries, habit["target_per_day"], DETAIL_WEEKS),
-                "current_streak": current,
-                "longest_streak": longest,
-                "total_logged": total_logged,
-                "project": db.effective_label_config(conn, habit["project_uid"]) if habit.get("project_uid") else None,
-            }
-        )
-    return templates.TemplateResponse("habit_detail.html", ctx)
+    return templates.TemplateResponse("habit_detail.html", _habit_detail_context(conn, request, uid))
 
 
 @router.post("/{uid}/entries/{entry_date}/toggle")
-def toggle_entry(uid: str, entry_date: str, request: Request, conn=Depends(get_db)):
+def toggle_entry(
+    uid: str,
+    entry_date: str,
+    request: Request,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.toggle_habit_entry(conn, uid, entry_date, _now())
+    if wants_json(x_requested_with):
+        return JSONResponse({"ok": True})
     # Heatmap cells are plain forms (no JS) -- redirect straight back to
     # wherever the click came from (list preview or detail page) so a
     # click from the list page's mini heatmap doesn't bounce you to the
@@ -275,6 +331,7 @@ def add_entry(
     entry_date: str = Form(...),
     value: str = Form("1"),
     note: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """The explicit backfill form on the detail page -- lets you enter an
@@ -293,6 +350,8 @@ def add_entry(
         db.delete_habit_entry(conn, uid, entry_date)
     else:
         db.upsert_habit_entry(conn, uid, entry_date, parsed_value, note or None, _now())
+    if wants_json(x_requested_with):
+        return JSONResponse({"ok": True})
     referer = request.headers.get("referer")
     return RedirectResponse(url=referer or f"/habits/{uid}", status_code=303)
 

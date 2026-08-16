@@ -36,7 +36,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="event-form" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}">
+<form method="post" id="event-form" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}" data-cc-change="event" data-cc-action="{% if event %}edit{% else %}create{% endif %}">
     {% include "_event_form_fields.html" %}
 </form>
 </div>
@@ -78,6 +78,7 @@
 {% set footer_delete_mode = 'undo' %}
 {% set footer_delete_label = event.title %}
 {% set footer_delete_redirect = '/calendar' %}
+{% set footer_delete_cc_change = 'event' %}
 {% endif %}
 {% set footer_primary_form = 'event-form' %}
 {% set footer_primary_label = 'Save' %}

@@ -53,7 +53,7 @@
                 {% else %}
                 <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
                 {% endif %}
-                <form method="post" action="/banners/remove" class="form-inline">
+                <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
                     <input type="hidden" name="scope" value="{{ scope }}">
                     <input type="hidden" name="page_url" value="{{ page_url }}">
                     <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove banner</button>
@@ -66,7 +66,7 @@
                  button = open the picker), and onchange auto-submits on
                  selection, so the form POSTs the moment a file is chosen
                  with no extra "Upload" step. -->
-            <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form">
+            <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form" data-cc-change="banner" data-cc-action="upload">
                 <input type="hidden" name="scope" value="{{ scope }}">
                 <input type="hidden" name="page_url" value="{{ page_url }}">
                 <label class="btn ghost banner-upload-btn">

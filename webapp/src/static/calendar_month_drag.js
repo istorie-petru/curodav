@@ -27,10 +27,8 @@
 // left alone -- same CLICK_THRESHOLD_PX pattern as calendar.js.
 
 (function () {
-  const items = Array.from(document.querySelectorAll(".month-event-item[data-uid]"));
-  if (!items.length) return;
-
-  const cells = Array.from(document.querySelectorAll(".month-day-cell"));
+  let items = [];
+  let cells = [];
   const CLICK_THRESHOLD_PX = 4;
 
   function cellAtPoint(x, y) {
@@ -112,13 +110,16 @@
         body: JSON.stringify({ start_at: newStart, end_at: newEnd || null }),
       }).then((resp) => {
         if (!resp.ok) throw new Error("reschedule failed");
-        // Simplest correct refresh: the moved event now needs to move
-        // between two day cells' own `rows`/overflow-count lists, which
-        // the server already recomputes correctly on a fresh render --
-        // unlike the Week grid's single-block top/left, there's no cheap
-        // local DOM edit that keeps overflow counts and "+N more" links
-        // consistent across both cells, so this reloads on success.
-        window.location.reload();
+        // async-CRUD (features/async-crud.md): the moved event now needs to
+        // move between two day cells' own `rows`/overflow-count lists,
+        // which the server recomputes correctly on a fresh render -- unlike
+        // the Week grid's single-block top/left, there's no cheap local DOM
+        // edit that keeps overflow counts and "+N more" links consistent
+        // across both cells, so we re-render the whole #month-grid region
+        // instead of reloading the page. The change event's listener
+        // (async_calendar.js) refreshes the region and re-inits the month
+        // drag/create bindings.
+        window.ccApi.dispatchChange({ type: "event", action: "move" });
       }).catch(() => {
         window.ccToast({ message: "Could not save that move.", variant: "error" });
       });
@@ -137,5 +138,16 @@
     });
   }
 
-  items.forEach(setupItem);
+  // init() is re-invocable: async_calendar.js re-runs it after swapping in
+  // a fresh #month-grid region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered event chips get their pointerdown bindings again.
+  function init() {
+    items = Array.from(document.querySelectorAll(".month-event-item[data-uid]"));
+    if (!items.length) return;
+    cells = Array.from(document.querySelectorAll(".month-day-cell"));
+    items.forEach(setupItem);
+  }
+
+  init();
+  window.CCMonthGridDrag = { init };
 })();

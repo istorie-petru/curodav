@@ -19,7 +19,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="habit-form" action="{% if habit %}/habits/{{ habit.uid }}/edit{% else %}/habits{% endif %}">
+<form method="post" id="habit-form" action="{% if habit %}/habits/{{ habit.uid }}/edit{% else %}/habits{% endif %}" data-cc-change="habit" data-cc-action="{% if habit %}edit{% else %}create{% endif %}">
     {% set ms_form_id = 'habit-form' %}
     <div class="field-grid">
         <div class="field field-wide">
@@ -108,6 +108,7 @@
 {% set footer_delete_url = '/habits/' ~ habit.uid ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Delete &quot;' ~ habit.name ~ '&quot; and all its logged history? This cannot be undone.' %}
+{% set footer_delete_cc_change = 'habit' %}
 {% endif %}
 {% set footer_primary_form = 'habit-form' %}
 {% set footer_primary_label = 'Save' %}

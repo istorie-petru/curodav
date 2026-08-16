@@ -22,7 +22,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="contact-form" action="{% if contact %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data">
+<form method="post" id="contact-form" action="{% if contact %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data" data-cc-change="contact" data-cc-action="{% if contact %}edit{% else %}create{% endif %}">
     {% set ms_form_id = 'contact-form' %}
     <div class="field-grid">
         <!-- Photo + Full name share one row (2026-08-07 modal-input rework,

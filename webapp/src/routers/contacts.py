@@ -4,11 +4,11 @@ import base64
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates
 from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -142,12 +142,7 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
 
 
 @router.get("")
-def list_contacts(
-    request: Request,
-    q: str | None = None,
-    tag: str | None = None,
-    conn=Depends(get_db),
-):
+def _contacts_list_context(conn, request: Request, q: str | None, tag: str | None) -> dict:
     contacts = db.list_contacts(conn, q=q)
     # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
     # this is now the *only* grouping/filtering mechanism for contacts,
@@ -160,17 +155,46 @@ def list_contacts(
             c for c in contacts
             if any(t.lower() == active_tag for t in c.get("tags") or [])
         ]
+    return {
+        "request": request,
+        "active_tab": "contacts",
+        "contacts": contacts,
+        "q": q or "",
+        "contact_tags": db.list_contact_tag_names(conn),
+        "active_tag": active_tag,
+    }
+
+
+def list_contacts(
+    request: Request,
+    q: str | None = None,
+    tag: str | None = None,
+    conn=Depends(get_db),
+):
     return templates.TemplateResponse(
         "contacts_list.html",
-        {
-            "request": request,
-            "active_tab": "contacts",
-            "contacts": contacts,
-            "q": q or "",
-            "contact_tags": db.list_contact_tag_names(conn),
-            "active_tag": active_tag,
-        },
+        _contacts_list_context(conn, request, q, tag),
     )
+
+
+@router.get("/regions")
+def contacts_regions(
+    request: Request,
+    region: str = "list",
+    q: str | None = None,
+    tag: str | None = None,
+    conn=Depends(get_db),
+):
+    """Async-CRUD region fragment (features/async-crud.md): renders the
+    #contacts-body div shared with contacts_list.html so refreshRegion() can
+    swap it in place after a contact mutation instead of a full reload.
+    Takes the same query params as list_contacts so the refreshed region
+    honors the active search/label filter."""
+    if region != "list":
+        return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
+    ctx = _contacts_list_context(conn, request, q, tag)
+    html = templates.env.get_template("_contacts_body.html").render(ctx)
+    return HTMLResponse(html)
 
 
 @router.get("/new")
@@ -219,6 +243,7 @@ async def create_contact(
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -273,7 +298,7 @@ async def create_contact(
         "updated_at": now,
     }
     db.upsert_contact(conn, row)
-    return RedirectResponse(url="/contacts", status_code=303)
+    return respond(x_requested_with, "/contacts", status_code=201, uid=row["uid"])
 
 
 @router.get("/{uid}")
@@ -338,6 +363,7 @@ async def update_contact(
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     remove_photo: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -379,10 +405,14 @@ async def update_contact(
         # else: no new file chosen -- row already carries the existing
         # photo_b64/photo_type through from `dict(existing)` above.
     db.upsert_contact(conn, row)
-    return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
+    return respond(x_requested_with, f"/contacts/{uid}")
 
 
 @router.post("/{uid}/delete")
-def delete_contact(uid: str, conn=Depends(get_db)):
+def delete_contact(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.delete_contact(conn, uid)
-    return RedirectResponse(url="/contacts", status_code=303)
+    return respond(x_requested_with, "/contacts")

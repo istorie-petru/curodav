@@ -5,11 +5,11 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, grid_layout, recurrence_expand
-from ..deps import _four_week_position, _week_start, get_db, templates
+from ..deps import _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
 # Month-view per-day list: how many rows (all-day colored rows + timed
@@ -454,14 +454,10 @@ def _four_week_grid(view_start: date, events: list[dict], tasks: list[dict], wee
     return weeks
 
 
-@router.get("")
-def month_view(
-    request: Request,
-    year: int | None = None,
-    month: int | None = None,
-    label: str | None = None,
-    conn=Depends(get_db),
-):
+def _month_view_context(conn, request: Request, year: int | None, month: int | None, label: str | None) -> dict:
+    """Shared computation for the Month view (calendar_month.html) and its
+    async-CRUD region fragment (_calendar_month_grid.html) -- one source of
+    truth so a region refresh can never drift from a fresh full render."""
     today = date.today()
     year = year or today.year
     month = month or today.month
@@ -506,26 +502,53 @@ def month_view(
     # with the 4-Week view via _weekday_names (2026-08-11).
     weekday_names = _weekday_names(week_start)
 
-    return templates.TemplateResponse(
-        "calendar_month.html",
-        {
-            "request": request,
-            "active_tab": "calendar",
-            "calendar_view": "month",
-            "today_iso": today.isoformat(),
-            "weeks": weeks,
-            "weekday_names": weekday_names,
-            "year": year,
-            "month": month,
-            "month_name": py_calendar.month_name[month],
-            "prev_year": prev_year,
-            "prev_month": prev_month,
-            "next_year": next_year,
-            "next_month": next_month,
-            "event_label_names": db.list_event_label_names(conn),
-            "active_label": label or "",
-        },
-    )
+    return {
+        "request": request,
+        "active_tab": "calendar",
+        "calendar_view": "month",
+        "today_iso": today.isoformat(),
+        "weeks": weeks,
+        "weekday_names": weekday_names,
+        "year": year,
+        "month": month,
+        "month_name": py_calendar.month_name[month],
+        "prev_year": prev_year,
+        "prev_month": prev_month,
+        "next_year": next_year,
+        "next_month": next_month,
+        "event_label_names": db.list_event_label_names(conn),
+        "active_label": label or "",
+    }
+
+
+@router.get("")
+def month_view(
+    request: Request,
+    year: int | None = None,
+    month: int | None = None,
+    label: str | None = None,
+    conn=Depends(get_db),
+):
+    return templates.TemplateResponse("calendar_month.html", _month_view_context(conn, request, year, month, label))
+
+
+@router.get("/regions")
+def calendar_regions(
+    request: Request,
+    region: str,
+    year: int | None = None,
+    month: int | None = None,
+    label: str | None = None,
+    conn=Depends(get_db),
+):
+    """async-CRUD region fragments (features/async-crud.md): GET endpoints
+    rendering one named region so a mutation's change event can re-render
+    just that slice of the calendar instead of a full reload."""
+    if region == "month":
+        return templates.TemplateResponse(
+            "_calendar_month_grid.html", _month_view_context(conn, request, year, month, label)
+        )
+    return JSONResponse({"error": f"unknown calendar region: {region}"}, status_code=400)
 
 
 @router.get("/fourweek")
@@ -975,6 +998,7 @@ def create_event(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -1001,7 +1025,7 @@ def create_event(
         "updated_at": now,
     }
     db.upsert_event(conn, row)
-    return RedirectResponse(url="/calendar", status_code=303)
+    return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
 @events_router.get("/events/{uid}")
@@ -1083,6 +1107,7 @@ def update_event(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -1123,13 +1148,13 @@ def update_event(
             task_row["title"] = title
             task_row["updated_at"] = datetime.now(timezone.utc).isoformat()
             db.upsert_task(conn, task_row)
-    return RedirectResponse(url="/calendar", status_code=303)
+    return respond(x_requested_with, "/calendar", ok=True)
 
 
 @events_router.post("/events/{uid}/delete")
-def delete_event(uid: str, conn=Depends(get_db)):
+def delete_event(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     db.delete_event(conn, uid)
-    return RedirectResponse(url="/calendar", status_code=303)
+    return respond(x_requested_with, "/calendar", ok=True)
 
 
 # --------------------------------------------------------------------- #
@@ -1144,13 +1169,18 @@ def delete_event(uid: str, conn=Depends(get_db)):
 
 
 @events_router.post("/events/{uid}/occurrences/cancel")
-def cancel_occurrence(uid: str, occurrence_date: str = Form(...), conn=Depends(get_db)):
+def cancel_occurrence(
+    uid: str,
+    occurrence_date: str = Form(...),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     now = datetime.now(timezone.utc).isoformat()
     db.upsert_event_occurrence_override(
         conn,
         {"master_uid": uid, "occurrence_date": occurrence_date, "cancelled": True, "created_at": now, "updated_at": now},
     )
-    return RedirectResponse(url="/calendar", status_code=303)
+    return respond(x_requested_with, "/calendar", ok=True)
 
 
 @events_router.post("/events/{uid}/occurrences/move")
@@ -1161,6 +1191,7 @@ def move_occurrence(
     end_at: str = Form(""),
     title: str = Form(""),
     location: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     now = datetime.now(timezone.utc).isoformat()
@@ -1173,15 +1204,15 @@ def move_occurrence(
             "created_at": now, "updated_at": now,
         },
     )
-    return RedirectResponse(url=f"/events/{uid}?occurrence_date={start_at}", status_code=303)
+    return respond(x_requested_with, f"/events/{uid}?occurrence_date={start_at}", ok=True)
 
 
 @events_router.post("/events/{uid}/occurrences/restore")
-def restore_occurrence(uid: str, occurrence_date: str = Form(...), conn=Depends(get_db)):
+def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     """Undoes a cancel or a move -- the occurrence goes back to whatever
     the recurrence rule alone generates."""
     db.delete_event_occurrence_override(conn, uid, occurrence_date)
-    return RedirectResponse(url=f"/events/{uid}?occurrence_date={occurrence_date}", status_code=303)
+    return respond(x_requested_with, f"/events/{uid}?occurrence_date={occurrence_date}", ok=True)
 
 
 # --------------------------------------------------------------------- #

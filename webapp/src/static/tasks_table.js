@@ -216,9 +216,7 @@
   // every other task mutation uses, so the single listener below refreshes
   // #tasks-body and the divider counts / sort order / empty state catch up.
   function dispatchTaskChange(action) {
-    document.dispatchEvent(
-      new CustomEvent("cc-entity-changed", { detail: { type: "task", action } })
-    );
+    window.ccApi.dispatchChange({ type: "task", action });
   }
 
   document.getElementById("bulk-delete")?.addEventListener("click", () => {
@@ -306,6 +304,11 @@
   document.addEventListener("cc-entity-changed", (e) => {
     const detail = e.detail || {};
     if (detail.type !== "task") return;
+    // Claim the event only when the region is actually on this page --
+    // otherwise (task edited from a calendar/timeline modal) leave it
+    // unclaimed so modal.js falls back to a reload rather than going stale.
+    if (!document.getElementById("tasks-body")) return;
+    detail.claimed = true;
     window.ccApi
       .refreshRegion(regionUrl(), "tasks-body")
       .catch(() => window.location.reload());
