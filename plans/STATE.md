@@ -2488,6 +2488,13 @@ session, right before the final commit of that session.
   ways that were simplest to write and verify together as one pass, even
   though their docs/tests/STATE.md entries are still kept fully separate
   above.
+- **Versioned:** `1.9` now shipped as `1.9.0` (2026-08-16) — `pyproject.toml`
+  bumped, catching another stale-versioning gap: it had stayed at `1.8.0`
+  since 1.9's Pagination slice shipped (2026-08-15) and the bump was never
+  committed, the same gap 1.8's own bump had already caught for 1.4-1.7.
+  No code changes — the 1.9 features (Tasks table pagination) shipped in
+  the entries above; this commit only versions them. Full suite still 1586
+  passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

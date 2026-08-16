@@ -5,12 +5,16 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.5** (1.0 was the first full release; 1.1 —
+**Version:** the app is at **1.9** (1.0 was the first full release; 1.1 —
 Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
 Universal command surface side work — shipped 2026-08-13; 1.3 — project-
 enabled labels + lifecycle — shipped 2026-08-13; 1.4 — work allocations +
 project week calendar — shipped 2026-08-13; 1.5 — task management &
-grouping — shipped 2026-08-13). Minor releases are numbered
+grouping — shipped 2026-08-13; 1.6 — schedule & recurrence rework —
+shipped 2026-08-14; 1.7 — information architecture & view surfaces —
+shipped 2026-08-14; 1.8 — offline-first editing & synchronization —
+shipped 2026-08-14; 1.9 — Tasks table pagination — shipped 2026-08-15,
+versioned 1.9.0 2026-08-16). Minor releases are numbered
 `1.1` … `1.9`; once everything on this roadmap is implemented, the next
 full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
