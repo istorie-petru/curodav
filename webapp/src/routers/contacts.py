@@ -141,7 +141,6 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
     ]
 
 
-@router.get("")
 def _contacts_list_context(conn, request: Request, q: str | None, tag: str | None) -> dict:
     contacts = db.list_contacts(conn, q=q)
     # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
@@ -165,6 +164,7 @@ def _contacts_list_context(conn, request: Request, q: str | None, tag: str | Non
     }
 
 
+@router.get("")
 def list_contacts(
     request: Request,
     q: str | None = None,
