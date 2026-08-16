@@ -36,20 +36,18 @@ these pieces fit together.
   and configure (today's agenda, the week ahead, overdue tasks, mini calendar,
   habit check-ins, project progress, contacts, and more), plus a greeting, a
   per-page cover banner, and a quick-add box for tasks and events.
-- **Today** — a single-page "what am I dealing with now" view: due/overdue
-  tasks, today's calendar events and scheduled task work side by side, and
-  anything else important or urgent, all in one place.
-- **Week (planning)** — a "how should I spend the week" view across every
-  project at once: unscheduled work you can drag straight onto a real week
-  grid alongside your existing commitments and due dates.
 - **Calendar** — your events in month, 4-week, week, or day views; drag to
-  move/resize, repeat on a schedule, set reminders, and link events to related
-  tasks.
+  move/resize, repeat on a schedule, set reminders, and link events to
+  related tasks. Week also doubles as the cross-project planning surface:
+  unscheduled work you can drag straight onto the grid alongside your
+  existing commitments and due dates.
 - **Tasks** — to-dos as a sortable table, a kanban board, or a timeline/Gantt;
   statuses, priorities, bulk edits, recurring to-dos with streaks, subtasks,
   and links to related events.
 - **Contacts** — people you know with photos, phones, emails, addresses, and
   notes; one click to call or email.
+- **Notes** — free-text notes with labels, the fourth thing Quick Capture
+  (`!n` in the command palette) can create.
 - **Labels & Spaces** — one consistent way to organize everything: tag any
   task, event, or contact; labels become filterable pages, and "Spaces" group
   labels into projects with their own dashboard, course info, and homework
@@ -78,12 +76,13 @@ reference for development; the tour above is the plain-language version.
 | Doc | Covers |
 |---|---|
 | [`architecture.md`](architecture.md) | The "how it works" + rulebook — data model, layering, M3, nav, lifecycle |
-| [`dashboard.md`](dashboard.md) | Widget grid, 11 widget types, Customize/Widget Builder, quick-add, greeting, banner |
-| [`today.md`](today.md) | `/today` — due/overdue tasks, today's schedule vs. scheduled work, important/urgent items |
-| [`week.md`](week.md) | `/week` — cross-project unscheduled work draggable onto the week grid, vs. Calendar's/a project's own week views |
+| [`dashboard.md`](dashboard.md) | Widget grid, 14 widget types, Customize/Widget Builder, quick-add, greeting, banner |
+| [`today.md`](today.md) | Retired (1.9) — folded into Dashboard widgets; see the doc for where its content lives now |
+| [`week.md`](week.md) | Retired (1.9) — folded into Calendar's Week view; see the doc for why that was already a safe merge |
 | [`calendar.md`](calendar.md) | Month/4-week/week/day views, recurrence, drag interactions, event CRUD, relations |
 | [`tasks.md`](tasks.md) | Table/board/timeline views, statuses/priorities, bulk actions, recurring tasks, relations |
 | [`contacts.md`](contacts.md) | Contact list/detail/form, fields, photo upload, professor linking |
+| [`notes.md`](notes.md) | The fourth Quick Capture entity type — free-text + labels, list/edit/delete |
 | [`labels.md`](labels.md) | The one organizing mechanism — manage page, generated Space/project pages, modules |
 | [`schedule.md`](schedule.md) | Class timetable → real events, table/weekly-grid views, holidays, settings |
 | [`habits.md`](habits.md) | Local habit tracking, heatmaps, streaks, habits-as-tasks view |
@@ -102,9 +101,11 @@ describe outcomes, not intentions. If you're about to start work, check
 
 ## Known gaps
 
-Noted for honesty, not as a promise to fix: **no global search / command
-palette** (per-view search only); **no file attachments** (beyond contact
-photos); **no generic links/backlinks graph** (only curated event↔task
-relations); Published Lists are **read-only** sync today. All four were
-deliberate decisions — see `plans/abandoned.md`. (Global search across tasks,
-events, and contacts is now scoped in `plans/open.md`.)
+Noted for honesty, not as a promise to fix: **no file attachments** (beyond
+contact photos); **no generic links/backlinks graph** (only curated
+event↔task relations); Published Lists are **read-only** sync today. All
+three were deliberate decisions — see `plans/abandoned.md`. (Global search
+and a real command palette — search, navigate, create/complete/delete/label,
+plus Quick Capture's `!t`/`!e`/`!c`/`!n` syntax — shipped as 1.2 side work
+plus two follow-up slices; see `tasks.md` § Search & the command surface and
+`plans/quick-capture.md`.)

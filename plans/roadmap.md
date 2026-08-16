@@ -5,12 +5,16 @@ The single build order across both open-work docs. It merges the rework
 work ([`open.md`](open.md)) into nine minor releases — **1.1 → 1.9** — that
 culminate in the next full release, **2.0**.
 
-**Version:** the app is at **1.5** (1.0 was the first full release; 1.1 —
+**Version:** the app is at **1.9** (1.0 was the first full release; 1.1 —
 Virtual & derived states — shipped 2026-08-13; 1.2 — task model settled,
 Universal command surface side work — shipped 2026-08-13; 1.3 — project-
 enabled labels + lifecycle — shipped 2026-08-13; 1.4 — work allocations +
 project week calendar — shipped 2026-08-13; 1.5 — task management &
-grouping — shipped 2026-08-13). Minor releases are numbered
+grouping — shipped 2026-08-13; 1.6 — schedule & recurrence rework —
+shipped 2026-08-14; 1.7 — information architecture & view surfaces —
+shipped 2026-08-14; 1.8 — offline-first editing & synchronization —
+shipped 2026-08-14; 1.9 — Tasks table pagination — shipped 2026-08-15,
+versioned 1.9.0 2026-08-16). Minor releases are numbered
 `1.1` … `1.9`; once everything on this roadmap is implemented, the next
 full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
@@ -31,13 +35,13 @@ never hold Track A up.
 |---|---|---|---|
 | `1.1` | ~~Virtual & derived states~~ — **shipped 2026-08-13** | ~~Data health~~ **shipped 2026-08-14**; Contacts parity | — |
 | `1.2` | ~~Task-model decision~~ **resolved 2026-08-13** (flat tasks + work allocations, subtasks removed) | ~~Universal command surface~~ **shipped 2026-08-13** (search/navigate; command actions optional follow-up) | 1.1 |
-| `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | Widget consolidation (not started — optional, doesn't block 1.4+) | 1.2 |
+| `1.3` | ~~Project-enabled labels + lifecycle~~ **shipped 2026-08-13** | ~~Widget consolidation~~ **shipped 2026-08-15** (expanded-scope follow-ups still open, `plans/open.md`) | 1.2 |
 | `1.4` | ~~Work allocations + project week calendar~~ **shipped 2026-08-13** | Project check-in (optional, not started — doesn't block 1.5+) | 1.3 |
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
-| `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14** | Configurable views + optional Schedule (not started — optional, doesn't block 1.7+) | 1.3 |
+| `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14, Schedule module itself removed 2026-08-15** | Configurable views (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | Pagination (not started — optional, doesn't block 1.9+) | 1.1 (WebDAV) + ~~data health~~ (shipped) |
-| `1.9` | Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
+| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | ~~Pagination~~ **shipped 2026-08-15 (as 1.9 slice)** | 1.1 (WebDAV) + ~~data health~~ (shipped) |
+| `1.9` | ~~Pagination (Tasks table)~~ **shipped 2026-08-15**; Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
 | `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
 
 ## Release detail
@@ -54,7 +58,9 @@ representation settled here — the sync work in 1.8 builds on it).
 
 Side work (independent): ~~**Data health & maintenance**~~ (verified backups —
 the prerequisite for trusting offline sync in 1.8 — **shipped 2026-08-14**,
-see `features/settings.md`) and **Contacts field parity**.
+see `features/settings.md`) and ~~**Contacts field parity**~~ (Nextcloud
+Contacts field parity, all six slices — **shipped 2026-08-16**, see
+`features/contacts.md`).
 
 ### 1.2 — Task model settled
 
@@ -68,8 +74,9 @@ Side work (independent): **Universal command surface** (search / picker /
 command palette) — **shipped 2026-08-13**: `db.search_entities` query layer,
 `GET /api/search` + `/search`, Ctrl-K/Cmd-K, and the Relations-card picker
 (`features/tasks.md` § Search & the command surface). Command-palette
-*actions* (create/complete/delete/label from the overlay) didn't ship —
-tracked as an optional follow-up in `open.md` § Command palette actions.
+*actions* (create/complete/delete/label from the overlay) — **shipped
+2026-08-15** as its own side-work slice, additive to the above; see the same
+`features/tasks.md` section.
 
 ### 1.3 — The project stack
 
@@ -196,14 +203,25 @@ and configurable terminology. `pyproject.toml` bumped to `1.6.0`.
   same pattern as Week starts on/Time format). Presentation-layer only: the
   underlying `holiday_calendar`/`exclude_saturday`/`exclude_sunday` field
   names and semantics never change, only the on-screen label
-  (`_event_form_fields.html`/`schedule_classes.html`, gated by `deps.py`'s
+  (`_event_form_fields.html`, gated by `deps.py`'s
   `recurrence_terminology()` Jinja global) — "Holiday calendar" / "Exclude
   Saturday" / "Exclude Sunday" in standard mode, "Respects Labor Laws" /
   "Marx Weekend: Saturday" / "Marx Weekend: Sunday" in playful mode. **1.6
   is now fully shipped.**
 
-Side work: **Configurable views + optional Schedule module** — best landed now
-that the reworked views are stable, since it toggles them.
+**REMOVED 2026-08-15:** the Schedule module itself (`/schedule`,
+day/time/parity class blocks, semester settings, credits, conflicts) is
+dropped entirely, at explicit request — its one distinguishing feature
+(odd/even-week recurrence) is now available directly on ordinary
+Calendar/Task events, making the dedicated module redundant. The Spaces
+"University module" (Course info/next-lecture badges/Homework table) is
+removed alongside it, since it had no other data source. See
+`plans/abandoned.md` and `plans/STATE.md`'s removal entry;
+`features/schedule.md` is deleted.
+
+Side work: **Configurable views** — best landed now that the reworked
+views are stable, since it toggles them. (The "optional Schedule module"
+half of this side-work item no longer applies — Schedule is gone.)
 
 ### ~~1.7 — New surfaces~~ — shipped 2026-08-14
 
@@ -267,9 +285,16 @@ resolution, protocol, PWA shell, GC) now that the open-priority.md design
 section has been marked shipped/struck-through per this repo's own "How
 open work gets tracked" convention.
 
-Side work: **Pagination / collapsible sections** (Phase B of webapp usability).
+Side work: ~~**Pagination / collapsible sections** (Phase B of webapp
+usability)~~ **shipped 2026-08-15, as a 1.9 slice** — see 1.9 below;
+collapsible sections weren't part of that slice's scope.
 
 ### 1.9 — Deployment & polish
+
+**Pagination (Tasks table)** — shipped 2026-08-15: `GET /tasks?page=&limit=`
+paginates the Table view's Open section (highest-traffic target), ungrouped
+view only. See `features/tasks.md` § Views. Collapsible sections and other
+lower-traffic surfaces remain open, not part of this slice.
 
 **DAVx5 mobile hosting** (`open.md` § Webapp usability + DAVx5 hosting) —
 CalDAV/CardDAV sync to a phone via a public HTTPS reverse proxy. Pure infra, no

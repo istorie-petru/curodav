@@ -1,0 +1,21 @@
+<!-- Data: {rows: [(task, states), ...]} -- see
+     routers/dashboard.py::_render_important_urgent. Open tasks flagged
+     important/urgent that aren't already overdue or due today (ported from
+     the retired /today page's own "Important & urgent, not due today"
+     section, 1.9 side work -- see plans/STATE.md). -->
+{% if data.rows %}
+<table>
+    {% for t, states in data.rows %}
+    <tr>
+        <td><a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></td>
+        <td style="text-align:right">
+            {% if 'important' in states %}<span class="cell-tag">Important</span>{% endif %}
+            {% if 'urgent' in states %}<span class="cell-tag tag-red">Urgent</span>{% endif %}
+            {% if t.due_at %}<span class="text-muted">due {{ t.due_at[:10] }}</span>{% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">Nothing else important or urgent right now.</div>
+{% endif %}

@@ -71,46 +71,54 @@
          to the new /settings section, reached via the gear icon below
          rather than a tab.
 
-         2026-08-07: Schedule and Contacts restored as primary tabbar
-         destinations (both are fully working, frequently-visited routers
-         that were previously reachable only via the Settings hub) --
-         Databases removed entirely in the same pass (see plans/
-         label-space-rework.md's Grades/Databases deactivation-and-removal
-         note; the feature and every route/table under it is gone, not
-         just unlinked). Schedule's day-to-day Blocks/Holidays view
-         (schedule_classes.html) sets active_tab="schedule" (routers/
-         schedule.py) and highlights this tab. 2026-08-08: Schedule's
-         Settings page was folded back into schedule_classes.html itself
-         (a <details> block, same as Holidays) -- active_tab="schedule_settings"
-         no longer exists, so the tab check below only needs "schedule".
-         Contacts' own sub-pages (detail/edit) all set active_tab="contacts"
-         (routers/contacts.py), unchanged by this rework. -->
+         2026-08-07: Contacts restored as a primary tabbar destination (a
+         fully working, frequently-visited router that was previously
+         reachable only via the Settings hub) -- Databases removed entirely
+         in the same pass (see plans/label-space-rework.md's Grades/
+         Databases deactivation-and-removal note; the feature and every
+         route/table under it is gone, not just unlinked). Contacts' own
+         sub-pages (detail/edit) all set active_tab="contacts" (routers/
+         contacts.py), unchanged by this rework.
+
+         2026-08-15: the Schedule tab (and the whole Schedule module --
+         `/schedule`, day/time/parity class blocks, semester settings) is
+         gone -- odd/even-week recurrence is now available on ordinary
+         Calendar events (`recurrence_picker.js`), which fully superseded
+         Schedule's one distinguishing feature; see plans/STATE.md's
+         removal entry. -->
     <nav class="tabbar" role="navigation" aria-label="Main">
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <!-- Today (1.7, "Today -- execution") -- a second, narrower fixed
-             destination right after Home: "What am I dealing with now?",
-             distinct from Home's broader orientation view. See
-             routers/today.py. -->
-        <a href="/today" data-tab="today" class="tab-btn {% if active_tab == 'today' %}active{% endif %}">{{ icon('sun') }}<span>Today</span></a>
+        {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
+           were retired as standalone tabs (1.9 side work) -- their own
+           content was folded into the Dashboard's widget registry
+           (important_urgent/scheduled_work_today widget types, see
+           routers/dashboard.py) and the merged Calendar Week view
+           respectively, following the same fold-then-redirect precedent
+           already set for the calendar sub-view retirement (see
+           plans/STATE.md's "Calendar Week + Timetable merged" entry). Both
+           old paths still redirect (any bookmark still lands somewhere
+           real) -- see routers/dashboard.py::today_redirect and
+           routers/calendar.py::week_redirect -- they just no longer have
+           their own tabbar entry. Using a Jinja comment, not an HTML
+           comment, here deliberately: an HTML `<!-- -->` still renders into
+           the response body, which would leave the literal old sub-view
+           path text discoverable in every page's markup -- exactly the
+           string test_calendar_week_scheduling.py's own
+           test_no_separate_timetable_link_in_subnav asserts is gone. #}
         <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
-        <!-- Week (planning), 1.7 slice 2 -- a third fixed destination:
-             cross-project "how should I spend the week" scheduling surface,
-             distinct from Calendar's own Week view (event management) and
-             from a single project's own Week Calendar (that project's own
-             work only). See routers/week.py. -->
-        <a href="/week" data-tab="week" class="tab-btn {% if active_tab == 'week' %}active{% endif %}">{{ icon('clock') }}<span>Week</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
-        <!-- 1.3 (Project-enabled label stack) -- restores Projects as a
-             primary tabbar destination (the 2026-08-01 Phase B nav rework
-             comment above pulled it off the bar entirely, back when a
-             "project" was just an ordinary label with nothing lifecycle-
-             bearing about it). The spec calls for "a dedicated page in the
-             main sidebar" as the primary interface connecting project work
-             to calendar time -- that's frequent-enough, standalone-enough
-             destination to earn its own tab again, not a Settings-hub
-             sub-page the way plain label management stayed. -->
-        <a href="/projects" data-tab="projects" class="tab-btn {% if active_tab == 'projects' %}active{% endif %}">{{ icon('folder') }}<span>Projects</span></a>
-        <a href="/schedule" data-tab="schedule" class="tab-btn {% if active_tab == 'schedule' %}active{% endif %}">{{ icon('repeat') }}<span>Schedule</span></a>
+        {# 2026-08-15 -- the "Projects" tabbar destination (1.3) is gone,
+           following the same fold-then-redirect precedent already set for
+           the /today and /week tabbar removals above: the standalone
+           /projects page and its two child views were redundant with
+           /tasks?group_by=project and the merged /calendar/week grid (see
+           routers/projects.py's own module docstring and plans/open.md's
+           "Retire the standalone /projects page" decision record). The old
+           paths still redirect (any bookmark still lands somewhere real),
+           they just no longer have their own tabbar entry. A Jinja comment
+           here, not an HTML comment, for the same reason as the /today//week
+           note above -- no stale path text should leak into rendered
+           markup. #}
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
         <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
              user-defined list in the same rail, directly below the five
@@ -247,25 +255,22 @@
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
+<!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
+     cc-entity-changed event bus + the generic data-cc-complete handler.
+     Loaded before every page/extra script so modal.js, app.js and each
+     page's own listeners can rely on window.ccApi existing. -->
+<script src="{{ static_url('async_crud.js') }}"></script>
 <script src="{{ static_url('tag_input.js') }}"></script>
 <script src="{{ static_url('recurrence_picker.js') }}"></script>
 <script src="{{ static_url('reminders_picker.js') }}"></script>
 <script src="{{ static_url('stepper.js') }}"></script>
-<!-- Loaded on every page (not just schedule_classes.html's own
-     extra_scripts, as before 2026-08-01) so modal.js's wireContent() can
-     call CCScheduleTable.init()/CCScheduleGrid.init() when Schedule is
-     opened as a modal from somewhere else (_calendar_nav.html) -- see
-     modal.js's wireContent() comment. Both no-op immediately if their
-     target elements aren't on the page, so this is harmless everywhere
-     Schedule isn't involved. -->
-<script src="{{ static_url('schedule_table.js') }}"></script>
-<script src="{{ static_url('schedule_grid.js') }}"></script>
 {#
-    Widget scripts (2026-08-03) -- loaded globally for the same reason as
-    Schedule's above: the Customize modal's Widget Builder and live preview
-    are injected via innerHTML, which never runs <script> tags, so modal.js's
-    wireContent() calls CCWidgetPreview.init against the freshly-injected
-    content. It no-ops instantly when its target elements aren't present.
+    Widget scripts (2026-08-03) -- loaded globally (not just the Customize
+    modal's own extra_scripts) so modal.js's wireContent() can call
+    CCWidgetPreview.init against the freshly-injected content when the
+    Widget Builder/live preview are injected via innerHTML, which never
+    runs <script> tags. It no-ops instantly when its target elements aren't
+    present.
     dashboard_widget_preview.js also self-initializes over the whole page
     for the workspace's own inline Add-widget form.
 
@@ -277,17 +282,34 @@
 #}
 <script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
 <!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
-     -- loaded globally for the same reason as Schedule's own scripts above:
+     -- loaded globally for the same reason as the Widget scripts above:
      contact_form.html is normally injected into the modal via innerHTML,
      which never runs <script> tags, so modal.js's wireContent() calls
      CCAvatarCropper.init(body) against the freshly-injected content. -->
 <script src="{{ static_url('avatar_cropper.js') }}"></script>
+<!-- contact_form.html's Phone/Email rows (Contacts field parity slice 2 of
+     6) -- same reason as the scripts above: contact_form.html is normally
+     injected into the modal via innerHTML, so modal.js's wireContent()
+     calls CCContactPhoneEmailRows.init(body) against the freshly-injected
+     content. -->
+<script src="{{ static_url('contact_phone_email_rows.js') }}"></script>
 <!-- task_form.html's Daily target field (2026-08-08) -- loaded globally
      for the same reason as the scripts above: task_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()
      calls CCHabitFieldToggle.init(body) against the freshly-injected
      content. -->
  <script src="{{ static_url('task_habit_field_toggle.js') }}"></script>
+<!-- label_edit_modal.html's Role picker (2026-08-15) -- same reason as
+     the scripts above: that page is only ever opened via data-modal, so
+     modal.js's wireContent() calls CCLabelRolePicker.init(body) against
+     the freshly-injected content. -->
+<script src="{{ static_url('label_role_picker.js') }}"></script>
+<!-- _event_form_fields.html's Format field (2026-08-15) -- loaded globally
+     for the same reason as the scripts above: event_form.html/quick_add.html
+     are normally injected into the modal via innerHTML, so modal.js's
+     wireContent() calls CCEventFormatToggle.init(body) against the
+     freshly-injected content. -->
+<script src="{{ static_url('event_format_toggle.js') }}"></script>
 <!-- Universal command surface (1.2 side work) -- global Ctrl-K/Cmd-K search
      plus the Relations cards' "add related X" picker
      (_task_relations.html/_event_relations.html, replacing the old

@@ -196,7 +196,17 @@ class TestDetailCardAndMetaGrid:
         assert 'class="detail-meta-value"' in body
 
     def test_contact_uses_the_shared_meta_grid_not_the_old_table(self, conn):
-        _seed_contact(conn, "c1", phone="+123", email="a@example.com", address="1 St")
+        # Contacts field parity slices 2/5: phone and address are multi-
+        # value now (contact_phones/contact_addresses) -- the legacy flat
+        # `phone`/`address` columns this test used to seed are dead and no
+        # longer rendered, so this seeds the real child-row shape instead
+        # to still get a populated meta grid.
+        _seed_contact(
+            conn, "c1",
+            phones=[{"type": "Other", "value": "+123"}],
+            emails=[{"type": "Other", "value": "a@example.com"}],
+            addresses=[{"type": "Other", "street": "1 St"}],
+        )
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
         assert 'class="detail-card"' in body
         assert 'class="detail-meta-grid"' in body

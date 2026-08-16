@@ -63,7 +63,7 @@ class TestTaskCrudNeverTouchesBridge:
         from src.routers import tasks as tasks_router
 
         assert "bridge" not in tasks_router.create_task.__code__.co_varnames
-        tasks_router.create_task(title="Buy milk", description="", due_at="", importance="", urgency="", status="active",
+        tasks_router.create_task(title="Buy milk", description="", due_at="", status="active",
                                   tags="", recurrence="", conn=conn)
         row = db.list_tasks(conn)[0]
         assert row["title"] == "Buy milk"
@@ -108,7 +108,8 @@ class TestContactCrudNeverTouchesBridge:
         from src.routers import contacts as contacts_router
 
         asyncio.run(contacts_router.create_contact(
-            full_name="Ada Lovelace", org="", phone="", email="", address="",
+            full_name="Ada Lovelace", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -138,10 +139,10 @@ class TestExplodingBridgeNeverInvoked:
         from src.routers import tasks as tasks_router
 
         bridge = _ExplodingBridge()  # noqa: F841 -- deliberately unused, proves nothing needs it
-        tasks_router.create_task(title="X", description="", due_at="", importance="", urgency="", status="active",
+        tasks_router.create_task(title="X", description="", due_at="", status="active",
                                   tags="", recurrence="", conn=conn)
         uid = db.list_tasks(conn)[0]["uid"]
-        tasks_router.update_task(uid, title="Y", description="", due_at="", start_at="", importance="", urgency="",
+        tasks_router.update_task(uid, title="Y", description="", due_at="", start_at="",
                                   status="active", tags="", recurrence="", conn=conn)
         tasks_router.complete_task(uid, conn=conn)
         tasks_router.delete_task(uid, conn=conn)

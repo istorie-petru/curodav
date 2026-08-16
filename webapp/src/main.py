@@ -116,11 +116,15 @@ def create_app() -> FastAPI:
     # features/architecture.md's Grades/Databases removal note and
     # db.py's own removal comments on the `databases`/`database_columns`/
     # `database_rows`/`grades` tables.
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, projects, published_lists, pwa, schedule, search, settings, sync_api, tasks, timeline, today, week
+    # routers/today.py and routers/week.py are gone (1.9 side work,
+    # "Today"/"Week" folded into the Dashboard's widget registry and the
+    # merged /calendar/week respectively -- see routers/dashboard.py::
+    # today_redirect and routers/calendar.py::week_redirect for the
+    # bookmark-preserving redirects that replaced them, same precedent as
+    # the earlier /calendar/timetable retirement).
+    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, sync_api, tasks, timeline
 
     app.include_router(dashboard.router)
-    app.include_router(today.router)
-    app.include_router(week.router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
     # src/offline_sync.py). No PWA client calls this yet (§11 slices 3+);
@@ -135,7 +139,6 @@ def create_app() -> FastAPI:
     app.include_router(pwa.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
-    app.include_router(schedule.router)
     # timeline.router's literal routes (/tasks/timeline, /tasks/timeline/
     # create) must be registered BEFORE tasks.router -- tasks.router
     # defines a catch-all GET /tasks/{uid} (task_detail) that would
@@ -148,6 +151,13 @@ def create_app() -> FastAPI:
     app.include_router(timeline.router)
     app.include_router(tasks.router)
     app.include_router(contacts.router)
+    app.include_router(notes.router)
+    # Quick Capture (plans/quick-capture.md) -- POST /api/quick-capture +
+    # GET /api/quick-capture/preview, its own tiny router since /api/search
+    # and /api/labels (routers/search.py) already own the /api/ namespace's
+    # other two endpoints and this is a distinct concern (parsing + create,
+    # not query).
+    app.include_router(quick_capture.router)
     app.include_router(labels.router)
     app.include_router(projects.router)
     app.include_router(habits.router)

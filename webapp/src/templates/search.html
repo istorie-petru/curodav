@@ -23,9 +23,11 @@
     <div class="empty-state" style="padding:24px 0">No results for "{{ q }}".</div>
     {% else %}
     {% for r in results %}
+    {% set _icon = {'task': 'check-square', 'event': 'calendar', 'contact': 'user', 'note': 'file-text'} %}
+    {% set _href = {'task': '/tasks/', 'event': '/events/', 'contact': '/contacts/', 'note': '/notes/'} %}
     <div class="checklist-row search-result-row" data-type="{{ r.type }}" data-uid="{{ r.uid }}">
-        {{ icon('check-square' if r.type == 'task' else ('calendar' if r.type == 'event' else 'user'), 'icon-sm') }}
-        <a class="checklist-text" href="{{ '/tasks/' if r.type == 'task' else ('/events/' if r.type == 'event' else '/contacts/') }}{{ r.uid }}" data-modal>
+        {{ icon(_icon.get(r.type, 'file'), 'icon-sm') }}
+        <a class="checklist-text" href="{{ _href.get(r.type, '/') }}{{ r.uid }}{{ '/edit' if r.type == 'note' else '' }}" data-modal>
             {{ r.title }}
             <span class="search-result-subtitle">{{ r.subtitle }}</span>
         </a>

@@ -48,7 +48,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -122,14 +124,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_at TEXT,
     due_at TEXT,
     -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
-    -- derived states): Importance/Urgency replace the old WebDAV `priority`
-    -- concept. Two explicit semantic axes, each 1..3 (higher = more
-    -- important/urgent); NULL = unset. Their effective values are derived
-    -- deterministically from explicit values + label rules + temporal state
-    -- (src/derived_state.py); the old `priority` column stays physically on
-    -- disk for pre-1.1 databases but is no longer referenced by app code.
-    importance INTEGER,
-    urgency INTEGER,
+    -- derived states) introduced Importance/Urgency as two explicit 1..3
+    -- axes, replacing the old WebDAV `priority` concept. A later rework
+    -- (side work, see this file's `_drop_column` calls below) removed the
+    -- explicit axes entirely -- both are now purely computed
+    -- (src/derived_state.py) from label rules + temporal state, never
+    -- manually set, so the `importance`/`urgency` columns no longer exist
+    -- on new databases. The old `priority` column stays physically on disk
+    -- for pre-1.1 databases but is no longer referenced by app code.
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
@@ -168,6 +170,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS contacts (
     uid TEXT PRIMARY KEY,
     full_name TEXT NOT NULL DEFAULT '',
+    title TEXT,
     org TEXT,
     phone TEXT,
     email TEXT,
@@ -182,6 +185,137 @@ CREATE TABLE IF NOT EXISTS contacts (
     photo_type TEXT,
     created_at TEXT,
     updated_at TEXT
+);
+
+
+-- Contacts field parity with Nextcloud Contacts (plans/open.md), slice 2 of
+-- 6 (Phone/Email, following slice 1's Title). `contacts.phone`/`contacts.
+-- email` above are single-value and stay physically present (never
+-- force-dropped, this file's standing convention) but are DEAD from this
+-- slice forward -- nothing here writes them anymore. A real person routinely
+-- has more than one phone number or email address, each meaningfully typed
+-- (home vs. work vs. cell), so a flat column was always going to need this
+-- rework eventually; keeping it "live" as a synced mirror of some
+-- designated-primary child row would mean reconciling two sources of truth
+-- on every write for no real benefit (nothing left reads the flat column),
+-- so it's simplest to just freeze it as a migration source (see
+-- migrate_legacy_contact_phone_email below) and stop touching it. Same
+-- natural-key-less "real owned child row" shape as task_checklist_items
+-- (plain TEXT uid PK, no FOREIGN KEY constraint -- this app doesn't use
+-- them anywhere, see _ensure_column's own docstring for the "no force-drop"
+-- convention this table's dead-column choice above still honors) --
+-- `contact_uid` is a real ownership column, not a natural key, since a
+-- contact can have several phones/emails of the very same type ("Home" and
+-- a second "Home" number is a real, if rare, case a natural key couldn't
+-- represent). `type` is free text at the storage layer (vCard/Nextcloud's
+-- vocabulary -- Home/Work/Cell/Fax/Pager for phone, Home/Work for email,
+-- plus Other for both -- is enforced by the `<select>` in contact_form.html
+-- and CONTACT_PHONE_TYPES/CONTACT_EMAIL_TYPES below, not a CHECK
+-- constraint, matching this file's general preference for validating in
+-- Python over SQL). `position` is the same float sort key task_checklist_
+-- items uses so display order survives a full replace-on-save without
+-- needing per-row uid tracking across an edit (see set_contact_phones/
+-- set_contact_emails).
+CREATE TABLE IF NOT EXISTS contact_phones (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contact_emails (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+-- Contacts field parity slice 3 of 6 -- Website. There has never been a
+-- single-value website-ish column on `contacts` (confirmed by grepping
+-- db.py/vcard_rows.py/contact_form.html/contact_detail.html before writing
+-- this table -- unlike Phone/Email above, there is genuinely nothing to
+-- auto-migrate here), so this is a brand-new field, multi-value from day
+-- one -- same shape as contact_phones/contact_emails immediately above
+-- (owned child rows keyed by `contact_uid`, no FOREIGN KEY constraint,
+-- float `position` sort key). vCard's property is URL, not a typed multi-
+-- instance property in the RFC 2426/6350 core the way TEL/EMAIL are, but
+-- vobject supports repeated `URL;TYPE=...:` lines identically (confirmed
+-- empirically -- see vcard_rows.py's module docstring) so the column is
+-- named `url` (the vCard property name) rather than `value`, purely for
+-- readability at this call site; the shape is otherwise identical.
+CREATE TABLE IF NOT EXISTS contact_websites (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    url TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+-- Contacts field parity slice 5 of 6 -- Address (plans/open.md). The old
+-- `contacts.address` column above is a single free-text line; a real vCard
+-- ADR is a structured, typed, MULTI-instance property (RFC 2426/6350 --
+-- box/extended/street/city/region/postal code/country, same 7-part
+-- structure vobject.vcard.Address models directly), confirmed empirically
+-- against vobject before writing this table: `card.add("adr")` is
+-- repeatable and `card.adr_list` reads every line back, each with its own
+-- `.type_param`, identically to `tel_list`/`email_list`/`url_list` (see
+-- vcard_rows.py's module docstring). So this is the same owned-child-row
+-- shape as contact_phones/contact_emails/contact_websites immediately
+-- above (`contact_uid` ownership column, no FOREIGN KEY, float `position`
+-- sort key), just with seven value columns instead of one. Type vocabulary
+-- is Home/Work/Other (green-lit, AskUserQuestion, 2026-08-15 -- "same as
+-- email/address" -- see CONTACT_ADDRESS_TYPES below), matching email/
+-- website, not phone's wider Cell/Fax/Pager set (vCard's ADR has no
+-- concept of those). Column names follow vobject.vcard.Address's own
+-- attribute names (box/extended/street/city/region/code/country) except
+-- `code` is spelled out as `postal_code` here for readability at this
+-- table's own call sites -- purely a naming choice, no behavior
+-- difference. Unlike Website, there IS a legacy single-value column to
+-- migrate from (`contacts.address`) -- see migrate_legacy_contact_address
+-- below, same "auto-migrate the old flat value into a single 'Other'-typed
+-- entry" shape migrate_legacy_contact_phone_email already established.
+CREATE TABLE IF NOT EXISTS contact_addresses (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    po_box TEXT NOT NULL DEFAULT '',
+    extended TEXT NOT NULL DEFAULT '',
+    street TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '',
+    postal_code TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
+);
+
+-- Contacts field parity slice 6 of 6 -- Social network (plans/open.md), the
+-- last field in the build order. Round-trips via the standard X-
+-- SOCIALPROFILE vCard property (green-lit, AskUserQuestion, 2026-08-15).
+-- Same owned-child-row shape as contact_phones/contact_emails/
+-- contact_websites (single `value` column, `contact_uid` ownership, no
+-- FOREIGN KEY, float `position` sort key) -- unlike Address, X-
+-- SOCIALPROFILE has no internal structure to split into columns, it's a
+-- single value (a profile URL or handle) plus a TYPE= naming the network.
+-- No pre-existing single-value social-network column ever existed on this
+-- app (confirmed by grepping db.py/vcard_rows.py/contact_form.html before
+-- writing this), so -- same as Website -- there is nothing to auto-
+-- migrate. Type vocabulary is network names (db.CONTACT_SOCIAL_TYPES),
+-- not the Home/Work/Other set every other typed contact field uses --
+-- "which network" is the meaningful distinction here, not "which
+-- location/context."
+CREATE TABLE IF NOT EXISTS contact_social_profiles (
+    uid TEXT PRIMARY KEY,
+    contact_uid TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Other',
+    value TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0,
+    created_at TEXT
 );
 
 
@@ -328,23 +462,6 @@ CREATE TABLE IF NOT EXISTS label_config (
     start_date TEXT,
     end_date TEXT,
     archived_at TEXT,
-    -- 1.6 (Schedule & recurrence rework, plans/open-priority.md § Schedule
-    -- & recurrence rework, "Classes as project labels + recurring
-    -- events"): a university course no longer gets its own `schedule_
-    -- classes` entity -- it's a project-enabled label whose recurring
-    -- lectures/seminars/etc. are ordinary recurring `events` tagged with
-    -- it (see schedule.py/routers/schedule.py). The four fields that
-    -- genuinely describe the *course* rather than any one meeting
-    -- (acronym, type, credits, instructor) round-trip through no VEVENT
-    -- property, so per §1.4's rule they live here as sparse label config
-    -- -- the same place start_date/end_date/is_project already put
-    -- 1.3's project-level facts -- not on `events`. Meaningless (and
-    -- simply unset) for a label that isn't a course; a course is just
-    -- "a project label someone happened to fill these in for."
-    course_acronym TEXT,
-    course_type TEXT,
-    course_credits REAL,
-    course_professor_contact_uid TEXT,
     created_at TEXT
 );
 
@@ -353,23 +470,30 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(full_name);
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_phones_contact ON contact_phones(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_emails_contact ON contact_emails(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_websites_contact ON contact_websites(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_addresses_contact ON contact_addresses(contact_uid);
+CREATE INDEX IF NOT EXISTS idx_contact_social_profiles_contact ON contact_social_profiles(contact_uid);
 
--- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` is
--- GONE from a brand-new database's schema -- a university class is no
--- longer its own entity mirrored one-way into `events`; it's a real
--- recurring `event`, tagged with its course's project-enabled label
--- (`is_project=1`), full stop. See schedule.py/routers/schedule.py for the
--- generation logic and label_config's `course_*` columns above for the
--- four course-level facts (acronym/type/credits/professor) that used to
--- live on this table's rows -- those describe the course, not any one
--- meeting, so they moved to the course's own label_config row instead of
--- becoming made-up `events` columns (§1.4's "no made-up X- properties"
--- rule). An existing cache.sqlite from before this migration still
+-- 1.6 (Schedule & recurrence rework, 2026-08-13): `schedule_classes` was
+-- dropped from a brand-new database's schema then -- a university class
+-- stopped being its own entity mirrored one-way into `events`, becoming a
+-- real recurring `event` tagged with its course's project-enabled label
+-- instead. An existing cache.sqlite from before that migration still
 -- physically has this table and its rows on disk (never force-dropped,
 -- same "don't touch old data automatically" convention as every other
--- table removal in this file) -- nothing in this module's own code
--- reads/writes it anymore; see scripts/migrate_schedule_classes_to_events.py
--- for the one-time conversion of any pre-1.6 rows into real events.
+-- table removal in this file), but nothing in this module's own code has
+-- read/written it since.
+--
+-- 2026-08-15: the Schedule module itself (routers/schedule.py, schedule.py,
+-- the `/schedule` UI, `schedule_settings`, and label_config's `course_*`
+-- columns) is removed entirely -- odd/even-week recurrence is now
+-- available directly on ordinary Calendar events, which fully superseded
+-- Schedule's one distinguishing feature; see plans/STATE.md's removal
+-- entry. `schedule_holidays` (below) is untouched -- it's a generic,
+-- named holiday-calendar mechanism any recurring event can use, unrelated
+-- to Schedule specifically (1.6 "Generalized non-working-day policy").
 
 -- 2026-08-07: `grades` (the per-class assessment tracker) removed along
 -- with the rest of the Databases/Grades feature -- see the `databases`/
@@ -397,26 +521,6 @@ CREATE TABLE IF NOT EXISTS schedule_holidays (
     label TEXT NOT NULL DEFAULT '',
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS schedule_settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    semester_start TEXT,
-    semester_end TEXT,
-    credits_needed REAL,
-    reminder_minutes INTEGER NOT NULL DEFAULT 15,
-    target_calendar_uid TEXT,
-    schedule_label TEXT NOT NULL DEFAULT 'Schedule',
-    -- 1.6 ("Generalized recurrence and the non-working-day policy"): which
-    -- named holiday calendar (schedule_holidays.calendar_name) this
-    -- install's class events reference -- 'Default' so every pre-1.6
-    -- holiday (all under that name, see schedule_holidays' own CREATE
-    -- TABLE comment) keeps excluding class occurrences exactly as before,
-    -- with no action required. `schedule.build_class_event_row` just
-    -- copies this straight onto every class event's own `holiday_calendar`
-    -- field -- there's no per-class override; a semester's classes all
-    -- respect the same institutional calendar together.
-    holiday_calendar TEXT NOT NULL DEFAULT 'Default'
 );
 
 -- Phase 2 (label-space rework, 2026-08-06): `tags`/`tag_groups`/
@@ -497,7 +601,7 @@ CREATE TABLE IF NOT EXISTS task_completions (
 -- checkbox/stepper check-in and a heatmap, same shape as the standalone
 -- Habits feature but sourced from labeled tasks + task_completions
 -- instead of the habits/habit_entries tables). One row, same
--- id-must-be-1 singleton pattern as schedule_settings.
+-- id-must-be-1 singleton pattern task_habit_settings' own peers use.
 CREATE TABLE IF NOT EXISTS task_habit_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     habit_label TEXT NOT NULL DEFAULT 'Habit'
@@ -549,7 +653,7 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_widgets_position ON dashboard_widgets(p
 -- doesn't belong to any real domain table -- so far just one thing:
 -- routers/dashboard.py's "has the mini-calendar backfill migration run
 -- yet" flag (2026-08-01). Deliberately NOT a place for user-facing
--- settings (those live on their own real tables -- schedule_settings,
+-- settings (those live on their own real tables -- task_habit_settings,
 -- etc.) -- this is strictly internal migration/bookkeeping state.
 CREATE TABLE IF NOT EXISTS app_meta (
     key TEXT PRIMARY KEY,
@@ -622,6 +726,31 @@ CREATE TABLE IF NOT EXISTS event_occurrence_overrides (
     updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_event_occurrence_overrides_master ON event_occurrence_overrides(master_uid);
+
+-- 1.9 side work ("Sleep Time / Leisure Time", direct feedback): weekly
+-- recurring soft-scheduling guidance blocks -- "this time of day, on these
+-- days of the week, is meant for X" (e.g. sleep 00:00-05:59 Monday-Sunday,
+-- leisure 21:00-21:59 Monday-Sunday). Deliberately NOT shaped like
+-- schedule_holidays (a dated range under a user-named, open-ended
+-- calendar) -- a time block has no date component at all, just a
+-- time-of-day range plus a day-of-week set, and `kind` is one of exactly
+-- two fixed categories (not a user-named set) since the feature request
+-- named exactly these two. Rendered as a soft diagonal-hatch overlay on
+-- the Week/Day grid (red for sleep, green for leisure, see
+-- routers/calendar.py's `_time_block_overlays`) and produces a
+-- non-blocking warning (never a hard block) when an event or work
+-- allocation is scheduled to overlap one -- see static/time_blocks.js.
+-- `days` is a comma-separated subset of db.TIME_BLOCK_DAYS, stored as full
+-- weekday names so a row reads directly in the admin table with no lookup.
+CREATE TABLE IF NOT EXISTS time_blocks (
+    uid TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('sleep', 'leisure')),
+    label TEXT NOT NULL DEFAULT '',
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    days TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_time_blocks_kind ON time_blocks(kind);
 
 -- 1.8 slice 1 ("Field-HLC shadow store + sync API skeleton",
 -- plans/open-priority.md § Offline-first editing & synchronization §9):
@@ -706,6 +835,38 @@ CREATE TABLE IF NOT EXISTS sync_conflicts (
     resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sync_conflicts_unresolved ON sync_conflicts(resolved_at);
+
+-- Quick Capture (plans/quick-capture.md) -- Notes are a fourth captured
+-- entity type (`!n`), alongside the pre-existing tasks/events/contacts.
+-- Deliberately minimal: a note is just free-text content plus labels
+-- (via the same `object_labels` table every other type uses, object_type
+-- 'note') -- no title field of its own (the content's first line serves
+-- that purpose everywhere it's displayed, same as this app's habit-log
+-- entries). Unrelated to `contacts.notes` (a free-text field on a
+-- contact) -- same English word, different concept, no schema overlap.
+CREATE TABLE IF NOT EXISTS notes (
+    uid TEXT PRIMARY KEY,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT
+);
+
+-- Quick Capture's label resolution (plans/quick-capture.md § Labels and
+-- Approximate Matching): "user corrections may also be retained as
+-- aliases... future uses of #universitty can resolve directly to the
+-- existing canonical label." One row per learned alias -- `alias` is the
+-- exact (lowercased) misspelling/variant typed in a capture, mapping to
+-- the real label's canonical name. Looked up before falling back to a
+-- fuzzy (difflib) match on every capture (db.resolve_capture_label), and
+-- written to once a fuzzy match is accepted -- see that function's own
+-- docstring for why an accepted fuzzy match is treated as the "user
+-- correction" the spec describes, there being no separate interactive
+-- confirm-the-suggestion step in this v1.
+CREATE TABLE IF NOT EXISTS label_aliases (
+    alias TEXT PRIMARY KEY,
+    canonical_name TEXT NOT NULL,
+    created_at TEXT
+);
 """
 
 
@@ -721,6 +882,21 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: st
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     if column not in existing:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coldef}")
+
+
+def _drop_column(conn: sqlite3.Connection, table: str, column: str) -> None:
+    """Inverse of `_ensure_column`, for the rare case a column's data
+    should actually be discarded rather than left inert (see this app's
+    usual "never force-drop old data" convention -- this is a deliberate
+    exception, decided per-column, not the default). Plain `ALTER TABLE
+    ... DROP COLUMN` (SQLite 3.35+, no shadow-table rebuild needed since
+    nothing here has an index/generated-column dependency on these
+    columns). Guarded the same way `_ensure_column` is guarded, so it's
+    safe to call on every startup: a no-op once the column is already
+    gone."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column in existing:
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -816,6 +992,83 @@ def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[
     logger.info("Relaxed legacy NOT NULL constraints on %s%s", table, f" ({', '.join(columns)})")
 
 
+def migrate_legacy_contact_phone_email(conn: sqlite3.Connection) -> None:
+    """Contacts field parity slice 2 of 6 (plans/open.md) -- the green-lit
+    auto-migration: a contact whose legacy `phone`/`email` column already
+    has a value gets that value copied into the new `contact_phones`/
+    `contact_emails` table as a single row typed "Other" (the vocabulary's
+    catch-all, since the old flat column never recorded which kind of
+    number/address it was).
+
+    Idempotent by construction, not by a separate "have I run" flag: a
+    contact is only migrated if it has a legacy value AND zero existing
+    child rows for that field, so running this again after the first row
+    exists is a no-op for that contact -- covers both "called twice in a
+    row" (schema setup runs on every `db.connect`) and "the contact
+    already has real typed rows a user entered" (per this slice's own test
+    list: a contact with real post-migration rows must be left alone even
+    if the legacy column somehow still has a stale value, since nothing
+    writes to the legacy column anymore -- see the contacts CREATE TABLE
+    comment for why it's frozen, not kept live). A contact with no legacy
+    value gets no rows at all -- no spurious "Other" entry from an empty
+    field."""
+    now = datetime.now(timezone.utc).isoformat()
+    phone_rows = conn.execute(
+        "SELECT uid, phone FROM contacts WHERE phone IS NOT NULL AND TRIM(phone) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_phones)"
+    ).fetchall()
+    for row in phone_rows:
+        conn.execute(
+            "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", row["phone"], 0, now),
+        )
+    email_rows = conn.execute(
+        "SELECT uid, email FROM contacts WHERE email IS NOT NULL AND TRIM(email) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_emails)"
+    ).fetchall()
+    for row in email_rows:
+        conn.execute(
+            "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", row["email"], 0, now),
+        )
+    if phone_rows or email_rows:
+        conn.commit()
+
+
+def migrate_legacy_contact_address(conn: sqlite3.Connection) -> None:
+    """Contacts field parity slice 5 of 6 -- the same green-lit auto-
+    migration shape as migrate_legacy_contact_phone_email above: a contact
+    whose legacy free-text `address` column already has a value gets that
+    value copied into the new `contact_addresses` table as a single row
+    typed "Other". Unlike phone/email (a single flat string that maps
+    directly onto TEL/EMAIL's own single `value`), the legacy `address`
+    column was never structured -- there's no reliable way to split an
+    arbitrary free-text address into PO Box/Street/City/Region/Postal code/
+    Country, so the whole legacy string is placed into `street` (the one
+    ADR line meant for a general street-level address) and every other
+    structured field is left blank; a user can split it into the real
+    fields by hand from the edit form afterward if they want to.
+
+    Same idempotence shape as migrate_legacy_contact_phone_email: only
+    migrates a contact that has a legacy value AND zero existing
+    contact_addresses rows, so a contact with real typed address rows
+    already (or a second call after the first migrated it) is left alone."""
+    now = datetime.now(timezone.utc).isoformat()
+    address_rows = conn.execute(
+        "SELECT uid, address FROM contacts WHERE address IS NOT NULL AND TRIM(address) != '' "
+        "AND uid NOT IN (SELECT DISTINCT contact_uid FROM contact_addresses)"
+    ).fetchall()
+    for row in address_rows:
+        conn.execute(
+            "INSERT INTO contact_addresses "
+            "(uid, contact_uid, type, po_box, extended, street, city, region, postal_code, country, position, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), row["uid"], "Other", "", "", row["address"], "", "", "", "", 0, now),
+        )
+    if address_rows:
+        conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
@@ -837,7 +1090,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # comment for why every pre-existing holiday keeps working unchanged
     # under the 'Default' calendar name.
     _ensure_column(conn, "schedule_holidays", "calendar_name", "TEXT NOT NULL DEFAULT 'Default'")
-    _ensure_column(conn, "schedule_settings", "holiday_calendar", "TEXT NOT NULL DEFAULT 'Default'")
     # Phase 1 (label-space rework): task_lists/calendars/addressbooks and
     # every href/etag/*_path/raw_ics/raw_vcard column are no longer part
     # of SCHEMA_SQL for a brand-new database. An *existing* cache.sqlite
@@ -854,6 +1106,44 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # (never queried by, just read/written per-row), so no landmine here.
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
+    # Contacts field parity with Nextcloud Contacts (open.md), slice 1 of 6
+    # (Title -> Phone/Email -> Website -> Birthday -> Address -> Social
+    # network, per the build order recorded there). Title is the vCard
+    # TITLE property (a person's job title, e.g. "Software Engineer") --
+    # distinct from `org` (their organization's name, vCard ORG). Same
+    # "column added after the table already existed on disk" situation as
+    # photo_b64/photo_type immediately above.
+    _ensure_column(conn, "contacts", "title", "TEXT")
+    # Contacts field parity slice 2 of 6 -- Phone/Email. contact_phones/
+    # contact_emails (SCHEMA_SQL above) are brand-new tables, so `CREATE
+    # TABLE IF NOT EXISTS` already handles a pre-slice-2 database (unlike a
+    # column added to an existing table, no _ensure_column needed for the
+    # tables themselves). What DOES need a migration is the *data*: a
+    # pre-slice-2 database has real values sitting in the now-dead
+    # `contacts.phone`/`contacts.email` columns that would otherwise vanish
+    # from view the moment the UI stops reading them. Runs on every
+    # connect, same as every other migration in this function -- see
+    # migrate_legacy_contact_phone_email's own docstring for why it's safe
+    # to call unconditionally (idempotent).
+    migrate_legacy_contact_phone_email(conn)
+    # Contacts field parity slice 5 of 6 -- Address. contact_addresses
+    # (SCHEMA_SQL above) is a brand-new table, same "CREATE TABLE IF NOT
+    # EXISTS already handles it" situation as contact_websites -- the
+    # migration below only needs to move the *data* sitting in the now-
+    # dead `contacts.address` column. Runs on every connect, same
+    # idempotence contract as migrate_legacy_contact_phone_email.
+    migrate_legacy_contact_address(conn)
+    # Contacts field parity slice 4 of 6 -- Birthday. Single-value (unlike
+    # Phone/Email/Website), so no child table -- just one more column, same
+    # "added after the table already existed on disk" situation as title/
+    # photo_b64/photo_type above. Stores the vCard BDAY value verbatim as
+    # text: a full date "YYYY-MM-DD", or a year-less date "--MM-DD" (green-
+    # lit 2026-08-15, AskUserQuestion) -- vobject treats a string BDAY value
+    # as opaque text and serializes/reads it back unchanged either way
+    # (confirmed directly against vobject before writing vcard_rows.py, not
+    # assumed -- see that module's docstring), so there's no need to parse
+    # into a `date` object anywhere in this app just to round-trip it.
+    _ensure_column(conn, "contacts", "birthday", "TEXT")
     # Schedule class -> contact link, same "column added after the table
     # already existed on disk" situation as the others above. Guarded on
     # table existence (unlike every other _ensure_column call here) because
@@ -884,13 +1174,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # Timeline a label-based grouping to replace it (see
     # routers/timeline.py).
     _ensure_column(conn, "tasks", "timeline_lane", "INTEGER")
-    # 1.1 (virtual & derived states) -- Importance/Urgency replace the old
-    # `priority` concept (see the `tasks` CREATE TABLE comment above). Same
-    # "column added after the table already existed on disk" situation as
-    # every other _ensure_column here; the old `priority` column stays
-    # physically present, unused.
-    _ensure_column(conn, "tasks", "importance", "INTEGER")
-    _ensure_column(conn, "tasks", "urgency", "INTEGER")
+    # Side work (post-1.1) -- Importance/Urgency's explicit per-task axes
+    # are gone: both are now purely computed from label rules + temporal
+    # state (src/derived_state.py), never manually set, so a database that
+    # still physically carries the 1.1 `importance`/`urgency` columns has
+    # them dropped outright here -- a deliberate exception to this file's
+    # usual "never force-drop old data" convention (see `_drop_column`'s
+    # own docstring), decided because a stale explicit value left inert
+    # would otherwise keep influencing filters/sort through the ORDER BY
+    # clauses below if a future change ever re-read it by accident.
+    _drop_column(conn, "tasks", "importance")
+    _drop_column(conn, "tasks", "urgency")
     # Streak widget (2026-08-07) -- see the `tasks` CREATE TABLE comment
     # above for the full rationale.
     _ensure_column(conn, "tasks", "completed_at", "TEXT")
@@ -940,13 +1234,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "label_config", "start_date", "TEXT")
     _ensure_column(conn, "label_config", "end_date", "TEXT")
     _ensure_column(conn, "label_config", "archived_at", "TEXT")
-    # 1.6 (Schedule & recurrence rework) -- see the label_config CREATE
-    # TABLE comment above for why these four course-only facts live here
-    # rather than on `events`.
-    _ensure_column(conn, "label_config", "course_acronym", "TEXT")
-    _ensure_column(conn, "label_config", "course_type", "TEXT")
-    _ensure_column(conn, "label_config", "course_credits", "REAL")
-    _ensure_column(conn, "label_config", "course_professor_contact_uid", "TEXT")
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -957,12 +1244,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # physically has those tables/indexes from before the removal is left
     # untouched, same "don't force-drop old data" convention as every
     # other removal in this file.
-    # 2026-08-08: the tag applied to every mirrored class event used to be
-    # hardcoded to the literal string "schedule" (schedule.py's
-    # class_to_event_row) -- now a real per-install setting, editable from
-    # the Schedule page itself, defaulting to the same value so nothing
-    # already-tagged silently changes until someone actually renames it.
-    _ensure_column(conn, "schedule_settings", "schedule_label", "TEXT NOT NULL DEFAULT 'Schedule'")
     # 2026-08-08: habit-labeled-task feature -- same "column added after
     # the table already existed on disk" situation as the others in this
     # function.
@@ -1336,7 +1617,7 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # to carry it through.
     cols = [
         "uid", "title", "description",
-        "start_at", "due_at", "importance", "urgency", "status", "progress",
+        "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
     ]
@@ -1451,9 +1732,11 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         "event_task_relations", "object_labels", "label_config",
         # 1.6: schedule_classes dropped from SCHEMA_SQL (see its removal
         # note above) -- a brand-new database never has this table, so it's
-        # no longer in this list. schedule_holidays/schedule_settings stay;
-        # 1.6 didn't touch either (see plans/STATE.md's next-slice note).
-        "schedule_holidays", "schedule_settings", "habits",
+        # no longer in this list. schedule_holidays stays -- it's the
+        # generic named-holiday-calendar mechanism, unrelated to the
+        # Schedule module itself (removed 2026-08-15, see plans/STATE.md);
+        # schedule_settings is gone along with that module.
+        "schedule_holidays", "habits",
         "habit_entries", "task_completions", "dashboard_widgets",
         "published_lists", "app_meta",
     ]
@@ -1501,7 +1784,12 @@ def list_tasks(
             params.extend(excluded_uids)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
+    # Importance/Urgency no longer sort here -- both are purely computed
+    # (src/derived_state.py, label rules + temporal state), not raw
+    # columns SQL can order by; a caller that needs importance/urgency
+    # ordering does it in Python via derived_state's effective values
+    # (see routers/tasks.py's _SORT_KEYS).
+    query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
 
@@ -1583,12 +1871,13 @@ def list_event_task_relations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[dict[str, Any]]:
     """Every task currently linked to `event_uid`, ordered the same way
-    list_tasks orders (undated last, then due date, then importance/
-    urgency) so a Relations card's list reads like every other task list
-    in the app."""
+    list_tasks orders (undated last, then due date -- importance/urgency
+    are computed, not SQL-orderable columns, see list_tasks' own comment)
+    so a Relations card's list reads like every other task list in the
+    app."""
     rows = conn.execute(
         "SELECT tasks.* FROM tasks JOIN event_task_relations r ON r.task_uid = tasks.uid "
-        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC, tasks.importance DESC, tasks.urgency DESC",
+        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC",
         (event_uid,),
     ).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
@@ -1692,6 +1981,15 @@ def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | 
         (event_uid,),
     ).fetchone()
     return row["task_uid"] if row else None
+
+
+def work_allocation_event_uids(conn: sqlite3.Connection) -> set[str]:
+    """Every event uid that is a work-allocation block, in one query -- the
+    bulk counterpart to work_allocation_task_uid, for a page (e.g. Month)
+    that needs to exclude every work-allocation event from a list it
+    already fetched via db.list_events, without an N+1 per-event lookup."""
+    rows = conn.execute("SELECT event_uid FROM event_task_relations WHERE is_work_allocation = 1").fetchall()
+    return {row["event_uid"] for row in rows}
 
 
 def delete_work_allocation(conn: sqlite3.Connection, event_uid: str) -> None:
@@ -1970,17 +2268,21 @@ def search_entities(
     include_habit_tasks: bool = False,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Search across tasks, events, and contacts.
+    """Search across tasks, events, contacts, and notes.
 
     Explicit filters (AND together):
       - `q`        -- free-text, case-insensitive substring across the
                       meaningful metadata: task title/description/labels;
                       event title/description/labels; contact name/org/
-                      phone/email/labels. (Fuzzy = SQL LIKE, the same
-                      mechanism list_tasks/list_contacts already use -- no
-                      index, appropriate at personal-scale volumes.)
-      - `types`    -- subset of ("task", "event", "contact"); None/empty
-                      means all three.
+                      phone/email/labels; note content/labels. (Fuzzy = SQL
+                      LIKE, the same mechanism list_tasks/list_contacts
+                      already use -- no index, appropriate at personal-scale
+                      volumes.)
+      - `types`    -- subset of ("task", "event", "contact", "note");
+                      None/empty means all four. ("note" added 2026-08-15,
+                      Quick Capture -- every existing caller that passes an
+                      explicit `types` list of its own, e.g. the relation
+                      picker's `["event"]`/`["task"]`, is unaffected.)
       - `labels`   -- multi-select label filter, any-match (a result needs
                       just one of the chosen labels), case-sensitive on the
                       stored object_labels name like every other label
@@ -2021,6 +2323,8 @@ def search_entities(
         result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set())))
     if not wanted or "contact" in wanted:
         result.extend(_search_contacts(conn, q, labels, exclude.get("contact", set())))
+    if not wanted or "note" in wanted:
+        result.extend(_search_notes(conn, q, labels, exclude.get("note", set())))
 
     if limit is not None:
         result = result[:limit]
@@ -2075,7 +2379,12 @@ def _search_tasks(
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY (due_at IS NULL), due_at ASC, importance DESC, urgency DESC"
+    # Importance/Urgency no longer sort here -- both are purely computed
+    # (src/derived_state.py, label rules + temporal state), not raw
+    # columns SQL can order by; a caller that needs importance/urgency
+    # ordering does it in Python via derived_state's effective values
+    # (see routers/tasks.py's _SORT_KEYS).
+    query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:
@@ -2165,12 +2474,17 @@ def _search_contacts(
     clauses: list[str] = []
 
     if q:
+        # Same "search both the dead legacy columns and the new child
+        # tables" reasoning as list_contacts above.
         like = f"%{q}%"
         clauses.append(
-            "(full_name LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
-            "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?))"
+            "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? OR uid IN "
+            "(SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_phones WHERE value LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_emails WHERE value LIKE ?) OR uid IN "
+            "(SELECT contact_uid FROM contact_websites WHERE url LIKE ?))"
         )
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like, like])
     if labels:
         placeholders = ", ".join("?" for _ in labels)
         clauses.append(
@@ -2188,13 +2502,66 @@ def _search_contacts(
     rows = conn.execute(query, params).fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:
-        d = _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))
-        subtitle = d.get("org") or d.get("email") or d.get("phone") or ""
+        d = _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+        first_email = d["emails"][0]["value"] if d.get("emails") else d.get("email")
+        first_phone = d["phones"][0]["value"] if d.get("phones") else d.get("phone")
+        subtitle = d.get("org") or d.get("title") or first_email or first_phone or ""
         out.append(
             {
                 "type": "contact",
                 "uid": d["uid"],
                 "title": d["full_name"],
+                "subtitle": subtitle,
+                "tags": d["tags"],
+                "entity": d,
+            }
+        )
+    return out
+
+
+def _search_notes(
+    conn: sqlite3.Connection,
+    q: str | None,
+    labels: list[str] | None,
+    excluded: set[str],
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM notes"
+    params: list[str] = []
+    clauses: list[str] = []
+
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(content LIKE ? OR uid IN (SELECT object_id FROM object_labels "
+            "WHERE object_type = 'note' AND label_name LIKE ?))"
+        )
+        params.extend([like, like])
+    if labels:
+        placeholders = ", ".join("?" for _ in labels)
+        clauses.append(
+            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'note' AND label_name IN ({placeholders}))"
+        )
+        params.extend(labels)
+    if excluded:
+        placeholders = ", ".join("?" for _ in excluded)
+        clauses.append(f"uid NOT IN ({placeholders})")
+        params.extend(excluded)
+
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = _attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS))
+        title = note_title(d)
+        body = (d.get("content") or "").strip()
+        subtitle = body[len(title) :].strip()[:80] if body.startswith(title) else body[:80]
+        out.append(
+            {
+                "type": "note",
+                "uid": d["uid"],
+                "title": title,
                 "subtitle": subtitle,
                 "tags": d["tags"],
                 "entity": d,
@@ -2234,13 +2601,178 @@ def delete_checklist_items_for_task(conn: sqlite3.Connection, task_uid: str) -> 
 
 _CONTACT_JSON_FIELDS: tuple[str, ...] = ()
 
+# Contacts field parity slice 2 of 6 -- the vCard/Nextcloud type vocabulary,
+# green-lit exactly as-is (AskUserQuestion, 2026-08-15): phone gets the full
+# Home/Work/Cell/Fax/Pager/Other set, email the narrower Home/Work/Other
+# (vCard has no CELL/FAX/PAGER concept for EMAIL). "Other" is also the type
+# every legacy single-value phone/email auto-migrates to (see
+# migrate_legacy_contact_phone_email). Used by contact_form.html to render
+# the type `<select>` and by routers/contacts.py to fall back to "Other" for
+# an unrecognized/blank type rather than rejecting the save outright -- kept
+# permissive (not a CHECK constraint) since a hand-edited vCard from another
+# CardDAV client could carry a TYPE token outside this list.
+CONTACT_PHONE_TYPES: tuple[str, ...] = ("Home", "Work", "Cell", "Fax", "Pager", "Other")
+CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 3 of 6 -- Website. Same vocabulary as email/
+# address (green-lit, AskUserQuestion, 2026-08-15) -- vCard's URL property
+# has no CELL/FAX/PAGER concept either.
+CONTACT_WEBSITE_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 5 of 6 -- Address. Same Home/Work/Other
+# vocabulary as email/website (green-lit, AskUserQuestion, 2026-08-15 --
+# "same as email/address"), not phone's wider set (vCard's ADR has no
+# CELL/FAX/PAGER concept either).
+CONTACT_ADDRESS_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
+# Contacts field parity slice 6 of 6 -- Social network. Network names, not
+# Home/Work/Other -- matches vcard_rows.py's own _SOCIAL_TYPE_TO_VCARD
+# mapping (every entry here except "Other" has a TYPE= token there).
+CONTACT_SOCIAL_TYPES: tuple[str, ...] = ("Twitter", "Facebook", "Instagram", "LinkedIn", "Mastodon", "GitHub", "Other")
+
+# Contacts field parity slice 4 of 6 -- Birthday. Single-value, so there's
+# no *_TYPES vocabulary the way phone/email/website have one -- just the
+# two accepted storage shapes (see upsert_contact's ensure_column comment
+# for why raw text, not a `date`). `parse_contact_birthday` is what
+# routers/contacts.py calls to validate a create/edit form's raw
+# `birthday` field before it ever reaches upsert_contact -- returns the
+# canonical stored string, or raises ValueError on anything else (leading/
+# trailing whitespace tolerated, an empty string is the caller's job to
+# treat as "no birthday" before calling this at all).
+_BIRTHDAY_FULL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_BIRTHDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
+
+
+def parse_contact_birthday(value: str) -> str:
+    v = (value or "").strip()
+    if _BIRTHDAY_FULL_RE.match(v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'") from exc
+        return v
+    if _BIRTHDAY_YEARLESS_RE.match(v):
+        month, day = v[2:4], v[5:7]
+        try:
+            # 2000 is a leap year -- lets a real "--02-29" (Feb 29, no
+            # year) validate, same as it would for someone born in an
+            # actual leap year, without this function needing to know
+            # which specific years were leap years.
+            datetime.strptime(f"2000-{month}-{day}", "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'") from exc
+        return v
+    raise ValueError(f"Birthday must be YYYY-MM-DD or --MM-DD, got '{value}'")
+
+
+_BIRTHDAY_MONTHS = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+
+
+def format_contact_birthday(value: str | None) -> str:
+    """Human-readable display form for a stored birthday string --
+    "May 17, 1990" for a full date, "May 17" (no year) for a year-less
+    one. Returns the raw stored value unchanged if it doesn't match either
+    known shape (a hand-edited vCard from another CardDAV client could
+    carry a BDAY this app didn't write, e.g. a bare `19900517` -- showing
+    the original text is safer than guessing at a reformat)."""
+    v = (value or "").strip()
+    if _BIRTHDAY_FULL_RE.match(v):
+        year, month, day = v.split("-")
+        return f"{_BIRTHDAY_MONTHS[int(month) - 1]} {int(day)}, {year}"
+    if _BIRTHDAY_YEARLESS_RE.match(v):
+        month, day = v[2:4], v[5:7]
+        return f"{_BIRTHDAY_MONTHS[int(month) - 1]} {int(day)}"
+    return v
+
+
+def _birthday_event_uid(contact_uid: str) -> str:
+    return f"birthday::{contact_uid}"
+
+
+def sync_contact_birthday_event(conn: sqlite3.Connection, contact_uid: str, full_name: str | None, birthday: str | None) -> None:
+    """Direct follow-up (2026-08-16) to Contacts field parity slice 4 of 6:
+    a contact's Birthday shows up on the Calendar itself, as a real all-day
+    event recurring yearly, tagged with the "Birthday" label -- not a
+    separate widget. Called from upsert_contact on every save (so the
+    event's title/date always tracks the contact's current full_name/
+    birthday) and from delete_contact.
+
+    The event's uid is deterministic (`_birthday_event_uid`), not a fresh
+    uuid4 -- lets this function find-and-replace it idempotently without a
+    separate contact<->event relation column/table, the same "derive the
+    id instead of storing a relation" shape event_occurrence_overrides'
+    `master_uid::occurrence_date` composite key already uses. A cleared
+    birthday (`None`) deletes the event outright via `delete_event` (which
+    also clears its `object_labels` row) rather than leaving a dangling
+    dateless event around.
+
+    A year-less "--MM-DD" birthday has no real year to anchor DTSTART on,
+    so it uses a fixed placeholder year (1900) far enough in the past that
+    `FREQ=YEARLY` always has a "this year" occurrence to expand, regardless
+    of when the calendar is viewed -- RRULE recurrence only ever generates
+    occurrences forward from DTSTART, never before it, which is also
+    exactly correct for a *full* birthday date: recurrence naturally starts
+    at the real birth year and never fires an occurrence before someone was
+    born."""
+    event_uid = _birthday_event_uid(contact_uid)
+    if not birthday:
+        delete_event(conn, event_uid)
+        return
+    v = birthday.strip()
+    if v.startswith("--"):
+        start_at = f"1900-{v[2:4]}-{v[5:7]}"
+    else:
+        start_at = v
+    existing = get_event(conn, event_uid)
+    now = datetime.now(timezone.utc).isoformat()
+    upsert_event(
+        conn,
+        {
+            "uid": event_uid,
+            "title": f"{full_name}'s Birthday" if full_name else "Birthday",
+            "description": "",
+            "start_at": start_at,
+            "end_at": None,
+            "all_day": True,
+            "location": None,
+            "meeting_url": None,
+            "status": "active",
+            "recurrence": "FREQ=YEARLY",
+            "tags": ["Birthday"],
+            "reminders": [],
+            "holiday_calendar": None,
+            "exclude_saturday": False,
+            "exclude_sunday": False,
+            "created_at": existing["created_at"] if existing else now,
+            "updated_at": now,
+        },
+    )
+
 
 def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data = dict(row)
     tags = data.pop("tags", None)
+    # `phones`/`emails` (the new multi-value lists) are handled separately
+    # below, same "pop the non-column keys, write the base row, then attach
+    # the related rows" shape `tags` already used -- upsert_contact stays
+    # the single call site every router/test uses to save a contact, it just
+    # now also owns writing the child tables when the caller supplies them.
+    phones = data.pop("phones", None)
+    emails = data.pop("emails", None)
+    # Contacts field parity slice 3 of 6 -- Website, same "pop, write the
+    # base row, then attach the related rows" shape as phones/emails above.
+    websites = data.pop("websites", None)
+    # Contacts field parity slice 5 of 6 -- Address, same "pop, write the
+    # base row, then attach the related rows" shape as phones/emails/
+    # websites above.
+    addresses = data.pop("addresses", None)
+    # Contacts field parity slice 6 of 6 -- Social network, same "pop,
+    # write the base row, then attach the related rows" shape as phones/
+    # emails/websites/addresses above.
+    social_profiles = data.pop("social_profiles", None)
     cols = [
-        "uid", "full_name", "org",
-        "phone", "email", "address", "notes",
+        "uid", "full_name", "title", "org",
+        "phone", "email", "address", "birthday", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]
@@ -2253,18 +2785,70 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     )
     if tags is not None:
         set_object_labels(conn, "contact", data["uid"], tags)
+    if phones is not None:
+        set_contact_phones(conn, data["uid"], phones)
+    if emails is not None:
+        set_contact_emails(conn, data["uid"], emails)
+    if websites is not None:
+        set_contact_websites(conn, data["uid"], websites)
+    if addresses is not None:
+        set_contact_addresses(conn, data["uid"], addresses)
+    if social_profiles is not None:
+        set_contact_social_profiles(conn, data["uid"], social_profiles)
     conn.commit()
+    # Direct follow-up (2026-08-16): keep the generated Birthday calendar
+    # event in sync with every save -- see sync_contact_birthday_event's
+    # own docstring. Runs unconditionally (not gated on "birthday" being in
+    # `data`) since a hand-built row dict that omits the key entirely
+    # (`data.get("birthday")` -> None) should behave exactly like an
+    # explicit clear -- the same "missing key means no value" convention
+    # `format_contact_birthday`/every other optional contact field here
+    # already follows.
+    sync_contact_birthday_event(conn, data["uid"], data.get("full_name"), data.get("birthday"))
 
 
 def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM contacts WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ?", (uid,))
+    # Same cascade-cleanup reasoning as delete_checklist_items_for_task --
+    # never actually reachable via a reused uid (uuid4), but an orphaned
+    # phone/email/website row pointing at a gone contact serves no purpose
+    # either.
+    conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_addresses WHERE contact_uid = ?", (uid,))
+    conn.execute("DELETE FROM contact_social_profiles WHERE contact_uid = ?", (uid,))
+    # Deletes the generated Birthday event (if one exists) along with the
+    # contact itself -- see sync_contact_birthday_event's docstring for why
+    # this is a plain delete_event on the deterministic uid, not a lookup
+    # through any relation table.
+    delete_event(conn, _birthday_event_uid(uid))
     conn.commit()
 
 
 def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM contacts WHERE uid = ?", (uid,)).fetchone()
-    return _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS)) if row else None
+    if not row:
+        return None
+    d = _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS))
+    return _attach_contact_phones_emails(conn, d)
+
+
+def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
+    """Attaches `phones`/`emails`/`websites`/`addresses` (each a list of
+    position-ordered dicts -- phones/emails are {"uid", "type", "value"},
+    websites {"uid", "type", "url"}, addresses {"uid", "type", "po_box",
+    "extended", "street", "city", "region", "postal_code", "country"},
+    social_profiles {"uid", "type", "value"}) the same way `_attach_tags`
+    attaches `tags` -- computed live from the child tables at read time,
+    never a stored JSON blob on the contacts row itself."""
+    d["phones"] = list_contact_phones(conn, d["uid"])
+    d["emails"] = list_contact_emails(conn, d["uid"])
+    d["websites"] = list_contact_websites(conn, d["uid"])
+    d["addresses"] = list_contact_addresses(conn, d["uid"])
+    d["social_profiles"] = list_contact_social_profiles(conn, d["uid"])
+    return d
 
 
 def list_contacts(
@@ -2275,17 +2859,349 @@ def list_contacts(
     params: list[str] = []
     clauses = []
     if q:
-        # Matches name, org, phone, or email -- a single search box covering
-        # every field someone's likely to actually remember about a contact,
-        # rather than separate name-only vs. org-only inputs.
-        clauses.append("(full_name LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ?)")
+        # Matches name, org, title, or any phone/email -- both the legacy
+        # flat columns (harmless redundancy; a pre-migration value can only
+        # exist there if migrate_legacy_contact_phone_email somehow hasn't
+        # run yet, which it always has by the time any query executes -- see
+        # that function's own call site in init_schema) and the new
+        # multi-value child tables, so a search for a number/address still
+        # finds the contact no matter which type it's tagged with.
+        clauses.append(
+            "(full_name LIKE ? OR title LIKE ? OR org LIKE ? OR phone LIKE ? OR email LIKE ? "
+            "OR uid IN (SELECT contact_uid FROM contact_phones WHERE value LIKE ?) "
+            "OR uid IN (SELECT contact_uid FROM contact_emails WHERE value LIKE ?) "
+            "OR uid IN (SELECT contact_uid FROM contact_websites WHERE url LIKE ?))"
+        )
         like = f"%{q}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like])
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)) for r in rows]
+    return [
+        _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+        for r in rows
+    ]
+
+
+# --------------------------------------------------------------------- #
+# Contact phones / emails -- Contacts field parity slice 2 of 6 (plans/
+# open.md). Per-parent child-table CRUD, closest precedent is work
+# allocations' list_work_allocations_for_task/create_work_allocation/
+# delete_work_allocation trio -- but a contact's phone/email list is edited
+# as a whole via one Save button (contact_form.html submits every row
+# together as parallel phone_type[]/phone_value[] form arrays, same shape
+# `tags_labels: list[str] = Form([])` already uses on this router), not
+# through separate per-row add/remove endpoints the way work sessions or
+# checklist items are -- so the primary write operation here is
+# set_contact_phones/set_contact_emails ("replace everything for this
+# contact with this ordered list"), not incremental add/update/delete
+# calls. add_contact_phone/add_contact_email still exist standalone because
+# migrate_legacy_contact_phone_email needs to insert exactly one row without
+# disturbing anything else already there.
+# --------------------------------------------------------------------- #
+
+
+def list_contact_phones(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_phones WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_contact_emails(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_emails WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_contact_phone(conn: sqlite3.Connection, contact_uid: str, type_: str, value: str) -> str:
+    """Appends one phone row after whatever's already there. Used by
+    migrate_legacy_contact_phone_email (a single-row, non-destructive
+    insert); the create/edit form uses set_contact_phones instead, since it
+    always submits the full list at once."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM contact_phones WHERE contact_uid = ?",
+        (contact_uid,),
+    ).fetchone()
+    new_uid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (new_uid, contact_uid, type_ or "Other", value, row["p"], datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return new_uid
+
+
+def add_contact_email(conn: sqlite3.Connection, contact_uid: str, type_: str, value: str) -> str:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM contact_emails WHERE contact_uid = ?",
+        (contact_uid,),
+    ).fetchone()
+    new_uid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (new_uid, contact_uid, type_ or "Other", value, row["p"], datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return new_uid
+
+
+def set_contact_phones(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every phone row for `contact_uid` with `items` (each a
+    {"type", "value"} dict), in the given order. The create/edit form always
+    submits its whole ordered phone list together (one Save button, per
+    plans/open.md's own reasoning for choosing form-array fields over
+    per-row endpoints) so "delete everything, re-insert in submitted order"
+    is simpler and just as correct as diffing against the previous set by
+    uid -- position is always just the item's index, so display order keeps
+    matching submission order. Blank values are dropped silently (an empty
+    row in the form is "no phone here", not a phone with an empty number)."""
+    conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_phones (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+def set_contact_emails(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    conn.execute("DELETE FROM contact_emails WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_emails (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact websites -- Contacts field parity slice 3 of 6 (plans/open.md).
+# Same shape as contact_phones/contact_emails immediately above -- one
+# Save-button replace-all write path (set_contact_websites), no separate
+# add/remove endpoints. Unlike phone/email, there is no legacy single-value
+# column to migrate from (confirmed by grep before this slice started), so
+# there's no add_contact_website standalone helper -- nothing needs to
+# insert exactly one row outside of set_contact_websites.
+# --------------------------------------------------------------------- #
+
+
+def list_contact_websites(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_websites WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_contact_websites(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every website row for `contact_uid` with `items` (each a
+    {"type", "url"} dict), in the given order -- same "delete everything,
+    re-insert in submitted order" reasoning as set_contact_phones/
+    set_contact_emails. Blank URLs are dropped silently."""
+    conn.execute("DELETE FROM contact_websites WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        url = (item.get("url") or "").strip()
+        if not url:
+            continue
+        conn.execute(
+            "INSERT INTO contact_websites (uid, contact_uid, type, url, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", url, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact addresses -- Contacts field parity slice 5 of 6 (plans/open.md).
+# Same shape as contact_phones/contact_emails/contact_websites above (one
+# Save-button replace-all write path, no separate add/remove endpoints),
+# just with seven value fields per row instead of one. A row counts as
+# "blank" (dropped on save) only when EVERY structured field is blank --
+# unlike phone/email/website's single `value`/`url`, a real address could
+# legitimately have e.g. only a city and country filled in, so there's no
+# single field whose blankness alone means "no address here."
+# --------------------------------------------------------------------- #
+
+_CONTACT_ADDRESS_FIELDS: tuple[str, ...] = (
+    "po_box", "extended", "street", "city", "region", "postal_code", "country",
+)
+
+
+def list_contact_addresses(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_addresses WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def format_contact_address(addr: dict[str, Any]) -> str:
+    """Human-readable multi-line display for one structured address dict
+    (contact_detail.html's `fmt_address` filter, deps.py) -- same line
+    ordering vCard's own `vobject.vcard.Address.__str__` uses (PO Box/
+    Extended/Street each get their own line if present, then "City, Region
+    PostalCode" on one line, then Country on its own line), reimplemented
+    here as a pure function of this app's dict shape rather than building a
+    throwaway `vobject.vcard.Address` object just to stringify it. Blank
+    fields are omitted entirely rather than leaving stray empty lines/
+    commas."""
+    lines = [addr.get(f) for f in ("po_box", "extended", "street") if (addr.get(f) or "").strip()]
+    city, region, postal_code = addr.get("city") or "", addr.get("region") or "", addr.get("postal_code") or ""
+    if city.strip() or region.strip() or postal_code.strip():
+        city_line = ", ".join(p for p in (city.strip(), " ".join(p for p in (region.strip(), postal_code.strip()) if p)) if p)
+        lines.append(city_line)
+    if (addr.get("country") or "").strip():
+        lines.append(addr["country"].strip())
+    return "\n".join(lines)
+
+
+def set_contact_addresses(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every address row for `contact_uid` with `items` (each a
+    {"type", "po_box", "extended", "street", "city", "region",
+    "postal_code", "country"} dict, any key may be omitted), in the given
+    order -- same "delete everything, re-insert in submitted order"
+    reasoning as set_contact_phones/set_contact_emails/set_contact_websites.
+    A row is dropped only when every one of the seven structured fields is
+    blank (see this section's own comment for why that's a 7-way check,
+    not a single-field one like the sibling setters)."""
+    conn.execute("DELETE FROM contact_addresses WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        values = {f: (item.get(f) or "").strip() for f in _CONTACT_ADDRESS_FIELDS}
+        if not any(values.values()):
+            continue
+        conn.execute(
+            "INSERT INTO contact_addresses "
+            "(uid, contact_uid, type, po_box, extended, street, city, region, postal_code, country, position, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()), contact_uid, item.get("type") or "Other",
+                values["po_box"], values["extended"], values["street"],
+                values["city"], values["region"], values["postal_code"], values["country"],
+                position, now,
+            ),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Contact social profiles -- Contacts field parity slice 6 of 6 (plans/
+# open.md). Same shape as contact_phones/contact_emails/contact_websites
+# (single `value` column, one Save-button replace-all write path, no
+# separate add/remove endpoints, no legacy column to migrate -- same
+# "confirmed by grep, nothing to migrate" situation as Website).
+# --------------------------------------------------------------------- #
+
+
+def list_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM contact_social_profiles WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
+        (contact_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
+    """Replaces every social-profile row for `contact_uid` with `items`
+    (each a {"type", "value"} dict), in the given order -- same "delete
+    everything, re-insert in submitted order" reasoning as
+    set_contact_phones/set_contact_emails/set_contact_websites. Blank
+    values are dropped silently."""
+    conn.execute("DELETE FROM contact_social_profiles WHERE contact_uid = ?", (contact_uid,))
+    now = datetime.now(timezone.utc).isoformat()
+    position = 0
+    for item in items:
+        value = (item.get("value") or "").strip()
+        if not value:
+            continue
+        conn.execute(
+            "INSERT INTO contact_social_profiles (uid, contact_uid, type, value, position, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), contact_uid, item.get("type") or "Other", value, position, now),
+        )
+        position += 1
+    conn.commit()
+
+
+# --------------------------------------------------------------------- #
+# Notes (Quick Capture, plans/quick-capture.md) -- see the `notes` CREATE
+# TABLE comment above for what a note is/isn't. Same shape as contacts'
+# own CRUD immediately above: upsert/get/delete/list, tags attached live
+# via object_labels like every other type.
+# --------------------------------------------------------------------- #
+
+_NOTE_JSON_FIELDS: tuple[str, ...] = ()
+
+
+def upsert_note(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    data = dict(row)
+    tags = data.pop("tags", None)
+    cols = ["uid", "content", "created_at", "updated_at"]
+    values = [data.get(c) for c in cols]
+    placeholders = ", ".join("?" for _ in cols)
+    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
+    conn.execute(
+        f"INSERT INTO notes ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"ON CONFLICT(uid) DO UPDATE SET {updates}",
+        values,
+    )
+    if tags is not None:
+        set_object_labels(conn, "note", data["uid"], tags)
+    conn.commit()
+
+
+def delete_note(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM notes WHERE uid = ?", (uid,))
+    conn.execute("DELETE FROM object_labels WHERE object_type = 'note' AND object_id = ?", (uid,))
+    conn.commit()
+
+
+def get_note(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM notes WHERE uid = ?", (uid,)).fetchone()
+    return _attach_tags(conn, "note", _row_to_dict(row, _NOTE_JSON_FIELDS)) if row else None
+
+
+def list_notes(conn: sqlite3.Connection, q: str | None = None) -> list[dict[str, Any]]:
+    query = "SELECT * FROM notes"
+    params: list[str] = []
+    if q:
+        query += " WHERE content LIKE ?"
+        params.append(f"%{q}%")
+    query += " ORDER BY updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    return [_attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS)) for r in rows]
+
+
+def note_title(note: dict[str, Any]) -> str:
+    """A note has no title column (see the `notes` CREATE TABLE comment) --
+    every list/search/picker surface that needs a short label for one uses
+    this: the content's first non-blank line, truncated, or a placeholder
+    for a still-empty note."""
+    for line in (note.get("content") or "").splitlines():
+        line = line.strip()
+        if line:
+            return line[:80]
+    return "(empty note)"
 
 
 def list_object_label_names(conn: sqlite3.Connection, object_type: str) -> list[str]:
@@ -2334,10 +3250,8 @@ def all_contact_uids(conn: sqlite3.Connection) -> set[str]:
 
 
 def find_contact_by_name(conn: sqlite3.Connection, full_name: str) -> dict[str, Any] | None:
-    """Case-insensitive exact match on full_name -- used by
-    routers/schedule.py's `_resolve_professor` to decide whether a typed
-    professor name should link to an existing contact or create a new
-    one. Exact-match rather than fuzzy on purpose: silently linking to
+    """Case-insensitive exact match on full_name. Exact-match rather than
+    fuzzy on purpose: silently linking to
     the *wrong* same-ish-named contact would be a worse outcome than
     occasionally creating a near-duplicate that the user can merge by
     hand, and this app has no fuzzy-match/merge UI to clean that up
@@ -2352,51 +3266,11 @@ def find_contact_by_name(conn: sqlite3.Connection, full_name: str) -> dict[str, 
 
 
 # --------------------------------------------------------------------- #
-# Schedule (class events / holidays / settings) -- see the SCHEMA_SQL
-# removal note above `schedule_classes` used to live at: 1.6 (Schedule &
-# recurrence rework) turned a class into a real recurring `events` row
-# tagged with the per-install Schedule system label
-# (`schedule_settings.schedule_label`) plus its course's project label,
-# instead of its own local-only entity. There is no more schedule_classes
-# table for a new database, so there's no more dedicated CRUD here either
-# -- a class event is created/read/updated/deleted via the ordinary
-# upsert_event/get_event/delete_event above, same as any other event.
-# list_schedule_class_events below is the one addition: the query a class
-# needs that a plain event doesn't (find every event carrying the
-# Schedule label, optionally narrowed to one course).
+# Holidays -- named holiday calendars any recurring event can reference
+# (1.6, "Generalized non-working-day policy"). Unrelated to the Schedule
+# module (removed 2026-08-15, see plans/STATE.md) -- these stayed because
+# they're a generic recurrence mechanism, not something Schedule-specific.
 # --------------------------------------------------------------------- #
-
-
-def list_course_types(conn: sqlite3.Connection) -> list[str]:
-    """Distinct `course_type` values already used across this user's own
-    course labels (label_config.course_type -- see that table's CREATE
-    comment) -- powers the class form's Type field dropdown, which
-    otherwise has no fixed vocabulary of its own. Same "query what's
-    actually been typed before" idiom the pre-1.6 `list_schedule_class_
-    types` used, just reading label_config instead of schedule_classes."""
-    rows = conn.execute(
-        "SELECT DISTINCT course_type FROM label_config "
-        "WHERE course_type IS NOT NULL AND course_type != '' "
-        "ORDER BY course_type COLLATE NOCASE"
-    ).fetchall()
-    return [r["course_type"] for r in rows]
-
-
-def list_schedule_class_events(
-    conn: sqlite3.Connection, course_label: str | None = None
-) -> list[dict[str, Any]]:
-    """Every real recurring event that's a class meeting -- carries the
-    per-install Schedule system label (default 'Schedule'). Optionally
-    narrowed to one course's own meetings. Plain Python filter over
-    list_events (each row already carries its tags via _attach_tags), same
-    idiom routers/labels.py's `_label_scope` already uses for a label's
-    generated page."""
-    schedule_label = get_schedule_settings(conn).get("schedule_label") or "Schedule"
-    events = [e for e in list_events(conn) if schedule_label in (e.get("tags") or [])]
-    if course_label:
-        events = [e for e in events if course_label in (e.get("tags") or [])]
-    return events
-
 
 # 2026-08-07: the Grades accessor functions (upsert_grade/get_grade/
 # list_grades/delete_grade/delete_grades_by_class) that used to live here
@@ -2458,53 +3332,49 @@ def list_holidays_by_calendar(conn: sqlite3.Connection) -> dict[str, list[dict[s
     return by_calendar
 
 
-def get_schedule_settings(conn: sqlite3.Connection) -> dict[str, Any]:
-    row = conn.execute("SELECT * FROM schedule_settings WHERE id = 1").fetchone()
-    if row is None:
-        return {
-            "semester_start": None,
-            "semester_end": None,
-            "credits_needed": None,
-            "reminder_minutes": 15,
-            "target_calendar_uid": None,
-            "schedule_label": "Schedule",
-            "holiday_calendar": "Default",
-        }
-    return dict(row)
+# --------------------------------------------------------------------- #
+# Sleep Time / Leisure Time (see time_blocks' own CREATE TABLE comment) --
+# same minimal shape as the schedule_holidays functions directly above
+# (plain dict rows, upsert-by-uid, explicit commit).
+# --------------------------------------------------------------------- #
+
+TIME_BLOCK_KINDS = ("sleep", "leisure")
+TIME_BLOCK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
-def set_schedule_target_calendar(conn: sqlite3.Connection, calendar_uid: str) -> None:
-    """Which real calendar the Schedule's mirrored class events live in --
-    changed via the Schedule > Export flow (routers/schedule.py), kept
-    separate from save_schedule_settings (semester dates etc.) since it has
-    its own dedicated form/action and shouldn't require re-submitting the
-    whole settings form just to redirect the export target."""
+def upsert_time_block(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     conn.execute(
-        "INSERT INTO schedule_settings (id, target_calendar_uid) VALUES (1, ?) "
-        "ON CONFLICT(id) DO UPDATE SET target_calendar_uid=excluded.target_calendar_uid",
-        (calendar_uid,),
+        "INSERT INTO time_blocks (uid, kind, label, start_time, end_time, days) VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(uid) DO UPDATE SET kind=excluded.kind, label=excluded.label, "
+        "start_time=excluded.start_time, end_time=excluded.end_time, days=excluded.days",
+        (row["uid"], row["kind"], row.get("label", ""), row["start_time"], row["end_time"], row.get("days", "")),
     )
     conn.commit()
 
 
-def save_schedule_settings(conn: sqlite3.Connection, settings: dict[str, Any]) -> None:
-    conn.execute(
-        "INSERT INTO schedule_settings (id, semester_start, semester_end, credits_needed, reminder_minutes, schedule_label, holiday_calendar) "
-        "VALUES (1, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(id) DO UPDATE SET semester_start=excluded.semester_start, "
-        "semester_end=excluded.semester_end, credits_needed=excluded.credits_needed, "
-        "reminder_minutes=excluded.reminder_minutes, schedule_label=excluded.schedule_label, "
-        "holiday_calendar=excluded.holiday_calendar",
-        (
-            settings.get("semester_start"),
-            settings.get("semester_end"),
-            settings.get("credits_needed"),
-            settings.get("reminder_minutes", 15),
-            settings.get("schedule_label") or "Schedule",
-            settings.get("holiday_calendar") or "Default",
-        ),
-    )
+def get_time_block(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM time_blocks WHERE uid = ?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_time_block(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM time_blocks WHERE uid = ?", (uid,))
     conn.commit()
+
+
+def list_time_blocks(conn: sqlite3.Connection, kind: str | None = None) -> list[dict[str, Any]]:
+    if kind:
+        rows = conn.execute("SELECT * FROM time_blocks WHERE kind = ? ORDER BY start_time", (kind,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM time_blocks ORDER BY kind, start_time").fetchall()
+    return [dict(r) for r in rows]
+
+
+def time_block_days(row: dict[str, Any]) -> list[str]:
+    """`row['days']` ("Monday,Wednesday,Friday") split back into a list --
+    the one place both the settings table and the overlay/warning code
+    parse this field, so they can't drift on the separator."""
+    return [d.strip() for d in (row.get("days") or "").split(",") if d.strip()]
 
 
 def get_task_habit_settings(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -2604,6 +3474,67 @@ def _resolve_label_name(conn: sqlite3.Connection, name: str) -> str:
     return name
 
 
+def resolve_capture_label(conn: sqlite3.Connection, name: str) -> str:
+    """Quick Capture's label resolution (plans/quick-capture.md § Labels
+    and Approximate Matching) -- deliberately separate from
+    `_resolve_label_name` above (that one only ever resolves an explicit
+    `label_config.abbreviation` synonym; this is the spec's own
+    approximate-matching pipeline for a capture's `#label` tokens, which
+    have no such config row backing them):
+
+      1. Exact match (case-insensitive) against every label already in
+         use always wins -- "a label is first matched ... using an exact
+         match."
+      2. Exact match against a previously-learned alias (`label_aliases`)
+         -- a typo already corrected once resolves instantly without
+         recomputing the fuzzy match below.
+      3. A close-but-not-exact match against every label in use
+         (`difflib.get_close_matches`, cutoff 0.8 -- high on purpose, so
+         only genuine near-typos resolve, e.g. "uunniversity"/
+         "universitty"/"unisity" -> "university" from the spec's own
+         examples, not merely related words) is picked automatically ("a
+         very close match may be resolved automatically") and persisted
+         as a new alias.
+      4. Otherwise `name` is returned unchanged -- a genuinely new label,
+         "preserving the ability to create genuinely new labels."
+
+    Simplification, noted deliberately: the spec also describes an
+    "uncertain match ... suggested for correction" tier sitting between
+    (3) and (4), reviewed interactively before being accepted. Quick
+    Capture v1 has no such review step (a capture is a single fire-and-
+    forget submission, not a multi-turn form) -- step 3's automatic
+    resolution doubles as the "user correction" step 4 of the spec
+    describes recording into the alias table, since there's no separate
+    moment where a person explicitly confirms it. A future interactive
+    capture flow could split this back into two real tiers without
+    changing the alias table's shape."""
+    import difflib
+
+    existing = list_all_label_names(conn)
+    lower_map = {n.lower(): n for n in existing}
+    if name.lower() in lower_map:
+        return lower_map[name.lower()]
+
+    alias_row = conn.execute(
+        "SELECT canonical_name FROM label_aliases WHERE alias = ?", (name.lower(),)
+    ).fetchone()
+    if alias_row:
+        return alias_row["canonical_name"]
+
+    if existing:
+        matches = difflib.get_close_matches(name.lower(), list(lower_map.keys()), n=1, cutoff=0.8)
+        if matches:
+            canonical = lower_map[matches[0]]
+            conn.execute(
+                "INSERT OR REPLACE INTO label_aliases (alias, canonical_name, created_at) VALUES (?, ?, ?)",
+                (name.lower(), canonical, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            return canonical
+
+    return name
+
+
 def list_labels_for_object(conn: sqlite3.Connection, object_type: str, object_id: str) -> list[str]:
     rows = conn.execute(
         "SELECT label_name FROM object_labels WHERE object_type = ? AND object_id = ? ORDER BY label_name COLLATE NOCASE",
@@ -2651,10 +3582,6 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "start_date": None,
     "end_date": None,
     "archived_at": None,
-    "course_acronym": None,
-    "course_type": None,
-    "course_credits": None,
-    "course_professor_contact_uid": None,
     "created_at": None,
 }
 
@@ -2708,7 +3635,6 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         "generate_space", "dashboard_preset_json", "abbreviation",
         "importance", "urgency_threshold_days",
         "is_project", "start_date", "end_date", "archived_at",
-        "course_acronym", "course_type", "course_credits", "course_professor_contact_uid",
         "created_at",
     )
     existing = get_label_config(conn, row["name"]) or {}

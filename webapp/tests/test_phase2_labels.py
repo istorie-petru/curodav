@@ -8,14 +8,22 @@ phase's task spec, item 8:
     label at all -- "clear" empties membership instead);
   * a generate_space=1 label's page renders the right aggregated content;
   * dashboard_widgets.label_name migration correctness;
-  * habits/schedule_classes correctly filter by label now.
+  * habits correctly filter by label now.
 
 2026-08-07: TestDatabasesFilterByLabel and
 test_databases_project_uid_backfilled_as_object_labels (which exercised
 the now-removed Databases feature's project-link-as-label behavior) are
 deleted -- see features/architecture.md's Grades/Databases removal
-note. Everything else in this file covers habits/schedule_classes/label
-management, unaffected by that removal.
+note. Everything else in this file covers habits/label management,
+unaffected by that removal.
+
+2026-08-15: TestScheduleClassesFilterByLabel is deleted -- the whole
+Schedule module (and the class-as-real-recurring-event mechanism it
+relied on) is removed, see plans/STATE.md's removal entry.
+`test_schedule_classes_project_uid_backfilled_as_a_real_tag` stays: it
+exercises `migrate_labels.py`'s legacy pre-1.6 `schedule_classes`-table
+backfill path directly against a synthetic table, unrelated to
+routers/schedule.py.
 """
 
 from __future__ import annotations
@@ -35,7 +43,6 @@ import migrate_labels  # noqa: E402
 
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
-from src.routers import schedule as schedule_router
 
 
 @pytest.fixture()
@@ -262,7 +269,7 @@ class TestDashboardWidgetsLabelName:
 
 
 # --------------------------------------------------------------------- #
-# habits/schedule_classes filter by label
+# habits filter by label
 # --------------------------------------------------------------------- #
 
 
@@ -279,44 +286,6 @@ class TestHabitsFilterByLabel:
         )
         scoped = db.list_habits(conn, project_uid="Uni")
         assert [h["name"] for h in scoped] == ["Study"]
-
-
-class TestScheduleClassesFilterByLabel:
-    def test_class_project_link_is_a_label_and_shows_on_its_page(self, conn):
-        schedule_router.create_class(
-            day="Monday", start_time="09:00", end_time="10:30", name="Algorithms",
-            acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
-            room="204", credits="6", parity="all", enrolled="on", project_uid="CS101", conn=conn,
-        )
-        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
-        cls = schedule_router._class_row(conn, event)
-        assert cls["project_uid"] == "CS101"
-        assert "CS101" in cls["tags"]
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
-        assert [c["uid"] for c in resp.context["classes"]] == [cls["uid"]]
-
-    def test_auto_provision_applies_space_label_directly(self, conn):
-        # An existing class already carries a Space label ("University") --
-        # the next auto-provisioned class's own course label should be
-        # nested under it AND the class itself should carry the Space
-        # label directly too (direct assignment only, §2/§5).
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        schedule_router.create_class(
-            day="Tuesday", start_time="08:00", end_time="09:30", name="Existing",
-            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
-            room="", credits="0", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        db.add_object_label(conn, "event", db.list_schedule_class_events(conn)[0]["uid"], "University")
-
-        schedule_router.create_class(
-            day="Wednesday", start_time="10:00", end_time="11:30", name="Algorithms",
-            acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
-            room="", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
-        cls = schedule_router._class_row(conn, event)
-        assert "University" in cls["tags"]
-        assert db.get_label_config(conn, "Algorithms")["parent_name"] == "University"
 
 
 # --------------------------------------------------------------------- #

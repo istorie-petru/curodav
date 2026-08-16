@@ -148,8 +148,23 @@
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
       document.body.appendChild(ghost);
+      // The actual drop target preview: a real grid-anchored box, always
+      // DEFAULT_BLOCK_MINUTES tall (the block a drop actually creates --
+      // see end()'s own identical snap/height math) -- NOT the 30-minute
+      // CREATE_SNAP_PX the drop *position* snaps to. Reuses calendar.js's
+      // own `.schedule-ghost` look for visual consistency. Direct feedback
+      // (2026-08-14, after the merged Week view started also loading
+      // calendar.js): calendar.js's own hover-preview ghost is 30 minutes
+      // tall (its own click-to-create default) and was rendering on top of
+      // this drag since the merged grid columns now carry
+      // `.calendar-create-col` too -- see the `window.__ccGridDragActive`
+      // suppression below and calendar.js's own check of it.
+      const slotGhost = document.createElement("div");
+      slotGhost.className = "schedule-ghost";
+      slotGhost.style.display = "none";
       item.classList.add("item-dragging");
-      drag = { startX: e.clientX, startY: e.clientY, ghost, hoverCol: null, dragged: false };
+      drag = { startX: e.clientX, startY: e.clientY, ghost, slotGhost, hoverCol: null, dragged: false };
+      window.__ccGridDragActive = true;
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", end);
       document.addEventListener("pointercancel", cancel);
@@ -177,6 +192,18 @@
       }
       cols.forEach((c) => c.classList.toggle("drop-hover", c === hover));
       drag.hoverCol = hover;
+      if (hover) {
+        if (drag.slotGhost.parentNode !== hover) hover.appendChild(drag.slotGhost);
+        const r = hover.getBoundingClientRect();
+        const rawTop = e.clientY - r.top;
+        const startPx = Math.max(0, Math.min(DAY_HEIGHT_PX - CREATE_SNAP_PX, snap(rawTop, CREATE_SNAP_PX)));
+        const blockPx = (PX_PER_HOUR / 60) * DEFAULT_BLOCK_MINUTES;
+        drag.slotGhost.style.top = startPx + "px";
+        drag.slotGhost.style.height = blockPx + "px";
+        drag.slotGhost.style.display = "block";
+      } else {
+        drag.slotGhost.style.display = "none";
+      }
       edgeScroll(e);
     }
 
@@ -185,8 +212,10 @@
       document.removeEventListener("pointerup", end);
       document.removeEventListener("pointercancel", cancel);
       stopEdgeScroll();
+      window.__ccGridDragActive = false;
       if (drag) {
         drag.ghost.parentNode.removeChild(drag.ghost);
+        if (drag.slotGhost.parentNode) drag.slotGhost.parentNode.removeChild(drag.slotGhost);
         item.classList.remove("item-dragging");
         document.querySelectorAll(".project-calendar-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
         drag = null;
@@ -200,13 +229,20 @@
       if (!wasDrag || !col) return; // a click (not a drop)
       // Time from the pointer's Y relative to the hovered column's rect.
       // getBoundingClientRect is viewport-relative, so this stays correct
-      // even if the grid auto-scrolled during the drag.
+      // even if the grid auto-scrolled during the drag. Same snap as the
+      // slot-preview ghost in move() above, so what was shown is exactly
+      // what gets created.
       const rect = col.getBoundingClientRect();
       const rawTop = e.clientY - rect.top;
       const startPx = Math.max(0, Math.min(DAY_HEIGHT_PX - CREATE_SNAP_PX, snap(rawTop, CREATE_SNAP_PX)));
       const startMin = Math.round((startPx / PX_PER_HOUR) * 60);
       const endMin = startMin + DEFAULT_BLOCK_MINUTES;
       const day = col.dataset.date;
+      // Sleep Time / Leisure Time warning (static/time_blocks.js) -- see
+      // calendar.js's identical call for the full rationale; a no-op when
+      // the page renders no cc-time-blocks tag (only calendar_week.html/
+      // calendar_day.html do -- /week and the project Week Calendar don't).
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
       submitForm(cfg.createUrl, {
         task_uid: item.dataset.taskUid,
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
@@ -274,6 +310,10 @@
       if (!dragged && (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX)) {
         dragged = true;
         el.classList.add("dragging");
+        // See interaction 1's own begin()/finish() for why -- calendar.js's
+        // 30-minute hover-preview ghost must not render while a block is
+        // being moved/resized across the merged Week view's grid either.
+        window.__ccGridDragActive = true;
       }
       if (!dragged) return;
 
@@ -323,6 +363,7 @@
       document.removeEventListener("pointerup", end);
       document.removeEventListener("pointercancel", cancel);
       stopEdgeScroll();
+      window.__ccGridDragActive = false;
       el.classList.remove("dragging");
       document.querySelectorAll(".project-calendar-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
       if (unscheduleTarget) unscheduleTarget.classList.remove("unschedule-drop-hover");
@@ -382,6 +423,7 @@
       const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
       submitForm(cfg.moveUrlBase + uid + "/move", {
         start_at: `${day}T${minutesToHHMMSS(startMin)}`,
         end_at: `${day}T${minutesToHHMMSS(endMin)}`,
@@ -391,7 +433,14 @@
 
     el.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest(".work-allocation-delete") || e.target.closest(".te-name")) return;
+      // The `.te-name` title is a plain span now, not a nested <a> (direct
+      // feedback: "why can't the whole div be a link and moved at the same
+      // time" -- a real <a> couldn't wrap the delete <form>/<button>
+      // anyway), so there's no native link click to preserve here anymore
+      // -- the whole block, title included, is one uniform drag target,
+      // same as an ordinary .time-event. Only the delete button still
+      // needs to let its own click through untouched.
+      if (e.target.closest(".work-allocation-delete")) return;
       e.preventDefault();
       begin(e, handle && e.target === handle);
     });

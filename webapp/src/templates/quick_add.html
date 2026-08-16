@@ -61,10 +61,12 @@
 </div>
 </div>
 </div>
-<div class="modal-footer">
-<a href="#" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
-<span class="spacer"></span>
-<button type="submit" form="task-form" id="quick-add-save" class="btn primary">{{ icon('check-square', 'icon-sm') }} Save</button>
-</div>
+{% set footer_back_url = '#' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'task-form' %}
+{% set footer_primary_id = 'quick-add-save' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

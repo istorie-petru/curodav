@@ -28,7 +28,7 @@
     {% endif %}
     {% if edit_mode %}
     <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
-    <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
+    <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
          Opens the banner editor modal (routers/banners.py); "Add" vs
          "Change" labels by whether a banner is already set. -->
@@ -80,8 +80,6 @@
      this label via dashboard_widgets.label_name. Seeded on first visit --
      see routers/dashboard.py's _ensure_default_label_widgets. -->
 {% include "_widget_workspace.html" %}
-
-{% include "_project_university_section.html" %}
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ static_url('habit_checkin.js') }}"></script>

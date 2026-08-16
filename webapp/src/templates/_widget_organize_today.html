@@ -1,0 +1,38 @@
+<!-- Data: {due_soon, urgent, unclear_format} -- see
+     routers/dashboard.py::_render_organize_today. "What needs organizing
+     today" (2026-08-15 widget consolidation, expanded scope) -- surfaces
+     decisions to make, not things already scheduled (that's Agenda's job):
+     tasks due soon / at Urgency=3 with no work session yet, and today's/
+     tomorrow's events with no location or meeting link. Task rows reuse
+     the planning grids' own "Unscheduled work" item partial (project pill
+     + title + a "+"/"-" session stepper) so a session can be added right
+     from the widget, not just linked out to fix elsewhere. -->
+{% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
+{% set _organize_next = request.url.path ~ (('?' ~ request.url.query) if request.url.query else '') %}
+{% if data.due_soon or data.urgent or data.unclear_format %}
+{% if data.due_soon %}
+<div class="widget-section-label">Due soon, unscheduled</div>
+<div class="unscheduled-task-list">
+    {% for item in data.due_soon %}{{ unscheduled_task_item(item, _organize_next) }}{% endfor %}
+</div>
+{% endif %}
+{% if data.urgent %}
+<div class="widget-section-label">Urgent, unscheduled</div>
+<div class="unscheduled-task-list">
+    {% for item in data.urgent %}{{ unscheduled_task_item(item, _organize_next) }}{% endfor %}
+</div>
+{% endif %}
+{% if data.unclear_format %}
+<div class="widget-section-label">Events with no location or link</div>
+<table>
+    {% for e in data.unclear_format %}
+    <tr>
+        <td class="text-muted" style="width:60px">{% if not e.all_day and e.start_at %}{{ e.start_at | fmt_time }}{% else %}All day{% endif %}</td>
+        <td><a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+{% else %}
+<div class="empty-state">Nothing needs organizing right now.</div>
+{% endif %}

@@ -161,7 +161,7 @@ class TestCreateTaskFormRejectsTwoProjectLabels:
         _make_project(conn, "Beta")
         with pytest.raises(HTTPException) as excinfo:
             tasks_router.create_task(
-                title="New task", description="", due_at="", importance="", urgency="", status="active",
+                title="New task", description="", due_at="", status="active",
                 tags="", tags_labels=["Alpha", "Beta"], recurrence="", conn=conn,
             )
         assert excinfo.value.status_code == 400
@@ -171,7 +171,7 @@ class TestCreateTaskFormRejectsTwoProjectLabels:
     def test_create_task_with_one_project_label_plus_ordinary_label_works(self, conn):
         _make_project(conn, "Alpha")
         tasks_router.create_task(
-            title="New task", description="", due_at="", importance="", urgency="", status="active",
+            title="New task", description="", due_at="", status="active",
             tags="", tags_labels=["Alpha", "Urgent"], recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "New task")
@@ -185,7 +185,7 @@ class TestUpdateTaskFormRejectsAddingASecondProjectLabel:
         _seed_task(conn, "t1", tags=["Alpha"])
         with pytest.raises(HTTPException) as excinfo:
             tasks_router.update_task(
-                uid="t1", title="t1", description="", due_at="", start_at="", importance="", urgency="",
+                uid="t1", title="t1", description="", due_at="", start_at="",
                 status="active", tags="", tags_labels=["Alpha", "Beta"], recurrence="", conn=conn,
             )
         assert excinfo.value.status_code == 400

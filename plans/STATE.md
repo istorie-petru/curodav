@@ -885,16 +885,1616 @@ session, right before the final commit of that session.
   outcome doc. 16 new tests (12 extending `test_offline_sync.py`/
   `test_data_health.py`, 4 extending `test_pwa_shell.py`), full suite
   1309 passed. **1.8 is now fully shipped.**
-- **Next slice:** nothing queued yet toward `1.9` — the next session should
-  open `plans/roadmap.md`'s `1.9 — Deployment & polish` subsection to scope
-  the first real slice there (DAVx5 mobile hosting is pure infra, blocked
-  on an external domain + server, so likely not the first thing to pick
-  up). In the meantime, any of these smaller, self-contained side-work
-  items are fair game for a session that wants a break from that: `open.md`'s
-  Command palette actions follow-up (1.2 side work), 1.4's optional Project
-  check-in, 1.6's optional "Configurable views + optional Schedule module",
-  and 1.8's own Pagination/collapsible-sections side work (Phase B of
-  webapp usability, `roadmap.md`'s 1.8 row).
+- **Shipped:** side work — **recurrence end condition (Never/On date/After N
+  occurrences)**, complete (2026-08-14) — direct feedback ("recurrence should
+  also have the ability to set an end date, until X, or for the event to
+  repeat a set number of times"). `recurrence_picker.js`'s FREQ presets
+  (Daily/Weekly/Monthly/Yearly) gained an "Ends" sub-panel nested in the same
+  dropdown panel: Never (no suffix), "On date" (`UNTIL=YYYY-MM-DD`, the app's
+  existing dashed-date convention), or "After N occurrences" (`COUNT=N`) —
+  entirely client-side, same "zero server-side recurrence parsing" contract
+  `routers/calendar.py`'s create/update handlers already had. New
+  `parseValue()` strips any `UNTIL=`/`COUNT=` token from the stored string
+  before matching a FREQ preset on reload, so an existing end condition
+  round-trips into the Ends radios instead of falling through to Custom; the
+  Ends group only shows once a real preset (not "Does not repeat", not
+  Custom) is selected. No expansion-side change needed — `COUNT=` already
+  worked end-to-end via `recurring_ical_events`, confirmed and locked in by
+  two new tests (`test_recurrence_expand.py`'s `test_count_recurrence_*`).
+  New `.recurrence-ends-*` CSS reusing `.multiselect-option`/
+  `.multiselect-new-input` conventions. See `features/calendar.md`'s
+  Recurrence section. 3 new tests (2 in `test_recurrence_expand.py`, 1
+  structural check in `test_modal_footer_and_inputs.py`), full suite 1312
+  passed.
+- **Removed:** side work — **Custom RRULE option removed from the recurrence
+  picker**, complete (2026-08-14) — direct follow-up ("remove the custom
+  option for recurring"). `recurrence_picker.js`'s free-text "Custom RRULE"
+  row is gone; the five fixed presets (Does not repeat/Daily/Weekly/Monthly/
+  Yearly) plus the "Ends" sub-choice from the slice above are now the only
+  thing the picker can produce. An existing value that doesn't match one of
+  the five presets is left with no preset radio checked and shown read-only
+  as the trigger summary — `sync()` never overwrites the hidden input until
+  a preset is actually picked, so this can't silently clobber a rule the
+  picker doesn't model just by opening/closing the form. See
+  `features/calendar.md`'s Recurrence section. Full suite 1312 passed (no
+  new tests — pure removal, existing structural/server-pass-through tests
+  already cover the remaining shape).
+- **Shipped:** side work — **"Ends" split into its own dropdown**, complete
+  (2026-08-14) — direct follow-up ("could we make ends another drop down
+  menu?"). The Ends choice (Never/On date/After N occurrences) moved out of
+  a sub-panel nested inside the FREQ preset dropdown into a second, separate
+  `.multiselect` dropdown (`recurrence-ends-select`), a sibling of the FREQ
+  dropdown reusing the same trigger/panel markup contract so `app.js`'s
+  generic multiselect click/portal/position handling picks it up with no JS
+  changes there. Still hidden entirely until a real preset (not "Does not
+  repeat") is selected — same rule, just driven off `endsWrap.hidden`
+  instead of a nested group. See `features/calendar.md`'s Recurrence
+  section. 1 new structural test
+  (`test_recurrence_picker_js_ends_is_a_separate_dropdown`), full suite 1313
+  passed.
+- **Shipped:** side work — **event holiday fields: recurring-only + real
+  dropdown**, complete (2026-08-14) — two direct follow-ups on
+  `_event_form_fields.html`'s Holiday calendar / Exclude Saturday / Exclude
+  Sunday fields ("make the holiday selector for events to appear only if
+  the event is recurring" + "make the menu a drop down where the use does
+  not need to type, but only select the calendar"):
+  - Each field now carries a shared `holiday-field` class and starts
+    `hidden` unless the event already has a `recurrence` value (server-
+    rendered, so a recurring event's fields are visible on first paint with
+    no JS-dependent flash); `static/recurrence_picker.js`'s existing
+    `sync()` (already the single place that knows whether the current
+    preset is "Does not repeat" or a real recurring one) now also toggles
+    `hidden` on every `.holiday-field` sibling it finds inside the same
+    `.field-grid` on every preset change. Kept as three separate grid items
+    rather than one wrapping container, so `.field-grid`'s two-column
+    layout is unaffected. `task_form.html`/`habit_task_form.html` share the
+    same picker but have no `.holiday-field` siblings, so this is a no-op
+    there.
+  - `holiday_calendar` changed from a free-text input + `<datalist>`
+    (type-to-filter, but still typeable) to a plain `<select>` populated
+    from `db.list_holiday_calendar_names` (already passed into every
+    caller of this partial) — the event form now only ever offers a
+    calendar that actually exists; creating a new named calendar stays a
+    Settings > Holidays action. Server-side handling (`routers/
+    calendar.py`/`dashboard.py`'s create/update) needed no change — an
+    empty `<select>` value round-trips as `""`/`None` exactly like the old
+    empty text input did.
+  No new tests (pure presentation change to an already-covered code path —
+  `test_holiday_calendars.py`/`test_recurrence_terminology.py`/
+  `test_modal_footer_and_inputs.py` still assert `name="holiday_calendar"`
+  and the create/update round-trip, which the `<select>` still satisfies).
+  Full suite 1313 passed.
+- **Fixed:** side work — **holiday fields' `hidden` attribute was silently
+  a no-op**, complete (2026-08-14), immediate follow-up on the slice above
+  ("Holiday calendar still appears when Recurrence is on Do not repeat").
+  Root cause: `style.css`'s `.field{display:flex; ...}` (author CSS) is the
+  same specificity as the browser's own `[hidden]{display:none}` UA rule,
+  and author styles always win that fight regardless of selector order --
+  so toggling `.hidden` on a `.field`/`.field-toggle` element (both the new
+  `holiday-field`s and, on reflection, the exact same reason
+  `.event-start-end-field` already uses an explicit `display:none` `:has()`
+  rule rather than the bare attribute) never actually hid anything, it just
+  silently set an attribute the box model ignored. New
+  `.field.holiday-field[hidden]{display:none;}` in `style.css` gives it the
+  specificity it needs. No JS/template change needed -- `recurrence_picker.
+  js`'s `sync()` and `_event_form_fields.html`'s server-rendered initial
+  `hidden` attribute were both already correct, just invisible. Full suite
+  1313 passed (no new tests -- CSS-only fix, existing structural tests
+  already assert the `hidden` attribute's presence/absence, which was
+  never the broken part).
+- **Shipped:** side work — **Exclude Saturday/Sunday folded into the
+  Holiday calendar dropdown**, complete (2026-08-14), direct follow-up
+  ("add exclude saturday and sunday into the holiday drop down menu as
+  checkboxes at the end"). `_widget_list_multiselect.html` (the shared
+  single/multi-select dropdown Recurrence/Ends/Labels already use) gained
+  two new optional params: `ms_extra_checkboxes` (a list of independent
+  `{name, id, label, checked}` boolean fields, each its own real form
+  field, rendered as extra rows after a new `.multiselect-option-divider`
+  separator at the end of the panel — not part of the picker's own
+  single/multi-select group) and `ms_hidden` (starts the outer `.field`
+  with the `hidden` attribute set). `_event_form_fields.html`'s three
+  separate Holiday calendar / Exclude Saturday / Exclude Sunday fields
+  collapsed into one such dropdown — `holiday_calendar` (single-select
+  radios, an explicit `{'uid': '', 'name': '(none)'}` leading the list so
+  "no calendar" is a real selectable option instead of the widget's
+  "nothing selected -> defaults to the first item" fallback silently
+  forcing whichever calendar sorts first) plus the two exclude checkboxes
+  via `ms_extra_checkboxes`. The whole dropdown keeps the single
+  `holiday-field` class from the slice above, so
+  `recurrence_picker.js`/`style.css`'s recurring-only show/hide is
+  unaffected — it now toggles one dropdown instead of three fields. No
+  server-side change: `routers/calendar.py`/`dashboard.py`'s create/update
+  still read the same three plain form field names. Verified by rendering
+  `calendar_router.new_event_form` directly (temporary test, not kept) —
+  radios/divider/checkboxes render in the right order inside one panel.
+  Full suite 1313 passed (no new tests — presentation-only regrouping of
+  three already-covered fields; `test_holiday_calendars.py`/
+  `test_recurrence_terminology.py`/`test_modal_footer_and_inputs.py` still
+  assert the same field names/round-trip).
+- **Shipped:** side work — **Calendar Week + Timetable merged, "Unscheduled
+  work" sidebar made collapsible**, complete (2026-08-14), direct feedback
+  ("merge the calendar's week view with the timetable view. make the
+  Unscheduled work block collapsible via a sidebar button"). The separate
+  "Timetable" sub-view (side work, 2026-08-14 earlier the same day) is gone
+  as its own page -- `routers/calendar.py::week_view` (`GET /calendar/week`)
+  now renders ONE grid with both capabilities at once: ordinary events stay
+  fully interactive (drag-to-move/resize, drag-to-create on empty space, via
+  `static/calendar.js`) AND every work-allocation event renders prominently
+  as a draggable `.work-allocation` block (`static/project_calendar.js`)
+  alongside the "Unscheduled work" sidebar that drags a task onto the grid
+  to schedule it. `templates/calendar_timetable.html` deleted;
+  `calendar_week.html` absorbed its grid/sidebar markup — grid columns now
+  carry BOTH `.calendar-create-col` and `.project-calendar-col`, so both
+  scripts' interactions coexist on the same page. Two real conflicts this
+  surfaced and fixed:
+  - `calendar.js`'s own `.time-event` selector would have double-attached a
+    pointerdown handler to every `.work-allocation` block (which
+    `project_calendar.js` already owns) -- changed to
+    `.time-event:not(.work-allocation)`.
+  - `style.css`'s `.project-calendar-col{cursor:default}` (written to kill
+    the Calendar grid's "click-drag to create" cursor on the planning-only
+    surfaces) would have silently killed it here too, where drag-to-create
+    is still a real gesture -- scoped to
+    `.project-calendar-col:not(.calendar-create-col)`.
+  `GET /calendar/timetable` and the old `/calendar/timetable/allocations...`
+  trio are gone; the page redirects to `/calendar/week` (any bookmark still
+  lands somewhere real) and the allocation endpoints moved to
+  `/calendar/week/allocations...` (`create_week_allocation`/
+  `move_week_allocation`/`delete_week_allocation`). Every calendar
+  template's subnav (`calendar_month.html`/`_fourweek.html`/`_day.html`)
+  dropped its separate "Timetable" entry -- Month/4-Week/Week/Day, four
+  tabs, not five.
+  New `static/unscheduled_panel_toggle.js`: a header button
+  (`#unscheduled-panel-toggle`, `{{ icon('sidebar', ...) }}`) collapses/
+  expands the sidebar to a narrow rail, state persisted per-device
+  (`localStorage`, same category as `timeline.js`'s gutter-width
+  preference) -- no server state, nothing to sync.
+  `tests/test_calendar_timetable.py` deleted; replaced by
+  `tests/test_calendar_week_scheduling.py` (29 tests, testing the merged
+  `week_view`/`create_week_allocation`/`move_week_allocation`/
+  `delete_week_allocation`/`timetable_view_redirect`, plus new coverage for
+  the collapse toggle button, the redirect, and that ordinary events stay
+  fully interactive instead of subdued `.context-event` context). One
+  existing assertion updated for the real, deliberate class-list change
+  (`test_calendar_viewport_layout.py`'s exact-match now expects
+  `"card calendar-viewport project-calendar-grid"`). Full suite 1317
+  passed.
+- **Fixed:** side work — **merged Week view: work-allocation blocks are
+  border-only (no fill), and the scheduling-drag ghost matched its real
+  1-hour outcome**, complete (2026-08-14), immediate follow-up feedback on
+  the merge above. Two independent fixes:
+  - **Styling** ("timetable tasks time allocation should never be colored,
+    only a thick colored border") — `.time-event.work-allocation` no longer
+    inherits its `.cal-<hue>` class's solid background fill; a new override
+    rule (placed AFTER the `.cal-*` swatch block in `style.css` so it wins
+    the same-specificity cascade) gives it `background:var(--bg-elevated)`
+    and a `3px solid` border instead, colored via a `--wa-border` CSS custom
+    property each template now sets inline (`var(--cal-bg-<hue>)`, the same
+    vivid hue variable the fill used to read) -- `calendar_week.html`,
+    `week_planning.html`, and `project_calendar.html` (every template that
+    renders a `.work-allocation` block) all updated.
+  - **Drag-preview/outcome mismatch** ("shows 30 minute event but after
+    dropping it is 1 hour... should always be 1 hour") — root cause,
+    confirmed live: `calendar.js`'s own click-to-create hover-preview ghost
+    (always 30 minutes tall, its own default) was ALSO rendering while
+    dragging a task from the Unscheduled work panel, because the merged
+    grid's columns now carry `.calendar-create-col` (calendar.js's trigger
+    class) in addition to `.project-calendar-col` -- something that could
+    never happen before the merge, since calendar.js was never loaded
+    alongside project_calendar.js on the same page. Fixed with a shared
+    `window.__ccGridDragActive` flag: `project_calendar.js` sets it true for
+    the duration of ANY of its own drags (the task-panel drag, and block
+    move/resize, for the same reason) and false when the drag ends;
+    `calendar.js`'s hover-preview pointermove/pointerdown handlers check it
+    first and stand down entirely while set. `project_calendar.js`'s
+    task-panel drag (interaction 1) also gained its own accurate
+    replacement: a real grid-anchored `slotGhost` (reusing calendar.js's own
+    `.schedule-ghost` look), always exactly `DEFAULT_BLOCK_MINUTES` (60)
+    tall at the snapped drop position inside the hovered column -- computed
+    with the identical snap math `end()` uses to actually create the
+    allocation, so the preview and the outcome can never disagree again.
+  New `TestGridDragConflictFix` in `test_calendar_week_scheduling.py` (3
+  structural JS-source tests, same convention as `test_pwa_shell.py`'s own
+  JS structural checks -- no browser in this test environment). Full suite
+  1320 passed.
+- **Fixed:** side work — **work-allocation blocks are one uniform drag
+  target, title included**, complete (2026-08-14), immediate follow-up
+  ("why can't it function like any other event so that the whole div is a
+  link and can be moved at the same time?"). Root cause: `.te-name` (the
+  block's title) was a real nested `<a href="/tasks/{uid}" data-modal>`,
+  and `project_calendar.js`'s block pointerdown handler had to explicitly
+  exclude clicks starting on it (`e.target.closest(".te-name")`) so its
+  native click could still navigate -- meaning you could NOT move a block
+  by grabbing its title text, only by grabbing the surrounding padding,
+  unlike an ordinary `.time-event` (itself a single `<a>`, draggable
+  anywhere on itself, since calendar.js owns click-vs-drag uniformly at the
+  JS level with no competing native link). The block can't itself become a
+  real `<a>` the same way (it also contains a delete `<form>`/`<button>`,
+  which `<a>` cannot legally contain), so instead `.te-name` dropped its
+  `<a>`/`href`/`data-modal` down to a plain `<span>` across all three
+  templates that render a `.work-allocation` block (`calendar_week.html`,
+  `week_planning.html`, `project_calendar.html`) -- opening the task view
+  is already handled uniformly by `project_calendar.js`'s own interaction 4
+  (any non-drag click, anywhere on the block) via `taskUrlBase`, so nothing
+  about "click to open the task" changed; only "click-drag to move" now
+  works from anywhere on the block, title included. `project_calendar.js`'s
+  pointerdown handler's `.te-name` exclusion removed (the
+  `.work-allocation-delete` exclusion stays, so the delete button keeps
+  working). Three tests updated (`test_calendar_week_scheduling.py`/
+  `test_week_planning.py`/`test_project_calendar.py`, each had one
+  `'href="/tasks/t1"' in body` assertion -- now asserts that href is GONE
+  and the title renders as a plain `<span>`). Full suite 1320 passed.
+- **Shipped:** side work — **Month view: events draggable to move, timetabled
+  tasks hidden**, complete (2026-08-15), direct feedback ("in calendar, month
+  view, events should be able to be moved via mouse. Timetabled tasks should
+  not be visible in the calendar view"). Two independent changes to
+  `routers/calendar.py::month_view`/`templates/calendar_month.html`:
+  - **Timetabled tasks (work-allocation events) excluded from Month** — new
+    `db.work_allocation_event_uids(conn)` (one bulk query, the N+1-avoiding
+    counterpart to `db.work_allocation_task_uid`) filters `month_view`'s
+    `events` list before `_month_grid` ever sees it, so a scheduled work
+    block never renders as a third kind of Month item duplicating the task's
+    own due-date chip. Week/Timetable is untouched (work allocations stay
+    deliberately prominent there, per `week_view`'s own docstring) — this is
+    Month-only, since that's the surface the feedback named.
+  - **Drag-to-move an event chip between day cells** — new
+    `static/calendar_month_drag.js`, loaded alongside the existing
+    click-and-hold drag-to-*create* script (`calendar_month.js`, unchanged).
+    Reuses the Week/Day grid's own `POST /events/{uid}/reschedule` JSON
+    endpoint (`static/calendar.js`) rather than adding a new route — Month
+    has no time axis, so a drop only ever shifts the event's existing
+    start/end timestamps by the whole-day delta between the origin and
+    target cell, time-of-day untouched. `calendar_month.html`'s all-day and
+    timed "event" kind chips (not task chips) gained a shared
+    `.month-event-item` class plus `data-uid`/`data-start`/`data-end`/
+    `data-all-day` — but only when the event is non-recurring: a recurring
+    event's chip renders with no `data-uid` at all, so the drag script never
+    attaches to it (only the whole `events` row exists to reschedule, and
+    shifting it would move the entire series, not the one occurrence being
+    dragged — same footgun manual-recurrence-exceptions exists to avoid
+    elsewhere; a click still opens a recurring chip normally, only the drag
+    affordance is withheld). Click-vs-drag disambiguation mirrors
+    `calendar.js`'s own `CLICK_THRESHOLD_PX` pattern so a plain click still
+    navigates via the chip's `href`. On a successful drop the page does a
+    full reload (not an optimistic DOM patch) — unlike the Week grid's
+    single block's top/left, a Month move can shift an item between two
+    cells' own `rows`/overflow-count/`"+N more"` lists, which only a fresh
+    server render keeps consistent. New `.month-day-cell.drop-hover`/
+    `.month-event-item.dragging` CSS, same vocabulary as the Week grid's own
+    `.time-col.drop-hover`/`.time-event.dragging`.
+  4-Week view (`calendar_fourweek.html`) has its own separate markup and was
+  not touched — still shows work-allocation events and has no drag-to-move,
+  since the feedback named Month specifically. 21 existing tests
+  (`test_calendar_month_bars.py`/`test_calendar_month_quickcreate.py`)
+  still pass unchanged; no new tests added (drag interactions need a real
+  browser, same "structural JS-source checks only" ceiling as the app's
+  other pointer-drag scripts — no assertion gap opened here that other
+  Month tests weren't already leaving). Full suite 1316 passed, 4 pre-existing
+  failures in `test_today.py` confirmed unrelated (reproduce identically on
+  the pre-slice commit via `git stash`; a UTC-vs-local `date.today()` /
+  test-module-import-time date mismatch in this sandbox, not caused by this
+  slice).
+- **Shipped:** side work — **Sleep Time / Leisure Time**, complete
+  (2026-08-15), direct feedback ("Add an option in the settings to set-up
+  Leisure Time and Sleep Time... similar to the holiday settings, but just
+  adding the hours... and days... a soft hatching... that when placing an
+  event to timetable an event there gives a warning"). New `time_blocks`
+  table (`db.py`: `kind` fixed to `'sleep'`/`'leisure'` — not a user-named
+  open-ended set like a holiday calendar — plus `label`, `start_time`/
+  `end_time` as plain `"HH:MM"`, `days` a comma-joined subset of the new
+  `db.TIME_BLOCK_DAYS`; no date component at all, this is a weekly
+  recurring rule, not a dated range) plus `upsert_time_block`/
+  `get_time_block`/`delete_time_block`/`list_time_blocks`/`time_block_days`,
+  same minimal shape as `schedule_holidays`' own functions.
+  - **Settings > Sleep & Leisure Time** (`/settings/time-blocks`,
+    `routers/settings.py`, new hub category) — same Tasks-table-style grid
+    as Holidays, two sections (Sleep, Leisure), each row inline-editable
+    (`POST /settings/time-blocks/{uid}/update-field`,
+    `_TIME_BLOCK_UPDATABLE_FIELDS`). Days picked via
+    `_widget_list_multiselect.html` in `filter` (multi-select) mode rather
+    than Holidays' `single` mode — "days" genuinely is a set, not one
+    choice. Deliberately two duplicated top-level template sections rather
+    than one Jinja macro wrapping the shared multiselect include — that
+    partial's own set-then-include pattern is only proven directly inside a
+    template body/for-loop elsewhere in this codebase, not inside a macro's
+    local scope, so this didn't risk a scoping surprise for a two-line
+    saving.
+  - **Week/Day grid hatching** — `routers/calendar.py::
+    _time_block_overlays_for_day` resolves each visible day's applicable
+    blocks (by `date.strftime('%A')` against `days`) into top/height px,
+    same math `grid_layout.position_event` uses for a real event; both
+    `week_view` and `day_view` compute this per day and
+    `calendar_week.html`/`calendar_day.html` render a `pointer-events:none`
+    `.time-block-overlay.time-block-{sleep,leisure}` div per block, behind
+    every real event (z-index 1 vs events' 3) so no drag/click interaction
+    is affected. Red/green via the app's existing `--danger`/`--success`
+    vars, not new colors. Month has no time axis and was left untouched —
+    "the calendar view" in the feedback read as Week/Day, the two views
+    that actually have hours to hatch.
+  - **Scheduling warning** — new `static/time_blocks.js` (loaded only on
+    `calendar_week.html`/`calendar_day.html`, reading a page-local
+    `<script type="application/json" id="cc-time-blocks">` tag built by
+    `routers/calendar.py::_time_blocks_client_payload`) exposes
+    `window.ccTimeBlocks.warnIfOverlapping(dateStr, startMin, endMin)`.
+    Wired into `static/calendar.js`'s block-move/resize `end()` and
+    `static/project_calendar.js`'s work-allocation create-drag and
+    move-drag `end()`s (both guarded by `if (window.ccTimeBlocks)`, a
+    silent no-op on `/week`/the project Week Calendar, which render no
+    `cc-time-blocks` tag) — a `toast-warning` toast ("Heads up: this
+    overlaps Sleep Time...") fires alongside the save, never blocking or
+    reverting it (the feature request's own "gives a warning," not "gives
+    an error"). The drag-to-*create a brand-new plain event* path
+    (calendar.js's `finishCreate`) deliberately has no warning call — it
+    only opens the New Event form prefilled, nothing is placed yet at that
+    point. New `.toast-warning` CSS (`var(--warning)`, dark text — the app's
+    existing amber "caution" color, distinct from `.toast-error`'s red).
+  24 new tests (`test_settings_time_blocks.py`: the Settings page/routes,
+  `_time_block_overlays_for_day`, `_time_blocks_client_payload`, and that
+  Month renders no hatching), plus `test_phase8_settings_hub.py`'s hub-URL
+  set updated for the new category. Full suite 1340 passed (same 4
+  pre-existing unrelated `test_today.py` failures as the slice above).
+- **Shipped:** side work — **Week/Day never opens scrolled to a Sleep hour
+  + fixed a real 12h/24h bug in the Work sessions card**, complete
+  (2026-08-15), direct follow-up feedback on the slice above ("the calendar
+  week view should never start at an hour that is marked as sleep... if
+  sleep from 00-06 AM, the week/day views should start from 6 AM, not 12
+  AM. Also, the app should respect the user choice of date preference 12
+  or 24 hours").
+  - **Initial scroll** — `static/time_blocks.js` (already loaded on
+    `calendar_week.html`/`calendar_day.html`) now also runs, once per page
+    load, over every visible `.time-col[data-date]`'s own date; if ANY of
+    them has a Sleep block covering midnight (`start_min <= 0 <
+    end_min`), it sets `.time-grid-wrap.scrollTop` past the LATEST such
+    block's end time (measuring `.time-grid-body`'s real rendered offset —
+    it sits below the sticky `.time-grid-top` header in normal flow — plus
+    its own half-hour top padding, rather than assuming a fixed header
+    height). Leisure blocks never affect this — only Sleep, and only a
+    block that actually covers minute 0, per the feedback's own example. A
+    no-op (grid opens at the top exactly as before) when no configured
+    Sleep block covers midnight on any visible day. No server-side change
+    needed — reuses the same `cc-time-blocks` JSON payload the scheduling
+    warning (slice above) already reads.
+  - **12h/24h audit turned up one real, unrelated bug**, fixed alongside:
+    `_task_work_allocations.html`'s "Work sessions" card (task detail/edit
+    modals) was slicing the raw stored ISO string directly
+    (`wa.start_at[:16]`/`wa.end_at[11:16]`) instead of going through
+    `deps.py`'s `fmt_time` filter — the one place in the app that still
+    showed a session's time in bare 24h regardless of the "24-hour time"
+    Settings > General preference. Fixing the field alone wasn't enough:
+    `task_detail.html`/`task_form.html` import that card as a Jinja macro
+    across a file boundary (`{% from "_task_work_allocations.html" import
+    task_work_allocations_section %}`), and a macro imported that way does
+    NOT inherit the caller's template context (so `fmt_time`'s
+    `@pass_context` read of `request` silently saw `None` and fell back to
+    its 24h default) unless imported `with context` — both import lines
+    needed that added, the same fix `_unscheduled_task_item.html`'s own
+    import already used for the identical reason. Confirmed live via a
+    synthetic-request smoke test before writing the fix (empirically, not
+    from reading the filter's source alone) — the bug reproduced exactly
+    as described, and the fix's before/after were both verified against a
+    real `request.app.state.settings.db_path`-backed Request, not a bare
+    one (a bare `Request({...})` with no `.app` at all silently falls back
+    to the 24h default through a *different* path — `_cached_app_meta`'s
+    own broad except — which would have hidden this bug's real cause
+    during manual testing). No other `fmt_time`/`fmt_hour` call site had
+    this problem — checked every template using either filter; the rest
+    are either not macros or already `{% include %}`d (context-inheriting
+    by default, unlike `{% from %}` import).
+  9 new tests: 4 structural JS-source checks in `test_settings_time_
+  blocks.py` (`TestSleepAwareInitialScroll` — no browser in this test
+  environment to assert a real scrollTop, same ceiling
+  `test_pwa_shell.py`'s own pointer-drag script tests already accept), 5 in
+  `test_display_prefs_settings.py` (`TestFmtTimeFilterInWorkSessionsCard`
+  — 24h default, 12h when set, and that `task_form.html`'s edit view
+  respects it too). Full suite 1347 passed (same 4 pre-existing unrelated
+  `test_today.py` failures).
+- **Shipped:** side work — **`/today` and `/week` retired, folded into the
+  Dashboard and Calendar**, complete (2026-08-15), a single large session
+  (user-approved deviation from this file's own one-slice default) covering
+  three ordered pieces:
+  1. **New Dashboard widget types, built and verified before anything was
+     deleted** (the session's own content-loss guard) — `routers/
+     dashboard.py`'s `WIDGET_TYPES` registry grew three entries:
+     `important_urgent` (open tasks flagged important/urgent that aren't
+     already due/overdue, `_render_important_urgent` — the exact
+     `derived_state.virtual_states` logic `/today` used, right down to
+     excluding anything already shown as due/overdue) and
+     `scheduled_work_today` (today's work-allocation sessions + a
+     completed-hours total, `_render_scheduled_work_today` — the same
+     `db.work_allocation_task_uid` per-event lookup `/today` used), both
+     addable through the existing Source/View picker
+     (`important_urgent_view`/`scheduled_work_view` under the
+     `calendar_tasks` source). Also added `quick_links` (a visual tile grid
+     of every Space + every open project, `label_config.icon`/`color` and
+     `filled_cards`' own `.filled-card` CSS reused, no new visual language
+     — the "more visual, less data-heavy" ask; the app has no separate
+     "pinned"/"favorite" concept, confirmed by reading `label_config`'s own
+     schema comment first rather than inventing one, so "every Space + every
+     open project" is the deliberately-simple v1), its own new
+     `quick_links`/`quick_links_view` source since it reads `label_config`
+     directly (`uses: set()`, same shape as `project_preview`/
+     `filled_cards`) and is excluded on Space/Project page scopes for the
+     same "meaningless once you're already inside one" reason those two
+     already were. Found and fixed a real Jinja footgun while wiring these
+     up: a render function's returned dict must never use the key name
+     `"items"` — Jinja's attribute-then-item lookup silently resolves
+     `data.items` to `dict.items` (the builtin method) instead of the
+     stored key, reproduced live before renaming to `rows`/`tiles`. Also
+     audited every `_widget_*.html` partial for the double-line date+time
+     wrap bug already found in `_widget_upcoming_events.html` (a fixed
+     110px `<td>` holding both a date and a time, per this slice's own
+     starting brief) — that was the only one; every sibling widget shows
+     either just a time or just a date in its narrow column, never both.
+     Widened to 150px + `white-space:nowrap`. 19 new tests.
+  2. **`/today` retired as a redirect** — `routers/today.py`,
+     `templates/today.html`, `tests/test_today.py` deleted; `GET /today`
+     now redirects (302, `routers/dashboard.py::today_redirect`) to `/`.
+  3. **`/week` retired as a redirect** — confirmed first, by reading both
+     routers/templates directly rather than assuming, that its entire
+     cross-project planning capability (Unscheduled work sidebar,
+     drag-to-schedule, block move/resize/delete, session stepper) was
+     already fully present at `/calendar/week`, a leftover from the earlier
+     "Calendar Week + Timetable merged" side work (2026-08-14) — `/week` had
+     become a third copy of the same thing, not a distinct surface.
+     `routers/week.py`, `templates/week_planning.html`,
+     `tests/test_week_planning.py` deleted; `GET /week` now redirects (302,
+     `routers/calendar.py::week_redirect`, registered on that module's
+     unprefixed `events_router` since the redirect's own path can't live
+     under `router`'s `prefix="/calendar"`) to `/calendar/week`, preserving
+     `?date_=`. Same "any bookmark still lands somewhere real" precedent
+     `timetable_view_redirect` already set for `/calendar/timetable`.
+  Both tabbar entries removed from `base.html` (Home/Calendar/Tasks/
+  Projects/Schedule/Contacts remain) — the explanatory comment there is a
+  Jinja `{# #}` comment, not an HTML `<!-- -->`, so the retired path text
+  doesn't leak into rendered markup (an HTML comment would have broken
+  `test_calendar_week_scheduling.py`'s own "no stale `/calendar/timetable`
+  text anywhere in the body" assertion the same way). `main.py`'s router
+  imports/`include_router` calls for `today`/`week` removed.
+  `features/today.md`/`features/week.md` rewritten as short retirement
+  notices (where their content lives now / why the merge was safe),
+  `features/dashboard.md` documents all 3 new widget types (now 14 total)
+  and the scope-exclusion change, `features/calendar.md`/`features/
+  tasks.md` had their stray `/week` mentions updated to stop implying a
+  separate page still exists, `features/README.md`'s table/tour updated.
+  `plans/roadmap.md`/`open-priority.md` needed no changes — their 1.7
+  Today/Week entries were already struck-through shipped history, not
+  open items, so nothing there was stale. New
+  `tests/test_dashboard_today_week_widgets.py` (24 tests: the 3 render
+  functions incl. tag-filter/limit/archived-project edge cases, both
+  redirects incl. `/week`'s `?date_=` passthrough, the tabbar/router-file
+  removal, the double-line fix). Full suite **1337 passed** — the 4
+  previously-pre-existing `test_today.py` failures are gone along with the
+  file itself (a UTC-vs-local `date.today()` test-environment quirk, not
+  worked around, just moot now that the file is gone), confirmed this is
+  the *only* change in the failure count by running the full suite after
+  each of the three commits, not just at the end.
+- **Shipped:** side work — **/projects rework: square colored cards,
+  click-to-open, create/edit moved into Settings**, complete (2026-08-15),
+  direct feedback ("square colored cards... open with click, not an open
+  button... creating/editing done entirely in settings"). `templates/
+  projects.html` is now a pure display surface: each project is one
+  `<a class="project-card-square cal-{{ p.color }}">` (new `.project-grid`/
+  `.project-card-square*` CSS, `static/style.css`) — the whole card is the
+  link (no inner Open button), full-bleed in the project's own `.cal-*`
+  swatch (the same palette every other `.cal-*` consumer already uses, not
+  a second one), `aspect-ratio:1` via `auto-fill`/`minmax` grid, status
+  pill + progress bar + task/deadline line inside, Archived cards dimmed
+  via `.is-archived`. The promote-a-label form, per-project dates form,
+  and Archive/Demote actions moved off this page entirely onto Settings >
+  Labels (`templates/labels_manage.html`'s existing Project `<td>`, using
+  the `.label-table details > summary` styling that already existed
+  there unused): not-yet-a-project rows get a `<details>` "promote" popover
+  (dates + submit -> `/projects/promote`), is_project rows get one showing
+  status + an inline dates-save form + conditional Archive + Demote,
+  matching every other per-label control's "own cell on this row" shape.
+  `routers/labels.py::manage_labels` now computes `project_status` per
+  is_project row (`db.project_status`) and accepts the same `overlap`/
+  `pending_*` query params `routers/projects.py`'s promote/dates conflict
+  redirects already produced — `_redirect_with_conflict` and every
+  promote/dates/demote/archive success redirect in `routers/projects.py`
+  now target `/labels` instead of `/projects` (the overlap-warning card
+  itself moved into `labels_manage.html`, `projects.html` dropped
+  `overlap_name`/`pending`/`existing_labels` from its context entirely).
+  No schema/endpoint changes — `promote`/`set_dates`/`demote`/`archive`
+  are the same functions with the same params, only their redirect target
+  and the form markup that posts to them moved; `tests/test_project_
+  stack.py`'s router-level tests (status-code/location-substring only,
+  never asserting on `/projects` specifically) needed no changes and all
+  still pass. Verified both pages render end-to-end (not just unit-level)
+  via a one-off script seeding a real project + tasks and calling
+  `list_projects`/`manage_labels` directly, checking the actual rendered
+  HTML for the card markup, the promote/dates/demote forms, and the
+  overlap-warning card together — router-function-call convention doesn't
+  by itself prove Jinja renders without error, since most existing tests
+  only assert on `resp.context`, not `resp.body`. Full suite still 1337
+  passed (no test count change — this was a display/relocation change, not
+  new behavior needing new coverage).
+- **Shipped:** side work — **Settings > Labels: table replaced by a
+  simple list + full edit modal, Space/Project made mutually exclusive**,
+  complete (2026-08-15), direct feedback ("the table should be
+  transform[ed] into a simple list... a button that opens a modal window
+  to edit labels with all the colors, icons, etc... becoming a project
+  should be mutual exclusive to a space — selected via a fancy dropdown
+  menu. Spaces or project settings appear only after being selected").
+  `templates/labels_manage.html`'s `<table>` (one column per control) is
+  now `.label-list` (`static/style.css`): one flex row per label showing
+  a color dot, icon, name/abbreviation, usage count, a Space/Project role
+  badge, and a single Edit button (`data-modal="/labels/{name}/edit"`).
+  Every per-label control that used to be its own column — rename,
+  color, icon, parent, abbreviation, description, Space, Project
+  (promote/dates/archive/demote, which had briefly landed as this page's
+  own `<details>` popover earlier the same day, see this file's prior
+  entry), Merge, Remove — moved into one new modal (`templates/
+  label_edit_modal.html`) with a single Save button
+  (`routers/labels.py`'s new `GET /labels/{name}/edit` +
+  `POST /labels/{name}/update`, replacing that popover's calls into
+  `routers/projects.py` for the UI's own purposes — those endpoints are
+  untouched and still directly tested by `tests/test_project_stack.py`,
+  just no longer linked to from anywhere).
+
+  **Space and Project are now one mutually-exclusive Role** (segmented
+  radio: Plain / Space / Project — `routers/labels.py::_label_role`),
+  not two independent checkboxes: picking "Project" always clears
+  `generate_space`, picking "Space" always clears `is_project`/dates/
+  `archived_at`, so a label saved through this form can never end up
+  with both set (a pre-existing label saved before this rework that
+  somehow has both keeps `is_project` winning until next edited — no
+  migration script, matching this app's usual "correct going forward,
+  don't rewrite history" convention). The Project date fields render
+  `hidden` until "Project" is selected and reveal with no page reload
+  (new `static/label_role_picker.js`, same `init(root)`-called-by-
+  `modal.js` pattern `task_habit_field_toggle.js` established, loaded
+  globally in `base.html` since this page is only ever opened via
+  `data-modal`). Switching *away* from a role with real data asks for
+  confirmation first (`data-confirm-sheet`, purely client-side, computed
+  once at GET time into `data-original-role`/`data-warn-role` and kept
+  in sync with the live radio selection) — a Project always (loses its
+  period + lifecycle), a Space only if it actually has child labels
+  grouped under it (`db.list_child_labels`); switching between two roles
+  that both had nothing to lose (e.g. Plain → Space) asks nothing.
+  Promoting to Project still runs the existing overlap check
+  (`db.find_overlapping_project`) — inside a modal there's no clean way
+  to show the old page's rich "Save anyway" warning card (`modal.js`'s
+  keep-open forms re-fetch their own URL on success and never render a
+  POST's own response body), so a conflict is a 409 + toast instead, with
+  a plain "Allow this period to overlap" checkbox in the form
+  (`confirm_overlap`) as the override — a real UX simplification, not
+  just a stopgap, noted here in case a future session wants to revisit
+  it. `static/label_search.js` generalized from table/tbody-specific
+  selectors to the new div-based list (same `data-label-group`/
+  `data-label-row`/`data-label-group-header` attributes, only the
+  container id changed). Four `tests/test_modal_input_phaseC_swatch_
+  grid.py` tests that asserted the color/icon picker markup on the old
+  table rows updated to assert it on the new edit modal instead (same
+  intent, moved surface) — one split in two for the "no picker on the
+  list, has one in the modal" distinction, net +1 test. Full suite
+  **1338 passed**, plus a one-off script exercising both pages end-to-end
+  (list rendering, all three role states' modal markup, missing-dates
+  400, overlap 409, successful promote, the mutual-exclusivity clear on
+  a Project→Space switch, and rename-through-Save) — router-function-
+  call tests alone don't prove the client-side confirm/reveal JS
+  actually gates anything, so that part is reasoned from reading
+  `label_role_picker.js` and `modal.js`'s own submit-handling code
+  directly rather than executed (no browser in this sandbox).
+- **Fixed/reworked:** side work — **Settings > Labels follow-up: fixed
+  the Role reveal bug, Group limited to Spaces only, overlap always
+  allowed, Merge moved back to the list, footer is Cancel/Delete/Save**,
+  complete (2026-08-15), same-day direct feedback on the slice above.
+  - **Bug, found and fixed:** the Project date fields never actually
+    appeared when picking "Project" in the Role control. Root cause:
+    `.field{display:flex}` (style.css) is author CSS of equal specificity
+    to the browser's own `[hidden]{display:none}` UA rule, and author
+    always wins that fight regardless of specificity — the exact
+    pre-existing footgun `.field.holiday-field[hidden]{display:none}`
+    was already added to work around once (recurrence_picker.js's
+    holiday-calendar fields, see that rule's own comment). Same fix:
+    `.field.label-project-fields[hidden]{display:none}`.
+  - **Overlapping project periods are always allowed now** — "shouldn't
+    exist because it should always be true" — the `confirm_overlap`
+    checkbox and the whole 409-conflict path removed from
+    `update_label`/`label_edit_modal.html` entirely. `db.find_
+    overlapping_project` and routers/projects.py's own promote/set_dates
+    (still directly tested) are untouched; nothing in the UI calls the
+    check anymore.
+  - **"Parent label" renamed to "Group" and limited to Spaces only** —
+    confirmed with the user this should stay wording-only for what
+    Group *does* (still both the Settings-list grouping key and what
+    feeds a Space's generated page), but *how it's set* changed: a
+    `<select>` of existing Space labels only (`edit_label_modal`'s new
+    `space_label_names`, plus the label's own current parent even if
+    stale/non-Space, so Save can never silently drop it), not a free-text
+    field that could name anything. `update_label` enforces the same
+    constraint server-side (400 if `parent_name` isn't blank or an actual
+    `generate_space` label). Direct follow-up ask: "the list UI should
+    display Spaces differently and always keep their children in their
+    group" — `manage_labels` rewritten to build `space_groups` (each a
+    Space label plus its resolved `children`, i.e. every label whose
+    `parent_name` names it) and `ungrouped` instead of a flat
+    `parent_display` groupby; a Space's own row IS its group's heading now
+    (`.is-space`, bold/tinted) with children rendered directly under it
+    indented (`.is-child`), not a disconnected text divider naming the
+    same string. **Named the context variable `space_groups`, not
+    `spaces`** — found live, the hard way: `base.html`'s nav rail already
+    does `{% set spaces = sidebar_spaces(request) %}` at its own top
+    level, which silently shadows a same-named context variable for the
+    rest of that render (Jinja `{% set %}` writes to shared `Context.vars`,
+    checked before the original context dict) — the page rendered its
+    empty state even with a correctly populated `spaces` sitting right
+    there in the router's own returned context, extremely confusing to
+    debug until traced to this collision. `static/label_search.js`
+    updated for "a group's header can itself be a real, searchable label
+    row" (a Space's own name now matches too, not just its children).
+  - **Merge reverted back out of the edit modal to its own small modal**
+    (direct follow-up: "I was wrong about that") — new `GET /labels/
+    {name}/merge-modal` + `label_merge_modal.html` (just the destination
+    picker + confirm, posting to the unchanged `/labels/{name}/merge`), a
+    Merge icon-button added back to each list row (hidden when there's
+    only one label total, nothing to merge into).
+  - **Edit modal footer is now exactly Cancel / Delete / Save** — the old
+    "Remove from everything" wording relabeled to "Delete" (same
+    `/labels/{name}/clear` action underneath, `btn danger` styling
+    matching `habit_form.html`'s own Delete convention). Also dropped the
+    explanatory paragraph under Role per direct feedback ("remove the
+    abundant labels").
+  Full suite still **1338 passed** (no test-count change — every change
+  here is UI/validation-shape, not new testable surface within this
+  session's scope), plus a fresh end-to-end script re-verifying all of
+  the above against real seeded data (grouping/nesting, overlap no longer
+  blocking, Group's Space-only enforcement both directions, the edit
+  modal's shape, the merge modal, and the CSS fix's presence).
+- **Fixed:** side work — **Labels list: gray group titles instead of
+  tree-like grouping, bigger icons, no cell-tag/color-dot, narrower
+  list**, complete (2026-08-15), direct follow-up feedback on the row
+  above's "a Space's own row IS its group's heading" design ("I would
+  preffer to not have tree like grouping, but grouping like it was
+  before"). `labels_manage.html`'s `label_row` macro dropped its
+  `is_space`/`is_header` params entirely: a group's heading is now always
+  a plain gray `.label-list-group-header` text title (the Space's name,
+  or "Ungrouped"), and the Space itself renders as an ordinary
+  non-bold `.is-child` row directly under its own heading, at the same
+  indent as its children — no row doubles as both a heading and a list
+  item anymore. Also dropped the per-row `.color-dot` and the
+  Project/Space `.cell-tag` role badge (direct feedback, "remove their
+  cell-tag") — a row is icon + name + usage count only now, role/color
+  still live in the Edit modal. Icons bumped from the default 15px to
+  19px (`.label-list-icon .icon`, direct feedback, "the icons a bit
+  bigger") since the icon is now the only per-row color/identity cue
+  left. `.label-list` capped at `max-width:480px` (direct feedback,
+  "make the list more narrow"). `static/label_search.js` needed no
+  changes — the new plain-text header still carries `data-label-group-
+  header` + a lowercased `data-label-name` for the same "searching a
+  Space's own name keeps it visible" behavior. Full suite still 1338
+  passed (no test-count change, same reasoning as the row above — pure
+  CSS/markup rework, no new testable surface).
+- **Shipped:** side work — **`/projects` page retired, folded into the
+  Tasks table**, complete (2026-08-15), direct feedback ("the projects page
+  and pages derived from it... are not worth existing... Task view for
+  projects could just be a way to group tasks in the Table view"). Scoped
+  first via `plans/open.md`'s decision record (now removed from that file
+  per its own "ships -> describe outcome, remove the section" convention),
+  then implemented same session. **Presentation-only**, confirmed explicitly
+  with the user: the label/project data model, Settings > Labels, and
+  `promote`/`set_dates`/`demote`/`archive` are completely untouched — only
+  the dedicated pages built to *view* a project are gone, both redundant
+  with capability that already existed: the Tasks view duplicated
+  `/tasks?group_by=project` (1.5, already shipped); the Week Calendar view
+  duplicated the merged `/calendar/week` grid (2026-08-14 side work)
+  filtered to one project, which already shows every work allocation
+  regardless of project — the same "third copy of the same thing" reasoning
+  that retired the standalone `/week` page.
+  - `routers/projects.py::list_projects`/`project_detail`/`project_calendar`
+    (and that page's own `create_allocation`/`move_allocation`/
+    `delete_allocation` -- its own drag-and-drop backend, unused anywhere
+    else since `/calendar/week` has its own independent, cross-project
+    allocation endpoints) replaced by three thin redirects:
+    `list_projects_redirect` (`GET /projects` -> `/tasks?group_by=project`)
+    and `project_detail_redirect`/`project_calendar_redirect` (`GET
+    /projects/{name}[/calendar]` -> `/tasks?label={name}`) — any bookmark
+    still lands somewhere real, same precedent as `/today`/`/week`/
+    `/calendar/timetable`'s own retirements. `_project_card` (now unused
+    outside the deleted page routes) removed too.
+  - `templates/projects.html`/`project_detail.html`/`project_calendar.html`
+    deleted; `base.html`'s tabbar "Projects" entry dropped (Jinja comment,
+    not HTML, in its place — same "no stale path text in rendered markup"
+    reasoning as the `/today`/`/week` tabbar removals).
+  - The two other Dashboard surfaces that linked to `/projects/{name}`
+    repointed to `/tasks?label={name}` instead: `dashboard.py`'s
+    `quick_links` widget tiles, and `_widget_project_preview.html`'s
+    per-project rows (which used to go to `/labels/{name}`, the label's
+    generated widget-grid page — confirmed with the user this should be
+    the plain filtered Tasks table instead, no `group_by`, since grouping
+    is meaningless once already filtered to one label).
+  - `tests/test_project_detail.py` (12 tests) and `tests/
+    test_project_calendar.py` (24 tests) deleted; `test_project_stack.py`'s
+    `TestProjectsPage` (2 tests, called `list_projects` for its card data)
+    replaced with `TestProjectPageRedirects` (3 tests, asserting the three
+    redirect targets) — `promote`/`set_dates`/`demote`/`archive` coverage
+    in that file untouched; `test_task_scheduled_column.py`'s
+    `TestProjectDetailPage` (2 tests, called `project_detail` directly)
+    removed, its "Scheduled column" coverage still intact via
+    `TestGlobalTasksPage`. Net **1301 passed** (was 1338; -37 removed +3
+    added, confirmed exactly matches the deleted-test count, not a
+    regression).
+  - **Not implemented, flagged for later if it matters:** whether
+    `_task_row.html`'s project-scoped extraction (built for the now-gone
+    project detail Tasks view, 1.4 slice 2) is still worth keeping as a
+    shared macro now its only caller is the global Tasks page — left as-is,
+    still works fine either way.
+- **Shipped:** side work — **Importance/Urgency: explicit per-task axes
+  removed, purely computed now**, complete (2026-08-15), direct feedback
+  ("I want them to just be calculated automatically. No manual input").
+  1.1 shipped the two axes as *explicit* fields combined with label rules
+  via max-precedence; this slice drops the explicit half entirely.
+  `tasks.importance`/`tasks.urgency` columns dropped from the schema
+  outright (`db._drop_column`, new — a deliberate, narrow exception to
+  this file's usual "never force-drop old data" convention, confirmed with
+  the user before implementing; existing manually-set values are
+  discarded, not migrated). `src/derived_state.py`: `effective_importance`
+  = label-derived only, `effective_urgency` = max(label-derived, temporal)
+  — no more `explicit` term anywhere in that module. No form field, no
+  inline pill-select, exists for either axis anywhere in the app anymore;
+  Table/Board/Detail render them read-only via two new Jinja globals
+  (`effective_importance`/`effective_urgency`, `deps.py`, label rules
+  memoized per request the same way `label_icon` already is) instead of
+  reading a stored column, so no router needs to precompute/attach the
+  value onto every task dict just to display a pill. `_task_row.html`'s
+  Importance/Urgency pill-selects became read-only `.pill-static` spans;
+  `_task_form_fields.html` dropped the two multiselect fields outright.
+  Filters/sort (`routers/tasks.py`) switched from matching the raw stored
+  value to matching the *computed* one (`_sort_keys` is now a factory
+  taking `label_rules`, since sorting needs it); `_UPDATABLE_FIELDS` no
+  longer accepts either axis via the inline-edit endpoint (400 if tried).
+  WebDAV/CSV export still writes the *effective* value (routers/export.py,
+  published_lists.py resolve label rules once and attach the computed
+  values onto a row copy before calling `ical_rows.task_row_to_ical`,
+  which itself stays DB-free); import no longer maps iCal `PRIORITY` back
+  to anything (confirmed with the user: silently dropped, this app is the
+  write-source) — `ical_rows._priority_from_ical` deleted as dead code.
+  One real behavior consequence, not papered over: urgency level 1
+  ("Low") has no source left under the purely-computed model (label
+  thresholds only ever imply level 3, temporal state only ever yields
+  0/2/3) and is effectively unreachable now — flagged in
+  `features/tasks.md`, not fixed as out of this slice's scope. See
+  `features/tasks.md` § Importance, Urgency, and the virtual states.
+  Touched ~15 source files and 9 test files (mostly seed-helper rewrites:
+  a manually-set axis is now reproduced in tests via a dedicated per-task
+  label + label_config rule, not a raw stored field); full suite 1291
+  passed (down from 1301 — one whole obsolete test class covering the
+  removed manual-input UI deleted outright, several schema/round-trip
+  tests rewritten to assert the opposite of before, not a coverage
+  regression).
+- **Shipped:** side work — **Importance/Urgency dropped from the Tasks
+  Table columns**, complete (2026-08-15), immediate follow-up feedback on
+  the slice directly above ("I don't want importance and urgency to show
+  in the tasks table view"). `_task_row.html`'s two read-only `.pill-static`
+  cells removed, `tasks_list.html`'s two sortable `<th>` headers removed —
+  Table now shows Title/Status/Due/Scheduled/Labels only. **Table-view-only
+  removal, not a feature removal**: both axes are still fully computed
+  (`src/derived_state.py`, unchanged) and still visible on Board (pills)
+  and the task detail modal (meta grid); the toolbar's Importance/Urgency
+  filter dropdowns are untouched (this was about the columns, not
+  filtering by the axis). `routers/tasks.py::_sort_keys` still supports
+  sorting by either axis, just with no Table column header linking to it
+  anymore. One test rewritten (`test_table_renders_both_as_read_only_pills`
+  -> `test_table_does_not_render_either_axis`, asserting the columns are
+  gone while the toolbar filters remain). Full suite 1291 passed (no
+  count change — a markup-only removal, same reasoning as other pure-
+  presentation slices in this file).
+- **Removed:** the **Schedule module + Spaces University module**,
+  complete (2026-08-15), direct user request ("I just want to drop
+  Schedule entirely. It doesn't have a function right now.") — the
+  university-timetable "classes" feature (`/schedule`, day/time/parity
+  blocks, semester settings, credits, conflicts) is dropped entirely:
+  `routers/schedule.py`, `src/schedule.py`, `schedule_classes.html`/
+  `schedule_class_form.html`, `schedule_grid.js`/`schedule_table.js`,
+  `scripts/migrate_schedule_classes_to_events.py`, and their dedicated
+  tests are deleted outright; `main.py`'s router registration and
+  `base.html`'s tabbar entry/scripts are removed. `db.py`'s
+  `schedule_settings` table (+ `get_schedule_settings`/
+  `save_schedule_settings`/`set_schedule_target_calendar`,
+  `list_schedule_class_events`, `list_course_types`) and
+  `label_config`'s `course_acronym`/`course_type`/`course_credits`/
+  `course_professor_contact_uid` columns are gone. The Spaces
+  "University module" (`_project_university_section.html`'s Course
+  info/next-lecture badges/Homework table, `_education_next_lectures.html`,
+  `routers/calendar.py::_group_education_next_lectures`) is removed
+  alongside it — confirmed with the user directly — since it only ever
+  got its data from Schedule's class-creation form and would be
+  permanently empty otherwise; `routers/labels.py::label_detail`'s scope
+  is back to plain tasks/events/contacts. Why now, not deferred:
+  1.6's odd/even-week recurrence (`recurrence_picker.js`) is already
+  available on ordinary Calendar/Task events, which was Schedule's one
+  distinguishing feature — the dedicated module had nothing left to
+  offer. `schedule_holidays` (named holiday calendars) and everything
+  under "scheduled work"/work allocations (`db.task_work_hours`, the Week
+  Calendar's Unscheduled-work panel, `routers/week.py`,
+  `routers/projects.py`'s calendar, the Timetable sub-view) are unrelated
+  and untouched — see `CLAUDE.md`'s own "what NOT to touch" note for this
+  session. `features/schedule.md` deleted; see `plans/abandoned.md` for
+  the full removal record. Full suite 1226 passed (net count: several
+  Schedule-only test files/classes deleted, a couple of nav/export tests
+  extended to assert Schedule's absence).
+- **Shipped:** `1.9` slice — **Tasks table pagination**, complete
+  (2026-08-15) — `GET /tasks?page=&limit=` (`routers/tasks.py::list_tasks`)
+  paginates the Open section, default 50/page, `limit` clamped to 1-200,
+  applied after every existing filter/sort. Ungrouped view only
+  (`group_by=none`, the default): `group_by=project` clusters tasks under
+  per-project header rows where a flat page boundary would split a
+  project's own tasks arbitrarily, so grouped mode still shows everything,
+  unpaginated — a deliberate, documented scope cut, not an oversight.
+  Completed tasks are never paginated (already visually separated below
+  Open, bounded in practice by the auto-archive setting). New
+  `_tasks_pager.html` partial (Prev/Next `.icon-btn`s, preserves every
+  active filter/sort/search param), `.pager`/`.pager-summary` styles in
+  `style.css`. `db.task_work_hours_bulk`'s call site was also narrowed to
+  only the tasks actually rendered post-pagination (open page + all
+  completed) instead of the whole filtered set, a small efficiency
+  side-benefit of the same change. This was Webapp usability's Phase B
+  (the DAVx5 Phase C piece is unrelated and still blocked on infra); see
+  `features/tasks.md` § Views. 13 new tests (`test_tasks_pagination.py`),
+  full suite 1239 passed.
+- **Shipped:** side work — **Command palette actions**, complete
+  (2026-08-15), Track B's top-priority item (`open.md` § Command palette
+  actions, now removed from that file per its own "ships -> describe outcome,
+  remove the section" convention). Turns the Ctrl-K/Cmd-K overlay (1.2 side
+  work: `db.search_entities`, `GET /api/search`, `static/command_palette.js`)
+  from search-and-navigate-only into a real command surface, additive
+  throughout — the query layer and the Relations-picker wiring are
+  unchanged. Global-mode result rows (not relation-mode rows, which exist to
+  be picked as a link target, not acted on) now carry action buttons:
+  **Mark done** (tasks, posts to the existing `POST /tasks/{uid}/complete`),
+  **Delete** (any type, confirmed via `window.ccConfirmSheet` before posting
+  to the existing per-type `/{uid}/delete` route — no new delete endpoints
+  needed, every one already existed), and **Add label**, which retargets the
+  overlay into a new third mode (label mode, alongside the existing global/
+  relation modes) backed by two new endpoints: `GET /api/labels` (type-to-
+  filter over `db.list_tag_names_in_use`) and `POST
+  /api/entities/{task,event,contact}/{uid}/labels`. A task's add goes
+  through `db.upsert_task`'s full tags list rather than
+  `db.add_object_label` directly, so 1.5's single-project-per-task guard
+  (`db.MultipleProjectLabelsError`) still applies — confirmed by test, the
+  palette is a fourth write path onto `tasks.tags`, not a bypass; events/
+  contacts have no such constraint and use `db.add_object_label` directly.
+  Global mode also gained **Create task/event: "\<query>"** rows (mirroring
+  relation mode's pre-existing "Create new" row), opening the ordinary new-
+  task/event form prefilled via a new `title` query param on
+  `new_task_form`/`new_event_form` (`prefill_title` in the template context,
+  a fallback added to `_task_form_fields.html`/`_event_form_fields.html`'s
+  title `value=`, blank for every other existing caller of either route).
+  `_picker_result` (routers/search.py) gained one new field, `status` (a
+  task's status, `None` for the other two types) so the palette can hide
+  "Mark done" on an already-done task — every other consumer of that shape
+  (search.html, the Relations picker) ignores the extra key. See
+  `features/tasks.md` § Search & the command surface. 28 new/updated tests
+  (`test_command_palette_actions.py`, plus one pre-existing
+  `test_search_api.py` assertion updated for the new `status` field), full
+  suite 1253 passed.
+- **Shipped:** side work — **Page navigation + Quick Capture in the command
+  palette**, complete (2026-08-15), direct follow-up feedback right after
+  Command palette actions above ("I would like it to also allow to navigate
+  to pages. And to quick capture according to the design document" —
+  `plans/quick-capture.md`, a previously-unreferenced standalone spec, now
+  marked implemented at its own top).
+  - **Page navigation** — global-mode results now also include the app's
+    own pages (Dashboard/Calendar/Tasks/Contacts/Notes/Settings, every
+    Space), computed server-side (`routers/search.py`'s new
+    `_matching_pages`) and tagged `type: "page"` — a synthetic row (no
+    `uid` that means anything beyond doubling as its URL), no action
+    buttons, picked via a plain navigation rather than `CCModal.open`.
+    Excluded from relation-picker mode and from any already-type-filtered
+    request.
+  - **Quick Capture** — a single-field capture syntax (`!t`/`!e`/`!c`/`!n`
+    markers, `#label`s, dates, time ranges, phone/email) layered onto
+    global mode's own input. New `src/quick_capture.py`: a pure,
+    `conn`-free parser (`parse()` dispatches to `parse_task`/
+    `parse_event`/`parse_contact`/`parse_note`), verified against every
+    example in the design doc verbatim plus edge cases the doc doesn't
+    spell out (multiple bare dates, short-date year inference, malformed
+    tokens) — 27 tests, `test_quick_capture_parser.py`. New
+    `routers/quick_capture.py`: `GET /api/quick-capture/preview` (parse
+    only, feeds the palette's live preview row — deliberately does NOT
+    resolve/persist labels, since that would write a new alias on every
+    debounced keystroke of a still-uncommitted label) and
+    `POST /api/quick-capture` (parse + resolve labels + create). A
+    captured task's timeblocks become real `db.create_work_allocation`
+    calls, same helper 1.4's Work sessions card already uses.
+  - **Notes** — the fourth entity type `!n` needed (none existed before).
+    Deliberately minimal per the design doc's own scope: `notes` table
+    (`uid`/`content`/`created_at`/`updated_at`) + `object_labels` tags,
+    same CRUD shape as contacts (`db.upsert_note`/`get_note`/`delete_note`/
+    `list_notes`), a bare `routers/notes.py` (list/new/edit/delete) and two
+    minimal templates. Not a tabbar destination (a deliberate, separate UI
+    decision left unmade) — reached via the palette or a direct `/notes`
+    visit. `db.search_entities` gained a fourth `_search_notes` branch so a
+    captured note is actually findable afterward, not a write-only row.
+    See `features/notes.md`.
+  - **Label fuzzy matching** (`plans/quick-capture.md` § Labels and
+    Approximate Matching) — new `db.resolve_capture_label`: exact match →
+    a previously-learned alias (new `label_aliases` table) → a
+    `difflib.get_close_matches` fuzzy match at a deliberately high cutoff
+    (0.8 — covers the spec's own three typo examples,
+    "uunniversity"/"universitty"/"unisity" → "university", without
+    matching unrelated words) → else treated as a genuinely new label. An
+    accepted fuzzy match is persisted as a new alias immediately — this v1
+    has no separate interactive "suggested for correction" review step
+    (a single fire-and-forget capture, not a multi-turn form), so an
+    automatic high-confidence resolution doubles as the spec's own "user
+    correction," noted explicitly in the function's docstring and in
+    `quick-capture.md`'s own new status line.
+  See `features/tasks.md` § Search & the command surface (page nav +
+  capture outcome) and `features/notes.md` (the new entity). 64 new tests
+  total (`test_quick_capture_parser.py`, `test_quick_capture.py`, plus
+  `TestPageNavigation` in `test_search_api.py` and one added case in
+  `test_command_palette_actions.py`), full suite 1317 passed.
+- **Shipped:** side work — **Widget consolidation (original design)**,
+  complete (2026-08-15), `plans/open.md` § Widget consolidation — the
+  next scoped priority per the reprioritization below, confirmed with the
+  user before starting since that section was explicitly marked "waiting
+  on your go-ahead" (the three newer expanded-scope asks stay unbuilt,
+  still needing a design pass, per the user's own choice). 11 widget
+  types → 8 (11 counting the untouched 1.9-side-work additions):
+  `today_agenda`/`weekly_overview`/`upcoming_events`/`overdue_tasks` → one
+  configurable `agenda` type (`config["range"]`: today/next_7_days/
+  next_30_days/all_upcoming, `config["show"]`: a subset of overdue/tasks/
+  events); `project_preview`/`filled_cards` → one `spaces_projects` type
+  (`config["style"]`: list/cards); `calendar_agenda` cut outright (no
+  replacement type — reproduce it by placing Mini Calendar next to
+  Agenda); new `streak` (current/longest run of consecutive days with
+  >=1 task completed, reading `tasks.completed_at`) and `next_deadline`
+  (soonest open task due date + soonest upcoming event) types. New
+  `_migrate_widget_consolidation` (`app_meta`-guarded, runs from
+  `widget_page_context` so it covers Home + every label page) rewrites
+  every existing `dashboard_widgets` row's type/config in place —
+  confirmed no dashboard loses a widget, though every migrated (and
+  newly default-seeded) Agenda widget now renders at Agenda's one static
+  `default_width` ("half") regardless of which of the four old types'
+  own width it used to carry, an unavoidable trade-off once 4 types
+  collapse into 1 with no per-instance width override (removed
+  2026-08-07). The Source/View/Range picker's `_SELECTION_TO_TYPE`/
+  `_TYPE_TO_SELECTION` value shape changed from `(type, range_days:
+  int|None)` to `(type, extra_config: dict)` to carry Agenda's string
+  `range` (and, via `_config_from_form`'s new `style`/`show` params, the
+  Style radio/Show checkboxes threaded through `add_widget`/
+  `edit_widget`/`preview_widget`) — a real internal-shape change, not
+  just new registry entries, documented in `_resolve_selection`'s/
+  `_selection_from_widget`'s own updated docstrings. `calendar_agenda`'s
+  old (view, range) dead-mapping precedent ("cards"/"filled_cards_view",
+  2026-08-07) was deliberately NOT repeated here — every real row is
+  rewritten by the migration, so no live widget can still carry a type
+  the registry no longer resolves. See `features/dashboard.md` (rewritten
+  widget-types table + new Migration section), `plans/open.md`'s section
+  trimmed to just the still-open expanded-scope bullets,
+  `plans/roadmap.md`'s 1.3 side-work row marked shipped. Test-file rewrite
+  delegated to a subagent given the scope (type renames + config-shape
+  fixes across `test_dashboard_router.py`/`test_dashboard_usability_
+  rework.py`/`test_dashboard_today_week_widgets.py`, one whole obsolete
+  test class deleted — `TestCalendarAgendaWidget`, no surviving intent
+  once that type was cut with no replacement); full suite 1313 passed (net
+  -6 from the deleted class, confirmed against the pre-slice 1319-total
+  baseline, not a coverage regression).
+- **Reprioritized (direct steer, 2026-08-15):** the next sessions should
+  work Track B (`open.md`) in this order, not pick arbitrarily: (1)
+  **Command palette actions** (`open.md` § Command palette actions —
+  turning the search overlay into a real command surface, decision already
+  recorded), (2) **Dashboard widgets, expanded scope** (`open.md` § Widget
+  consolidation... — original consolidation design plus three new,
+  not-yet-fully-scoped asks: a per-Space Project/Space links widget, a new
+  "what needs organizing today" action widget, and widgets being more
+  customizable in general — needs a design pass before slice 2 starts),
+  (3) two small items, either order: **Tasks page filter cleanup**
+  (`open.md`, new section — Important/Urgent move into their own dropdowns,
+  Overdue needs a new home, not decided) and **Event format for simple
+  events** (`open.md`, new section — a Format: In person/Online field on
+  events replacing the always-both-shown Location/Meeting URL fields), (4)
+  **Contacts field parity**, (5) **Project check-in**, (6) **Modal window
+  uniformization** (`open.md`, new section — deliberately last since it
+  cuts across every modal the items above still touch). DAVx5 mobile
+  hosting (Phase C of Webapp usability) stays blocked on an external
+  domain + server the user doesn't have yet — don't start it until that
+  changes. Configurable views + optional Schedule module and collapsible
+  sections (Phase B's other half) weren't part of this reprioritization;
+  they're still fair game for a session that wants a change of pace, just
+  not the default next pick anymore.
+- **Shipped:** side work — **Widget consolidation, expanded scope**,
+  complete (2026-08-15), the three items `plans/open.md` § Widget
+  consolidation left open after the original design shipped earlier the
+  same day, design-discussed with the user (AskUserQuestion) before
+  writing any code:
+  - **Spaces & Projects Scope toggle** — `config["scope"]` (`"space"`
+    default, or `"everything"`) on the consolidated `spaces_projects`
+    type, a per-widget-instance override rather than a second widget
+    type (per the user's own framing of this ask). A Space/Project page's
+    instance auto-scopes to that page via `config["label_name"]` as
+    before; `scope: "everything"` makes one instance ignore that and
+    render the app-wide list instead. `db.list_child_labels` already
+    doesn't distinguish project vs. Space children, so "This Space"
+    already included sub-Spaces with no code change needed there,
+    confirmed by a new test rather than assumed. New "Scope" field in the
+    builder/edit forms, shown only when the widget already belongs to a
+    Space/Project page (Home has nothing to opt out of).
+  - **New `organize_today` widget** ("What Needs Organizing") — due-soon
+    (3 days) open tasks with no work session yet, open Urgency=3 tasks
+    with none regardless of date, and today's/tomorrow's events with no
+    location or meeting link (a proxy for the not-yet-shipped Event
+    format field, `plans/open.md`'s own still-separate section — needs no
+    changes once that ships, since it'll keep reading the same
+    `location`/`meeting_url` columns). "No session yet" reuses
+    `routers/calendar.py::week_view`'s own unscheduled-task rule verbatim
+    (`db.work_allocation_panel_info`: no allocations at all, or at least
+    one still undated). Task rows reuse the shared
+    `_unscheduled_task_item.html` partial (project pill + title + the
+    "+"/"−" session stepper) directly, per the user's "inline quick
+    actions" choice, rather than plain links -- verified the exact
+    `{"task", "project", "sessions"}` item shape that partial expects by
+    reading `week_view`'s own construction of it, not guessing.
+  - **Limit field exposed for more Views** — investigated the user's
+    "widgets should be more customizable" ask concretely instead of
+    assuming a gap existed: per-widget Labels/Space filtering turned out
+    to already be universal across every task/event-backed widget type
+    (the Labels chip multiselect has never been gated by type). The real,
+    narrow gap found instead: `contact_list`/`important_urgent`'s own
+    render functions already read `config["limit"]`, but the builder's
+    Limit field was hardcoded to only ever show for one View. Generalized
+    to a `has_limit` flag on `WIDGET_VIEWS` (`agenda_view`,
+    `contact_list_view`, `important_urgent_view`), read by both the JS
+    gating (`dashboard_widget_preview.js`) and the per-widget edit form's
+    server-rendered gate.
+  See `features/dashboard.md` (widget-types table + Scope/Migration
+  sections), `plans/open.md`'s Widget consolidation section fully removed
+  (both the original design and the expanded-scope follow-ups are now
+  shipped). 19 new tests across `TestSpacesProjectsScope`/
+  `TestOrganizeTodayWidget`/`TestLimitFieldExposedForMoreViews`
+  (`test_dashboard_router.py`), full suite 1332 passed.
+- **Shipped:** two direct-feedback widget-picker polish items + a new
+  **Weekly Schedule** widget, complete (2026-08-15). Design-discussed via
+  AskUserQuestion before building (whether to merge Quick Links/Spaces &
+  Projects too -- declined, "leave both, just add new widget types").
+  - **Data source picker: two rows, not one** — `.widget-source-select`
+    switched from the shared `.tile-select`'s flex/nowrap to a 3-column
+    grid, so 4-5 sources wrap to a readable 2-row layout instead of
+    fighting for a shrinking equal share of one enforced row (the
+    2026-08-07 one-row decision was made for 4 sources, before Spaces &
+    Projects' source made it 5).
+  - **Tile icons keep their color when selected** — dropped `.tile-option:
+    has(.tile-radio:checked) .tile-icon`'s recolor-to-accent-neutral rule;
+    a selected tile is already clear from its border/background/label-text
+    change.
+  - **View/Range picker: non-applicable options actually hide, not just
+    disable** — root cause was the exact same `.field{display:flex}`-
+    beats-`[hidden]{display:none}` specificity footgun already hit twice
+    this app (`.field.holiday-field`/`.field.label-project-fields`):
+    `filterMsOptions` (`dashboard_widget_preview.js`) already set the
+    `hidden` attribute correctly, but `.multiselect-option{display:flex}`
+    silently won, so a non-applicable View just sat there visibly disabled
+    instead of disappearing. New `.multiselect-option[hidden]{display:
+    none}` fixes both View and Range (same shared component).
+  - **New `weekly_schedule` widget type** ("Weekly Schedule") — see
+    `features/dashboard.md`'s own table entry and
+    `_render_weekly_schedule`'s docstring for the full design (static
+    weekday+time-of-day grid straight off each qualifying event's own
+    `start_at`/`end_at`, not a real week's expanded occurrences; new
+    `_is_long_lived_recurrence` filters to recurring events whose own rule
+    spans >= 30 days first-to-last occurrence, via one `recurrence_expand.
+    expand_events` call per candidate over its own 2-year window). New
+    `src/recurrence_expand` import in `routers/dashboard.py` (previously
+    unused there). Deliberately does NOT revive the removed Schedule
+    module (`plans/abandoned.md`, dropped 2026-08-15 same day) — no course/
+    semester data model, purely a presentation over ordinary recurring
+    Calendar events that already exist.
+  See `features/dashboard.md`. 12 new tests (`TestIsLongLivedRecurrence`/
+  `TestWeeklyScheduleWidget` in `test_dashboard_router.py`), full suite
+  1344 passed.
+- **Shipped:** side work — **Tasks page filter cleanup**, complete
+  (2026-08-15), `plans/open.md` § Tasks page filter cleanup (build-order
+  item 3 of the 2026-08-15 reprioritization). The Table/Board/Timeline
+  toolbar's Date dropdown (`routers/tasks.py`'s `DATE_FILTERS`) used to
+  carry `overdue`/`important`/`urgent` alongside the real date buckets —
+  direct feedback said that reads as clutter/wrong-drawer. Two of three
+  moves were already decided (Important -> Importance dropdown, Urgent ->
+  Urgency dropdown, each an "(any level)" option alongside the explicit
+  Low/Medium/High values); **Overdue's new home was left to this session's
+  call** — went with folding it into the Status dropdown as a virtual
+  pseudo-status (`STATUS_FILTERS`'s new trailing `"overdue"` entry) over
+  the toolbar-chip alternative, since it isn't a value on any real axis and
+  a chip would've been a second, redundant filtering mechanism sitting next
+  to dropdowns that already cover every other axis. `DATE_FILTERS` is back
+  to just the five real date buckets. `_apply_status_filter` gained a
+  `label_rules` parameter (mirroring the shape `_apply_importance_filter`/
+  `_apply_urgency_filter` already had) since the virtual `overdue` branch
+  needs it; every call site (Table, Board, Timeline) updated. The
+  Dashboard's At-a-glance widget's outbound links updated to match
+  (`status_filter=overdue`, `importance_filter=important`,
+  `urgency_filter=urgent` instead of `date_filter=...`) — caught by its own
+  existing link-assertion tests. Direct function calls with the old
+  `date_filter=overdue/important/urgent` values still happened to work
+  unchanged (`_apply_date_filter` never validated against `DATE_FILTERS`,
+  it just intersects whatever string it's given against
+  `derived_state.virtual_states`), so most of the pre-existing filter tests
+  needed no changes at all — only the three link-assertion tests that
+  literally spelled out `date_filter=overdue`. See `features/tasks.md` §
+  Tasks page filter cleanup. 8 new tests (`TestFilterOptionListsAfter
+  FilterCleanup`, `test_overdue_is_a_virtual_pseudo_status`,
+  `test_important_any_level_option`/`test_urgent_any_level_option`, etc. in
+  `test_tasks_view_rework.py`), full suite 1352 passed.
+- **Shipped:** side work — **Event format for simple events**, complete
+  (2026-08-15), `plans/open.md` § Event format for simple events (build-order
+  item 4 of the 2026-08-15 reprioritization). `_event_form_fields.html`
+  gained a Format field (`.event-format-segmented`, the same `.seg-btn`/
+  `.seg-radio`/`:has()` radio pattern `label_edit_modal.html`'s Role picker
+  already established) with two options, **In person** / **Online**, that
+  reveals only the relevant field (In person → Location, Online → Meeting
+  URL) instead of always showing both — resolving the one open sub-decision
+  left in the spec: "neither picked" (both fields hidden) is a real, default
+  third state, not just a fallback — a brand-new event starts with neither
+  radio checked. No backing column — Format is derived from which of
+  `events.location`/`events.meeting_url` already has a value (an existing
+  event with only Location set opens with In person pre-checked, etc.;
+  Location wins the tie for legacy rows that somehow have both set, since
+  there's no real "both" state in the new model); `create_event`/
+  `update_event` are completely unchanged. Show/hide is plain CSS
+  (`#event-form:has(#event_format_in_person:checked) .field-format-location`,
+  `style.css`, same `:has()` progressive-disclosure pattern as `#all_day`/
+  `.holiday-field` above); new `static/event_format_toggle.js` (loaded
+  globally in `base.html`, re-initialized on modal-injected content via
+  `modal.js`'s `wireContent()`, same convention as `task_habit_field_
+  toggle.js`) clears the *other* field's value on switch, so a hidden stale
+  value (e.g. a Meeting URL typed in before switching to In person) can't
+  silently resubmit and repopulate both columns behind the derivation's
+  back. `sw.js`'s precache list gained the new script (`cc-shell-v7`). No
+  changes needed to `event_detail.html` (already conditionally shows
+  Location/Meeting only when set) or the `organize_today` dashboard widget
+  (already reads the same two columns, per its own 2026-08-15 slice note).
+  See `features/calendar.md` § Event CRUD & fields, `plans/open.md`'s Event
+  format section removed. 13 new tests (`test_event_format_field.py`), plus
+  `test_pwa_shell.py`'s cache-name pin updated to v7, full suite 1365
+  passed.
+- **Shipped:** `Contacts field parity` slice 1 of 6 — **Title**, complete
+  (2026-08-15), build-order item 5 of the 2026-08-15 reprioritization.
+  Green-lit this session via AskUserQuestion (all five of `open.md`'s open
+  questions answered: vCard/Nextcloud type vocabulary, auto-migrate-as-
+  "Other" for existing single-value data, full vCard ADR structure for
+  Address, both full and year-less Birthday dates, `X-SOCIALPROFILE` for
+  Social network — recorded in `open.md`'s Contacts field parity section for
+  the 5 slices still to come). This slice: new `contacts.title` column
+  (`db.py`, `_ensure_column` migration for pre-existing databases), vCard
+  TITLE round-trip (`vcard_rows.py`), `title` Form field on
+  `create_contact`/`update_contact` (`routers/contacts.py`, same `"none"`/
+  `"nothing"` sentinel-clearing convention as `org`/`phone`/etc.), a Title
+  input on `contact_form.html`, and "Title at Org" (falling back to
+  whichever is present) on both `contact_detail.html`'s header and
+  `contacts_list.html`'s row subtitle. Contact search (`db.list_contacts`/
+  `db._search_contacts`) now matches `title` too. See `features/contacts.md`.
+  17 new tests (`test_contacts_field_parity_title.py`), plus 5 existing
+  contact-route call sites across `test_phase5_contacts.py`/
+  `test_phase1_universal_pool.py`/`test_modal_input_phaseB_chip_
+  multiselect.py` updated to pass the new `title` param (calling the router
+  function directly with a param omitted binds FastAPI's raw `Form(...)`
+  sentinel object, not `""` — caught by the full suite, not this slice's own
+  new tests), full suite 1382 passed. **Next in this build order:** Phone/
+  Email (multi-value), then Website, Birthday, Address, Social network — see
+  `open.md`'s Contacts field parity section.
+- **Shipped:** `Contacts field parity` slice 2 of 6 — **Phone/Email**,
+  complete (2026-08-15), build-order item 5 of the 2026-08-15
+  reprioritization, following slice 1's Title. New `contact_phones`/
+  `contact_emails` tables (`db.py`) give a contact any number of phone
+  numbers/email addresses, each typed from the vCard/Nextcloud vocabulary
+  green-lit in slice 1's own session (Home/Work/Cell/Fax/Pager/Other for
+  phone, Home/Work/Other for email) — owned child rows keyed by
+  `contact_uid`, no FOREIGN KEY constraint (confirmed via grep that
+  nothing in `SCHEMA_SQL` uses them), `position` a float sort key, same
+  shape as `task_checklist_items`. The old flat `contacts.phone`/
+  `contacts.email` columns are never dropped (this file's standing
+  convention) but are now dead by design, not kept live: reconciling two
+  sources of truth (a flat column plus a real multi-value list) on every
+  write would need an arbitrary "which one is primary" rule for no benefit
+  once nothing reads the column anymore, so it's simplest to freeze it as a
+  one-time migration source. `db.migrate_legacy_contact_phone_email` copies
+  a still-legacy value into the new table as a single "Other"-typed row,
+  gated on "zero existing child rows for this contact" so it's idempotent
+  and never overwrites real typed data a user already entered — runs
+  automatically in `init_schema`, same place every other migration in this
+  file lives. vCard round-trips as multiple TEL/EMAIL lines with a `TYPE=`
+  param (`vobject`'s `card.add("tel")`/`.type_param`, read back via
+  `tel_list`/`email_list` — the plural API, confirmed via a live vobject
+  round-trip that `card.tel`/`card.email` only ever surface the first
+  line); "Other" deliberately gets no `TYPE=` param at all since vCard has
+  no standard token for it, in either direction. Router: `create_contact`/
+  `update_contact` swapped their flat `phone`/`email` Form fields for
+  parallel `phone_type[]`/`phone_value[]` (`email_type[]`/`email_value[]`)
+  arrays (`list[str] = Form([])`, the same shape `tags_labels` already
+  uses) — chosen over `_task_work_allocations.html`'s own-POST-endpoints-
+  per-row pattern because a phone/email list is small and edited as a
+  whole on the form's one existing Save button, not a separate persistent
+  sub-resource like a work session. Rows are added/removed purely client-
+  side (new `static/contact_phone_email_rows.js`, clones a `<template>`
+  row, same `wireContent()` re-init idiom as `label_role_picker.js`) since
+  nothing is written until Save either way; the type picker is a plain
+  `<select>` (matching `habit_form.html`'s Project picker/`label_edit_
+  modal.html`'s Parent picker for "one of a short fixed list", not the
+  segmented `.seg-btn` control reserved for 2-3-way toggles). Detail page
+  lists every phone/email with its type label and a tel:/mailto: link
+  (repeated per row); the contacts-list row subtitle and the dashboard
+  Contact List widget both stay concise, showing only the first
+  (lowest-position) entry of each — no new "primary" flag, "first" is
+  simply creation/submission order. `db.list_contacts`'s `q` search and the
+  global `db._search_contacts` now also match the new child tables (the
+  dead legacy columns are still searched too — harmless redundancy, and
+  correct since the migration always runs before any query executes).
+  Also updated: `routers/export.py`'s contacts.csv (reads the first phone/
+  email instead of the dead columns) and `routers/quick_capture.py`'s `!c`
+  contact capture (stores its single parsed phone/email as one "Other"-
+  typed entry instead of writing the dead columns). See
+  `features/contacts.md`. 40 new tests
+  (`test_contacts_field_parity_phone_email.py`), plus 7 existing contact-
+  route call sites across `test_phase5_contacts.py`/
+  `test_phase1_universal_pool.py`/`test_modal_input_phaseB_chip_
+  multiselect.py`/`test_contacts_field_parity_title.py` updated for the new
+  `phone_type`/`phone_value`/`email_type`/`email_value` params, plus
+  `test_quick_capture.py`/`test_row_translators.py` updated off the now-
+  dead flat `phone`/`email` row keys (caught by the full suite, not this
+  slice's own new tests), full suite 1422 passed. **Next in this build
+  order:** Website (multi-value), then Birthday, Address, Social network —
+  see `open.md`'s Contacts field parity section.
+
+- **Designed:** side work — **Modal window uniformization, audit + rules**
+  (docs only, no code), complete (2026-08-15), direct user request to jump
+  ahead of Project check-in in the 2026-08-15 reprioritized queue and start
+  this now. Read every modal template in the app
+  (`grep -l "modal-header\|modal-body" src/templates/*.html`, 15 real modal
+  fragments) against `_modal_footer.html`'s existing convention, per this
+  file's own standing "audit before assuming a from-scratch build" habit.
+  Found: three different footer implementations in use (the shared
+  `_modal_footer.html` partial — core three entities only; hand-rolled
+  `.modal-footer` markup with small pointless differences — habit_form/
+  habit_task_form/label_edit_modal/label_merge_modal/note_form/quick_add/
+  _modal_widget_customize; no footer at all, Save embedded in the body form
+  — `_widget_edit_modal`/`banner_editor`); a real safety bug
+  (`note_form.html`'s Delete has neither confirm-sheet nor undo — the only
+  unconfirmed delete action in the app); an inconsistent icon-prefixed `<h1>`
+  on 2 of 12 utility-modal titles; and one real sizing bug
+  (`_modal_widget_customize`'s two-pane widget-builder grid never gets
+  `data-modal-size="wide"` on its trigger links, unlike the visually
+  identical `_widget_edit_modal`, so it squeezes into the default width).
+  Wrote the "real uniform modal windows" rules (footer always through
+  `_modal_footer.html`, delete confirmation never optional, plain-`<h1>`
+  titles reserved for utility modals vs. the rich identity header for
+  entity detail views, two allowed body shapes plus a documented custom
+  exception, two named dialog sizes) and an 8-slice (A-H) implementation
+  breakdown, ordered safety-fix-first. See `plans/open.md`'s Modal window
+  uniformization section for the full audit + rules + slice list.
+  **Deliberately no code changed this session** — slices A-C are small and
+  independent, but slices D-H should still wait for Contacts field parity
+  (4 of 6 sub-slices open) and Project check-in to finish touching the
+  entity/widget modals first, per the section's own updated note.
+
+- **Shipped:** side work — **Modal window uniformization, slices A-C**,
+  complete (2026-08-15), direct follow-up to the same-day audit + rules
+  pass above ("start work uniforming their look"). Three small,
+  independent slices from `plans/open.md`'s 8-slice (A-H) breakdown:
+  - **A+B — hand-rolled footers migrated onto `_modal_footer.html`**:
+    `habit_form`, `habit_task_form`, `label_edit_modal`,
+    `label_merge_modal`, `note_form`, `quick_add` all render their footer
+    through the shared partial now, matching the core three entities
+    (task/event/contact). Folded slice A's safety fix into the same
+    change: `note_form.html`'s Delete had neither `data-confirm-sheet` nor
+    `data-delete-undo` before this — the only unconfirmed destructive
+    action anywhere in the app — and now goes through the partial's
+    `confirm` mode like every other migrated modal's Delete.
+    `_modal_footer.html` gained one small, backward-compatible extension:
+    an optional `footer_primary_id` (`quick_add.html`'s tab switch
+    retargets the Save button's `form` attribute via
+    `getElementById("quick-add-save")`, `static/quick_add.js` — the
+    partial didn't expose a stable id for that before).
+  - **C — "New widget" triggers sized to match their content**:
+    `dashboard.html`/`label_detail.html`'s "New widget" links now carry
+    `data-modal-size="wide"`, matching `_widget_edit_modal.html`'s own
+    trigger — both open the identical `.widget-builder` two-pane grid, but
+    only one used to get the wide dialog.
+  Slices D-H (the remaining footer-less/icon-prefixed utility modals —
+  `_modal_widget_customize`, `_widget_edit_modal`, `banner_editor`) are
+  deliberately deferred per `open.md`'s own note: they touch modals
+  Contacts field parity (4 of 6 sub-slices open) and Project check-in
+  haven't finished adding fields to yet. See `plans/open.md`'s Modal
+  window uniformization section. 9 new tests
+  (`test_modal_uniformization.py`), full suite 1431 passed.
+
+- **Shipped:** **Contacts field parity slice 3 of 6 — Website**, complete
+  (2026-08-15) — multi-value, Home/Work/Other type vocabulary (same as
+  email/address, green-lit alongside the other Contacts field parity
+  decisions), new `contact_websites` table (`db.py`, same owned-child-row
+  shape as `contact_phones`/`contact_emails` — `contact_uid`, `type`,
+  `position`, no FOREIGN KEY — but the value column is named `url`, not
+  `value`, matching vCard's own URL property name). Unlike Phone/Email,
+  there was never a pre-existing single-value website column anywhere in
+  this app (confirmed by grepping `db.py`/`vcard_rows.py`/
+  `contact_form.html`/`contact_detail.html` before writing any code), so
+  no auto-migration was needed for this slice. vCard round-trips as
+  multiple `URL` lines with the same `TYPE=` convention Phone/Email use
+  ("Other" omits the param) — vCard's URL property isn't one of RFC
+  2426/6350's typed multi-instance properties the way TEL/EMAIL are, but
+  vobject supports repeated `card.add("url")` calls and a `card.url_list`
+  read-back identically, confirmed directly against vobject with a live
+  Python snippet before writing `vcard_rows.py`, not assumed. The
+  create/edit form submits every website row together as parallel
+  `website_type[]`/`website_url[]` form arrays, reusing
+  `static/contact_phone_email_rows.js`'s existing add/remove-row wiring
+  verbatim — it was already written generically enough
+  (`data-repeatable-rows-scope`/`-add`/`-template`) for a third field
+  group, no JS changes needed. The detail page lists every website with
+  its type and an external link (`target="_blank" rel="noopener"`,
+  matching event `meeting_url`'s own convention in `event_detail.html`).
+  Left off the contacts-list row subtitle and dashboard Contact List
+  widget — org/title/phone/email stay the more useful compact-row fields,
+  per the slice's own scoping note. Search (`db.list_contacts`/
+  `db._search_contacts`) matches website URLs too. See
+  `features/contacts.md`. 26 new tests
+  (`test_contacts_field_parity_website.py`); updated 7 existing
+  contact-route call sites (`test_contacts_field_parity_phone_email.py`,
+  `test_contacts_field_parity_title.py`, `test_phase5_contacts.py`,
+  `test_phase1_universal_pool.py`,
+  `test_modal_input_phaseB_chip_multiselect.py`) that call
+  `contacts_router.create_contact`/`update_contact` directly, off the new
+  required `website_type`/`website_url` form-array params — same "wire up
+  the new arrays at every existing call site" step Phone/Email's own
+  slice needed. Full suite 1457 passed. **Next in this build order:
+  Birthday** (full or year-less date, 4 of 6).
+- **Shipped:** **Contacts field parity slice 4 of 6 — Birthday**, complete
+  (2026-08-16) — single-value (unlike Phone/Email/Website above — a
+  contact has at most one birthday), so a plain `contacts.birthday`
+  column (`_ensure_column`), not a child table. Stores vCard's own BDAY
+  text verbatim: a full `YYYY-MM-DD` date, or a year-less `--MM-DD` date
+  (green-lit alongside the other Contacts field parity decisions,
+  2026-08-15). New `db.parse_contact_birthday` validates a create/edit
+  form's raw text against both shapes using real calendar-date rules
+  (`datetime.strptime`, not just a regex — rejects e.g. `1990-02-30`; a
+  year-less date is checked against a dummy leap year, 2000, so `--02-29`
+  validates) — `routers/contacts.py`'s one call site before
+  `db.upsert_contact` ever runs, raising a 400 on anything else so a
+  rejected save never partially writes (same convention
+  single-project-per-task's `MultipleProjectLabelsError` handling uses).
+  New `db.format_contact_birthday` is the display side ("May 17, 1990" /
+  "May 17"), falling back to the raw stored value unchanged for a shape
+  this app didn't write itself. vCard round-trips through one BDAY line —
+  confirmed directly against vobject before writing `vcard_rows.py` that a
+  plain string `.value` (not a `date` object) round-trips both shapes
+  byte-for-byte on both write and read, so no date-parsing is needed
+  anywhere in this app. The create/edit form uses a plain text input
+  (`contact_form.html`, new `.field-hint` CSS shared with any future
+  plain-form hint text), not a native `<input type="date">`, since a
+  year-less birthday has no HTML date-input equivalent — `pattern` is a
+  client-side hint only, the router's `_parse_birthday_field` is the real
+  validation. The detail page renders it through a new `fmt_birthday`
+  Jinja filter (`deps.py`). Deliberately not searched
+  (`db._search_contacts`/`list_contacts`) — same precedent as Address, the
+  other single-value field, which isn't searched either. See
+  `features/contacts.md`. 35 new tests
+  (`test_contacts_field_parity_birthday.py`); updated 20 existing
+  contact-route call sites across 6 test files
+  (`test_contacts_field_parity_phone_email.py`,
+  `test_contacts_field_parity_title.py`,
+  `test_contacts_field_parity_website.py`,
+  `test_modal_input_phaseB_chip_multiselect.py`,
+  `test_phase1_universal_pool.py`, `test_phase5_contacts.py`) that call
+  `contacts_router.create_contact`/`update_contact` directly, off the new
+  required `birthday` form param — same "wire up the new field at every
+  existing call site" step Website's own slice needed. Full suite 1492
+  passed. **Next in this build order: Address** (structured multi-value,
+  full vCard ADR, 5 of 6).
+- **Shipped:** side work — **Birthdays as generated Calendar events + a
+  real `.checklist-delete` style**, complete (2026-08-16), direct feedback
+  on the Birthday slice above. Two independent pieces:
+  - A contact with a Birthday now shows up on the Calendar itself as a
+    real all-day event, recurring `FREQ=YEARLY`, tagged with the
+    "Birthday" label — not a separate widget. New `db.sync_contact_
+    birthday_event(conn, contact_uid, full_name, birthday)`, called from
+    `upsert_contact` on every save and from `delete_contact`, owns exactly
+    one such event per contact at the deterministic uid
+    `f"birthday::{contact_uid}"` — found-and-replaced idempotently on
+    every save rather than tracked through a new relation table (same
+    "derive the id instead of storing a relation" shape
+    `event_occurrence_overrides`' `master_uid::occurrence_date` composite
+    key already uses). A year-less `--MM-DD` birthday has no real year to
+    anchor `DTSTART` on, so it uses a fixed placeholder year (1900) far
+    enough in the past that `FREQ=YEARLY` always has a "this year"
+    occurrence — RRULE recurrence only ever generates forward from
+    DTSTART, which is also exactly correct for a *full* birthday date
+    (DTSTART = the real birth year, no occurrence before someone was
+    born). Clearing a birthday deletes the generated event; deleting the
+    contact does too. Verified end-to-end through the real
+    `recurrence_expand.expand_events` pipeline the Calendar page itself
+    uses (not just that the row exists) — both a full-date and a
+    year-less birthday actually expand to one occurrence in the current
+    year's window. See `features/calendar.md`'s new "Generated Birthday
+    events" note and `features/contacts.md`'s Birthday entry.
+  - `.checklist-delete` (the icon-only remove button used by checklist
+    rows, the Relations card's unlink action, and Work sessions/Phone/
+    Email/Website row removal) was previously unstyled beyond
+    `margin-left:auto` — it rendered as a bare native `<button>` with
+    default browser chrome. Now styled with the same quiet-by-default,
+    red-on-hover/focus treatment `.detail-delete-link` already uses for
+    the footer's demoted Delete action (`color:var(--fg-tertiary)` ->
+    `var(--danger)` + `var(--tag-red-bg)` on hover/focus), just sized for
+    an inline row instead of a footer link.
+  11 new tests extending `test_contacts_field_parity_birthday.py`
+  (`TestBirthdayCalendarEvent`, 46 total in that file), full suite 1503
+  passed. No CSS-only test coverage for `.checklist-delete` (this app has
+  no visual-regression harness) — verified by reading the rendered rule
+  against `.detail-delete-link`'s own precedent.
+
+- **Shipped:** `1.9` slice — **Async CRUD: task create/edit/complete/delete
+  without a page reload**, complete (2026-08-16) — progressive-enhancement
+  async layer over the existing plain-form flows, per `features/async-crud.md`.
+  Every mutation endpoint keeps its `303 Redirect` for a non-JS client; with
+  the fetch header (`X-Requested-With: fetch`) it returns JSON instead
+  (`201 {"ok": true, "uid": …}` on create, `200 {"ok": true}` on the rest) —
+  detected via `x_requested_with: str | None = Header(default=None)` (a
+  `Request | None` param breaks FastAPI with "Invalid args for response
+  field"), shared by `routers/tasks.py`'s `_wants_json`/`_respond`.
+  - New `static/async_crud.js` (loaded globally in `base.html` after
+    `modal.js`): `window.ccApi.post` (the only `fetch` path every mutating
+    form goes through, so 1.8's future outbox interception has one hook —
+    `_send`), `window.ccApi.refreshRegion`, a generic `data-cc-complete`
+    submit handler (posts, then dispatches the event; it does *not* refresh
+    — the owner does), and the `cc-entity-changed` event bus for
+    cross-surface sync.
+  - Tasks page: new `GET /tasks/regions?region=table` fragment endpoint
+    (`routers/tasks.py::tasks_regions`, unknown region -> 400 JSON) renders
+    the shared `_tasks_body.html` (extracted from `tasks_list.html`, which
+    now just includes it — the partial self-imports `task_row` and defines
+    `sort_link` so it renders standalone). It accepts the same query params
+    as `list_tasks`; the client forwards the page's own `location.search`
+    so filters/sort/page carry over. `tasks_table.js` was refactored to
+    document-level delegation (region swaps replace `#task-table`), and
+    listens for `cc-entity-changed` to refresh `#tasks-body` (reload
+    fallback on failure); inline pill/date edits stay optimistic with no
+    region refresh, by design. Bulk status/tag/delete dispatch the event
+    instead of reloading; bulk list-select stays a reload.
+  - Modals/other JS: `modal.js` sends the fetch header and, on a
+    non-keep-open success of a `data-cc-change` form (action from
+    `data-cc-action`), dispatches `cc-entity-changed` instead of
+    reloading; `task_form.html` uses `data-cc-change="task"` +
+    `data-cc-action`, `task_detail.html` opts its footer delete into the
+    same via `_modal_footer.html`'s new `footer_delete_cc_change`.
+    `app.js`'s delete-with-undo and list-row timer paths do the same when
+    the form carries `data-cc-change`; `command_palette.js`'s task
+    complete/delete send the header + dispatch (notes/events unchanged).
+  - Dashboard: new `GET /dashboard/widgets/{uid}` (`routers/dashboard.py::
+    widget_card_region`, 404 on unknown uid) renders the single-card
+    `_widget_card.html` (widget markup extracted into the shared
+    `widget_inner` macro in new `_widget_inner.html`); cards carry
+    `data-widget-uses="tasks"` and the dashboard listener refreshes
+    `.widget-card[data-widget-uses*="tasks"]` on `cc-entity-changed` but
+    skips while `#dashboard-grid.is-editing` (the fragment renders
+    `edit_mode=False` and would drop drag chrome). `_widget_agenda.html`'s
+    complete forms got `data-cc-complete`. Stack children have no
+    `#widget-<uid>` container so `refreshRegion` no-ops there (documented
+    scope cut).
+  17 new tests (`test_async_crud.py`): region-fragment parity with the full
+  page (rows, filters/pagination, pager, empty state, unknown region 400),
+  dual-mode mutations (JSON 201/200 with header, 303 without, recurring
+  completion history, two-project 400), widget card region (marker +
+  content + 404), detail delete-form opt-in. Full suite 1524 passed.
+  *Note:* the working tree also still carries the pre-existing uncommitted
+  Modal window uniformization slices D–H (modal-uniformization audit +
+  rules were committed as slices A–C in `cc31141`); two small fixes were
+  made to that uncommitted work to get the suite green (`_widget_edit_
+  modal.html`'s Jinja comment ending `-->` instead of `#}`; a too-strict
+  assertion in `test_modal_uniformization.py`).
+- **Shipped:** side work — **Modal window uniformization, slices D-H (all
+  slices now shipped)**, complete (2026-08-15), continuing straight on
+  from slices A-C (`cc31141`) once the concurrent Async CRUD work above
+  had committed and the tree was green again (session paused mid-slice
+  waiting on that, per its own direct instruction — see this file's git
+  log for the gap). Four small slices closing out the 8-slice (A-H)
+  breakdown from `plans/open.md`'s former Modal window uniformization
+  section (now removed — every slice shipped, folded into
+  `features/design-system.md`'s new "Modal windows" section instead, per
+  this repo's "ships -> describe the outcome, remove the section"
+  convention):
+  - **D** — `_modal_widget_customize.html`'s "Add widget" onto
+    `_modal_footer.html` in a new primary-only mode (no back link at all,
+    the dialog's own X still closes it, preserving the 2026-08-07
+    "one button" decision) — `_modal_footer.html` gained a second small
+    extension, `footer_back_url` can now be omitted entirely.
+  - **E** — `_widget_edit_modal.html` gets a Back/Done-only footer.
+    Checked `static/dashboard_widget_preview.js` directly before touching
+    anything (per this file's own "verify, don't guess" habit): the body's
+    inline "Save filters" button isn't vestigial, it's a real
+    progressive-enhancement fallback JS hides once autosave takes over and
+    un-hides again on failure, so it stays in the body untouched — the
+    partial gained a third small extension, `footer_primary_label` can now
+    be omitted for a footer with no primary button at all.
+  - **F** — `banner_editor.html` gets a Back/Done-only footer using the
+    real `page_url` (this template also renders standalone for a no-JS
+    visit, so the back link needs a real navigable target, not `#`).
+  - **G** — dropped the inconsistent icon prefix from `banner_editor`'s
+    and `_widget_edit_modal`'s `<h1>` to match every other utility modal.
+  - **H** — re-grepped all 15 modal fragments: every one now includes
+    `_modal_footer.html`, no leftover hand-rolled footer markup anywhere.
+    Added a standing regression test (`TestFullAppModalSweep`) that greps
+    the same 15 files for the include, so a future modal skipping the
+    partial fails CI instead of waiting for another manual audit.
+  4 new tests extending `test_modal_uniformization.py` (13 total), full
+  suite 1524 passed.
+- **Shipped:** side work — **Contacts field parity slice 5 of 6, Address
+  (structured multi-value, full vCard ADR)**, complete (2026-08-16) — the
+  old `contacts.address` free-text column is now `contact_addresses`, a
+  full structured, multi-value vCard ADR (PO Box, Extended, Street, City,
+  Region, Postal code, Country), each entry typed Home/Work/Other (same
+  vocabulary as email/website). Same owned-child-row shape as
+  `contact_phones`/`contact_emails`/`contact_websites`
+  (`db.list_contact_addresses`/`set_contact_addresses`), just seven value
+  columns instead of one — a row is dropped on save only when every one
+  of the seven fields is blank, unlike the sibling tables' single-value
+  blank check. The old flat value auto-migrates once, idempotently, into
+  a single "Other"-typed entry (the whole legacy string placed in
+  `street`, every other field left blank —
+  `db.migrate_legacy_contact_address`, same shape as
+  `migrate_legacy_contact_phone_email`). vCard round-trips as multiple
+  `ADR` lines with `TYPE=` (Other omits it) via vobject's `card.add
+  ("adr")`/`adr_list` — ADR is one of RFC 2426/6350's own typed multi-
+  instance properties (unlike Website's URL workaround), confirmed
+  directly against vobject before writing `vcard_rows.py`. The create/
+  edit form renders each address as its own card (new
+  `.contact-address-row`/`.contact-address-fields` CSS, a 2-column field
+  grid) rather than the single-line rows phone/email/website use — more
+  fields per entry than a one-line layout could hold; still reuses
+  `static/contact_phone_email_rows.js`'s generic add/remove-row wiring
+  verbatim. The detail page renders each entry through a new
+  `fmt_address` Jinja filter (`deps.py` -> `db.format_contact_address`),
+  vCard's own multi-line layout (PO Box/Extended/Street each own line,
+  then "City, Region PostalCode", then Country). Not searched, same
+  precedent Birthday established. See `features/contacts.md`. 37 new
+  tests (`test_contacts_field_parity_address.py`); ~28 existing call
+  sites across 8 test files updated for the removed bare `address` form
+  param (superseded by eight `address_*[]` arrays), full suite 1560
+  passed.
+- **Shipped:** side work — **Contacts field parity slice 6 of 6, Social
+  network (`X-SOCIALPROFILE`)**, complete (2026-08-16) — closes out the
+  6-slice Contacts field parity effort (`plans/open.md`, Title -> Phone/
+  Email -> Website -> Birthday -> Address -> Social network). Multi-
+  value, each entry tagged with a network name (`db.CONTACT_SOCIAL_
+  TYPES` — Twitter/Facebook/Instagram/LinkedIn/Mastodon/GitHub/Other),
+  deliberately not the Home/Work/Other vocabulary every other typed
+  contact field uses, since "which network" is the meaningful
+  distinction here, not "which location/context." New
+  `contact_social_profiles` table, same owned-child-row shape as
+  `contact_phones`/`contact_emails`/`contact_websites` (single `value`
+  column, `db.list_contact_social_profiles`/`set_contact_social_
+  profiles`). No pre-existing single-value column ever existed, so no
+  auto-migration was needed (same situation as Website, confirmed by
+  grep first). vCard round-trips as multiple `X-SOCIALPROFILE` lines
+  with `TYPE=` naming the network (Other omits it) — an X- extension
+  property, not core RFC 2426/6350, but vobject treats it identically to
+  a typed core property (repeatable `card.add`, plural `_list` read-
+  back), confirmed directly against vobject before writing
+  `vcard_rows.py`. Create/edit form uses the same one-line multi-row
+  shape as Phone/Email/Website (`social_type[]`/`social_value[]`,
+  `static/contact_phone_email_rows.js` reused verbatim). The detail page
+  renders a URL-shaped value (`http://`/`https://`) as an external link,
+  matching website's own convention; a bare handle/username renders as
+  plain text, since X-SOCIALPROFILE doesn't guarantee either shape. See
+  `features/contacts.md`. 25 new tests
+  (`test_contacts_field_parity_social.py`), full suite 1586 passed.
+  **Contacts field parity with Nextcloud Contacts is now fully shipped**
+  (`plans/open.md`'s section closed out, `plans/roadmap.md`'s 1.1 side-
+  work row marked shipped).
+  *Note on session discipline:* both slices above were built and
+  committed together in this one session, at the user's explicit
+  request (normally one slice per session, per this file's own "How to
+  run a session" section below) — Address and Social network touch the
+  same handful of files (`db.py`, `vcard_rows.py`,
+  `routers/contacts.py`, `contact_form.html`/`contact_detail.html`) in
+  ways that were simplest to write and verify together as one pass, even
+  though their docs/tests/STATE.md entries are still kept fully separate
+  above.
+- **Versioned:** `1.9` now shipped as `1.9.0` (2026-08-16) — `pyproject.toml`
+  bumped, catching another stale-versioning gap: it had stayed at `1.8.0`
+  since 1.9's Pagination slice shipped (2026-08-15) and the bump was never
+  committed, the same gap 1.8's own bump had already caught for 1.4-1.7.
+  No code changes — the 1.9 features (Tasks table pagination) shipped in
+  the entries above; this commit only versions them. Full suite still 1586
+  passed.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

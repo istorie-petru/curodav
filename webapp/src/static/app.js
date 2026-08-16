@@ -183,9 +183,19 @@ document.addEventListener("submit", (event) => {
 
     if (redirect) {
       if (inModal) window.CCModal.close();
-      fetch(form.action, { method: "POST", body: new FormData(form) })
+      fetch(form.action, { method: "POST", headers: { "X-Requested-With": "fetch" }, body: new FormData(form) })
         .then(() => {
-          if (inModal) window.location.reload();
+          // async-CRUD (features/async-crud.md): a form marked data-cc-change
+          // opts out of the reload -- the page the modal was opened over
+          // refreshes just its own region on the cc-entity-changed event.
+          const changeType = form.getAttribute("data-cc-change");
+          if (inModal && changeType) {
+            document.dispatchEvent(
+              new CustomEvent("cc-entity-changed", {
+                detail: { type: changeType, action: "delete" },
+              })
+            );
+          } else if (inModal) window.location.reload();
           else window.location.href = redirect;
         })
         .catch(() => {
@@ -201,11 +211,25 @@ document.addEventListener("submit", (event) => {
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return;
-      fetch(form.action, { method: "POST", body: new FormData(form) }).catch(() => {
-        // Best-effort: the row is already hidden client-side; a failed
-        // background delete just means it'll reappear on next reload
-        // rather than silently vanishing forever.
-      });
+      fetch(form.action, { method: "POST", headers: { "X-Requested-With": "fetch" }, body: new FormData(form) })
+        .then(() => {
+          // Tell the page's region (e.g. #tasks-body) to re-render now the
+          // delete is confirmed, so divider counts / pagers / empty states
+          // catch up -- only when the form opted in via data-cc-change.
+          const changeType = form.getAttribute("data-cc-change");
+          if (changeType) {
+            document.dispatchEvent(
+              new CustomEvent("cc-entity-changed", {
+                detail: { type: changeType, action: "delete" },
+              })
+            );
+          }
+        })
+        .catch(() => {
+          // Best-effort: the row is already hidden client-side; a failed
+          // background delete just means it'll reappear on next reload
+          // rather than silently vanishing forever.
+        });
     }, 4500);
     window.ccToast({
       message: `Deleted "${label}"`,

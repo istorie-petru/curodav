@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import calendar as py_calendar
+import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, recurrence_expand, schedule
+from .. import db, grid_layout, recurrence_expand
 from ..deps import _four_week_position, _week_start, get_db, templates
 from . import dashboard as dashboard_router
 
@@ -77,6 +78,66 @@ def _weekday_names(week_start: str) -> list[str]:
     return names
 
 
+def _hhmm_to_minutes(t: str) -> int:
+    """"HH:MM" -> minutes since midnight -- the Sleep/Leisure Time blocks'
+    own start_time/end_time storage format (routers/settings.py's Time
+    inputs), same idea as grid_layout._minutes but reading a bare time
+    string instead of slicing an ISO datetime."""
+    h, m = t.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _time_block_overlays_for_day(blocks: list[dict], day: date) -> list[dict]:
+    """Every Sleep/Leisure Time block (db.list_time_blocks) that applies to
+    `day`'s weekday, turned into a top_px/height_px overlay the Week/Day
+    grid can render directly behind its events -- same top/height math as
+    grid_layout.position_event, just driven off a fixed weekly time range
+    instead of one event's start_at/end_at. `date.strftime('%A')` gives the
+    same full weekday name (e.g. "Monday") db.TIME_BLOCK_DAYS/time_blocks.days
+    already store, so no separate lookup table is needed here."""
+    weekday = day.strftime("%A")
+    overlays = []
+    for b in blocks:
+        if weekday not in db.time_block_days(b):
+            continue
+        start_min = _hhmm_to_minutes(b["start_time"])
+        end_min = _hhmm_to_minutes(b["end_time"])
+        if end_min <= start_min:
+            continue  # defensive -- create/update already reject this, but never trust storage alone
+        overlays.append(
+            {
+                "kind": b["kind"],
+                "top_px": round(start_min / 60 * grid_layout.PX_PER_HOUR, 1),
+                "height_px": round((end_min - start_min) / 60 * grid_layout.PX_PER_HOUR, 1),
+            }
+        )
+    return overlays
+
+
+def _time_blocks_client_payload(blocks: list[dict]) -> str:
+    """JSON for the Week/Day grid's client-side scheduling-warning check
+    (static/time_blocks.js) -- {kind, label, days, start_min, end_min} per
+    block, minutes-since-midnight so the client never has to re-parse
+    "HH:MM" strings. Rendered into a page-local <script type="application/
+    json"> tag rather than an inline JS literal so it round-trips through
+    Jinja's HTML auto-escaping safely (json.dumps already produces valid,
+    self-contained JSON text -- no `</script>`-breaking concerns here since
+    every string value is a plain label/day name this app itself controls
+    via Settings > Sleep & Leisure Time, never arbitrary user HTML)."""
+    return json.dumps(
+        [
+            {
+                "kind": b["kind"],
+                "label": b.get("label") or "",
+                "days": db.time_block_days(b),
+                "start_min": _hhmm_to_minutes(b["start_time"]),
+                "end_min": _hhmm_to_minutes(b["end_time"]),
+            }
+            for b in blocks
+        ]
+    )
+
+
 def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
@@ -123,57 +184,6 @@ def _related_context(conn, event: dict | None) -> dict:
     for t in related:
         t["status_color"] = _TASK_STATUS_DOT_COLORS.get(t["status"], "blue")
     return {"related_tasks": related}
-
-
-def _group_education_next_lectures(conn, label: str | None) -> list[dict]:
-    """Phase 6 -- the education "next lecture" badge strip for a Space-
-    filtered calendar. Phase 2 (label-space rework) dropped project_groups'
-    `kind='education'` column -- there's no dedicated "education space"
-    flag anymore, so this now just checks whether the filtered Space
-    (a generate_space=1 label) has any class events among its child
-    labels' members at all; any other filter renders no badges. 1.6
-    (Schedule & recurrence rework): a "class" is now a real recurring
-    event carrying the Schedule system label plus a course label
-    (db.list_schedule_class_events), not its own schedule_classes row --
-    each entry's "class" key is that event dict now, and the next
-    occurrence is read straight off the event's own RRULE/EXDATE
-    (schedule.next_occurrence_for_event) instead of being re-derived from
-    settings/holidays. Phase 9b toolbar rework: the calendar's filter is a
-    plain event label filter (`label`, see month_view/week_view/day_view/
-    agenda_view below), not a dedicated Space/Project picker -- this still
-    works unchanged since a Space is just a label like any other, `label`
-    here plays the same role `group_uid` used to. Each entry: {"class":
-    <event row>, "date": <next date>, "label": "today"|"tomorrow"|"in N
-    days"}."""
-    from datetime import date as _date
-
-    if not label:
-        return []
-    cfg = db.get_label_config(conn, label)
-    if not cfg or not cfg.get("generate_space"):
-        return []
-    child_names = {c["name"] for c in db.list_child_labels(conn, label)}
-    classes = [
-        c for c in db.list_schedule_class_events(conn) if child_names & set(c.get("tags") or [])
-    ]
-    if not classes:
-        return []
-    today = _date.today()
-    holiday_calendars = db.list_holidays_by_calendar(conn)
-    badges = []
-    for cl in classes:
-        nxt = schedule.next_occurrence_for_event(cl, today, holiday_calendars=holiday_calendars)
-        if not nxt:
-            continue
-        # The badge's acronym is the course's own label_config.course_acronym
-        # now (see db.py's label_config CREATE TABLE comment) -- an event
-        # itself has no acronym field, only its title.
-        course_name = db.project_label_for(conn, "event", cl["uid"])
-        course_cfg = db.get_label_config(conn, course_name) if course_name else None
-        cl = dict(cl)
-        cl["acronym"] = (course_cfg or {}).get("course_acronym")
-        badges.append({"class": cl, "date": nxt, "label": schedule.next_label(nxt, today)})
-    return badges
 
 
 def _apply_event_label_filter(events: list[dict], label: str | None) -> list[dict]:
@@ -467,6 +477,15 @@ def month_view(
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
+    # Timetabled tasks (work-allocation events, scheduled from a project's
+    # Week/Timetable planning grids) are scheduling placeholders, not
+    # ordinary events -- they're deliberately prominent on the Week grid
+    # (see week_view's own docstring) but would just be noise duplicating
+    # the task's own due-date chip here, so Month excludes them entirely
+    # rather than rendering them as a third kind of item.
+    allocation_uids = db.work_allocation_event_uids(conn)
+    events = [e for e in events if e["uid"] not in allocation_uids]
+
     # Phase 9b toolbar rework: the dead Space/Project dropdowns
     # (project_uid/group_uid) are gone -- `label` is the one real filter
     # now, applied to both events and the all-day task chips this page
@@ -505,7 +524,6 @@ def month_view(
             "next_month": next_month,
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -565,7 +583,6 @@ def four_week_view(
             "next_start": (view_start + timedelta(days=7)).isoformat(),
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
         },
     )
 
@@ -577,6 +594,26 @@ def week_view(
     label: str | None = None,
     conn=Depends(get_db),
 ):
+    """Week -- the ordinary Week grid (Month/4-Week/Week/Day) MERGED with the
+    former "Timetable" sub-view (1.9 side work, direct feedback: "merge the
+    calendar's week view with the timetable view"). One grid, both
+    capabilities at once: ordinary calendar events stay fully interactive
+    (drag-to-move/resize via `static/calendar.js`, click to open), empty grid
+    space still drag-creates a new event (`.calendar-create-col`), AND every
+    work-allocation event renders prominently as a draggable `.work-allocation`
+    block (`static/project_calendar.js`) with its own move/resize/delete
+    (block only, never the task) plus the "Unscheduled work" sidebar that
+    drags a task onto the grid to schedule it. Both scripts load on this page
+    now; calendar.js's own `.time-event` selector explicitly excludes
+    `.work-allocation` so the two scripts never double-attach a pointerdown
+    handler to the same block (see calendar.js's own comment). The sidebar is
+    collapsible via a header button (static/unscheduled_panel_toggle.js,
+    per-device localStorage, no server state).
+
+    This reuses what the old timetable_view (folded in here) computed: the
+    per-event `is_allocation`/`task_uid` annotation and the unscheduled-work
+    list (`db.work_allocation_panel_info`), on top of the plain Week grid's
+    own geometry (`grid_layout.layout_day`) and color annotation."""
     anchor = date.fromisoformat(date_) if date_ else date.today()
     week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
 
@@ -589,8 +626,23 @@ def week_view(
     events = _apply_event_label_filter(events, label)
     events = _annotate_calendar_colors(conn, events)
 
+    # Every work-allocation event is schedulable-work-made-visible, prominent
+    # regardless of task/project -- same annotation the old timetable_view
+    # (and routers/week.py::week_view) did.
+    for e in events:
+        task_uid = db.work_allocation_task_uid(conn, e["uid"])
+        e["is_allocation"] = bool(task_uid)
+        e["task_uid"] = task_uid
+
     tasks = db.list_tasks(conn)
     tasks = _apply_task_label_filter(tasks, label)
+    open_tasks = [t for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
+
+    # Sleep/Leisure Time hatching (1.9 side work) -- fetched once for the
+    # whole week, then resolved per day by weekday name (_time_block_overlays_
+    # for_day), same "compute once, slice per day" shape day_all_day above
+    # already uses.
+    time_blocks = db.list_time_blocks(conn)
 
     days = []
     for i in range(7):
@@ -599,6 +651,7 @@ def week_view(
         day_events = [e for e in events if e.get("start_at", "").startswith(key)]
         timed = grid_layout.layout_day(day_events)
         day_tasks = [t for t in tasks if (t.get("due_at") or "").startswith(key)]
+        time_block_overlays = _time_block_overlays_for_day(time_blocks, d)
         # All-day events repeat on every day they span, not just their
         # start date -- the same "repeated entry per day" behavior Month's
         # _month_grid already has (a multi-day all-day trip should fill
@@ -619,8 +672,29 @@ def week_view(
                 "all_day": day_all_day,
                 "timed": timed,
                 "tasks": day_tasks,
+                "time_block_overlays": time_block_overlays,
             }
         )
+
+    # Unscheduled work (the drag source): every open task with no work
+    # allocation yet, across every project or none -- sorted by due date
+    # (earliest first, no-due-date tasks last). Each item carries its
+    # db.work_allocation_panel_info summary (session count still needing
+    # placement) for the stepper the shared _unscheduled_task_item.html
+    # partial renders.
+    unscheduled_tasks = []
+    for t in open_tasks:
+        # Unscheduled = no work session at all, OR any session still has no
+        # date (a "+"-added placeholder from the task modal's Work sessions
+        # card awaiting placement on a grid -- see db.create_work_allocation's
+        # undated form). Only a task whose every session is dated has nothing
+        # left to place, so only those drop off the panel.
+        info = db.work_allocation_panel_info(conn, t["uid"])
+        if info["count"] and not info["undated_count"]:
+            continue
+        project = db.project_label_config_for(conn, "task", t["uid"])
+        unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
+    unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     return templates.TemplateResponse(
         "calendar_week.html",
@@ -642,145 +716,68 @@ def week_view(
             "sunday": week_end_date,
             "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
             "next_week": (week_start_date + timedelta(days=7)).isoformat(),
+            "unscheduled_tasks": unscheduled_tasks,
+            "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
+            "time_blocks_json": _time_blocks_client_payload(time_blocks),
         },
     )
+
+
+@events_router.get("/week")
+def week_redirect(date_: str | None = None):
+    """The former standalone /week page ("Week -- planning", 1.7 slice 2,
+    routers/week.py) is retired (1.9 side work) -- its cross-project
+    scheduling surface (Unscheduled work sidebar, drag-drop, the grid
+    itself) is now identically present at /calendar/week (see this file's
+    own week_view docstring: the "Calendar Week + Timetable merged" side
+    work already folded Timetable's planning capability into the ordinary
+    Week grid, confirmed by reading both routers/templates directly before
+    this retirement, not assumed). Registered on `events_router` (this
+    module's unprefixed router) rather than `router` (prefix="/calendar")
+    since the redirect's own path has to be the bare "/week", not
+    "/calendar/week" -- same "any bookmark still lands somewhere real"
+    precedent `timetable_view_redirect` right below already set."""
+    url = "/calendar/week"
+    if date_:
+        url += f"?date_={date_}"
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/timetable")
-def timetable_view(
-    request: Request,
-    date_: str | None = None,
-    label: str | None = None,
-    conn=Depends(get_db),
-):
-    """Timetable -- the global Week (planning) surface (1.7, routers/week.py::
-    week_view) folded in as another sub-view of the main Calendar page, named
-    "Timetable" in the calendar-subnav. It is `/week` copied into the
-    Calendar page, not a calendar.js merge: the exact grid markup/CSS classes
-    `week_planning.html` renders, with the scheduling affordances -- the
-    "Unscheduled work" sidebar that drags onto the grid to create (or place)
-    a work allocation, and every work-allocation block rendered prominently
-    with its own move/resize/delete (block only, never the task) plus the
-    same click-a-block-to-open-its-task behavior. Ordinary calendar events
-    render as subdued `.context-event` context, exactly as on /week, so
-    `static/project_calendar.js` runs alone here (its own
-    window.PROJECT_CALENDAR config pointed at this page's
-    /calendar/timetable/allocations endpoints).
-
-    This reuses week_view's geometry/annotations (the grid_layout.layout_day
-    call, the _annotate_calendar_colors pass) and week.py's scheduling data
-    (per-event `is_allocation`/`task_uid`, the unscheduled-work list) on a
-    single page -- see calendar_timetable.html's own comment."""
-
-    anchor = date.fromisoformat(date_) if date_ else date.today()
-    week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
-
-    events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
-    events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
-    events = _apply_event_label_filter(events, label)
-    events = _annotate_calendar_colors(conn, events)
-
-    # Every work-allocation event is schedulable-work-made-visible, prominent
-    # regardless of task/project -- same annotation routers/week.py::week_view
-    # does (its whole point is seeing ALL scheduled work at once).
-    for e in events:
-        task_uid = db.work_allocation_task_uid(conn, e["uid"])
-        e["is_allocation"] = bool(task_uid)
-        e["task_uid"] = task_uid
-
-    tasks = db.list_tasks(conn)
-    tasks = _apply_task_label_filter(tasks, label)
-    open_tasks = [t for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
-
-    days = []
-    for i in range(7):
-        d = week_start_date + timedelta(days=i)
-        key = d.isoformat()
-        day_events = [e for e in events if e.get("start_at", "").startswith(key)]
-        timed = grid_layout.layout_day(day_events)
-        day_all_day = []
-        for e in events:
-            if not e.get("all_day"):
-                continue
-            rng = _event_date_range(e)
-            if rng and rng[0] <= d <= rng[1]:
-                day_all_day.append(e)
-        day_tasks = [t for t in tasks if (t.get("due_at") or "").startswith(key)]
-        days.append(
-            {
-                "date": d,
-                "iso": key,
-                "is_today": d == date.today(),
-                "all_day": day_all_day,
-                "timed": timed,
-                "tasks": day_tasks,
-            }
-        )
-
-    # Unscheduled work (the drag source): every open task with no work
-    # allocation yet, across every project or none -- same rule as
-    # routers/week.py::week_view, sorted by due date (earliest first,
-    # no-due-date tasks last). Each item carries its
-    # db.work_allocation_panel_info summary (session count + scheduled/total
-    # hours) for the stepper and x/y readout the shared
-    # _unscheduled_task_item.html partial renders.
-    unscheduled_tasks = []
-    for t in open_tasks:
-        # Unscheduled = no work session at all, OR any session still has no
-        # date (a "+"-added placeholder from the task modal's Work sessions
-        # card awaiting placement on a grid -- see db.create_work_allocation's
-        # undated form). Only a task whose every session is dated has nothing
-        # left to place, so only those drop off the panel.
-        info = db.work_allocation_panel_info(conn, t["uid"])
-        if info["count"] and not info["undated_count"]:
-            continue
-        project = db.project_label_config_for(conn, "task", t["uid"])
-        unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
-    unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
-
-    return templates.TemplateResponse(
-        "calendar_timetable.html",
-        {
-            "request": request,
-            "active_tab": "calendar",
-            "calendar_view": "timetable",
-            "today_iso": date.today().isoformat(),
-            "days": days,
-            "hours": list(range(grid_layout.GRID_HOURS)),
-            "px_per_hour": grid_layout.PX_PER_HOUR,
-            "monday": week_start_date,
-            "sunday": week_end_date,
-            "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
-            "next_week": (week_start_date + timedelta(days=7)).isoformat(),
-            "unscheduled_tasks": unscheduled_tasks,
-            "unscheduled_next": f"/calendar/timetable?date_={week_start_date.isoformat()}",
-            "event_label_names": db.list_event_label_names(conn),
-            "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
-        },
-    )
+def timetable_view_redirect(date_: str | None = None, label: str | None = None):
+    """The former standalone "Timetable" sub-view is now just Week (see
+    week_view's own docstring) -- kept as a redirect so any old bookmark/link
+    to /calendar/timetable still lands somewhere real."""
+    url = "/calendar/week"
+    params = []
+    if date_:
+        params.append(f"date_={date_}")
+    if label:
+        params.append(f"label={label}")
+    if params:
+        url += "?" + "&".join(params)
+    return RedirectResponse(url=url, status_code=303)
 
 
-def _timetable_redirect(date_: str) -> RedirectResponse:
-    url = "/calendar/timetable"
+def _week_redirect(date_: str) -> RedirectResponse:
+    url = "/calendar/week"
     if date_:
         url += f"?date_={date_}"
     return RedirectResponse(url=url, status_code=303)
 
 
-@router.post("/timetable/allocations")
-def create_timetable_allocation(
+@router.post("/week/allocations")
+def create_week_allocation(
     task_uid: str = Form(...),
     start_at: str = Form(...),
     end_at: str = Form(...),
     date_: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Drag a task from the "Unscheduled work" list onto the Timetable grid
-    to create a work allocation -- same shape/validation as routers/week.py::
+    """Drag a task from the "Unscheduled work" list onto the Week grid to
+    create a work allocation -- same shape/validation as routers/week.py::
     create_allocation (any open task is a valid drop target here, no project
     re-check), just redirecting back to this page instead of /week. The
     block-level create/move/delete trio is deliberately duplicated from
@@ -799,19 +796,19 @@ def create_timetable_allocation(
             db.set_work_allocation_times(conn, undated["uid"], start_at, end_at)
         else:
             db.create_work_allocation(conn, task_uid, start_at, end_at)
-    return _timetable_redirect(date_)
+    return _week_redirect(date_)
 
 
-@router.post("/timetable/allocations/{event_uid}/move")
-def move_timetable_allocation(
+@router.post("/week/allocations/{event_uid}/move")
+def move_week_allocation(
     event_uid: str,
     start_at: str = Form(...),
     end_at: str = Form(...),
     date_: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Drag-to-move / drag-to-resize a work-allocation block on the Timetable
-    -- only a real work-allocation event may be moved (re-checked via
+    """Drag-to-move / drag-to-resize a work-allocation block on Week -- only
+    a real work-allocation event may be moved (re-checked via
     db.work_allocation_task_uid), same as routers/week.py::move_allocation."""
     task_uid = db.work_allocation_task_uid(conn, event_uid)
     if task_uid and start_at and end_at and end_at > start_at:
@@ -822,11 +819,11 @@ def move_timetable_allocation(
             row["end_at"] = end_at
             row["updated_at"] = _now()
             db.upsert_event(conn, row)
-    return _timetable_redirect(date_)
+    return _week_redirect(date_)
 
 
-@router.post("/timetable/allocations/{event_uid}/delete")
-def delete_timetable_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
+@router.post("/week/allocations/{event_uid}/delete")
+def delete_week_allocation(event_uid: str, date_: str = Form(""), conn=Depends(get_db)):
     """Unschedule a block -- clears this ONE session back to undated
     (`db.unschedule_work_allocation`) instead of deleting it; the task's
     total session count never changes just from unscheduling. Same fixed
@@ -835,7 +832,7 @@ def delete_timetable_allocation(event_uid: str, date_: str = Form(""), conn=Depe
     to-one, then a hard delete, both wrong)."""
     if not db.unschedule_work_allocation(conn, event_uid):
         db.delete_work_allocation(conn, event_uid)
-    return _timetable_redirect(date_)
+    return _week_redirect(date_)
 
 
 @router.get("/day/{day}")
@@ -875,6 +872,8 @@ def day_view(
     ]
     day_events = [e for e in events if e.get("start_at", "").startswith(day)]
     timed = grid_layout.layout_day(day_events)
+    day_time_blocks = db.list_time_blocks(conn)
+    time_block_overlays = _time_block_overlays_for_day(day_time_blocks, d)
 
     return templates.TemplateResponse(
         "calendar_day.html",
@@ -889,11 +888,12 @@ def day_view(
             "all_day": all_day,
             "timed": timed,
             "tasks": tasks,
+            "time_block_overlays": time_block_overlays,
             "hours": list(range(grid_layout.GRID_HOURS)),
             "px_per_hour": grid_layout.PX_PER_HOUR,
             "event_label_names": db.list_event_label_names(conn),
             "active_label": label or "",
-            "schedule_next_lectures": _group_education_next_lectures(conn, label),
+            "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
         },
     )
 
@@ -921,6 +921,7 @@ def new_event_form(
     start_time: str | None = None,
     end_time: str | None = None,
     end_date: str | None = None,
+    title: str = "",
     conn=Depends(get_db),
 ):
     # `end_date` (no start_time/end_time) is the month-view click-and-hold
@@ -945,6 +946,9 @@ def new_event_form(
             "request": request,
             "active_tab": "calendar",
             "event": None,
+            # Command palette actions (open.md) -- see new_task_form's
+            # identical prefill_title comment; blank for every other caller.
+            "prefill_title": title,
             "prefill_start": prefill_start,
             "prefill_end": prefill_end,
             "prefill_all_day": prefill_all_day,
@@ -1198,9 +1202,9 @@ def _create_related_task(conn, event: dict, title: str) -> str | None:
     "＋ New task…" path. Inherits the event's labels (guaranteeing the
     shared-label rule), starts today (the same default create_task applies
     when a task form leaves start_at blank), status active -- the user
-    edits due date/importance/urgency/labels later. Returns None (no task
-    created) when the event has no labels at all, since no shared-label
-    link could ever hold."""
+    edits due date/labels later (importance/urgency are computed, never
+    set). Returns None (no task created) when the event has no labels at
+    all, since no shared-label link could ever hold."""
     event_tags = event.get("tags") or []
     if not event_tags:
         return None
@@ -1214,8 +1218,6 @@ def _create_related_task(conn, event: dict, title: str) -> str | None:
         "description": "",
         "start_at": date.today().isoformat(),
         "due_at": None,
-        "importance": None,
-        "urgency": None,
         "status": "active",
         "progress": 0.0,
         "recurrence": None,

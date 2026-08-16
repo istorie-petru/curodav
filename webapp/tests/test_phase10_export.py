@@ -215,13 +215,6 @@ class TestJson:
         names = {l["name"] for l in data["labels"]}
         assert {"University", "CS101"} <= names
 
-    def test_schedule_json(self, conn):
-        import json
-
-        data = json.loads(export_router.export_schedule_json(conn=conn).body)
-        assert "settings" in data and "classes" in data and "holidays" in data
-
-
 class TestImportRestore:
     def test_full_json_restore_round_trip(self, conn):
         payload = {

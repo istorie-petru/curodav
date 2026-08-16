@@ -247,23 +247,19 @@
        });
      }
 
-    // Schedule opened as a modal (2026-08-01, from _calendar_nav.html) --
-    // its Table/Calendar views have their own interactive JS
-    // (schedule_table.js's inline-edit, schedule_grid.js's drag-to-move),
-    // but a modal's content is injected via innerHTML, which never
-    // executes <script> tags and never re-runs a script that already
-    // finished loading on whatever page opened the modal. Both files are
-    // loaded globally now (base.html) specifically so they're available
-    // here to re-run against the freshly-injected content -- each no-ops
-    // instantly if its target elements aren't present, so calling both
-    // unconditionally on every modal open is harmless for modals that
-    // aren't Schedule.
-    if (window.CCScheduleTable) window.CCScheduleTable.init(body);
-    if (window.CCScheduleGrid) window.CCScheduleGrid.init(body);
     // Contact photo cropper (contact_form.html) -- same re-init reasoning.
     if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
+    // contact_form.html's Phone/Email add/remove rows (Contacts field
+    // parity slice 2 of 6) -- same re-init reasoning.
+    if (window.CCContactPhoneEmailRows) window.CCContactPhoneEmailRows.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
     if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
+    // label_edit_modal.html's Role picker (Space/Project date-field
+    // reveal + switch-away confirm) -- same re-init reasoning.
+    if (window.CCLabelRolePicker) window.CCLabelRolePicker.init(body);
+    // _event_form_fields.html's Format field (clears the other field's
+    // value on switch) -- same re-init reasoning.
+    if (window.CCEventFormatToggle) window.CCEventFormatToggle.init(body);
     // Relations cards' add-row picker (1.2 side work, static/
     // command_palette.js) needs no re-init call here -- its entry points
     // are document-level delegated listeners, which already cover content
@@ -343,6 +339,7 @@
         try {
           const resp = await fetch(form.action, {
             method: form.method || "POST",
+            headers: { "X-Requested-With": "fetch" },
             body: new FormData(form),
           });
           if (resp.ok) {
@@ -351,7 +348,23 @@
               await refreshModalContent(); // re-render in place, modal stays open
             } else {
               closeModal();
-              window.location.reload();
+              // async-CRUD (features/async-crud.md): a form marked
+              // data-cc-change opts out of the full-page reload -- on
+              // success we dispatch a document-level cc-entity-changed event
+              // and let the page underneath refresh just its own region.
+              const changeType = form.getAttribute("data-cc-change");
+              if (changeType) {
+                document.dispatchEvent(
+                  new CustomEvent("cc-entity-changed", {
+                    detail: {
+                      type: changeType,
+                      action: form.getAttribute("data-cc-action") || "edit",
+                    },
+                  })
+                );
+              } else {
+                window.location.reload();
+              }
             }
           } else {
             const text = await resp.text().catch(() => "");
@@ -443,9 +456,9 @@
    }
 
   document.addEventListener("click", (e) => {
-    // Event/class blocks on the Calendar and Schedule time-grids
-    // (calendar.js, schedule_grid.js) are both `[data-modal]` links AND
-    // drag targets -- their own click handler already calls
+    // Event blocks on the Calendar time-grid (calendar.js) are both
+    // `[data-modal]` links AND drag targets -- their own click handler
+    // already calls
     // preventDefault() when a click turns out to have been a real drag,
     // specifically to stop the "open this" navigation from firing. This
     // listener runs after that one (bubble order: element before

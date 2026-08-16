@@ -129,7 +129,27 @@
                      control type, and `_tags_list`/`_combine_tags`
                      already drop blank entries, so a form submitted with
                      this input left empty behaves exactly as if it
-                     weren't there. #}
+                     weren't there.
+     ms_extra_checkboxes -- (2026-08-14, event form's Holiday calendar
+                     dropdown: "add exclude saturday and sunday into the
+                     holiday drop down menu as checkboxes at the end")
+                     optional list of independent checkbox rows appended
+                     after everything else in the panel -- unlike the
+                     radios/checkboxes above, each one carries its *own*
+                     `name`/`id` (not `ms_name`), so this is how a caller
+                     folds a couple of unrelated boolean fields into the
+                     same dropdown as this widget's own single/multi
+                     picker rather than giving them a separate field
+                     entirely. Each item: {name, id, label, checked,
+                     form (optional, defaults to ms_form_id)}.
+     ms_hidden    -- when true, the outer `.field` starts with the
+                     `hidden` attribute set (e.g. a field that's only
+                     meaningful given some other field's state -- see
+                     style.css's `.field[hidden]` note: plain `hidden`
+                     alone does nothing on a `.field`, a caller doing this
+                     needs its own `.field.<class>[hidden]{display:none;}`
+                     override, same as `_event_form_fields.html`'s
+                     `.holiday-field` via `ms_extra_class`). #}
 {% set _mode = ms_mode | default('filter') %}
 {% set _single = _mode == 'single' %}
 {% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
@@ -138,7 +158,7 @@
 {% set _total = ms_items | length %}
 {% set _wide = ms_wide | default(true) %}
 {% set _sel_item = (ms_items | selectattr('uid', 'equalto', ms_selected) | list | first) if (_single and ms_selected) else ((ms_items | first) if (_single and ms_items) else none) %}
-<div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}">
+<div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
     <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
         <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
@@ -161,6 +181,17 @@
                 <input type="text" name="{{ ms_name }}" class="multiselect-new-input" placeholder="New {{ ms_label|lower|replace('labels', 'label') }}&hellip;"
                        {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
             </label>
+            {% endif %}
+            {% if ms_extra_checkboxes %}
+            {% if ms_items or _allow_new %}<div class="multiselect-option-divider"></div>{% endif %}
+            {% for cb in ms_extra_checkboxes %}
+            <label class="multiselect-option">
+                <input type="checkbox" name="{{ cb.name }}" id="{{ cb.id | default(cb.name) }}" value="{{ cb.value | default('1') }}"
+                       {% if cb.form | default(ms_form_id) %}form="{{ cb.form | default(ms_form_id) }}"{% endif %}
+                       {% if cb.checked %}checked{% endif %}>
+                <span>{{ cb.label }}</span>
+            </label>
+            {% endfor %}
             {% endif %}
         </div>
     </div>

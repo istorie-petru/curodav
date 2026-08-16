@@ -1,0 +1,28 @@
+<!-- Data: {next_task, next_task_days, next_event, next_event_days} -- see
+     routers/dashboard.py::_render_next_deadline. The single soonest open
+     task due date and the single soonest upcoming event -- a focused
+     "what's next" stat, distinct from Agenda's fuller list. -->
+{% if data.next_task or data.next_event %}
+<table>
+    {% if data.next_task %}
+    <tr>
+        <td style="width:26px">{{ icon('square', 'icon-sm') }}</td>
+        <td><a href="/tasks/{{ data.next_task.uid }}" data-modal>{{ data.next_task.title }}</a></td>
+        <td class="text-muted" style="text-align:right; white-space:nowrap">
+            {% if data.next_task_days < 0 %}Overdue{% elif data.next_task_days == 0 %}Today{% elif data.next_task_days == 1 %}Tomorrow{% else %}In {{ data.next_task_days }} days{% endif %}
+        </td>
+    </tr>
+    {% endif %}
+    {% if data.next_event %}
+    <tr>
+        <td style="width:26px">{{ icon('calendar', 'icon-sm') }}</td>
+        <td><a href="/events/{{ data.next_event.uid }}" data-modal>{{ data.next_event.title }}</a></td>
+        <td class="text-muted" style="text-align:right; white-space:nowrap">
+            {% if data.next_event_days == 0 %}Today{% elif data.next_event_days == 1 %}Tomorrow{% else %}In {{ data.next_event_days }} days{% endif %}
+        </td>
+    </tr>
+    {% endif %}
+</table>
+{% else %}
+<div class="empty-state">Nothing on the horizon.</div>
+{% endif %}

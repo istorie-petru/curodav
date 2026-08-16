@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit note' if note else 'New note' }}{% endblock %}
+{% block content %}
+{# Notes (Quick Capture's `!n`, plans/quick-capture.md) -- deliberately
+   minimal, matching db.py's `notes` CREATE TABLE comment: content + labels,
+   nothing else. One shared form for new/edit, same convention task_form.html
+   uses (note is None on the new-note path). #}
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ 'Edit note' if note else 'New note' }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="note-form" action="{{ '/notes/' ~ note.uid if note else '/notes' }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Content</label>
+            <textarea name="content" rows="6" required autofocus>{{ note.content if note else (prefill_content or '') }}</textarea>
+        </div>
+        <div class="field">
+            {% set ms_form_id = 'note-form' %}
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_icon = 'tag' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = note.tags if note else [] %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/notes' %}
+{% set footer_back_label = 'Cancel' %}
+{% if note %}
+{# 2026-08-15 modal uniformization: this delete had no confirmation or undo
+   at all before -- the only unconfirmed destructive action in the app.
+   Given confirm mode like every other hand-rolled-footer migration. #}
+{% set footer_delete_url = '/notes/' ~ note.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete this note? This cannot be undone.' %}
+{% endif %}
+{% set footer_primary_form = 'note-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

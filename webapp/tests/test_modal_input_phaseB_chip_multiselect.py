@@ -123,7 +123,7 @@ class TestFormsRenderChipMultiselectNotTextInput:
 class TestCreateWithTwoLabelsStoresBoth:
     def test_create_task_with_two_labels(self, conn):
         tasks_router.create_task(
-            title="Water plants", description="", due_at="", importance="", urgency="", status="active",
+            title="Water plants", description="", due_at="", status="active",
             tags="", tags_labels=["Home", "Chores"], recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Water plants")
@@ -140,7 +140,8 @@ class TestCreateWithTwoLabelsStoresBoth:
 
     def test_create_contact_with_two_labels(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", org="", phone="", email="", address="",
+            full_name="Grace Hopper", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", tags_labels=["Professor", "CS"], notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
@@ -159,7 +160,7 @@ class TestEditAddOrRemoveLabel:
     def test_update_task_adds_and_removes_labels(self, conn):
         _seed_task(conn, "t1", tags=["Old"])
         tasks_router.update_task(
-            uid="t1", title="t1", description="", due_at="", start_at="", importance="", urgency="",
+            uid="t1", title="t1", description="", due_at="", start_at="",
             status="active", tags="", tags_labels=["New"], recurrence="", conn=conn,
         )
         assert db.get_task(conn, "t1")["tags"] == ["New"]
@@ -176,7 +177,8 @@ class TestEditAddOrRemoveLabel:
     def test_update_contact_adds_and_removes_labels(self, conn):
         _seed_contact(conn, "c1", tags=["Old"])
         asyncio.run(contacts_router.update_contact(
-            uid="c1", full_name="c1", org="", phone="", email="", address="",
+            uid="c1", full_name="c1", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", tags_labels=["New"], notes="", photo=None, remove_photo="", conn=conn,
         ))
         assert db.get_contact(conn, "c1")["tags"] == ["New"]
@@ -267,7 +269,7 @@ class TestDirectCallsWithoutTagsLabelsStillWork:
 
     def test_create_task_without_tags_labels_kwarg(self, conn):
         tasks_router.create_task(
-            title="Plain", description="", due_at="", importance="", urgency="", status="active",
+            title="Plain", description="", due_at="", status="active",
             tags="Legacy", recurrence="", conn=conn,
         )
         task = next(t for t in db.list_tasks(conn) if t["title"] == "Plain")

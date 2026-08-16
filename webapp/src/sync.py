@@ -8,9 +8,9 @@ plain SQL, full stop -- there is no invisible default Radicale collection
 for it to poll into anymore, and no other CalDAV/CardDAV client to
 reconcile the base pool against (this app is the only writer of it now;
 nothing else round-trips through Radicale for base storage). routers/
-tasks.py, routers/calendar.py, routers/contacts.py, routers/schedule.py
-write straight to db.py, no bridge call in that path (see each router's
-own module docstring).
+tasks.py, routers/calendar.py, routers/contacts.py write straight to
+db.py, no bridge call in that path (see each router's own module
+docstring).
 
 Phase 6 (published Lists, 2026-08-07) gave this module a real job again:
 `full_refresh` now materializes every `published_lists` row (see

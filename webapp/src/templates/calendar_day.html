@@ -13,7 +13,6 @@
             <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
             <a class="seg-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
             <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
-            <a class="seg-btn" href="/calendar/timetable{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Timetable</a>
             <a class="seg-btn active" href="/calendar/day/{{ day }}{{ _lq }}">Day</a>
         </div>
         <div class="spacer"></div>
@@ -23,8 +22,6 @@
         <a class="btn primary" href="/events/new?date={{ day }}" data-modal data-fab title="New event on this day">{{ icon('plus') }} New</a>
     </div>
 </div>
-{% include "_education_next_lectures.html" %}
-
 <!-- 2026-08-08: Day is now the same single-pane, fit-the-page scrollable
      layout as Week (direct feedback: make the day view's scrollable
      calendar-viewport behave like the calendar week view, and remove the
@@ -62,6 +59,9 @@
     </div>
     <div class="time-cols day">
         <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
+            {% for ov in time_block_overlays %}
+            <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
+            {% endfor %}
             {% for e in timed %}
             <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
@@ -79,5 +79,10 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
+     Settings > Sleep & Leisure Time) -- loaded before calendar.js so it
+     can call window.ccTimeBlocks. -->
+<script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
+<script src="{{ static_url('time_blocks.js') }}"></script>
 <script src="{{ static_url('calendar.js') }}"></script>
 {% endblock %}

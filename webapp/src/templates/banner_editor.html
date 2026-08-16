@@ -26,7 +26,10 @@
      banner (current banner dict or None). -->
 <div id="modal-target">
     <div class="modal-header">
-        <h1>{{ icon('image', 'icon-sm') }} Page banner</h1>
+        {# 2026-08-15 modal uniformization rule 3: plain title, no icon
+           prefix, to match every other utility modal (label_edit_modal,
+           note_form, _modal_widget_customize, ...). #}
+        <h1>Page banner</h1>
     </div>
     <div class="modal-body">
         <div class="banner-editor">
@@ -74,5 +77,16 @@
             </form>
         </div>
     </div>
+    {# 2026-08-15 modal uniformization slice F: every action here (upload,
+       remove) is instant/auto-submitting, so there's still no primary
+       button -- but per rule 1 every modal gets a footer, so this is a
+       documented Back/Done-only exception rather than the accidental
+       "no footer markup at all" it was before. page_url is a real
+       navigable page (this template also renders standalone for a no-JS
+       visit -- see the header comment), so footer_back_url is the real
+       URL, not "#". #}
+    {% set footer_back_url = page_url %}
+    {% set footer_back_label = 'Done' %}
+    {% include "_modal_footer.html" %}
 </div>
 {% endblock %}

@@ -1,40 +1,45 @@
-# Today
+# Today — retired, folded into the Dashboard (1.9 side work)
 
-`GET /today` (`routers/today.py::today_view`), the first surface of 1.7
-(Information architecture & view surfaces, `plans/open-priority.md` §
-Information architecture & view surfaces' "Today — execution" bullet):
-"What am I dealing with now?" A single-page operational view of the current
-day, distinct from the Dashboard's broader orientation widgets. No separate
-Today data model — everything is read straight off `db.list_events`/
-`list_tasks` and the shared derived-state aggregation service (1.1,
-`src/derived_state.py`) each request.
+`GET /today` (`routers/today.py::today_view`) shipped in 1.7 slice 1
+("Today — execution", `plans/open-priority.md` § Information architecture &
+view surfaces). It is **retired** — `routers/today.py`,
+`templates/today.html`, and `tests/test_today.py` are gone. `GET /today` now
+redirects (302, `routers/dashboard.py::today_redirect`) to `/`, the same
+"any bookmark still lands somewhere real" precedent this repo already
+established for `/calendar/timetable` (see `features/calendar.md`).
 
-## Sections
+## Where its content lives now
 
-- **At-a-glance strip** (reuses `_widget_at_a_glance.html`'s own CSS
-  classes) — overdue count, due-today count, today's event count, and
-  today's total scheduled work hours.
-- **Due & overdue** — every open task whose `due_at` is today or earlier
-  (`overdue_tasks` + `due_today_tasks`), most-overdue first, each row a
-  plain "mark done" checkbox + link, same idiom as the Dashboard's
-  `today_agenda`/`overdue_tasks` widgets.
-- **Today's schedule** — today's events, split into two kinds:
-  - ordinary calendar events (`calendar_events`)
-  - scheduled task work (`scheduled_work`) — today's work-allocation events
-    (`db.work_allocation_task_uid`, the same per-event lookup
-    `routers/projects.py::project_calendar` uses to tell a work allocation
-    apart from an ordinary event), each showing its task link and hours.
-- **Important & urgent, not due today** (`important_upcoming`) — open tasks
-  whose `derived_state.virtual_states` includes `important` or `urgent`,
-  excluding anything already shown in Due & overdue above (no task appears
-  twice on the page). Capped at 8, sorted by effective importance, then
-  effective urgency, then due date.
+Before this page existed, the Dashboard already covered most of what it
+showed (via `today_agenda`/`at_a_glance`/`overdue_tasks`); the two sections
+that were genuinely unique to `/today` are now their own Dashboard widget
+types (`routers/dashboard.py`'s `WIDGET_TYPES` registry), addable/removable/
+stackable/scopable exactly like every other widget:
+
+- **Important & urgent, not due today** → the `important_urgent` widget type
+  (`_render_important_urgent` / `_widget_important_urgent.html`). Same
+  underlying logic /today used — open tasks whose
+  `derived_state.virtual_states` includes `important`/`urgent`, excluding
+  anything already overdue or due today, sorted by effective importance then
+  urgency then due date.
+- **Scheduled work hours today** (the at-a-glance strip's "scheduled work"
+  stat + the "Today's schedule" list's work-allocation half) → the
+  `scheduled_work_today` widget type (`_render_scheduled_work_today` /
+  `_widget_scheduled_work_today.html`). Same `db.work_allocation_task_uid`
+  lookup /today used to tell a work-allocation event apart from an ordinary
+  one, plus a completed-hours-today total.
+- Everything else /today showed (overdue/due-today tasks, today's ordinary
+  calendar events) already had a direct Dashboard equivalent
+  (`today_agenda`/`overdue_tasks`).
+
+See `features/dashboard.md` for the full widget registry, including these
+two.
 
 ## Notes
 
-- Added a `/today` tab to the primary tabbar (`base.html`), right after
-  Home — `active_tab == "today"`.
-- Nothing here is stored; a reload always reflects current task/event state,
-  same as every other page in this app.
-- Week (planning) and Spaces (context), 1.7's other two surfaces, are
-  separate, later slices — see `plans/STATE.md`.
+- The `/today` tabbar entry is gone (`base.html`) — Home, Calendar, Tasks,
+  Projects, Schedule, and Contacts remain.
+- No data was lost: both new widget types read the exact same
+  `db.list_tasks`/`db.list_events`/`src/derived_state.py` sources /today did,
+  confirmed working (rendered + tested) before /today's own router/template/
+  tests were deleted, per this session's own content-loss guard.

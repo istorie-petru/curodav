@@ -59,6 +59,21 @@ def _request(path="/"):
 
 
 def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None, tags=None):
+    """importance/urgency are computed, not stored columns (side work,
+    post-1.1, src/derived_state.py) -- a given importance level is
+    reproduced via a dedicated per-task label with that label_config rule.
+    urgency only ever supports level 3 here (due today, temporal) --
+    that's the only level every call site in this file actually needs;
+    level 1 has no source at all in the purely-computed model (label
+    thresholds only ever imply URGENCY_HIGH, temporal state only ever
+    yields 0/2/3), so it isn't reproducible via seeding."""
+    all_tags = list(tags or [])
+    if importance is not None:
+        label = f"{uid}-imp-label"
+        db.upsert_label_config(conn, {"name": label, "importance": importance})
+        all_tags.append(label)
+    if urgency == 3 and due_at is None:
+        due_at = date.today().isoformat()
     db.upsert_task(
         conn,
         {
@@ -67,9 +82,7 @@ def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency
             "description": "",
             "status": status,
             "due_at": due_at,
-            "importance": importance,
-            "urgency": urgency,
-            "tags": tags or [],
+            "tags": all_tags,
             "created_at": _now(),
         },
     )
@@ -137,7 +150,7 @@ class TestBoardTimelineFiltersRespected:
 
     def test_board_respects_urgency_filter(self, conn):
         _seed_task(conn, "now", status="active", urgency=3)
-        _seed_task(conn, "later", status="active", urgency=1)
+        _seed_task(conn, "later", status="active", due_at=(date.today() + timedelta(days=20)).isoformat())
         resp = tasks_router.board_view(_request("/tasks/board"), urgency_filter="3", conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"now"}
@@ -415,51 +428,6 @@ class TestIconOnlyFiltersNextToAdd:
         assert "toolbar-filters-body" not in body
 
 
-class TestScheduleToolbarConsistency:
-    """Schedule brought into the same .toolbar.top-app-bar.toolbar-2row/
-    .toolbar-row shell as Calendar/Tasks/Contacts (Phase 9c), including a
-    visible search box for the `q` param routers/schedule.py already
-    accepted but had no input for."""
-
-    def test_schedule_uses_the_shared_toolbar_shell(self, conn):
-        from src.routers import schedule as schedule_router
-
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        body = resp.body.decode()
-        assert 'class="toolbar top-app-bar toolbar-2row"' in body
-        assert 'class="toolbar-row"' in body
-
-    def test_schedule_table_view_has_a_search_box(self, conn):
-        from src.routers import schedule as schedule_router
-
-        # 2026-08-08: the toolbar search box and the Table-view body's own
-        # duplicate search box merged into one -- see schedule_classes.html's
-        # comment. Placeholder describes the columns classes_view actually
-        # searches (name/acronym/professor/room).
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        body = resp.body.decode()
-        assert 'name="q"' in body
-        assert 'placeholder="Search course, professor, room..."' in body
-        assert body.count('name="q"') == 1
-
-    def test_schedule_search_actually_filters(self, conn):
-        from src import schedule as schedule_logic
-        from src.routers import schedule as schedule_router
-
-        # 1.6: a class is a real recurring event now (see schedule_
-        # router's module docstring) -- seeded straight via db.upsert_event
-        # (like the pre-1.6 db.upsert_schedule_class call this replaces),
-        # tagged with only the Schedule system label and deliberately no
-        # course label, so this stays a search-vs-table test and doesn't
-        # also exercise the (separate, label-driven) filter dropdown.
-        for uid, name, day in (("cl1", "Algorithms", "Monday"), ("cl2", "History", "Tuesday")):
-            row = schedule_logic.build_class_event_row(
-                {"uid": uid, "day": day, "start_time": "09:00", "end_time": "10:00", "title": name, "room": "", "parity": "all", "enrolled": True},
-                {}, [],
-            )
-            db.upsert_event(conn, row)
-            db.set_object_labels(conn, "event", uid, ["Schedule"])
-        resp = schedule_router.classes_view(_request("/schedule?q=Algo"), q="Algo", conn=conn)
-        body = resp.body.decode()
-        assert "Algorithms" in body
-        assert "History" not in body
+# 2026-08-15: TestScheduleToolbarConsistency is deleted -- the whole
+# Schedule module (routers/schedule.py, schedule_classes.html) is removed,
+# see plans/STATE.md's removal entry.

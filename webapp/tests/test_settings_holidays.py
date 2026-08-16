@@ -1,10 +1,15 @@
-"""Holidays moved from Schedule's Table view into Settings > Holidays
-(2026-08-14, routers/settings.py's "2026-08-14 follow-up" docstring note)
--- a Tasks-table-style grid (title/calendar/start/end columns, inline
-editing) replacing the old compact add-form-plus-plain-table pair that
-lived inside schedule_classes.html. See test_holiday_calendars.py for the
-underlying db.py accessor coverage and the generalized-recurrence
-mechanism this UI configures; this file covers the page/routes themselves.
+"""Holidays moved from the (now-removed) Schedule module's Table view into
+Settings > Holidays (2026-08-14, routers/settings.py's "2026-08-14
+follow-up" docstring note) -- a Tasks-table-style grid (title/calendar/
+start/end columns, inline editing) replacing the old compact add-form-
+plus-plain-table pair that used to live inside schedule_classes.html. See
+test_holiday_calendars.py for the underlying db.py accessor coverage and
+the generalized-recurrence mechanism this UI configures; this file covers
+the page/routes themselves.
+
+2026-08-15: `TestScheduleTablePageNoLongerManagesHolidays` is deleted --
+the whole Schedule module it was asserting the ABSENCE of holiday CRUD
+routes on is itself gone now. See plans/STATE.md's removal entry.
 """
 
 from __future__ import annotations
@@ -13,7 +18,6 @@ import pytest
 from starlette.requests import Request
 
 from src import db
-from src.routers import schedule as schedule_router
 from src.routers import settings as settings_router
 
 
@@ -144,31 +148,6 @@ class TestDeleteHoliday:
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/holidays"
         assert db.list_holidays(conn) == []
-
-
-class TestScheduleTablePageNoLongerManagesHolidays:
-    """The old inline add-form/table pair is gone from
-    schedule_classes.html; the Settings panel keeps the `holiday_calendar`
-    picker (which named calendar the semester's classes respect) and links
-    out to /settings/holidays for managing the calendars' own contents."""
-
-    def test_schedule_module_has_no_holiday_crud_routes(self):
-        assert not hasattr(schedule_router, "create_holiday")
-        assert not hasattr(schedule_router, "delete_holiday")
-
-    def test_classes_view_links_to_settings_holidays(self, conn):
-        req = _request("/schedule")
-        resp = schedule_router.classes_view(req, conn=conn)
-        body = resp.body.decode()
-        assert 'href="/settings/holidays"' in body
-        assert 'action="/schedule/holidays"' not in body
-
-    def test_classes_view_still_passes_calendar_names_for_the_datalist(self, conn):
-        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
-        req = _request("/schedule")
-        resp = schedule_router.classes_view(req, conn=conn)
-        assert resp.context["holiday_calendar_names"] == ["University"]
-        assert "holidays" not in resp.context
 
 
 class _FakeJsonRequest:

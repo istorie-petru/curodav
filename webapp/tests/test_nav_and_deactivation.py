@@ -2,8 +2,8 @@
 
 Two related changes, both covered here:
 
-  1. Schedule and Contacts restored as primary tabbar destinations
-     (Home/Calendar/Tasks/Schedule/Contacts/Settings), Databases removed
+  1. Contacts restored as a primary tabbar destination
+     (Home/Calendar/Tasks/Contacts/Settings), Databases removed
      from the tabbar entirely -- see base.html's nav comment and
      routers/settings.py/_settings_nav.html's own removal notes for what
      moved out of the Settings hub as a result.
@@ -19,7 +19,12 @@ test_phase9_grades.py/test_formula_engine.py (deleted outright, per §4's
 standing rule -- their whole subject no longer exists) and complements
 the in-place fixes made to test_phase2_labels.py/test_phase4_modules.py/
 test_phase10_export.py/test_phase8_settings_hub.py, which each covered
-other things too and so were edited rather than deleted."""
+other things too and so were edited rather than deleted.
+
+2026-08-15: the Schedule tab/tests (TestActiveTabHighlighting's Schedule
+cases, `test_tabbar_includes_schedule_and_contacts_not_databases`) were
+removed/edited along with the whole Schedule module -- see
+plans/STATE.md's removal entry."""
 
 from __future__ import annotations
 
@@ -33,7 +38,6 @@ from src import db
 from src.routers import contacts as contacts_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
-from src.routers import schedule as schedule_router
 
 
 def _now() -> str:
@@ -68,17 +72,18 @@ def _request(path="/"):
 
 
 class TestTabbarContents:
-    def test_tabbar_includes_schedule_and_contacts_not_databases(self, conn):
+    def test_tabbar_includes_contacts_not_databases_or_schedule(self, conn):
         db.set_app_meta(conn, dashboard_router._MINI_CALENDAR_BACKFILL_KEY, "1")
         resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
         body = resp.body.decode()
-        assert 'data-tab="schedule"' in body
         assert 'data-tab="contacts"' in body
-        assert 'href="/schedule"' in body
         assert 'href="/contacts"' in body
         # Databases is gone from the tabbar entirely -- no tab, no link.
         assert 'data-tab="databases"' not in body
         assert 'href="/databases"' not in body
+        # 2026-08-15: Schedule is gone entirely too -- no tab, no link.
+        assert 'data-tab="schedule"' not in body
+        assert 'href="/schedule"' not in body
 
     def test_dashboard_see_more_no_longer_links_databases_or_contacts(self, conn):
         # Contacts is a primary tab now (no longer needed in the mobile
@@ -94,47 +99,11 @@ class TestTabbarContents:
 
 
 # --------------------------------------------------------------------- #
-# 2. active_tab highlighting on Schedule/Contacts pages and sub-pages
+# 2. active_tab highlighting on Contacts pages and sub-pages
 # --------------------------------------------------------------------- #
 
 
 class TestActiveTabHighlighting:
-    def test_schedule_classes_page_sets_and_highlights_schedule_tab(self, conn):
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        assert resp.context["active_tab"] == "schedule"
-        body = resp.body.decode()
-        assert 'data-tab="schedule" class="tab-btn active"' in body
-
-    def test_new_class_form_highlights_schedule_tab(self, conn):
-        resp = schedule_router.new_class_form(_request("/schedule/classes/new"), conn=conn)
-        assert resp.context["active_tab"] == "schedule"
-
-    def test_edit_class_form_highlights_schedule_tab(self, conn):
-        # 1.6: a class is a real recurring event now (see schedule_
-        # router's module docstring) -- create it via the real create_class
-        # router path instead of a removed db.upsert_schedule_class call.
-        schedule_router.create_class(
-            day="Monday", start_time="09:00", end_time="10:00", name="Algorithms",
-            acronym="", class_type_select="", class_type_other="", professor_select="", professor_new="",
-            room="", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        uid = db.list_schedule_class_events(conn)[0]["uid"]
-        resp = schedule_router.edit_class_form(uid, _request(f"/schedule/classes/{uid}/edit"), conn=conn)
-        assert resp.context["active_tab"] == "schedule"
-
-    def test_schedule_settings_is_a_details_block_on_the_schedule_page_and_still_highlights_schedule_tab(self, conn):
-        # 2026-08-08: semester dates/credits/reminder/event-label settings
-        # moved off their own /schedule/settings page (removed --
-        # routers/schedule.py's settings_view is gone) back onto
-        # schedule_classes.html itself as a <details> block, same as
-        # Holidays -- there's only one Schedule destination now, and it
-        # highlights the Schedule tab same as before.
-        resp = schedule_router.classes_view(_request("/schedule"), conn=conn)
-        assert resp.context["active_tab"] == "schedule"
-        body = resp.body.decode()
-        assert 'data-tab="schedule" class="tab-btn active"' in body
-        assert 'name="schedule_label"' in body
-
     def test_contacts_list_page_sets_and_highlights_contacts_tab(self, conn):
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         assert resp.context["active_tab"] == "contacts"
@@ -242,33 +211,21 @@ class TestDatabasesFeatureRemoved:
         # removed entirely, not just deactivated, same treatment as the
         # three modules already covered here. See routers/labels.py's own
         # removal note.
-        for module_name in ("src.routers.databases", "src.routers.grades", "src.grades", "src.formula_engine", "src.label_modules"):
+        #
+        # 2026-08-15: src.routers.schedule/src.schedule join this list too
+        # -- the whole Schedule module is removed entirely, not just
+        # unlinked. See plans/STATE.md's removal entry.
+        for module_name in (
+            "src.routers.databases", "src.routers.grades", "src.grades",
+            "src.formula_engine", "src.label_modules",
+            "src.routers.schedule", "src.schedule",
+        ):
             with pytest.raises(ModuleNotFoundError):
                 importlib.import_module(module_name)
 
     def test_no_widget_type_offers_databases(self):
         assert "databases" not in dashboard_router.WIDGET_TYPES
         assert "grades" not in dashboard_router.WIDGET_TYPES
-
-    def test_creating_a_class_no_longer_provisions_a_database(self, conn):
-        # Since the `databases` table doesn't exist at all anymore, the
-        # strongest possible assertion is that creating a class doesn't
-        # even try to touch it -- confirmed above via db module/table
-        # checks. This test's own job is just the behavioral half: class
-        # creation still succeeds and still applies the course label.
-        #
-        # 2026-08-08: no more `enabled_modules` assertion here -- that
-        # field (and the "Sections" gating it fed) is removed entirely;
-        # Course info/Homework on the resulting Space page now just show
-        # whenever there's matching data, unconditionally.
-        schedule_router.create_class(
-            day="Monday", start_time="09:00", end_time="10:30", name="Algorithms",
-            acronym="ALG", class_type_select="Course", class_type_other="", professor_select="", professor_new="",
-            room="204", credits="6", parity="all", enrolled="on", project_uid="", conn=conn,
-        )
-        event = next(e for e in db.list_schedule_class_events(conn) if e["title"] == "Algorithms")
-        cls = schedule_router._class_row(conn, event)
-        assert cls["project_uid"] == "Algorithms"
 
 
 # --------------------------------------------------------------------- #
@@ -292,3 +249,7 @@ class TestRoutesNotRegistered:
     def test_grades_routes_are_gone(self):
         paths = self._registered_paths()
         assert not any(p and p.startswith("/grades") for p in paths)
+
+    def test_schedule_routes_are_gone(self):
+        paths = self._registered_paths()
+        assert not any(p and p.startswith("/schedule") for p in paths)

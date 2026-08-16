@@ -9,19 +9,23 @@ Callers resolve label rules once (db.effective_label_config_ci per tag) and
 pass a {label_name: cfg} mapping in; this module never touches the database.
 
 Values are 1..3 on each axis (higher = more important / more urgent), with 0
-meaning "none". The effective value is derived deterministically from all
-applicable sources -- explicit user configuration, label-based rules, temporal
-state -- using max-precedence rather than physically created chains of labels
-(per the plan: `effective importance = max(explicit, label-derived)`), and is
-never stored: derived classifications must never go stale, so nothing is
-persisted that can be calculated reliably from current data. The two persistent
-exceptions (explicit importance/urgency and label config rules) live in the DB
-as real columns; see db.py's `tasks` / `label_config` comments.
+meaning "none". A later rework (post-1.1 side work) removed the per-task
+*explicit* axes entirely -- there is no manual "set this task's importance/
+urgency" input anywhere in the app anymore. The effective value is now
+derived purely from label-based rules and temporal state, using
+max-precedence: `effective importance = label-derived`, `effective urgency =
+max(label-derived, temporal)`. Nothing derived is ever stored. The one
+persistent exception is the label config rules themselves
+(`label_config.importance`/`urgency_threshold_days`) -- configured once per
+label, not per task -- which live in the DB as real columns; see db.py's
+`label_config` comment.
 
 The virtual states this derives (`Important`, `Urgent`, and the temporal
 `Today` / `Tomorrow` / `This Week` / `This Month` / `Overdue`) are query
-projections, not labels -- see routers/tasks.py's DATE_FILTERS for where they
-surface as filters.
+projections, not labels -- see routers/tasks.py's DATE_FILTERS (the
+temporal ones) and IMPORTANCE_FILTERS/URGENCY_FILTERS/STATUS_FILTERS
+(Important/Urgent/Overdue, moved there by the Tasks page filter cleanup,
+2026-08-15) for where they surface as filters.
 """
 
 from __future__ import annotations
@@ -65,11 +69,11 @@ def _max_int(values: list) -> int:
 
 
 def effective_importance(task: dict, label_rules: dict) -> int:
-    """Deterministic effective importance = max(explicit, label-derived).
-    Returns 0..3 (0 = no importance anywhere)."""
-    explicit = int(task.get("importance") or 0)
-    derived = _max_int(rule.get("importance") for rule in label_rules_for(task, label_rules))
-    return max(explicit, derived)
+    """Deterministic effective importance = label-derived only (no manual
+    per-task input, see this module's docstring). Returns 0..3 (0 = no
+    importance anywhere -- correct for a task carrying no importance-rule
+    label, not a gap to fill)."""
+    return _max_int(rule.get("importance") for rule in label_rules_for(task, label_rules))
 
 
 def _due_date(task: dict) -> date | None:
@@ -125,15 +129,14 @@ def _temporal_urgency(task: dict, today: date) -> int:
 
 
 def effective_urgency(task: dict, label_rules: dict, today: date | None = None) -> int:
-    """Deterministic effective urgency = max(explicit, label-derived,
-    temporal). Returns 0..3. `today` defaults to the current date; callers
-    that need a fixed reference date (tests, dashboard "as of" views) pass
-    their own."""
+    """Deterministic effective urgency = max(label-derived, temporal) (no
+    manual per-task input, see this module's docstring). Returns 0..3.
+    `today` defaults to the current date; callers that need a fixed
+    reference date (tests, dashboard "as of" views) pass their own."""
     if today is None:
         today = date.today()
-    explicit = int(task.get("urgency") or 0)
     rules = label_rules_for(task, label_rules)
-    return max(explicit, _label_urgency(rules, task, today), _temporal_urgency(task, today))
+    return max(_label_urgency(rules, task, today), _temporal_urgency(task, today))
 
 
 def is_important(task: dict, label_rules: dict) -> bool:
@@ -156,8 +159,11 @@ def is_urgent(task: dict, label_rules: dict, today: date | None = None) -> bool:
 def virtual_states(task: dict, label_rules: dict, today: date | None = None) -> set[str]:
     """The set of virtual-state names a task currently belongs to, computed
     purely from current data (dates + derived importance/urgency) -- never
-    stored, never labels. State names match the DATE_FILTERS values in
-    routers/tasks.py so a count here links 1:1 to a filter there."""
+    stored, never labels. State names match the filter values in
+    routers/tasks.py -- the temporal ones in DATE_FILTERS, `important` in
+    IMPORTANCE_FILTERS, `urgent` in URGENCY_FILTERS, `overdue` in
+    STATUS_FILTERS (Tasks page filter cleanup, 2026-08-15) -- so a count
+    here links 1:1 to a filter there."""
     if today is None:
         today = date.today()
     states = set()
@@ -184,11 +190,13 @@ def virtual_states(task: dict, label_rules: dict, today: date | None = None) -> 
 def count_by_state(tasks: list[dict], label_rules: dict, today: date | None = None) -> dict[str, int]:
     """One pass over a task list producing the per-state counts every
     surface needs (overdue / today / tomorrow / this_week / this_month /
-    important / urgent). State names match routers/tasks.py's DATE_FILTERS,
-    so `count_by_state(...)["overdue"]` is the same set of tasks the
-    Tasks page's `date_filter=overdue` shows. A task counts toward every
-    state it belongs to (overdue *and* important etc.), matching how the
-    filters AND -- each is an independent projection, not a partition."""
+    important / urgent). State names match routers/tasks.py's filter
+    values (see virtual_states' docstring for exactly which dropdown each
+    lives in since the 2026-08-15 Tasks page filter cleanup), so
+    `count_by_state(...)["overdue"]` is the same set of tasks the Tasks
+    page's `status_filter=overdue` shows. A task counts toward every state
+    it belongs to (overdue *and* important etc.), matching how the filters
+    AND -- each is an independent projection, not a partition."""
     if today is None:
         today = date.today()
     counts = {name: 0 for name in ("overdue", "today", "tomorrow", "this_week", "this_month", "important", "urgent")}

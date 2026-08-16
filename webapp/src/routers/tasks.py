@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
 from ..deps import get_db, templates
@@ -35,6 +35,26 @@ def _auto_archive_if_configured(conn) -> None:
         db.delete_old_completed_tasks(conn, days)
 
 
+# --------------------------------------------------------------------- #
+# Dual-mode responses (async-CRUD design, features/async-crud.md) --
+# every task mutation endpoint keeps its plain-HTML 303 Redirect default
+# (so a form still works with no JS at all), but returns JSON when the
+# request carries `X-Requested-With: fetch` (static/async_crud.js always
+# sends it). Read via a FastAPI Header param (default None) rather than a
+# Request object because this suite's direct-call tests invoke the router
+# functions as plain Python functions without building a Request -- those
+# keep getting the redirect default.
+# --------------------------------------------------------------------- #
+def _wants_json(x_requested_with: str | None) -> bool:
+    return x_requested_with == "fetch"
+
+
+def _respond(x_requested_with: str | None, redirect_url: str, *, status_code: int = 200, **payload) -> JSONResponse | RedirectResponse:
+    if _wants_json(x_requested_with):
+        return JSONResponse({"ok": True, **payload}, status_code=status_code)
+    return RedirectResponse(url=redirect_url, status_code=303)
+
+
 STATUSES = ["active", "in_progress", "waiting", "done", "archived"]
 STATUS_LABELS = {
     "active": "Active",
@@ -62,19 +82,15 @@ IMPORTANCE_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 
 # 2026-08-08 direct feedback ("rework Priority/Status/Recurrence to look
-# the same as Range/View/Labels") -- task_form.html's Importance/Urgency/
-# Status fields moved from plain `<select>`s (a browser's own unstyleable
-# open-dropdown chrome, the same problem View/Range had before their
-# 2026-08-07 rework -- see _widget_list_multiselect.html's header comment)
-# to the same single-mode multiselect panel View/Range/Labels already
-# share. {uid, name} pairs, the same shape that partial expects
-# everywhere else.
-IMPORTANCE_ITEMS = [{"uid": "", "name": "(none)"}] + [
-    {"uid": str(v), "name": f"{v} - {label}"} for v, label in IMPORTANCE_LABELS.items()
-]
-URGENCY_ITEMS = [{"uid": "", "name": "(none)"}] + [
-    {"uid": str(v), "name": f"{v} - {label}"} for v, label in URGENCY_LABELS.items()
-]
+# the same as Range/View/Labels") -- task_form.html's Status field moved
+# from a plain `<select>` (a browser's own unstyleable open-dropdown
+# chrome, the same problem View/Range had before their 2026-08-07 rework
+# -- see _widget_list_multiselect.html's header comment) to the same
+# single-mode multiselect panel View/Range/Labels already share. {uid,
+# name} pairs, the same shape that partial expects everywhere else.
+# Importance/Urgency used to have their own *_ITEMS lists here too (the
+# 1.1 manual multiselect fields); side work (post-1.1) removed the fields
+# entirely -- see _task_form_fields.html's header comment.
 STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 
 # Reworked 2026-08-01: the single "smart filter" dropdown above (Today /
@@ -88,90 +104,126 @@ STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 # stored column.
 #
 # 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states): the date filter grew `tomorrow` and `this_month`, and gained the
-# two derived virtual states `important` / `urgent`. Important/urgent are
-# NOT labels -- they are query projections over the derived importance/
-# urgency values (src/derived_state.py), computed per task at filter time,
-# never stored, never assigned. They sit in DATE_FILTERS because they are
-# state-based system filters (the toolbar's one mechanism for narrowing a
-# view), not because they are dates; see _apply_date_filter's docstring.
-DATE_FILTERS = ["all", "today", "tomorrow", "this_week", "this_month", "overdue", "important", "urgent"]
+# states) originally grew this dropdown with `tomorrow`/`this_month` plus the
+# two derived virtual states `important`/`urgent`, and later folded the
+# temporal `overdue` state in here too. Tasks page filter cleanup (small,
+# 2026-08-15, plans/open.md § Tasks page filter cleanup): direct feedback
+# said `overdue`/`important`/`urgent` read as clutter/wrong-drawer in the
+# Date dropdown -- they aren't dates, they're virtual states on other axes.
+# `important` moved into IMPORTANCE_FILTERS (an "(any level)" option
+# alongside the explicit 1/2/3 values -- decided), `urgent` moved into
+# URGENCY_FILTERS the same way (decided), and `overdue` moved into
+# STATUS_FILTERS as a virtual pseudo-status (the "fold it into the Status
+# dropdown" candidate from that section, since it isn't a value on any real
+# axis and a toolbar chip would've been a second, redundant filtering
+# mechanism). DATE_FILTERS is back to being just real date buckets.
+DATE_FILTERS = ["all", "today", "tomorrow", "this_week", "this_month"]
 DATE_FILTER_LABELS = {
     "all": "All dates",
     "today": "Today",
     "tomorrow": "Tomorrow",
     "this_week": "This week",
     "this_month": "This month",
-    "overdue": "Overdue",
-    "important": "Important",
-    "urgent": "Urgent",
 }
 
-STATUS_FILTERS = ["all"] + STATUSES
-STATUS_FILTER_LABELS = {"all": "All statuses", **STATUS_LABELS}
+# `overdue` is a virtual pseudo-status (src/derived_state.py's `overdue`
+# state, computed from due_at vs. today) -- not a real `tasks.status` value,
+# same "query projection, never stored" nature DATE_FILTERS' old
+# important/urgent entries had. See _apply_status_filter.
+STATUS_FILTERS = ["all"] + STATUSES + ["overdue"]
+STATUS_FILTER_LABELS = {"all": "All statuses", **STATUS_LABELS, "overdue": "Overdue"}
 
-IMPORTANCE_FILTERS = ["all", "1", "2", "3"]
-IMPORTANCE_FILTER_LABELS = {"all": "All importance", **{str(k): v for k, v in IMPORTANCE_LABELS.items()}}
-URGENCY_FILTERS = ["all", "1", "2", "3"]
-URGENCY_FILTER_LABELS = {"all": "All urgency", **{str(k): v for k, v in URGENCY_LABELS.items()}}
+# `important` is an "(any level)" virtual option -- src/derived_state.py's
+# `is_important` (effective importance >= IMPORTANT_THRESHOLD), distinct
+# from picking an exact 1/2/3 level below it. See _apply_importance_filter.
+IMPORTANCE_FILTERS = ["all", "1", "2", "3", "important"]
+IMPORTANCE_FILTER_LABELS = {
+    "all": "All importance",
+    **{str(k): v for k, v in IMPORTANCE_LABELS.items()},
+    "important": "Important (any level)",
+}
+# `urgent` is the urgency-axis sibling of `important` above (`is_urgent`).
+URGENCY_FILTERS = ["all", "1", "2", "3", "urgent"]
+URGENCY_FILTER_LABELS = {
+    "all": "All urgency",
+    **{str(k): v for k, v in URGENCY_LABELS.items()},
+    "urgent": "Urgent (any level)",
+}
 
 DONE_STATUSES = ("done", "archived")
 
 
 def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | None = None) -> list[dict]:
-    """Filters tasks by the state-based date/system filters. Each value
-    delegates to src/derived_state.py's `virtual_states` predicate -- the
-    single place per-state membership is computed -- so this filter, the
-    Dashboard's aggregation service, and any future surface agree by
-    construction rather than by each re-implementing the date math.
+    """Filters tasks by the real date buckets (today/tomorrow/this_week/
+    this_month). Delegates to src/derived_state.py's `virtual_states`
+    predicate -- the single place per-state membership is computed -- so
+    this filter, the Dashboard's aggregation service, and any future
+    surface agree by construction rather than by each re-implementing the
+    date math.
 
-    The temporal ones (`today`/`tomorrow`/`this_week`/`this_month`/
-    `overdue`) match `due_at` against the current date (the same pure date
-    math that's been here since 2026-08-01, extended 1.1 with `tomorrow`
-    and `this_month`); `important` and `urgent` (1.1) are the virtual/
-    derived states projecting through effective-importance / effective-
-    urgency (explicit values + label rules + temporal state, deterministic,
-    never stored). They need the resolved label-config rules to compute the
-    label-derived component, which is why this function takes `label_rules`
-    ({label name: effective config}) -- each view resolves them once (see
-    `_task_label_rules`) and passes them through, rather than this pure
-    function touching the database."""
+    Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue`/
+    `important`/`urgent` used to live here too (1.1) but have moved to
+    STATUS_FILTERS/IMPORTANCE_FILTERS/URGENCY_FILTERS respectively -- see
+    _apply_status_filter/_apply_importance_filter/_apply_urgency_filter.
+    `label_rules` is kept as a parameter (unused by the remaining, purely
+    temporal buckets) rather than dropped, so every call site can keep
+    passing it uniformly across all four `_apply_*_filter` functions
+    without special-casing this one."""
     if date_filter == "all":
         return tasks
     states = {date_filter}
     return [t for t in tasks if states & derived_state.virtual_states(t, label_rules or {})]
 
 
-def _apply_status_filter(tasks: list[dict], status_filter: str) -> list[dict]:
+def _apply_status_filter(tasks: list[dict], status_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Status filter (toolbar Status dropdown). `overdue` (2026-08-15,
+    Tasks page filter cleanup) is a virtual pseudo-status, not a real
+    `tasks.status` value -- it delegates to src/derived_state.py's
+    `virtual_states` the same way the old DATE_FILTERS `overdue` entry did,
+    which is why this function now takes `label_rules` too (unused by the
+    real-status branch, needed for the virtual one) -- same "each `_apply_*`
+    takes label_rules uniformly" reasoning as _apply_date_filter above."""
     if status_filter == "all":
         return tasks
+    if status_filter == "overdue":
+        return [t for t in tasks if "overdue" in derived_state.virtual_states(t, label_rules or {})]
     return [t for t in tasks if t["status"] == status_filter]
 
 
-def _apply_importance_filter(tasks: list[dict], importance_filter: str) -> list[dict]:
-    """Explicit importance-level filter (toolbar Importance dropdown) --
-    matches the stored explicit importance value (1..3), independent of
-    the derived-state `important` filter in DATE_FILTERS (which projects
-    through label rules + temporal state via src/derived_state.py)."""
+def _apply_importance_filter(tasks: list[dict], importance_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Importance-level filter (toolbar Importance dropdown) -- matches
+    the *computed* effective importance value (1..3, src/derived_state.py:
+    label-derived, no manual per-task value exists anymore). `important`
+    (2026-08-15, Tasks page filter cleanup -- moved here from DATE_FILTERS)
+    is the "(any level)" virtual option: at/above the Important threshold
+    (`derived_state.is_important`) rather than one exact level."""
     if importance_filter == "all":
         return tasks
+    label_rules = label_rules or {}
+    if importance_filter == "important":
+        return [t for t in tasks if derived_state.is_important(t, label_rules)]
     try:
         wanted = int(importance_filter)
     except ValueError:
         return tasks
-    return [t for t in tasks if t.get("importance") == wanted]
+    return [t for t in tasks if derived_state.effective_importance(t, label_rules) == wanted]
 
 
-def _apply_urgency_filter(tasks: list[dict], urgency_filter: str) -> list[dict]:
-    """Explicit urgency-level filter (toolbar Urgency dropdown) -- the
-    urgency-axis sibling of _apply_importance_filter."""
+def _apply_urgency_filter(tasks: list[dict], urgency_filter: str, label_rules: dict | None = None) -> list[dict]:
+    """Urgency-level filter (toolbar Urgency dropdown) -- the urgency-axis
+    sibling of _apply_importance_filter, same "exact level, plus an
+    `urgent` (any level) virtual option moved here from DATE_FILTERS
+    2026-08-15" shape."""
     if urgency_filter == "all":
         return tasks
+    label_rules = label_rules or {}
+    if urgency_filter == "urgent":
+        return [t for t in tasks if derived_state.is_urgent(t, label_rules)]
     try:
         wanted = int(urgency_filter)
     except ValueError:
         return tasks
-    return [t for t in tasks if t.get("urgency") == wanted]
+    return [t for t in tasks if derived_state.effective_urgency(t, label_rules) == wanted]
 
 
 def _apply_label_filter(tasks: list[dict], label: str | None) -> list[dict]:
@@ -289,13 +341,20 @@ def _task_context(request: Request) -> dict:
     }
 
 
-_SORT_KEYS = {
-    "title": lambda t: (t.get("title") or "").lower(),
-    "due_at": lambda t: t.get("due_at") or "9999",
-    "importance": lambda t: t.get("importance") if t.get("importance") is not None else 0,
-    "urgency": lambda t: t.get("urgency") if t.get("urgency") is not None else 0,
-    "status": lambda t: STATUSES.index(t["status"]) if t["status"] in STATUSES else 99,
-}
+def _sort_keys(label_rules: dict) -> dict:
+    """Factory, not a plain module-level dict: the importance/urgency sort
+    keys need `label_rules` to compute the effective value (side work,
+    post-1.1 -- there's no stored column to sort by anymore, see
+    src/derived_state.py). Every other key is unaffected by label rules,
+    kept here rather than split out so `list_tasks` has one dict to look
+    `sort` up in either way."""
+    return {
+        "title": lambda t: (t.get("title") or "").lower(),
+        "due_at": lambda t: t.get("due_at") or "9999",
+        "importance": lambda t: derived_state.effective_importance(t, label_rules),
+        "urgency": lambda t: derived_state.effective_urgency(t, label_rules),
+        "status": lambda t: STATUSES.index(t["status"]) if t["status"] in STATUSES else 99,
+    }
 
 
 def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
@@ -326,8 +385,8 @@ def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
     return groups
 
 
-@router.get("")
-def list_tasks(
+def _tasks_list_context(
+    conn,
     request: Request,
     date_filter: str = "all",
     status_filter: str = "all",
@@ -338,22 +397,30 @@ def list_tasks(
     sort: str = "due_at",
     dir: str = "asc",
     group_by: str = "none",
-    conn=Depends(get_db),
-):
+    page: int = 1,
+    limit: int = 50,
+) -> dict:
+    """Build the full render context for the Table view. Shared between the
+    full page (list_tasks) and the async-CRUD region fragment
+    (tasks_regions, GET /tasks/regions?region=table) so a mutation-triggered
+    region refresh re-renders the exact same markup as the full page --
+    _tasks_body.html is the single source of truth either way
+    (features/async-crud.md)."""
     _auto_archive_if_configured(conn)
     label_rules = _task_label_rules(conn)
     tasks = db.list_tasks(conn, q=q)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_importance_filter(tasks, importance_filter)
-    tasks = _apply_urgency_filter(tasks, urgency_filter)
+    tasks = _apply_status_filter(tasks, status_filter, label_rules)
+    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
+    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     # Phase 9b toolbar rework: label filter, the real replacement for the
     # old dead Space/Project dropdowns (see routers/labels.py and
     # db.list_task_label_names) -- narrows by object_labels membership
     # (object_type='task'), same case-insensitive single-label match
     # Contacts' `?tag=` filter already uses.
     tasks = _apply_label_filter(tasks, label)
-    key_fn = _SORT_KEYS.get(sort, _SORT_KEYS["due_at"])
+    sort_keys = _sort_keys(label_rules)
+    key_fn = sort_keys.get(sort, sort_keys["due_at"])
     tasks.sort(key=key_fn, reverse=(dir == "desc"))
 
     # Completed tasks (done/archived) stay visible in every view -- Today,
@@ -369,14 +436,45 @@ def list_tasks(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
+    # 1.9 slice (Webapp usability Phase B, plans/open.md § Webapp usability +
+    # DAVx5 mobile hosting): paginate the open section of the Table view --
+    # the highest-traffic surface named in that doc as the first pagination
+    # target. Applies only in the default ungrouped view (group_by=='none');
+    # group_by=project clusters tasks under per-project header rows, and a
+    # flat page boundary would split a project's own tasks arbitrarily
+    # across pages, so grouped mode is left showing everything, same as
+    # before this slice -- a deliberate, documented scope cut, not an
+    # oversight. limit is clamped to a sane range so a stray ?limit=0 or
+    # ?limit=100000 can't produce a zero-division or an effectively
+    # unpaginated "page". Completed tasks are never paginated: they're
+    # already visually separated below Open, and bounded in practice by the
+    # "Auto-archive completed tasks" setting (_auto_archive_if_configured
+    # above) -- if that turns out wrong at real volume, it's a follow-up,
+    # not a blocker for this slice (open.md's own "live-volume verification
+    # required" note).
+    limit = min(max(limit, 1), 200)
+    page = max(page, 1)
+    paginated = group_by == "none"
+    open_total = len(open_tasks)
+    total_pages = max(1, -(-open_total // limit)) if paginated else 1
+    if paginated:
+        page = min(page, total_pages)
+        open_tasks = open_tasks[(page - 1) * limit : page * limit]
+    else:
+        page = 1
+
     # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
     # plans/open-priority.md § Task model): attach each visible task's
     # scheduled/completed/remaining hours so _task_row.html can render a
     # "Scheduled" column distinct from "Due" -- one batched query
     # (db.task_work_hours_bulk) for the whole page instead of one query per
-    # row, since this list can be every task in the app.
-    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in tasks])
-    for t in tasks:
+    # row. Scoped to open_tasks + completed_tasks (i.e. after the 1.9
+    # pagination slice above) rather than the full filtered `tasks` list, so
+    # a large filtered set only pays for the hours of rows it actually
+    # renders.
+    _rendered = open_tasks + completed_tasks
+    _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in _rendered])
+    for t in _rendered:
         t["work_hours"] = _hours[t["uid"]]
 
     # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
@@ -421,9 +519,77 @@ def list_tasks(
             "dir": dir,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "paginated": paginated,
+            "page": page,
+            "limit": limit,
+            "open_total": open_total,
+            "total_pages": total_pages,
+            # The dead Space/Project filter helpers (_aguid/_apuid, see
+            # tasks_list.html) are always empty today; the page sets them via
+            # `default('')` at block scope, so the fragment route must supply
+            # the same empty values for the shared _tasks_body.html partial.
+            "_aguid": "",
+            "_apuid": "",
         }
     )
+    return ctx
+
+
+@router.get("")
+def list_tasks(
+    request: Request,
+    date_filter: str = "all",
+    status_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
+    label: str | None = None,
+    q: str | None = None,
+    sort: str = "due_at",
+    dir: str = "asc",
+    group_by: str = "none",
+    page: int = 1,
+    limit: int = 50,
+    conn=Depends(get_db),
+):
+    ctx = _tasks_list_context(
+        conn, request, date_filter, status_filter, importance_filter,
+        urgency_filter, label, q, sort, dir, group_by, page, limit,
+    )
     return templates.TemplateResponse("tasks_list.html", ctx)
+
+
+@router.get("/regions")
+def tasks_regions(
+    request: Request,
+    region: str = "table",
+    date_filter: str = "all",
+    status_filter: str = "all",
+    importance_filter: str = "all",
+    urgency_filter: str = "all",
+    label: str | None = None,
+    q: str | None = None,
+    sort: str = "due_at",
+    dir: str = "asc",
+    group_by: str = "none",
+    page: int = 1,
+    limit: int = 50,
+    conn=Depends(get_db),
+):
+    """Async-CRUD region fragment (features/async-crud.md): renders a single
+    named region of the Table view -- currently `region=table`, the
+    #tasks-body div shared with tasks_list.html -- so static/async_crud.js's
+    refreshRegion() can swap it in place after a mutation instead of a full
+    page reload. Takes the same query params as list_tasks; the client
+    forwards the page's own query string so the refreshed region honors the
+    active filters/sort/page."""
+    if region != "table":
+        return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
+    ctx = _tasks_list_context(
+        conn, request, date_filter, status_filter, importance_filter,
+        urgency_filter, label, q, sort, dir, group_by, page, limit,
+    )
+    html = templates.env.get_template("_tasks_body.html").render(ctx)
+    return HTMLResponse(html)
 
 
 @router.get("/board")
@@ -451,9 +617,9 @@ def board_view(
     # status" is a meaningful, non-redundant combination.
     label_rules = _task_label_rules(conn)
     tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter)
-    tasks = _apply_importance_filter(tasks, importance_filter)
-    tasks = _apply_urgency_filter(tasks, urgency_filter)
+    tasks = _apply_status_filter(tasks, status_filter, label_rules)
+    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
+    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
     tasks = _apply_label_filter(tasks, label)
     columns = {s: [] for s in STATUSES if s != "archived"}
     for t in tasks:
@@ -564,7 +730,9 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_task_form(request: Request, habit: bool = False, project: str = "", conn=Depends(get_db)):
+def new_task_form(
+    request: Request, habit: bool = False, project: str = "", title: str = "", conn=Depends(get_db)
+):
     # 2026-08-08 follow-up: Tasks > Habits' own "New" button (?habit=1)
     # renders a real, separate, stripped-down form now -- not task_form.html
     # with a field pre-checked -- direct feedback that a habit doesn't need
@@ -600,9 +768,12 @@ def new_task_form(request: Request, habit: bool = False, project: str = "", conn
             "request": request,
             "active_tab": "tasks",
             "task": None,
+            # Command palette actions (open.md) -- the palette's "Create
+            # task: '<query>'" row opens this form with ?title=<query> so
+            # the typed text isn't lost; blank for every other caller of
+            # this route, same as prefill_start/prefill_end below.
+            "prefill_title": title,
             "statuses": STATUSES,
-            "importance_items": IMPORTANCE_ITEMS,
-            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
@@ -628,13 +799,12 @@ def create_task(
     description: str = Form(""),
     due_at: str = Form(""),
     start_at: str = Form(""),
-    importance: str = Form(""),
-    urgency: str = Form(""),
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -672,8 +842,6 @@ def create_task(
         # in routers/calendar.py -- keeps the old "starts today" behavior
         # unchanged).
         "start_at": start_at or date.today().isoformat(),
-        "importance": int(importance) if importance else None,
-        "urgency": int(urgency) if urgency else None,
         "status": status,
         "progress": _progress_for_status(status),
         "tags": _tags_list(tags),
@@ -695,7 +863,7 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
 # --------------------------------------------------------------------- #
@@ -836,8 +1004,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "active_tab": "tasks",
             "task": task,
             "statuses": STATUSES,
-            "importance_items": IMPORTANCE_ITEMS,
-            "urgency_items": URGENCY_ITEMS,
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
@@ -904,13 +1070,12 @@ def update_task(
     description: str = Form(""),
     due_at: str = Form(""),
     start_at: str = Form(""),
-    importance: str = Form(""),
-    urgency: str = Form(""),
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -931,8 +1096,6 @@ def update_task(
             "description": description,
             "due_at": due_at or None,
             "start_at": start_at or None,
-            "importance": int(importance) if importance else None,
-            "urgency": int(urgency) if urgency else None,
             "status": status,
             "progress": _progress_for_status(status),
             "tags": _tags_list(tags),
@@ -945,10 +1108,10 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
-_UPDATABLE_FIELDS = {"status", "importance", "urgency", "due_at", "title"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title"}
 
 
 @router.post("/{uid}/update-field")
@@ -968,11 +1131,7 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     if existing is None:
         return JSONResponse({"error": "task not found"}, status_code=404)
     row = dict(existing)
-    if field == "importance":
-        row["importance"] = int(value) if value else None
-    elif field == "urgency":
-        row["urgency"] = int(value) if value else None
-    elif field == "due_at":
+    if field == "due_at":
         row["due_at"] = value or None
     elif field == "status":
         row["status"] = value
@@ -985,7 +1144,7 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
 
 
 @router.post("/{uid}/complete")
-def complete_task(uid: str, conn=Depends(get_db)):
+def complete_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     row = db.get_task(conn, uid)
     if row:
         row["status"] = "done"
@@ -997,7 +1156,7 @@ def complete_task(uid: str, conn=Depends(get_db)):
         # again tomorrow. Plain tasks just flip to done, no history row.
         if row.get("recurrence"):
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
 def _completion_streaks(completions: dict[str, str], today: date | None = None) -> tuple[int, int]:
@@ -1122,7 +1281,7 @@ def set_task_completion(
 
 
 @router.post("/{uid}/delete")
-def delete_task(uid: str, conn=Depends(get_db)):
+def delete_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     # Tasks are flat (1.2, task-model decision) -- a task is an independent
     # unit of work, so this deletes exactly the one task (plus its labels
     # and relation links, via db.delete_task's own cleanup). The checklist-
@@ -1130,7 +1289,7 @@ def delete_task(uid: str, conn=Depends(get_db)):
     # checklist/subtask removal still physically has.
     db.delete_task(conn, uid)
     db.delete_checklist_items_for_task(conn, uid)
-    return RedirectResponse(url="/tasks", status_code=303)
+    return _respond(x_requested_with, "/tasks")
 
 
 # --------------------------------------------------------------------- #

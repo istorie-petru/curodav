@@ -62,6 +62,85 @@ def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
+def _parse_birthday_field(birthday: str) -> str | None:
+    """Contacts field parity slice 4 of 6 -- validates a create/edit form's
+    raw `birthday` text against db.parse_contact_birthday's two accepted
+    shapes (full "YYYY-MM-DD" or year-less "--MM-DD"), same "reject with a
+    clear 400 rather than silently storing garbage" convention this app's
+    other plain-form validation (e.g. single-project-per-task) already
+    uses. A blank field is "no birthday," not an error -- same as every
+    other optional contact field on this router."""
+    v = (birthday or "").strip()
+    if not v:
+        return None
+    try:
+        return db.parse_contact_birthday(v)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+def _phone_email_list(types: list[str], values: list[str]) -> list[dict]:
+    """Zips a create/edit form's parallel `*_type[]`/`*_value[]` arrays
+    into the {"type", "value"} shape db.set_contact_phones/
+    set_contact_emails expects. A blank type (a row where the browser
+    submitted the field but nothing was picked -- shouldn't normally
+    happen with a `<select>` that always has a value, but a hand-built
+    POST could) falls back to "Other", same default the legacy-column
+    migration uses. Blank values are left in -- db.set_contact_phones/
+    set_contact_emails already drop them, same place every other blank-row
+    filtering happens for this feature."""
+    return [
+        {"type": (t or "").strip() or "Other", "value": v}
+        for t, v in zip(types, values)
+    ]
+
+
+def _website_list(types: list[str], urls: list[str]) -> list[dict]:
+    """Same zip as `_phone_email_list` (parallel `website_type[]`/
+    `website_url[]` form arrays into db.set_contact_websites' {"type",
+    "url"} shape) -- kept as a separate function rather than a shared
+    generic helper because the value key differs (`url`, not `value` --
+    db.py's contact_websites column naming choice)."""
+    return [
+        {"type": (t or "").strip() or "Other", "url": u}
+        for t, u in zip(types, urls)
+    ]
+
+
+def _address_list(
+    types: list[str], po_boxes: list[str], extendeds: list[str], streets: list[str],
+    cities: list[str], regions: list[str], postal_codes: list[str], countries: list[str],
+) -> list[dict]:
+    """Contacts field parity slice 5 of 6 -- zips a create/edit form's eight
+    parallel `address_*[]` arrays into db.set_contact_addresses' per-row
+    shape. Unlike `_phone_email_list`/`_website_list` (one value field), a
+    structured address has seven -- `zip` over eight equal-length lists
+    (the form always submits every field for every row, even ones left
+    blank, since they're all part of the same repeatable-row template) is
+    still the simplest correct way to reconstruct each row; db.
+    set_contact_addresses itself is what actually drops an all-blank row."""
+    return [
+        {
+            "type": (t or "").strip() or "Other",
+            "po_box": po_box, "extended": extended, "street": street,
+            "city": city, "region": region, "postal_code": postal_code, "country": country,
+        }
+        for t, po_box, extended, street, city, region, postal_code, country in zip(
+            types, po_boxes, extendeds, streets, cities, regions, postal_codes, countries
+        )
+    ]
+
+
+def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
+    """Contacts field parity slice 6 of 6 -- same zip shape as
+    `_phone_email_list`, for the `social_type[]`/`social_value[]` form
+    arrays into db.set_contact_social_profiles' {"type", "value"} shape."""
+    return [
+        {"type": (t or "").strip() or "Other", "value": v}
+        for t, v in zip(types, values)
+    ]
+
+
 @router.get("")
 def list_contacts(
     request: Request,
@@ -105,6 +184,11 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
             "contact": None,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "phone_types": db.CONTACT_PHONE_TYPES,
+            "email_types": db.CONTACT_EMAIL_TYPES,
+            "website_types": db.CONTACT_WEBSITE_TYPES,
+            "address_types": db.CONTACT_ADDRESS_TYPES,
+            "social_types": db.CONTACT_SOCIAL_TYPES,
         },
     )
 
@@ -112,10 +196,25 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
 @router.post("")
 async def create_contact(
     full_name: str = Form(...),
+    title: str = Form(""),
     org: str = Form(""),
-    phone: str = Form(""),
-    email: str = Form(""),
-    address: str = Form(""),
+    phone_type: list[str] = Form([]),
+    phone_value: list[str] = Form([]),
+    email_type: list[str] = Form([]),
+    email_value: list[str] = Form([]),
+    website_type: list[str] = Form([]),
+    website_url: list[str] = Form([]),
+    address_type: list[str] = Form([]),
+    address_po_box: list[str] = Form([]),
+    address_extended: list[str] = Form([]),
+    address_street: list[str] = Form([]),
+    address_city: list[str] = Form([]),
+    address_region: list[str] = Form([]),
+    address_postal_code: list[str] = Form([]),
+    address_country: list[str] = Form([]),
+    social_type: list[str] = Form([]),
+    social_value: list[str] = Form([]),
+    birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
@@ -123,16 +222,49 @@ async def create_contact(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
         "full_name": full_name,
+        "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
-        "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
-        "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
-        "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+        # Contacts field parity slice 2 of 6 -- phone/email are multi-value
+        # now (contact_phones/contact_emails), submitted as parallel
+        # phone_type[]/phone_value[] (email_type[]/email_value[]) form
+        # arrays, same `list[str] = Form([])` shape `tags_labels` already
+        # uses on this router -- one Save button, no separate per-row
+        # endpoints (see plans/STATE.md's slice entry for the full
+        # reasoning). The old flat `phone`/`email` columns are no longer
+        # written here at all (db.py's contacts CREATE TABLE comment).
+        "phones": _phone_email_list(phone_type, phone_value),
+        "emails": _phone_email_list(email_type, email_value),
+        # Contacts field parity slice 3 of 6 -- Website, same multi-value
+        # form-array shape as phone/email above (website_type[]/
+        # website_url[]; the value key is "url" to match db.py's
+        # contact_websites column naming, not "value").
+        "websites": _website_list(website_type, website_url),
+        # Contacts field parity slice 5 of 6 -- Address is now the full
+        # structured, multi-value vCard ADR (contact_addresses), submitted
+        # as eight parallel address_*[] form arrays (see _address_list).
+        # The old flat `address` column is no longer written here at all,
+        # same "legacy column frozen, not kept live" convention phone/email
+        # already established.
+        "addresses": _address_list(
+            address_type, address_po_box, address_extended, address_street,
+            address_city, address_region, address_postal_code, address_country,
+        ),
+        # Contacts field parity slice 6 of 6 -- Social network
+        # (contact_social_profiles), same multi-value form-array shape as
+        # phone/email/website above.
+        "social_profiles": _social_profile_list(social_type, social_value),
+        # Contacts field parity slice 4 of 6 -- Birthday, single-value (no
+        # form-array shape like phone/email/website above -- a contact has
+        # at most one). `_parse_birthday_field` already validated/
+        # normalized it (or raised a 400) before this dict is built.
+        "birthday": birthday_value,
         "tags": _tags_list(tags),
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
         "photo_b64": photo_b64,
@@ -169,6 +301,11 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "contact": contact,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "phone_types": db.CONTACT_PHONE_TYPES,
+            "email_types": db.CONTACT_EMAIL_TYPES,
+            "website_types": db.CONTACT_WEBSITE_TYPES,
+            "address_types": db.CONTACT_ADDRESS_TYPES,
+            "social_types": db.CONTACT_SOCIAL_TYPES,
         },
     )
 
@@ -177,10 +314,25 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
 async def update_contact(
     uid: str,
     full_name: str = Form(...),
+    title: str = Form(""),
     org: str = Form(""),
-    phone: str = Form(""),
-    email: str = Form(""),
-    address: str = Form(""),
+    phone_type: list[str] = Form([]),
+    phone_value: list[str] = Form([]),
+    email_type: list[str] = Form([]),
+    email_value: list[str] = Form([]),
+    website_type: list[str] = Form([]),
+    website_url: list[str] = Form([]),
+    address_type: list[str] = Form([]),
+    address_po_box: list[str] = Form([]),
+    address_extended: list[str] = Form([]),
+    address_street: list[str] = Form([]),
+    address_city: list[str] = Form([]),
+    address_region: list[str] = Form([]),
+    address_postal_code: list[str] = Form([]),
+    address_country: list[str] = Form([]),
+    social_type: list[str] = Form([]),
+    social_value: list[str] = Form([]),
+    birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
@@ -189,16 +341,29 @@ async def update_contact(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
     row = dict(existing)
     row.update(
         {
             "uid": uid,
             "full_name": full_name,
+            "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
             "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
-            "phone": phone if phone and phone.strip().lower() not in ("none", "nothing") else None,
-            "email": email if email and email.strip().lower() not in ("none", "nothing") else None,
-            "address": address if address and address.strip().lower() not in ("none", "nothing") else None,
+            # Same multi-value replace-on-save as create_contact above --
+            # the submitted arrays are the full, ordered set, so this
+            # always overwrites `existing`'s phones/emails rather than
+            # merging with them (`db.upsert_contact` -> `set_contact_
+            # phones`/`set_contact_emails`, a full delete-then-reinsert).
+            "phones": _phone_email_list(phone_type, phone_value),
+            "emails": _phone_email_list(email_type, email_value),
+            "websites": _website_list(website_type, website_url),
+            "addresses": _address_list(
+                address_type, address_po_box, address_extended, address_street,
+                address_city, address_region, address_postal_code, address_country,
+            ),
+            "social_profiles": _social_profile_list(social_type, social_value),
+            "birthday": birthday_value,
             "tags": _tags_list(tags),
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),

@@ -41,29 +41,40 @@ def _seed_event(conn, uid, start_at=None, tags=None):
     })
 
 
+def _seed_recurring_event(conn, uid, start_at, end_at=None, recurrence=None, tags=None):
+    db.upsert_event(conn, {
+        "uid": uid, "title": uid,
+        "description": "", "status": "active", "all_day": 0,
+        "start_at": start_at, "end_at": end_at, "recurrence": recurrence,
+        "tags": tags or [], "created_at": _now(),
+    })
+
+
 class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
-        # 2026-08-07 (screenshot-driven default-layout rework): default
-        # seed is now exactly Today's Agenda + a stack of At a Glance /
-        # Upcoming Events / Overdue Tasks -- see
+        # 2026-08-15 widget consolidation: default seed is Agenda (range=
+        # today) + a stack of At a Glance / Agenda (all_upcoming, events
+        # only) / Agenda (today, overdue only) -- see
         # dashboard_router._seed_agenda_stack_layout.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
-        assert [w["type"] for w in top_level] == ["today_agenda", "stack"]
+        assert [w["type"] for w in top_level] == ["agenda", "stack"]
 
         stack = top_level[1]
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
-        assert [w["type"] for w in members] == ["at_a_glance", "upcoming_events", "overdue_tasks"]
+        assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
+        assert members[1]["config"]["show"] == ["events"]
+        assert members[2]["config"]["show"] == ["overdue"]
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
-        # Today's Agenda and the stack share the width split (half/half)
-        # so the side-by-side layout is correct out of the box.
+        # The main Agenda widget and the stack share the width split
+        # (half/half) so the side-by-side layout is correct out of the box.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
-        today_agenda = next(w for w in widgets if w["type"] == "today_agenda")
+        main_agenda = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
         stack = next(w for w in widgets if w["type"] == "stack")
-        assert today_agenda["config"]["width"] == "half"
+        assert main_agenda["config"]["width"] == "half"
         assert stack["config"]["width"] == "half"
 
     def test_default_seed_no_longer_includes_removed_types(self, conn):
@@ -139,72 +150,92 @@ class TestFiltering:
         assert {t["uid"] for t in result} == {"t1", "t2"}
 
 
-class TestTodayAgendaWidget:
+class TestAgendaWidgetToday:
+    """range="today" reproduces today_agenda's old content: overdue + due-
+    today tasks (as separate Overdue/Tasks sections now) and today's
+    events."""
+
     def test_includes_overdue_and_today_excludes_future(self, conn):
         today = date.today()
         _seed_task(conn, "overdue", due_at=(today - timedelta(days=2)).isoformat())
         _seed_task(conn, "today", due_at=today.isoformat())
         _seed_task(conn, "future", due_at=(today + timedelta(days=3)).isoformat())
-        data = dashboard_router._render_today_agenda(conn, {})
-        assert {t["uid"] for t in data["tasks"]} == {"overdue", "today"}
+        data = dashboard_router._render_agenda(conn, {"range": "today"})
+        assert {t["uid"] for t in data["overdue_tasks"]} == {"overdue"}
+        assert {t["uid"] for t in data["tasks"]} == {"today"}
 
     def test_events_only_today(self, conn):
         today = date.today()
         _seed_event(conn, "e_today", start_at=f"{today.isoformat()}T09:00:00")
         _seed_event(conn, "e_tomorrow", start_at=f"{(today + timedelta(days=1)).isoformat()}T09:00:00")
-        data = dashboard_router._render_today_agenda(conn, {})
+        data = dashboard_router._render_agenda(conn, {"range": "today"})
         assert {e["uid"] for e in data["events"]} == {"e_today"}
 
+    def test_show_toggles_narrow_the_sections_rendered(self, conn):
+        today = date.today()
+        _seed_task(conn, "overdue", due_at=(today - timedelta(days=1)).isoformat())
+        _seed_task(conn, "today", due_at=today.isoformat())
+        _seed_event(conn, "e_today", start_at=f"{today.isoformat()}T09:00:00")
+        data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["overdue"]})
+        assert {t["uid"] for t in data["overdue_tasks"]} == {"overdue"}
+        assert data["tasks"] == []
+        assert data["events"] == []
 
-class TestWeeklyOverviewWidget:
+
+class TestAgendaWidgetDays:
     def test_groups_by_day_across_next_seven_days(self, conn):
         today = date.today()
         _seed_task(conn, "t1", due_at=today.isoformat())
         _seed_task(conn, "t2", due_at=(today + timedelta(days=3)).isoformat())
         _seed_task(conn, "t_out_of_range", due_at=(today + timedelta(days=10)).isoformat())
-        data = dashboard_router._render_weekly_overview(conn, {})
+        data = dashboard_router._render_agenda(conn, {"range": "next_7_days"})
+        assert data["mode"] == "days"
         assert len(data["days"]) == 7
         assert data["days"][0]["is_today"] is True
         all_task_uids = {t["uid"] for day in data["days"] for t in day["tasks"]}
         assert all_task_uids == {"t1", "t2"}
 
+    def test_next_30_days_range(self, conn):
+        data = dashboard_router._render_agenda(conn, {"range": "next_30_days"})
+        assert len(data["days"]) == 30
 
-class TestUpcomingEventsWidget:
+
+class TestAgendaWidgetAllUpcoming:
     def test_only_future_events_chronological(self, conn):
         now = datetime.now(timezone.utc)
         _seed_event(conn, "past", start_at=(now - timedelta(days=1)).isoformat())
         _seed_event(conn, "soon", start_at=(now + timedelta(days=1)).isoformat())
         _seed_event(conn, "later", start_at=(now + timedelta(days=5)).isoformat())
-        data = dashboard_router._render_upcoming_events(conn, {})
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"]})
         assert [e["uid"] for e in data["events"]] == ["soon", "later"]
 
     def test_respects_limit(self, conn):
         now = datetime.now(timezone.utc)
         for i in range(5):
             _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
-        data = dashboard_router._render_upcoming_events(conn, {"limit": 2})
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 2})
         assert len(data["events"]) == 2
 
 
-class TestOverdueTasksWidget:
+class TestAgendaWidgetOverdueOnly:
     def test_only_overdue_open_tasks(self, conn):
         today = date.today()
         _seed_task(conn, "overdue", due_at=(today - timedelta(days=1)).isoformat())
         _seed_task(conn, "today", due_at=today.isoformat())
         _seed_task(conn, "done_overdue", due_at=(today - timedelta(days=2)).isoformat(), status="done")
-        data = dashboard_router._render_overdue_tasks(conn, {})
-        assert {t["uid"] for t in data["tasks"]} == {"overdue"}
+        data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["overdue"]})
+        assert {t["uid"] for t in data["overdue_tasks"]} == {"overdue"}
 
 
 class TestWidgetCRUD:
     def test_add_widget(self, conn):
         dashboard_router.add_widget(
-            source="calendar_tasks", view="agenda", range="today", title="My Agenda", project_uid="", tags="uni, urgent",
+            source="calendar_tasks", view="agenda_view", range="today", title="My Agenda", project_uid="", tags="uni, urgent",
             task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
         )
         w = db.list_dashboard_widgets(conn)[0]
         assert w["title"] == "My Agenda"
-        assert w["type"] == "today_agenda"
+        assert w["type"] == "agenda"
         assert w["config"]["tags"] == ["uni", "urgent"]
 
     def test_add_widget_with_unknown_source_is_a_noop(self, conn):
@@ -223,17 +254,19 @@ class TestWidgetCRUD:
         # forward-lookup data but are no longer in WIDGET_VIEWS/
         # WIDGET_SOURCES -- add_widget correctly rejects them as an unknown
         # source now (see test_add_widget_rejects_removed_projects_source).
-        for (view, range_), (expected_type, expected_range_days) in dashboard_router._SELECTION_TO_TYPE.items():
+        for (view, range_), (expected_type, expected_extra) in dashboard_router._SELECTION_TO_TYPE.items():
             if view not in dashboard_router.WIDGET_VIEWS:
                 continue
             source = dashboard_router.WIDGET_VIEWS[view]["source"]
             dashboard_router.add_widget(
                 source=source, view=view, range=range_ or "", title="", project_uid="", tags="",
-                task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+                task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show_overdue=False,
+                show_tasks=False, show_events=False, space_uid="", conn=conn,
             )
             w = db.list_dashboard_widgets(conn)[-1]
             assert w["type"] == expected_type
-            assert w["config"].get("range_days") == expected_range_days
+            for key, value in expected_extra.items():
+                assert w["config"].get(key) == value
 
     def test_edit_widget_updates_config(self, conn):
         dashboard_router.add_widget(source="calendar_tasks", view="upcoming_list", range="all_upcoming", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
@@ -245,12 +278,12 @@ class TestWidgetCRUD:
         assert updated["config"]["limit"] == 5
 
     def test_edit_widget_can_change_source_view_range(self, conn):
-        dashboard_router.add_widget(source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
+        dashboard_router.add_widget(source="calendar_tasks", view="agenda_view", range="today", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
         w = db.list_dashboard_widgets(conn)[0]
-        dashboard_router.edit_widget(w["uid"], source="calendar_tasks", view="agenda", range="next_7_days", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn)
+        dashboard_router.edit_widget(w["uid"], source="calendar_tasks", view="agenda_view", range="next_7_days", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn)
         updated = db.get_dashboard_widget(conn, w["uid"])
-        assert updated["type"] == "weekly_overview"
-        assert updated["config"]["range_days"] == 7
+        assert updated["type"] == "agenda"
+        assert updated["config"]["range"] == "next_7_days"
 
     def test_delete_widget(self, conn):
         dashboard_router.add_widget(source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
@@ -313,16 +346,14 @@ class TestWidgetCRUD:
         assert updated["config"]["tags"] == ["Focus", "Reading"]
 
     def test_legacy_widget_with_empty_config_reverse_maps_correctly(self, conn):
-        # Every dashboard seeded before 2026-08-02's Source/View/Range
-        # rework has widgets stored with `config == {}` -- no range_days
-        # at all, since that key didn't exist yet. _render_weekly_overview
-        # itself defaults an absent range_days to 7, so the reverse
-        # mapping used to pre-fill the Filters form has to treat
-        # (weekly_overview, None) the same as (weekly_overview, 7), or
-        # opening an old Weekly Overview widget's Filters panel would show
-        # (and on Save, silently change it to) Today's Agenda instead.
-        widget = {"uid": "x", "type": "weekly_overview", "config": {}}
-        assert dashboard_router._selection_from_widget(widget) == ("calendar_tasks", "agenda", "next_7_days")
+        # An old dashboard's widget with no range info in config at all
+        # (config == {}) still resolves sensibly -- _agenda_range's own
+        # fallback treats an absent `range` (and absent `range_days`) as
+        # "today", so the reverse mapping used to pre-fill the Filters
+        # form lands on Today's Agenda rather than crashing or picking an
+        # arbitrary range.
+        widget = {"uid": "x", "type": "agenda", "config": {}}
+        assert dashboard_router._selection_from_widget(widget) == ("calendar_tasks", "agenda_view", "today")
 
     def test_move_widget_up_and_down(self, conn):
         dashboard_router.add_widget(source="calendar_tasks", view="agenda", range="today", title="A", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
@@ -415,11 +446,11 @@ class TestWidgetWidthAutomatic:
         assert "width" not in params
 
     def test_created_widget_always_renders_at_its_types_default_width(self, conn):
-        # calendar_tasks/agenda resolves to today_agenda, whose
+        # calendar_tasks/agenda_view resolves to agenda, whose
         # default_width is "half" -- confirm that's what actually renders
         # regardless of anything a stale/forged client might have sent.
         w = self._add(conn)
-        assert w["type"] == "today_agenda"
+        assert w["type"] == "agenda"
         wc = dashboard_router._widget_context(conn, w)
         assert wc["width"]["key"] == "half"
 
@@ -798,57 +829,6 @@ class TestSpaceWidgets:
         assert stack["space_uid"] == "space1"
 
 
-class TestCalendarAgendaWidget:
-    """§1 Dashboard rework, 2026-08-03 -- calendar_agenda combines
-    _render_mini_month_calendar + _render_weekly_overview into one dict
-    so the template can render the month grid above and the agenda below."""
-
-    def test_returns_calendar_and_agenda_keys(self, conn):
-        data = dashboard_router._render_calendar_agenda(conn, {})
-        assert "calendar" in data
-        assert "agenda" in data
-
-    def test_calendar_sub_dict_has_weeks_and_month_label(self, conn):
-        data = dashboard_router._render_calendar_agenda(conn, {})
-        assert "weeks" in data["calendar"]
-        assert "month_label" in data["calendar"]
-
-    def test_agenda_sub_dict_has_7_days(self, conn):
-        data = dashboard_router._render_calendar_agenda(conn, {})
-        assert len(data["agenda"]["days"]) == 7
-
-    def test_label_name_scoping_now_filters_tasks_by_child_labels(self, conn):
-        # 2026-08-07 bug fix: this test used to assert the *opposite* --
-        # that calendar_agenda's label_name config never filtered tasks,
-        # documenting a real bug (see _effective_tags_filter's own
-        # docstring in routers/dashboard.py): _passes_filters never
-        # resolved config["label_name"] into a tag filter at all, so every
-        # Space/Project page's today_agenda/weekly_overview/overdue_tasks/
-        # calendar_agenda widget silently showed the *entire app's* tasks,
-        # not just that page's own. Fixed via the shared
-        # _effective_tags_filter helper, now exercised here: a task tagged
-        # with the Space's child label passes, an untagged task doesn't.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        today = date.today()
-        _seed_task(conn, "t_in", due_at=today.isoformat(), tags=["CS101"])
-        _seed_task(conn, "t_out", due_at=today.isoformat())
-        data = dashboard_router._render_calendar_agenda(conn, {"label_name": "Uni"})
-        all_agenda_task_uids = {t["uid"] for day in data["agenda"]["days"] for t in day["tasks"]}
-        assert "t_in" in all_agenda_task_uids
-        assert "t_out" not in all_agenda_task_uids
-
-    def test_registered_in_widget_types(self, conn):
-        assert "calendar_agenda" in dashboard_router.WIDGET_TYPES
-        spec = dashboard_router.WIDGET_TYPES["calendar_agenda"]
-        assert spec["default_width"] == "third"
-        assert "default_height" not in spec
-
-    def test_registered_in_selection_tables(self, conn):
-        assert ("calendar_agenda_view", None) in dashboard_router._SELECTION_TO_TYPE
-        assert ("calendar_agenda", None) in dashboard_router._TYPE_TO_SELECTION
-
-
 class TestContactListWidget:
     """§2 Spaces v2, 2026-08-03 -- contact_list widget filters contacts by
     tags matching the space's group project names (via group_uid) or
@@ -914,11 +894,11 @@ class TestDefaultSpaceWidgets:
         dashboard_router._ensure_default_label_widgets(conn, "space1")
         widgets = db.list_dashboard_widgets(conn, space_uid="space1")
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
-        assert [w["type"] for w in top_level] == ["today_agenda", "stack"]
+        assert [w["type"] for w in top_level] == ["agenda", "stack"]
 
         stack = top_level[1]
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
-        assert [w["type"] for w in members] == ["at_a_glance", "upcoming_events", "overdue_tasks"]
+        assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
 
     def test_default_seed_no_longer_includes_removed_types(self, conn):
         self._make_space(conn, "space1")
@@ -930,7 +910,7 @@ class TestDefaultSpaceWidgets:
         self._make_space(conn, "space1")
         dashboard_router._ensure_default_label_widgets(conn, "space1")
         widgets = db.list_dashboard_widgets(conn, space_uid="space1")
-        today_agenda = next(w for w in widgets if w["type"] == "today_agenda")
+        today_agenda = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
         stack = next(w for w in widgets if w["type"] == "stack")
         assert today_agenda["config"]["width"] == "half"
         assert stack["config"]["width"] == "half"
@@ -985,7 +965,7 @@ class TestSpaceScopedRenderers:
         db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
         db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
-        data = dashboard_router._render_project_preview(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
         assert [pv["project"]["uid"] for pv in data["previews"]] == ["CS101"]
 
     def test_habit_checkin_label_filter(self, conn):
@@ -995,3 +975,259 @@ class TestSpaceScopedRenderers:
         db.upsert_habit(conn, {"uid": "h2", "name": "Read", "created_at": _now(), "updated_at": _now()})
         data = dashboard_router._render_habit_checkin(conn, {"label_name": "Uni"})
         assert [r["habit"]["uid"] for r in data["rows"]] == ["h1"]
+
+
+class TestSpacesProjectsScope:
+    """2026-08-15, widget consolidation expanded scope: a Spaces & Projects
+    widget placed on a Space/Project page is auto-scoped to that page via
+    config['label_name'] -- config['scope']=='everything' opts a single
+    widget instance out of that, rendering the same as an unscoped Home
+    instance would."""
+
+    def test_default_scope_is_label_scoped(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
+        assert [pv["project"]["uid"] for pv in data["previews"]] == ["CS101"]
+
+    def test_scope_everything_ignores_label_name(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything"})
+        # Same as the unscoped Home case: every plain (non-Space) label,
+        # parented or not (list_labels' own "not generate_space" query
+        # doesn't filter by parent_name).
+        assert {pv["project"]["uid"] for pv in data["previews"]} == {"CS101", "Personal"}
+
+    def test_scope_everything_cards_style_lists_every_space(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything", "style": "cards"})
+        assert {c["uid"] for c in data["cards"]} == {"Uni", "Work"}
+
+    def test_children_include_sub_spaces_not_just_projects(self, conn):
+        # db.list_child_labels doesn't distinguish project vs. Space
+        # children -- "This Space" scope already includes both, no special
+        # casing needed.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Grad School", "parent_name": "Uni", "generate_space": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
+        assert {pv["project"]["uid"] for pv in data["previews"]} == {"CS101", "Grad School"}
+
+    def test_add_widget_stores_scope(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        dashboard_router.add_widget(
+            source="spaces_projects", view="spaces_projects_view", range="", title="", project_uid="",
+            tags="", task_list_uids=[], calendar_uids=[], limit="", style="cards", scope="everything",
+            show_overdue=False, show_tasks=False, show_events=False, space_uid="Uni", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn, space_uid="Uni")[0]
+        assert w["type"] == "spaces_projects"
+        assert w["config"]["scope"] == "everything"
+        assert w["config"]["style"] == "cards"
+
+
+class TestOrganizeTodayWidget:
+    """2026-08-15, widget consolidation expanded scope: "what needs
+    organizing today" -- decisions to make, not things already scheduled."""
+
+    def test_unallocated_task_due_soon_is_listed(self, conn):
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
+        data = dashboard_router._render_organize_today(conn, {})
+        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+        assert data["urgent"] == []
+
+    def test_task_due_soon_but_already_fully_scheduled_is_excluded(self, conn):
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
+        db.create_work_allocation(conn, "t1", start_at=f"{today.isoformat()}T09:00:00", end_at=f"{today.isoformat()}T10:00:00")
+        data = dashboard_router._render_organize_today(conn, {})
+        assert data["due_soon"] == []
+
+    def test_task_due_soon_with_only_an_undated_session_is_still_listed(self, conn):
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=1)).isoformat())
+        db.create_work_allocation(conn, "t1")  # undated placeholder
+        data = dashboard_router._render_organize_today(conn, {})
+        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+
+    def test_task_due_beyond_the_horizon_is_excluded(self, conn):
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat())
+        data = dashboard_router._render_organize_today(conn, {})
+        assert data["due_soon"] == []
+        assert data["urgent"] == []
+
+    def test_label_urgent_unallocated_task_beyond_the_due_soon_horizon_is_listed(self, conn):
+        # A label's urgency_threshold_days can make a task Urgency=3 well
+        # beyond the 3-day due-soon horizon (effective_urgency = max(label-
+        # derived, temporal); label-derived only needs a due date within
+        # the label's own window, not the widget's 3-day one).
+        db.upsert_label_config(conn, {"name": "Conference", "created_at": _now(), "urgency_threshold_days": 30})
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat(), tags=["Conference"])
+        data = dashboard_router._render_organize_today(conn, {})
+        assert data["due_soon"] == []
+        assert [item["task"]["uid"] for item in data["urgent"]] == ["t1"]
+
+    def test_task_already_in_due_soon_is_not_duplicated_in_urgent(self, conn):
+        # Overdue/due-today is itself URGENCY_HIGH (temporal component) --
+        # a due-soon task that's also urgent must only appear once.
+        today = date.today()
+        _seed_task(conn, "t1", due_at=today.isoformat())
+        data = dashboard_router._render_organize_today(conn, {})
+        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+        assert data["urgent"] == []
+
+    def test_event_with_no_location_or_url_is_unclear(self, conn):
+        today = date.today()
+        _seed_event(conn, "e1", start_at=f"{today.isoformat()}T09:00:00")
+        data = dashboard_router._render_organize_today(conn, {})
+        assert [e["uid"] for e in data["unclear_format"]] == ["e1"]
+
+    def test_event_with_a_location_is_not_unclear(self, conn):
+        today = date.today()
+        db.upsert_event(conn, {
+            "uid": "e1", "title": "e1", "description": "", "status": "active", "all_day": 0,
+            "start_at": f"{today.isoformat()}T09:00:00", "location": "Room 101",
+            "tags": [], "created_at": _now(),
+        })
+        data = dashboard_router._render_organize_today(conn, {})
+        assert data["unclear_format"] == []
+
+    def test_event_beyond_tomorrow_is_excluded(self, conn):
+        today = date.today()
+        _seed_event(conn, "e1", start_at=f"{(today + timedelta(days=2)).isoformat()}T09:00:00")
+        data = dashboard_router._render_organize_today(conn, {})
+        assert data["unclear_format"] == []
+
+    def test_registered_in_widget_types_and_selection_tables(self, conn):
+        assert "organize_today" in dashboard_router.WIDGET_TYPES
+        assert ("organize_today_view", None) in dashboard_router._SELECTION_TO_TYPE
+        assert ("organize_today", None) in dashboard_router._TYPE_TO_SELECTION
+
+
+class TestLimitFieldExposedForMoreViews:
+    """2026-08-15, widget consolidation expanded scope ("widgets should be
+    more customizable"): contact_list/important_urgent's own render
+    functions already read config['limit'] -- the builder just never
+    offered a way to set it. Verified via _resolve_selection + the stored
+    config, not the JS (no browser in this test environment)."""
+
+    def test_important_urgent_view_has_limit_flag(self):
+        assert dashboard_router.WIDGET_VIEWS["important_urgent_view"]["has_limit"] is True
+
+    def test_contact_list_view_has_limit_flag(self):
+        assert dashboard_router.WIDGET_VIEWS["contact_list_view"]["has_limit"] is True
+
+    def test_add_widget_with_limit_on_important_urgent(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="important_urgent_view", range="", title="", project_uid="",
+            tags="", task_list_uids=[], calendar_uids=[], limit="3", style="", scope="",
+            show_overdue=False, show_tasks=False, show_events=False, space_uid="", conn=conn,
+        )
+        w = db.list_dashboard_widgets(conn)[0]
+        assert w["config"]["limit"] == 3
+
+    def test_important_urgent_render_respects_the_stored_limit(self, conn):
+        db.upsert_label_config(conn, {"name": "Important", "created_at": _now(), "importance": 3})
+        for i in range(5):
+            _seed_task(conn, f"t{i}", tags=["Important"])
+        data = dashboard_router._render_important_urgent(conn, {"limit": 2})
+        assert len(data["rows"]) == 2
+
+
+class TestIsLongLivedRecurrence:
+    """2026-08-15, new Weekly Schedule widget -- filters a short recurring
+    reminder out while keeping a real standing weekly pattern, purely from
+    the event's own recurrence rule (no DB, no "as of" date needed)."""
+
+    def test_open_ended_weekly_qualifies(self):
+        event = {"uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00", "recurrence": "FREQ=WEEKLY"}
+        assert dashboard_router._is_long_lived_recurrence(event) is True
+
+    def test_semester_long_until_qualifies(self):
+        event = {
+            "uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00",
+            "recurrence": "FREQ=WEEKLY;UNTIL=2026-12-15",
+        }
+        assert dashboard_router._is_long_lived_recurrence(event) is True
+
+    def test_short_count_reminder_does_not_qualify(self):
+        event = {
+            "uid": "e1", "start_at": "2026-09-01T08:00:00", "end_at": "2026-09-01T08:05:00",
+            "recurrence": "FREQ=DAILY;COUNT=3",
+        }
+        assert dashboard_router._is_long_lived_recurrence(event) is False
+
+    def test_non_recurring_does_not_qualify(self):
+        event = {"uid": "e1", "start_at": "2026-09-01T10:00:00", "end_at": "2026-09-01T11:00:00"}
+        assert dashboard_router._is_long_lived_recurrence(event) is False
+
+    def test_no_start_at_does_not_qualify(self):
+        assert dashboard_router._is_long_lived_recurrence({"uid": "e1", "recurrence": "FREQ=WEEKLY"}) is False
+
+
+class TestWeeklyScheduleWidget:
+    """2026-08-15, new type -- a compact, static weekly-pattern view of a
+    label's long-lived recurring events; no revival of the removed
+    Schedule module, purely a presentation over ordinary recurring
+    Calendar events."""
+
+    def test_short_lived_recurrence_is_excluded(self, conn):
+        _seed_recurring_event(conn, "e1", "2026-09-01T10:00:00", "2026-09-01T10:30:00", recurrence="FREQ=DAILY;COUNT=3")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+        assert data["agenda_rows"] == []
+
+    def test_non_recurring_event_is_excluded(self, conn):
+        _seed_event(conn, "e1", start_at="2026-09-01T10:00:00")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+
+    def test_semester_long_weekly_event_produces_one_day_column(self, conn):
+        # 2026-09-01 is a Tuesday.
+        _seed_recurring_event(conn, "lecture", "2026-09-01T10:00:00", "2026-09-01T11:30:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert len(data["days"]) == 1
+        assert data["days"][0]["weekday"] == 1  # Tuesday, Monday=0
+        assert data["days"][0]["label"] == "Tue"
+        assert len(data["days"][0]["blocks"]) == 1
+        assert data["days"][0]["blocks"][0]["event"]["uid"] == "lecture"
+        assert data["agenda_rows"][0]["event"]["uid"] == "lecture"
+
+    def test_grid_is_only_as_tall_as_the_events_own_time_span(self, conn):
+        # Two lectures 10:00-11:00 and 14:00-15:00 -- the grid should be
+        # tightened to roughly 9:30-15:30, not the full 24h day, so a
+        # 10:00 block doesn't start near the very top of a mostly-empty
+        # column.
+        _seed_recurring_event(conn, "morning", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        _seed_recurring_event(conn, "afternoon", "2026-09-03T14:00:00", "2026-09-03T15:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        blocks = {b["event"]["uid"]: b for day in data["days"] for b in day["blocks"]}
+        assert blocks["morning"]["top_pct"] < blocks["afternoon"]["top_pct"]
+        # Neither block should be flush against the very top of its column
+        # (a 30-minute pad was added before the earliest start).
+        assert blocks["morning"]["top_pct"] > 0
+
+    def test_biweekly_event_is_flagged(self, conn):
+        _seed_recurring_event(conn, "lecture", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;INTERVAL=2")
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"][0]["blocks"][0]["biweekly"] is True
+        assert data["agenda_rows"][0]["biweekly"] is True
+
+    def test_label_scoping(self, conn):
+        _seed_recurring_event(conn, "cs101", "2026-09-01T10:00:00", "2026-09-01T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15", tags=["CS101"])
+        _seed_recurring_event(conn, "other", "2026-09-02T10:00:00", "2026-09-02T11:00:00", recurrence="FREQ=WEEKLY;UNTIL=2026-12-15", tags=["Other"])
+        data = dashboard_router._render_weekly_schedule(conn, {"tags": ["CS101"]})
+        agenda_uids = {row["event"]["uid"] for row in data["agenda_rows"]}
+        assert agenda_uids == {"cs101"}
+
+    def test_registered_in_widget_types_and_selection_tables(self, conn):
+        assert "weekly_schedule" in dashboard_router.WIDGET_TYPES
+        assert ("weekly_schedule_view", None) in dashboard_router._SELECTION_TO_TYPE
+        assert ("weekly_schedule", None) in dashboard_router._TYPE_TO_SELECTION

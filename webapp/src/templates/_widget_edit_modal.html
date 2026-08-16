@@ -9,7 +9,9 @@
      re-opening the dialog each time. -->
 <div id="modal-target">
     <div class="modal-header">
-        <h1>{{ icon('edit', 'icon-sm') }} Edit widget</h1>
+        {# 2026-08-15 modal uniformization rule 3: plain title, no icon
+           prefix, matching every other utility modal. #}
+        <h1>Edit widget</h1>
     </div>
     <div class="modal-body">
         <datalist id="tag-names-datalist">
@@ -27,4 +29,16 @@
             </div>
         </div>
     </div>
+    {# 2026-08-15 modal uniformization slice E: a Back/Done-only footer
+       (no primary -- footer_primary_label deliberately unset) for
+       consistency with rule 1. The real Save stays in the body
+       (_widget_edit_form.html's own button) since it's a genuine
+       progressive-enhancement fallback for the no-JS/autosave-failed
+       path, not a redundant duplicate -- see _modal_footer.html's own
+       docstring note. "#" + default cancel mode just closes the dialog,
+       same convention quick_add.html's Cancel already uses -- there's no
+       separate list page for a per-widget filters editor to return to. #}
+    {% set footer_back_url = '#' %}
+    {% set footer_back_label = 'Done' %}
+    {% include "_modal_footer.html" %}
 </div>

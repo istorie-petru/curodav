@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db
+from . import db, derived_state
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -341,6 +341,46 @@ def _label_icon(request: Request, label: str) -> str:
 templates.env.globals["label_icon"] = _label_icon
 
 
+def _task_label_rules_for_request(request: Request) -> dict:
+    """{label name: effective config} for every label, memoized on
+    request.state per request -- same reasoning as `_label_icon` above:
+    the same rule set applies to every task on a page, so resolve it once
+    per request rather than once per task/template call. Broad
+    try/except + empty-dict fallback, same convention as every other
+    request-scoped helper in this file (this app's test suite constructs
+    bare Request({...}) objects with no real ASGI app in scope)."""
+    cache_attr = "_cc_task_label_rules_cache"
+    cache = getattr(request.state, cache_attr, None)
+    if cache is not None:
+        return cache
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            cache = db.list_label_rules(conn)
+    except Exception:
+        cache = {}
+    setattr(request.state, cache_attr, cache)
+    return cache
+
+
+def _effective_importance(request: Request, task: dict) -> int:
+    """A task's computed Importance (1..3, 0 = none) for display --
+    `{{ effective_importance(request, t) }}` instead of the old `t.importance`
+    (side work, post-1.1: the explicit per-task axis is gone, see
+    src/derived_state.py's module docstring). The one template-facing
+    entry point every importance pill uses, so a page never needs its own
+    router to precompute/attach the value onto each task dict."""
+    return derived_state.effective_importance(task, _task_label_rules_for_request(request))
+
+
+def _effective_urgency(request: Request, task: dict) -> int:
+    """Urgency-axis sibling of `_effective_importance` above."""
+    return derived_state.effective_urgency(task, _task_label_rules_for_request(request))
+
+
+templates.env.globals["effective_importance"] = _effective_importance
+templates.env.globals["effective_urgency"] = _effective_urgency
+
+
 def _format_time_value(value: str, fmt: str) -> str:
     """Shared formatting core for the two filters below -- accepts either
     a full ISO datetime ("2026-08-08T14:30:00") or a bare "HH:MM" string
@@ -401,6 +441,31 @@ def _fmt_hour(ctx, hour: int) -> str:
 
 
 templates.env.filters["fmt_hour"] = _fmt_hour
+
+
+def _fmt_birthday(value: str | None) -> str:
+    """Jinja filter for Contacts field parity slice 4 of 6 (Birthday) --
+    `{{ contact.birthday | fmt_birthday }}` to render the stored raw
+    "YYYY-MM-DD"/"--MM-DD" string as "May 17, 1990"/"May 17". No @pass_context
+    needed (unlike fmt_time/fmt_hour) -- birthday display has no per-request
+    Settings preference the way 24h/12h time format does, it's a pure
+    function of the stored value (db.format_contact_birthday)."""
+    return db.format_contact_birthday(value)
+
+
+templates.env.filters["fmt_birthday"] = _fmt_birthday
+
+
+def _fmt_address(addr: dict) -> str:
+    """Jinja filter for Contacts field parity slice 5 of 6 (Address) --
+    `{{ a | fmt_address }}` to render one structured {"po_box", "extended",
+    "street", "city", "region", "postal_code", "country"} dict as vCard's
+    own multi-line address layout. Same "pure function of the stored
+    value, no per-request Settings preference" shape as fmt_birthday above."""
+    return db.format_contact_address(addr)
+
+
+templates.env.filters["fmt_address"] = _fmt_address
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:

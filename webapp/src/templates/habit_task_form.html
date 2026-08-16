@@ -53,9 +53,11 @@
 </form>
 </div>
 </div>
-<div class="modal-footer">
-<a href="/tasks/habits" class="btn ghost" data-modal-cancel>Cancel</a>
-<button type="submit" form="habit-task-form" class="btn primary">Save</button>
-</div>
+{% set footer_back_url = '/tasks/habits' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'habit-task-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

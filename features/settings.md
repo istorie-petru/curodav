@@ -1,7 +1,7 @@
 # Settings
 
 `routers/settings.py` — a hub-and-children layout (rework 2026-08-08). The hub
-page (`settings_index.html`) has seven categories:
+page (`settings_index.html`) has eight categories:
 
 - **General** (`/settings/general`) — display name (drives the Home greeting),
   week start (Mon/Sun), 24h vs 12h time, "4-Week view: current week" position,
@@ -29,6 +29,24 @@ page (`settings_index.html`) has seven categories:
   settings (semester dates etc.), which stay on `/schedule` itself; see
   this router's own "2026-08-14 follow-up" docstring note for the full
   reasoning.
+- **Sleep & Leisure Time** (`/settings/time-blocks`, 1.9 side work, direct
+  feedback) — same Tasks-table-style grid shape as Holidays, two sections
+  (Sleep, Leisure) each backed by the new `time_blocks` table: `kind`
+  (`'sleep'`/`'leisure'`, fixed — not a user-named set like a holiday
+  calendar), `label`, `start_time`/`end_time` (`"HH:MM"`, plain `<input
+  type="time">`, no date component at all), `days` (comma-joined subset of
+  `db.TIME_BLOCK_DAYS`, picked via `_widget_list_multiselect.html` in
+  `filter` mode — "days" is a real multi-select, not single-choice).
+  `POST /settings/time-blocks` creates a block (kind fixed per section's
+  add-form, rejects `end_time <= start_time` or an unknown kind); `POST
+  /settings/time-blocks/{uid}/update-field` inline-edits one field
+  (`_TIME_BLOCK_UPDATABLE_FIELDS`; the "days" field takes one comma-joined
+  string, not a JSON list — `static/settings_time_blocks.js` collects the
+  full checked set before calling it, same one-request-shape-per-field
+  convention Holidays' own JS uses); `POST
+  /settings/time-blocks/{uid}/delete` removes one. See `calendar.md`'s
+  Views section for where these rows turn into the Week/Day grid's
+  soft-hatch overlay and the drag scheduling warning.
 - **Data health** (`/settings/data-health`, 2026-08-14, `plans/open.md` §
   Data health & maintenance — the verified-backups precondition 1.8's offline
   sync is gated on) — Status card (database integrity via `PRAGMA

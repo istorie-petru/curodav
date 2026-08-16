@@ -89,8 +89,9 @@ class TestNoCategoryColumn:
 class TestCreateEditFlowHasNoCategory:
     def test_create_contact_flow_never_touches_category(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", org="Navy", phone="", email="",
-            address="", tags="Professor, CS", notes="", photo=None, conn=conn,
+            full_name="Grace Hopper", title="", org="Navy",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="Professor, CS", notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
         assert "category" not in row
@@ -99,8 +100,9 @@ class TestCreateEditFlowHasNoCategory:
     def test_update_contact_flow_never_touches_category(self, conn):
         uid = _make_contact(conn, tags=["Old"])
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", org="", phone="", email="",
-            address="", tags="Mathematician", notes="", photo=None,
+            uid=uid, full_name="Ada Lovelace", title="", org="",
+            phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
+            birthday="", tags="Mathematician", notes="", photo=None,
             remove_photo="", conn=conn,
         ))
         row = db.get_contact(conn, uid)

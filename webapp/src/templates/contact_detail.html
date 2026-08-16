@@ -27,36 +27,102 @@
     {{ avatar(contact, 'avatar-large') }}
     <div class="detail-heading-text">
         <h1 class="detail-title">{{ contact.full_name }}</h1>
-        {% if contact.org %}<div class="detail-heading-sub">{{ contact.org }}</div>{% endif %}
+        {% if contact.title or contact.org %}
+        <div class="detail-heading-sub">
+            {%- if contact.title and contact.org -%}
+            {{ contact.title }} at {{ contact.org }}
+            {%- elif contact.title -%}
+            {{ contact.title }}
+            {%- else -%}
+            {{ contact.org }}
+            {%- endif -%}
+        </div>
+        {% endif %}
     </div>
 </div>
 
 <div class="modal-body">
-{% if contact.phone or contact.email %}
+<!-- Contacts field parity slice 2 of 6: phone/email are multi-value now
+     (contact.phones/contact.emails, each {"type", "value"}) -- quick
+     actions (Call/Email) use just the first entry of each, same "concise
+     first entry" convention contacts_list.html's row subtitle uses; the
+     meta grid below lists every entry with its type label, same tel:/
+     mailto: links as before, just repeated per row. -->
+{% if contact.phones or contact.emails %}
 <div class="contact-quick-actions">
-    {% if contact.phone %}<a class="btn" href="tel:{{ contact.phone }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
-    {% if contact.email %}<a class="btn" href="mailto:{{ contact.email }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
+    {% if contact.phones %}<a class="btn" href="tel:{{ contact.phones[0].value }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
+    {% if contact.emails %}<a class="btn" href="mailto:{{ contact.emails[0].value }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
 </div>
 {% endif %}
 
 <div class="detail-card">
     <div class="detail-meta-grid">
-        {% if contact.phone %}
+        {% for p in contact.phones %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Phone</span>
-            <span class="detail-meta-value"><a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></span>
+            <span class="detail-meta-label">Phone{% if p.type %} ({{ p.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="tel:{{ p.value }}">{{ p.value }}</a></span>
         </div>
-        {% endif %}
-        {% if contact.email %}
+        {% endfor %}
+        {% for e in contact.emails %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Email</span>
-            <span class="detail-meta-value"><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></span>
+            <span class="detail-meta-label">Email{% if e.type %} ({{ e.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="mailto:{{ e.value }}">{{ e.value }}</a></span>
         </div>
-        {% endif %}
-        {% if contact.address %}
+        {% endfor %}
+        <!-- Contacts field parity slice 3 of 6: website is multi-value
+             (contact.websites, each {"type", "url"}) -- listed same as
+             phone/email above, one row per entry with its type label, an
+             external link (target="_blank" rel="noopener", matching
+             event_detail.html's meeting_url convention) rather than tel:/
+             mailto:. -->
+        {% for w in contact.websites %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Address</span>
-            <span class="detail-meta-value">{{ contact.address }}</span>
+            <span class="detail-meta-label">Website{% if w.type %} ({{ w.type }}){% endif %}</span>
+            <span class="detail-meta-value"><a href="{{ w.url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ w.url }}</a></span>
+        </div>
+        {% endfor %}
+        <!-- Contacts field parity slice 5 of 6: Address is now structured
+             and multi-value (contact.addresses, each {"type", "po_box",
+             "extended", "street", "city", "region", "postal_code",
+             "country"}) -- listed same as phone/email/website above, one
+             row per entry with its type label, formatted through the
+             vCard-standard line ordering (PO Box/Extended/Street each own
+             line, then "City, Region PostalCode", then Country) via the
+             new fmt_address filter (deps.py) rather than re-deriving that
+             layout in the template. -->
+        {% for a in contact.addresses %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Address{% if a.type %} ({{ a.type }}){% endif %}</span>
+            <span class="detail-meta-value detail-meta-multiline">{{ a | fmt_address }}</span>
+        </div>
+        {% endfor %}
+        <!-- Contacts field parity slice 6 of 6: Social network
+             (contact.social_profiles, each {"type", "value"}) -- listed
+             same as phone/email/website above. A value that looks like a
+             URL renders as an external link (matching website's own
+             convention); a bare handle/username renders as plain text,
+             since X-SOCIALPROFILE doesn't guarantee either shape. -->
+        {% for s in contact.social_profiles %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Social{% if s.type %} ({{ s.type }}){% endif %}</span>
+            <span class="detail-meta-value">
+                {% if s.value.startswith('http://') or s.value.startswith('https://') %}
+                <a href="{{ s.value }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ s.value }}</a>
+                {% else %}
+                {{ s.value }}
+                {% endif %}
+            </span>
+        </div>
+        {% endfor %}
+        <!-- Contacts field parity slice 4 of 6: Birthday, single-value, the
+             stored raw "YYYY-MM-DD"/"--MM-DD" text rendered human-readable
+             via the fmt_birthday filter (deps.py -> db.format_contact_
+             birthday) -- "May 17, 1990" for a full date, "May 17" (no
+             year) for a year-less one. -->
+        {% if contact.birthday %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Birthday</span>
+            <span class="detail-meta-value">{{ contact.birthday | fmt_birthday }}</span>
         </div>
         {% endif %}
         {% if contact.tags %}
@@ -72,7 +138,7 @@
         <p>{{ contact.notes }}</p>
     </div>
     {% endif %}
-    {% if not (contact.phone or contact.email or contact.address or contact.tags or contact.notes) %}
+    {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
     <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
     {% endif %}
 </div>

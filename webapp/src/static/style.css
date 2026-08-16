@@ -919,6 +919,14 @@ label.seg-btn[hidden]{display:none;}
   font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
 }
 .detail-meta-value a{font-weight:600;}
+/* Contacts field parity slice 5 of 6 -- Address's fmt_address filter
+   returns a real multi-line string (PO Box/Extended/Street each own line,
+   then "City, Region PostalCode", then Country); .detail-meta-value's
+   default inline-flex/nowrap-ish layout is wrong for that, so this
+   override switches to a block with `white-space:pre-line` -- collapses
+   ordinary runs of spaces same as normal HTML, but preserves the `\n`s
+   fmt_address emits as real line breaks. */
+.detail-meta-multiline{display:block; white-space:pre-line;}
 
 /* Demoted Delete action in the detail modals' footer -- the old filled
    red .btn.danger was the loudest button on the view, outranking the
@@ -1197,6 +1205,24 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
+/* Direct feedback, 2026-08-15: "depending on the data source, some Views
+   should simply not be visible, not unselectable" -- dashboard_widget_
+   preview.js's filterMsOptions already sets the `hidden` attribute on a
+   row that doesn't apply to the current Source/View (and separately
+   disables its input), but `.multiselect-option{display:flex}` (author
+   CSS) is the same specificity as the browser's own `[hidden]{display:
+   none}` UA rule, and author styles always win that fight regardless of
+   selector order -- so the row never actually disappeared, it just sat
+   there fully visible with a disabled (grayed-out, unselectable) input,
+   reading as "can't pick this" rather than "isn't offered here". Same
+   footgun, same fix, as `.field.holiday-field[hidden]`/`.field.label-
+   project-fields[hidden]` elsewhere in this file. */
+.multiselect-option[hidden]{display:none;}
+/* Separator before `ms_extra_checkboxes` (2026-08-14, event form's Holiday
+   calendar dropdown folding in Exclude Saturday/Sunday) -- visually splits
+   the picker's own radios/checkboxes above from the unrelated boolean
+   fields appended after them. */
+.multiselect-option-divider{height:1px; margin:4px 4px; background:var(--separator);}
 /* "+ New label" row (2026-08-07, modal-input-design Phase B follow-up) --
    converting Labels to a checkbox-only list removed the app's only way
    to type a brand-new label name; this restores it as one extra row at
@@ -1253,9 +1279,24 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   padding:8px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
 }
+/* Tasks Table view's Open-section pager (1.9, Webapp usability Phase B,
+   _tasks_pager.html) -- one row spanning the table, reusing .icon-btn for
+   Prev/Next rather than introducing a new button variant. */
+.task-pager-row td{padding:6px 10px; border-bottom:none;}
+.pager{display:flex; align-items:center; gap:4px;}
+.pager-summary{font-size:var(--text-caption); color:var(--fg-tertiary);}
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;
+}
+/* Read-only sibling of .pill-select (side work, post-1.1) -- for values
+   that are displayed but no longer manually editable, e.g. the computed
+   Importance/Urgency columns in _task_row.html. Same box metrics as
+   .pill-select minus the dropdown-chrome padding/background-position, so
+   the column doesn't visibly shift width next to other pill-selects. */
+.pill-static{
+  display:inline-block; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-caption);
+  font-weight:600;
 }
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
@@ -1328,7 +1369,23 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .checklist-check{background:none; border:none; cursor:pointer; font-size:15px; padding:0; width:20px; color:var(--fg-secondary);}
 .checklist-check.is-done{color:var(--success);}
 .checklist-text{flex:1;}
-.checklist-delete{margin-left:auto;}
+/* Icon-only remove button (checklist rows, Relations card unlink, Work
+   sessions/Phone/Email/Website row remove) -- previously unstyled (just
+   margin-left:auto), which left it rendering as a bare native <button>
+   with default browser chrome. Now the same quiet-by-default,
+   red-on-hover/focus treatment .detail-delete-link already uses for the
+   footer's demoted Delete action, just sized for an inline row rather
+   than a footer link. */
+.checklist-delete{
+  margin-left:auto;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:none; border:none; cursor:pointer; padding:5px;
+  color:var(--fg-tertiary); border-radius:var(--radius-control);
+  transition:color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.checklist-delete:hover{color:var(--danger); background:var(--tag-red-bg);}
+.checklist-delete:focus-visible{outline:2px solid var(--danger); outline-offset:-2px;}
+.checklist-delete .icon{width:14px; height:14px;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
 /* Work sessions card (task_detail.html/task_form.html, _task_work_allocations
@@ -1339,6 +1396,36 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .work-sessions-head{display:flex; align-items:center; gap:6px;}
 .work-sessions-head .work-session-add{margin-left:auto;}
 .session-when{color:var(--fg-secondary); font-size:var(--text-caption); white-space:nowrap;}
+
+/* contact_form.html's Phone/Email rows (Contacts field parity slice 2 of 6)
+   -- a type <select> + value input per row, reusing .checklist-delete for
+   the remove button (same icon-only look the Work sessions card's remove
+   button already has). The two selectors below (a .field-wide ancestor)
+   deliberately outrank the generic `.field select`/`.field input` rule
+   above (width:100%) so the type select stays a fixed, compact width
+   instead of stretching to fill the row -- the value input is the one
+   that should grow. */
+.contact-multi-rows{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
+.contact-multi-row{display:flex; align-items:center; gap:8px;}
+.field-wide .contact-multi-row select{width:110px; flex:none;}
+.field-wide .contact-multi-row input{width:auto; flex:1;}
+.contact-multi-row .checklist-delete{flex:none;}
+
+/* Contacts field parity slice 5 of 6 -- Address (contact_form.html). A
+   structured ADR row has seven value fields, not one, so it can't share
+   the single-line flex layout every other .contact-multi-row (phone/
+   email/website/social) uses -- it's its own taller card instead: type
+   select on top, a small 2-column field grid below, remove button pinned
+   to the top-right corner. Still a `.contact-multi-row` for
+   contact_phone_email_rows.js's generic remove-row targeting
+   (`.closest(".contact-multi-row")`), just with this additional class
+   overriding the shared row's own flex/align rules. */
+.contact-address-row{flex-direction:column; align-items:stretch; gap:8px; position:relative; padding:10px 36px 10px 10px; border:1px solid var(--separator); border-radius:8px;}
+.contact-address-row select{width:140px;}
+.contact-address-row .checklist-delete{position:absolute; top:8px; right:8px;}
+.contact-address-fields{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+.contact-address-fields input{width:auto;}
+.contact-address-full{grid-column:1 / -1;}
 
 /* Relations card (2026-08-09, _task_relations.html/_event_relations.html)
    -- the merged Subtasks+relations detail card; 1.2 removed the Subtasks
@@ -1453,6 +1540,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    spacing here, reusing `.multiselect-new-input` for the input itself. */
 .recurrence-preset-select{margin-bottom:var(--space-2);}
 .recurrence-raw-input{margin-top:var(--space-1);}
+/* "Ends" dropdown (recurrence_picker.js) -- Never/On date/After N
+   occurrences, a separate `.multiselect` sibling of `.recurrence-preset-
+   select` above rather than a sub-panel nested inside it (2026-08-14
+   follow-up, "could we make ends another drop down menu?"), shown only
+   once a real preset (not "Does not repeat") is selected. */
+.recurrence-ends-select{margin-bottom:var(--space-2);}
+.recurrence-ends-until{width:140px;}
+.recurrence-ends-count{width:64px;}
 .reminders-custom-input{margin-bottom:0;}
 .field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
 .field-grid .field-wide{grid-column:span 2;}
@@ -1460,6 +1555,30 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    while the All day checkbox is checked (event_form.html), same `:has()`
    progressive-disclosure pattern the professor/class-type fields use. */
 #event-form:has(#all_day:checked) .event-start-end-field{display:none;}
+/* Holiday calendar / Exclude Saturday / Exclude Sunday (_event_form_fields.html,
+   toggled via the `hidden` attribute by static/recurrence_picker.js's sync())
+   -- `.field{display:flex}` above is author CSS of equal specificity to the
+   browser's own `[hidden]{display:none}` UA rule, and author styles always
+   win that fight regardless of selector order, so the bare `hidden` attribute
+   alone is silently ineffective on any `.field` element. Needs this explicit,
+   higher-specificity override -- same reason .event-start-end-field above
+   can't just rely on `hidden` either. */
+.field.holiday-field[hidden]{display:none;}
+/* Format field (2026-08-15, "Event format for simple events") --
+   Location/Meeting URL (_event_form_fields.html) both start hidden;
+   picking a Format radio reveals only its own field. Same
+   #event-form:has() progressive-disclosure pattern as #all_day above --
+   plain `display:none`/`:flex` rather than the `hidden` attribute, for the
+   same `.field{display:flex}`-beats-bare-`[hidden]` reason
+   .field.holiday-field's own comment explains. */
+.field.field-format-location,
+.field.field-format-meeting{display:none;}
+#event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}
+#event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}
+/* label_edit_modal.html's Project date fields, toggled via `hidden` by
+   static/label_role_picker.js -- same `.field{display:flex}`-beats-bare-
+   `[hidden]` fight as .field.holiday-field right above; same fix. */
+.field.label-project-fields[hidden]{display:none;}
 
 /* Tile/card picker (2026-08-07, modal-input-design pattern 1) -- a row of
    large tappable cards (icon + label), one visibly selected, for a
@@ -1481,6 +1600,17 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    picker is ever shown at; the label just wraps onto a second line
    inside its own narrower tile instead of pushing the row wider. */
 .tile-select{display:flex; flex-wrap:nowrap; gap:var(--space-2);}
+/* Data source picker specifically (direct feedback, 2026-08-15: "make the
+   Data source grid show on two rows") -- five sources now (calendar_tasks/
+   habits/contacts/quick_links/spaces_projects, up from the four the
+   2026-08-07 one-row decision above was made for), which read as too
+   cramped forced into a single row. Grid instead of flex (`flex` on
+   .tile-option below is simply ignored once its container isn't a flex
+   container, no override needed there), 3 columns so 4-5 sources wrap to
+   a readable 2-row layout (3+1 or 3+2). .tile-select itself is untouched
+   -- still just flex/one-row for any future single-row tile picker that
+   reuses the base pattern. */
+.widget-source-select{display:grid; grid-template-columns:repeat(3, 1fr);}
 .tile-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
 .tile-option{
   position:relative; display:flex; flex-direction:column; align-items:center; gap:4px;
@@ -1491,8 +1621,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .tile-option:hover{box-shadow:var(--elevation-1);}
 .tile-option:has(.tile-radio:checked){border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:var(--elevation-1);}
+/* Direct feedback, 2026-08-15: "the tile icons should retain the color
+   even when one is selected" -- a checked tile used to recolor its icon
+   to --accent-neutral (the same blue the border/background/label text
+   already switch to), so the icon's own color wasn't stable across the
+   unselected/selected states. Selection is still clearly shown by the
+   border/background/label-text change on .tile-option itself just above
+   -- the icon simply no longer has its own separate recolor rule. */
 .tile-icon{color:var(--fg-secondary);}
-.tile-option:has(.tile-radio:checked) .tile-icon{color:var(--accent-neutral);}
 .tile-option-label{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
 
 /* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
@@ -1730,14 +1866,36 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
 
+/* Sleep Time / Leisure Time hatching (1.9 side work, Settings > Sleep &
+   Leisure Time) -- a soft diagonal hatch behind the grid's own events,
+   never interactive (pointer-events:none, so drag-to-create/move/resize
+   all still work straight through it) and always beneath every real event
+   and drag ghost (.time-event z-index:3, .schedule-ghost z-index:2, this
+   z-index:1 -- just above the plain gridline background). Red for Sleep,
+   green for Leisure -- var(--danger)/
+   var(--success), the same two semantic colors the rest of the app
+   already uses for "avoid" / "go", just at low opacity so the hatch reads
+   as a soft background cue, not a blocking overlay (this feature only
+   ever warns, never blocks -- see static/time_blocks.js). */
+.time-block-overlay{
+  position:absolute; left:0; right:0; pointer-events:none; z-index:1; opacity:.5;
+}
+.time-block-sleep{
+  background-image:repeating-linear-gradient(135deg, var(--danger) 0, var(--danger) 1.5px, transparent 1.5px, transparent 9px);
+}
+.time-block-leisure{
+  background-image:repeating-linear-gradient(135deg, var(--success) 0, var(--success) 1.5px, transparent 1.5px, transparent 9px);
+}
+
 /* Project Week Calendar (1.4 slice 3, templates/project_calendar.html) --
    ordinary calendar events render as visually subdued context ("reduced
    opacity or a restrained hashed treatment", § Project pages & views) so
-   the project's own work allocations (.work-allocation, full-strength
-   .cal-* color) stay visually prominent by contrast. `pointer-events:none`
-   -- context events are read-only here, not draggable/clickable, since
-   this page's grid interactions are entirely about the project's own
-   allocations. */
+   the project's own work allocations (.work-allocation -- a thick colored
+   border, not a solid fill, see the `.time-event.work-allocation` override
+   further down this file) stay visually prominent by contrast.
+   `pointer-events:none` -- context events are read-only here, not
+   draggable/clickable, since this page's grid interactions are entirely
+   about the project's own allocations. */
 .time-event.context-event{
   opacity:.35; cursor:default; pointer-events:none;
 }
@@ -1762,8 +1920,18 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    rather than collapsing to its content width (flex-start was making it sit
    as a narrow strip beside the full-width sidebar). */
 .project-calendar-layout{display:flex; gap:16px; align-items:stretch;}
-.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto;}
+.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto; transition:width var(--dur-fast) var(--ease-standard);}
 .project-calendar-grid{flex:1; min-width:0;}
+/* Collapsible "Unscheduled work" sidebar (1.9 side work,
+   static/unscheduled_panel_toggle.js) -- header (title + toggle button)
+   always visible; collapsed shrinks the panel to a narrow rail holding just
+   the toggle, same idea as a collapsed nav rail elsewhere in the app. */
+.unscheduled-panel-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.unscheduled-panel-head h2{margin:0;}
+.project-calendar-unscheduled.collapsed{width:auto; overflow:visible;}
+.project-calendar-unscheduled.collapsed .unscheduled-panel-head h2,
+.project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
+.project-calendar-unscheduled.collapsed #unscheduled-panel-toggle svg{transform:rotate(180deg);}
 .unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial on the planning grids). ONE line (2026-08-14 design): a project
@@ -1803,13 +1971,16 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   box-shadow:0 6px 16px rgba(0,0,0,.18);
 }
 .project-calendar-col.drop-hover{background-color:var(--accent-neutral-subtle);}
-/* The planning grids (project_calendar.html, week_planning.html,
-   calendar_timetable.html) reuse .time-col, whose cursor:copy is the
-   Calendar grid's "click-drag to create an event" affordance (calendar.js)
-   -- wrong on the planning surfaces, where empty-space drag isn't a create
-   gesture at all (only dropping an unscheduled task onto a column is, and
-   that task row itself already carries the grab cursor). */
-.project-calendar-col{cursor:default;}
+/* The planning-only grids (project_calendar.html, week_planning.html) reuse
+   .time-col, whose cursor:copy is the Calendar grid's "click-drag to create
+   an event" affordance (calendar.js) -- wrong there, where empty-space drag
+   isn't a create gesture at all (only dropping an unscheduled task onto a
+   column is, and that task row itself already carries the grab cursor).
+   :not(.calendar-create-col) excludes the merged Week view (1.9 side work,
+   templates/calendar_week.html), whose columns carry BOTH classes -- that
+   page's empty-space drag IS a real create gesture (calendar.js is loaded
+   there too), so it keeps the copy cursor. */
+.project-calendar-col:not(.calendar-create-col){cursor:default;}
 /* Drag-a-scheduled-block-onto-the-panel-to-unschedule-it (project_calendar.js
    interaction 3): the unscheduled-work panel lights up while a dragged block
    is over it, the same visual vocabulary as a column's .drop-hover, so the
@@ -1853,6 +2024,26 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .cal-brown{background:var(--cal-bg-brown); color:var(--cal-fg-brown);}
 .cal-gray{background:var(--cal-bg-gray); color:var(--cal-fg-gray);}
 .cal-slate{background:var(--cal-bg-slate); color:var(--cal-fg-slate);}
+
+/* Work-allocation blocks (1.9 side work, direct feedback: "timetable tasks
+   time allocation should never be colored, only a thick colored border") --
+   the plain `.cal-*` swatch rules above still WIN the solid-fill background
+   on every other `.time-event` (ordinary calendar events keep their full
+   color, unchanged); this rule has to come AFTER them in source order (same
+   `.time-event.work-allocation.cal-*` specificity as `.cal-*` alone would
+   tie -- being later is what makes it win) to override that fill down to a
+   thick colored border instead, on every hue at once via `--wa-border`
+   rather than one override rule per `.cal-*` class. `templates/
+   calendar_week.html`/`week_planning.html`/`project_calendar.html`/
+   `calendar_timetable.html`(gone)/`project_calendar.html` set
+   `--wa-border: var(--cal-bg-<hue>)` inline (the same vivid hue variable
+   the fill used to read) alongside the class. */
+.time-event.work-allocation{
+  background:var(--bg-elevated);
+  border:3px solid var(--wa-border, var(--accent-neutral));
+  color:var(--fg-primary);
+}
+.time-event.work-allocation .te-time{opacity:.7;}
 
 /* Filled cards widget (Material You) -- uses the same cal-* color palette
    but with slightly desaturated/muted variants for a softer Material You
@@ -1992,6 +2183,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    show a tinted background) plus an accent ring so the selected range
    reads clearly against both light and dark themes. */
 .month-day-cell.is-selecting{background:var(--row-alt); box-shadow:inset 0 0 0 1px var(--accent-neutral);}
+
+/* Month-view drag-to-move an existing event chip onto a different day cell
+   (static/calendar_month_drag.js) -- same visual vocabulary as the
+   Week/Day grid's own .time-col.drop-hover, so "this cell is the drop
+   target" reads consistently across every calendar view. */
+.month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle);}
+.month-event-item.dragging{opacity:.5; cursor:grabbing;}
 
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,
    static/timeline.js. Everything absolutely positioned within one
@@ -2182,6 +2380,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .toast-close:hover{opacity:1; background:rgba(255,255,255,.12);}
 .toast-error{background:var(--danger);}
 .toast-error .toast-close{color:#fff;}
+/* Sleep/Leisure Time scheduling warning (static/time_blocks.js) -- a
+   caution, not a failure, so it gets --warning (the same amber the app
+   already uses for that meaning) rather than --danger's red. Dark text,
+   not the base toast's light color, since --warning is a light/mid amber
+   in both themes and white text on it fails contrast. */
+.toast-warning{background:var(--warning); color:#1a1a1a;}
+.toast-warning .toast-close{color:#1a1a1a;}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */
@@ -2365,6 +2570,42 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .command-palette-row-subtitle{font-size:var(--text-caption); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-footnote); text-align:center;}
+
+/* Command palette actions (open.md § Command palette actions) -- a result
+   row can now carry per-type action buttons (complete/label/delete)
+   alongside the "click to open" main area, so .command-palette-row (a
+   <div> for these rows, not a <button> -- can't nest a <button> in a
+   <button>) wraps two children instead of being the sole clickable
+   surface: .command-palette-row-main (the original title/subtitle
+   button, flex:1) and .command-palette-row-actions (the new buttons).
+   Every other row kind (plain results in relation mode, "Create new...",
+   label options) still has .command-palette-row itself as the one
+   clickable element, unchanged from before. */
+.command-palette-row-main{
+  display:flex; align-items:center; gap:var(--space-3); flex:1; min-width:0;
+  border:none; background:transparent; padding:0; margin:0;
+  font:inherit; text-align:left; color:inherit; cursor:pointer;
+}
+.command-palette-row-actions{display:flex; align-items:center; gap:2px; flex:none;}
+.command-palette-action{
+  display:flex; align-items:center; justify-content:center; width:28px; height:28px;
+  border:none; background:transparent; border-radius:var(--radius-control);
+  color:var(--fg-tertiary); cursor:pointer; flex:none;
+}
+.command-palette-action:hover{background:var(--bg-tertiary); color:var(--fg-primary);}
+.command-palette-action.is-danger:hover{color:var(--danger);}
+
+/* Quick Capture (plans/quick-capture.md) -- the single preview row shown
+   while a !t/!e/!c/!n marker is present in global mode's input
+   (command_palette.js's renderCapturePreview). A tinted left border marks
+   it as a distinct mode from an ordinary search result, not just another
+   row in the list -- there's only ever exactly one of these on screen at
+   a time. */
+.command-palette-capture-row{
+  border-left:3px solid var(--accent); cursor:default;
+  background:var(--accent-subtle);
+}
+.command-palette-capture-row .icon{color:var(--accent);}
 
 /* Standalone /search page (search.html) -- the same result-row language
    as .command-palette-row above, laid over the app's ordinary .checklist
@@ -2736,6 +2977,52 @@ body.command-palette-open{overflow:hidden;}
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
 .project-scope-section{margin-top:16px;}
+
+/* projects.html (side work, 2026-08-15 direct feedback: "square colored
+   cards... open with click, not an open button"). The whole card is one
+   `<a>` (no separate Open button/link inside it), colored with the
+   project's own `.cal-*` swatch as a full-bleed background rather than
+   just a small tag pill -- the same palette every other .cal-* consumer
+   (calendar events, label chips) already uses, so a project's color here
+   is the same color it shows everywhere else, not a second palette.
+   `aspect-ratio:1` keeps every card square regardless of content length;
+   `auto-fill`/`minmax` wraps to however many columns fit rather than a
+   fixed count, same responsive approach as .habit-task-grid/.today-grid
+   above use fixed 2-column instead -- this grid can hold many more items
+   than either of those, so a fixed column count would either waste width
+   on a wide screen or crowd a narrow one. */
+.project-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+  gap:var(--space-4); margin-bottom:var(--space-4);
+}
+.project-card-square{
+  aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between;
+  padding:var(--space-4); border-radius:var(--radius-lg); text-decoration:none;
+  box-shadow:var(--elevation-1);
+  transition:transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.project-card-square:hover, .project-card-square:focus-visible{
+  transform:translateY(-2px); box-shadow:var(--elevation-3); text-decoration:none;
+}
+/* Archived projects stay visible (historical record, per db.project_status's
+   own docstring) but visually recede rather than competing with the
+   still-live cards for attention. */
+.project-card-square.is-archived{opacity:.5;}
+.project-card-square.is-archived:hover{opacity:.85;}
+.project-card-square-status{
+  display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  padding:2px 7px; border-radius:var(--radius-pill); background:rgba(0,0,0,.22); margin-bottom:8px;
+}
+.project-card-square-title{
+  display:flex; align-items:center; gap:6px; font-weight:600; font-size:15px; line-height:1.3;
+  overflow-wrap:anywhere;
+}
+.project-card-square-footer{font-size:12px; opacity:.92; margin:0;}
+.project-card-square .project-progress-bar{background:rgba(0,0,0,.22);}
+.project-card-square .project-progress-fill{background:currentColor; opacity:.9;}
+@media (max-width:480px){
+  .project-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));}
+}
 .project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
 
 /* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.
@@ -3233,6 +3520,10 @@ body.command-palette-open{overflow:hidden;}
 }
 
 .widget-limit-field.is-hidden{display:none;}
+/* Show (Agenda)/Style (Spaces & Projects) fields -- 2026-08-15 widget
+   consolidation, same hide-via-class convention as .widget-limit-field/
+   .widget-range-field above. */
+.widget-show-field.is-hidden, .widget-style-field.is-hidden, .widget-scope-field.is-hidden{display:none;}
 .widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2);}
 .widget-save-filters-btn.is-hidden{display:none;}
 .widget-save-status{font-size:.85em; color:var(--fg-secondary); opacity:0; transition:opacity .2s ease;}
@@ -3267,6 +3558,32 @@ body.command-palette-open{overflow:hidden;}
 @media (max-width:700px){
   .week-overview-grid{grid-template-columns:repeat(2,1fr);}
 }
+
+/* Weekly Schedule widget (2026-08-15, _widget_weekly_schedule.html) -- a
+   compact STATIC weekly-pattern grid, deliberately not the 24-hour Week/
+   Day grid's own math (grid_layout.py): only weekdays with a block become
+   columns, stacked chronologically rather than positioned by proportional
+   top/height percentages on a time axis -- fixed-size, legible cards
+   instead of a mini calendar grid. The agenda table below reuses this
+   app's plain <table> widget convention (see _widget_agenda.html etc.),
+   just with a leading weekday column. */
+.weekly-schedule-grid{display:grid; gap:14px; margin-bottom:14px;}
+.weekly-schedule-col{display:flex; flex-direction:column; min-width:0;}
+.weekly-schedule-day-label{
+  font-size:13px; font-weight:600; color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
+}
+.weekly-schedule-col-body{
+  display:flex; flex-direction:column; gap:8px;
+}
+.weekly-schedule-block{
+  overflow:hidden; min-height:56px;
+  display:flex; flex-direction:column; justify-content:center; gap:3px;
+  background:var(--accent-neutral-subtle); border-left:3px solid var(--accent-neutral);
+  border-radius:var(--radius-sm); padding:10px 12px; text-decoration:none; color:var(--fg-primary);
+}
+.weekly-schedule-block-time{font-size:11px; font-weight:500; color:var(--fg-tertiary);}
+.weekly-schedule-block-title{font-size:13px; font-weight:600; line-height:1.3; word-break:break-word;}
+.weekly-schedule-agenda{width:100%;}
 
 /* Schedule > Export modal (routers/schedule.py, schedule_export.html):
    two mode radios, each followed by the fields for that mode. Uses
@@ -3353,7 +3670,14 @@ body.command-palette-open{overflow:hidden;}
    .settings-row/.calendar-row already are. */
 .settings-field-row{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-2);}
 .settings-field-row + .settings-field-row{border-top:1px solid var(--separator);}
-.settings-field-row .settings-field-label{font-weight:500;}
+/* max-width, not a media-query-gated one -- a half-width desktop window
+   (e.g. ~960px, half of a 1920 display) is still well above the 720px
+   "mobile" breakpoint below, so a rule that only capped the label under
+   720px never applied to it at all. The label doesn't need a breakpoint:
+   without a cap it's a plain flex item free to claim however much of the
+   row it wants, leaving the control (segmented/select) whatever sliver is
+   left over at any width where the row is tight, not just narrow ones. */
+.settings-field-row .settings-field-label{font-weight:500; max-width:55%;}
 .settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-footnote); margin-top:2px;}
 .settings-field-row .spacer{flex:1;}
 .settings-field-row input[type="text"]{max-width:220px;}
@@ -3364,47 +3688,56 @@ body.command-palette-open{overflow:hidden;}
 .settings-search{margin-bottom:12px;}
 .settings-search input{width:100%; max-width:320px;}
 
-/* Labels manage table (labels_manage.html, 2026-08-08 follow-up) -- was a
-   flex-row list with no fixed columns (Color/Icon/Space/Sections/Merge/
-   Remove each landed at a different horizontal position row to row,
-   depending on that row's own name/usage-count text length, and wrapped
-   unpredictably below a very wide viewport). Reuses the Tasks table view's
-   own `table`/`thead th`/`tbody tr`/.table-scroll rules as-is -- this is
-   the same "real columns, one header per control" component, not a second
-   table system. These are just this table's own deltas. This is a
-   management list meant to be scanned row after row (rename, recolor,
-   remove, repeat), not read -- every row/column gets tighter padding and
-   smaller controls than Tasks' own table, which mixes in real content
-   (titles, due dates) that needs more breathing room. */
-.label-table td, .label-table th{padding:5px 8px;}
-.label-table td{vertical-align:middle;}
-/* A handful of this table's own per-label forms (Rename/Merge/Remove) are
-   small enough to live entirely inside one <td> -- unlike Color, which
-   owns the shared "set" form other cells attach to via `form="..."` (see
-   labels_manage.html's own comment), these three need no cross-cell
-   reach, so each is just a plain inline form scoped to its own cell. */
-.label-cell-inline{display:flex; align-items:center; gap:6px;}
+/* Labels manage list (labels_manage.html, reworked 2026-08-15 from a
+   <table> into a plain scannable list -- side work, direct feedback: "the
+   table should be transformed into a simple list, showing data about
+   them"). Every per-label control (rename/color/icon/Group/abbreviation/
+   Space/Project/merge/remove) that used to be one column each moved into
+   the Edit button's modal (label_edit_modal.html) or, for Merge, its own
+   small modal (label_merge_modal.html) -- a row here is read-only display
+   plus two actions, not an editor, so it no longer needs the table's
+   fixed-column layout at all: one flex row per label with a consistent
+   left-to-right reading order (color, icon, name, usage, role badge,
+   Merge, Edit).
 
-/* Open/Merge/Remove (2026-08-08 follow-up) -- the actions cell's own row
-   wrapper: without this, its three children (a plain `<a>` plus two
-   `display:flex` forms) had no shared flex context, and a flex container
-   is block-level by default, so each form broke onto its own line inside
-   the cell instead of sitting next to the Open link. `justify-content:
-   flex-end` keeps everything right-aligned, matching the <td>'s own
-   text-align:right the rest of this table uses for its trailing column. */
-.label-actions{display:inline-flex; align-items:center; gap:6px; justify-content:flex-end;}
-.label-cell-inline input[type="text"]{min-width:0; width:150px; padding:4px 7px;}
-.label-table .tag-usage-count{flex:none; white-space:nowrap;}
-.label-table .filter-select{max-width:110px; padding:4px 22px 4px 8px; font-size:var(--text-caption);}
-.label-table .color-swatch-current{width:18px; height:18px;}
-.label-table .icon-picker-current{width:22px; height:22px;}
-.label-table .icon-btn{width:24px; height:24px;}
-.label-table .icon-btn .icon{width:14px; height:14px;}
-.label-table .btn-sm{padding:3px 8px; font-size:var(--text-caption);}
-.label-table details > summary{list-style:none; width:fit-content;}
-.label-table details > summary::-webkit-details-marker{display:none;}
-.label-table details[open] summary{color:var(--fg-primary);}
-.label-table input[type="checkbox"]{width:15px; height:15px;}
+   Reworked again 2026-08-15 (direct feedback: "I would preffer to not
+   have tree like grouping, but grouping like it was before") away from a
+   Space's own row doubling as its group's bold/tinted heading. Now
+   `.label-list-group-header` is a plain gray "[space name]" text title
+   (same look for every group, Space or "Ungrouped"), and the Space
+   itself renders as an ordinary, non-bold `.is-child` row directly under
+   its own heading, at the same indent as its children -- "always in
+   their group" still reads visually via the shared indent, without the
+   heading-doubles-as-a-row tree look. Also dropped the per-row
+   `.color-dot` and `.cell-tag` role badge (Project/Space) the row used
+   to carry -- direct feedback, "remove their cell-tag" -- a row is just
+   icon + name + usage count now; role/color still live in the Edit
+   modal. */
+.label-list-group-header{
+  padding:10px 8px 4px; font-size:var(--text-caption); font-weight:600;
+  color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
+}
+[data-label-group] + [data-label-group] .label-list-group-header{margin-top:6px;}
+.label-list-row{
+  display:flex; align-items:center; gap:10px; padding:8px;
+  border-radius:var(--radius-md);
+}
+.label-list-row:hover{background:var(--bg-secondary);}
+.label-list-row + .label-list-row{border-top:1px solid var(--separator);}
+/* A bit bigger than the default 15px icon -- direct feedback, "the icons
+   a bit bigger for them in the list" -- since this row no longer carries
+   a `.color-dot`, the icon is the only visual color/identity cue left. */
+.label-list-icon{display:inline-flex; color:var(--fg-tertiary);}
+.label-list-icon .icon{width:19px; height:19px;}
+.label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* Every row -- the Space itself included -- indents at the same level
+   under its group's plain-text heading. */
+.label-list-row.is-child{padding-left:28px;}
+
+/* label_edit_modal.html's Role control (segmented, .segmented/.seg-btn
+   base already defined elsewhere) and the Project date fields it reveals. */
+.label-role-segmented{margin-bottom:6px;}
+.label-project-fields{margin-top:10px; padding-top:10px; border-top:1px solid var(--separator);}
 
 /* Small on-off switch (app preferences).
     MD3 Switch: track is a rounded rectangle, thumb is a circle
@@ -3430,6 +3763,45 @@ body.command-palette-open{overflow:hidden;}
   .field-grid .field-wide{grid-column:span 1;}
   /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
   main{padding-top:14px; padding-left:12px; padding-right:12px;}
+
+  /* Inline "add a row" forms (.calendar-new-form -- Holidays, Sleep &
+     Leisure Time) have the same problem one level down: several fields
+     side by side with no labels of their own (a date picker, a bare title
+     input, a calendar dropdown), so wrapping them plain left them in an
+     order that reads like nothing groups with anything else. Stack them
+     into one field per line instead, each full width, so what each field
+     is is legible from its own placeholder/native chrome without a label. */
+  .calendar-new-form{flex-direction:column; align-items:stretch;}
+  .calendar-new-form input,
+  .calendar-new-form select,
+  .calendar-new-form .multiselect{width:100%; min-width:0;}
+}
+
+/* Segmented control (.segmented/.seg-btn) many-option overflow, app-wide --
+   same root cause as .settings-field-row above, one level further down:
+   .segmented's compact look (transparent buttons floating on one shared
+   grey pill, only the checked one getting a real surface) only reads as
+   "a row of N clickable choices" when every option fits on one line. Once
+   a control with 3+ options (4-Week view's First/Second/Third/Fourth,
+   Calendar's Month/4-Week/Week/Day/Timetable subnav, ...) doesn't fit and
+   wraps, every *unchecked* option has no visible border/background of its
+   own and reads as inert disabled text stacked under the one real-looking
+   button -- confirmed live, not just from the screenshot, this is the
+   exact failure `.segmented-list` (widget builder's View/Range field,
+   2026-08-07) was already built to fix, just opted into per-template
+   instead of applied automatically. Below this width, give every
+   .segmented control that same always-visible-surface treatment instead
+   of requiring each caller to opt in with a second class. */
+@media (max-width:560px){
+  .segmented{flex-direction:column; background:none; padding:0; gap:6px; border-radius:0; width:100%;}
+  .seg-btn{
+    display:block; text-align:left; border:1.5px solid var(--control-border);
+    border-radius:var(--radius-md); background:var(--surface-container-high); padding:8px 12px;
+  }
+  .seg-btn.active,
+  label.seg-btn:has(.seg-radio:checked){
+    border-color:var(--accent-neutral); background:var(--accent-neutral-subtle); color:var(--fg-primary); box-shadow:none;
+  }
 }
 
 /* --------------------------------------------------------------------- */
@@ -3542,6 +3914,12 @@ body.command-palette-open{overflow:hidden;}
 .banner-upload-btn{cursor:pointer;}
 .banner-upload-input{display:none;}
 .banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
+
+/* Generic plain-form field hint (contact_form.html's Birthday field,
+   Contacts field parity slice 4 of 6) -- same footnote-size/tertiary-color
+   shape as .settings-field-hint/.banner-upload-hint above, just not scoped
+   to Settings or the banner uploader specifically. */
+.field-hint{display:block; font-size:var(--text-footnote); color:var(--fg-tertiary); margin-top:2px;}
 
 /* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
    upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,

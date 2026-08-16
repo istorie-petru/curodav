@@ -36,7 +36,13 @@
         <div class="checklist-row">
             <span class="checklist-text">Session {{ loop.index }}</span>
             {% if wa.start_at %}
-            <span class="session-when">{{ wa.start_at[:16].replace('T', ' ') }}{% if wa.end_at %} &ndash; {{ wa.end_at[11:16] }}{% endif %}</span>
+            {# fmt_time, not a raw [:16] slice -- respects the "24-hour time"
+               Settings > General preference, same as every other time
+               display in the app (deps.py's fmt_time filter). This card
+               used to show the raw stored 24h string regardless of that
+               setting -- direct feedback: "the app should respect the
+               user choice of date preference 12 or 24 hours." #}
+            <span class="session-when">{{ wa.start_at[:10] }} {{ wa.start_at | fmt_time }}{% if wa.end_at %} &ndash; {{ wa.end_at | fmt_time }}{% endif %}</span>
             {% endif %}
             <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>
                 <input type="hidden" name="event_uid" value="{{ wa.uid }}">

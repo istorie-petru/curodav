@@ -48,7 +48,7 @@
          customization modal (dashboard_customize.html) to add a new widget.
          Only visible in edit mode -- adding/removing widgets is an explicit
          edit action, not a browsing action. -->
-    <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
+    <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode,
          since both are page-content edits. Opens the banner editor modal
          (routers/banners.py); "Add" vs "Change" labels by whether a banner

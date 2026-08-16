@@ -4,8 +4,7 @@ entirely and the Space/Project-management half of the old
 for the full model: a label is not an entity with a lifecycle (no
 create/delete workflow, no cascading-delete concerns) -- it's a name that
 tasks/events/contacts/habits point at via the one `object_labels` join
-table (1.6 dropped schedule_classes from that list -- a class is a real
-event now, see schedule.py's module docstring). Any color/icon/behavior config is a thin,
+table. Any color/icon/behavior config is a thin,
 optional dict keyed by the label's name (`label_config`), not a row other
 tables hold a hard foreign key into.
 
@@ -25,14 +24,14 @@ This router owns:
 -- the Databases feature (and Grades, built on it) is removed entirely.
 
 2026-08-08: the Phase 4 `enabled_modules`/"Sections" checkbox group is
-gone -- Course info/Homework on a Space's page (_project_university_
-section.html) now always render whenever there's matching data, exactly
-what leaving every checkbox unchecked already did for everyone who never
-touched the control. The checkboxes only ever let someone deliberately
-*hide* a section that had real data (nobody did), and two of its five
-options (Tasks/Events/Contacts) never gated anything to begin with -- not
-a real setting, just unused surface area. See label_modules.py's own
-removal note for where the gating logic used to live.
+gone. See label_modules.py's own removal note for where the gating logic
+used to live.
+
+2026-08-15: the University module (Course info/Homework,
+`_project_university_section.html`) is removed entirely, alongside the
+whole Schedule module it depended on for its only source of data (a
+"class" was a Schedule-created recurring event) -- see plans/STATE.md's
+removal entry. A label's scope is just tasks/events/contacts again.
 
 No delete endpoint anywhere in this file, per §0.1: "removing" a label in
 the UI is `clear_label` -- it empties `object_labels` for that name, not a
@@ -42,16 +41,14 @@ pointing at it; that's harmless and expected, not cleaned up here.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from .. import db, schedule
+from .. import db
 from ..deps import get_db, templates
 from . import dashboard as dashboard_router
-from . import schedule as schedule_router
-from .tasks import STATUS_COLORS, STATUS_LABELS
 
 router = APIRouter(prefix="/labels", tags=["labels"])
 
@@ -198,10 +195,46 @@ def _now() -> str:
 
 @router.get("")
 def manage_labels(request: Request, conn=Depends(get_db)):
+    """The list is grouped by Space membership only (side work, 2026-08-15
+    follow-up direct feedback): "Group" (formerly "Parent label") is a
+    dropdown of Spaces only now (see update_label's own validation), so
+    every group a label can land in corresponds to a real Space label,
+    never an arbitrary/stale free-text value -- a group heading IS that
+    Space's own row (rendered bold/tinted, `.is-space`) with its children
+    indented directly under it, not a second, disconnected divider row
+    naming the same string. A Space that itself has another Space as its
+    Group nests as a (still visually `.is-space`) child row rather than
+    also getting its own top-level section, so it's never rendered twice."""
     labels = db.list_labels(conn)
     for lbl in labels:
-        lbl["parent_display"] = lbl.get("parent_name") or "~ Ungrouped"
-    labels.sort(key=lambda l: (l["parent_display"].lower(), l["name"].lower()))
+        # Status is only needed for is_project rows (the badge shows it) --
+        # skipped for everything else rather than calling db.project_status
+        # on every label.
+        if lbl.get("is_project"):
+            lbl["project_status"] = db.project_status(conn, lbl)
+
+    space_names = {l["name"] for l in labels if l.get("generate_space")}
+    children_of: dict[str, list[dict]] = {}
+    top_level_spaces = []
+    ungrouped = []
+    for lbl in labels:
+        parent = lbl.get("parent_name")
+        if lbl.get("generate_space"):
+            if parent in space_names and parent != lbl["name"]:
+                children_of.setdefault(parent, []).append(lbl)
+            else:
+                top_level_spaces.append(lbl)
+        elif parent in space_names:
+            children_of.setdefault(parent, []).append(lbl)
+        else:
+            ungrouped.append(lbl)
+
+    top_level_spaces.sort(key=lambda l: l["name"].lower())
+    ungrouped.sort(key=lambda l: l["name"].lower())
+    for name in children_of:
+        children_of[name].sort(key=lambda l: l["name"].lower())
+    space_groups = [dict(s, children=children_of.get(s["name"], [])) for s in top_level_spaces]
+
     return templates.TemplateResponse(
         "labels_manage.html",
         {
@@ -209,12 +242,176 @@ def manage_labels(request: Request, conn=Depends(get_db)):
             "active_tab": "labels",
             "crumbs": [{"url": "/settings", "name": "Settings"}],
             "title": "Labels",
-            "labels": labels,
-            "colors": COLORS,
-            "label_icons": LABEL_ICONS,
-            "icon_groups": ICON_GROUPS,
+            # Named `space_groups`, not `spaces` -- base.html's nav rail
+            # already binds a template-local `spaces` via `{% set %}` (the
+            # sidebar's own Space list), which would silently shadow a
+            # same-named context variable for this page's whole render.
+            # See labels_manage.html's own comment on this.
+            "space_groups": space_groups,
+            "has_multiple_labels": len(labels) > 1,
+            "ungrouped": ungrouped,
+            "has_labels": bool(labels),
         },
     )
+
+
+def _label_role(cfg: dict) -> str:
+    """"none" / "space" / "project" -- the mutually-exclusive Role a label
+    can have (side work, 2026-08-15 direct feedback: "becoming a project
+    should be mutually exclusive to a space"). `is_project` wins if a
+    pre-existing label somehow still has both flags set (from before this
+    rework) -- a label edited through this page from now on can never
+    reach that state again, see update_label below, but nothing here
+    forces a one-time migration of old rows that were never re-saved."""
+    if cfg.get("is_project"):
+        return "project"
+    if cfg.get("generate_space"):
+        return "space"
+    return "none"
+
+
+@router.get("/{name}/edit")
+def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
+    """The label edit modal (side work, 2026-08-15 direct feedback: "a
+    button that opens a modal window to edit labels with all the colors,
+    icons, etc."). Replaces labels_manage.html's old per-row inline forms
+    (rename/color/icon/parent/abbreviation/space-checkbox) AND the Project
+    <details> popover (promote/dates/archive/demote) that had briefly
+    lived there (2026-08-15, same day) -- both now live in one form here,
+    submitted together to update_label below.
+
+    2026-08-15 follow-up: "Group" (formerly "Parent label") only ever
+    offers actual Space labels -- `space_label_names` below, everything
+    else about a label's grouping is display-only (manage_labels' own
+    Space-children grouping). Merge moved back out to its own small
+    modal (merge_modal below), so it's no longer built here."""
+    cfg = db.effective_label_config(conn, name)
+    role = _label_role(cfg)
+    has_children = bool(db.list_child_labels(conn, name))
+    project_status = db.project_status(conn, cfg) if role == "project" else None
+    space_label_names = sorted(
+        (l["name"] for l in db.list_labels(conn) if l.get("generate_space") and l["name"] != name),
+        key=str.lower,
+    )
+    # A stale parent_name from before this rework (any label could be a
+    # parent) might not name a current Space -- keep it selectable so
+    # Save can't silently drop it just because the label opened this
+    # modal without touching Group at all.
+    if cfg.get("parent_name") and cfg["parent_name"] not in space_label_names:
+        space_label_names = sorted(space_label_names + [cfg["parent_name"]], key=str.lower)
+    return templates.TemplateResponse(
+        "label_edit_modal.html",
+        {
+            "request": request,
+            "l": cfg,
+            "role": role,
+            "has_children": has_children,
+            "project_status": project_status,
+            "colors": COLORS,
+            "icon_groups": ICON_GROUPS,
+            "space_label_names": space_label_names,
+        },
+    )
+
+
+@router.get("/{name}/merge-modal")
+def merge_modal(name: str, request: Request, conn=Depends(get_db)):
+    """Small standalone modal (side work, 2026-08-15 follow-up direct
+    feedback: "Merge should be a button in the list... it should open a
+    small modal window where the user selects") -- just the destination
+    picker, posting to the unchanged /labels/{name}/merge below."""
+    other_names = sorted((l["name"] for l in db.list_labels(conn) if l["name"] != name), key=str.lower)
+    return templates.TemplateResponse(
+        "label_merge_modal.html",
+        {"request": request, "name": name, "other_label_names": other_names},
+    )
+
+
+@router.post("/{name}/update")
+def update_label(
+    name: str,
+    new_name: str = Form(""),
+    color: str = Form("blue"),
+    icon: str = Form(""),
+    description: str = Form(""),
+    parent_name: str = Form(""),
+    abbreviation: str = Form(""),
+    role: str = Form("none"),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    conn=Depends(get_db),
+):
+    """The label edit modal's single Save button -- one endpoint for every
+    field the old rename/set/promote/dates/demote endpoints each handled
+    separately, since they're now one form instead of five small ones.
+    Those older endpoints (this file's rename_label/set_label,
+    routers/projects.py's promote/set_dates/demote/archive) are untouched
+    and still work standalone -- nothing else in the app calls them, but
+    removing them isn't this slice's job and `tests/test_project_stack.py`
+    still exercises routers/projects.py's directly.
+
+    Role replaces the old independent generate_space checkbox + is_project
+    promote flow with one mutually-exclusive choice (side work, 2026-08-15
+    direct feedback) -- picking "project" always clears generate_space and
+    picking "space" always clears is_project/dates/archived_at, so a label
+    saved through this form can never end up with both set at once.
+
+    2026-08-15 follow-up (same day): two more direct-feedback changes --
+    (1) overlapping project periods are always allowed now, no confirm
+    step (the old `confirm_overlap` checkbox/409-conflict flow removed
+    entirely, per "Allow this period to overlap another project shouldn't
+    exist because it should always be true"); (2) `parent_name` ("Group")
+    must be blank or name an actual Space -- the modal's own dropdown
+    already only offers Spaces, this is the server-side backstop for
+    whatever it's handed."""
+    new_name = (new_name or "").strip() or name
+    abbreviation = abbreviation if isinstance(abbreviation, str) else ""
+    abbreviation = abbreviation.strip()[:5] or None
+    start_date = start_date.strip() if isinstance(start_date, str) else ""
+    end_date = end_date.strip() if isinstance(end_date, str) else ""
+    role = role if role in ("space", "project") else "none"
+    parent_name = (parent_name or "").strip() or None
+
+    if role == "project" and (not start_date or not end_date):
+        raise HTTPException(400, "A project needs both a start and end date.")
+
+    if parent_name:
+        parent_cfg = db.get_label_config(conn, parent_name)
+        if parent_name == name or not parent_cfg or not parent_cfg.get("generate_space"):
+            raise HTTPException(400, f'"{parent_name}" is not a Space -- Group can only be an existing Space.')
+
+    if new_name != name:
+        db.rename_label(conn, name, new_name)
+        # rename_label merges into new_name if it already names a
+        # different existing label (see its own docstring) -- either way,
+        # every field below now belongs under new_name.
+        name = new_name
+
+    existing = db.get_label_config(conn, name) or {}
+    row = {
+        "name": name,
+        "color": color or "blue",
+        "icon": icon.strip() or None,
+        "description": description,
+        "parent_name": parent_name,
+        "abbreviation": abbreviation,
+        "generate_space": 1 if role == "space" else 0,
+        "is_project": 1 if role == "project" else 0,
+        "created_at": existing.get("created_at") or _now(),
+    }
+    if role == "project":
+        row["start_date"] = start_date
+        row["end_date"] = end_date
+        # Keep an existing project's archived_at as-is (editing dates on an
+        # archived project shouldn't quietly unarchive it); a fresh
+        # promotion (wasn't already is_project) always starts unarchived.
+        row["archived_at"] = existing.get("archived_at") if existing.get("is_project") else None
+    else:
+        row["start_date"] = None
+        row["end_date"] = None
+        row["archived_at"] = None
+    db.upsert_label_config(conn, row)
+    return RedirectResponse(url="/labels", status_code=303)
 
 
 @router.post("/{name}/rename")
@@ -289,38 +486,27 @@ def set_label(
 
 
 def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact/class directly tagged with `name` -- the
-    "centralizes all tasks, events, contacts, classes" behavior the old
+    """Every task/event/contact directly tagged with `name` -- the
+    "centralizes all tasks, events, contacts" behavior the old
     project/space detail pages had, now driven off object_labels instead
     of project_uid/task_lists/calendars/addressbooks.
 
     2026-08-07: no more `databases` key here -- the Databases feature (and
     Grades, which was built on it) is removed entirely, not just
-    unlinked. See _project_university_section.html's own removal note.
+    unlinked.
 
-    1.6 (Schedule & recurrence rework): `classes` is no longer a dedicated
-    schedule_classes query -- a class is a real recurring event tagged with
-    both the Schedule system label and this course label
-    (db.list_schedule_class_events), enriched into the same day/acronym/
-    professor/credits/parity shape routers/schedule.py's Table view uses
-    (schedule_router._class_row) so _project_university_section.html and
-    schedule.next_occurrence needed no changes at all."""
+    2026-08-15: no more `classes` key here -- the Schedule module (and the
+    University module built on it) is removed entirely, see this file's
+    header comment."""
     tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
     events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
     contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
-    class_events = db.list_schedule_class_events(conn, course_label=name)
-    classes = [schedule_router._class_row(conn, e) for e in class_events]
 
     return {
         "tasks": tasks,
         "events": events,
         "contacts": contacts,
-        "classes": classes,
     }
-
-
-def _next_label(next_date: date, today: date) -> str:
-    return schedule.next_label(next_date, today)
 
 
 @router.get("/{name}")
@@ -352,46 +538,7 @@ def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(g
             # button read.
             "banner": db.get_page_banner(conn, name),
             "banner_scope": name,
-            # status_labels/status_colors drive the Homework table inside
-            # _project_university_section.html. color/icon/parent editing
-            # moved to the manage page (/labels) with the old inline
-            # "Edit label" block's removal, so colors/icon_groups/
-            # all_labels are no longer needed here.
-            "status_labels": STATUS_LABELS,
-            "status_colors": STATUS_COLORS,
         }
     )
-
-    # §5 University module (preserved from the old project_detail):
-    # Homework tasks, professor contacts, next-lecture badges -- unchanged
-    # logic, just sourced from this label's own scope. 2026-08-07: no more
-    # `project_databases`/linked-databases context -- the Databases
-    # feature (and Grades, which was built on it) is removed entirely, see
-    # _project_university_section.html's own removal note.
-    ctx["homework_tasks"] = [
-        t for t in scope["tasks"] if any(tag.lower() == "homework" for tag in (t.get("tags") or []))
-    ]
-    professor_contacts: dict[str, dict] = {}
-    for cl in scope["classes"]:
-        puid = cl.get("professor_contact_uid")
-        if puid and puid not in professor_contacts:
-            contact = db.get_contact(conn, puid)
-            if contact:
-                professor_contacts[puid] = contact
-    ctx["professor_contacts"] = professor_contacts
-
-    # 1.6: next-occurrence is read straight off each class's own recurring
-    # event (RRULE + EXDATE), not re-derived from settings/holidays --
-    # schedule.next_occurrence_for_event reuses the same recurrence_expand
-    # machinery the Calendar tab itself expands with.
-    next_lecture: dict[str, dict] = {}
-    today = date.today()
-    holiday_calendars = db.list_holidays_by_calendar(conn)
-    for cl in scope["classes"]:
-        event = db.get_event(conn, cl["uid"])
-        next_date = schedule.next_occurrence_for_event(event, today, holiday_calendars=holiday_calendars) if event else None
-        if next_date:
-            next_lecture[cl["uid"]] = {"date": next_date, "label": _next_label(next_date, today)}
-    ctx["class_next_lecture"] = next_lecture
 
     return templates.TemplateResponse("label_detail.html", ctx)

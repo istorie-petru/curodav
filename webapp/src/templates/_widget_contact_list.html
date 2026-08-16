@@ -4,17 +4,20 @@
      the Space widget grid so, e.g., a University space automatically shows
      contacts tagged with its course/project names.
 
-     data.contacts is a list of contact dicts (full_name, org, email,
-     phone, tags). §2 Spaces v2, 2026-08-03; `category` dropped Phase 5
-     (label-space rework, 2026-08-07). -->
+     data.contacts is a list of contact dicts (full_name, org, phones,
+     emails, tags). §2 Spaces v2, 2026-08-03; `category` dropped Phase 5
+     (label-space rework, 2026-08-07). Contacts field parity slice 2 of 6:
+     `email`/`phone` are now multi-value lists (`emails`/`phones`) -- this
+     widget, like contacts_list.html's row subtitle, shows only the first
+     (lowest-position) entry of each, same "concise, one line" convention. -->
 {% if data.contacts %}
 <div class="contact-list-widget">
     {% for c in data.contacts %}
     <a class="contact-list-row" href="/contacts/{{ c.uid }}">
         <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
         {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
-        {% if c.email %}<span class="contact-list-detail">{{ c.email }}</span>{% endif %}
-        {% if c.phone %}<span class="contact-list-detail">{{ c.phone }}</span>{% endif %}
+        {% if c.emails %}<span class="contact-list-detail">{{ c.emails[0].value }}</span>{% endif %}
+        {% if c.phones %}<span class="contact-list-detail">{{ c.phones[0].value }}</span>{% endif %}
     </a>
     {% endfor %}
 </div>

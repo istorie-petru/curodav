@@ -301,9 +301,17 @@ class TestLocalWritePath:
 
     def test_shell_cache_name_was_bumped_for_the_new_precached_script(self):
         # cc-shell-v3 was slice 5's own bump (adding offline_write.js);
-        # slice 6 adds offline_status.js on top and bumps again.
+        # slice 6 added offline_status.js and bumped to v4; v5 fixed the
+        # manifest precache entry (was "/manifest.webmanifest", a path that
+        # 404s -- the file is only served at "/static/manifest.webmanifest"
+        # -- which made cache.addAll() reject and the whole shell precache
+        # fail on install); v6 (2026-08-15) dropped schedule_table.js/
+        # schedule_grid.js from the precache list along with the whole
+        # Schedule module, see plans/STATE.md's removal entry; v7
+        # (2026-08-15) added event_format_toggle.js, "Event format for
+        # simple events".
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v4"' in script
+        assert 'CACHE_NAME = "cc-shell-v7"' in script
 
 
 class TestSyncEngine:

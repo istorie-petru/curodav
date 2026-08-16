@@ -136,6 +136,11 @@
       const uid = el.dataset.uid;
       const droppedCol = currentCol;
 
+      // Sleep Time / Leisure Time warning (static/time_blocks.js) -- purely
+      // advisory, fired alongside the save below rather than gating it; a
+      // no-op if the page has no configured blocks or the script didn't load.
+      if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
+
       // Optimistic, same as Kanban's drag-and-drop (tasks_board.js) --
       // the position on screen is already correct the instant the pointer
       // is released (that's what the whole drag was doing), so a reload
@@ -185,7 +190,13 @@
     });
   }
 
-  document.querySelectorAll(".time-event").forEach(setupEvent);
+  // :not(.work-allocation) -- on the merged Week view (1.9 side work,
+  // templates/calendar_week.html) static/project_calendar.js also runs on
+  // this page and owns every `.work-allocation` block's own pointerdown
+  // (move/resize/delete-to-unschedule, plus click-to-open-task). Without
+  // this exclusion both scripts would attach a competing pointerdown
+  // handler to the same element.
+  document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
 
   // ---------------------------------------------------------------- //
   // Hover-preview + click / click-drag-release to CREATE a new event on
@@ -269,6 +280,19 @@
     // preview, but the drag-to-create gesture below still works
     // identically once pressed) and the live drag-update while `creating`.
     col.addEventListener("pointermove", (e) => {
+      // On the merged Week view (1.9 side work) these columns also carry
+      // `.project-calendar-col` -- static/project_calendar.js sets
+      // `window.__ccGridDragActive` while it owns an active drag (an
+      // unscheduled task being dragged onto the grid, or an existing block
+      // being moved/resized). Without this check, this hover-preview
+      // ghost -- always 30 minutes tall, this file's own click-to-create
+      // default -- rendered on top of that drag and looked like the drop
+      // would create a 30-minute block, when the actual result is always
+      // DEFAULT_BLOCK_MINUTES (60) -- direct feedback, confirmed live.
+      if (window.__ccGridDragActive) {
+        ghost.style.display = "none";
+        return;
+      }
       if (e.target !== col) {
         if (!creating) ghost.style.display = "none";
         return;
@@ -291,7 +315,7 @@
     });
 
     col.addEventListener("pointerdown", (e) => {
-      if (e.target !== col || e.button !== 0) return;
+      if (window.__ccGridDragActive || e.target !== col || e.button !== 0) return;
       creating = true;
       createStartPx = snapCreate(offsetY(e));
       showGhost(createStartPx, CREATE_SNAP_PX);

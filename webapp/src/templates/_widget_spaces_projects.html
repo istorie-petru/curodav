@@ -1,0 +1,46 @@
+<!-- Data: {style, previews} (style="list") or {style, cards} (style="cards")
+     -- see routers/dashboard.py::_render_spaces_projects. Consolidated
+     Spaces & Projects widget (2026-08-15 widget consolidation) replacing
+     project_preview/filled_cards -- style="list" reuses project_preview's
+     own rows, style="cards" reuses filled_cards' own Material-You-style
+     filled squares. -->
+{% if data.style == 'cards' %}
+{% if data.cards %}
+<div class="filled-cards-grid">
+    {% for card in data.cards %}
+    {% set color_class = 'cal-' + (card.color if card.color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
+    <a class="filled-card {{ color_class }}" href="/labels/{{ card.uid }}">
+        <div class="filled-card-content">
+            <div class="filled-card-title">{{ card.name }}</div>
+            {% if card.description %}
+            <div class="filled-card-description">{{ card.description }}</div>
+            {% else %}
+            <div class="filled-card-meta">{{ card.project_count }} project{{ 's' if card.project_count != 1 else '' }}</div>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No spaces found -- add projects from Settings to get started.</div>
+{% endif %}
+{% else %}
+{% if data.previews %}
+<div class="project-preview-list">
+    {% for pv in data.previews %}
+    <a class="project-preview-row" href="/tasks?label={{ pv.project.uid|urlencode }}">
+        <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
+        {% if pv.progress is not none %}
+        <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>
+        <span class="tag-usage-count">{{ pv.tasks_done }}/{{ pv.tasks_total }}</span>
+        {% else %}
+        <span class="spacer"></span>
+        <span class="tag-usage-count">No tasks yet</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No active projects -- add one from Settings.</div>
+{% endif %}
+{% endif %}

@@ -3,8 +3,7 @@
 {% block content %}
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Data health</h1>
-<p class="settings-hint">Verified backups, database integrity, and storage --
-    the trust layer 1.8's offline sync is built on top of.</p>
+<p class="settings-hint">Verified backups, database integrity, and storage — the safety net behind your data.</p>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint" style="color:var(--md-primary,var(--accent))">{{ request.query_params.get('note') }}</div>
@@ -91,35 +90,35 @@
     <div class="card">
         <form class="settings-field-row" method="post" action="/settings/data-health/backup">
             <span class="settings-field-label">Create a backup now
-                <span class="settings-field-hint">Full data snapshot, saved on the server</span>
+                <span class="settings-field-hint">Saves a full snapshot you can restore from later if something goes wrong</span>
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn primary">{{ icon('archive', 'icon-sm') }} Backup now</button>
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/verify">
             <span class="settings-field-label">Verify latest backup
-                <span class="settings-field-hint">Checks structure, required data, and per-row integrity</span>
+                <span class="settings-field-hint">Confirms your most recent backup is complete and restorable</span>
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('check-square', 'icon-sm') }} Verify</button>
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/integrity-check">
             <span class="settings-field-label">Check database integrity
-                <span class="settings-field-hint">SQLite's own full structural scan (PRAGMA integrity_check)</span>
+                <span class="settings-field-hint">Scans your data for corruption — run this if something looks wrong</span>
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('eye', 'icon-sm') }} Check</button>
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
             <span class="settings-field-label">Compact &amp; reindex
-                <span class="settings-field-hint">Rebuilds indexes, reclaims disk space (REINDEX + VACUUM)</span>
+                <span class="settings-field-hint">Speeds up the app and frees up disk space</span>
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('tool', 'icon-sm') }} Repair</button>
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/sync-retention">
             <span class="settings-field-label">Sync cleanup retention
-                <span class="settings-field-hint">How long a deleted item is kept as a tombstone before permanent removal</span>
+                <span class="settings-field-hint">How long deleted items are kept around before being permanently removed</span>
             </span>
             <span class="spacer"></span>
             <select name="days" onchange="this.form.requestSubmit()">
@@ -130,7 +129,7 @@
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/sync-gc">
             <span class="settings-field-label">Run sync cleanup now
-                <span class="settings-field-hint">Purges tombstoned items and idempotency records past the retention window</span>
+                <span class="settings-field-hint">Frees up space by removing old deleted items right away, instead of waiting</span>
             </span>
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Clean up</button>

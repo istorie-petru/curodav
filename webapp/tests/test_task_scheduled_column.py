@@ -2,18 +2,20 @@
 plans/open-priority.md § Task model, "The distinction between a task
 deadline and scheduled work is explicit"). The two fields already existed
 independently (`due_at` and work allocations via `db.task_work_hours`), but
-the global Tasks table and the project detail Tasks view (both rendering
-the shared `_task_row.html` macro) only ever showed "Due" -- work-allocation
-status was invisible on the primary task-management surface unless the
-detail modal was opened. This adds a "Scheduled" column, distinct from
-"Due", to both.
+the global Tasks table only ever showed "Due" -- work-allocation status was
+invisible on the primary task-management surface unless the detail modal
+was opened. This adds a "Scheduled" column, distinct from "Due".
 
 Covers: a task with no allocations renders a plain empty-state dash (not an
 error), a task with allocations shows the right completed/scheduled hours,
-the column appears on both `GET /tasks` and `GET /projects/{name}` (the
-shared macro), and `db.task_work_hours_bulk` (the batched query added to
-avoid an N+1 -- one query per row would otherwise happen on every page
-render) matches `db.task_work_hours`'s per-task numbers exactly."""
+and `db.task_work_hours_bulk` (the batched query added to avoid an N+1 --
+one query per row would otherwise happen on every page render) matches
+`db.task_work_hours`'s per-task numbers exactly.
+
+(This originally also covered `GET /projects/{name}`'s Tasks view, which
+shared the same `_task_row.html` macro -- that page is gone, 2026-08-15, see
+routers/projects.py's module docstring; TestProjectDetailPage removed
+along with it.)"""
 
 from __future__ import annotations
 
@@ -23,7 +25,6 @@ import pytest
 from starlette.requests import Request
 
 from src import db
-from src.routers import projects as projects_router
 from src.routers import tasks as tasks_router
 
 
@@ -60,13 +61,6 @@ def _task(conn, uid, tags=None, status="active", due_at=None, title=None):
             "uid": uid, "title": title or uid, "description": "", "status": status,
             "tags": tags or [], "created_at": _now(), "due_at": due_at,
         },
-    )
-
-
-def _project(conn, name, start_date="2026-08-01", end_date="2026-09-01"):
-    db.upsert_label_config(
-        conn,
-        {"name": name, "is_project": 1, "start_date": start_date, "end_date": end_date, "created_at": _now()},
     )
 
 
@@ -107,30 +101,6 @@ class TestGlobalTasksPage:
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert ">Due<" in body
         assert ">Scheduled<" in body
-
-
-class TestProjectDetailPage:
-    def test_scheduled_column_present_and_correct(self, conn):
-        _project(conn, "Conference XYZ")
-        _task(conn, "t1", tags=["Conference XYZ"])
-        now = datetime.now(timezone.utc)
-        db.create_work_allocation(
-            conn, "t1", now.isoformat(), (now + timedelta(hours=4)).isoformat()
-        )
-        body = projects_router.project_detail(
-            "Conference XYZ", _request("/projects/Conference XYZ"), conn=conn
-        ).body.decode()
-        assert ">Scheduled<" in body
-        assert "0.0/4.0h" in body
-
-    def test_task_with_no_allocations_shows_dash(self, conn):
-        _project(conn, "Conference XYZ")
-        _task(conn, "t1", tags=["Conference XYZ"])
-        resp = projects_router.project_detail(
-            "Conference XYZ", _request("/projects/Conference XYZ"), conn=conn
-        )
-        task = next(t for t in resp.context["open_tasks"] if t["uid"] == "t1")
-        assert task["work_hours"] == {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}
 
 
 class TestTaskWorkHoursBulk:

@@ -13,7 +13,6 @@
             <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
             <a class="seg-btn active" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
             <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
-            <a class="seg-btn" href="/calendar/timetable{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Timetable</a>
             <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
         </div>
         <div class="spacer"></div>
@@ -23,8 +22,6 @@
         <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
     </div>
 </div>
-
-{% include "_education_next_lectures.html" %}
 
 <!-- 2026-08-11: the same Month-viewport shell as calendar_month.html
      (fits the viewport, week rows flex to share the height, day cells drop

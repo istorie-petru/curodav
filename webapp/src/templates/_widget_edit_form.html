@@ -61,7 +61,7 @@
              than a native <select>. -->
         {% set _view_ns = namespace(items=[]) %}
         {% for key, vspec in widget_views.items() %}
-        {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': vspec.label, 'data': {'source': vspec.source, 'has-range': ('1' if vspec.has_range else '')}}] %}
+        {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': vspec.label, 'data': {'source': vspec.source, 'has-range': ('1' if vspec.has_range else ''), 'has-limit': ('1' if vspec.get('has_limit') else '')}}] %}
         {% endfor %}
         {% set ms_name = 'view' %}
         {% set ms_mode = 'single' %}
@@ -87,7 +87,7 @@
         {% set ms_root_class = 'widget-range-select' %}
         {% include "_widget_list_multiselect.html" %}
         {% endif %}
-        <div class="field widget-limit-field" {% if widget.type != 'upcoming_events' %}style="display:none"{% endif %}>
+        <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list', 'important_urgent') %}style="display:none"{% endif %}>
             <label>Limit</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
@@ -95,6 +95,45 @@
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
             </div>
         </div>
+        <!-- Show -- Agenda-only (2026-08-15 widget consolidation), see
+             _widget_builder_fields.html's own comment for the rationale.
+             Pre-checked from this widget's own config.show (defaulting to
+             all three, same AGENDA_DEFAULT_SHOW the render function
+             falls back to when config.show is unset). -->
+        {% set _agenda_show_set = (widget.config.show if widget.config.show is defined and widget.config.show is not none else ['overdue', 'tasks', 'events']) %}
+        <div class="field widget-show-field" {% if widget.type != 'agenda' %}style="display:none"{% endif %}>
+            <label>Show</label>
+            <div class="field-toggle-group">
+                <label class="field-toggle"><input type="checkbox" name="show_overdue" value="1" {% if 'overdue' in _agenda_show_set %}checked{% endif %}> Overdue</label>
+                <label class="field-toggle"><input type="checkbox" name="show_tasks" value="1" {% if 'tasks' in _agenda_show_set %}checked{% endif %}> Tasks</label>
+                <label class="field-toggle"><input type="checkbox" name="show_events" value="1" {% if 'events' in _agenda_show_set %}checked{% endif %}> Events</label>
+            </div>
+        </div>
+        <!-- Style -- Spaces & Projects-only (2026-08-15 widget
+             consolidation), pre-selected from this widget's own
+             config.style (defaulting to "list", same as the render
+             function's own fallback). -->
+        <div class="field widget-style-field" {% if widget.type != 'spaces_projects' %}style="display:none"{% endif %}>
+            <label>Style</label>
+            <div class="field-toggle-group">
+                <label class="field-toggle"><input type="radio" name="style" value="list" {% if (widget.config.style or 'list') == 'list' %}checked{% endif %}> List</label>
+                <label class="field-toggle"><input type="radio" name="style" value="cards" {% if widget.config.style == 'cards' %}checked{% endif %}> Cards</label>
+            </div>
+        </div>
+        <!-- Scope -- Spaces & Projects-only, and only shown for a widget
+             that already belongs to a Space/Project page (widget.label_name
+             set) -- a Home instance has no auto-scope to override. See
+             _render_spaces_projects' own docstring for what "everything"
+             does. -->
+        {% if widget.type == 'spaces_projects' and widget.label_name %}
+        <div class="field widget-scope-field">
+            <label>Scope</label>
+            <div class="field-toggle-group">
+                <label class="field-toggle"><input type="radio" name="scope" value="space" {% if (widget.config.scope or 'space') == 'space' %}checked{% endif %}> This Space</label>
+                <label class="field-toggle"><input type="radio" name="scope" value="everything" {% if widget.config.scope == 'everything' %}checked{% endif %}> Everything</label>
+            </div>
+        </div>
+        {% endif %}
         <!-- Labels/Task lists/Calendars -- used to be wrapped in a
              visually distinct "Advanced" group; 2026-08-07 follow-up
              ("move them into normality") flattened that away, same as

@@ -128,14 +128,5 @@ class TestEventFormLabelsSwap:
         assert event["exclude_saturday"]
 
 
-class TestScheduleSettingsLabelsSwap:
-    def test_schedule_settings_page_respects_the_toggle(self, tmp_path):
-        from src.routers import schedule as schedule_router
-
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as conn:
-            db.set_app_meta(conn, deps.RECURRENCE_TERMINOLOGY_KEY, "playful")
-            resp = schedule_router.classes_view(_request_with_app("/schedule", db_path), conn=conn)
-        body = resp.body.decode()
-        assert "Respects Labor Laws" in body
-        assert 'name="holiday_calendar"' in body
+# 2026-08-15: TestScheduleSettingsLabelsSwap is deleted -- the whole
+# Schedule module is removed, see plans/STATE.md's removal entry.
