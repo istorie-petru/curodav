@@ -2883,6 +2883,55 @@ session, right before the final commit of that session.
      the direct-call tests build fuller fake apps. `SETTINGS_UI_GUIDE.md`'s
      reorg section marked shipped; `features/settings.md` rewritten to the
      7-category current state. 16 files, full suite **1659 passed**.
+- **Shipped:** side work — **Settings Appearance page restructure + three
+  template bugs**, complete (2026-08-17) — the appearance page was the last
+  Settings template still using the old half-width two-column
+  `.field-split` layout while General/Labels already used the single-card
+  `.settings-field-row` stack; `settings_appearance.html` now matches
+  General (Theme stays a non-form `<div>` rather than a `<form>`, the same
+  exception General's profile-picture row established — the segmented
+  control's buttons already post via `app.js`'s `window.CCTheme`). Three
+  real bugs fixed along the way: (1) the edit modals for Holidays and Sleep
+  & Leisure Time each rendered a **duplicate `<label>`** (their own + the
+  one `_widget_list_multiselect.html` renders for its `ms_label` input), so
+  clicking "Calendar"/"Days" opened the picker twice — removed the modals'
+  own labels; (2) Settings > Purge all was missing `time_blocks` from
+  `db.purge_all_data`'s table list, so a "purge all" left the Sleep/Leisure
+  blocks behind; (3) the Sleep & Leisure rows listed full day names
+  ("Monday Tuesday Friday") — new `_time_block_days_label` in
+  `routers/settings.py` renders "All week" (7 days), "All work week"
+  (Mon-Fri), else compact abbreviations ("Mon Tue Fri"), same shape as the
+  Holidays "calendar · from → to" hint. Full suite **1662 passed**.
+- **Shipped:** side work — **shared date+time range picker**, complete
+  (2026-08-17), direct feedback ("create a way to add dates, and hours,
+  more easily ... keyboard and mouse friendly, something for easy hour
+  select"). New `templates/_datetime_picker.html` macro +
+  `static/datetime_picker.js`: one popover with a month calendar (Monday-
+  first, matching the app's own mini-cal) for the date and a clickable
+  24-row hour grid for the start/end range ("like the Week grid"), used by
+  all three call sites — the calendar event form's Start/End
+  (`_event_form_fields.html`, still wrapped in `.event-start-end-field` so
+  All-day hides it), the time-block edit modal's Hours (`time` mode, no
+  date), and each Work-sessions-card session's when (`range` + `submit`
+  mode, posting to a new `POST /tasks/{uid}/work-allocations/{event_uid}/
+  set-times` endpoint wrapping the existing `db.set_work_allocation_times`
+  — a session can be dated right from the card now, not only by drag). The
+  picker's two hidden inputs keep the exact `start_at`/`end_at` name/value
+  contract the native inputs had, so no server parsing changed anywhere.
+  Hour selection is whole-hour granularity with the original minutes
+  preserved when the same hour is re-saved (`origStart`/`origEnd`); the
+  panel portals to `#multiselect-portal` like `.multiselect` so a modal
+  never clips it, and supports pointer drag, click-click, Arrow-key + Enter
+  navigation, and Escape/outside-click close. The 12h/24h display
+  preference flows through as `data-dtp-12h` (via `time_format(request)`,
+  which is why the macros all import `with context`) and the label is
+  rendered client-side. Loaded globally in `base.html` (the event form and
+  both modals are innerHTML-injected, so `datetime_picker.js` self-
+  initializes via the same MutationObserver convention as
+  `reminders_picker.js`). Tests: 3 new set-times endpoint tests +
+  event-form-picker render test; the Work-sessions card + display-prefs
+  tests rewritten off the old server-rendered `session-when` text. Full
+  suite **1666 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
