@@ -68,6 +68,15 @@
     return { hour: +m[1], minute: +m[2] };
   }
 
+  // "YYYY-MM-DD" (date mode, the native <input type="date"> contract) ->
+  // parsed or null
+  function parseDateOnly(v) {
+    if (!v) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) return null;
+    return { year: +m[1], month: +m[2], day: +m[3] };
+  }
+
   function dateKey(year, month, day) {
     return year + "-" + pad2(month) + "-" + pad2(day);
   }
@@ -134,19 +143,22 @@
     if (enhanced.has(container)) return;
     enhanced.add(container);
 
-    const mode = container.getAttribute("data-dtp-mode") === "time" ? "time" : "range";
+    const rawMode = container.getAttribute("data-dtp-mode");
+    const mode = rawMode === "date" || rawMode === "time" ? rawMode : "range";
     const submit = container.getAttribute("data-dtp-submit") === "1";
     const use12h = container.getAttribute("data-dtp-12h") === "1";
     const inputs = container.querySelectorAll('input[type="hidden"]');
     const startInput = inputs[0];
     const endInput = inputs[1];
-    if (!startInput || !endInput) return;
+    if (!startInput) return;
+    if (mode !== "date" && !endInput) return;
 
-    const placeholder = mode === "time" ? "Set hours…" : "Set time…";
+    const placeholder =
+      mode === "time" ? "Set hours…" : mode === "date" ? "Pick a date…" : "Set time…";
 
     const state = {
       mode, submit, use12h, placeholder,
-      date: null, // "YYYY-MM-DD" (range mode only)
+      date: null, // "YYYY-MM-DD" (range and date modes)
       viewYear: null, viewMonth: null, // calendar month being shown
       startHour: null, endHour: null,
       origStart: { hour: null, minute: null },
@@ -154,18 +166,20 @@
     };
 
     // Prefill from whatever the hidden inputs already hold.
-    const ps = mode === "time" ? parseTime(startInput.value) : parseRange(startInput.value);
-    const pe = mode === "time" ? parseTime(endInput.value) : parseRange(endInput.value);
+    const ps = mode === "time" ? parseTime(startInput.value) : mode === "date" ? parseDateOnly(startInput.value) : parseRange(startInput.value);
+    const pe = mode === "time" ? parseTime(endInput.value) : mode === "range" ? parseRange(endInput.value) : null;
     if (ps) {
-      state.date = dateKey(ps.year, ps.month, ps.day);
-      state.startHour = ps.hour;
-      state.origStart = { hour: ps.hour, minute: ps.minute };
+      if (mode !== "date") {
+        state.startHour = ps.hour;
+        state.origStart = { hour: ps.hour, minute: ps.minute };
+      }
+      if (mode !== "time") state.date = dateKey(ps.year, ps.month, ps.day);
     }
     if (pe) {
       state.endHour = pe.hour;
       state.origEnd = { hour: pe.hour, minute: pe.minute };
     }
-    if (mode === "range") {
+    if (mode !== "time") {
       const base = ps ? { y: ps.year, m: ps.month } : null;
       const n = new Date();
       state.viewYear = base ? base.y : n.getFullYear();
@@ -193,6 +207,7 @@
     container.appendChild(panel);
 
     function labelText() {
+      if (mode === "date") return state.date ? fmtDate(state.date) : placeholder;
       const start = state.startHour !== null ? fmtHour(state.startHour, use12h) : null;
       const end = state.endHour !== null ? fmtHour(state.endHour, use12h) : null;
       if (start === null || end === null) return placeholder;
@@ -206,6 +221,7 @@
     }
 
     function currentLabel() {
+      if (mode === "date") return state.date ? fmtDate(state.date) : placeholder;
       const start = state.startHour !== null ? fmtHour(state.startHour, use12h) : null;
       const end = state.endHour !== null ? fmtHour(state.endHour, use12h) : null;
       if (mode === "time") {
@@ -234,12 +250,14 @@
         renderHours(hourCol);
         panel.appendChild(calCol);
         panel.appendChild(hourCol);
+      } else if (mode === "date") {
+        renderCalendar(panel);
       } else {
         renderHours(panel);
       }
       renderFooter();
 
-      if (mode === "range") {
+      if (mode !== "time") {
         // Focus the selected (or today's) day so arrow-key navigation works
         // immediately after opening.
         const focusKey = state.date || dateKey(state.viewYear, state.viewMonth, Math.min(todayInView(), daysInMonth(state.viewYear, state.viewMonth)));
@@ -462,6 +480,17 @@
     }
 
     function applySelection() {
+      if (mode === "date") {
+        if (!state.date) return;
+        startInput.value = state.date;
+        updateTrigger();
+        close();
+        if (submit) {
+          const form = container.closest("form");
+          if (form) form.requestSubmit();
+        }
+        return;
+      }
       const haveRange = state.startHour !== null && state.endHour !== null;
       if (mode === "range" && (!state.date || !haveRange)) return;
       if (mode === "time" && !haveRange) return;

@@ -42,11 +42,12 @@
         </div>
         <div class="field">
             <label>Start date</label>
-            <input type="date" name="date_from" required value="{{ h.date_from if h else '' }}">
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('date_from', '', h.date_from if h else '', '', 'date', required=true) }}
         </div>
         <div class="field">
             <label>End date</label>
-            <input type="date" name="date_to" required value="{{ h.date_to if h else '' }}">
+            {{ datetime_picker('date_to', '', h.date_to if h else '', '', 'date', required=true) }}
         </div>
     </div>
 </form>

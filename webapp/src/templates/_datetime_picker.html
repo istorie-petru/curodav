@@ -13,18 +13,26 @@
        end_at, time blocks' start_time/end_time).
      value_start / value_end -- current values ("YYYY-MM-DDTHH:MM" in range
        mode, "HH:MM" in time mode), blank for new records.
-     mode -- "range" (default; date + start/end hours) or "time" (hours
-       only, for a weekly time block that has no date).
+     mode -- "range" (default; date + start/end hours), "time" (hours
+       only, for a weekly time block that has no date), or "date" (a single
+       date only -- e.g. a holiday's From/To -- written as "YYYY-MM-DD",
+       which replaces the native <input type="date"> picker that otherwise
+       pops the browser's own, unstylable calendar).
      submit -- when true, Apply immediately submits the enclosing <form>
        (the Work-sessions card's per-session set-times form) instead of just
-       filling values for a later Save. #}
-{% macro datetime_picker(name_start, name_end, value_start, value_end, mode='range', submit=false, class_='') %}
+       filling values for a later Save.
+     required -- when true, the hidden input carries `required` so the
+       browser still blocks an empty form submit the way the native date
+       input it replaces did. #}
+{% macro datetime_picker(name_start, name_end, value_start, value_end, mode='range', submit=false, class_='', required=false) %}
 <div class="dtp {{ class_ }}"
      data-dtp
      data-dtp-mode="{{ mode }}"
      data-dtp-submit="{{ '1' if submit else '' }}"
      data-dtp-12h="{{ '1' if (request is defined and time_format(request) == '12h') else '' }}">
-    <input type="hidden" name="{{ name_start }}" value="{{ value_start or '' }}">
+    <input type="hidden" name="{{ name_start }}" value="{{ value_start or '' }}"{% if required %} required{% endif %}>
+    {% if mode != 'date' %}
     <input type="hidden" name="{{ name_end }}" value="{{ value_end or '' }}">
+    {% endif %}
 </div>
 {% endmacro %}

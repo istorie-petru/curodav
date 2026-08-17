@@ -2932,6 +2932,15 @@ session, right before the final commit of that session.
   event-form-picker render test; the Work-sessions card + display-prefs
   tests rewritten off the old server-rendered `session-when` text. Full
   suite **1666 passed**.
+- **Shipped:** follow-up (2026-08-17) — the picker gained a **date-only
+  mode** (`data-dtp-mode="date"`: a single `YYYY-MM-DD` hidden input, plus
+  a `required` param so the browser still blocks an empty submit the way
+  the native input it replaces did), wired into the Holiday modal's From/To
+  fields — those were native `<input type="date">`s whose browser-drawn
+  popup (its clickable month/year header + Clear button) can't be themed
+  by the app's CSS, the root of the "the month/year selector and the clear
+  are unthemed" feedback; the themed picker replaces it everywhere now.
+  Full suite **1667 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

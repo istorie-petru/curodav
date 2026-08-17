@@ -114,6 +114,22 @@ class TestHolidayEditModal:
             settings_router.edit_holiday_modal("missing", _request("/settings/holidays/missing/edit"), conn=conn)
         assert exc.value.status_code == 404
 
+    def test_modal_dates_use_shared_themed_date_picker(self, conn):
+        """2026-08-17: the From/To fields were native <input type="date">s,
+        which pop the browser's own unstylable calendar (its month/year
+        header + Clear button can't be themed by the app's CSS) -- replaced
+        with the shared picker in date mode, whose hidden inputs keep the
+        exact date_from/date_to value contract the native inputs had."""
+        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Default", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
+        resp = settings_router.edit_holiday_modal("h1", _request("/settings/holidays/h1/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'data-dtp-mode="date"' in body
+        assert 'name="date_from"' in body
+        assert 'name="date_to"' in body
+        assert 'value="2026-09-14"' in body
+        assert 'value="2026-09-16"' in body
+        assert 'type="date"' not in body
+
 
 class TestCreateHoliday:
     def test_creates_and_redirects_to_holidays_page(self, conn):
