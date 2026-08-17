@@ -73,22 +73,24 @@ def export_index(request: Request, conn=Depends(get_db)):
     backup should be fully with all buttons... in the advanced page") --
     the standard-format/JSON downloads and restore forms this used to
     render (export_index.html, deleted) are now inlined directly into
-    Settings > Advanced (routers/settings.py's settings_advanced,
-    settings_advanced.html's own "Export & backup" section) instead of
-    living behind a link to a separate page. This route stays registered
-    as a plain redirect rather than being deleted outright, so an old
-    bookmark/link to /export still lands somewhere real."""
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    Settings > Data & Maintenance (routers/settings.py's
+    settings_data_maintenance, settings_data_maintenance.html's "Export &
+    import" section -- Advanced's old home, folded into that page 2026-08-
+    17) instead of living behind a link to a separate page. This route
+    stays registered as a plain redirect rather than being deleted
+    outright, so an old bookmark/link to /export still lands somewhere
+    real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 def export_context(conn) -> dict:
-    """The data Settings > Advanced's "Export & backup" section needs --
-    factored out of the old export_index page route (above) so
-    routers/settings.py's settings_advanced can call it directly instead
-    of importing a page-rendering function. Deliberately takes `conn`
-    only, not `request` -- radicale_url is fetched separately by the
-    caller (it needs `request.app.state`, which this function has no use
-    for otherwise), keeping this a plain data function."""
+    """The data Settings > Data & Maintenance's "Export & import" section
+    needs -- factored out of the old export_index page route (above) so
+    routers/settings.py's settings_data_maintenance can call it directly
+    instead of importing a page-rendering function. Deliberately takes
+    `conn` only, not `request` -- radicale_url is fetched separately by
+    the caller (it needs `request.app.state`, which this function has no
+    use for otherwise), keeping this a plain data function."""
     return {
         "contact_count": len(db.list_contacts(conn)),
         "event_count": len(db.list_events(conn)),

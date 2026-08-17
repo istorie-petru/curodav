@@ -124,21 +124,29 @@ router = APIRouter(tags=["settings"])
 # labels_manage.html/published_lists.html's own breadcrumbs for how each
 # still reads as "inside Settings"). Habits is deliberately NOT a hub
 # category: it's reached from Tasks > Habits, its contextual home.
+#
+# 2026-08-17 settings HTML uniformity pass (SETTINGS_UI_GUIDE.md
+# "Proposed reorganization") -- Data health, Sync conflicts and Advanced
+# were three pages splitting "everything about your data's safety and
+# lifecycle" across them with no priority ordering inside any of them.
+# They're one "Data & Maintenance" category now (settings_data_maintenance.
+# html, urgent items first): the old /settings/data-health,
+# /settings/sync-conflicts and /settings/advanced URLs stay as 303
+# redirects for old bookmarks/links. The conflict-count badge that makes an
+# unresolved conflict visible from the hub itself lives on this one row
+# (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
-    {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
-    {"url": "/settings/sync-conflicts", "icon": "merge", "name": "Sync conflicts", "desc": "Offline edits the sync engine couldn't auto-merge"},
+    {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
-    {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
 
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
-_ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced"}]
 
 # "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
 # of choices, not a free-typed number: a handful of sane presets is
@@ -151,12 +159,16 @@ DAYS_CHOICES = [("0", "Never"), ("7", "7 days"), ("14", "14 days"), ("30", "30 d
 
 @router.get("/settings")
 def settings_index(request: Request, conn=Depends(get_db)):
+    # conflict_count feeds the Data & Maintenance row's badge
+    # (settings_index.html) -- the "visible even without visiting the page"
+    # half of SETTINGS_UI_GUIDE.md's sync-conflict recommendation.
     return templates.TemplateResponse(
         "settings_index.html",
         {
             "request": request,
             "active_tab": "settings",
             "categories": HUB_CATEGORIES,
+            "conflict_count": len(db.list_sync_conflicts(conn)),
         },
     )
 
@@ -638,25 +650,27 @@ def delete_time_block(uid: str, conn=Depends(get_db)):
 
 
 # --------------------------------------------------------------------- #
-# Data health (`plans/open.md` § Data health & maintenance) -- server-side,
-# actively-verified backups plus database integrity/repair. The 1.8
-# (offline-first editing & synchronization) precondition: "trusted only
-# once verified backups exist" (plans/STATE.md). Every route here is a
-# thin wrapper around src/data_health.py's plain functions -- the same
-# functions scripts/data_health.py calls -- so the GUI and CLI genuinely
-# share one implementation instead of two copies that could drift
-# (open.md's own requirement). This is deliberately NOT folded into
-# Advanced's existing "Export & backup" section: that section is an
-# on-demand *download* a person triggers and keeps themselves; Data health
-# is server-side, verifiable, and restorable without ever leaving the app.
+# Data & Maintenance (`plans/open.md` § Data health & maintenance) --
+# the merged page for everything about your data's safety and lifecycle,
+# reorganized 2026-08-17 (SETTINGS_UI_GUIDE.md "Proposed reorganization:
+# Advanced + Data health + Sync conflicts") into one priority-ordered page:
+# needs-attention first, then health status, primary actions, export &
+# import, danger zone, backups last. It folds together three former pages
+# -- Data health (server-side, actively-verified backups plus database
+# integrity/repair, the 1.8 "trusted only once verified backups exist"
+# precondition; every route here is a thin wrapper around src/data_health.
+# py's plain functions, the same functions scripts/data_health.py calls),
+# Advanced (export & backup, reset Home's widget layout, auto-archive
+# completed tasks by age, plus two explicit confirmed-destructive purge
+# actions), and Sync conflicts (1.8 slice 2, §7b/c -- a conflict is never
+# auto-resolved, restore/dismiss are the only two things a person can do
+# with one). The old three URLs redirect here for old bookmarks/links.
 # --------------------------------------------------------------------- #
 
-_DATA_HEALTH_CRUMB = _ROOT_CRUMB
-
 # Fixed preset choices, not a free-typed number -- same reasoning as
-# settings_advanced.html's own auto-archive field (this module's own
-# DAYS_CHOICES): a select autosubmits on pick, matching this page's other
-# direct controls, and a validated preset can never end up storing
+# settings_data_maintenance.html's own auto-archive field (this module's
+# own DAYS_CHOICES): a select autosubmits on pick, matching this page's
+# other direct controls, and a validated preset can never end up storing
 # something typo'd/out-of-range. This app's sync design documents 90 days
 # as the retention horizon's own default (offline_sync.RETENTION_DAYS),
 # so unlike DAYS_CHOICES' "0/Never" default, this field's own default
@@ -668,27 +682,53 @@ def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
 
 
-@router.get("/settings/data-health")
-def settings_data_health(request: Request, conn=Depends(get_db)):
+@router.get("/settings/data-maintenance")
+def settings_data_maintenance(request: Request, conn=Depends(get_db)):
+    """The merged Data & Maintenance page (2026-08-17 reorg). Context is
+    everything the three former pages used to gather separately: the data
+    health summary (health_summary's `integrity`/`latest_backup`/
+    `latest_verified_backup`/`sync`/`sync_gc`/`storage`/`entities`/
+    `backups`), the unresolved sync conflicts, and Advanced's export/
+    import + purge/auto-archive context (export_context() plus the counts
+    and choices settings_data_maintenance.html renders)."""
     backups_dir = _backups_dir(request)
     summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
-    return templates.TemplateResponse(
-        "settings_data_health.html",
-        {
-            "request": request,
-            "active_tab": "settings_data_health",
-            "crumbs": _DATA_HEALTH_CRUMB,
-            "title": "Data health",
-            "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
-            **summary,
-        },
-    )
+    completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
+    ctx = {
+        "request": request,
+        "active_tab": "settings_data_maintenance",
+        "crumbs": _ROOT_CRUMB,
+        "title": "Data & Maintenance",
+        "conflicts": db.list_sync_conflicts(conn),
+        "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
+        "completed_task_count": completed_task_count,
+        "task_auto_archive_days": db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0",
+        "days_choices": DAYS_CHOICES,
+        # Export & backup (was settings_advanced.html's, itself moved off
+        # its own /export page -- direct feedback: "export and backup
+        # should be fully with all buttons... in the advanced page").
+        # export_context() is the same data /export's own page used to
+        # gather; radicale_url is fetched here directly since
+        # export_context() takes no `request`.
+        "radicale_url": request.app.state.settings.radicale_base_url,
+    }
+    ctx.update(summary)
+    ctx.update(export_context(conn))
+    return templates.TemplateResponse("settings_data_maintenance.html", ctx)
+
+
+@router.get("/settings/data-health")
+def settings_data_health(request: Request, conn=Depends(get_db)):
+    """Old Data health page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the many action endpoints' redirect targets) land somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/data-health/backup")
 def data_health_backup(request: Request, conn=Depends(get_db)):
     path = data_health.create_backup(conn, _backups_dir(request))
-    return RedirectResponse(url=f"/settings/data-health?note=Backup+created+({path.name}).", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note=Backup+created+({path.name}).", status_code=303)
 
 
 @router.post("/settings/data-health/verify")
@@ -699,10 +739,10 @@ def data_health_verify(request: Request, filename: str = Form(""), conn=Depends(
         latest = data_health.latest_backup(backups_dir)
         target = Path(latest["path"]) if latest else None
     if target is None:
-        return RedirectResponse(url="/settings/data-health?error=No+backup+to+verify+yet.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=No+backup+to+verify+yet.", status_code=303)
     result = data_health.verify_backup(target)
     note = "Backup+verified+OK." if result.ok else f"Verification+found+{len(result.errors)}+problem(s)."
-    return RedirectResponse(url=f"/settings/data-health?{'note' if result.ok else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result.ok else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/restore")
@@ -718,9 +758,9 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
         raise HTTPException(400, "Invalid backup filename.")
     result = data_health.restore_backup(conn, target, backups_dir=backups_dir)
     if not result["ok"]:
-        return RedirectResponse(url="/settings/data-health?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
     return RedirectResponse(
-        url=f"/settings/data-health?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
+        url=f"/settings/data-maintenance?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
         status_code=303,
     )
 
@@ -729,13 +769,13 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
 def data_health_integrity_check(conn=Depends(get_db)):
     result = data_health.check_integrity(conn)
     note = "Database+integrity%3A+OK." if result["ok"] else "Database+integrity+check+found+problems+-+see+detail."
-    return RedirectResponse(url=f"/settings/data-health?{'note' if result['ok'] else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result['ok'] else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/repair")
 def data_health_repair(request: Request, conn=Depends(get_db)):
     result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
-    return RedirectResponse(url="/settings/data-health?note=Compacted+and+reindexed+the+database.", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance?note=Compacted+and+reindexed+the+database.", status_code=303)
 
 
 @router.post("/settings/data-health/sync-retention")
@@ -749,7 +789,7 @@ def data_health_set_sync_retention(days: str = Form("90"), conn=Depends(get_db))
     -own-options convention as `set_task_auto_archive`."""
     valid = {choice for choice, _ in SYNC_GC_DAYS_CHOICES}
     data_health.set_sync_gc_retention_days(conn, int(days) if days in valid else 90)
-    return RedirectResponse(url="/settings/data-health?note=Sync+cleanup+retention+updated.", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance?note=Sync+cleanup+retention+updated.", status_code=303)
 
 
 @router.post("/settings/data-health/sync-gc")
@@ -763,57 +803,38 @@ def data_health_run_sync_gc(conn=Depends(get_db)):
     purged_entities = result["purged_entities"]
     purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
     note = f"Sync+cleanup+ran%3A+{purged_total}+row(s)+purged." if purged_total else "Sync+cleanup+ran%3A+nothing+to+purge."
-    return RedirectResponse(url=f"/settings/data-health?note={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note={note}", status_code=303)
 
 
 # --------------------------------------------------------------------- #
 # Advanced -- export & backup, reset Home's widget layout, auto-archive
 # completed tasks by age, plus two explicit, confirmed-destructive purge
-# actions. Scope confirmed directly with the user before building the
-# purge actions (2026-08-07): "Purge completed" is tasks-only (every
-# done/archived task); "Purge all" is a full data wipe across the whole
-# app (not just tasks) -- see db.py's purge_all_data/
-# delete_completed_tasks docstrings for exactly what each touches and,
-# for purge-all, its one known limitation (Published Lists' already-
-# materialized Radicale collections aren't torn down, only this app's own
-# tracking of them). Reset layout itself lives in routers/dashboard.py
-# (POST /dashboard/reset) -- this page just links to it, same as it
-# always has from label_detail.html's own edit-mode toolbar. Export &
-# backup itself lives in routers/export.py (/export) -- this page links
+# actions. 2026-08-17: this whole page is now the "Export & import",
+# "Maintenance & upkeep" and "Danger zone" sections of the merged Data &
+# Maintenance page (settings_data_maintenance.html); /settings/advanced is
+# a redirect there for old bookmarks/links. Scope confirmed directly with
+# the user before building the purge actions (2026-08-07): "Purge
+# completed" is tasks-only (every done/archived task); "Purge all" is a
+# full data wipe across the whole app (not just tasks) -- see db.py's
+# purge_all_data/delete_completed_tasks docstrings for exactly what each
+# touches and, for purge-all, its one known limitation (Published Lists'
+# already-materialized Radicale collections aren't torn down, only this
+# app's own tracking of them). Reset layout itself lives in routers/
+# dashboard.py (POST /dashboard/reset) -- this page just links to it, same
+# as it always has from label_detail.html's own edit-mode toolbar. Export
+# & backup itself lives in routers/export.py (/export) -- this page links
 # to it (2026-08-08, moved here from the now-deleted "Data & backup"
 # category, see this module's own docstring).
-#
-# 2026-08-08: auto-archive sits right above the two purge actions
-# deliberately, not off in a "Tasks" category of its own -- it's the
-# automatic, age-based version of "Purge completed" directly below it
-# (routers/tasks.py's TASK_AUTO_ARCHIVE_DAYS_KEY/_auto_archive_if_
-# configured, checked lazily on every visit to the Tasks table view;
-# db.delete_old_completed_tasks does the actual deleting). Grouping them
-# together is what makes the relationship legible: "this happens on its
-# own, or trigger it manually below."
 # --------------------------------------------------------------------- #
 
 
 @router.get("/settings/advanced")
 def settings_advanced(request: Request, conn=Depends(get_db)):
-    completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
-    ctx = {
-        "request": request,
-        "active_tab": "settings_advanced",
-        "crumbs": _ROOT_CRUMB,
-        "title": "Advanced",
-        "completed_task_count": completed_task_count,
-        "task_auto_archive_days": db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0",
-        "days_choices": DAYS_CHOICES,
-        # Export & backup (2026-08-08, moved off its own /export page
-        # entirely -- direct feedback: "export and backup should be fully
-        # with all buttons... in the advanced page") -- export_context()
-        # is the same data /export's own page used to gather, radicale_url
-        # fetched here directly since export_context() takes no `request`.
-        "radicale_url": request.app.state.settings.radicale_base_url,
-    }
-    ctx.update(export_context(conn))
-    return templates.TemplateResponse("settings_advanced.html", ctx)
+    """Old Advanced page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the export/import redirect from routers/export.py) land
+    somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/task-auto-archive")
@@ -821,19 +842,19 @@ def set_task_auto_archive(days: str = Form("0"), conn=Depends(get_db)):
     """"Auto-archive completed tasks" -- a plain string count of days
     ("0" = Never, the default) read back by routers/tasks.py's
     _auto_archive_if_configured on every visit to the Tasks table view.
-    Only ever stores one of settings_advanced.html's own offered options
-    (validated against DAYS_CHOICES rather than trusting the raw POST
-    body) -- an unrecognized value falls back to "0"/Never rather than
-    silently deleting tasks on some unintended schedule."""
+    Only ever stores one of settings_data_maintenance.html's own offered
+    options (validated against DAYS_CHOICES rather than trusting the raw
+    POST body) -- an unrecognized value falls back to "0"/Never rather
+    than silently deleting tasks on some unintended schedule."""
     valid = {choice for choice, _ in DAYS_CHOICES}
     db.set_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY, days if days in valid else "0")
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/purge-completed")
 def purge_completed(conn=Depends(get_db)):
     db.delete_completed_tasks(conn)
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/purge-all")
@@ -852,7 +873,7 @@ def purge_all(request: Request, conn=Depends(get_db)):
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_secret = None
-    response = RedirectResponse(url="/settings/advanced", status_code=303)
+    response = RedirectResponse(url="/settings/data-maintenance", status_code=303)
     response.delete_cookie(auth.SESSION_COOKIE, path="/")
     return response
 
@@ -865,24 +886,18 @@ def purge_all(request: Request, conn=Depends(get_db)):
 # offline_sync.py's apply_op/apply_batch record one whenever a genuinely
 # concurrent event-time edit or a same-batch project-label clash picks a
 # winner) -- restore or dismiss are the only two things a person can do
-# with one.
+# with one. 2026-08-17: the list itself renders at the top of the merged
+# Data & Maintenance page ("Needs attention" section, settings_data_
+# maintenance.html); /settings/sync-conflicts is a redirect there.
 # --------------------------------------------------------------------- #
-
-_SYNC_CONFLICTS_CRUMB = _ROOT_CRUMB
 
 
 @router.get("/settings/sync-conflicts")
 def settings_sync_conflicts(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse(
-        "settings_sync_conflicts.html",
-        {
-            "request": request,
-            "active_tab": "settings_sync_conflicts",
-            "crumbs": _SYNC_CONFLICTS_CRUMB,
-            "title": "Sync conflicts",
-            "conflicts": db.list_sync_conflicts(conn),
-        },
-    )
+    """Old Sync conflicts page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the restore/dismiss redirects below) land somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/sync-conflicts/{conflict_id}/restore")
@@ -895,7 +910,7 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     conflict is then dismissed -- the restore itself is the resolution."""
     conflict = db.get_sync_conflict(conn, conflict_id)
     if conflict is None:
-        return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance", status_code=303)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
     if conflict["field_name"] == "project_label":
@@ -922,10 +937,10 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
             "fields": {conflict["field_name"]: {"value": conflict["losing_value"], "hlc": restore_hlc}},
         })
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/sync-conflicts/{conflict_id}/dismiss")
 def dismiss_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)

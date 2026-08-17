@@ -410,7 +410,7 @@ class TestPurgeAllInvalidatesSession:
         req = _request(_settings(), state_extra={"_cc_auth_secret": "old-secret"})
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         # The session cookie is cleared and the memoized secret dropped.
         header = resp.headers["set-cookie"]
         assert auth.SESSION_COOKIE in header

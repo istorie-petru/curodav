@@ -571,23 +571,38 @@ class TestHomeResetButton:
 
 
 class TestSettingsResetButton:
-    def test_settings_advanced_has_reset_button(self, conn, tmp_path):
+    def test_settings_data_maintenance_has_reset_button(self, conn, tmp_path):
         # 2026-08-08 Settings redesign: Reset to default layout lived on
         # Settings > Widgets, alongside the Custom widgets toggle it
         # shared a hub group with; that toggle was removed outright the
         # same day (see routers/settings.py's module docstring) and the
         # one remaining action folded into Settings > Advanced instead.
+        # 2026-08-17 Advanced itself folded into the merged Data &
+        # Maintenance page's "Maintenance & upkeep" section.
         #
-        # settings_advanced also reads request.app.state.settings
-        # .radicale_base_url now (Export & backup inlined into this page
-        # the same day) -- needs a fuller fake request than the bare one
-        # this file's own _request() builds.
+        # The merged page also reads request.app.state.settings' db_path,
+        # backup_dir and radicale_base_url and renders the note/error
+        # query-param strip -- needs a fuller fake request than the bare
+        # one this file's own _request() builds.
         from types import SimpleNamespace
 
-        fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(radicale_base_url="http://localhost:5232")))
-        req = _request("/settings/advanced")
-        req.scope["app"] = fake_app
-        resp = settings_router.settings_advanced(req, conn=conn)
+        fake_app = SimpleNamespace(
+            state=SimpleNamespace(
+                settings=SimpleNamespace(
+                    radicale_base_url="http://localhost:5232",
+                    db_path=tmp_path / "cache.sqlite",
+                    backup_dir=tmp_path / "backups",
+                )
+            )
+        )
+        req = Request(
+            {
+                "type": "http", "method": "GET", "path": "/settings/data-maintenance",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [], "app": fake_app,
+            }
+        )
+        resp = settings_router.settings_data_maintenance(req, conn=conn)
         body = resp.body.decode()
         assert 'action="/dashboard/reset"' in body
         assert 'data-confirm-sheet' in body

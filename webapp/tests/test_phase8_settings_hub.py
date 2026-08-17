@@ -67,14 +67,24 @@ def _request(path="/settings"):
     )
 
 
-def _request_with_radicale(path):
+def _request_with_radicale(path, db_path=None, backup_dir=None):
     """routers/published_lists.py/export.py both read
     `request.app.state.settings.radicale_base_url` -- a bare `_request()`
     has no ASGI `app` in scope at all, so those two specifically need
-    this fuller fake instead."""
+    this fuller fake instead. `db_path`/`backup_dir` default to None and
+    can be supplied by the tests that render the merged Data &
+    Maintenance page, whose route reads all three."""
     from types import SimpleNamespace
 
-    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(radicale_base_url="http://localhost:5232")))
+    fake_app = SimpleNamespace(
+        state=SimpleNamespace(
+            settings=SimpleNamespace(
+                radicale_base_url="http://localhost:5232",
+                db_path=db_path,
+                backup_dir=backup_dir,
+            )
+        )
+    )
     return Request(
         {
             "type": "http", "method": "GET", "path": path, "query_string": b"",
@@ -89,7 +99,7 @@ class TestSettingsHub:
         resp = settings_router.settings_index(_request(), conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
-        for name in ("General", "Appearance", "Labels", "Holidays", "Published lists", "Advanced"):
+        for name in ("General", "Appearance", "Labels", "Holidays", "Sleep &amp; Leisure Time", "Data &amp; Maintenance", "Published lists"):
             assert name in body
         # Habits is not a hub category (2026-08-08 follow-up #3): it's
         # reached from Tasks > Habits, so a hub shortcut would duplicate
@@ -120,10 +130,8 @@ class TestSettingsHub:
             "/labels",
             "/settings/holidays",
             "/settings/time-blocks",
-            "/settings/data-health",
-            "/settings/sync-conflicts",
+            "/settings/data-maintenance",
             "/published-lists",
-            "/settings/advanced",
         }
 
     def test_hub_is_a_short_list_not_a_page_of_every_control(self, conn):
@@ -136,6 +144,28 @@ class TestSettingsHub:
         assert 'id="themeSegmented"' not in body
         assert 'name="display_name"' not in body
         assert 'action="/settings/purge-all"' not in body
+
+
+class TestSyncConflictHubBadge:
+    """2026-08-17 (SETTINGS_UI_GUIDE.md): the hub's Data & Maintenance row
+    carries an unresolved-sync-conflict count badge, so a category with 3
+    conflicts doesn't look identical to one with 0."""
+
+    def test_no_badge_when_there_are_no_conflicts(self, conn):
+        resp = settings_router.settings_index(_request(), conn=conn)
+        assert resp.context["conflict_count"] == 0
+        body = resp.body.decode()
+        assert "unresolved sync conflict" not in body
+
+    def test_badge_shows_the_conflict_count(self, conn):
+        db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        db.create_sync_conflict(conn, "event", "e2", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        resp = settings_router.settings_index(_request(), conn=conn)
+        assert resp.context["conflict_count"] == 2
+        body = resp.body.decode()
+        assert 'href="/settings/data-maintenance"' in body
+        assert ">2<" in body
+        assert "unresolved sync conflicts" in body
 
 
 class TestSettingsGeneral:
@@ -209,19 +239,20 @@ class TestDataAndBackupCategoryRemoved:
         resp = published_lists_router.list_index(_request_with_radicale("/published-lists"), conn=conn)
         assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
 
-    def test_export_page_redirects_to_advanced(self, conn):
+    def test_export_page_redirects_to_data_maintenance(self, conn):
         # 2026-08-08 follow-up: /export stopped being its own page
         # entirely (not just re-parented under Advanced) -- direct
-        # feedback: "export and backup should be fully with all
-        # buttons... in the advanced page." Every download/import button
-        # is inlined into settings_advanced.html now; /export is just a
-        # redirect for old links/bookmarks.
+        # feedback: "export and backup should be fully with all buttons...
+        # in the advanced page." Every download/import button is inlined
+        # into settings_data_maintenance.html's "Export & import" section
+        # now (Advanced's old home, folded into that page 2026-08-17);
+        # /export is just a redirect for old links/bookmarks.
         resp = export_router.export_index(_request_with_radicale("/export"), conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
 
-    def test_advanced_page_has_the_export_buttons_inlined(self, conn):
-        resp = settings_router.settings_advanced(_request_with_radicale("/settings/advanced"), conn=conn)
+    def test_data_maintenance_page_has_the_export_buttons_inlined(self, conn, tmp_path):
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert "standard formats" in body
         assert 'href="/export/events.ics"' in body
@@ -259,33 +290,35 @@ class TestCustomWidgetsToggleRemoved:
 
 class TestSettingsAdvanced:
     """2026-08-07 -- two explicit, confirmed-destructive purge actions,
-    now living on their own Settings > Advanced page rather than a
-    "Danger zone" section at the bottom of one long hub. Scope confirmed
-    directly with the user before building: "Purge completed" is
-    tasks-only; "Purge all" is a full data wipe across the whole app, not
-    just tasks."""
+    now living on the merged Data & Maintenance page's "Danger zone"
+    section (2026-08-17; formerly their own Settings > Advanced page
+    rather than a "Danger zone" section at the bottom of one long hub).
+    Scope confirmed directly with the user before building: "Purge
+    completed" is tasks-only; "Purge all" is a full data wipe across the
+    whole app, not just tasks."""
 
-    def test_renders_both_purge_actions(self, conn):
-        resp = settings_router.settings_advanced(_request_with_radicale("/settings/advanced"), conn=conn)
-        assert resp.context["active_tab"] == "settings_advanced"
+    def test_renders_both_purge_actions(self, conn, tmp_path):
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
+        assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
         assert 'action="/settings/purge-completed"' in body
         assert 'action="/settings/purge-all"' in body
 
-    def test_also_has_reset_layout_now_that_widgets_folded_in(self, conn):
+    def test_also_has_reset_layout_now_that_widgets_folded_in(self, conn, tmp_path):
         # 2026-08-08: "Widgets" (Custom widgets toggle + reset layout) was
         # folded into Advanced when the toggle itself was removed -- see
-        # routers/settings.py's module docstring.
-        resp = settings_router.settings_advanced(_request_with_radicale("/settings/advanced"), conn=conn)
+        # routers/settings.py's module docstring; 2026-08-17 that folded
+        # page became Data & Maintenance's "Maintenance & upkeep" section.
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'action="/dashboard/reset"' in body
         assert "data-confirm-sheet" in body
 
-    def test_completed_task_count_shown(self, conn):
+    def test_completed_task_count_shown(self, conn, tmp_path):
         _make_task(conn, "t1", status="done")
         _make_task(conn, "t2", status="archived")
         _make_task(conn, "t3", status="active")
-        resp = settings_router.settings_advanced(_request_with_radicale("/settings/advanced"), conn=conn)
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         assert resp.context["completed_task_count"] == 2
 
     def test_purge_completed_deletes_only_done_and_archived_tasks(self, conn):
@@ -297,11 +330,11 @@ class TestSettingsAdvanced:
         remaining = {t["uid"] for t in db.list_tasks(conn)}
         assert remaining == {"t3"}
 
-    def test_purge_completed_route_redirects_to_advanced_page(self, conn):
+    def test_purge_completed_route_redirects_to_data_maintenance_page(self, conn):
         _make_task(conn, "t1", status="done")
         resp = settings_router.purge_completed(conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.list_tasks(conn) == []
 
     def test_purge_completed_cascades_object_labels(self, conn):
@@ -326,7 +359,7 @@ class TestSettingsAdvanced:
         assert db.list_habits(conn) == []
         assert db.get_app_meta(conn, "some_flag") is None
 
-    def test_purge_all_route_redirects_to_advanced_page(self, conn):
+    def test_purge_all_route_redirects_to_data_maintenance_page(self, conn):
         from types import SimpleNamespace
 
         _make_task(conn, "t1")
@@ -344,7 +377,7 @@ class TestSettingsAdvanced:
         )
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.list_tasks(conn) == []
 
     def test_purge_all_lets_home_reseed_fresh(self, conn):

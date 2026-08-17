@@ -521,10 +521,24 @@ class TestProjectLabelInvariantAfterBatch:
 
 
 class TestSyncConflictsSettingsPage:
-    def test_page_lists_unresolved_conflicts(self, conn):
+    def test_page_lists_unresolved_conflicts(self, conn, tmp_path):
+        from types import SimpleNamespace
+
         db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
-        req = Request({"type": "http", "method": "GET", "path": "/settings/sync-conflicts", "query_string": b"", "headers": []})
-        resp = settings_router.settings_sync_conflicts(req, conn=conn)
+        # The merged Data & Maintenance page (2026-08-17; sync conflicts
+        # moved off their own page into its "Needs attention" section)
+        # reads app.state.settings' db_path/backup_dir/radicale_base_url.
+        fake_app = SimpleNamespace(
+            state=SimpleNamespace(
+                settings=SimpleNamespace(
+                    radicale_base_url="http://localhost:5232",
+                    db_path=tmp_path / "cache.sqlite",
+                    backup_dir=tmp_path / "backups",
+                )
+            )
+        )
+        req = Request({"type": "http", "method": "GET", "path": "/settings/data-maintenance", "query_string": b"", "headers": [], "app": fake_app})
+        resp = settings_router.settings_data_maintenance(req, conn=conn)
         body = resp.body.decode()
         assert "2026-08-10T11:00:00" in body
         assert "Restore" in body and "Dismiss" in body

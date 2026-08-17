@@ -12,6 +12,14 @@
         <span class="settings-row-desc">{{ c.desc }}</span>
     </span>
     <span class="spacer"></span>
+    {% if c.url == '/settings/data-maintenance' and conflict_count %}
+    <!-- Unresolved sync conflicts count on the Data & Maintenance row --
+         SETTINGS_UI_GUIDE.md "a conflict count badge on the Settings hub
+         row itself": a category with 3 unresolved conflicts should not
+         look identical to one with 0. pill-static pill-red (existing M3
+         token classes, no new CSS). -->
+    <span class="pill-static pill-red" title="{{ conflict_count }} unresolved sync conflict{{ 's' if conflict_count != 1 else '' }}">{{ conflict_count }}</span>
+    {% endif %}
     <span class="settings-row-chevron">{{ icon('chevron-right', 'icon-sm') }}</span>
 </a>
 {% endfor %}

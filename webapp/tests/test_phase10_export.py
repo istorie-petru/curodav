@@ -104,20 +104,22 @@ def _seed(conn):
 
 
 class TestIndex:
-    def test_index_redirects_to_settings_advanced(self, conn):
+    def test_index_redirects_to_settings_data_maintenance(self, conn):
         # 2026-08-08: /export is no longer a page of its own -- direct
         # feedback ("export and backup should be fully with all
         # buttons... in the advanced page") moved every download/import
-        # button here into Settings > Advanced directly
-        # (settings_advanced.html; see routers/settings.py's
-        # settings_advanced and export.py's export_context()). This route
-        # stays registered as a redirect so an old bookmark/link to
-        # /export still lands somewhere real, rather than 404ing.
+        # button here into Settings > Advanced directly, and 2026-08-17
+        # Advanced itself folded into the merged Data & Maintenance page
+        # (settings_data_maintenance.html; see routers/settings.py's
+        # settings_data_maintenance and export.py's export_context()).
+        # This route stays registered as a redirect so an old
+        # bookmark/link to /export still lands somewhere real, rather
+        # than 404ing.
         resp = export_router.export_index(_request_with_settings(), conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
 
-    def test_export_context_has_the_counts_settings_advanced_needs(self, conn):
+    def test_export_context_has_the_counts_data_maintenance_needs(self, conn):
         _seed(conn)
         ctx = export_router.export_context(conn)
         assert ctx == {"contact_count": 1, "event_count": 1, "task_count": 1}

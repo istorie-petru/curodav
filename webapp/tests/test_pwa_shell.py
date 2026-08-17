@@ -412,8 +412,12 @@ class TestTombstoneGc:
             "applyChanges(body.changes)"
         )
 
-    def test_settings_data_health_page_shows_sync_cleanup_controls(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_health.html").read_text()
+    def test_settings_data_maintenance_page_shows_sync_cleanup_controls(self):
+        # 2026-08-17: Data health, Sync conflicts and Advanced merged into
+        # the Data & Maintenance page (settings_data_maintenance.html); the
+        # sync-retention / sync-gc controls live in its "Maintenance &
+        # upkeep" section now.
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
         assert "sync-retention" in html
         assert "sync-gc" in html
 

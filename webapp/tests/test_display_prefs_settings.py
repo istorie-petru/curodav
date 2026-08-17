@@ -47,13 +47,15 @@ def _bare_request(path="/"):
     )
 
 
-def _request_with_app(path, db_path):
+def _request_with_app(path, db_path, backup_dir=None):
     """Same helper as test_pinned_spaces_sidebar.py's own -- a Request
     whose `.app.state.settings.db_path` actually resolves, so deps.py's
     app_meta-backed globals exercise their real (non-fallback) path
     without needing a full TestClient (a pattern this suite doesn't use
-    anywhere else)."""
-    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path, radicale_base_url="http://localhost:5232")))
+    anywhere else). `backup_dir` defaults to None and can be supplied by
+    the test that renders the merged Data & Maintenance page, whose route
+    reads all three."""
+    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path, backup_dir=backup_dir, radicale_base_url="http://localhost:5232")))
     return Request(
         {
             "type": "http", "method": "GET", "path": path, "query_string": b"",
@@ -407,12 +409,13 @@ class TestSettingsGeneralNewFields:
         assert "time_format" not in resp.context
 
 
-class TestSettingsAdvancedAutoArchive:
+class TestSettingsAutoArchive:
     def test_renders_auto_archive_select_with_all_choices(self, conn, tmp_path):
-        # settings_advanced now also reads request.app.state.settings
-        # .radicale_base_url (2026-08-08, Export & backup inlined into
-        # this page) -- needs the fuller fake request, not the bare one.
-        resp = settings_router.settings_advanced(_request_with_app("/settings/advanced", tmp_path / "cache.sqlite"), conn=conn)
+        # The merged Data & Maintenance page (2026-08-17; auto-archive's
+        # old home Settings > Advanced folded into it) reads
+        # request.app.state.settings' db_path/backup_dir/radicale_base_url
+        # -- needs the fuller fake request, not the bare one.
+        resp = settings_router.settings_data_maintenance(_request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'action="/settings/task-auto-archive"' in body
         for value, label in settings_router.DAYS_CHOICES:
@@ -423,7 +426,7 @@ class TestSettingsAdvancedAutoArchive:
     def test_set_task_auto_archive_route(self, conn):
         resp = settings_router.set_task_auto_archive(days="30", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.get_app_meta(conn, tasks_router.TASK_AUTO_ARCHIVE_DAYS_KEY) == "30"
 
     def test_set_task_auto_archive_rejects_unrecognized_values(self, conn):

@@ -209,15 +209,51 @@ class TestHealthSummary:
         assert summary["sync_gc"]["last_run"] is None
 
 
-class TestSettingsDataHealthPage:
+class TestSettingsDataMaintenancePage:
+    """2026-08-17: Data health, Sync conflicts and Advanced merged into
+    one Data & Maintenance page (settings_data_maintenance.html); the
+    three old URLs redirect to it. The service-level tests above are
+    unchanged -- only the page this one renders moved."""
+
     def test_renders_empty_state(self, conn, tmp_path):
+        resp = settings_router.settings_data_maintenance(
+            _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
+        )
+        assert resp.status_code == 200
+        assert resp.context["active_tab"] == "settings_data_maintenance"
+        body = resp.body.decode()
+        assert "No backups yet" in body
+
+    def test_old_data_health_url_redirects_to_the_merged_page(self, conn, tmp_path):
         resp = settings_router.settings_data_health(
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
         )
-        assert resp.status_code == 200
-        assert resp.context["active_tab"] == "settings_data_health"
-        body = resp.body.decode()
-        assert "No backups yet" in body
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/data-maintenance"
+
+    def test_needs_attention_section_appears_only_when_something_is_wrong(self, conn, tmp_path):
+        req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
+        # The section's warning-tinted card (and its count pill / restore
+        # forms) only render when something is actually wrong; "Needs
+        # attention" itself also appears in the template's own comment, so
+        # assert on the rendered markers instead.
+        warning_card = 'style="background:var(--tag-red-bg);border:1px solid var(--tag-red-fg)"'
+        # Healthy database, no conflicts -> no "Needs attention" section.
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert warning_card not in body
+        assert "unresolved sync conflict" not in body
+        # An unresolved sync conflict -> the section appears at the top.
+        db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert warning_card in body
+        assert "1 unresolved sync conflict" in body
+        assert 'action="/settings/sync-conflicts/' in body
+
+    def test_health_status_uses_status_pills_not_plain_text(self, conn, tmp_path):
+        req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert "pill-static pill-green" in body  # integrity OK
+        assert "pill-static pill-gray" in body  # sync not configured
 
     def test_backup_route_creates_a_backup_and_redirects(self, conn, tmp_path):
         backups_dir = tmp_path / "backups"
@@ -266,9 +302,9 @@ class TestSettingsDataHealthPage:
         )
         assert resp.status_code == 303
 
-    def test_data_health_is_a_hub_category(self):
+    def test_data_maintenance_is_a_hub_category(self):
         urls = [c["url"] for c in settings_router.HUB_CATEGORIES]
-        assert "/settings/data-health" in urls
+        assert "/settings/data-maintenance" in urls
 
 
 class TestSyncGcRoutes:
