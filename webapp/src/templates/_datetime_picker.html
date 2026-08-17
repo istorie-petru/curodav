@@ -1,0 +1,30 @@
+{# Shared date+time (or time-only) range picker (2026-08-17 direct
+   feedback: "create a way to add dates, and hours, more easily ... practical,
+   keyboard and mouse friendly, something for easy hour select"). One popover
+   with a month calendar for the date and a clickable 24-row hour grid for
+   start/end hours -- static/datetime_picker.js renders the trigger button
+   and panel (portaled, keyboard+pointer friendly). All the server ever sees
+   are two hidden <input>s whose name/value contract matches the native
+   date/time inputs this replaces at every call site, so no server parsing
+   changes anywhere.
+
+   Args:
+     name_start / name_end -- form field names (e.g. event form's start_at/
+       end_at, time blocks' start_time/end_time).
+     value_start / value_end -- current values ("YYYY-MM-DDTHH:MM" in range
+       mode, "HH:MM" in time mode), blank for new records.
+     mode -- "range" (default; date + start/end hours) or "time" (hours
+       only, for a weekly time block that has no date).
+     submit -- when true, Apply immediately submits the enclosing <form>
+       (the Work-sessions card's per-session set-times form) instead of just
+       filling values for a later Save. #}
+{% macro datetime_picker(name_start, name_end, value_start, value_end, mode='range', submit=false, class_='') %}
+<div class="dtp {{ class_ }}"
+     data-dtp
+     data-dtp-mode="{{ mode }}"
+     data-dtp-submit="{{ '1' if submit else '' }}"
+     data-dtp-12h="{{ '1' if (request is defined and time_format(request) == '12h') else '' }}">
+    <input type="hidden" name="{{ name_start }}" value="{{ value_start or '' }}">
+    <input type="hidden" name="{{ name_end }}" value="{{ value_end or '' }}">
+</div>
+{% endmacro %}

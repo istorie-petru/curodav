@@ -4006,3 +4006,68 @@ body.command-palette-open{overflow:hidden;}
   background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-caption);
 }
 .auth-submit{width:100%; margin-top:var(--space-2);}
+
+/* --------------------------------------------------------------------- */
+/* Date+time range picker (static/datetime_picker.js, templates/
+   _datetime_picker.html, 2026-08-17) -- the shared "add dates and hours
+   easily" control. A trigger button styled like the other field dropdowns
+   (.widget-list-multiselect .multiselect-trigger's field look) and a
+   portal panel (same fixed/portal/z-index contract as .multiselect-panel:
+   portaled to #multiselect-portal so a modal never clips it, 150 sits
+   above .modal-overlay's 100) holding a month calendar next to a 24-row
+   hour grid. "range" mode lays the two columns side by side; "time" mode
+   (a weekly block has no date) is the hour grid alone. */
+.dtp{display:block;}
+.dtp-trigger{
+  display:flex; align-items:center; justify-content:flex-start; gap:8px;
+  width:100%; background:var(--control-bg);
+  border:1.5px solid var(--control-border); border-radius:var(--radius-control);
+  padding:10px 14px; font-size:var(--text-body); font-weight:400; color:var(--fg-primary);
+  font-family:inherit; cursor:pointer;
+}
+.dtp-trigger:hover{background:var(--bg-secondary); border-color:var(--border-strong);}
+.dtp-trigger:focus-visible{outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
+.dtp-trigger .dtp-value{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left;}
+.dtp-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard); color:var(--fg-tertiary);}
+.dtp.is-open > .dtp-trigger .filter-caret{transform:rotate(180deg);}
+/* Compact inline variant (the Work-sessions card's per-session trigger
+   sitting mid-row) -- shrinks to its content instead of filling the row. */
+.dtp--compact{display:inline-flex;}
+.dtp--compact .dtp-trigger{width:auto; padding:6px 10px; font-size:var(--text-caption); border-radius:var(--radius-sm);}
+.dtp-panel{
+  display:none; position:fixed; z-index:150;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-3); padding:var(--space-3);
+}
+.dtp-panel.is-open{display:block;}
+.dtp-panel--range{display:none; grid-template-columns:minmax(224px, 1fr) minmax(150px, 1fr); gap:var(--space-3);}
+.dtp-panel--range.is-open{display:grid;}
+.dtp-col{display:flex; flex-direction:column; gap:var(--space-2); min-width:0;}
+.dtp-panel-head{display:flex; align-items:center; justify-content:space-between; gap:6px;}
+.dtp-panel-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
+.dtp-month-nav{width:24px; height:24px;}
+.dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+.dtp-day{
+  display:flex; align-items:center; justify-content:center;
+  width:100%; padding:3px 0; font-size:var(--text-caption); color:var(--fg-primary);
+  background:none; border:none; border-radius:var(--radius-pill); font-family:inherit; cursor:pointer;
+}
+.dtp-day:hover{background:var(--row-alt);}
+.dtp-day:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
+.dtp-day.is-blank{visibility:hidden;}
+.dtp-day.is-today{font-weight:700; background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
+.dtp-day.is-selected{background:var(--accent); color:var(--fg-on-accent);}
+[data-theme="dark"] .dtp-day.is-today{background:#494949;}
+.dtp-hours-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
+.dtp-hours{display:flex; flex-direction:column; gap:2px; max-height:300px; overflow-y:auto;}
+.dtp-hour{
+  text-align:left; padding:5px 10px; font-size:var(--text-caption); color:var(--fg-secondary);
+  background:none; border:none; border-radius:var(--radius-sm); font-family:inherit; cursor:pointer;
+}
+.dtp-hour:hover{background:var(--row-alt);}
+.dtp-hour:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
+.dtp-hour.in-range{background:var(--accent-neutral-subtle); color:var(--fg-primary);}
+.dtp-hour.is-start, .dtp-hour.is-end{background:var(--accent); color:var(--fg-on-accent); font-weight:600;}
+.dtp-panel-footer{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); margin-top:var(--space-3);}
+.dtp-panel--range .dtp-panel-footer{grid-column:1 / -1;}
+.dtp-readout{flex:1; font-size:var(--text-caption); color:var(--fg-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}

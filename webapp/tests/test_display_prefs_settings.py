@@ -244,27 +244,34 @@ class TestFmtTimeFilterInCalendarPages:
 
 class TestFmtTimeFilterInWorkSessionsCard:
     """1.9 side work, direct feedback ("the app should respect the user
-    choice of date preference 12 or 24 hours") -- _task_work_allocations
-    .html's "Work sessions" card used to slice the raw stored ISO string
-    directly (`wa.start_at[:16]`/`wa.end_at[11:16]`), ignoring this
-    preference entirely regardless of what Settings > General said. Fixed
-    to use fmt_time; also needed `with context` added to task_detail.html/
-    task_form.html's macro imports -- a Jinja macro imported across files
-    doesn't inherit the caller's template context (and so can't see
-    `request`) unless imported that way, which is why the filter silently
-    fell back to its 24h default before this fix even after the field
-    itself was switched to fmt_time."""
+    choice of date preference 12 or 24 hours") -- the Work sessions card's
+    when used to slice the raw stored ISO string directly
+    (`wa.start_at[:16]`/`wa.end_at[11:16]`), ignoring this preference
+    regardless of what Settings > General said. Fixed to use fmt_time; also
+    needed `with context` added to task_detail.html/task_form.html's macro
+    imports -- a Jinja macro imported across files doesn't inherit the
+    caller's template context (and so can't see `request`) unless imported
+    that way, which is why the filter silently fell back to its 24h default
+    before this fix even after the field itself was switched to fmt_time.
 
-    def test_session_time_respects_24h_default(self, tmp_path):
+    Since 2026-08-17 the when is the shared datetime picker, whose label is
+    rendered client-side; the server's job is to pass the preference down
+    as data-dtp-12h (still via time_format(request), still needing the
+    `with context` import) alongside the raw stored values in the hidden
+    start_at/end_at inputs the picker submits."""
+
+    def test_session_respects_24h_default(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
         with db.connect(db_path) as c:
             _make_task(c, "t1", title="Write report")
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert '<span class="session-when">2026-08-17 14:00' in body
+        assert 'data-dtp-12h=""' in body  # 24h is the default, no 12h flag
+        assert 'value="2026-08-17T14:00:00"' in body
+        assert 'value="2026-08-17T16:00:00"' in body
 
-    def test_session_time_respects_12h_when_set(self, tmp_path):
+    def test_session_respects_12h_when_set(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
         with db.connect(db_path) as c:
             db.set_app_meta(c, deps.TIME_FORMAT_KEY, "12h")
@@ -272,8 +279,8 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert '<span class="session-when">2026-08-17 2:00 PM &ndash; 4:00 PM</span>' in body
-        assert "14:00" not in body
+        assert 'data-dtp-12h="1"' in body
+        assert 'value="2026-08-17T14:00:00"' in body
 
     def test_task_edit_form_also_respects_12h(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
@@ -283,7 +290,7 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c)
         body = resp.body.decode()
-        assert "2:00 PM" in body
+        assert 'data-dtp-12h="1"' in body
 
 
 # --------------------------------------------------------------------- #

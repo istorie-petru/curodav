@@ -23,20 +23,19 @@
         <!-- Phase 1 (label-space rework, 2026-08-06) removed the Calendar
              picker here -- calendars is gone, every event lives in one
              universal pool now (see db.py's Phase 1 comments). -->
-        <!-- Start/End wrap in .event-start-end-field so the All-day
-             checkbox can hide them as a unit (style.css's
-             #event-form:has(#all_day:checked) rule) -- an all-day event
-             has no meaningful start/end time of day, so the pair goes
-             away while the toggle is on and comes straight back when
-             it's turned off. -->
-        <div class="field event-start-end-field">
-            <label>Start</label>
-            <input type="datetime-local" name="start_at"
-                   value="{{ event.start_at if event else (prefill_start or '') }}" required>
-        </div>
-        <div class="field event-start-end-field">
-            <label>End</label>
-            <input type="datetime-local" name="end_at" value="{{ event.end_at if event else (prefill_end or '') }}">
+        <!-- Start/End (2026-08-17) -- one shared range picker
+             (_datetime_picker.html, static/datetime_picker.js) replaces the
+             two native date+time inputs: a month calendar for the date
+             + a clickable 24-row hour grid for start/end, keyboard+mouse
+             friendly. The picker's hidden inputs keep the exact
+             start_at/end_at name/value contract the native inputs had, so
+             create_event/update_event are untouched. Wraps in
+             .event-start-end-field so the All-day checkbox can hide it as a
+             unit (style.css's #event-form:has(#all_day:checked) rule). -->
+        <div class="field field-wide event-start-end-field">
+            <label>Start &amp; end</label>
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('start_at', 'end_at', event.start_at if event else (prefill_start or ''), event.end_at if event else (prefill_end or '')) }}
         </div>
         <div class="field field-toggle field-wide">
             <input type="checkbox" id="all_day" name="all_day" value="1" {% if (event and event.all_day) or (not event and prefill_all_day) %}checked{% endif %}>

@@ -228,6 +228,18 @@ class TestEventRelationsCard:
         body = calendar_router.new_event_form(_request("/events/new"), conn=conn).body.decode()
         assert "/events//relations" not in body
 
+    def test_new_event_form_renders_shared_datetime_picker(self, conn):
+        """2026-08-17: the event form's Start/End are the shared datetime
+        picker -- one `.dtp` container holding hidden start_at/end_at inputs
+        whose name/value contract is unchanged (empty on a new event)."""
+        body = calendar_router.new_event_form(_request("/events/new"), conn=conn).body.decode()
+        assert 'class="dtp' in body
+        assert 'data-dtp-mode="range"' in body
+        assert 'name="start_at"' in body
+        assert 'name="end_at"' in body
+        assert 'value=""' in body  # the hidden inputs start blank
+        assert "datetime-local" not in body
+
     def test_add_event_relation_links_existing_shared_label_task(self, conn):
         _seed_event(conn, "e1", tags=["Work"])
         _seed_task(conn, "t1", tags=["Work"])

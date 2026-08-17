@@ -29,15 +29,11 @@
             <input type="text" name="label" value="{{ b.label if b else '' }}" placeholder="(optional)">
         </div>
         <div class="field">
-            <label>Start time</label>
-            <input type="time" name="start_time" required value="{{ b.start_time if b else '' }}">
+            <label>Hours</label>
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('start_time', 'end_time', b.start_time if b else '', b.end_time if b else '', 'time') }}
         </div>
         <div class="field">
-            <label>End time</label>
-            <input type="time" name="end_time" required value="{{ b.end_time if b else '' }}">
-        </div>
-        <div class="field">
-            <label>Days</label>
             {% set ms_mode = 'filter' %}
             {% set ms_form_id = 'time-block-form' %}
             {% set ms_name = 'days' %}

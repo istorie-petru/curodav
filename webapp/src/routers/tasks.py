@@ -1437,6 +1437,21 @@ def remove_work_allocation(uid: str, event_uid: str = Form(...), conn=Depends(ge
     return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 
+@router.post("/{uid}/work-allocations/{event_uid}/set-times")
+def set_work_allocation_times(uid: str, event_uid: str, start_at: str = Form(""), end_at: str = Form(""), conn=Depends(get_db)):
+    """The Work sessions card's per-session picker (2026-08-17): give one
+    session its scheduled start/end right from the card instead of only by
+    drag. The shared datetime picker's hidden start_at/end_at inputs post
+    here (data-modal-keep-open refreshes the card in place). db.
+    set_work_allocation_times guards the same contract the drag endpoints
+    use -- the event must actually be one of this task's work allocations
+    and end_at must follow start_at -- and returns False (no-op) otherwise,
+    never an error page, so a cancelled/invalid Apply just leaves the
+    session untouched."""
+    db.set_work_allocation_times(conn, event_uid, start_at, end_at)
+    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+
+
 # --------------------------------------------------------------------- #
 # Checklist -- 2026-08-08 direct feedback ("merge checklists and subtasks
 # into one feature") -- the add/toggle/delete-single-item routes that used
