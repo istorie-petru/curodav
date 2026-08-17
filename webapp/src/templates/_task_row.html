@@ -44,7 +44,16 @@
         </select>
     </td>
     <td>
-        <input type="date" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
+        {# Due date -- 2026-08-17: was a native <input type="date"> whose
+           popup is unstylable browser chrome; now the shared themed picker
+           (datetime_picker.js). The start hidden input keeps the exact
+           class/data-* contract tasks_table.js's delegated
+           `#task-table input.inline-date` change listener reads, and the
+           picker fires `change` on Apply/Clear, so the single-field
+           update-field POST is unchanged. #}
+        <div class="dtp dtp--compact" data-dtp data-dtp-mode="date">
+            <input type="hidden" name="due_at" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
+        </div>
     </td>
     {# "Scheduled" -- work-allocation hours, deliberately NOT styled like
        the Due date cell above (plain text, not an editable input; a

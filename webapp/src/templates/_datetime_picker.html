@@ -23,13 +23,16 @@
        filling values for a later Save.
      required -- when true, the hidden input carries `required` so the
        browser still blocks an empty form submit the way the native date
-       input it replaces did. #}
-{% macro datetime_picker(name_start, name_end, value_start, value_end, mode='range', submit=false, class_='', required=false) %}
+       input it replaces did.
+     max -- optional "YYYY-MM-DD"; every day after that is disabled in the
+       calendar (the habit check-in's entry date is capped at today). #}
+{% macro datetime_picker(name_start, name_end, value_start, value_end, mode='range', submit=false, class_='', required=false, max='') %}
 <div class="dtp {{ class_ }}"
      data-dtp
      data-dtp-mode="{{ mode }}"
      data-dtp-submit="{{ '1' if submit else '' }}"
-     data-dtp-12h="{{ '1' if (request is defined and time_format(request) == '12h') else '' }}">
+     data-dtp-12h="{{ '1' if (request is defined and time_format(request) == '12h') else '' }}"
+     {% if max %}data-dtp-max="{{ max }}"{% endif %}>
     <input type="hidden" name="{{ name_start }}" value="{{ value_start or '' }}"{% if required %} required{% endif %}>
     {% if mode != 'date' %}
     <input type="hidden" name="{{ name_end }}" value="{{ value_end or '' }}">

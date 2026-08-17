@@ -4057,6 +4057,8 @@ body.command-palette-open{overflow:hidden;}
 .dtp-day.is-blank{visibility:hidden;}
 .dtp-day.is-today{font-weight:700; background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
 .dtp-day.is-selected{background:var(--accent); color:var(--fg-on-accent);}
+.dtp-day.is-disabled{color:var(--fg-tertiary); opacity:.5; cursor:not-allowed;}
+.dtp-day.is-disabled:hover{background:none;}
 [data-theme="dark"] .dtp-day.is-today{background:#494949;}
 .dtp-hours-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
 .dtp-hours{display:flex; flex-direction:column; gap:2px; max-height:300px; overflow-y:auto;}

@@ -30,7 +30,8 @@
         </div>
         <div class="field">
             <label>Due date</label>
-            <input type="date" name="due_at" value="{{ task.due_at[:10] if task and task.due_at else '' }}">
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('due_at', '', task.due_at[:10] if task and task.due_at else '', '', 'date') }}
         </div>
         <!-- 2026-08-08 direct feedback: Start date is editable on the
              new-task form now too, not just when editing -- defaults to
@@ -39,7 +40,7 @@
              so "today" reads as the default rather than a blank field). -->
         <div class="field">
             <label>Start date</label>
-            <input type="date" name="start_at" value="{{ task.start_at[:10] if task and task.start_at else today }}">
+            {{ datetime_picker('start_at', '', task.start_at[:10] if task and task.start_at else today, '', 'date') }}
         </div>
         <!-- Status -- 2026-08-08 direct feedback ("rework the drop down
              menus for priority, status, Recurrence to look the same as

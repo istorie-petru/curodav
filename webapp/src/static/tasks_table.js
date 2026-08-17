@@ -1,7 +1,9 @@
 // Inline editing for the Tasks table view (templates/tasks_list.html) --
 // status renders as a native <select> element styled to look like a
-// colored pill (pill-select, see style.css), due date as a plain
-// <input type="date">. (Importance/Urgency used to be inline-editable
+// colored pill (pill-select, see style.css), due date as the shared themed
+// date picker (datetime_picker.js, date mode) whose Apply/Clear fires a
+// `change` on the same hidden input contract this file listens for.
+// (Importance/Urgency used to be inline-editable
 // pill-selects too -- side work, post-1.1, removed them: both are purely
 // computed now, rendered as read-only .pill-static spans instead, see
 // _task_row.html.) Changing any of them fires a single-field

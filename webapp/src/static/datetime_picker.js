@@ -25,11 +25,25 @@
 //   "range" (default) -- date + start/end hours, writes "YYYY-MM-DDTHH:MM".
 //   "time"            -- hours only (a weekly Sleep/Leisure block has no
 //                        date), writes "HH:MM".
+//   "date"            -- a single date only, written "YYYY-MM-DD" -- the
+//                        native <input type="date"> contract, added
+//                        2026-08-17 so every native date input in the app
+//                        (Holiday From/To, project Start/End, task
+//                        due/start, habit entry date) pops the themed
+//                        panel instead of the browser's own unstylable
+//                        calendar.
 // data-dtp-submit="1" makes Apply submit the enclosing <form> immediately
 // (the Work-sessions card's per-session set-times form) instead of just
 // filling values for a later Save. data-dtp-12h="1" labels the hour grid in
 // 12-hour form, honoring the Settings > General time-format preference the
-// server passes down (deps.py's fmt_time).
+// server passes down (deps.py's fmt_time). data-dtp-max="YYYY-MM-DD"
+// disables every day after that bound (the habit check-in's entry date,
+// which was a native <input type="date" max="today">).
+//
+// Committing (Apply) or clearing also fires a `change` event on the start
+// hidden input -- the same event the replaced native input produced -- so
+// the Tasks table's inline due-date cell (tasks_table.js) keeps saving the
+// single-field update without any picker-specific wiring.
 //
 // Mouse: click a day; click an hour to start a range, click again to end it
 // (an earlier second click swaps so start is always first), or press and
@@ -147,6 +161,10 @@
     const mode = rawMode === "date" || rawMode === "time" ? rawMode : "range";
     const submit = container.getAttribute("data-dtp-submit") === "1";
     const use12h = container.getAttribute("data-dtp-12h") === "1";
+    // Optional upper bound "YYYY-MM-DD" (the habit check-in's entry date
+    // was a native <input type="date" max="today">; future dates must not
+    // be pickable there).
+    const maxDate = container.getAttribute("data-dtp-max") || "";
     const inputs = container.querySelectorAll('input[type="hidden"]');
     const startInput = inputs[0];
     const endInput = inputs[1];
@@ -275,6 +293,10 @@
       return 1;
     }
 
+    function isDisabledDay(key) {
+      return maxDate !== "" && key > maxDate;
+    }
+
     function renderCalendar(host) {
       const head = document.createElement("div");
       head.className = "dtp-panel-head";
@@ -319,14 +341,17 @@
           continue;
         }
         const key = dateKey(state.viewYear, state.viewMonth, dayNum);
+        const disabled = isDisabledDay(key);
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "dtp-day";
+        if (disabled) btn.classList.add("is-disabled");
         if (isToday(key)) btn.classList.add("is-today");
         if (key === state.date) btn.classList.add("is-selected");
         btn.dataset.date = key;
         btn.textContent = String(dayNum);
         btn.addEventListener("click", () => {
+          if (disabled) return;
           state.date = key;
           renderPanel();
         });
@@ -457,6 +482,7 @@
           startInput.value = "";
           endInput.value = "";
           updateTrigger();
+          commitChange();
           close();
         });
         footer.appendChild(clear);
@@ -479,11 +505,22 @@
       return hour === orig.hour ? orig.minute : 0;
     }
 
+    // Fires the same change event the native input this picker replaces
+    // did, so change-driven handlers that were wired to it keep working
+    // (the Tasks table's inline due-date cell -- tasks_table.js's delegated
+    // `#task-table input.inline-date` listener reads the hidden input's
+    // value and posts the single-field update). Harmless for plain form
+    // fields, which have no such listeners.
+    function commitChange() {
+      startInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
     function applySelection() {
       if (mode === "date") {
         if (!state.date) return;
         startInput.value = state.date;
         updateTrigger();
+        commitChange();
         close();
         if (submit) {
           const form = container.closest("form");
@@ -505,6 +542,7 @@
         endInput.value = state.date + "T" + pad2(state.endHour) + ":" + pad2(endMin);
       }
       updateTrigger();
+      commitChange();
       close();
       if (submit) {
         const form = container.closest("form");
@@ -584,6 +622,10 @@
         else if (e.key === "ArrowUp") moved = addDays(new Date(year, month - 1, d), -7);
         else if (e.key === "ArrowDown") moved = addDays(new Date(year, month - 1, d), 7);
         else if (e.key === "Enter" || e.key === " ") {
+          if (day.classList.contains("is-disabled")) {
+            e.preventDefault();
+            return;
+          }
           state.date = day.dataset.date;
           renderPanel();
           e.preventDefault();

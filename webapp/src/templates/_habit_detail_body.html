@@ -35,7 +35,8 @@
 <form method="post" action="/habits/{{ habit.uid }}/entries" class="field-grid" data-cc-change="habit" data-cc-action="log">
     <div class="field">
         <label>Date</label>
-        <input type="date" name="entry_date" value="{{ today }}" max="{{ today }}" required>
+        {% from "_datetime_picker.html" import datetime_picker with context %}
+        {{ datetime_picker('entry_date', '', today, '', 'date', required=true, max=today) }}
     </div>
     <div class="field">
         <label>Value{% if habit.target_per_day %} (target: {{ habit.target_per_day }}){% endif %}</label>

@@ -102,13 +102,14 @@
              conflict flow entirely -- see update_label's docstring). -->
         <div class="field field-wide label-project-fields" {% if role != 'project' %}hidden{% endif %}>
             <div class="field-grid">
+                {% from "_datetime_picker.html" import datetime_picker with context %}
                 <div class="field">
                     <label>Start date</label>
-                    <input type="date" name="start_date" value="{{ l.start_date or '' }}">
+                    {{ datetime_picker('start_date', '', l.start_date or '', '', 'date') }}
                 </div>
                 <div class="field">
                     <label>End date</label>
-                    <input type="date" name="end_date" value="{{ l.end_date or '' }}">
+                    {{ datetime_picker('end_date', '', l.end_date or '', '', 'date') }}
                 </div>
             </div>
             {% if role == 'project' %}<p class="settings-hint">Status: {{ project_status }}</p>{% endif %}

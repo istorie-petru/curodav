@@ -2940,7 +2940,17 @@ session, right before the final commit of that session.
   popup (its clickable month/year header + Clear button) can't be themed
   by the app's CSS, the root of the "the month/year selector and the clear
   are unthemed" feedback; the themed picker replaces it everywhere now.
-  Full suite **1667 passed**.
+  **Rolled out to every remaining native date/datetime input in the app**
+  (same day): task form Due/Start date, project Start/End date (label
+  modal), habit check-in entry date (with `data-dtp-max="today"` so future
+  days stay disabled like the old `max` attribute), the calendar "Move
+  this occurrence" start/end (now the range picker), and the Tasks table's
+  inline due-date cell — the picker fires a `change` on its start hidden
+  input on Apply/Clear, so tasks_table.js's existing `input.inline-date`
+  single-field update keeps working with zero wiring changes. Only the PWA
+  offline shell (`offline_shell.js`) keeps a native date input, by design
+  (a static fallback that can't depend on the app JS). Full suite
+  **1667 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 
