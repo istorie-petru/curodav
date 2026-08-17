@@ -4043,22 +4043,18 @@ body.command-palette-open{overflow:hidden;}
 .dtp-panel--range{display:none; grid-template-columns:minmax(224px, 1fr) minmax(150px, 1fr); gap:var(--space-3);}
 .dtp-panel--range.is-open{display:grid;}
 .dtp-col{display:flex; flex-direction:column; gap:var(--space-2); min-width:0;}
-.dtp-panel-head{display:flex; align-items:center; justify-content:space-between; gap:6px;}
-.dtp-panel-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
-.dtp-month-nav{width:24px; height:24px;}
-.dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
-.dtp-day{
-  display:flex; align-items:center; justify-content:center;
-  width:100%; padding:3px 0; font-size:var(--text-caption); color:var(--fg-primary);
-  background:none; border:none; border-radius:var(--radius-pill); font-family:inherit; cursor:pointer;
-}
-.dtp-day:hover{background:var(--row-alt);}
+/* The month calendar reuses the widget mini-calendar's own classes
+   (mini-cal-label-row / mini-cal-label / mini-cal-nav / mini-cal-weekdays /
+   mini-cal-grid / mini-cal-day / mini-cal-day-num, style.css above) so the
+   picker's date grid is pixel-consistent with every other month grid in
+   the app -- .dtp-day only strips the UA <button> chrome (the mini-cal's
+   day cells are <a> links) and adds the two states the mini-cal never
+   needed: a visible keyboard focus ring, and the accent .is-selected
+   circle (the mini-cal only ever shows .is-today). */
+.dtp-day{background:none; border:none; font-family:inherit; cursor:pointer;}
 .dtp-day:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
 .dtp-day.is-blank{visibility:hidden;}
-.dtp-day.is-today{font-weight:700; background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
-.dtp-day.is-selected{background:var(--accent); color:var(--fg-on-accent);}
-[data-theme="dark"] .dtp-day.is-today{background:#494949;}
-.dtp-hours-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
+.dtp-day.is-selected .mini-cal-day-num{background:var(--accent); color:var(--fg-on-accent); font-weight:700;}
 .dtp-hours{display:flex; flex-direction:column; gap:2px; max-height:300px; overflow-y:auto;}
 .dtp-hour{
   text-align:left; padding:5px 10px; font-size:var(--text-caption); color:var(--fg-secondary);

@@ -122,6 +122,7 @@
       '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-left"></use></svg>',
     right:
       '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>',
+    x: '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"></use></svg>',
   };
 
   // ------------------------------------------------------------------ //
@@ -255,19 +256,24 @@
     }
 
     function renderCalendar(host) {
+      // Reuses the widget mini-calendar's own classes/design language
+      // (_widget_mini_month_calendar.html, style.css's .mini-cal-* rules)
+      // so the picker's calendar is visually identical to the app's other
+      // month grids -- only .dtp-day adds the button chrome UA styles and
+      // the .is-selected accent circle the mini-cal never needed.
       const head = document.createElement("div");
-      head.className = "dtp-panel-head";
+      head.className = "mini-cal-label-row";
       const prev = document.createElement("button");
       prev.type = "button";
-      prev.className = "icon-btn dtp-month-nav";
+      prev.className = "icon-btn mini-cal-nav";
       prev.setAttribute("aria-label", "Previous month");
       prev.innerHTML = ICON.left;
       const title = document.createElement("span");
-      title.className = "dtp-panel-title";
+      title.className = "mini-cal-label";
       title.textContent = monthLabel(state.viewYear, state.viewMonth);
       const next = document.createElement("button");
       next.type = "button";
-      next.className = "icon-btn dtp-month-nav";
+      next.className = "icon-btn mini-cal-nav";
       next.setAttribute("aria-label", "Next month");
       next.innerHTML = ICON.right;
       head.appendChild(prev);
@@ -286,25 +292,28 @@
       }
 
       const grid = document.createElement("div");
-      grid.className = "dtp-cal-grid";
+      grid.className = "mini-cal-grid";
       const offset = firstDayOfWeekOffset(state.viewYear, state.viewMonth);
       const dim = daysInMonth(state.viewYear, state.viewMonth);
       for (let i = 0; i < 42; i++) {
         const dayNum = i - offset + 1;
         if (dayNum < 1 || dayNum > dim) {
           const blank = document.createElement("span");
-          blank.className = "dtp-day is-blank";
+          blank.className = "mini-cal-day dtp-day is-blank";
           grid.appendChild(blank);
           continue;
         }
         const key = dateKey(state.viewYear, state.viewMonth, dayNum);
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "dtp-day";
+        btn.className = "mini-cal-day dtp-day";
         if (isToday(key)) btn.classList.add("is-today");
         if (key === state.date) btn.classList.add("is-selected");
         btn.dataset.date = key;
-        btn.textContent = String(dayNum);
+        const num = document.createElement("span");
+        num.className = "mini-cal-day-num";
+        num.textContent = String(dayNum);
+        btn.appendChild(num);
         btn.addEventListener("click", () => {
           state.date = key;
           renderPanel();
@@ -331,7 +340,7 @@
 
     function renderHours(host) {
       const title = document.createElement("div");
-      title.className = "dtp-hours-title";
+      title.className = "mini-cal-label";
       title.textContent = mode === "time" ? "Hours" : "Hours on this day";
       const grid = document.createElement("div");
       grid.className = "dtp-hours";
@@ -428,7 +437,7 @@
         const clear = document.createElement("button");
         clear.type = "button";
         clear.className = "btn ghost btn-sm";
-        clear.textContent = "Clear";
+        clear.innerHTML = ICON.x + "Clear";
         clear.addEventListener("click", () => {
           state.date = null;
           state.startHour = null;
