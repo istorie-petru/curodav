@@ -3,26 +3,22 @@
      Spaces & Projects widget (2026-08-15 widget consolidation) replacing
      project_preview/filled_cards -- style="list" reuses project_preview's
      own rows, style="cards" reuses filled_cards' own Material-You-style
-     filled squares. -->
+     filled squares. Cards render through the shared filled_card macro, the
+     empty states through widget_empty (_widget_items.html). The list
+     style's project pill is deliberately NOT widget_pill -- it's a
+     .cell-tag.cal-* swatch (the label's own identity color, UI guide §6's
+     one allowed identity palette), a genuinely different kind of colored
+     chip from a status pill. -->
+{% from "_widget_items.html" import widget_empty, filled_card %}
 {% if data.style == 'cards' %}
 {% if data.cards %}
 <div class="filled-cards-grid">
     {% for card in data.cards %}
-    {% set color_class = 'cal-' + (card.color if card.color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
-    <a class="filled-card {{ color_class }}" href="/labels/{{ card.uid }}">
-        <div class="filled-card-content">
-            <div class="filled-card-title">{{ card.name }}</div>
-            {% if card.description %}
-            <div class="filled-card-description">{{ card.description }}</div>
-            {% else %}
-            <div class="filled-card-meta">{{ card.project_count }} project{{ 's' if card.project_count != 1 else '' }}</div>
-            {% endif %}
-        </div>
-    </a>
+    {{ filled_card(card.name, '/labels/' ~ card.uid, card.color, description=card.description, meta=(card.project_count ~ (' project' if card.project_count == 1 else ' projects'))) }}
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">No spaces found -- add projects from Settings to get started.</div>
+{{ widget_empty('No spaces found -- add projects from Settings to get started.') }}
 {% endif %}
 {% else %}
 {% if data.previews %}
@@ -41,6 +37,6 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">No active projects -- add one from Settings.</div>
+{{ widget_empty('No active projects -- add one from Settings.') }}
 {% endif %}
 {% endif %}

@@ -7,6 +7,7 @@
      /dashboard/widgets/{uid}/edit and modal.js keeps the dialog open
      after submit via data-modal-keep-open so multiple edits don't require
      re-opening the dialog each time. -->
+{% from "_widget_items.html" import widget_empty %}
 <div id="modal-target">
     <div class="modal-header">
         {# 2026-08-15 modal uniformization rule 3: plain title, no icon
@@ -24,7 +25,7 @@
             </div>
             <div class="widget-builder-preview">
                 <div class="widget-preview-content" id="widget-preview-content">
-                    <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+                    {{ widget_empty('Loading preview…', inset=True) }}
                 </div>
             </div>
         </div>

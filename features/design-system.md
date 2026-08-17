@@ -74,3 +74,38 @@ convention).
   fragment must carry the attribute. `.modal-stable-height` is for any modal
   whose own content changes shape post-open without a full re-navigation (a
   view↔edit cross-fade, a tab switch) — everything else free-heights.
+
+## Widget bodies (2026-08-17 uniformity pass)
+
+The 13 visual dashboard widgets' body markup (between the shared card chrome
+and the widget header) used to be hand-rolled per file — the audit that
+kicked off this pass found the same five patterns (link-list rows, status
+pills, stat blocks, filled cards, empty states) implemented slightly
+differently in every widget, plus two bugs only visible in aggregate: a
+status pill with no color class rendered as a transparent pill, and three
+arbitrary fixed-width time columns where one `white-space:nowrap` rule is
+the actual fix. The bodies now compose one shared partial,
+`_widget_items.html` (see `features/dashboard.md` § Widget bodies for the
+macro inventory), following UI guide §4 (a widget's simple link list is a
+real `<table>`) and §6 (read-only status values render as
+`.pill-static.pill-{color}`, never as a bare tag or a `.cell-tag` with no
+color).
+
+- **Rows** (`widget_link_row`) take `.widget-row-icon` / `.widget-row-time` /
+  `.widget-row-right` classes instead of inline `style="width:...px"` /
+  `text-align:right`; `.widget-row-time{white-space:nowrap}` is the fix for
+  a date+time cell wrapping to two lines, and the row never fixes a width.
+- **Pills** (`widget_pill`) need the `.pill-*` family to cover the full
+  16-color identity palette (gray, orange, green, blue, red, purple, yellow,
+  brown, pink, lime, mint, teal, cyan, indigo, magenta, slate) — 9 classes
+  were added in this pass to complete it, each mapping the same
+  `--tag-{color}-bg`/`--tag-{color}-fg` tokens as `.tag-*`.
+- **Empty states** (`widget_empty`) render `.empty-state` (`.empty-state--inset`
+  inside an already-padded builder pane) — the four builder/preview
+  fragments swapped their old inline `padding:16px 0` for the modifier.
+- Two bodies stay off the library by design: `_widget_mini_month_calendar`
+  (a genuinely custom grid) and the Spaces & Projects list style (its
+  `.cell-tag.cal-*` pill is a label-identity swatch, a different kind of
+  chip — see `features/dashboard.md`). `tests/test_widget_library.py` is
+  the structural sweep that fails CI if a future widget reintroduces a
+  hand-rolled variant.

@@ -85,6 +85,11 @@ The repo's documentation is organized by state, not by history:
 | [`plans/STATE.md`](plans/STATE.md) | **Start here.** Current position on the roadmap, the next slice, and how to run a low-token session. Read only this at session start |
 | [`features/README.md`](features/README.md) | Tour of what you can do today; links each area to its technical doc |
 | [`features/architecture.md`](features/architecture.md) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
+| [`CODE_READING_GUIDE.md`](CODE_READING_GUIDE.md) | Plain-language guide to how files are structured and named, for editing the code yourself |
+| [`CLEAN_CODE_GUIDE.md`](CLEAN_CODE_GUIDE.md) | Honest critique of what hurts readability today (giant files, history-as-comments) + rules for writing cleaner code going forward |
+| [`CODING_STANDARDS.md`](CODING_STANDARDS.md) | Reference for naming files/functions/variables and where comments belong (file/class/function/inline) and how much |
+| [`UI_CONSISTENCY_GUIDE.md`](UI_CONSISTENCY_GUIDE.md) | One canonical pattern per UI piece — cards, buttons, forms, tables, modals, tags, toolbars, empty states — and the "ask before inventing a new one" rule |
+| [`SETTINGS_UI_GUIDE.md`](SETTINGS_UI_GUIDE.md) | Settings-specific canon: which layout for preferences vs. managed records vs. logs, and a reorg proposal for Advanced/Data health/Sync conflicts |
 | [`plans/roadmap.md`](plans/roadmap.md) | The single build order across all open work, phased by release |
 | [`plans/open-priority.md`](plans/open-priority.md) | Open work that reshapes the architecture/presentation (the rework) |
 | [`plans/open.md`](plans/open.md) | Open work that is low-priority or app-local |

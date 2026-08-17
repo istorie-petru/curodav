@@ -9,6 +9,7 @@
      open. Expects the same context _widget_builder_fields.html does:
      space_uid, widget_sources/widget_views/widget_ranges,
      projects, task_lists, calendars, tag_names. -->
+{% from "_widget_items.html" import widget_empty %}
 {% if not widget_add_always_visible %}
 <details class="widget-config widget-add-config" style="margin-bottom:16px">
 <summary class="widget-add-summary">{{ icon('plus', 'icon-sm') }} <span class="ms-summary-text">Add widget</span><span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span></summary>
@@ -25,7 +26,7 @@
 
 <div class="widget-preview-pane">
     <div class="widget-preview-content" id="widget-preview-content">
-        <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+        {{ widget_empty('Loading preview…', inset=True) }}
     </div>
 </div>
 {% if not widget_add_always_visible %}

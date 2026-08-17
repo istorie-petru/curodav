@@ -14,7 +14,10 @@
      too) just to flip one row's icon. `data-*` attributes carry the
      numbers the JS needs to update the row in place; the forms
      themselves are the no-JS fallback (still real POSTs to the same
-     endpoints) if the script fails to load. -->
+     endpoints) if the script fails to load. The name pill renders through
+     the shared widget_pill macro and the empty state through widget_empty
+     (_widget_items.html). -->
+{% from "_widget_items.html" import widget_empty, widget_pill %}
 {% if data.rows %}
 <div class="habit-checkin-list" id="habit-checkin-list">
     {% for row in data.rows %}
@@ -22,7 +25,7 @@
         <!-- habit.icon is a sprite icon name (modal-input-design Phase C),
              not a free-typed emoji glyph -- same icon() rendering as
              habits_list.html's own card header. -->
-        <span class="cell-tag tag-{{ row.habit.color }}">{% if row.habit.icon %}{{ icon(row.habit.icon, 'icon-sm') }} {% endif %}{{ row.habit.name }}</span>
+        {{ widget_pill(row.habit.name, row.habit.color, icon_name=row.habit.icon) }}
         <span class="spacer"></span>
         {% if row.is_quantity %}
         <span class="tag-usage-count habit-checkin-count">{{ row.current_value|int }}/{{ row.habit.target_per_day|int }}</span>
@@ -45,5 +48,5 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">No habits yet -- add one from Settings.</div>
+{{ widget_empty('No habits yet -- add one from Settings.') }}
 {% endif %}

@@ -11,26 +11,13 @@
      information, not an empty state to hide. The counts come from the
      shared aggregation service (src/derived_state.py's count_by_state), so
      they can never disagree with what the linked filtered Tasks view
-     actually shows. -->
+     actually shows. Blocks render through the shared stat_block macro
+     (_widget_items.html). -->
+{% from "_widget_items.html" import stat_block %}
 <div class="at-a-glance-row">
-    <a class="at-a-glance-stat" href="{{ data.overdue_link }}">
-        <div class="at-a-glance-number is-overdue">{{ data.overdue_count }}</div>
-        <div class="widget-section-label">Overdue</div>
-    </a>
-    <a class="at-a-glance-stat" href="{{ data.today_link }}">
-        <div class="at-a-glance-number">{{ data.today_count }}</div>
-        <div class="widget-section-label">Due today</div>
-    </a>
-    <a class="at-a-glance-stat" href="{{ data.week_link }}">
-        <div class="at-a-glance-number">{{ data.week_count }}</div>
-        <div class="widget-section-label">Due this week</div>
-    </a>
-    <a class="at-a-glance-stat" href="{{ data.important_link }}">
-        <div class="at-a-glance-number">{{ data.important_count }}</div>
-        <div class="widget-section-label">Important</div>
-    </a>
-    <a class="at-a-glance-stat" href="{{ data.urgent_link }}">
-        <div class="at-a-glance-number is-overdue">{{ data.urgent_count }}</div>
-        <div class="widget-section-label">Urgent</div>
-    </a>
+    {{ stat_block(data.overdue_count, 'Overdue', href=data.overdue_link, number_class='is-overdue') }}
+    {{ stat_block(data.today_count, 'Due today', href=data.today_link) }}
+    {{ stat_block(data.week_count, 'Due this week', href=data.week_link) }}
+    {{ stat_block(data.important_count, 'Important', href=data.important_link) }}
+    {{ stat_block(data.urgent_count, 'Urgent', href=data.urgent_link, number_class='is-overdue') }}
 </div>

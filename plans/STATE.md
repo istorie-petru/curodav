@@ -2793,6 +2793,48 @@ session, right before the final commit of that session.
   **1639 passed**, plus a Node smoke run (22 checks) over toast.js with a
   minimal DOM stub exercising persistent/set/isAlive/dedupe-bypass and the
   confirm action/Escape paths.
+- **Shipped:** side work — **Widget bodies: one shared component library**,
+  complete (2026-08-17), direct request ("make all design visual widgets
+  uniform... create a coherent widget library... reused, not reinvented"),
+  following `UI_CONSISTENCY_GUIDE.md` (the audited every `_widget_*.html`
+  partial found the same five patterns — link-list rows, status pills, stat
+  blocks, filled cards, empty states — hand-rolled slightly differently per
+  file). New `src/templates/_widget_items.html`: `widget_link_row(url,
+  title, leading=..., leading_class=..., right=...)` (supports a
+  `{% call %}` right cell), `widget_pill(text, color, icon_name=...)`,
+  `stat_block(number, label, ...)`, `filled_card(name, href, color, ...)`,
+  `widget_empty(message, inset=...)`, `widget_section_label`,
+  `relative_due(days)`, `widget_complete_button(uid)`. All 13 visual
+  widgets (agenda incl. every view, at_a_glance, streak, next_deadline,
+  important_urgent, scheduled_work_today, organize_today, quick_links,
+  spaces_projects, habit_checkin, contact_list, weekly_schedule) plus the
+  four builder/preview fragments' empty states refactored onto it. The
+  audit surfaced and the pass fixed three real inconsistencies: (1) a bare
+  `.cell-tag` with no color class in `_widget_important_urgent.html`
+  rendered as a transparent pill → `widget_pill` always emits
+  `.pill-static.pill-{color}`; (2) the `.pill-*` CSS family only covered 7
+  of the 16 identity colors, so a `pink`/`teal`/... pill rendered
+  uncolored → completed the family (9 new classes, same
+  `--tag-{color}-bg`/`fg` tokens as `.tag-*`, UI guide §6); (3) three
+  arbitrary fixed-width time cells (60/100/150px) where
+  `white-space:nowrap` was the actual wrap-fix → `.widget-row-time`
+  class, no fixed widths anywhere. Also fixed a Jinja gotcha the live
+  render check caught: macro params are auto-escaped, so the builder
+  empty-states' `&hellip;` entity rendered as literal `&amp;hellip;` →
+  literal `…` characters. Two bodies deliberately stay off the library and
+  are documented as such at the top of their files: `_widget_mini_month_
+  calendar` (custom grid) and the Spaces & Projects list style (`.cell-tag.
+  cal-*` is a label-identity swatch, not a status pill). Structural sweep
+  tests (`tests/test_widget_library.py`, same grep-the-templates style as
+  the modal-uniformization sweep): every visual widget imports the library,
+  none hand-roll an empty-state/section-label/status-pill/fixed-width cell,
+  and the pill palette stays complete; the old
+  `TestUpcomingEventsDoubleLineFix` updated to assert the shared
+  `.widget-row-time` class instead of the removed inline `width:150px`.
+  Verified with a live-render script (a real seeded DB through the actual
+  router functions: full dashboard with one widget of every type + every
+  source preview + customize page), not just structural checks. Full suite
+  **1645 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

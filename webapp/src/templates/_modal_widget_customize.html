@@ -20,6 +20,7 @@
      buttons. static/dashboard_widget_builder.js (the old stay-open
      mechanism) and its wiring in modal.js are removed as a result --
      nothing else used them. -->
+{% from "_widget_items.html" import widget_empty %}
 <div class="modal-header">
     <h1>Customize {{ page_label }}</h1>
 </div>
@@ -44,7 +45,7 @@
         </div>
         <div class="widget-builder-preview">
             <div class="widget-preview-content" id="widget-preview-content">
-                <div class="empty-state" style="padding:16px 0">Loading preview&hellip;</div>
+                {{ widget_empty('Loading preview…', inset=True) }}
             </div>
         </div>
     </div>

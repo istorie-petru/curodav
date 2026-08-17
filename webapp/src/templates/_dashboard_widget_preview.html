@@ -5,11 +5,12 @@
      the Mini Calendar's prev/next anchor links, which don't need to go
      anywhere meaningful here). static/dashboard_widget_preview.js fetches
      this into the Add-widget/Filters form's preview pane on every change. -->
+{% from "_widget_items.html" import widget_empty %}
 <div class="card widget-card widget-preview-card">
     <div class="widget-header"><h2>{{ widget.title or (spec.label if spec else "Preview") }}</h2></div>
     {% if spec %}
     {% include spec.template %}
     {% else %}
-    <div class="empty-state" style="padding:16px 0">Pick a data source to preview.</div>
+    {{ widget_empty('Pick a data source to preview.', inset=True) }}
     {% endif %}
 </div>

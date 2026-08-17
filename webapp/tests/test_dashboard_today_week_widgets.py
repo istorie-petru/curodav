@@ -242,9 +242,23 @@ class TestUpcomingEventsDoubleLineFix:
     def test_date_time_column_is_wide_enough_and_nowraps(self):
         # Structural check (no browser to measure real wrapping) -- same
         # ceiling this app's other CSS-shape tests already accept.
+        # 2026-08-17 widget uniformity pass: the nowrap fix moved out of an
+        # inline `width:150px` td into the shared `.widget-row-time` class
+        # (style.css) the widget_link_row macro attaches, so the event-time
+        # column can no longer wrap to two lines -- assert the class exists
+        # in the CSS and the agenda template actually uses it.
         import pathlib
-        partial = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates" / "_widget_agenda.html"
-        source = partial.read_text()
-        assert "width:150px" in source
-        assert "white-space:nowrap" in source
-        assert "width:110px" not in source
+        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
+        css = (templates.parent / "static" / "style.css").read_text()
+        assert ".widget-row-time{white-space:nowrap;}" in css
+        partial = (templates / "_widget_agenda.html").read_text()
+        assert "leading_class='widget-row-time'" in partial
+        assert "width:110px" not in partial
+        # no widget should hand-roll a fixed-width cell any more (the
+        # spaces_projects progress fill's `style="width:{{ ... }}%"` is a
+        # dynamic value, not a fixed column, so only flag fixed pixels)
+        import re
+        for name in templates.glob("_widget_*.html"):
+            text = name.read_text()
+            assert not re.search(r'style="width:\s*\d', text), f"{name.name} still hand-rolls a width"
+            assert "width:150px" not in text, f"{name.name} still has the old fixed-width cell"

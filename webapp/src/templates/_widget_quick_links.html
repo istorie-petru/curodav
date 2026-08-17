@@ -3,20 +3,16 @@
      to every Space and every open project, reusing filled_cards' own
      Material-You-style filled square (.filled-cards-grid/.filled-card,
      .cal-<color> hue) with each label's own icon (label_config.icon) on
-     top instead of a description -- no new visual language introduced. -->
+     top instead of a description -- no new visual language introduced.
+     Tiles render through the shared filled_card macro, the empty state
+     through widget_empty (_widget_items.html). -->
+{% from "_widget_items.html" import widget_empty, filled_card %}
 {% if data.tiles %}
 <div class="filled-cards-grid">
     {% for item in data.tiles %}
-    {% set color_class = 'cal-' + (item.color if item.color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
-    <a class="filled-card {{ color_class }}" href="{{ item.href }}">
-        <div class="filled-card-content">
-            {{ icon(item.icon, 'icon-lg') }}
-            <div class="filled-card-title">{{ item.name }}</div>
-            <div class="filled-card-meta">{{ item.kind }}</div>
-        </div>
-    </a>
+    {{ filled_card(item.name, item.href, item.color, icon_name=item.icon, meta=item.kind) }}
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">No Spaces or projects yet -- add one from Settings.</div>
+{{ widget_empty('No Spaces or projects yet -- add one from Settings.') }}
 {% endif %}

@@ -142,6 +142,40 @@ typical flat/today-range widget.
   the same fixed-narrow-column date+time pattern at the time, none of the
   rest combine a date and a time in one column.
 
+## Widget bodies (shared library, 2026-08-17)
+
+All 13 visual widgets' *bodies* — the content between the shared card
+chrome (`_widget_inner.html`) and the widget's own header — compose the
+same small component library now, `_widget_items.html`. Before this pass
+each widget hand-rolled the same row / pill / stat / empty-state /
+filled-card markup with small differences (a bare `.cell-tag` with no color
+class rendered as a transparent pill, three arbitrary fixed-width time
+columns, inconsistent empty-state markup); they now `{% from
+"_widget_items.html" import ... %}` the shared pieces instead:
+
+- `widget_link_row(url, title, leading=..., leading_class=..., right=...)`
+  — the simple link-list row (an agenda item, an "Unscheduled work" item,
+  a weekly-schedule row). Leading/right cells carry `.widget-row-icon` /
+  `.widget-row-time` / `.widget-row-right` classes instead of inline fixed
+  widths — `white-space:nowrap` on `.widget-row-time` is what actually
+  keeps a date+time cell on one line (no fixed column widths anywhere).
+- `widget_pill(text, color, icon_name=...)` — the read-only status pill
+  (`.pill-static.pill-{color}`); the `.pill-*` family now covers the full
+  16-color identity palette (only 7 of the classes existed before, so e.g.
+  a `pink`/`teal` pill rendered uncolored).
+- `stat_block(number, label, ...)` — At a Glance's number cells;
+  `filled_card(...)` — Spaces & Projects' colored tiles; `widget_empty(
+  message, inset=...)` — the empty state; `widget_section_label(text)`;
+  `relative_due(days)`; `widget_complete_button(uid)`.
+
+Exceptions, deliberately NOT on the library (documented at the top of each
+file): `_widget_mini_month_calendar.html` (a genuinely custom grid layout,
+no shared piece applies) and the Spaces & Projects *list* style, whose
+`.cell-tag.cal-*` project pill is a label-identity swatch — a different
+kind of chip from a status pill (UI guide §6). A structural sweep test
+(`test_widget_library.py`) locks the convention: no visual widget may
+hand-roll an empty-state, section label, status pill, or fixed-width cell.
+
 ## Endpoints
 
 `/` (view, `?edit=`, `?cal_year=`/`?cal_month=`), `/quick/add`,

@@ -171,6 +171,12 @@ comment for the full file organization). The contract:
 - **Density wins.** This is a data-dense personal hub: body copy ~13px, compact
   tables, a 4pt spacing scale (`--space-*`). Don't sprinkle generous spacing "to
   look prettier" — keep rhythm.
+- **One canonical pattern per UI piece, app-wide** — cards, buttons, forms,
+  tables/lists, modals, tags/pills, toolbars, empty states, icons. Settings
+  gets the plainest version of every one of them, zero exceptions. See
+  [`UI_CONSISTENCY_GUIDE.md`](../UI_CONSISTENCY_GUIDE.md) — a new variant of
+  any of these is a rare exception that must be asked about before being
+  built, not after.
 
 ---
 

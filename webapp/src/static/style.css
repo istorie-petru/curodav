@@ -1026,7 +1026,8 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    relying on incidental whitespace between the template's `{% for %}`
    iterations, which was inconsistent (present in some loops, not others)
    and produced tags rendered flush against each other with zero gap. */
-.cell-tag + .cell-tag{margin-left:5px;}
+.cell-tag + .cell-tag,
+.pill-static + .pill-static{margin-left:5px;}
 .tag-gray{background:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .tag-orange{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
 .tag-green{background:var(--tag-green-bg); color:var(--tag-green-fg);}
@@ -1295,7 +1296,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    .pill-select minus the dropdown-chrome padding/background-position, so
    the column doesn't visibly shift width next to other pill-selects. */
 .pill-static{
-  display:inline-block; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-caption);
+  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-caption);
   font-weight:600;
 }
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
@@ -1305,6 +1306,19 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .pill-red{background-color:var(--tag-red-bg); color:var(--tag-red-fg);}
 .pill-purple{background-color:var(--tag-purple-bg); color:var(--tag-purple-fg);}
 .pill-yellow{background-color:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
+/* The pill family is the full 16-color identity palette, same as .tag-*
+   (UI_CONSISTENCY_GUIDE.md §6). Completed 2026-08-17 (widget uniformity
+   pass): only 7 of the 16 pill-* classes existed, so a .pill-static with
+   e.g. "pink"/"teal" rendered as an uncolored (transparent) pill. */
+.pill-brown{background-color:var(--tag-brown-bg); color:var(--tag-brown-fg);}
+.pill-pink{background-color:var(--tag-pink-bg); color:var(--tag-pink-fg);}
+.pill-lime{background-color:var(--tag-lime-bg); color:var(--tag-lime-fg);}
+.pill-mint{background-color:var(--tag-mint-bg); color:var(--tag-mint-fg);}
+.pill-teal{background-color:var(--tag-teal-bg); color:var(--tag-teal-fg);}
+.pill-cyan{background-color:var(--tag-cyan-bg); color:var(--tag-cyan-fg);}
+.pill-indigo{background-color:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
+.pill-magenta{background-color:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
+.pill-slate{background-color:var(--tag-slate-bg); color:var(--tag-slate-fg);}
 .inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:128px;}
 .inline-date:hover{border-color:var(--control-border);}
 /* Holidays table (settings_holidays.html) -- title cell, same idea as
@@ -1653,6 +1667,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .form-inline{display:inline;}
 
 .empty-state{padding:var(--space-8) var(--space-5); text-align:center; color:var(--fg-tertiary);}
+/* Small in-pane empty state -- the widget builder's "Loading preview…"
+   placeholder and the preview pane's "Pick a data source" sit inside an
+   already-padded container, so they use a reduced inset instead of the
+   full .empty-state padding (added 2026-08-17, widget uniformity pass --
+   replaces the inline `style="padding:16px 0"` the four builder templates
+   used to hand-roll). */
+.empty-state--inset{padding:16px 0;}
 /* Richer empty-state variant (icon + title + helper text + optional CTA)
    -- opt-in via `.empty-state-rich` alongside the base class, so every
    existing plain-text `.empty-state` (there are ~25 across this app: 404-
@@ -3343,6 +3364,15 @@ body.command-palette-open{overflow:hidden;}
   margin:10px 0 4px;
 }
 .widget-section-label:first-child{margin-top:0;}
+/* Widget list-row table cells (UI guide §4: a widget's simple link list is
+   a real <table>) -- the leading-cell/right-cell classes the shared
+   widget_link_row macro (_widget_items.html) attaches instead of the inline
+   `style="width:26px"/"width:60px"/"width:150px"/"text-align:right"`
+   attributes each widget used to hand-roll. nowrap is what actually fixes
+   a date+time column wrapping to two lines; no fixed widths. */
+.widget-row-icon{width:26px;}
+.widget-row-time{white-space:nowrap;}
+.widget-row-right{text-align:right;}
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
 .widget-config summary{cursor:pointer; font-size:13px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}

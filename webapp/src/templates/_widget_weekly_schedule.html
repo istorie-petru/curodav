@@ -10,7 +10,10 @@
      proportional time axis -- legible fixed-size cards, not a mini
      calendar grid -- and each card shows its own time interval directly,
      so the plain agenda-style list underneath is a secondary, fuller
-     reference rather than the only place the time appears. -->
+     reference rather than the only place the time appears. The agenda
+     list's rows render through the shared widget_link_row macro and the
+     empty state through widget_empty (_widget_items.html). -->
+{% from "_widget_items.html" import widget_empty, widget_link_row %}
 {% if data.days %}
 <div class="weekly-schedule-grid" style="grid-template-columns: repeat({{ data.days|length }}, 1fr);">
     {% for day in data.days %}
@@ -30,13 +33,9 @@
 </div>
 <table class="weekly-schedule-agenda">
     {% for row in data.agenda_rows %}
-    <tr>
-        <td class="text-muted" style="width:36px">{{ ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][row.weekday] }}</td>
-        <td class="text-muted" style="width:100px; white-space:nowrap">{{ row.event.start_at | fmt_time }}{% if row.event.end_at %}&ndash;{{ row.event.end_at | fmt_time }}{% endif %}</td>
-        <td><a href="/events/{{ row.event.uid }}" data-modal>{{ row.event.title }}</a>{% if row.biweekly %} <span class="text-muted">(every 2 weeks)</span>{% endif %}</td>
-    </tr>
+    {{ widget_link_row('/events/' ~ row.event.uid, row.event.title, leading=(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][row.weekday] ~ ' ' ~ (row.event.start_at | fmt_time) ~ ('–' ~ (row.event.end_at | fmt_time) if row.event.end_at else '')), leading_class='widget-row-time', right=('(every 2 weeks)' if row.biweekly else None)) }}
     {% endfor %}
 </table>
 {% else %}
-<div class="empty-state">No standing weekly pattern yet -- add a recurring event that repeats for at least a month.</div>
+{{ widget_empty('No standing weekly pattern yet -- add a recurring event that repeats for at least a month.') }}
 {% endif %}
