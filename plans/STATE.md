@@ -2835,6 +2835,54 @@ session, right before the final commit of that session.
   router functions: full dashboard with one widget of every type + every
   source preview + customize page), not just structural checks. Full suite
   **1645 passed**.
+- **Shipped:** side work — **Settings templates uniformization** (both
+  halves), complete (2026-08-17), direct request ("make the Settings pages
+  uniform... the CSS is fine") per `SETTINGS_UI_GUIDE.md`, landed as two
+  commits:
+  1. **Holidays + Sleep & Leisure Time onto the Labels grouped-list + modal
+     pattern** (`34b7435`): the two Tasks-table-style grids are now
+     `.label-list` grouped lists (`settings_holidays.html`, each row a title
+     + "calendar · from → to" hint; `settings_time_blocks.html`, Sleep and
+     Leisure sections), with Edit buttons opening the same
+     modal-in-`#modal-target` shape as Labels (`holiday_edit_modal.html` /
+     `time_block_edit_modal.html`, delete in the footer's confirm mode) and
+     "+ Add" toolbar buttons. Router: `_HOLIDAY_UPDATABLE_FIELDS`/
+     `_TIME_BLOCK_UPDATABLE_FIELDS` and the per-field `update-field`
+     endpoints removed in favor of `new_*_modal`/`edit_*_modal` GETs and
+     `update_holiday`/`update_time_block` POSTs (`{uid}/update`); the
+     time-block one deliberately ignores any `kind` the form submits (kind
+     is fixed per table) and drops `end_time <= start_time` edits as
+     malformed. `static/settings_holidays.js`/`settings_time_blocks.js`
+     deleted — the pattern needs no JS. See `features/settings.md`'s
+     Holidays and Sleep & Leisure Time entries. 9 files, full suite 1654
+     passed.
+  2. **Advanced + Data health + Sync conflicts merged into one "Data &
+     Maintenance" page** (`47a0f54`): hub is now 7 categories, the three
+     pages (plus `/export`) folded into `GET /settings/data-maintenance`
+     (`settings_data_maintenance.html`) with the old URLs kept as 303
+     redirects and every POST action endpoint redirecting back to it.
+     Section order per the guide: (1) **Needs attention** — a warning-tone
+     card (M3 `--tag-red-*` tokens, the one deliberately non-neutral block
+     in Settings) rendering only when something is wrong: unresolved sync
+     conflicts (Restore/Dismiss), a failed integrity check, or an
+     unverified latest backup; its "visible" half is a `pill-static
+     pill-red` conflict-count badge on the hub row in `settings_index.html`
+     (`conflict_count`, only when > 0); (2) **Health status** as colored
+     chips rather than plain text rows; (3) **Maintenance & upkeep** —
+     Backup now (`btn primary`) / Verify / Check integrity / Repair /
+     Reset layout (`btn ghost`) plus sync-retention and task-auto-archive
+     selects; (4) **Export & import** (from Advanced); (5) **Danger zone**
+     last and visually separated (purge completed / purge all); (6)
+     **Backups & storage** (stats + backups table) last. Test surface
+     updated across `test_phase8_settings_hub.py` (7-category hub, badge
+     tests, export-inlined, purge redirects), `test_data_health.py`,
+     `test_offline_sync.py`, `test_display_prefs_settings.py`,
+     `test_phase10_export.py`, `test_dashboard_usability_rework.py`,
+     `test_pwa_shell.py`, `test_auth.py`; the merged page reads
+     `request.app.state.settings.{db_path,backup_dir,radicale_base_url}` so
+     the direct-call tests build fuller fake apps. `SETTINGS_UI_GUIDE.md`'s
+     reorg section marked shipped; `features/settings.md` rewritten to the
+     7-category current state. 16 files, full suite **1659 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

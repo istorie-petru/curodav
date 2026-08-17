@@ -99,7 +99,7 @@ list) are legitimately a third, different thing — a link, not a setting or
 a record. Keep `.settings-row` for exactly that, don't fold it into A or B,
 and don't let it drift into being used for anything else either.
 
-## Proposed reorganization: Advanced + Data health + Sync conflicts
+## Reorganization: Advanced + Data health + Sync conflicts (shipped 2026-08-17)
 
 These three currently split "everything about your data's safety and
 lifecycle" across three separate pages with no priority ordering within
@@ -107,9 +107,11 @@ any of them — a destructive "Purge all data" button sits in the same
 visual weight as "Reset dashboard layout" on Advanced, and an unresolved
 sync conflict is invisible unless you happen to visit its own page.
 
-Proposed shape for a merged **"Data & Maintenance"** hub category
-(one page, sub-sectioned — or three tabs under one URL, either works; the
-ordering principle matters more than the exact navigation mechanics):
+**Implemented** as a merged **"Data & Maintenance"** hub category at
+`/settings/data-maintenance` — one page, sub-sectioned (the old three URLs
+plus `/export` are 303 redirects into it; every POST action endpoint keeps
+its URL but redirects back here). The ordered shape, exactly as proposed
+below:
 
 1. **Needs attention, first, visually urgent.** Unresolved sync conflicts
    and any failed integrity check belong at the very top, not buried in a
@@ -143,9 +145,9 @@ ordering principle matters more than the exact navigation mechanics):
 6. **Backups list & storage stats**, last — reference information, kept
    as the existing table pattern (it's a log, per the rule above).
 
-This reordering (and the sync-conflict badge) is also real implementation
-work, not a doc change — same note as above: worth scoping as its own
-slice rather than trying to land it as a side effect of an unrelated fix.
+This reordering (and the sync-conflict badge) was implemented 2026-08-17 as
+its own slice — see `features/settings.md` § Data & Maintenance and the
+`settings_data_maintenance.html` template for the shipped shape.
 
 ## Quick self-check before adding anything to Settings
 
