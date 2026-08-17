@@ -11,133 +11,62 @@
     is placed inside one.
 </p>
 
-<!-- Sleep Time -- same Tasks-table-style grid as Holidays
-     (settings_holidays.html), just with a fixed `kind` per section instead
-     of a free-form calendar name, and a day-of-week multiselect
-     (_widget_list_multiselect.html, filter mode) instead of a date range.
-     Deliberately two separate top-level sections rather than one Jinja
-     macro/include loop -- _widget_list_multiselect.html's own set-then-
-     include pattern is only proven (elsewhere in this codebase) directly
-     inside a template body/for-loop, not inside a macro's own local
-     scope, so this duplicates the small block rather than risk a scoping
-     surprise. -->
+<!-- Sleep Time -- simple list (2026-08-17 settings HTML uniformity pass,
+     SETTINGS_UI_GUIDE.md pattern B) -- replaces the old inline-add form +
+     inline-editable table (static/settings_time_blocks.js's per-field PATCH).
+     A row is read-only display plus an Edit button opening
+     time_block_edit_modal.html; Delete lives in that modal's footer. Same
+     grouped-list shape as _labels_body.html's label rows. Deliberately two
+     separate top-level sections rather than one Jinja macro/include loop --
+     _widget_list_multiselect.html's own set-then-include pattern is only
+     proven directly inside a template body, not inside a macro's local
+     scope. -->
 <h2 style="margin:20px 0 8px">Sleep Time</h2>
-<div class="card" style="margin-bottom:14px">
-    <form method="post" action="/settings/time-blocks" id="new-sleep-form" class="calendar-new-form">
-        <input type="hidden" name="kind" value="sleep">
-        <input type="text" name="label" placeholder="Title (optional)">
-        <input type="time" name="start_time" required title="Start">
-        <input type="time" name="end_time" required title="End">
-        {% set ms_mode = 'filter' %}
-        {% set ms_form_id = 'new-sleep-form' %}
-        {% set ms_name = 'days' %}
-        {% set ms_label = 'Days' %}
-        {% set ms_items = [] %}
-        {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-        {% set ms_selected = time_block_days %}
-        {% set ms_wide = false %}
-        {% set ms_extra_class = '' %}
-        {% include '_widget_list_multiselect.html' %}
-        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
-    </form>
-</div>
-
 {% if sleep_blocks %}
-<div class="card table-scroll">
-<table class="task-table time-block-table" id="sleep-block-table">
-    <thead>
-        <tr><th>Title</th><th>Start</th><th>End</th><th>Days</th><th></th></tr>
-    </thead>
-    <tbody>
-        {% for b in sleep_blocks %}
-        <tr data-uid="{{ b.uid }}">
-            <td><input type="text" class="inline-text" data-uid="{{ b.uid }}" data-field="label" value="{{ b.label }}" placeholder="(untitled)"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="start_time" value="{{ b.start_time }}"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="end_time" value="{{ b.end_time }}"></td>
-            <td>
-                {% set ms_mode = 'filter' %}
-                {% set ms_form_id = none %}
-                {% set ms_name = 'days__' ~ b.uid %}
-                {% set ms_label = 'Days' %}
-                {% set ms_items = [] %}
-                {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-                {% set ms_selected = b.days.split(',') if b.days else [] %}
-                {% set ms_wide = false %}
-                {% set ms_extra_class = 'time-block-days-select' %}
-                {% include '_widget_list_multiselect.html' %}
-            </td>
-            <td style="text-align:right">
-                <form class="form-inline" method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-delete-undo="{{ b.label or 'Sleep time' }}">
-                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+<div class="label-list" id="sleep-block-list">
+    {% for b in sleep_blocks %}
+    <div class="label-list-row" data-uid="{{ b.uid }}">
+        <span class="label-list-icon">{{ icon('moon') }}</span>
+        <span class="label-list-name">
+            {{ b.label or '(untitled)' }}
+            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days.split(',')|join(' ') }}</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    </div>
+    {% endfor %}
+</div>
 </div>
 {% else %}
-<div class="empty-state">No sleep time configured yet -- add one above.</div>
+<div class="empty-state">No sleep time configured yet -- add one below.</div>
 {% endif %}
+<div class="toolbar" style="margin-top:16px">
+    <a href="/settings/time-blocks/new?kind=sleep" class="btn ghost btn-sm" data-modal>{{ icon('plus', 'icon-sm') }} Add sleep time</a>
+</div>
 
 <!-- Leisure Time -- identical shape to Sleep Time above, kind="leisure". -->
 <h2 style="margin:24px 0 8px">Leisure Time</h2>
-<div class="card" style="margin-bottom:14px">
-    <form method="post" action="/settings/time-blocks" id="new-leisure-form" class="calendar-new-form">
-        <input type="hidden" name="kind" value="leisure">
-        <input type="text" name="label" placeholder="Title (optional)">
-        <input type="time" name="start_time" required title="Start">
-        <input type="time" name="end_time" required title="End">
-        {% set ms_mode = 'filter' %}
-        {% set ms_form_id = 'new-leisure-form' %}
-        {% set ms_name = 'days' %}
-        {% set ms_label = 'Days' %}
-        {% set ms_items = [] %}
-        {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-        {% set ms_selected = time_block_days %}
-        {% set ms_wide = false %}
-        {% set ms_extra_class = '' %}
-        {% include '_widget_list_multiselect.html' %}
-        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
-    </form>
-</div>
-
 {% if leisure_blocks %}
-<div class="card table-scroll">
-<table class="task-table time-block-table" id="leisure-block-table">
-    <thead>
-        <tr><th>Title</th><th>Start</th><th>End</th><th>Days</th><th></th></tr>
-    </thead>
-    <tbody>
-        {% for b in leisure_blocks %}
-        <tr data-uid="{{ b.uid }}">
-            <td><input type="text" class="inline-text" data-uid="{{ b.uid }}" data-field="label" value="{{ b.label }}" placeholder="(untitled)"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="start_time" value="{{ b.start_time }}"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="end_time" value="{{ b.end_time }}"></td>
-            <td>
-                {% set ms_mode = 'filter' %}
-                {% set ms_form_id = none %}
-                {% set ms_name = 'days__' ~ b.uid %}
-                {% set ms_label = 'Days' %}
-                {% set ms_items = [] %}
-                {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-                {% set ms_selected = b.days.split(',') if b.days else [] %}
-                {% set ms_wide = false %}
-                {% set ms_extra_class = 'time-block-days-select' %}
-                {% include '_widget_list_multiselect.html' %}
-            </td>
-            <td style="text-align:right">
-                <form class="form-inline" method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-delete-undo="{{ b.label or 'Leisure time' }}">
-                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+<div class="label-list" id="leisure-block-list">
+    {% for b in leisure_blocks %}
+    <div class="label-list-row" data-uid="{{ b.uid }}">
+        <span class="label-list-icon">{{ icon('sun') }}</span>
+        <span class="label-list-name">
+            {{ b.label or '(untitled)' }}
+            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days.split(',')|join(' ') }}</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    </div>
+    {% endfor %}
+</div>
 </div>
 {% else %}
-<div class="empty-state">No leisure time configured yet -- add one above.</div>
+<div class="empty-state">No leisure time configured yet -- add one below.</div>
 {% endif %}
+<div class="toolbar" style="margin-top:16px">
+    <a href="/settings/time-blocks/new?kind=leisure" class="btn ghost btn-sm" data-modal>{{ icon('plus', 'icon-sm') }} Add leisure time</a>
+</div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('settings_time_blocks.js') }}"></script>{% endblock %}

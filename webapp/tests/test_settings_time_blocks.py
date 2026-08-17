@@ -4,11 +4,18 @@ the holiday settings, but just adding the hours... and days"). Covers the
 Settings > Sleep & Leisure Time page/routes (same shape as
 test_settings_holidays.py) plus the Week/Day grid's overlay computation and
 client-warning JSON payload (routers/calendar.py's
-`_time_block_overlays_for_day`/`_time_blocks_client_payload`)."""
+`_time_block_overlays_for_day`/`_time_blocks_client_payload`). The page was
+a Tasks-table-style grid with inline editing; the 2026-08-17 settings HTML
+uniformity pass (SETTINGS_UI_GUIDE.md pattern B) rebuilt it onto the
+grouped-list + modal pattern -- a read-only row per block, one Edit button
+opening time_block_edit_modal.html (delete lives in that modal's footer),
+and a per-section "+ Add" toolbar button opening the same modal empty. The
+old per-field inline edit (update_time_block_field +
+static/settings_time_blocks.js) is gone, replaced by one whole-form
+update_time_block endpoint."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import date
 
@@ -27,22 +34,14 @@ def conn(tmp_path):
         yield c
 
 
-def _request(path="/settings/time-blocks"):
+def _request(path="/settings/time-blocks", query_string=b""):
     return Request(
         {
-            "type": "http", "method": "GET", "path": path, "query_string": b"",
+            "type": "http", "method": "GET", "path": path, "query_string": query_string,
             "scheme": "http", "server": ("testserver", 80), "root_path": "",
             "headers": [],
         }
     )
-
-
-class _FakeJsonRequest:
-    def __init__(self, payload):
-        self._payload = payload
-
-    async def json(self):
-        return self._payload
 
 
 class TestSettingsTimeBlocksPage:
@@ -56,17 +55,24 @@ class TestSettingsTimeBlocksPage:
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
         assert "No sleep time configured yet" in body
         assert "No leisure time configured yet" in body
-        assert 'id="sleep-block-table"' not in body
-        assert 'id="leisure-block-table"' not in body
+        assert 'id="sleep-block-list"' not in body
+        assert 'id="leisure-block-list"' not in body
+        assert 'href="/settings/time-blocks/new?kind=sleep"' in body
+        assert 'href="/settings/time-blocks/new?kind=leisure"' in body
 
-    def test_lists_existing_blocks_in_their_own_table(self, conn):
+    def test_lists_existing_blocks_in_their_own_list(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
         db.upsert_time_block(conn, {"uid": "l1", "kind": "leisure", "label": "Evening", "start_time": "21:00", "end_time": "21:59", "days": "Monday"})
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert 'id="sleep-block-table"' in body
-        assert 'id="leisure-block-table"' in body
+        assert 'id="sleep-block-list"' in body
+        assert 'id="leisure-block-list"' in body
         assert "Night" in body
         assert "Evening" in body
+        assert "00:00&ndash;05:59 &middot; Monday Tuesday" in body
+        assert 'href="/settings/time-blocks/s1/edit"' in body
+        assert 'href="/settings/time-blocks/l1/edit"' in body
+        assert 'class="inline-text"' not in body
+        assert 'id="sleep-block-table"' not in body
 
     def test_hub_links_to_time_blocks(self, conn):
         body = settings_router.settings_index(_request("/settings"), conn=conn).body.decode()
@@ -102,43 +108,83 @@ class TestCreateTimeBlock:
         assert db.list_time_blocks(conn)[0]["days"] == "Monday"
 
 
-class TestUpdateTimeBlockField:
+class TestTimeBlockEditModal:
+    def test_new_modal_renders_empty_add_form(self, conn):
+        resp = settings_router.new_time_block_modal(_request("/settings/time-blocks/new"), kind="sleep", conn=conn)
+        assert resp.status_code == 200
+        body = resp.body.decode()
+        assert "Add sleep time block" in body
+        assert 'action="/settings/time-blocks"' in body
+        assert 'id="time-block-form"' in body
+        assert 'value="sleep"' in body
+        assert 'name="days"' in body
+        assert 'value="00:00"' not in body
+
+    def test_new_modal_kind_flows_into_the_form(self, conn):
+        resp = settings_router.new_time_block_modal(_request("/settings/time-blocks/new"), kind="leisure", conn=conn)
+        body = resp.body.decode()
+        assert "Add leisure time block" in body
+        assert 'value="leisure"' in body
+
+    def test_edit_modal_prefills_values_and_posts_to_update(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
+        resp = settings_router.edit_time_block_modal("s1", _request("/settings/time-blocks/s1/edit"), conn=conn)
+        assert resp.status_code == 200
+        body = resp.body.decode()
+        assert "Edit time block" in body
+        assert 'action="/settings/time-blocks/s1/update"' in body
+        assert 'value="Night"' in body
+        assert 'value="00:00"' in body
+        assert 'value="05:59"' in body
+        assert 'action="/settings/time-blocks/s1/delete"' in body
+
+    def test_edit_modal_404s_for_unknown_uid(self, conn):
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            settings_router.edit_time_block_modal("missing", _request("/settings/time-blocks/missing/edit"), conn=conn)
+        assert exc.value.status_code == 404
+
+
+class TestUpdateTimeBlock:
     def test_updates_label(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Old", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
-        req = _FakeJsonRequest({"field": "label", "value": "New"})
-        resp = asyncio.run(settings_router.update_time_block_field("s1", req, conn=conn))
-        assert resp.status_code == 200
+        resp = settings_router.update_time_block("s1", label="New", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/time-blocks"
         assert db.get_time_block(conn, "s1")["label"] == "New"
 
     def test_updates_start_and_end_time(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
-        req = _FakeJsonRequest({"field": "start_time", "value": "01:00"})
-        asyncio.run(settings_router.update_time_block_field("s1", req, conn=conn))
+        settings_router.update_time_block("s1", label="Night", start_time="01:00", end_time="05:00", days=["Monday"], conn=conn)
         assert db.get_time_block(conn, "s1")["start_time"] == "01:00"
 
-    def test_rejects_end_time_not_after_start(self, conn):
+    def test_drops_end_time_not_after_start(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
-        req = _FakeJsonRequest({"field": "end_time", "value": "00:00"})
-        resp = asyncio.run(settings_router.update_time_block_field("s1", req, conn=conn))
-        assert resp.status_code == 400
+        settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="00:00", days=["Monday"], conn=conn)
         assert db.get_time_block(conn, "s1")["end_time"] == "05:00"
 
     def test_updates_days(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
-        req = _FakeJsonRequest({"field": "days", "value": "Monday,Tuesday,Wednesday"})
-        asyncio.run(settings_router.update_time_block_field("s1", req, conn=conn))
+        settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="05:00", days=["Monday", "Tuesday", "Wednesday"], conn=conn)
         assert db.get_time_block(conn, "s1")["days"] == "Monday,Tuesday,Wednesday"
 
-    def test_rejects_a_non_allowlisted_field(self, conn):
+    def test_drops_invalid_day_names(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
-        req = _FakeJsonRequest({"field": "kind", "value": "leisure"})
-        resp = asyncio.run(settings_router.update_time_block_field("s1", req, conn=conn))
-        assert resp.status_code == 400
+        settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="05:00", days=["Monday", "Someday"], conn=conn)
+        assert db.get_time_block(conn, "s1")["days"] == "Monday"
+
+    def test_kind_is_fixed_by_the_row_not_the_form(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
+        settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
+        assert db.get_time_block(conn, "s1")["kind"] == "sleep"
 
     def test_404s_for_unknown_uid(self, conn):
-        req = _FakeJsonRequest({"field": "label", "value": "New"})
-        resp = asyncio.run(settings_router.update_time_block_field("missing", req, conn=conn))
-        assert resp.status_code == 404
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            settings_router.update_time_block("missing", label="New", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
+        assert exc.value.status_code == 404
 
 
 class TestDeleteTimeBlock:

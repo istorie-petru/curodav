@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ form_title }}{% endblock %}
+{% block content %}
+<!-- One form for every field (2026-08-17 settings HTML uniformity pass,
+     SETTINGS_UI_GUIDE.md pattern B) -- replaces the Holidays table's old
+     inline-editable cells (per-field PATCH via static/settings_holidays.js).
+     Same shape as label_edit_modal.html: opened empty from the "+ Add
+     holiday" toolbar button (routers/settings.py::new_holiday_modal, posts
+     to create_holiday) or prefilled from a row's Edit button
+     (edit_holiday_modal, posts to update_holiday). The calendar name uses
+     the same pick-or-create single-mode multiselect as the labels fields
+     (_widget_list_multiselect.html), so a holiday calendar is either chosen
+     from an existing one or originated here. Delete lives in the shared
+     modal footer as a confirm-only action (holiday deletion is
+     irreversible -- no undo), pointing at the unchanged
+     /settings/holidays/{uid}/delete endpoint. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ form_title }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="holiday-form" action="{{ form_action }}">
+    <div class="field-grid">
+        <div class="field">
+            <label>Title</label>
+            <input type="text" name="label" value="{{ h.label if h else '' }}" placeholder="(untitled)">
+        </div>
+        <div class="field">
+            <label>Calendar</label>
+            {% set ms_mode = 'single' %}
+            {% set ms_form_id = 'holiday-form' %}
+            {% set ms_name = 'calendar_name' %}
+            {% set ms_label = 'Calendar' %}
+            {% set ms_items = [] %}
+            {% for _n in holiday_calendar_names %}{% set _ = ms_items.append({'uid': _n, 'name': _n}) %}{% endfor %}
+            {% set ms_selected = h.calendar_name if h else 'Default' %}
+            {% set ms_allow_new = true %}
+            {% set ms_wide = false %}
+            {% set ms_extra_class = '' %}
+            {% set ms_placeholder = 'Default' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field">
+            <label>Start date</label>
+            <input type="date" name="date_from" required value="{{ h.date_from if h else '' }}">
+        </div>
+        <div class="field">
+            <label>End date</label>
+            <input type="date" name="date_to" required value="{{ h.date_to if h else '' }}">
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/holidays' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% if h %}
+{% set footer_delete_url = '/settings/holidays/' ~ h.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete &quot;' ~ (h.label or '(untitled)') ~ '&quot;? This removes the holiday dates from the calendar it references.' %}
+{% endif %}
+{% set footer_primary_form = 'holiday-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}
+<!-- No extra_scripts block here -- like label_edit_modal.html, this page is
+     only ever opened via data-modal, so anything outside #modal-target above
+     is never part of what modal.js actually injects. -->

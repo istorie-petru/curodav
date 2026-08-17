@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ form_title }}{% endblock %}
+{% block content %}
+<!-- One form for every field (2026-08-17 settings HTML uniformity pass,
+     SETTINGS_UI_GUIDE.md pattern B) -- replaces the Sleep/Leisure tables'
+     old inline-editable cells (per-field PATCH via
+     static/settings_time_blocks.js). Same shape as label_edit_modal.html:
+     opened empty from a section's "+ Add" toolbar button
+     (routers/settings.py::new_time_block_modal, posts to create_time_block)
+     or prefilled from a row's Edit button (edit_time_block_modal, posts to
+     update_time_block). `kind` rides along as a hidden input so a block
+     never silently moves between the Sleep and Leisure tables; the day set
+     uses the same filter-mode multiselect as the old table cells
+     (_widget_list_multiselect.html). Delete lives in the shared modal
+     footer as a confirm-only action (time-block deletion is irreversible --
+     no undo), pointing at the unchanged
+     /settings/time-blocks/{uid}/delete endpoint. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ form_title }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="time-block-form" action="{{ form_action }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <div class="field-grid">
+        <div class="field">
+            <label>Title</label>
+            <input type="text" name="label" value="{{ b.label if b else '' }}" placeholder="(optional)">
+        </div>
+        <div class="field">
+            <label>Start time</label>
+            <input type="time" name="start_time" required value="{{ b.start_time if b else '' }}">
+        </div>
+        <div class="field">
+            <label>End time</label>
+            <input type="time" name="end_time" required value="{{ b.end_time if b else '' }}">
+        </div>
+        <div class="field">
+            <label>Days</label>
+            {% set ms_mode = 'filter' %}
+            {% set ms_form_id = 'time-block-form' %}
+            {% set ms_name = 'days' %}
+            {% set ms_label = 'Days' %}
+            {% set ms_items = [] %}
+            {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
+            {% set ms_selected = b.days.split(',') if (b and b.days) else time_block_days %}
+            {% set ms_wide = false %}
+            {% set ms_extra_class = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/time-blocks' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% if b %}
+{% set footer_delete_url = '/settings/time-blocks/' ~ b.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete &quot;' ~ (b.label or kind ~ ' time block') ~ '&quot;? This stops the Week/Day grid from hatching these hours.' %}
+{% endif %}
+{% set footer_primary_form = 'time-block-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}
+<!-- No extra_scripts block here -- like label_edit_modal.html, this page is
+     only ever opened via data-modal, so anything outside #modal-target above
+     is never part of what modal.js actually injects. -->

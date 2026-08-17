@@ -9,82 +9,33 @@
     is still on the Schedule page's Settings panel).
 </p>
 
-<!-- Add row -- same compact inline-add idiom as the old schedule_classes.html
-     panel this replaces (.calendar-new-form, no field-grid), just with the
-     calendar name now a proper dropdown-or-create picker
-     (_widget_list_multiselect.html, single+allow_new) instead of a free-text
-     +datalist input, matching how a Labels field lets you pick or originate
-     a new one. -->
-<div class="card" style="margin-bottom:14px">
-    <form method="post" action="/settings/holidays" id="new-holiday-form" class="calendar-new-form">
-        {% set ms_mode = 'single' %}
-        {% set ms_form_id = 'new-holiday-form' %}
-        {% set ms_name = 'calendar_name' %}
-        {% set ms_label = 'Calendar' %}
-        {% set ms_items = [] %}
-        {% for _n in holiday_calendar_names %}{% set _ = ms_items.append({'uid': _n, 'name': _n}) %}{% endfor %}
-        {% set ms_selected = 'Default' %}
-        {% set ms_allow_new = true %}
-        {% set ms_wide = false %}
-        {% set ms_extra_class = '' %}
-        {% set ms_placeholder = 'Default' %}
-        {% include '_widget_list_multiselect.html' %}
-        <input type="text" name="label" placeholder="Title (e.g. Winter break)">
-        <input type="date" name="date_from" required title="From">
-        <input type="date" name="date_to" required title="To">
-        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
-    </form>
-</div>
-
+<!-- Simple list (2026-08-17 settings HTML uniformity pass, SETTINGS_UI_GUIDE.md
+     pattern B) -- replaces the old inline-add form + inline-editable table
+     (static/settings_holidays.js's per-field PATCH). A row is read-only
+     display plus an Edit button opening holiday_edit_modal.html; Delete
+     lives in that modal's footer. Same grouped-list shape as
+     _labels_body.html's label rows. -->
 {% if holidays %}
-<div class="card table-scroll">
-<table class="task-table" id="holiday-table">
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Calendar</th>
-            <th>Start date</th>
-            <th>End date</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for h in holidays %}
-        <tr data-uid="{{ h.uid }}">
-            <td>
-                <input type="text" class="inline-text" data-uid="{{ h.uid }}" data-field="label" value="{{ h.label }}" placeholder="(untitled)">
-            </td>
-            <td>
-                {% set ms_mode = 'single' %}
-                {% set ms_form_id = none %}
-                {% set ms_name = 'calendar_name__' ~ h.uid %}
-                {% set ms_label = 'Calendar' %}
-                {% set ms_items = [] %}
-                {% for _n in holiday_calendar_names %}{% set _ = ms_items.append({'uid': _n, 'name': _n}) %}{% endfor %}
-                {% set ms_selected = h.calendar_name %}
-                {% set ms_allow_new = true %}
-                {% set ms_wide = false %}
-                {% set ms_extra_class = 'holiday-calendar-select' %}
-                {% include '_widget_list_multiselect.html' %}
-            </td>
-            <td>
-                <input type="date" class="inline-date" data-uid="{{ h.uid }}" data-field="date_from" value="{{ h.date_from }}">
-            </td>
-            <td>
-                <input type="date" class="inline-date" data-uid="{{ h.uid }}" data-field="date_to" value="{{ h.date_to }}">
-            </td>
-            <td style="text-align:right">
-                <form class="form-inline" method="post" action="/settings/holidays/{{ h.uid }}/delete" data-delete-undo="{{ h.label or 'Holiday' }}">
-                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+<div class="label-list" id="holiday-list">
+    {% for h in holidays %}
+    <div class="label-list-row" data-uid="{{ h.uid }}">
+        <span class="label-list-icon">{{ icon('calendar') }}</span>
+        <span class="label-list-name">
+            {{ h.label or '(untitled)' }}
+            <span class="settings-hint">{{ h.calendar_name }} &middot; {{ h.date_from }} &rarr; {{ h.date_to }}</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/settings/holidays/{{ h.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    </div>
+    {% endfor %}
+</div>
 </div>
 {% else %}
-<div class="empty-state">No holidays configured yet -- add one above.</div>
+<div class="empty-state">No holidays configured yet -- add one below.</div>
 {% endif %}
+
+<div class="toolbar" style="margin-top:16px">
+    <a href="/settings/holidays/new" class="btn primary btn-sm" data-modal>{{ icon('plus', 'icon-sm') }} Add holiday</a>
+</div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('settings_holidays.js') }}"></script>{% endblock %}

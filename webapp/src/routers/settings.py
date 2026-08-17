@@ -97,8 +97,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import RedirectResponse
 
 from .. import auth, data_health, db, offline_sync
 from ..deps import (
@@ -139,12 +139,6 @@ HUB_CATEGORIES = [
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
 _ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced"}]
-
-# Which schedule_holidays fields the Holidays table's inline edit
-# (static/settings_holidays.js) is allowed to touch -- same allowlist
-# convention as routers/tasks.py's _UPDATABLE_FIELDS, so a crafted request
-# can't write an arbitrary column.
-_HOLIDAY_UPDATABLE_FIELDS = {"calendar_name", "label", "date_from", "date_to"}
 
 # "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
 # of choices, not a free-typed number: a handful of sane presets is
@@ -385,12 +379,11 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
 # any recurring event can reference (1.6, "Generalized non-working-day
 # policy + named holiday calendars"), not something specific to Schedule
 # blocks -- the same "Labels get their own page, not a Tasks-only widget"
-# reasoning that already applies elsewhere in this Settings hub. Rendered
-# as a Tasks-table-style grid (id="holiday-table", inline-editable cells
-# via static/settings_holidays.js's update-field call, same shape as
-# static/tasks_table.js) rather than the old compact add-form-plus-plain-
-# table pair, so editing an existing holiday's dates no longer requires
-# delete-and-re-add.
+# reasoning that already applies elsewhere in this Settings hub. The page
+# is a grouped list plus a modal (2026-08-17 settings HTML uniformity
+# pass, SETTINGS_UI_GUIDE.md pattern B -- holiday_edit_modal.html) rather
+# than the old inline-editable grid, so editing an existing holiday's dates
+# is one whole-form Save instead of per-cell PATCH calls.
 # --------------------------------------------------------------------- #
 
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
@@ -406,6 +399,44 @@ def settings_holidays(request: Request, conn=Depends(get_db)):
             "crumbs": _HOLIDAYS_CRUMB,
             "title": "Holidays",
             "holidays": db.list_holidays(conn),
+        },
+    )
+
+
+@router.get("/settings/holidays/new")
+def new_holiday_modal(request: Request, conn=Depends(get_db)):
+    """The "+ Add holiday" entry point (2026-08-17 settings HTML
+    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
+    holiday_edit_modal.html the Edit buttons open, empty. Opens via
+    data-modal, posts to create_holiday below."""
+    return templates.TemplateResponse(
+        "holiday_edit_modal.html",
+        {
+            "request": request,
+            "h": None,
+            "form_title": "Add holiday",
+            "form_action": "/settings/holidays",
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+        },
+    )
+
+
+@router.get("/settings/holidays/{uid}/edit")
+def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
+    """The Holiday Edit button's modal (pattern B) -- one form for every
+    field, replacing the old inline-editable table cells
+    (static/settings_holidays.js's per-field PATCH). Opens via data-modal
+    from the Holidays list row; posts to update_holiday below."""
+    holiday = db.get_holiday(conn, uid)
+    if holiday is None:
+        raise HTTPException(404, "Holiday not found")
+    return templates.TemplateResponse(
+        "holiday_edit_modal.html",
+        {
+            "request": request,
+            "h": holiday,
+            "form_title": "Edit holiday",
+            "form_action": f"/settings/holidays/{uid}/update",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -435,29 +466,31 @@ def create_holiday(
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
-@router.post("/settings/holidays/{uid}/update-field")
-async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit for the Holidays table -- mirrors
-    routers/tasks.py's identical update-field endpoint. Merges the one
-    changed field onto the existing row and
-    round-trips through upsert_holiday (there's no separate "update"
-    helper in db.py -- a holiday's uid never changes, so upsert-by-uid
-    already is the update)."""
-    payload = await request.json()
-    field = payload.get("field")
-    value = payload.get("value")
-    if field not in _HOLIDAY_UPDATABLE_FIELDS:
-        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+@router.post("/settings/holidays/{uid}/update")
+def update_holiday(
+    uid: str,
+    calendar_name: str = Form("Default"),
+    label: str = Form(""),
+    date_from: str = Form(...),
+    date_to: str = Form(...),
+    conn=Depends(get_db),
+):
+    """The Holiday edit modal's single Save button (pattern B) -- one
+    endpoint for every field the inline edit used to PATCH separately.
+    There's no separate "update" helper in db.py -- a holiday's uid never
+    changes, so upsert-by-uid already is the update."""
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if field in ("date_from", "date_to") and not str(value).strip():
-        return JSONResponse({"error": "date cannot be empty"}, status_code=400)
-    holiday[field] = value.strip() if field == "calendar_name" else value
-    if field == "calendar_name" and not holiday[field]:
-        holiday[field] = "Default"
-    db.upsert_holiday(conn, holiday)
-    return JSONResponse({"ok": True})
+        raise HTTPException(404, "Holiday not found")
+    db.upsert_holiday(
+        conn,
+        {
+            **holiday,
+            "calendar_name": calendar_name.strip() or "Default",
+            "label": label, "date_from": date_from, "date_to": date_to,
+        },
+    )
+    return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
 @router.post("/settings/holidays/{uid}/delete")
@@ -470,9 +503,10 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
 # Sleep Time / Leisure Time (1.9 side work, direct feedback: "Add an
 # option in the settings to set-up Leisure Time and Sleep Time... similar
 # to the holiday settings, but just adding the hours... and days"). Same
-# Tasks-table-style grid shape as Holidays directly above -- one page,
-# two tables (Sleep, Leisure), each row inline-editable via
-# static/settings_time_blocks.js. Unlike Holidays, `kind` is fixed per
+# grouped-list-plus-modal shape as Holidays directly above (2026-08-17
+# settings HTML uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- two
+# lists (Sleep, Leisure), each row read-only with an Edit button opening
+# time_block_edit_modal.html. Unlike Holidays, `kind` is fixed per
 # table (no free-form calendar name) and there's no date range, just a
 # time-of-day start/end plus a day-of-week set
 # (`_widget_list_multiselect.html`, filter mode -- see db.TIME_BLOCK_DAYS).
@@ -481,10 +515,6 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
 # --------------------------------------------------------------------- #
 
 _TIME_BLOCKS_CRUMB = _ROOT_CRUMB
-
-# Which time_blocks fields the inline edit (static/settings_time_blocks.js)
-# may touch -- same allowlist convention as _HOLIDAY_UPDATABLE_FIELDS.
-_TIME_BLOCK_UPDATABLE_FIELDS = {"label", "start_time", "end_time", "days"}
 
 
 @router.get("/settings/time-blocks")
@@ -498,6 +528,48 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
             "title": "Sleep & Leisure Time",
             "sleep_blocks": db.list_time_blocks(conn, "sleep"),
             "leisure_blocks": db.list_time_blocks(conn, "leisure"),
+            "time_block_days": db.TIME_BLOCK_DAYS,
+        },
+    )
+
+
+@router.get("/settings/time-blocks/new")
+def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depends(get_db)):
+    """The per-table "+ Add ..." entry point (2026-08-17 settings HTML
+    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
+    time_block_edit_modal.html the Edit buttons open, empty. Opens via
+    data-modal from the Sleep/Leisure list toolbar and posts to
+    create_time_block below."""
+    return templates.TemplateResponse(
+        "time_block_edit_modal.html",
+        {
+            "request": request,
+            "b": None,
+            "form_title": f"Add {kind} time block",
+            "form_action": "/settings/time-blocks",
+            "kind": kind,
+            "time_block_days": db.TIME_BLOCK_DAYS,
+        },
+    )
+
+
+@router.get("/settings/time-blocks/{uid}/edit")
+def edit_time_block_modal(uid: str, request: Request, conn=Depends(get_db)):
+    """The Sleep/Leisure Edit button's modal (pattern B) -- one form for
+    every field, replacing the old inline-editable table cells
+    (static/settings_time_blocks.js's per-field PATCH). Opens via
+    data-modal from the list row; posts to update_time_block below."""
+    block = db.get_time_block(conn, uid)
+    if block is None:
+        raise HTTPException(404, "Time block not found")
+    return templates.TemplateResponse(
+        "time_block_edit_modal.html",
+        {
+            "request": request,
+            "b": block,
+            "form_title": "Edit time block",
+            "form_action": f"/settings/time-blocks/{uid}/update",
+            "kind": block["kind"],
             "time_block_days": db.TIME_BLOCK_DAYS,
         },
     )
@@ -524,31 +596,39 @@ def create_time_block(
     return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
-@router.post("/settings/time-blocks/{uid}/update-field")
-async def update_time_block_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit for the Sleep/Leisure tables -- mirrors
-    update_holiday_field. `field == "days"` takes a comma-joined string
-    (static/settings_time_blocks.js collects every checked day into one
-    string before calling this, same as it does for a plain text/time
-    input's single value) rather than a JSON list, so this endpoint has
-    exactly one request shape regardless of which field changed."""
-    payload = await request.json()
-    field = payload.get("field")
-    value = payload.get("value")
-    if field not in _TIME_BLOCK_UPDATABLE_FIELDS:
-        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+@router.post("/settings/time-blocks/{uid}/update")
+def update_time_block(
+    uid: str,
+    label: str = Form(""),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    days: list[str] = Form([]),
+    conn=Depends(get_db),
+):
+    """The time block edit modal's single Save button (pattern B) -- one
+    endpoint for every field the inline edit used to PATCH separately.
+    `kind` deliberately does NOT come from the form: a block's kind is
+    fixed by the table its row lives in (Sleep vs Leisure), so it's always
+    whatever the row already was -- a crafted form can't silently move a
+    block between tables. Same end-time-after-start-time guard as
+    create_time_block: a malformed edit is dropped (kept on screen via the
+    existing value) rather than stored."""
     block = db.get_time_block(conn, uid)
     if block is None:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if field in ("start_time", "end_time") and not str(value).strip():
-        return JSONResponse({"error": "time cannot be empty"}, status_code=400)
-    if field == "days":
-        value = ",".join(d for d in str(value).split(",") if d.strip() in db.TIME_BLOCK_DAYS)
-    block[field] = value
-    if block["end_time"] <= block["start_time"]:
-        return JSONResponse({"error": "end time must be after start time"}, status_code=400)
-    db.upsert_time_block(conn, block)
-    return JSONResponse({"ok": True})
+        raise HTTPException(404, "Time block not found")
+    valid_days = [d for d in days if d in db.TIME_BLOCK_DAYS]
+    if start_time and end_time and end_time > start_time:
+        db.upsert_time_block(
+            conn,
+            {
+                **block,
+                "label": label,
+                "start_time": start_time,
+                "end_time": end_time,
+                "days": ",".join(valid_days),
+            },
+        )
+    return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
 @router.post("/settings/time-blocks/{uid}/delete")
