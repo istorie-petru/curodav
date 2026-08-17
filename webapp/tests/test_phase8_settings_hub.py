@@ -348,6 +348,7 @@ class TestSettingsAdvanced:
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada", "created_at": _now(), "updated_at": _now()})
         db.upsert_label_config(conn, {"name": "Work", "color": "blue", "created_at": _now()})
         db.upsert_habit(conn, {"uid": "h1", "name": "Read", "created_at": _now(), "updated_at": _now()})
+        db.upsert_time_block(conn, {"uid": "tb1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday"})
         db.set_app_meta(conn, "some_flag", "1")
 
         db.purge_all_data(conn)
@@ -357,6 +358,7 @@ class TestSettingsAdvanced:
         assert db.list_contacts(conn) == []
         assert db.list_labels(conn) == []
         assert db.list_habits(conn) == []
+        assert db.list_time_blocks(conn) == []
         assert db.get_app_meta(conn, "some_flag") is None
 
     def test_purge_all_route_redirects_to_data_maintenance_page(self, conn):

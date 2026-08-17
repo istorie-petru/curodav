@@ -1738,6 +1738,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
         "habit_entries", "task_completions", "dashboard_widgets",
+        "time_blocks",
         "published_lists", "app_meta",
     ]
     for table in tables:

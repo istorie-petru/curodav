@@ -4,6 +4,15 @@
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Appearance</h1>
 
+<!-- One .card stacking every Appearance preference as a
+     .settings-field-row, exactly the shape settings_general.html uses for
+     General -- not three separate cards (each preference used to get its
+     own .card as it was added, session by session). Two rows are plain
+     autosubmit radio forms like General's Week-starts-on control; the
+     Theme row is NOT a form: theme is a client-side localStorage choice
+     (window.CCTheme, static/app.js -- see the comment below), so there's
+     no POST endpoint for it, the same reason General's profile-picture row
+     is a plain div with sibling forms instead of a form itself. -->
 <div class="card">
     <div class="settings-field-row">
         <span class="settings-field-label">Theme
@@ -27,14 +36,12 @@
             <button type="button" class="seg-btn" data-theme-choice="dark">{{ icon('moon', 'icon-sm') }} Dark</button>
         </div>
     </div>
-</div>
-<!-- Show icons next to labels (2026-08-09) -- a second Appearance
-     preference: when on, every label pill in the app (task/event label
-     pills, Tasks table/board, calendar chips) renders the label's
-     assigned icon before its name. Same autosubmit segmented on/off
-     pattern as General's Week-starts-on control. Read back everywhere
-     via deps.py's show_label_icons()/label_icon() Jinja globals. -->
-<div class="card">
+    <!-- Show icons next to labels (2026-08-09) -- when on, every label pill
+         in the app (task/event label pills, Tasks table/board, calendar
+         chips) renders the label's assigned icon before its name. Same
+         autosubmit segmented on/off pattern as General's Week-starts-on
+         control. Read back everywhere via deps.py's show_label_icons()/
+         label_icon() Jinja globals. -->
     <form class="settings-field-row" method="post" action="/settings/label-icons">
         <span class="settings-field-label">Show icons next to labels
             <span class="settings-field-hint">Each label's icon before its name, wherever labels appear</span>
@@ -45,14 +52,12 @@
             <label class="seg-btn"><input type="radio" name="show" value="" class="seg-radio" {% if not current_show_label_icons %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
         </div>
     </form>
-</div>
-<!-- Show the Relations card (2026-08-14) -- an Appearance preference:
-     whether the Relations card renders on task/event detail and edit modals
-     (the merged Relations/subtasks card, _task_relations.html/
-     _event_relations.html). Same autosubmit segmented on/off pattern as the
-     label-icons control above. Read back via deps.py's
-     show_relations_card() Jinja global; default on. -->
-<div class="card">
+    <!-- Show the Relations card (2026-08-14) -- whether the Relations card
+         renders on task/event detail and edit modals (the merged
+         Relations/subtasks card, _task_relations.html/_event_relations.html).
+         Same autosubmit segmented on/off pattern as the label-icons control
+         above. Read back via deps.py's show_relations_card() Jinja global;
+         default on. -->
     <form class="settings-field-row" method="post" action="/settings/relations-card">
         <span class="settings-field-label">Show the Relations card
             <span class="settings-field-hint">Shows linked tasks, subtasks, and events on task and event details — turn off to keep things simpler</span>

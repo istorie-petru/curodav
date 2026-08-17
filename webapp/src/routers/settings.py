@@ -528,9 +528,33 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
 
 _TIME_BLOCKS_CRUMB = _ROOT_CRUMB
 
+_DAY_ABBR = {
+    "Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu",
+    "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun",
+}
+
+
+def _time_block_days_label(days_csv: str) -> str:
+    """Human summary of a time block's day set (2026-08-17 direct
+    feedback) -- abbreviations ("Mon Tue Fri"), not the full stored day
+    names, with the two named sets spelled out: every day is "All week",
+    exactly Monday-Friday is "All work week". `days_csv` is comma-separated
+    in db.TIME_BLOCK_DAYS order (the form's checkbox order), so both the
+    len==7 test and the Mon-Fri slice comparison are order-safe."""
+    days = days_csv.split(",") if days_csv else []
+    if len(days) == len(db.TIME_BLOCK_DAYS):
+        return "All week"
+    if days == db.TIME_BLOCK_DAYS[:5]:
+        return "All work week"
+    return " ".join(_DAY_ABBR.get(d, d) for d in days)
+
 
 @router.get("/settings/time-blocks")
 def settings_time_blocks(request: Request, conn=Depends(get_db)):
+    sleep_blocks = db.list_time_blocks(conn, "sleep")
+    leisure_blocks = db.list_time_blocks(conn, "leisure")
+    for block in sleep_blocks + leisure_blocks:
+        block["days_label"] = _time_block_days_label(block.get("days") or "")
     return templates.TemplateResponse(
         "settings_time_blocks.html",
         {
@@ -538,8 +562,8 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_time_blocks",
             "crumbs": _TIME_BLOCKS_CRUMB,
             "title": "Sleep & Leisure Time",
-            "sleep_blocks": db.list_time_blocks(conn, "sleep"),
-            "leisure_blocks": db.list_time_blocks(conn, "leisure"),
+            "sleep_blocks": sleep_blocks,
+            "leisure_blocks": leisure_blocks,
             "time_block_days": db.TIME_BLOCK_DAYS,
         },
     )

@@ -30,7 +30,7 @@
         <span class="label-list-icon">{{ icon('moon') }}</span>
         <span class="label-list-name">
             {{ b.label or '(untitled)' }}
-            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days.split(',')|join(' ') }}</span>
+            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days_label }}</span>
         </span>
         <span class="spacer"></span>
         <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
@@ -55,7 +55,7 @@
         <span class="label-list-icon">{{ icon('sun') }}</span>
         <span class="label-list-name">
             {{ b.label or '(untitled)' }}
-            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days.split(',')|join(' ') }}</span>
+            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days_label }}</span>
         </span>
         <span class="spacer"></span>
         <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>

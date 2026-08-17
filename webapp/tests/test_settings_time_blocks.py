@@ -68,7 +68,7 @@ class TestSettingsTimeBlocksPage:
         assert 'id="leisure-block-list"' in body
         assert "Night" in body
         assert "Evening" in body
-        assert "00:00&ndash;05:59 &middot; Monday Tuesday" in body
+        assert "00:00&ndash;05:59 &middot; Mon Tue" in body
         assert 'href="/settings/time-blocks/s1/edit"' in body
         assert 'href="/settings/time-blocks/l1/edit"' in body
         assert 'class="inline-text"' not in body
@@ -78,6 +78,21 @@ class TestSettingsTimeBlocksPage:
         body = settings_router.settings_index(_request("/settings"), conn=conn).body.decode()
         assert 'href="/settings/time-blocks"' in body
         assert "Sleep &amp; Leisure Time" in body or "Sleep & Leisure Time" in body
+
+    def test_all_seven_days_summarize_as_all_week(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": ",".join(db.TIME_BLOCK_DAYS)})
+        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        assert "All week" in body
+
+    def test_monday_to_friday_summarize_as_all_work_week(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": ",".join(db.TIME_BLOCK_DAYS[:5])})
+        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        assert "All work week" in body
+
+    def test_partial_day_sets_are_abbreviated_in_canonical_order(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Wednesday,Friday"})
+        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        assert "00:00&ndash;05:59 &middot; Mon Wed Fri" in body
 
 
 class TestCreateTimeBlock:
