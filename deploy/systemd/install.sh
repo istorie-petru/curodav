@@ -60,22 +60,27 @@ for tool in curl rsync; do
   fi
 done
 
-if command -v uv >/dev/null 2>&1; then
-  UV_BIN="$(command -v uv)"
-elif [ -x "$HOME/.local/bin/uv" ]; then
-  UV_BIN="$HOME/.local/bin/uv"
-else
-  echo "==> Installing uv (Python package manager)..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  UV_BIN="$HOME/.local/bin/uv"
-  [ -x "$UV_BIN" ] || { echo "install.sh: uv install failed" >&2; exit 1; }
-fi
-
 # --- service user -----------------------------------------------------------
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
   echo "==> Creating system user '$SERVICE_USER'..."
   useradd --system --home-dir "$DATA_DIR" --create-home \
     --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+
+# --- uv (must be runnable by the service user) --------------------------------
+# The dependency sync runs uv via `su`, so a uv found only under the root
+# user's home (/root/.local/bin/uv -- what sudo's $HOME resolves to) is
+# useless: the service user cannot traverse /root. Prefer a system-wide uv,
+# then one installed in the service user's own home, else install it there.
+if command -v uv >/dev/null 2>&1; then
+  UV_BIN="$(command -v uv)"
+elif [ -x "$DATA_DIR/.local/bin/uv" ]; then
+  UV_BIN="$DATA_DIR/.local/bin/uv"
+else
+  echo "==> Installing uv (Python package manager) for the '$SERVICE_USER' user..."
+  su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; curl -LsSf https://astral.sh/uv/install.sh | sh"
+  UV_BIN="$DATA_DIR/.local/bin/uv"
+  [ -x "$UV_BIN" ] || { echo "install.sh: uv install failed" >&2; exit 1; }
 fi
 
 # --- app code --------------------------------------------------------------------
