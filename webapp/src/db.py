@@ -1299,6 +1299,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # every _ensure_column migration above, so the whitelist columns it
     # reads (deleted_at included) all exist.
     backfill_server_sync_writes(conn)
+    # 2026-08-18 -- one-time backfill of the work-allocation sync flag
+    # (see backfill_work_allocation_flags). Separate pass with its own
+    # marker: on a real install sync_server_writes_backfilled may already
+    # be set, but that covers entity columns only -- the flag lives in
+    # event_task_relations, which that pass never reads.
+    backfill_work_allocation_flags(conn)
     conn.commit()
 
 
@@ -1992,6 +1998,12 @@ def create_work_allocation(
         "VALUES (?, ?, ?, 1)",
         (event_uid, task_uid, now),
     )
+    # 2026-08-18 -- offline "Upcoming" view: a device's pull only ever
+    # learns the work-allocation flag through field_versions, and the flag
+    # isn't an `events` column record_server_sync_write's diff can catch,
+    # so the sync-flag entry is recorded explicitly (see
+    # record_work_allocation_flag).
+    record_work_allocation_flag(conn, event_uid)
     conn.commit()
     return event_uid
 
@@ -4713,6 +4725,27 @@ def record_server_delete(
     bump_sync_data_version(conn)
 
 
+def record_work_allocation_flag(
+    conn: sqlite3.Connection, event_uid: str, *, hlc: tuple[int, int, str] | None = None
+) -> None:
+    """Records a work-allocation event's `is_work_allocation` sync flag into
+    field_versions, so a device's pull can deliver it. The flag is not an
+    `events` column -- it lives in `event_task_relations.is_work_allocation`
+    (see create_work_allocation) -- so record_server_sync_write's plain
+    column diff can never see it; it gets its own field_versions entry
+    here. The value itself is never stored: offline_sync.pull() reads it
+    back from the relation table (offline_sync._current_field_value's
+    special case), exactly as the deleted-at-tombstone value is synthesized
+    rather than stored. Only ever recorded for work allocations -- a
+    regular event has no flag entry, and a pull simply never mentions it,
+    which the mirror reads as "not a work allocation." `hlc` lets a caller
+    seed with a known clock value instead of minting one."""
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    set_field_hlc(conn, "event", event_uid, "is_work_allocation", hlc)
+    bump_sync_data_version(conn)
+
+
 # The sync-whitelist columns for each entity, as a fixed ORDERED list --
 # the diff/read substrate for the server-as-author recording above (a
 # stable ordering keeps the generated SELECTs deterministic).
@@ -4759,6 +4792,50 @@ def backfill_server_sync_writes(conn: sqlite3.Connection) -> None:
                 )
                 inserted += cur.rowcount
     set_app_meta(conn, _SERVER_WRITES_BACKFILLED_KEY, "1")
+    if inserted:
+        bump_sync_data_version(conn)
+
+
+# One-time backfill of the work-allocation sync flag (2026-08-18, the
+# offline "Upcoming" view). The main sync_server_writes_backfilled marker
+# above may already be set on a real install -- it covers the entity
+# columns, but a work allocation's flag lives in event_task_relations, not
+# an `events` column, so its field_versions entry needs a separate one-time
+# pass, gated on its own marker.
+_WORK_ALLOCATION_FLAGS_BACKFILLED_KEY = "sync_work_allocation_flags_backfilled"
+
+
+def backfill_work_allocation_flags(conn: sqlite3.Connection) -> None:
+    """One-time: records an `is_work_allocation` field_versions entry for
+    every pre-existing work-allocation event (an event_task_relations row
+    with is_work_allocation=1), so a device's pull -- which only ever
+    learns the flag through field_versions -- sees pre-existing scheduled
+    work sessions as work allocations in its local mirror. `INSERT OR
+    IGNORE` (field_versions' primary key is entity_type+entity_uid+
+    field_name) means a field a device has already synced keeps its own
+    HLC untouched, same contract as backfill_server_sync_writes. Only the
+    =1 rows get an entry: a relation with is_work_allocation=0 is an
+    ordinary task/event link, and a regular event having *no* flag entry
+    is exactly what a pull expects to mean "not a work allocation."
+    Idempotent via its own app_meta marker, and only bumps the data
+    version when something was actually inserted (so a device's round-skip
+    pre-check notices the new flags)."""
+    if get_app_meta(conn, _WORK_ALLOCATION_FLAGS_BACKFILLED_KEY):
+        return
+    hlc = mint_server_hlc(conn)
+    inserted = 0
+    rows = conn.execute(
+        "SELECT event_uid FROM event_task_relations WHERE is_work_allocation = 1"
+    ).fetchall()
+    for (event_uid,) in rows:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO field_versions "
+            "(entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id) "
+            "VALUES ('event', ?, 'is_work_allocation', ?, ?, ?)",
+            (event_uid, hlc[0], hlc[1], hlc[2]),
+        )
+        inserted += cur.rowcount
+    set_app_meta(conn, _WORK_ALLOCATION_FLAGS_BACKFILLED_KEY, "1")
     if inserted:
         bump_sync_data_version(conn)
 

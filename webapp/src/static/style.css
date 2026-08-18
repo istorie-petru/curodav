@@ -3979,8 +3979,27 @@ body.command-palette-open{overflow:hidden;}
    entirely client-rendered by offline_shell.js so they get no server-side
    template counterpart. */
 .offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
-.offline-add-task-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-3);}
-.offline-add-task-form input[type="text"]{flex:1;}
+/* 2026-08-18 rework -- the "Quick add + Upcoming" toolbar (offline.html +
+   offline_shell.js): two tab-style .segmented buttons over two mutually
+   exclusive .offline-panels (same show-one-at-a-time contract
+   .quick-add-panels/.quick-add-panel already establish for the quick-add
+   modal's Task/Event tabs). */
+.offline-tabs{width:100%; margin-bottom:var(--space-3);}
+.offline-panels{display:block;}
+.offline-panel{display:none;}
+.offline-panel.is-active{display:block;}
+/* Agenda-style leading cell for the Upcoming events / Timetabled events
+   rows -- date + clock (or "—" for an undated event), the client-side
+   stand-in for the Agenda widget's widget-row-time column. */
+.offline-event-when{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; min-width:9.5em;}
+/* Quick add panel -- the single-field capture input, its syntax hint, and
+   the inline result/error line below it (offline_shell.js's showResult). */
+.offline-quick-capture-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-2);}
+.offline-quick-capture-form input[type="text"]{flex:1;}
+.offline-quick-capture-hint{font-size:var(--text-caption); color:var(--fg-tertiary); margin-bottom:var(--space-3);}
+.offline-quick-capture-hint code{font-size:inherit;}
+.offline-quick-capture-result{font-size:var(--text-footnote); color:var(--success);}
+.offline-quick-capture-result.is-error{color:var(--danger);}
 
 /* --------------------------------------------------------------------- */
 /* Single-user login page (2026-08-16, src/auth.py + templates/login.html)

@@ -3181,6 +3181,45 @@ session, right before the final commit of that session.
    suite **1688 passed**. This also closes out the uncommitted state from
    the previous session (the sync-toast grace-period slice) — committed
    together below.
+- **Shipped:** side work — **the /offline toolbar rework: "Quick add +
+  Upcoming"**, complete (2026-08-18) — the offline page's toolbar is now
+  two tabs (offline.html + offline_shell.js): **Upcoming** (the existing
+  mirror-read list, now split into Tasks / Upcoming events / Timetabled
+  events sections, agenda-style like the dashboard's Agenda widget —
+  a leading date+clock cell per row) and **Quick add** (a single-field
+  capture input, `!t` task / `!e` event / `!c` contact, parsed entirely
+  client-side by new `static/offline_quick_capture.js` — a faithful JS
+  port of `src/quick_capture.py`'s grammar, cross-checked against it —
+  and created through `offline_write.js`'s new `createEvent`/
+  `createContact`, built by a shared `createEntity` helper alongside the
+  existing `createTask`). The "Timetabled events" section needed a way to
+  tell a work-allocation session from an ordinary event in the local
+  mirror, and the sync protocol only delivers through `field_versions`,
+  so the server now records the flag as its own sync field: the value
+  isn't an `events` column (it lives in `event_task_relations.
+  is_work_allocation`), so `db.record_work_allocation_flag` writes the
+  field_versions HLC entry, `create_work_allocation` calls it, a second
+  one-time backfill (`db.backfill_work_allocation_flags`, own app_meta
+  marker — the main `sync_server_writes_backfilled` marker covers entity
+  columns only, which is why it needs a separate pass) fills in
+  pre-existing sessions, and `offline_sync._current_field_value` derives
+  the delivered value back from the relation table (a device push that
+  tries to set it is rejected as an unknown field — the flag is
+  server-derived). Honest-by-design scope, reported in the quick-add
+  result line rather than silently dropped: labels can't be applied
+  offline (they never flow through the field-HLC path), a task's
+  scheduled time blocks can't be created offline (a work allocation needs
+  the server-side relation a device op can't express), and a contact's
+  phone/email are dropped (they live in `contact_phones`/`contact_emails`
+  child tables outside the sync protocol; the dead `contacts.phone`/
+  `email` columns are never written). The old inline add-task form is
+  gone — Quick add replaces it. `CACHE_NAME` bumped to `cc-shell-v12`
+  (new script precached). 6 new server tests (`test_offline_sync.py`'s
+  `TestWorkAllocationSyncFlag`: flag pull on create, regular event has no
+  flag, undated sessions still flagged, backfill only for `=1` relations,
+  backfill idempotence + never-clobbers-device-HLC, device push rejected)
+  and 9 new client tests (`test_pwa_shell.py`'s `TestOfflineToolbar`).
+  Full suite **1703 passed**.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

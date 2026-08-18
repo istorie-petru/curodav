@@ -404,6 +404,22 @@ def _reconcile_project_labels(
 
 
 def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, field_name: str) -> Any:
+    # 2026-08-18 -- the offline "Upcoming" view. `is_work_allocation` is
+    # not an `events` column (the flag lives in
+    # event_task_relations.is_work_allocation, see db.create_work_allocation),
+    # so the generic SELECT below would fail -- pull() derives the value
+    # from the relation table instead, mirroring the deleted_at-tombstone
+    # synthesis just below (a field whose value lives somewhere other than
+    # the entity row it's recorded against). Only work-allocation events
+    # have a field_versions entry at all (db.record_work_allocation_flag
+    # and db.backfill_work_allocation_flags never write one for a regular
+    # event), so this is only ever asked about a real work allocation.
+    if entity_type == "event" and field_name == "is_work_allocation":
+        row = conn.execute(
+            "SELECT task_uid FROM event_task_relations WHERE event_uid = ? AND is_work_allocation = 1",
+            (uid,),
+        ).fetchone()
+        return 1 if row else 0
     table = _ENTITY_TABLES.get(entity_type)
     if table is None:
         return None

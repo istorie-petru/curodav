@@ -328,9 +328,87 @@ class TestLocalWritePath:
         # (offline_shell.js / offline_write.js / offline_status.js) were
         # never runtime-cached during normal page visits and failed to load
         # on a device's first offline visit, leaving the static empty state
-        # visible; forces a fresh shell install with the new handler.
+        # visible; v12 (2026-08-18) added offline_quick_capture.js to the
+        # precache list (the "Quick add" toolbar's capture parser). Both
+        # force a fresh shell install with the new handler/assets.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v11"' in script
+        assert 'CACHE_NAME = "cc-shell-v12"' in script
+
+
+class TestOfflineToolbar:
+    """2026-08-18 rework -- the /offline toolbar's two tabs ("Quick add" +
+    "Upcoming") and the single-field quick-capture input. Same "read the
+    JS/template source, assert the shape" level of confidence as every
+    other class here -- the parser's actual behavior is exercised by the
+    offline_quick_capture.js smoke run during development (matching
+    src/quick_capture.py's own parser output), not by this suite."""
+
+    def test_offline_page_has_the_two_toolbar_tabs(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert 'data-offline-tab="upcoming"' in html
+        assert 'data-offline-tab="quickadd"' in html
+        assert "Upcoming" in html
+        assert "Quick add" in html
+
+    def test_offline_html_has_the_quick_capture_form(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert 'id="offline-quick-capture-form"' in html
+        assert 'name="capture"' in html
+        assert 'id="offline-quick-capture-result"' in html
+
+    def test_offline_html_loads_the_quick_capture_script(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert "offline_quick_capture.js" in html
+        assert "offline_write.js" in html
+        assert "offline_shell.js" in html
+
+    def test_offline_quick_capture_defines_the_parser_and_markers(self):
+        script = (_STATIC_DIR / "offline_quick_capture.js").read_text()
+        assert "window.CCOfflineCapture" in script
+        assert "parse: parse" in script
+        for marker in ("!t", "!e", "!c"):
+            assert marker in script
+        # Parser only -- no network call anywhere in it (it must work fully
+        # offline, there's no server to preview against).
+        assert "fetch(" not in script
+
+    def test_offline_write_gained_event_and_contact_creates(self):
+        script = (_STATIC_DIR / "offline_write.js").read_text()
+        assert "createEvent" in script
+        assert "createContact" in script
+        # Both built by one shared create helper, not two copies of the
+        # create-op plumbing.
+        assert "createEntity" in script
+
+    def test_offline_shell_renders_three_upcoming_sections(self):
+        script = (_STATIC_DIR / "offline_shell.js").read_text()
+        assert "Tasks (" in script
+        assert "Upcoming events (" in script
+        assert "Timetabled events (" in script
+        # The timetabled section is driven by the mirror's work-allocation
+        # flag -- the thing the server's new is_work_allocation sync field
+        # delivers.
+        assert "is_work_allocation" in script
+
+    def test_offline_shell_wires_the_quick_capture_submit(self):
+        script = (_STATIC_DIR / "offline_shell.js").read_text()
+        assert "offline-quick-capture-form" in script
+        assert "CCOfflineCapture.parse" in script
+        assert "CCOfflineWrite.createEvent" in script
+        assert "CCOfflineWrite.createContact" in script
+        assert "CCOfflineWrite.createTask" in script
+
+    def test_quick_capture_script_not_loaded_globally(self):
+        # offline_quick_capture.js is /offline-only, like offline_write.js
+        # and offline_shell.js -- loading it on every page would be dead
+        # weight (offline_db.js/offline_sync_client.js/offline_status.js
+        # are the ones that genuinely run everywhere).
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
+        assert "offline_quick_capture.js" not in html
+
+    def test_precache_list_includes_the_quick_capture_script(self):
+        script = (_STATIC_DIR / "sw.js").read_text()
+        assert "/static/offline_quick_capture.js" in script
 
 
 class TestSyncEngine:

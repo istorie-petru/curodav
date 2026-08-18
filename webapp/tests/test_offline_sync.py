@@ -812,3 +812,107 @@ class TestServerWritesBackfill:
         # own HLC untouched.
         assert db.get_field_hlc(conn, "task", "t1", "title") == before
         assert db.get_field_hlc(conn, "task", "t1", "status") is not None
+
+
+class TestWorkAllocationSyncFlag:
+    """2026-08-18 -- the offline "Upcoming" view needs to tell a
+    work-allocation event (a scheduled task work session) apart from an
+    ordinary event in the local mirror. The flag isn't an `events` column
+    -- it lives in event_task_relations.is_work_allocation -- and the sync
+    protocol only ever delivers a device's mirror something through
+    field_versions, so the server records it as its own sync field
+    (`db.record_work_allocation_flag`) and `offline_sync._current_field_
+    value` derives the delivered value back from the relation table. These
+    tests pin that server-side, the same way TestServerWritesEnterField
+    Versions pins the server-as-author mechanism."""
+
+    def test_create_work_allocation_pull_delivers_the_flag(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "Write report", "description": "", "status": "active"})
+        event_uid = db.create_work_allocation(
+            conn, "t1", "2026-08-20T10:00:00", "2026-08-20T11:00:00"
+        )
+        changes = offline_sync.pull(conn, None)["changes"]
+        flag = [c for c in changes if c["entity_uid"] == event_uid and c["field_name"] == "is_work_allocation"]
+        assert len(flag) == 1
+        assert flag[0]["value"] == 1
+        assert flag[0]["hlc"][2] == db.SERVER_DEVICE_ID
+
+    def test_regular_event_has_no_flag_change(self, conn):
+        # No flag entry is written for a regular event, and pull never
+        # mentions it -- the mirror reads the absence as "not a work
+        # allocation," which is exactly what a plain event is.
+        db.upsert_event(conn, {
+            "uid": "e1", "title": "Dentist", "description": "", "status": "active",
+            "all_day": False, "start_at": "2026-08-20T09:00:00", "end_at": "2026-08-20T09:30:00",
+        })
+        changes = offline_sync.pull(conn, None)["changes"]
+        assert all(c["field_name"] != "is_work_allocation" for c in changes)
+
+    def test_undated_work_allocation_still_delivers_the_flag(self, conn):
+        # An undated session placeholder (no start/end yet, the "+"-added
+        # kind) is still a work allocation -- the flag must travel
+        # regardless of whether the block has been scheduled yet.
+        db.upsert_task(conn, {"uid": "t1", "title": "Read", "description": "", "status": "active"})
+        event_uid = db.create_work_allocation(conn, "t1")
+        changes = offline_sync.pull(conn, None)["changes"]
+        flag = [c for c in changes if c["entity_uid"] == event_uid and c["field_name"] == "is_work_allocation"]
+        assert flag and flag[0]["value"] == 1
+
+    def test_backfill_records_pre_existing_work_allocation_flags(self, conn):
+        # Rows created before this feature have no flag entry (only the
+        # main entity-column backfill ran, which never reads the relation
+        # table) -- backfill_work_allocation_flags fills exactly those in.
+        conn.execute("INSERT INTO events (uid, title, description, status, all_day) VALUES ('e-wa', 'Old session', '', 'active', 0)")
+        conn.execute("INSERT INTO events (uid, title, description, status, all_day) VALUES ('e-link', 'Linked event', '', 'active', 0)")
+        conn.execute(
+            "INSERT INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
+            "VALUES ('e-wa', 't1', '2026-08-18T00:00:00', 1)"
+        )
+        conn.execute(
+            "INSERT INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
+            "VALUES ('e-link', 't1', '2026-08-18T00:00:00', 0)"
+        )
+        conn.commit()
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (db._WORK_ALLOCATION_FLAGS_BACKFILLED_KEY,))
+        conn.commit()
+        db.backfill_work_allocation_flags(conn)
+        changes = offline_sync.pull(conn, None)["changes"]
+        flags = {c["entity_uid"]: c["value"] for c in changes if c["field_name"] == "is_work_allocation"}
+        # Only the =1 relation's event gets a flag entry; a plain task link
+        # (=0) is an ordinary event and stays flagless.
+        assert flags == {"e-wa": 1}
+
+    def test_backfill_is_idempotent_and_never_overwrites_device_state(self, conn):
+        conn.execute("INSERT INTO events (uid, title, description, status, all_day) VALUES ('e-wa', 'Old', '', 'active', 0)")
+        conn.execute(
+            "INSERT INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
+            "VALUES ('e-wa', 't1', '2026-08-18T00:00:00', 1)"
+        )
+        conn.commit()
+        # Simulate a device that already synced a flag value for this event
+        # (e.g. pulled a server-written flag before the install ever ran
+        # the backfill) -- the backfill's INSERT OR IGNORE must leave its
+        # HLC untouched.
+        db.set_field_hlc(conn, "event", "e-wa", "is_work_allocation", (9999, 0, "device-a"))
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (db._WORK_ALLOCATION_FLAGS_BACKFILLED_KEY,))
+        conn.commit()
+        db.backfill_work_allocation_flags(conn)
+        assert db.get_field_hlc(conn, "event", "e-wa", "is_work_allocation") == (9999, 0, "device-a")
+        # Idempotent: the marker is set once the scan has run, so a second
+        # call records nothing and moves the data version nothing.
+        version = db.get_sync_data_version(conn)
+        db.backfill_work_allocation_flags(conn)
+        assert db.get_sync_data_version(conn) == version
+
+    def test_device_cannot_push_the_flag_itself(self, conn):
+        # The flag is server-derived (it describes a relation row, which a
+        # device op has no way to express) -- a device push that tries to
+        # set it is rejected like any other unknown field, not silently
+        # interpolated into a SQL column that doesn't exist.
+        result = offline_sync.apply_op(conn, _field_set_op(
+            "op1", "event", "e1",
+            {"title": {"value": "E", "hlc": _hlc(1000)}, "is_work_allocation": {"value": 1, "hlc": _hlc(1001)}},
+        ))
+        assert result["fields"]["is_work_allocation"] == "rejected_unknown_field"
+        assert result["fields"]["title"] == "applied"
+        assert db.get_field_hlc(conn, "event", "e1", "is_work_allocation") is None

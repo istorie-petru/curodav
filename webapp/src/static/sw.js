@@ -25,8 +25,11 @@
 // falls back to caches.match(request, { ignoreSearch: true }) so the
 // versioned ?v= URLs every page requests can be served from the precache's
 // un-versioned entries (before that, /offline-only scripts failed to load
-// on a device's first offline visit).
-const CACHE_NAME = "cc-shell-v11";
+// on a device's first offline visit). v12 (2026-08-18): added
+// /static/offline_quick_capture.js to the precache list (the offline
+// "Quick add" toolbar's client-side capture parser), forcing a fresh shell
+// install so /offline loads it.
+const CACHE_NAME = "cc-shell-v12";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -56,6 +59,7 @@ const SHELL_ASSETS = [
   "/static/offline_sync_client.js",
   "/static/offline_status.js",
   "/static/offline_write.js",
+  "/static/offline_quick_capture.js",
   "/static/offline_shell.js",
   "/static/favicon-16.png",
   "/static/favicon-32.png",

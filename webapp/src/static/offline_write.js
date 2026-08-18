@@ -14,6 +14,14 @@
 // yet; a later slice can repeat this same shape for them once there's a
 // real sync engine (slice 6) to actually flush the outbox against.
 //
+// 2026-08-18 -- the offline "Quick add" toolbar grew a single-field
+// capture input (offline_quick_capture.js) that can create all three of
+// the sync-pool entity types, so this file gained createEvent/createContact
+// alongside createTask, all three now built by one shared createEntity
+// helper (the only per-type difference is the base fields a brand-new row
+// needs: a task starts "open", an event "active", a contact has no status).
+// The task list's per-row complete/delete controls are unchanged.
+//
 // Still no sync engine: ops queued here just accumulate in `outbox` until
 // slice 6's push loop exists. Nothing here ever talks to the network.
 (function () {
@@ -69,20 +77,24 @@
 
   // `create` is a single field_set covering every field at once, stamped
   // with one shared HLC (§2: "a plain-form create with no prior state to
-  // conflict against").
-  async function createTask(fields) {
+  // conflict against"). `baseFields` are the per-type defaults a fresh row
+  // needs beyond created_at/updated_at (task: status "open"; event: status
+  // "active"; contact: none) -- passed explicitly rather than special-cased
+  // inside so the entity table (offline_db.js's ENTITY_STORES) stays the
+  // single source of truth for which types exist.
+  async function createEntity(entityType, fields, baseFields) {
     const deviceId = await window.CCOfflineDB.getDeviceId();
     const uid = crypto.randomUUID();
     const hlc = hlcPayload(await window.CCOfflineDB.nextHlc());
     const nowIso = new Date().toISOString();
-    const base = Object.assign({ status: "open", created_at: nowIso, updated_at: nowIso }, fields);
+    const base = Object.assign({ created_at: nowIso, updated_at: nowIso }, baseFields, fields);
     const opFields = {};
     for (const [name, value] of Object.entries(base)) {
       opFields[name] = { value, hlc };
     }
     const op = {
       op_id: crypto.randomUUID(),
-      entity_type: "task",
+      entity_type: entityType,
       entity_uid: uid,
       op_type: "create",
       fields: opFields,
@@ -94,6 +106,18 @@
     };
     await submitOp(op);
     return uid;
+  }
+
+  async function createTask(fields) {
+    return createEntity("task", fields, { status: "open" });
+  }
+
+  async function createEvent(fields) {
+    return createEntity("event", fields, { status: "active" });
+  }
+
+  async function createContact(fields) {
+    return createEntity("contact", fields, {});
   }
 
   // A single field edit (e.g. marking a task complete) -- `updated_at`
@@ -135,5 +159,5 @@
     await submitOp(op);
   }
 
-  window.CCOfflineWrite = { createTask, updateTaskField, deleteTask };
+  window.CCOfflineWrite = { createTask, createEvent, createContact, updateTaskField, deleteTask };
 })();
