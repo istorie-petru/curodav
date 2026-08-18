@@ -137,8 +137,11 @@ systemctl enable --now curodav.service
 if [ "$WITH_RADICALE" = 1 ]; then
   echo "==> Setting up Radicale (CalDAV/CardDAV server)..."
   install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$(dirname "$RADICALE_VENV")"
-  su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; '$UV_BIN' venv --python 3.12 '$RADICALE_VENV'"
-  su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; '$UV_BIN' pip install --python '$RADICALE_VENV/bin/python' 'radicale>=3.3'"
+  # Run uv from the service user's home: from the caller's CWD (e.g. the root
+  # user's clone) uv would walk up and try to read that repo's uv.toml, which
+  # the service user cannot access (Permission denied).
+  su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; cd '$DATA_DIR' && '$UV_BIN' venv --python 3.12 '$RADICALE_VENV'"
+  su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; cd '$DATA_DIR' && '$UV_BIN' pip install --python '$RADICALE_VENV/bin/python' 'radicale>=3.3'"
 
   install -o root -g "$SERVICE_USER" -m 0644 \
     "$SOURCE_DIR/deploy/systemd/radicale/config.example" \
