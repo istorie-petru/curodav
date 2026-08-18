@@ -4,18 +4,23 @@
 #   sudo bash install.sh                   # the app only
 #   sudo bash install.sh --with-radicale   # app + optional CalDAV/CardDAV server
 #
-# What it sets up (paths are overridable via CC_* env vars):
-#   /opt/curodav          the repo (git clone), venv created by `uv sync`
+# How it works: you clone the whole repo, then run this script from
+# deploy/systemd/. It syncs your clone to /opt/curodav, creates the service
+# user, installs config + systemd units, installs Python deps, and starts the
+# service -- one step, no dependency on the GitHub remote being up to date.
+#
+# What it sets up (paths overridable via CC_* env vars / --repo-dir / --user):
+#   /opt/curodav          the app code (a copy of your clone, no .git)
 #   /var/lib/curodav      data: SQLite cache, backups, radicale collections
 #   /etc/curodav          config: curodav.env + radicale/ (0640 root:curodav)
 #   curodav.service       the app, enabled + started
 #   curodav-radicale.service  optional, only with --with-radicale
 #
-# Safe to re-run: pulls the latest repo, re-syncs deps, reinstalls the units,
+# Safe to re-run: re-syncs your clone, re-syncs deps, reinstalls the units,
 # and never overwrites an existing /etc/curodav/curodav.env.
 set -euo pipefail
 
-REPO_URL="https://github.com/istorie-petru/curodav.git"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_DIR="${CC_REPO_DIR:-/opt/curodav}"
 SERVICE_USER="${CC_SERVICE_USER:-curodav}"
 DATA_DIR="/var/lib/curodav"
@@ -37,8 +42,18 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+# --- validate the source clone ------------------------------------------------
+# The installer ships inside the repo, so the clone it lives in IS the source
+# of the app code. Refuse to run from anywhere that does not look like it.
+if [ ! -f "$SOURCE_DIR/deploy/systemd/curodav.env.example" ] || [ ! -d "$SOURCE_DIR/webapp" ]; then
+  echo "install.sh: cannot find the curodav repo around $SOURCE_DIR." >&2
+  echo "Run this script from inside your clone, i.e. at" >&2
+  echo "    <your-clone>/deploy/systemd/install.sh" >&2
+  exit 1
+fi
+
 # --- prerequisites --------------------------------------------------------
-for tool in git curl; do
+for tool in curl rsync; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "install.sh: missing prerequisite: $tool" >&2
     exit 1
@@ -63,16 +78,21 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
     --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
 
-# --- repo --------------------------------------------------------------------
-if [ -d "$REPO_DIR/.git" ]; then
-  echo "==> Updating existing repo at $REPO_DIR..."
-  git -C "$REPO_DIR" pull --ff-only
-else
-  echo "==> Cloning $REPO_URL -> $REPO_DIR ..."
+# --- app code --------------------------------------------------------------------
+# /opt/curodav is a plain deployment copy of the clone, refreshed on every
+# run. --delete keeps it a faithful snapshot (a stale released clone or a
+# renamed file cannot linger); .git/.venv and dev bytecode are skipped.
+if [ "$SOURCE_DIR" != "$REPO_DIR" ]; then
+  echo "==> Syncing $SOURCE_DIR -> $REPO_DIR ..."
   mkdir -p "$(dirname "$REPO_DIR")"
-  git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+  rsync -a --delete "$SOURCE_DIR/" "$REPO_DIR/" \
+    --exclude .git --exclude .venv \
+    --exclude __pycache__ --exclude '*.pyc'
+  rm -rf "$REPO_DIR/.git"
+  chown -R "$SERVICE_USER":"$SERVICE_USER" "$REPO_DIR"
+else
+  echo "==> Repo already in place at $REPO_DIR (source equals destination)."
 fi
-chown -R "$SERVICE_USER":"$SERVICE_USER" "$REPO_DIR"
 
 # --- data + config dirs -------------------------------------------------------
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" \
@@ -88,7 +108,7 @@ ENV_FILE="$CONF_DIR/curodav.env"
 if [ ! -f "$ENV_FILE" ]; then
   echo "==> Writing $ENV_FILE (from the example)..."
   install -o root -g "$SERVICE_USER" -m 0640 \
-    "$REPO_DIR/deploy/systemd/curodav.env.example" "$ENV_FILE"
+    "$SOURCE_DIR/deploy/systemd/curodav.env.example" "$ENV_FILE"
 fi
 
 # --- app dependencies -----------------------------------------------------------
@@ -103,7 +123,7 @@ su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; cd '$REPO_DIR/webap
 
 # --- app unit --------------------------------------------------------------------
 echo "==> Installing systemd units..."
-install -m 0644 "$REPO_DIR/deploy/systemd/curodav.service" \
+install -m 0644 "$SOURCE_DIR/deploy/systemd/curodav.service" \
   /etc/systemd/system/curodav.service
 systemctl daemon-reload
 systemctl enable --now curodav.service
@@ -116,7 +136,7 @@ if [ "$WITH_RADICALE" = 1 ]; then
   su -s /bin/bash "$SERVICE_USER" -c "export HOME='$DATA_DIR'; '$UV_BIN' pip install --python '$RADICALE_VENV/bin/python' 'radicale>=3.3'"
 
   install -o root -g "$SERVICE_USER" -m 0644 \
-    "$REPO_DIR/deploy/systemd/radicale/config.example" \
+    "$SOURCE_DIR/deploy/systemd/radicale/config.example" \
     "$CONF_DIR/radicale/config"
 
   RADICALE_USER="${CC_RADICALE_USER:-curodav}"
@@ -136,7 +156,7 @@ if [ "$WITH_RADICALE" = 1 ]; then
     echo ""
   fi
 
-  install -m 0644 "$REPO_DIR/deploy/systemd/curodav-radicale.service" \
+  install -m 0644 "$SOURCE_DIR/deploy/systemd/curodav-radicale.service" \
     /etc/systemd/system/curodav-radicale.service
   systemctl daemon-reload
   systemctl enable --now curodav-radicale.service
@@ -146,4 +166,5 @@ echo "==> Done. Service status:"
 systemctl --no-pager --full status curodav.service | head -12
 echo ""
 echo "    Point your browser at http://<this-host>:8000"
-echo "    Update later with: sudo bash $REPO_DIR/deploy/systemd/update.sh"
+echo "    Update later: pull your clone and re-run this installer from it:"
+echo "        sudo bash $SOURCE_DIR/deploy/systemd/install.sh"
