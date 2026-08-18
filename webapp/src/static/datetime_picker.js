@@ -238,22 +238,6 @@
       value.textContent = labelText();
     }
 
-    function currentLabel() {
-      if (mode === "date") return state.date ? fmtDate(state.date) : placeholder;
-      const start = state.startHour !== null ? fmtHour(state.startHour, use12h) : null;
-      const end = state.endHour !== null ? fmtHour(state.endHour, use12h) : null;
-      if (mode === "time") {
-        return start !== null && end !== null ? start + "\u2013" + end : placeholder;
-      }
-      if (state.date && start !== null && end !== null) {
-        return fmtDate(state.date) + " \u00b7 " + start + "\u2013" + end;
-      }
-      if (state.date && start !== null) {
-        return fmtDate(state.date) + " \u00b7 " + start + "\u2013\u2026";
-      }
-      return placeholder;
-    }
-
     // ------------------------------------------------------------------ //
     // Rendering the panel body
     // ------------------------------------------------------------------ //
@@ -411,8 +395,6 @@
             h < Math.max(state.startHour, state.endHour)
         );
       });
-      const readout = panel.querySelector(".dtp-readout");
-      if (readout) readout.textContent = currentLabel();
     }
 
     function pickHour(h) {
@@ -465,10 +447,6 @@
     function renderFooter() {
       const footer = document.createElement("div");
       footer.className = "dtp-panel-footer";
-      const readout = document.createElement("span");
-      readout.className = "dtp-readout";
-      readout.textContent = currentLabel();
-      footer.appendChild(readout);
 
       if (!submit) {
         const clear = document.createElement("button");

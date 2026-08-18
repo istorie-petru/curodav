@@ -391,13 +391,97 @@ class TestSyncApiRouter:
         assert db.get_task(conn, "t1") is not None
 
 
+class TestDataVersion:
+    """2026-08-17 -- the server-side data version (db.get_sync_data_version):
+    a monotonic counter that moves exactly when a sync write actually
+    changes server state, exposed via GET /api/sync/state and in every pull
+    response. The client compares it against its own last-synced copy to
+    skip a no-op round entirely (offline_sync_client.js's `nothingToDo()`
+    pre-check) -- so "did the version change" must mean exactly the same
+    thing as "would a pull return something new"."""
+
+    def test_version_starts_at_zero(self, conn):
+        assert db.get_sync_data_version(conn) == 0
+
+    def test_apply_batch_with_a_real_write_bumps_the_version(self, conn):
+        assert db.get_sync_data_version(conn) == 0
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})]
+        )
+        assert db.get_sync_data_version(conn) == 1
+        # A second, separate real write moves it again.
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op2", "task", "t1", {"due_at": {"value": "2026-09-01", "hlc": _hlc(2000)}})]
+        )
+        assert db.get_sync_data_version(conn) == 2
+
+    def test_replaying_the_same_batch_does_not_bump_again(self, conn):
+        batch = [_field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})]
+        offline_sync.apply_batch(conn, batch)
+        assert db.get_sync_data_version(conn) == 1
+        # A retried push of the same op_ids replays the cached result (§5)
+        # -- nothing changes server-side, so the version must not move, or
+        # every retry would send other devices into a pull that returns
+        # nothing new.
+        offline_sync.apply_batch(conn, batch)
+        assert db.get_sync_data_version(conn) == 1
+
+    def test_a_stale_batch_does_not_bump(self, conn):
+        offline_sync.apply_op(conn, _field_set_op("op1", "task", "t1", {"title": {"value": "New", "hlc": _hlc(2000)}}))
+        # A fully-stale batch (every field write loses to what's already
+        # there) changes nothing -- version stays put.
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op2", "task", "t1", {"title": {"value": "Stale", "hlc": _hlc(1000)}})]
+        )
+        assert db.get_sync_data_version(conn) == 0
+
+    def test_state_endpoint_returns_the_version(self, conn):
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})]
+        )
+        resp = asyncio.run(sync_api.state(conn=conn))
+        assert resp.status_code == 200
+        assert _json.loads(resp.body.decode()) == {"version": 1}
+
+    def test_pull_response_includes_the_current_version(self, conn):
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})]
+        )
+        resp = asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
+        body = _json.loads(resp.body.decode())
+        assert body["version"] == 1
+        # A pull after a GC purge reflects the post-purge version.
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        offline_sync.purge_expired(conn, retention_days=0)
+        resp = asyncio.run(sync_api.pull(_json_request({"device_id": "device-b", "cursor": None}), conn=conn))
+        body = _json.loads(resp.body.decode())
+        assert body["version"] == db.get_sync_data_version(conn)
+
+    def test_purge_expired_bumps_the_version_when_it_purges(self, conn):
+        offline_sync.apply_batch(
+            conn, [_field_set_op("op1", "task", "t1", {"title": {"value": "T", "hlc": _hlc(1000)}})]
+        )
+        version_before = db.get_sync_data_version(conn)
+        offline_sync.apply_op(conn, _delete_op("op2", "task", "t1", 2000))
+        result = offline_sync.purge_expired(conn, retention_days=0)
+        assert any(result["purged_entities"].values())
+        assert db.get_sync_data_version(conn) == version_before + 1
+
+
 def _seed_event(conn, uid, **overrides):
     row = {
         "uid": uid, "title": uid, "description": "", "status": "active", "all_day": False,
         "start_at": "2026-08-10T09:00:00", "end_at": "2026-08-10T10:00:00", "tags": [],
     }
     row.update(overrides)
-    db.upsert_event(conn, row)
+    # record_server_write=False: these seeds represent a row that already
+    # existed before the sync feature (see TestServerWritesEnterFieldVersions
+    # for the server-as-author behavior a *live* upsert now exhibits). With
+    # recording on, the seed would mint a real-now "server" field HLC that
+    # outranks every synthetic device HLC below and turn every §7b test into
+    # a server-vs-device conflict test -- this keeps them focused on the
+    # two-device concurrency each one is actually about.
+    db.upsert_event(conn, row, record_server_write=False)
 
 
 class TestConcurrentEventTimeConflicts:
@@ -573,3 +657,158 @@ class TestSyncConflictsSettingsPage:
         assert resp.status_code == 303
         assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T12:00:00"
         assert db.get_sync_conflict(conn, conflict_id)["resolved_at"] is not None
+
+
+class TestServerWritesEnterFieldVersions:
+    """2026-08-18 follow-up -- the fix for the "offline shows nothing" bug.
+    The sync protocol only ever delivers changes to a device through
+    field_versions, and field_versions was only ever written by *device*
+    pushes. The ordinary rendered UI's own writes (db.upsert_*/delete_*)
+    bypassed it entirely, so a fresh device's pull returned an empty delta
+    and its local mirror stayed empty forever -- leaving the /offline
+    shell's static "Nothing to load right now" empty state visible. The
+    server is now itself a participant in the same scheme: every server
+    write records its changed fields into field_versions under a "server"
+    HLC (db.SERVER_DEVICE_ID), and a pull delivers them like any other
+    change. These tests pin that behavior server-side (no browser)."""
+
+    def test_server_create_records_its_fields_and_pull_delivers_them(self, conn):
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Buy groceries", "description": "",
+            "status": "active", "due_at": "2026-08-20T10:00:00",
+            "created_at": "2026-08-18T09:00:00",
+        })
+        result = offline_sync.pull(conn, None)
+        assert result["full_resync"] is False
+        changes = {c["field_name"]: c for c in result["changes"]}
+        assert changes["title"]["value"] == "Buy groceries"
+        assert changes["due_at"]["value"] == "2026-08-20T10:00:00"
+        assert changes["status"]["value"] == "active"
+        assert all(c["hlc"][2] == db.SERVER_DEVICE_ID for c in result["changes"])
+        # Exactly one version bump for the whole create -- one server write,
+        # not one per field.
+        assert db.get_sync_data_version(conn) == 1
+
+    def test_server_edit_records_only_the_fields_that_changed(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "A", "description": "", "status": "active"})
+        first_hlc = db.get_field_hlc(conn, "task", "t1", "title")
+        db.upsert_task(conn, {"uid": "t1", "title": "B", "description": "", "status": "active"})
+        # title changed -> its HLC advanced past the create's...
+        assert db.get_field_hlc(conn, "task", "t1", "title") > first_hlc
+        # ...but status/description did not -- recording *every* column on
+        # every edit would overwrite a device's newer HLC on fields the
+        # server never touched, so unchanged fields keep their old HLC.
+        assert db.get_field_hlc(conn, "task", "t1", "status") == first_hlc
+        assert db.get_field_hlc(conn, "task", "t1", "description") == first_hlc
+
+    def test_server_delete_records_a_tombstone_a_pull_can_deliver(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "A", "description": "", "status": "active"})
+        db.delete_task(conn, "t1")
+        assert db.get_task(conn, "t1") is None
+        result = offline_sync.pull(conn, None)
+        tombstones = [
+            c for c in result["changes"]
+            if c["field_name"] == "deleted_at" and c["entity_uid"] == "t1"
+        ]
+        assert len(tombstones) == 1
+        # The row is physically gone; the value is synthesized from the
+        # tombstone's HLC (offline_sync._current_field_value) so a device's
+        # mirror hides the entity rather than seeing a null deleted_at.
+        assert tombstones[0]["value"]
+
+    def test_server_clock_merges_past_an_applied_device_op(self, conn):
+        offline_sync.apply_op(conn, _field_set_op(
+            "op1", "task", "t1",
+            {"title": {"value": "From device", "hlc": _hlc(5000, device="device-a")}},
+        ))
+        # The server observed the device's HLC -- its own clock must now be
+        # past it, or a server edit causally *after* the device's offline
+        # edit could mint an HLC that fails to outrank it (§3's merge rule).
+        clock = db.get_server_hlc_clock(conn)
+        assert clock is not None and clock[0] >= 5000
+        db.upsert_task(conn, {"uid": "t1", "title": "Server edit", "description": "", "status": "active"})
+        hlc = db.get_field_hlc(conn, "task", "t1", "title")
+        assert hlc[0] > 5000 or (hlc[0] == 5000 and hlc[1] > 0)
+        assert db.get_task(conn, "t1")["title"] == "Server edit"
+
+    def test_device_edit_newer_than_a_pulled_server_write_wins_plainly(self, conn):
+        # A device that pulled the server's write first (mirroring the
+        # client's mergeHlc on pull) then edits offline pushes a strictly
+        # newer HLC and wins -- plain §6, no different from any two devices.
+        db.upsert_task(conn, {"uid": "t1", "title": "Server title", "description": "", "status": "active"})
+        server_hlc = db.get_field_hlc(conn, "task", "t1", "title")
+        result = offline_sync.apply_op(conn, _field_set_op(
+            "op1", "task", "t1",
+            {"title": {"value": "Device title", "hlc": _hlc(server_hlc[0] + 1, device="device-a")}},
+        ))
+        assert result["status"] == "applied"
+        assert db.get_task(conn, "t1")["title"] == "Device title"
+
+    def test_server_write_is_a_sync_conflict_participant_on_surfaced_fields(self, conn):
+        # §7b's surfaced scheduling fields treat a cross-device overwrite as
+        # a conflict -- the server's seed HLC carries device "server", so a
+        # device edit to an event's start_at that beats it is recorded as a
+        # conflict exactly like a two-device edit would be.
+        db.upsert_event(conn, {
+            "uid": "e1", "title": "E", "description": "", "status": "active",
+            "all_day": False, "start_at": "2026-08-10T09:00:00",
+            "end_at": "2026-08-10T10:00:00",
+        })
+        server_hlc = db.get_field_hlc(conn, "event", "e1", "start_at")
+        offline_sync.apply_op(conn, _field_set_op(
+            "op1", "event", "e1",
+            {"start_at": {"value": "2026-08-10T11:00:00", "hlc": _hlc(server_hlc[0] + 1, device="device-a")}},
+        ))
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-10T11:00:00"
+        conflicts = db.list_sync_conflicts(conn)
+        assert len(conflicts) == 1
+        assert conflicts[0]["field_name"] == "start_at"
+        assert conflicts[0]["losing_value"] == "2026-08-10T09:00:00"
+
+
+class TestServerWritesBackfill:
+    """The one-time backfill half of the same fix: rows that *predate*
+    server-as-author recording (created before this change, so they have
+    no field_versions entries at all) get recorded into field_versions by
+    db.backfill_server_sync_writes when init_schema runs on an upgraded
+    installation -- otherwise a device's first pull would still return an
+    empty delta for them and the offline shell would still show nothing."""
+
+    def _clear_backfill_marker(self, conn):
+        # init_schema already ran the (empty-database, no-op) backfill on
+        # the fixture connection and set the done-marker; clear it to
+        # exercise the backfill itself, exactly as an upgraded install's
+        # first connection would.
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (db._SERVER_WRITES_BACKFILLED_KEY,))
+        conn.commit()
+
+    def test_backfill_records_pre_existing_rows_and_a_pull_delivers_them(self, conn):
+        conn.execute("INSERT INTO tasks (uid, title, description, status) VALUES ('t-old', 'Old task', '', 'active')")
+        conn.execute("INSERT INTO events (uid, title, description, status, all_day) VALUES ('e-old', 'Old event', '', 'active', 0)")
+        conn.commit()
+        self._clear_backfill_marker(conn)
+        db.backfill_server_sync_writes(conn)
+        assert db.get_field_hlc(conn, "task", "t-old", "title") is not None
+        assert db.get_field_hlc(conn, "event", "e-old", "title") is not None
+        changes = offline_sync.pull(conn, None)["changes"]
+        titles = [c for c in changes if c["entity_uid"] == "t-old" and c["field_name"] == "title"]
+        assert titles and titles[0]["value"] == "Old task"
+        # Idempotent: the marker is set once the scan has run, so a second
+        # call adds nothing and moves the data version nothing.
+        version = db.get_sync_data_version(conn)
+        db.backfill_server_sync_writes(conn)
+        assert db.get_sync_data_version(conn) == version
+
+    def test_backfill_never_overwrites_a_field_a_device_already_synced(self, conn):
+        offline_sync.apply_op(conn, _field_set_op(
+            "op1", "task", "t1",
+            {"title": {"value": "Device wrote", "hlc": _hlc(1000, device="device-a")}},
+        ))
+        before = db.get_field_hlc(conn, "task", "t1", "title")
+        self._clear_backfill_marker(conn)
+        db.backfill_server_sync_writes(conn)
+        # The backfill only ever ADDS missing field_versions entries
+        # (INSERT OR IGNORE); a field a device has already synced keeps its
+        # own HLC untouched.
+        assert db.get_field_hlc(conn, "task", "t1", "title") == before
+        assert db.get_field_hlc(conn, "task", "t1", "status") is not None

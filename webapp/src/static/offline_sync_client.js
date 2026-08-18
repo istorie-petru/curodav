@@ -11,8 +11,24 @@
 // (ofline-first-pwa.md's offline/synchronizing/pending/synchronized
 // states, rendered by static/offline_status.js off the
 // `cc-offline-status-change` event this file dispatches). This is what
-// finally wires slices 1-5 together end to end -- before this, an
-// offline write was durable locally but never left the device.
+// finally wires slices 1-5 together end to end -- before this, an offline
+// write was durable locally but never left the device.
+//
+// Status is computed live, never stored, and the `cc-offline-status-change`
+// detail now also carries a `didWork` boolean -- whether that round actually
+// moved data (2026-08-17 follow-up: a routine page-load round on an
+// up-to-date, continuously-connected machine does no push work and pulls
+// nothing, and shouldn't announce "Synced" as if a real sync had happened).
+// The same follow-up also gates the round-start "synchronizing" emission on
+// a non-empty outbox, so even the "Syncing…" persistent toast never flashes
+// on such a round -- only the round's outcome ("Synced", or silence) is
+// announced. A second follow-up the same day (the user's "hash attached to
+// the database" idea) makes a pull-only round with nothing to pull not even
+// run: the server exposes a monotonic data version (GET /api/sync/state,
+// bumped whenever a sync write actually applies) that the client compares
+// against the version saved after its last successful pull -- on a match
+// with an empty outbox the round is skipped outright (no pull request, no
+// status event, no toast).
 (function () {
   const BASE_RETRY_MS = 2000;
   const MAX_RETRY_MS = 30000;
@@ -20,6 +36,15 @@
   let inFlight = false;
   let retryDelay = BASE_RETRY_MS;
   let retryTimer = null;
+  // Whether the current/last sync round actually moved data -- either
+  // pushed local changes to the server (a non-empty outbox) or pulled new
+  // changes from it (a non-empty `changes` list). A routine round on an
+  // up-to-date, continuously-connected machine (a page-load health check
+  // with an empty outbox and nothing new server-side) does neither; that
+  // distinction is what offline_status.js uses to decide whether a
+  // non-synced -> synced return is a real, announce-worthy sync or just
+  // a silent no-op round.
+  let didWork = false;
 
   async function postJson(url, body) {
     let response;
@@ -33,6 +58,43 @@
       return null; // offline or unreachable -- expected, not an error to surface
     }
     return response.ok ? await response.json() : null;
+  }
+
+  // 2026-08-17 -- the server-side data-version pre-flight ("a hash attached
+  // to the database": the server bumps a monotonic version whenever a sync
+  // write actually applies, and a device compares it against the version it
+  // saved after its last successful pull to decide whether a sync round is
+  // needed at all). A pull-only round with a matching version would return
+  // an empty changes list -- this check skips it entirely (no pull, no
+  // status churn, no toast) rather than running a network round just to
+  // learn "nothing changed". A failed check (server unreachable) falls
+  // through to the normal round, whose own failure then drives the usual
+  // retry/backoff -- never skipped on a fetch error.
+  async function getServerState() {
+    let response;
+    try {
+      response = await fetch("/api/sync/state", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+    } catch (err) {
+      return { ok: false, version: null };
+    }
+    if (!response.ok) return { ok: false, version: null };
+    try {
+      const body = await response.json();
+      return { ok: true, version: typeof body.version === "number" ? body.version : null };
+    } catch (err) {
+      return { ok: false, version: null };
+    }
+  }
+
+  async function nothingToDo() {
+    const saved = await window.CCOfflineDB.getServerVersion();
+    if (saved === null) return false; // never synced -- run a real round
+    const state = await getServerState();
+    if (!state.ok || state.version === null) return false; // let the round fail/retry normally
+    return state.version === saved;
   }
 
   // §8's push phase: send every op still in the outbox, per-entity
@@ -49,6 +111,7 @@
     if (!("indexedDB" in window) || !navigator.onLine) return false;
     const ops = await window.CCOfflineDB.getOutboxOps();
     if (ops.length === 0) return true;
+    didWork = true; // real work -- this device's own local changes are being sent
 
     const deviceId = await window.CCOfflineDB.getDeviceId();
     const body = await postJson("/api/sync/push", { device_id: deviceId, ops });
@@ -89,6 +152,7 @@
       if (!body || body.full_resync) return false;
     }
 
+    if (body.changes && body.changes.length > 0) didWork = true; // real work -- the server had something new for this device
     await window.CCOfflineDB.applyChanges(body.changes);
     // §3's receive-side merge rule: advance this device's own HLC clock
     // past the newest thing it just observed from the server, so any
@@ -97,6 +161,13 @@
     if (body.cursor) await window.CCOfflineDB.mergeHlc(body.cursor);
     if (body.cursor) await window.CCOfflineDB.setCursor(body.cursor);
     await window.CCOfflineDB.setLastSyncedAt(new Date().toISOString());
+    // Save the server's data version now that this device is fully caught
+    // up, so the next round's `nothingToDo()` pre-check compares against
+    // a current value. Only saved after a *successful pull* -- never after
+    // a push alone (a successful push with a failed pull leaves changes
+    // unpulled, and recording the post-push version would wrongly let the
+    // next round skip the pull this device still needs).
+    if (body.version != null) await window.CCOfflineDB.setServerVersion(body.version);
     document.dispatchEvent(new CustomEvent("cc-offline-sync-complete"));
     return true;
   }
@@ -119,7 +190,7 @@
     else if (inFlight) status = "synchronizing";
     else if (pendingCount > 0) status = "pending";
     else status = "synced";
-    return { status, pendingCount };
+    return { status, pendingCount, didWork };
   }
 
   async function emitStatus() {
@@ -136,12 +207,48 @@
       return false;
     }
     inFlight = true;
+    didWork = false; // per-round -- the announcement decision reflects only this round
+    let ok;
+    try {
+      const outboxCount = await window.CCOfflineDB.getOutboxCount();
+      if (outboxCount > 0) {
+        // Announce the round's start only when it has real push work queued
+        // (a non-empty outbox). A pull-only/no-op round -- the routine page-
+        // load health check of an up-to-date machine -- must stay silent until
+        // its outcome is known; emitting "synchronizing" here would flash a
+        // "Syncing…" toast on every page visit (2026-08-17 follow-up).
+        await emitStatus();
+      } else if (await nothingToDo()) {
+        // Nothing local to push and the server's data version matches this
+        // device's last-synced one -- no sync needed at all, so don't even
+        // run a pull-only round. Silent, no status churn, no toast, no
+        // pull request (2026-08-17: the user's "hash attached to the
+        // database" idea -- skip the round entirely when nothing changed).
+        ok = true;
+      }
+      // A round with real push work queued (first branch) or an out-of-date
+      // server (second branch) still runs the push-then-pull exchange --
+      // this is deliberately NOT an `else` of the round-start branch above,
+      // so an announce-worthy round also actually syncs its data
+      // (2026-08-18: caught while smoke-testing -- the earlier restructure
+      // parked push/pull in an `else` and rounds with a non-empty outbox
+      // never pushed, retrying forever).
+      if (ok === undefined) {
+        const pushOk = await pushOnce();
+        const pullOk = await pullOnce();
+        ok = pushOk && pullOk;
+      }
+    } finally {
+      // `inFlight` must always be reset, even when a round throws (e.g. a
+      // malformed pull response making applyChanges fail) -- a round that
+      // dies mid-flight with the flag left true would otherwise report
+      // "synchronizing" forever, which offline_status.js renders as a
+      // stuck "Syncing…" toast. The status is emitted *after* this reset
+      // (below), never while inFlight is still set.
+      inFlight = false;
+    }
     await emitStatus();
-    const pushOk = await pushOnce();
-    const pullOk = await pullOnce();
-    inFlight = false;
-    await emitStatus();
-    return pushOk && pullOk;
+    return ok;
   }
 
   function jitter(ms) {

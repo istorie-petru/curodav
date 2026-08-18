@@ -50,6 +50,7 @@ import json
 import logging
 import re
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -1293,6 +1294,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _relax_legacy_not_null(conn, "events", ("href", "etag", "calendar_path"))
     _relax_legacy_not_null(conn, "tasks", ("href", "etag", "calendar_path", "list_path"))
     _relax_legacy_not_null(conn, "contacts", ("href", "etag", "addressbook_path"))
+    # 2026-08-18 -- one-time backfill of pre-existing rows into the sync
+    # shadow store (see backfill_server_sync_writes). Runs last, after
+    # every _ensure_column migration above, so the whitelist columns it
+    # reads (deleted_at included) all exist.
+    backfill_server_sync_writes(conn)
     conn.commit()
 
 
@@ -1359,8 +1365,12 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
 _EVENT_JSON_FIELDS = ("reminders_json", "exdates_json")
 
 
-def upsert_event(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_event(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "events", str(data.get("uid")), _EVENT_SYNC_COLUMNS)
     data["reminders_json"] = json.dumps(data.get("reminders") or [])
     data["exdates_json"] = json.dumps(data.get("exdates") or [])
     # NOT NULL DEFAULT 0 columns -- must coerce None -> 0 explicitly here;
@@ -1394,10 +1404,22 @@ def upsert_event(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     )
     if tags is not None:
         set_object_labels(conn, "event", data["uid"], tags)
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "event",
+            data["uid"],
+            previous,
+            _row_columns(conn, "events", data["uid"], _EVENT_SYNC_COLUMNS),
+        )
     conn.commit()
 
 
-def delete_event(conn: sqlite3.Connection, uid: str) -> None:
+def delete_event(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "event", uid)
     conn.execute("DELETE FROM events WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'event' AND object_id = ?", (uid,))
     # Relations are graph links, not ownership -- the task on the other end
@@ -1571,8 +1593,12 @@ def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -
         raise MultipleProjectLabelsError(selected)
 
 
-def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_task(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "tasks", str(data.get("uid")), _TASK_SYNC_COLUMNS)
     tags = data.pop("tags", None)
     # Validated before anything is written (not just before set_object_labels
     # further down) so a rejected label set never leaves a partial write --
@@ -1650,10 +1676,22 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # diffing old vs. new title first.
     if data.get("title") is not None:
         sync_work_allocation_titles(conn, data["uid"], data["title"])
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "task",
+            data["uid"],
+            previous,
+            _row_columns(conn, "tasks", data["uid"], _TASK_SYNC_COLUMNS),
+        )
     conn.commit()
 
 
-def delete_task(conn: sqlite3.Connection, uid: str) -> None:
+def delete_task(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "task", uid)
     conn.execute("DELETE FROM tasks WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'task' AND object_id = ?", (uid,))
     # Mirror of delete_event's relation cleanup -- the linked event survives,
@@ -2750,8 +2788,12 @@ def sync_contact_birthday_event(conn: sqlite3.Connection, contact_uid: str, full
     )
 
 
-def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_contact(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "contacts", str(data.get("uid")), _CONTACT_SYNC_COLUMNS)
     tags = data.pop("tags", None)
     # `phones`/`emails` (the new multi-value lists) are handled separately
     # below, same "pop the non-column keys, write the base row, then attach
@@ -2796,6 +2838,14 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         set_contact_addresses(conn, data["uid"], addresses)
     if social_profiles is not None:
         set_contact_social_profiles(conn, data["uid"], social_profiles)
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "contact",
+            data["uid"],
+            previous,
+            _row_columns(conn, "contacts", data["uid"], _CONTACT_SYNC_COLUMNS),
+        )
     conn.commit()
     # Direct follow-up (2026-08-16): keep the generated Birthday calendar
     # event in sync with every save -- see sync_contact_birthday_event's
@@ -2808,7 +2858,11 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     sync_contact_birthday_event(conn, data["uid"], data.get("full_name"), data.get("birthday"))
 
 
-def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
+def delete_contact(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "contact", uid)
     conn.execute("DELETE FROM contacts WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ?", (uid,))
     # Same cascade-cleanup reasoning as delete_checklist_items_for_task --
@@ -4472,6 +4526,242 @@ def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, A
 # this file.
 # --------------------------------------------------------------------- #
 
+# The entity tables and per-field sync whitelist, shared by offline_sync.py
+# (which only ever receives *device* ops) and the server-write recording
+# below (which makes the server itself a participant in the same scheme).
+# One copy lives here, not two -- offline_sync.py aliases it so a field
+# added to the sync protocol in one place can't silently diverge from the
+# other. Deliberately excludes `importance`/`urgency`: those axes were
+# removed as columns in an earlier side-work rework (see the `tasks`
+# CREATE TABLE comment), so a device op or server write targeting them has
+# no column to land in.
+ENTITY_TABLES: dict[str, str] = {
+    "task": "tasks",
+    "event": "events",
+    "contact": "contacts",
+}
+
+ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
+    "task": {
+        "title", "description", "start_at", "due_at", "status", "progress",
+        "recurrence", "exdates_json", "completed_at", "target_per_day",
+        "created_at", "updated_at", "deleted_at",
+    },
+    "event": {
+        "title", "description", "start_at", "end_at", "all_day", "location",
+        "meeting_url", "status", "recurrence", "exdates_json", "reminders_json",
+        "holiday_calendar", "exclude_saturday", "exclude_sunday",
+        "created_at", "updated_at", "deleted_at",
+    },
+    "contact": {
+        "full_name", "org", "phone", "email", "address", "notes",
+        "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
+    },
+}
+
+
+# --------------------------------------------------------------------- #
+# The server as a sync author (2026-08-18 follow-up -- the fix for the
+# "offline shows nothing" bug). The sync protocol delivers changes to a
+# device *only* through field_versions, and field_versions was only ever
+# written when a device pushed an op. The ordinary rendered web UI writes
+# to the same tables through db.upsert_*/delete_* -- those writes never
+# entered field_versions, so a fresh device's pull returned an empty delta
+# and its local mirror stayed empty forever, leaving the /offline shell
+# with nothing to render ("Nothing to load right now" on every page).
+#
+# The fix makes the server a first-class participant: every task/event/
+# contact write it performs on behalf of the plain UI is recorded into
+# field_versions under a server-minted HLC (device id "server"), exactly
+# as if a device had pushed it. A device's pull then delivers it like any
+# other change. The server stays a passive relay for device ops (the §5
+# ledger still guarantees a retried push replays instead of re-applying);
+# it is only an *author* for its own UI writes.
+#
+# The server HLC clock lives in app_meta and is merged forward past every
+# device op the server applies (offline_sync.apply_op calls
+# merge_server_hlc), so per §3 the server's own next write is guaranteed
+# to sort strictly after anything it has already observed -- an ordinary
+# online edit to a field a device last wrote offline genuinely outranks
+# that device's write when the device next pushes it. Same read-modify-
+# write shape (and same benign concurrency race under two requests in the
+# same millisecond) as the existing sync_data_version counter just above.
+# --------------------------------------------------------------------- #
+
+SERVER_DEVICE_ID = "server"
+_SERVER_HLC_KEY = "server_hlc_clock"
+
+
+def get_server_hlc_clock(conn: sqlite3.Connection) -> tuple[int, int] | None:
+    """The server's own HLC clock as (physical, logical) -- the stored
+    state merge_server_hlc/mint_server_hlc read-modify-write. None before
+    the server has ever minted or merged a write."""
+    raw = get_app_meta(conn, _SERVER_HLC_KEY)
+    if not raw:
+        return None
+    try:
+        clock = json.loads(raw)
+        return (clock[0], clock[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _put_server_hlc_clock(conn: sqlite3.Connection, clock: tuple[int, int]) -> None:
+    conn.execute(
+        "INSERT INTO app_meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (_SERVER_HLC_KEY, json.dumps([clock[0], clock[1]])),
+    )
+
+
+def merge_server_hlc(conn: sqlite3.Connection, observed: tuple[int, int, str]) -> None:
+    """§3's receive-side HLC merge, applied whenever the server applies a
+    device op (offline_sync.apply_op): advance the server's clock past
+    what it just observed so its own next minted write outranks it."""
+    prev = get_server_hlc_clock(conn) or (0, 0)
+    if observed[0] == prev[0]:
+        logical = max(prev[1], observed[1]) + 1
+    elif observed[0] > prev[0]:
+        logical = observed[1] + 1
+    else:
+        logical = prev[1]
+    _put_server_hlc_clock(conn, (max(prev[0], observed[0]), logical))
+
+
+def mint_server_hlc(conn: sqlite3.Connection) -> tuple[int, int, str]:
+    """Mints a fresh server HLC -- the timestamp every server-written field
+    change is recorded under. Physical time never goes backwards (the
+    clock is monotonic across the process's own writes and every device op
+    it has observed via merge_server_hlc), and two server writes within
+    the same millisecond get distinct logical values."""
+    prev = get_server_hlc_clock(conn) or (0, 0)
+    now = int(time.time() * 1000)
+    if prev[0] >= now:
+        physical, logical = prev[0], prev[1] + 1
+    else:
+        physical, logical = now, 0
+    _put_server_hlc_clock(conn, (physical, logical))
+    return (physical, logical, SERVER_DEVICE_ID)
+
+
+def _row_columns(
+    conn: sqlite3.Connection, table: str, uid: str, columns: list[str]
+) -> dict[str, Any]:
+    """Raw stored values for a fixed set of columns -- the diff substrate
+    for record_server_sync_write. Reads the real column names straight off
+    the table (not via get_*, which decodes *_json columns into bare names
+    and attaches labels), so the comparison always operates on the stored
+    representation, the same values a pull would deliver."""
+    row = conn.execute(
+        f"SELECT {', '.join(columns)} FROM {table} WHERE uid = ?", (uid,)
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def record_server_sync_write(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Records a server-side UI write into field_versions (the server-as-
+    author mechanism above). Diffs the entity's sync-whitelist columns
+    before vs. after the write and records each one that actually changed
+    under a single server HLC -- recording every column unconditionally
+    would overwrite a device's newer HLC on fields the server didn't touch
+    (see the module comment), so only real changes move the field HLCs.
+    Bumps the sync data version iff anything was recorded, exactly like a
+    device push that changed state. `hlc` lets a caller seed with a known
+    clock value instead of minting one (tests seeding pre-sync data)."""
+    fields = ENTITY_SYNC_FIELDS.get(entity_type)
+    if not fields or not current:
+        return
+    changed = [
+        f
+        for f in fields
+        if f in current and (previous or {}).get(f) != current[f]
+    ]
+    if not changed:
+        return
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    for f in changed:
+        set_field_hlc(conn, entity_type, entity_uid, f, hlc)
+    bump_sync_data_version(conn)
+
+
+def record_server_delete(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    *,
+    hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Records a server-side hard delete as a `deleted_at` field_versions
+    entry -- the same tombstone a device's delete op creates, but with no
+    stored value (the entity row is physically removed, unlike a sync
+    soft-delete). offline_sync.pull() synthesizes a truthy deleted_at for
+    a missing row (see _current_field_value), so a device's mirror learns
+    "this entity is gone" and hides it. `hlc` lets a caller seed with a
+    known clock value instead of minting one."""
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    set_field_hlc(conn, entity_type, entity_uid, "deleted_at", hlc)
+    bump_sync_data_version(conn)
+
+
+# The sync-whitelist columns for each entity, as a fixed ORDERED list --
+# the diff/read substrate for the server-as-author recording above (a
+# stable ordering keeps the generated SELECTs deterministic).
+_TASK_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["task"])
+_EVENT_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["event"])
+_CONTACT_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["contact"])
+
+
+# One-time backfill (2026-08-18) -- the same "offline shows nothing" fix,
+# applied to data that already existed before the server-as-author change.
+# New server writes now record themselves into field_versions going
+# forward, but rows created *before* this fix have no entries at all, so
+# without a backfill a device's first pull would still return an empty
+# delta for them and the offline shell would still show "Nothing to load
+# right now." Runs at the end of init_schema, gated on an app_meta marker
+# so it happens exactly once on a real installation.
+_SERVER_WRITES_BACKFILLED_KEY = "sync_server_writes_backfilled"
+
+
+def backfill_server_sync_writes(conn: sqlite3.Connection) -> None:
+    """One-time: records every existing task/event/contact's sync-whitelist
+    columns into field_versions under a single server HLC, so a device's
+    very first pull delivers the full pre-existing dataset. `INSERT OR
+    IGNORE` (the field_versions primary key is entity_type+entity_uid+
+    field_name) means a field a device has already synced keeps its own
+    HLC untouched -- the backfill only ever adds *missing* entries and
+    never overwrites device state. Idempotent: the app_meta marker is set
+    even when there was nothing to backfill (a fresh database), so the
+    scan never re-runs; the data version only moves when something was
+    actually inserted."""
+    if get_app_meta(conn, _SERVER_WRITES_BACKFILLED_KEY):
+        return
+    hlc = mint_server_hlc(conn)
+    inserted = 0
+    for entity_type, table in ENTITY_TABLES.items():
+        uids = conn.execute(f"SELECT uid FROM {table}").fetchall()
+        for (uid,) in uids:
+            for field_name in ENTITY_SYNC_FIELDS[entity_type]:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO field_versions "
+                    "(entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (entity_type, uid, field_name, hlc[0], hlc[1], hlc[2]),
+                )
+                inserted += cur.rowcount
+    set_app_meta(conn, _SERVER_WRITES_BACKFILLED_KEY, "1")
+    if inserted:
+        bump_sync_data_version(conn)
+
 
 def get_field_hlc(
     conn: sqlite3.Connection, entity_type: str, entity_uid: str, field_name: str
@@ -4586,6 +4876,41 @@ def get_sync_device(conn: sqlite3.Connection, device_id: str) -> dict[str, Any] 
         "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
         "last_seen_at": row[7],
     }
+
+
+# 2026-08-17 follow-up -- the server-side "database hash" a device
+# compares against its own last-synced copy before deciding whether a
+# sync round is needed at all. A monotonic counter over applied sync
+# writes, not a literal hash of the entity tables: the sync protocol can
+# only ever *deliver* changes that arrived through the sync path
+# (field_versions), so a counter that moves exactly when a sync write
+# actually lands is the only signal whose "did it change" answer matches
+# what a pull would return. A whole-DB hash would also move on ordinary
+# server-rendered app edits (which never enter field_versions) and would
+# send every device into a pull that returns nothing new, forever.
+# Stored in app_meta, same "sync bookkeeping is just a key/value row"
+# convention as the sync-GC settings (data_health.py) -- no schema change.
+_SYNC_DATA_VERSION_KEY = "sync_data_version"
+
+
+def get_sync_data_version(conn: sqlite3.Connection) -> int:
+    """The server's current data version -- 0 before any sync write has
+    ever been applied. Compared client-side (offline_sync_client.js's
+    round-skip pre-check) against the version the device saved the last
+    time it pulled successfully."""
+    raw = get_app_meta(conn, _SYNC_DATA_VERSION_KEY)
+    return int(raw) if raw else 0
+
+
+def bump_sync_data_version(conn: sqlite3.Connection) -> int:
+    """Advances the version by one and commits. Called once per batch
+    (offline_sync.apply_batch) when at least one op in it actually
+    changed server state, and by purge_expired when GC physically removes
+    anything -- so the version changes iff a pull would return something
+    new (or force a resync), and never regresses."""
+    version = get_sync_data_version(conn) + 1
+    set_app_meta(conn, _SYNC_DATA_VERSION_KEY, str(version))
+    return version
 
 
 def touch_sync_device(

@@ -61,33 +61,16 @@ HLC = tuple[int, int, str]
 # task/event/contact already carries the stable `uid` sync needs). Labels
 # are handled separately below (`object_label`, natural-key identified,
 # no HLC arbitration needed at all -- §7a).
-_ENTITY_TABLES: dict[str, str] = {
-    "task": "tasks",
-    "event": "events",
-    "contact": "contacts",
-}
+_ENTITY_TABLES: dict[str, str] = db.ENTITY_TABLES
 
 # Whitelist of columns a `field_set`/`create` op may target -- op payloads
 # are client-supplied JSON, so field names must never be interpolated into
 # SQL unchecked. `deleted_at` is included deliberately: §4 models a delete
-# as an ordinary field write, not a separate code path.
-_ENTITY_FIELDS: dict[str, set[str]] = {
-    "task": {
-        "title", "description", "start_at", "due_at", "importance", "urgency",
-        "status", "progress", "recurrence", "exdates_json", "completed_at",
-        "target_per_day", "created_at", "updated_at", "deleted_at",
-    },
-    "event": {
-        "title", "description", "start_at", "end_at", "all_day", "location",
-        "meeting_url", "status", "recurrence", "exdates_json", "reminders_json",
-        "holiday_calendar", "exclude_saturday", "exclude_sunday",
-        "created_at", "updated_at", "deleted_at",
-    },
-    "contact": {
-        "full_name", "org", "phone", "email", "address", "notes",
-        "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
-    },
-}
+# as an ordinary field write, not a separate code path. Single source of
+# truth lives in db.py (ENTITY_SYNC_FIELDS) -- db.py's own server-write
+# recording (the server is a participant in the same scheme, 2026-08-18)
+# must diff against the identical whitelist, and one copy beats two.
+_ENTITY_FIELDS: dict[str, set[str]] = db.ENTITY_SYNC_FIELDS
 
 
 class UnknownEntityTypeError(ValueError):
@@ -245,6 +228,25 @@ def _summarize(field_results: dict[str, str]) -> str:
     return "stale"
 
 
+def _op_hlc(op: dict[str, Any]) -> HLC:
+    """The single newest HLC an op carries -- the max over a create/
+    field_set's per-field HLCs, or the op's own HLC for delete/label ops.
+    What `apply_batch` sorts a batch by, and what the server's own clock
+    merges past when it applies the op (db.merge_server_hlc -- the server
+    is itself a participant in §3's HLC scheme, 2026-08-18)."""
+    if op.get("op_type") in ("create", "field_set"):
+        fields = op.get("fields") or {}
+        if not fields:
+            return (0, 0, "")
+        return max(hlc_from_payload(spec["hlc"]) for spec in fields.values())
+    # Label ops are §7a commutative -- some callers (older tests, and the
+    # §7c batch helpers) stamp a top-level `hlc`, but it plays no part in
+    # the merge; an op without one simply doesn't advance the server clock.
+    if "hlc" in op:
+        return hlc_from_payload(op["hlc"])
+    return (0, 0, "")
+
+
 def apply_op(conn: sqlite3.Connection, op: dict[str, Any]) -> dict[str, Any]:
     """Applies one op (§2's shape) with §5 idempotency: a duplicate
     `op_id` (a retried push after a connection drop) replays the cached
@@ -269,6 +271,12 @@ def apply_op(conn: sqlite3.Connection, op: dict[str, Any]) -> dict[str, Any]:
     else:
         raise ValueError(f"unknown op_type: {op_type!r}")
 
+    # §3's receive-side merge: the server has now *observed* this op, so
+    # its own clock must advance past the op's HLC -- otherwise the next
+    # server-side UI write could mint an HLC that fails to outrank a
+    # device write it was causally after (see db.mint_server_hlc). Only on
+    # a genuinely new op, not a cached replay.
+    db.merge_server_hlc(conn, _op_hlc(op))
     db.record_sync_applied_op(conn, op_id, entity_type, entity_uid, result)
     return {"op_id": op_id, **result}
 
@@ -288,19 +296,30 @@ def apply_batch(conn: sqlite3.Connection, ops: list[dict[str, Any]]) -> list[dic
     commutative §7a op on its own; only the *combination* (two different
     project labels landing on the same task) can violate the invariant,
     so it can only be caught after the fact, not per-op."""
-    def _op_hlc(op: dict[str, Any]) -> HLC:
-        if op["op_type"] in ("create", "field_set"):
-            fields = op.get("fields") or {}
-            if not fields:
-                return (0, 0, "")
-            return max(hlc_from_payload(spec["hlc"]) for spec in fields.values())
-        return hlc_from_payload(op["hlc"])
-
     ordered = sorted(ops, key=_op_hlc)
     project_names = {cfg["name"] for cfg in db.list_project_labels(conn)}
     pre_existing = _snapshot_pre_existing_project_labels(conn, ordered, project_names)
-    results = [apply_op(conn, op) for op in ordered]
+    # The data version (db.get_sync_data_version) must move exactly when a
+    # *new* write actually changes server state -- the "did anything
+    # change" signal a device compares against before running a sync round
+    # (offline_sync_client.js's round-skip pre-check). A replayed op_id
+    # (a retried push of an already-applied batch) returns its cached
+    # "applied" result but must not bump the version: nothing changed.
+    # `result["status"]` is computed pre-reconcile here -- a label_add that
+    # §7c then reverts to "rejected_invariant" may bump spuriously, an
+    # accepted edge case (one extra no-op pull on other devices, harmless).
+    results = []
+    changed = False
+    for op in ordered:
+        op_id = op["op_id"]
+        cached = db.get_sync_applied_op(conn, op_id) is not None
+        result = apply_op(conn, op)
+        if not cached and result["status"] in ("applied", "applied_partial"):
+            changed = True
+        results.append(result)
     _reconcile_project_labels(conn, ordered, project_names, pre_existing, results)
+    if changed:
+        db.bump_sync_data_version(conn)
     return results
 
 
@@ -389,7 +408,19 @@ def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, f
     if table is None:
         return None
     row = conn.execute(f"SELECT {field_name} FROM {table} WHERE uid = ?", (uid,)).fetchone()
-    return row[0] if row is not None else None
+    if row is not None:
+        return row[0]
+    # A *server-side* hard delete (db.delete_task/event/contact, 2026-08-18)
+    # records a `deleted_at` field_versions entry but physically removes the
+    # row -- unlike a sync soft-delete, there is no column value to read
+    # back. Without a special case the pull would emit `deleted_at: null`
+    # and a device's mirror would never hide the entity. Emit the tombstone
+    # HLC's own timestamp instead -- a truthy value whose only job is to
+    # let the mirror's "not soft-deleted" filter exclude the row.
+    if field_name == "deleted_at":
+        hlc = db.get_field_hlc(conn, entity_type, uid, "deleted_at")
+        return _hlc_to_iso(hlc) if hlc else None
+    return None
 
 
 # Tombstone GC retention horizon (§4) -- a device whose cursor predates
@@ -488,11 +519,11 @@ def _purge_expired_tombstones(conn: sqlite3.Connection, cutoff_ms: int) -> dict[
             # nothing to purge for this uid.
             continue
         if entity_type == "task":
-            db.delete_task(conn, uid)
+            db.delete_task(conn, uid, record_server_write=False)
         elif entity_type == "event":
-            db.delete_event(conn, uid)
+            db.delete_event(conn, uid, record_server_write=False)
         elif entity_type == "contact":
-            db.delete_contact(conn, uid)
+            db.delete_contact(conn, uid, record_server_write=False)
         conn.execute(
             "DELETE FROM field_versions WHERE entity_type = ? AND entity_uid = ?", (entity_type, uid)
         )
@@ -527,6 +558,13 @@ def purge_expired(
     cutoff_ms = now_ms - retention_days * 24 * 60 * 60 * 1000
     purged_entities = _purge_expired_tombstones(conn, cutoff_ms)
     purged_applied_ops = _purge_expired_applied_ops(conn, cutoff_ms)
+    if any(purged_entities.values()) or purged_applied_ops:
+        # GC physically removed data -- a stale device would now get a
+        # different pull answer than before, so the data version must
+        # move or that device's round-skip pre-check could let it quietly
+        # skip past a resync it actually needs (its cursor is by
+        # definition older than the retention horizon at this point).
+        db.bump_sync_data_version(conn)
     return {
         "retention_days": retention_days,
         "cutoff_ms": cutoff_ms,

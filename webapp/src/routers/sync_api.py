@@ -28,6 +28,19 @@ from ..deps import get_db
 router = APIRouter(tags=["sync"])
 
 
+@router.get("/api/sync/state")
+async def state(conn=Depends(get_db)):
+    """The server's current data version (db.get_sync_data_version) -- the
+    cheap pre-flight check the client makes before running a sync round
+    (offline_sync_client.js's round-skip logic): when this equals the
+    version the device saved after its last successful pull and the
+    outbox is empty, there is nothing to do, so the round is skipped
+    entirely -- no pull, no status churn, no toast. A plain single-row
+    read (app_meta), deliberately lighter than pull's own field_versions
+    scan -- that's the point of checking here first."""
+    return JSONResponse({"version": db.get_sync_data_version(conn)})
+
+
 @router.post("/api/sync/push")
 async def push(request: Request, conn=Depends(get_db)):
     payload = await request.json()
@@ -78,5 +91,11 @@ async def pull(request: Request, conn=Depends(get_db)):
                 {**c, "hlc": offline_sync.hlc_to_payload(c["hlc"])} for c in result["changes"]
             ],
             "cursor": offline_sync.hlc_to_payload(result["cursor"]) if result["cursor"] else None,
+            # 2026-08-17 -- the server's data version, computed *after*
+            # run_sync_gc above has had its chance to purge (a purge moves
+            # the version too), so the device that just pulled saves the
+            # exact post-pull state and its next round-skip pre-check
+            # compares against a current value.
+            "version": db.get_sync_data_version(conn),
         }
     )

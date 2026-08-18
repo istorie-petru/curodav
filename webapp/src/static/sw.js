@@ -14,8 +14,19 @@
 //
 // CACHE_NAME is bumped whenever this file's own precache list changes --
 // activate's cleanup below deletes any previous cc-shell-* cache, so an
-// old shell version never lingers once a new one has installed.
-const CACHE_NAME = "cc-shell-v8";
+// old shell version never lingers once a new one has installed. v9
+// (2026-08-17): reworked offline_sync_client.js / offline_status.js
+// (sync-status toasts now fire only on real sync work), so bumping forces
+// an installed PWA to re-precache the fresh scripts instead of serving a
+// cached copy that still announces "Syncing…"/"Synced" on dead-server
+// page loads. v10 (2026-08-18): reworked offline_status.js again (the
+// in-progress "Syncing…" toast is deferred by a grace period so a fast
+// small sync never flashes it). v11 (2026-08-18): the static handler now
+// falls back to caches.match(request, { ignoreSearch: true }) so the
+// versioned ?v= URLs every page requests can be served from the precache's
+// un-versioned entries (before that, /offline-only scripts failed to load
+// on a device's first offline visit).
+const CACHE_NAME = "cc-shell-v11";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -118,15 +129,37 @@ self.addEventListener("fetch", (event) => {
     // gets requested under a different URL than the one already cached.
     // Falls back to the network (and refreshes the cache entry) for
     // anything not in the precache list above.
+    //
+    // 2026-08-18 -- `ignoreSearch` fallback: pages request these assets
+    // with the `?v=` suffix, and `caches.match` never matches that against
+    // the precached un-versioned entry, so the precache only actually
+    // served anything for assets the runtime path had ALSO cached under
+    // their versioned URL during a controlled online visit. Scripts that
+    // only /offline loads (offline_shell.js/offline_write.js/
+    // offline_status.js) are never requested by a normal page visit, so
+    // they were never runtime-cached -- and a device's first offline visit
+    // then failed to load them, leaving /offline's static empty state
+    // visible no matter how well-populated the local mirror was. The
+    // versioned-exact match is tried first (a runtime-cached copy is the
+    // freshest thing the SW knows); the ignoreSearch match against the
+    // un-versioned precache entry is the fallback. The one accepted
+    // staleness: between a file changing and the SW itself updating, an
+    // offline device may get the old precached copy -- the cache-busting
+    // query still governs the online path, where the fresh file loads and
+    // is runtime-cached under its new versioned URL.
     event.respondWith(
       caches.match(request).then(
         (cached) =>
           cached ||
-          fetch(request).then((response) => {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-            return response;
-          })
+          caches.match(request, { ignoreSearch: true }).then(
+            (precached) =>
+              precached ||
+              fetch(request).then((response) => {
+                const copy = response.clone();
+                caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                return response;
+              })
+          )
       )
     );
   }

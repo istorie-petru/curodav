@@ -2951,6 +2951,236 @@ session, right before the final commit of that session.
   offline shell (`offline_shell.js`) keeps a native date input, by design
   (a static fallback that can't depend on the app JS). Full suite
   **1667 passed**.
+- **Fixed:** side work — **"Synced — All changes are up to date" toast only
+  fires after a real sync**, complete (2026-08-17), direct feedback ("the
+  'Synced All changes are up to date.' notification from bottom right should
+  only appear after a real sync, not with a local machine that is
+  continuously been connected to the server"). Root cause:
+  `static/offline_status.js`'s "Synced" confirmation was gated on a
+  `wasNonSynced` flag that flipped true the moment any status event left the
+  `synced` state — and a routine page load on an up-to-date,
+  continuously-connected machine always does leave it briefly (the `load`
+  event triggers `requestSync` → a push/pull round → `synchronizing` → back
+  to `synced`), so every page visit announced "Synced" even though nothing
+  was pushed and nothing new was pulled. The gate is now the sync engine's
+  own `didWork` fact instead: `offline_sync_client.js` sets a per-round
+  `didWork` flag only when a round actually moved data — `pushOnce` when the
+  outbox is non-empty (real local changes sent), `pullOnce` when the server
+  returned a non-empty `changes` list (something new received) — reset at
+  the start of each `syncNow` round and surfaced through `getStatus()`'s
+  detail. `offline_status.js` shows the transient "Synced" toast only when
+  `detail.didWork` is true; the `wasNonSynced` flag is gone. A page-load
+  health check with an empty outbox and nothing new server-side stays
+  silent, while a genuine offline→online flush of queued changes, or a pull
+  that actually receives new data, still announces itself. See
+  `features/offline-sync.md`. Test updates: `test_toast_rework.py`'s
+  `TestSyncStatusToasts` re-gated on `didWork` (asserting `wasNonSynced` is
+  gone), one new structural test
+  (`test_offline_sync_client_tracks_whether_a_round_moved_data`) in
+  `test_pwa_shell.py`. Full suite 1668 passed.
+  **Same-session follow-up:** even the brief "Syncing…" persistent toast
+  still flashed on every routine page load -- `syncNow` emitted the
+  "synchronizing" status at the *start* of every round, so an up-to-date,
+  continuously-connected machine showed "Syncing…" for the duration of its
+  no-op push/pull round before settling back to "synced". The round-start
+  emission is now gated on a non-empty outbox
+  (`syncNow`: `if ((await CCOfflineDB.getOutboxCount()) > 0) await
+  emitStatus()`), so a pull-only/no-op round announces nothing at all and
+  only the round's outcome ("Synced" when `didWork`, or silence) is
+  surfaced; a real flush still flips the toast to "Changes pending" the
+  moment the round starts. The bare "Syncing…" `configFor` branch in
+`offline_status.js` is effectively unreachable now and kept only as a
+   defensive fallback. One more structural test
+   (`test_sync_now_announces_round_start_only_with_real_push_work` in
+   `test_pwa_shell.py`). Full suite 1669 passed.
+   **Same-session follow-up:** direct feedback the next day ("when the
+   server is ofline, the sync, synced notification still appear") did not
+   reproduce against the current code. A Node smoke run (`/tmp/opencode/
+   smoke.js`) loading the real `offline_db.js`/`offline_sync_client.js`/
+   `offline_status.js` from disk under `fake-indexeddb` with a stub
+   `fetch` that rejects (server unreachable) confirmed: server down + empty
+   outbox → zero toasts, status stays `synced` with `didWork:false`;
+   server down + queued op → only the persistent "Changes pending" toast,
+   never "Synced" (status ends `pending`, and the "Synced" toast needs
+   `status === "synced" && didWork === true`, which requires a successful
+   push/pull). The reported behavior exactly matches the *pre-fix* code
+   (page load on a dead server flashed "Syncing…" then "Synced"), i.e. the
+   browser was still running a cached copy of the old scripts. Bumped
+   `sw.js`'s `CACHE_NAME` to `cc-shell-v9` per the file's own convention
+   so an installed PWA re-precaches the reworked `offline_sync_client.js`/
+   `offline_status.js` and never serves the stale "announces on dead server"
+   versions again; `test_pwa_shell.py`'s cache-name test bumped to v9. Full
+   suite 1669 passed.
+   **Second same-session follow-up:** "the syncing still shows onn normal
+   app" did not reproduce against the current code either -- the bare
+   "Syncing…" branch in `offline_status.js`'s `configFor` is unreachable
+   dead code (it needs `synchronizing` with an empty outbox, and the
+   round-start emission is gated on a non-empty one), so the report again
+   matches a stale cached copy of the pre-fix scripts. Implemented the
+   user's proposed mechanism anyway -- "a hash attached to the database,
+   on the server, compared against the locally saved hash to decide
+   whether a sync is needed" -- as a monotonic **server data version**
+   rather than a literal whole-DB hash (a whole-DB hash would also move on
+   ordinary server-rendered app edits that never enter `field_versions`,
+   sending every device into a pull that returns nothing new, forever;
+   the counter moves exactly when a sync write actually lands, so "did the
+   version change" always matches "would a pull return something").
+   Server: `db.get_sync_data_version`/`bump_sync_data_version`
+   (app_meta-backed, no schema change), bumped in `offline_sync.apply_
+   batch` only for *new* ops whose result actually applied (never for a
+   replayed op_id, §5) and by `purge_expired` when GC physically removes
+   anything; new `GET /api/sync/state` endpoint (routers/sync_api.py)
+   plus `version` in every pull response (computed after the lazy GC so
+   the pulling device saves post-purge state). Client: `offline_db.js`
+   gains `getServerVersion`/`setServerVersion` meta rows; `offline_sync_
+   client.js`'s `syncNow` now checks `nothingToDo()` on the empty-outbox
+   branch -- a `GET /api/sync/state` whose version matches the saved one
+   skips the round outright (no pull, no status event, no toast), while a
+   failed/unreachable state check falls through to the normal round so the
+   usual failure/retry path still applies; the version is saved only after
+   a *successful pull*, never after a push alone (a successful push with a
+   failed pull leaves changes unpulled). Node smoke (scenarios A-F)
+   confirmed: version match -> only the state GET, zero toasts; version
+   bump -> real round, "Synced" when changes arrive; server down -> silent
+    as before. 7 new server tests (`test_offline_sync.py`'s
+    `TestDataVersion`) + 2 structural JS checks (`test_pwa_shell.py`).
+    Full suite 1678 passed.
+- **Fixed:** side work — **a round with a non-empty outbox actually syncs
+  its data again**, complete (2026-08-18) — found while smoke-testing the
+  `inFlight`-reset hardening. The previous `syncNow` restructure wrapped the
+  round body in `try/finally` to guarantee `inFlight` is reset even when a
+  round throws, but parked the `pushOnce()`/`pullOnce()` exchange in an
+  `else` of the round-start-emission branch — so a round with real push work
+  queued (a non-empty outbox) took the emission branch and **never ran
+  push/pull**, returned `undefined` (falsy), and `attempt()` retried it
+  forever: infinite "Syncing…"/"Changes pending" with data never leaving the
+  device. Exactly the signature of the user's "Syncthing is now showing
+  infinitelly" report — this would have shipped the real thing if left
+  alone. The push/pull exchange now runs via an independent
+  `if (ok === undefined)` guard (deliberately NOT an `else`), so all three
+  round shapes work: outbox non-empty → announce start + actually push/pull;
+  outbox empty + version mismatch → silent push/pull; outbox empty + version
+  match → skip outright. Node smoke (`/tmp/opencode/smoke.js`) re-verified
+  all six scenarios; the smoke harness itself was also made faithful — it
+  re-evals the sync client per scenario (fresh module state, like a fresh
+  page load), which leaked the previous scenario's `setTimeout` retry timer
+  into the next one and produced phantom extra rounds; the harness now
+  tracks `setTimeout`/`clearTimeout` and cancels all pending timers at the
+  start of each scenario. Full suite 1678 passed.
+- **Shipped:** side work — **the in-progress sync toast is deferred by a
+  grace period**, complete (2026-08-18), direct feedback ("Syncing shows for
+  some pages, for a brief second... rework the syncing one specifically, to
+  add a delay for the frontend showing. So for bigger syncing it shows, but
+  for small ones it doesn't. And for none or very smalls the frontend doesn't
+  get a notification"). `static/offline_status.js` (the renderer, the
+  "frontend showing") now defers the *first* appearance of the persistent
+  synchronizing/pending toast by `SYNC_SHOW_DELAY_MS` (1500ms): a small sync
+  round -- a handful of queued ops against a reachable server, resolved in a
+  few hundred ms -- never flashes "Syncing…"/"Changes pending" at all, while a
+  state still current once the grace has elapsed (a genuinely slow/big round,
+  or a round that fails and settles back to pending) still surfaces its
+  persistent toast. The deferral covers **both** triggers of a first
+  appearance, not just the round-start emission: the `DOMContentLoaded`
+  initial render of a non-empty outbox (status `pending` before any round
+  runs) is deferred too, otherwise a page load with a queued op would still
+  flash "Changes pending" before its fast flush resolves it -- caught by the
+  smoke harness's new timed snapshots. Every new status event cancels a
+  pending grace timer, so a fast round's deferred toast can never surface
+  after its outcome; `offline` ("You're offline") surfaces immediately, never
+  deferred (the network state is worth knowing right away), and an
+  already-visible persistent state (a genuinely stuck/failing retry loop)
+  keeps updating in place via `set()` with no flicker. The engine
+  (`offline_sync_client.js`) is untouched -- status events stay honest and
+  immediate; only the renderer delays what it shows. "Synced" is unchanged:
+  still gated on `didWork`, so a small-but-real sync (e.g. one op flushed
+  fast) still gets its brief confirmation -- only the in-progress toast is
+  suppressed by the grace (if the user wants even that silenced for tiny
+  syncs, that's a follow-up decision, flagged here). `sw.js` cache bumped
+  `cc-shell-v9` -> `v10` so an installed PWA re-precaches the reworked
+  renderer. Node smoke (`/tmp/opencode/smoke.js`) extended from 6 to 8
+  scenarios, two purpose-built for the grace: G (push+pull each delayed 2.5s)
+  confirms a slow round shows "Changes pending" only after the delay (no
+  toast at the 900ms snapshot, toast present once the grace has elapsed, then
+  "Synced"); H (a fast successful flush) confirms no in-progress toast ever
+  appears, only the "Synced" outcome; the harness's push mock now also
+  acknowledges the sent ops like the real server's idempotency ledger, so a
+  successful round actually drains the outbox. 2 new structural tests
+   (`test_pwa_shell.py`'s `TestSyncEngine::test_offline_status_defers_the_
+   in_progress_toast_behind_a_grace` and `test_toast_rework.py`'s
+   `TestSyncStatusToasts::test_in_progress_toast_is_deferred_behind_a_grace_
+   period`), cache-name pin bumped to v10. Full suite **1680 passed**.
+- **Fixed:** side work — **the app's offline experience actually works**
+   (the server writes its own UI edits into the sync mirror, and /offline's
+   own scripts load offline), complete (2026-08-18) — reported directly
+   ("every page offline shows the /offline empty state — Nothing to load
+   right now — instead of local data"). Reproduced live against the real
+   app (headless Chromium, wipe IndexedDB/caches/SW, online visit, go
+   offline) and found **two independent root causes**:
+   - **Root cause 1 (data): the server's own UI writes never entered
+     `field_versions`** — the only source a device's pull reads. Every
+     task/event/contact created or edited through the rendered app
+     (`db.upsert_*`/`delete_*`) bypassed the sync layer entirely, so a
+     fresh device's first pull returned an empty delta and its local mirror
+     stayed empty. Fixed by making **the server itself a sync participant**:
+     `db.ENTITY_TABLES`/`ENTITY_SYNC_FIELDS` (the sync-whitelist
+     centralized in one place; dead `importance`/`urgency` task columns
+     dropped from it), `db.SERVER_DEVICE_ID = "server"`, an app_meta-backed
+     monotonic `server_hlc_clock`
+     (`get_server_hlc_clock`/`mint_server_hlc`/`merge_server_hlc`),
+     `record_server_sync_write` (diffs the whitelist columns before/after a
+     write and records **only changed fields**, so a device's newer HLC on
+     an untouched field is never clobbered) and `record_server_delete`
+     (records a `deleted_at` tombstone in `field_versions`). `upsert_task`/
+     `upsert_event`/`upsert_contact` and `delete_task`/`delete_event`/
+     `delete_contact` now take `record_server_write: bool = True`; the GC's
+     `_purge_expired_tombstones` passes `False` so mechanical purge doesn't
+     re-record the tombstone it's deleting. `offline_sync.py` merges the
+     server clock forward on every applied op (`apply_op` → `db.merge_
+     server_hlc`), so a server edit causally after a device's offline edit
+     genuinely outranks it per §3; `_current_field_value` special-cases a
+     missing row's `deleted_at` (synthesizes a truthy value from the field
+     HLC) so the server's hard delete propagates to devices' mirrors. A
+     **one-time backfill** (`db.backfill_server_sync_writes`, app_meta
+     marker `sync_server_writes_backfilled`, called at the end of
+     `init_schema`) writes `field_versions` entries for every pre-fix row
+     via `INSERT OR IGNORE` (never overwrites a device-synced HLC,
+     idempotent, bumps the data version only when rows were actually
+     inserted — keeps `test_version_starts_at_zero` green), so databases
+     with data written before this fix sync that data too.
+   - **Root cause 2 (assets): the SW could not serve /offline's own
+     scripts.** Pages request every static asset with a cache-busting
+     `?v=` URL, and `caches.match` never matches that against the
+     precache's un-versioned entries — the precache only actually served
+     assets the runtime path had ALSO cached under their versioned URL
+     during a controlled online visit. Scripts only `/offline` loads
+     (`offline_shell.js`/`offline_write.js`/`offline_status.js`) are never
+     requested by a normal page visit, so they were never runtime-cached,
+     and a device's first offline visit failed to load them entirely
+     (`net::ERR_FAILED`), leaving the static "Nothing to load right now"
+     empty state visible no matter how populated the mirror was. Fixed in
+     `sw.js`'s static handler: try the versioned-exact match first, then
+     fall back to `caches.match(request, { ignoreSearch: true })` before
+     hitting the network — the precache becomes genuinely reachable. One
+     accepted staleness (documented in the handler): between a file
+     changing and the SW itself updating, an offline device may get the
+     old precached copy; the `?v=` query still governs the online path,
+     where the fresh file loads and is runtime-cached under its new
+     versioned URL. `CACHE_NAME` bumped to `cc-shell-v11` (pinned in
+     `test_pwa_shell.py`) so installed PWAs re-precache with the new
+     handler.
+   Verified live (headless Chromium, `/tmp/opencode/offline_test2.js`):
+   wipe IndexedDB + caches + SW, visit online (mirror populates 4 tasks +
+   2 events from the pull, SW controlling), block network for both the page
+   and the service-worker target, navigate to `/offline` → renders "Tasks
+   (4)"/"Events (2)" with real titles and "Last synced" timestamp, no
+   "Nothing to load right now". 7 new server tests
+   (`test_offline_sync.py`'s `TestServerWritesEnterFieldVersions` (5) and
+   `TestServerWritesBackfill` (2); the §7b two-device conflict tests are
+   preserved by seeding their pre-sync rows via `record_server_write=
+   False` — server-vs-device participation is pinned separately). Full
+   suite **1688 passed**. This also closes out the uncommitted state from
+   the previous session (the sync-toast grace-period slice) — committed
+   together below.
 
 ## Breadcrumbs for 1.4's two still-deferred items
 

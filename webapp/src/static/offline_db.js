@@ -28,7 +28,10 @@
 //                               last_synced_at, hlc_clock (this device's own
 //                               (physical_time_ms, logical_counter) pair --
 //                               device_id itself lives under its own key
-//                               and is appended to form the full triple).
+//                               and is appended to form the full triple),
+//                               server_version (the server's data version
+//                               at this device's last successful pull --
+//                               2026-08-17, the round-skip pre-check).
 //
 // Deliberately entity-shape-agnostic: this file never hardcodes a task's
 // or event's field list (routers/../offline_sync.py's _ENTITY_FIELDS
@@ -112,6 +115,19 @@
 
   async function setLastSyncedAt(isoString) {
     await setMeta("last_synced_at", isoString);
+  }
+
+  // 2026-08-17 -- the server's data version, saved after every successful
+  // pull (offline_sync_client.js stores `body.version`). Compared against
+  // a fresh GET /api/sync/state before a pull-only round: when they match
+  // and the outbox is empty, nothing has changed server-side since this
+  // device last synced, so the round is skipped entirely.
+  async function getServerVersion() {
+    return await getMeta("server_version");
+  }
+
+  async function setServerVersion(version) {
+    await setMeta("server_version", version);
   }
 
   // §3's HLC clock, client-side half. Nothing through slice 4 ever minted
@@ -347,6 +363,8 @@
     setCursor,
     getLastSyncedAt,
     setLastSyncedAt,
+    getServerVersion,
+    setServerVersion,
     nextHlc,
     mergeHlc,
     applyChanges,

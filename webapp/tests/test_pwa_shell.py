@@ -299,7 +299,7 @@ class TestLocalWritePath:
         script = (_STATIC_DIR / "sw.js").read_text()
         assert "/static/offline_write.js" in script
 
-    def test_shell_cache_name_was_bumped_for_the_new_precached_script(self):
+    def test_shell_cache_name_was_bumped_for_the_reworked_sync_scripts(self):
         # cc-shell-v3 was slice 5's own bump (adding offline_write.js);
         # slice 6 added offline_status.js and bumped to v4; v5 fixed the
         # manifest precache entry (was "/manifest.webmanifest", a path that
@@ -312,9 +312,25 @@ class TestLocalWritePath:
         # simple events"; v8 (2026-08-16) reworked toast.js /
         # offline_status.js / style.css (sync status + delete confirms as
         # bottom-right toasts), forcing a fresh shell install so no
-        # precached copy of the old assets lingers.
+        # precached copy of the old assets lingers; v9 (2026-08-17)
+        # reworked offline_sync_client.js / offline_status.js again (sync-
+        # status toasts fire only on real sync work), forcing a fresh
+        # shell install so an installed PWA never keeps serving a cached
+        # copy that announces "Syncing…"/"Synced" on dead-server page
+        # loads; v10 (2026-08-18) reworked offline_status.js again (the
+        # in-progress "Syncing…" toast is deferred by a grace period so a
+        # fast small sync never flashes it), forcing a fresh shell install
+        # so an installed PWA doesn't keep serving the pre-delay renderer;
+        # v11 (2026-08-18) made the static-asset handler fall back to
+        # `caches.match(request, { ignoreSearch: true })` so the versioned
+        # `?v=` URLs every page requests can be served from the precache's
+        # un-versioned entries -- before that, scripts only /offline loads
+        # (offline_shell.js / offline_write.js / offline_status.js) were
+        # never runtime-cached during normal page visits and failed to load
+        # on a device's first offline visit, leaving the static empty state
+        # visible; forces a fresh shell install with the new handler.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v8"' in script
+        assert 'CACHE_NAME = "cc-shell-v11"' in script
 
 
 class TestSyncEngine:
@@ -349,6 +365,63 @@ class TestSyncEngine:
         assert "requestSync" in script
         assert "cc-offline-status-change" in script
 
+    def test_offline_sync_client_tracks_whether_a_round_moved_data(self):
+        # 2026-08-17 follow-up -- the "Synced" announcement must only fire
+        # when a round actually moved data (pushed a non-empty outbox or
+        # pulled a non-empty changes list), not on a routine page-load
+        # health check of an up-to-date, continuously-connected machine.
+        # `didWork` is reset at the start of every syncNow round and set by
+        # pushOnce/pullOnce only when there was something to move, then
+        # surfaced through getStatus for offline_status.js to read.
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        assert "didWork" in script
+        assert "getOutboxOps()" in script
+        assert "body.changes" in script
+        assert "didWork }" in script  # getStatus returns it in the detail
+
+    def test_sync_now_announces_round_start_only_with_real_push_work(self):
+        # 2026-08-17 follow-up -- the round-start "synchronizing" emission
+        # must be gated on a non-empty outbox, so a routine pull-only
+        # page-load round never flashes a "Syncing…" toast on an
+        # up-to-date, continuously-connected machine; only the round's
+        # outcome is announced.
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        sync = script[script.index("async function syncNow()") : script.index("window.CCOfflineSync")]
+        assert "getOutboxCount()" in sync
+        assert sync.index("getOutboxCount()") < sync.index("pushOnce()")
+        # The round-start emission is conditioned on that non-empty outbox.
+        assert "if (outboxCount > 0)" in sync
+        assert "await emitStatus()" in sync
+
+    def test_sync_now_skips_the_round_entirely_when_the_server_version_is_unchanged(self):
+        # 2026-08-17 (the user's "hash attached to the database" idea) --
+        # when the outbox is empty and the server's data version matches
+        # what this device saved after its last successful pull, the round
+        # is skipped outright: no pull request, no status event, no toast.
+        # `nothingToDo()` must run only on the empty-outbox branch (a
+        # non-empty outbox always pushes, regardless of the version), and a
+        # failed state check must fall through to the normal round rather
+        # than being wrongly treated as "nothing to do".
+        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
+        sync = script[script.index("async function syncNow()") : script.index("window.CCOfflineSync")]
+        assert "getServerVersion()" in script
+        assert "nothingToDo()" in sync
+        assert sync.index("getOutboxCount()") < sync.index("nothingToDo()")
+        assert sync.index("nothingToDo()") < sync.index("pushOnce()")
+        assert '"GET"' in script and "/api/sync/state" in script
+        # A failed/unreachable state check must not count as "nothing to do".
+        nothing = script[script.index("async function nothingToDo()") : script.index("async function getStatus()")]
+        assert "return false" in nothing
+        assert "state.version === saved" in nothing
+
+    def test_offline_db_stores_the_last_synced_server_version(self):
+        # 2026-08-17 -- meta helper pair the round-skip pre-check reads.
+        script = (_STATIC_DIR / "offline_db.js").read_text()
+        assert "getServerVersion" in script
+        assert "setServerVersion" in script
+        assert "server_version" in script
+        assert "getServerVersion," in script  # exposed on window.CCOfflineDB
+
     def test_offline_write_requests_a_sync_after_queuing_a_write(self):
         # A local write shouldn't have to wait for the next periodic retry
         # if the device is already online.
@@ -362,6 +435,29 @@ class TestSyncEngine:
         # Renderer only -- no IndexedDB or network calls of its own.
         assert "indexedDB.open" not in script
         assert "fetch(" not in script
+
+    def test_offline_status_defers_the_in_progress_toast_behind_a_grace(self):
+        # 2026-08-18 follow-up -- the in-progress "Syncing…"/"Changes
+        # pending" toast is deferred by SYNC_SHOW_DELAY_MS on its first
+        # appearance: a small sync round that finishes inside the window
+        # never flashes a toast at all, and only a round still in flight
+        # once the grace elapses surfaces as "in progress" (the user's "for
+        # bigger syncing it shows, but for small ones it doesn't"). The
+        # deferral is renderer-side -- offline_sync_client.js's status
+        # events stay immediate -- and every new status event cancels a
+        # pending grace timer so a fast round's deferred toast can never
+        # surface after its outcome.
+        script = (_STATIC_DIR / "offline_status.js").read_text()
+        render = script[script.index("function render(") : script.index("document.addEventListener")]
+        assert "SYNC_SHOW_DELAY_MS" in script
+        assert "setTimeout(" in render
+        assert "clearSyncGraceTimer()" in render
+        # Defer only the *first* appearance -- an already-visible in-progress
+        # toast (a genuinely stuck/failing round) keeps updating in place,
+        # and the network-offline state surfaces immediately, never deferred.
+        assert "isAlive()" in render
+        assert 'detail.status === "offline"' in render
+        assert "clearTimeout(syncGraceTimer)" in script
 
     def test_offline_status_script_loaded_globally_and_precached(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()

@@ -169,8 +169,15 @@ class TestSyncStatusToasts:
     """2026-08-16 follow-up -- the sync status indicator (offline_status.js)
     is now rendered as bottom-right toasts like every other announcement,
     not a top-right pill: persistent for the offline/pending/synchronizing
-    states, a brief "Synced" toast only on a real non-synced -> synced
-    transition. Same structural-check level as the rest of this file."""
+    states, a brief "Synced" toast only when a completed round actually
+    moved data (2026-08-17 follow-up: gated on `detail.didWork` from
+    offline_sync_client.js rather than any non-synced -> synced transition,
+    so a routine page-load round on an up-to-date, continuously-connected
+    machine stays silent). 2026-08-18 follow-up: the in-progress
+    "Syncing…"/"Changes pending" toast is further deferred by a grace
+    period on its first appearance, so a small sync that finishes quickly
+    never flashes it. Same structural-check level as the rest of this
+    file."""
 
     def test_status_renders_through_ccToast_as_persistent_toasts(self):
         js = (_STATIC_DIR / "offline_status.js").read_text(encoding="utf-8")
@@ -188,11 +195,30 @@ class TestSyncStatusToasts:
 
     def test_synced_only_shows_a_brief_toast_on_a_real_transition(self):
         js = (_STATIC_DIR / "offline_status.js").read_text(encoding="utf-8")
-        assert "wasNonSynced" in js
+        assert "didWork" in js
         assert "duration: 3000" in js
+        # The toast must be gated on the round actually moving data, not on
+        # merely having left the synced state -- the old `wasNonSynced` flag
+        # fired on every page-load health check of an up-to-date machine.
+        assert "wasNonSynced" not in js
         # Still renderer-only -- no IndexedDB or network calls of its own.
         assert "indexedDB.open" not in js
         assert "fetch(" not in js
+
+    def test_in_progress_toast_is_deferred_behind_a_grace_period(self):
+        js = (_STATIC_DIR / "offline_status.js").read_text(encoding="utf-8")
+        # 2026-08-18 -- a small sync round (a fast flush/pull) completes in
+        # well under SYNC_SHOW_DELAY_MS and must never flash its in-progress
+        # "Syncing…"/"Changes pending" toast; only a round still in flight
+        # when the grace elapses is announced as "in progress".
+        assert "SYNC_SHOW_DELAY_MS" in js
+        assert "setTimeout(" in js
+        assert "clearSyncGraceTimer()" in js
+        # The deferral only applies to the toast's *first* appearance -- an
+        # already-visible persistent state (a stuck failing round) still
+        # updates in place via .set().
+        assert ".set(cfg)" in js
+        assert ".isAlive()" in js
 
     def test_pill_css_removed(self):
         css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
