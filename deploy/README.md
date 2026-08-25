@@ -111,8 +111,9 @@ LAN).
   between releases propagate automatically.
 - `update.sh` takes a cheap SQLite snapshot before pulling; the app's own
   Settings > Data health backups are the authoritative backup mechanism.
-- Uninstall: `systemctl disable --now curodav.service curodav-radicale.service`
-  and remove the three directories (keep `/var/lib/curodav` for your data).
+- Uninstall: `sudo bash /opt/curodav/deploy/systemd/uninstall.sh` (add
+  `--with-radicale` if you installed that; add `--purge` to also delete
+  `/var/lib/curodav` and the `curodav` user — data is kept by default).
 
 **Docker**
 
@@ -149,6 +150,7 @@ deploy/
     radicale/config.example    Radicale config template
     install.sh                 idempotent installer (sudo)
     update.sh                  updater (sudo)
+    uninstall.sh               uninstaller (sudo)
   docker/
     Dockerfile                 python:3.12-slim + uv image
     docker-compose.yml         app (+ optional radicale, profile "sync")

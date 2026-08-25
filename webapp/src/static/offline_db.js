@@ -8,8 +8,10 @@
 // ones). Still no sync engine wired up (slice 6) -- outbox ops just
 // accumulate here until then.
 //
-// Schema (IndexedDB database "cc-offline", version 2):
-//   tasks/events/contacts   -- keyPath "uid", one row per entity, fields
+// 2026-08-19 -- Added "notes" entity store for the Offline Mode page.
+//
+// Schema (IndexedDB database "cc-offline", version 3):
+//   tasks/events/contacts/notes -- keyPath "uid", one row per entity, fields
 //                               written incrementally as pull()/local
 //                               writes deliver them (never a whole-row
 //                               replace).
@@ -39,8 +41,8 @@
 // field_name/value pairs a change/op sends into the matching row.
 (function () {
   const DB_NAME = "cc-offline";
-  const DB_VERSION = 2;
-  const ENTITY_STORES = { task: "tasks", event: "events", contact: "contacts" };
+  const DB_VERSION = 3;
+  const ENTITY_STORES = { task: "tasks", event: "events", contact: "contacts", note: "notes" };
 
   let dbPromise = null;
 
@@ -53,6 +55,7 @@
         if (!db.objectStoreNames.contains("tasks")) db.createObjectStore("tasks", { keyPath: "uid" });
         if (!db.objectStoreNames.contains("events")) db.createObjectStore("events", { keyPath: "uid" });
         if (!db.objectStoreNames.contains("contacts")) db.createObjectStore("contacts", { keyPath: "uid" });
+        if (!db.objectStoreNames.contains("notes")) db.createObjectStore("notes", { keyPath: "uid" });
         if (!db.objectStoreNames.contains("field_hlc")) db.createObjectStore("field_hlc", { keyPath: "key" });
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
         // Slice 5 -- added on top of a slice-4 (version 1) database via
@@ -275,6 +278,10 @@
     return getAll("contacts");
   }
 
+  async function getAllNotes() {
+    return getAll("notes");
+  }
+
   // §2's outbox -- append-only from a local write's point of view through
   // slice 5 (that slice never mutated or removed a queued op). Slice 6's
   // push loop (offline_sync_client.js) is the first thing that does,
@@ -350,9 +357,9 @@
   // or its own not-yet-acknowledged local writes.
   async function clearMirror() {
     const db = await openDb();
-    const t = tx(db, ["tasks", "events", "contacts", "field_hlc"], "readwrite");
+    const t = tx(db, ["tasks", "events", "contacts", "notes", "field_hlc"], "readwrite");
     await Promise.all(
-      ["tasks", "events", "contacts", "field_hlc"].map((name) => reqToPromise(t.objectStore(name).clear()))
+      ["tasks", "events", "contacts", "notes", "field_hlc"].map((name) => reqToPromise(t.objectStore(name).clear()))
     );
   }
 
@@ -371,6 +378,7 @@
     getAllTasks,
     getAllEvents,
     getAllContacts,
+    getAllNotes,
     enqueueOp,
     getOutboxOps,
     getOutboxCount,

@@ -22,6 +22,10 @@
 // needs: a task starts "open", an event "active", a contact has no status).
 // The task list's per-row complete/delete controls are unchanged.
 //
+// 2026-08-19 -- Dedicated Offline Mode page: added createNote, deleteContact,
+// deleteNote, and updateEventField for full offline CRUD across all five
+// entity types in the Offline Mode page.
+//
 // Still no sync engine: ops queued here just accumulate in `outbox` until
 // slice 6's push loop exists. Nothing here ever talks to the network.
 (function () {
@@ -79,9 +83,9 @@
   // with one shared HLC (§2: "a plain-form create with no prior state to
   // conflict against"). `baseFields` are the per-type defaults a fresh row
   // needs beyond created_at/updated_at (task: status "open"; event: status
-  // "active"; contact: none) -- passed explicitly rather than special-cased
-  // inside so the entity table (offline_db.js's ENTITY_STORES) stays the
-  // single source of truth for which types exist.
+  // "active"; contact: none; note: none) -- passed explicitly rather than
+  // special-cased inside so the entity table (offline_db.js's ENTITY_STORES)
+  // stays the single source of truth for which types exist.
   async function createEntity(entityType, fields, baseFields) {
     const deviceId = await window.CCOfflineDB.getDeviceId();
     const uid = crypto.randomUUID();
@@ -120,6 +124,10 @@
     return createEntity("contact", fields, {});
   }
 
+  async function createNote(fields) {
+    return createEntity("note", fields, {});
+  }
+
   // A single field edit (e.g. marking a task complete) -- `updated_at`
   // rides along on the same HLC as the edited field, since both describe
   // the same write event.
@@ -137,6 +145,24 @@
       },
       device_id: deviceId,
       hlc, // see createTask's own comment on this convenience top-level copy
+    };
+    await submitOp(op);
+  }
+
+  async function updateEventField(uid, fieldName, value) {
+    const deviceId = await window.CCOfflineDB.getDeviceId();
+    const hlc = hlcPayload(await window.CCOfflineDB.nextHlc());
+    const op = {
+      op_id: crypto.randomUUID(),
+      entity_type: "event",
+      entity_uid: uid,
+      op_type: "field_set",
+      fields: {
+        [fieldName]: { value, hlc },
+        updated_at: { value: new Date().toISOString(), hlc },
+      },
+      device_id: deviceId,
+      hlc,
     };
     await submitOp(op);
   }
@@ -159,5 +185,33 @@
     await submitOp(op);
   }
 
-  window.CCOfflineWrite = { createTask, createEvent, createContact, updateTaskField, deleteTask };
+  async function deleteContact(uid) {
+    const deviceId = await window.CCOfflineDB.getDeviceId();
+    const hlc = hlcPayload(await window.CCOfflineDB.nextHlc());
+    const op = {
+      op_id: crypto.randomUUID(),
+      entity_type: "contact",
+      entity_uid: uid,
+      op_type: "delete",
+      device_id: deviceId,
+      hlc,
+    };
+    await submitOp(op);
+  }
+
+  async function deleteNote(uid) {
+    const deviceId = await window.CCOfflineDB.getDeviceId();
+    const hlc = hlcPayload(await window.CCOfflineDB.nextHlc());
+    const op = {
+      op_id: crypto.randomUUID(),
+      entity_type: "note",
+      entity_uid: uid,
+      op_type: "delete",
+      device_id: deviceId,
+      hlc,
+    };
+    await submitOp(op);
+  }
+
+  window.CCOfflineWrite = { createTask, createEvent, createContact, createNote, updateTaskField, updateEventField, deleteTask, deleteContact, deleteNote };
 })();

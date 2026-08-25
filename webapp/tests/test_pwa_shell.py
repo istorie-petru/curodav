@@ -169,7 +169,7 @@ class TestOfflineShell:
         body = pwa_router.offline_shell(_request("/offline")).body.decode()
         assert '<nav class="tabbar"' in body
         assert "offline" in body.lower()
-        assert "You&#39;re offline" in body or "You're offline" in body
+        assert "Offline Mode" in body
 
     def test_offline_page_reachable_without_simulating_a_dropped_connection(self):
         # A plain route, not sw.js-only -- confirms the page itself needs
@@ -184,7 +184,7 @@ class TestOfflineShell:
 class TestLocalReadPath:
     def test_offline_db_defines_the_expected_stores_and_exports(self):
         script = (_STATIC_DIR / "offline_db.js").read_text()
-        for store in ('"tasks"', '"events"', '"contacts"', '"field_hlc"', '"meta"'):
+        for store in ('"tasks"', '"events"', '"contacts"', '"notes"', '"field_hlc"', '"meta"'):
             assert store in script
         for export in (
             "getDeviceId",
@@ -196,6 +196,7 @@ class TestLocalReadPath:
             "getAllTasks",
             "getAllEvents",
             "getAllContacts",
+            "getAllNotes",
         ):
             assert export in script
         assert "window.CCOfflineDB" in script
@@ -229,7 +230,12 @@ class TestLocalReadPath:
 
     def test_offline_html_has_the_render_target_and_loads_the_shell_script(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert 'id="offline-local-data"' in html
+        # New Offline Mode page has multiple panel IDs
+        assert 'id="offline-dashboard"' in html
+        assert 'id="offline-calendar"' in html
+        assert 'id="offline-tasks"' in html
+        assert 'id="offline-contacts"' in html
+        assert 'id="offline-notes"' in html
         assert "offline_shell.js" in html
 
     def test_precache_list_includes_the_local_read_path_scripts(self):
@@ -336,19 +342,24 @@ class TestLocalWritePath:
 
 
 class TestOfflineToolbar:
-    """2026-08-18 rework -- the /offline toolbar's two tabs ("Quick add" +
-    "Upcoming") and the single-field quick-capture input. Same "read the
-    JS/template source, assert the shape" level of confidence as every
-    other class here -- the parser's actual behavior is exercised by the
-    offline_quick_capture.js smoke run during development (matching
-    src/quick_capture.py's own parser output), not by this suite."""
+    """2026-08-19 -- Dedicated Offline Mode page: full tabbed interface
+    mirroring the main app navigation (Dashboard, Calendar, Tasks, Contacts,
+    Notes) with read/write access to the local IndexedDB mirror. Quick add is
+    a floating action button on every tab. Same "read the JS/template source,
+    assert the shape" level of confidence as every other class here."""
 
-    def test_offline_page_has_the_two_toolbar_tabs(self):
+    def test_offline_page_has_the_main_tabs(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert 'data-offline-tab="upcoming"' in html
-        assert 'data-offline-tab="quickadd"' in html
-        assert "Upcoming" in html
-        assert "Quick add" in html
+        assert 'data-offline-main-tab="dashboard"' in html
+        assert 'data-offline-main-tab="calendar"' in html
+        assert 'data-offline-main-tab="tasks"' in html
+        assert 'data-offline-main-tab="contacts"' in html
+        assert 'data-offline-main-tab="notes"' in html
+        assert "Dashboard" in html
+        assert "Calendar" in html
+        assert "Tasks" in html
+        assert "Contacts" in html
+        assert "Notes" in html
 
     def test_offline_html_has_the_quick_capture_form(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
@@ -366,7 +377,7 @@ class TestOfflineToolbar:
         script = (_STATIC_DIR / "offline_quick_capture.js").read_text()
         assert "window.CCOfflineCapture" in script
         assert "parse: parse" in script
-        for marker in ("!t", "!e", "!c"):
+        for marker in ("!t", "!e", "!c", "!n"):
             assert marker in script
         # Parser only -- no network call anywhere in it (it must work fully
         # offline, there's no server to preview against).
@@ -376,15 +387,19 @@ class TestOfflineToolbar:
         script = (_STATIC_DIR / "offline_write.js").read_text()
         assert "createEvent" in script
         assert "createContact" in script
+        assert "createNote" in script
         # Both built by one shared create helper, not two copies of the
         # create-op plumbing.
         assert "createEntity" in script
 
-    def test_offline_shell_renders_three_upcoming_sections(self):
+    def test_offline_shell_renders_all_panels(self):
         script = (_STATIC_DIR / "offline_shell.js").read_text()
+        # Now renders all five panels
         assert "Tasks (" in script
-        assert "Upcoming events (" in script
+        assert "Upcoming Events (" in script
         assert "Timetabled events (" in script
+        assert "Contacts (" in script
+        assert "Notes (" in script
         # The timetabled section is driven by the mirror's work-allocation
         # flag -- the thing the server's new is_work_allocation sync field
         # delivers.
@@ -397,6 +412,7 @@ class TestOfflineToolbar:
         assert "CCOfflineWrite.createEvent" in script
         assert "CCOfflineWrite.createContact" in script
         assert "CCOfflineWrite.createTask" in script
+        assert "CCOfflineWrite.createNote" in script
 
     def test_quick_capture_script_not_loaded_globally(self):
         # offline_quick_capture.js is /offline-only, like offline_write.js

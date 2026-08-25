@@ -1,9 +1,9 @@
-// 1.8 slices 4-5 + 2026-08-18 rework -- renders /offline's content
-// straight from the local IndexedDB mirror (offline_db.js), no network
-// request of its own. This is the one page in this slice that actually
-// reads *and now writes* the local store -- every other page is untouched
-// server-rendered HTML, per §0's "a second read/write path alongside the
-// server-rendered one, not a replacement."
+// 1.8 slices 4-5 + 2026-08-18 rework + 2026-08-19 Offline Mode page --
+// renders /offline's content straight from the local IndexedDB mirror
+// (offline_db.js), no network request of its own. This is the one page in
+// this slice that actually reads *and now writes* the local store -- every
+// other page is untouched server-rendered HTML, per §0's "a second
+// read/write path alongside the server-rendered one, not a replacement."
 //
 // Slice 4 was read-only. Slice 5 added create/complete/delete for the task
 // list (offline_write.js), each going through the same §2 op + outbox path
@@ -16,7 +16,7 @@
 // tabs. "Upcoming" holds the mirror-read list -- Tasks (with complete/
 // delete, as slice 5), Upcoming events, and Timetabled events (work-
 // allocation sessions, distinguished in the mirror by the server's new
-// is_work_allocation sync field) -- in the same agenda-style sections the
+// is_work_allocation field) -- in the same agenda-style sections the
 // dashboard's Agenda widget uses. "Quick add" is a single-field capture
 // input (offline_quick_capture.js's parser) whose submissions go through
 // CCOfflineWrite.createTask/createEvent/createContact. Labels and a task's
@@ -26,6 +26,12 @@
 // express); a contact's phone/email are dropped too (they live in child
 // tables outside the sync protocol) -- each skip is reported honestly in
 // the result line rather than silently ignored.
+//
+// 2026-08-19 -- Dedicated Offline Mode page: full tabbed interface mirroring
+// the main app navigation (Dashboard, Calendar, Tasks, Contacts, Notes)
+// with read/write access to the local IndexedDB mirror. Quick add is now a
+// floating action button on every tab. This file now renders all five
+// panels from the local mirror.
 (function () {
   function fmtWhen(iso) {
     if (!iso) return "";
@@ -55,7 +61,7 @@
   }
 
   function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "'" }[c]));
   }
 
   // Same markup deps.py's `icon()` Jinja global renders server-side
@@ -71,115 +77,160 @@
   }
 
   async function render() {
-    const root = document.getElementById("offline-local-data");
-    if (!root || !("indexedDB" in window)) return;
-
-    const [tasks, events, lastSynced, outboxCount] = await Promise.all([
-      window.CCOfflineDB.getAllTasks(),
-      window.CCOfflineDB.getAllEvents(),
-      window.CCOfflineDB.getLastSyncedAt(),
-      window.CCOfflineDB.getOutboxCount(),
+    const [tasks, events, contacts, notes, lastSynced, outboxCount] = await Promise.all([
+      window.CCOfflineDB.getAllTasks ? window.CCOfflineDB.getAllTasks() : Promise.resolve([]),
+      window.CCOfflineDB.getAllEvents ? window.CCOfflineDB.getAllEvents() : Promise.resolve([]),
+      window.CCOfflineDB.getAllContacts ? window.CCOfflineDB.getAllContacts() : Promise.resolve([]),
+      window.CCOfflineDB.getAllNotes ? window.CCOfflineDB.getAllNotes() : Promise.resolve([]),
+      window.CCOfflineDB.getLastSyncedAt ? window.CCOfflineDB.getLastSyncedAt() : Promise.resolve(null),
+      window.CCOfflineDB.getOutboxCount ? window.CCOfflineDB.getOutboxCount() : Promise.resolve(0),
     ]);
 
-    const emptyState = document.getElementById("offline-empty-state");
-    if (emptyState) emptyState.style.display = "none";
+    // Common header for all panels
+    const syncedHtml = '<div class="offline-synced-at">Last synced from this device: ' + (lastSynced ? fmtWhen(lastSynced) : "never") + "</div>";
+    const pendingHtml = outboxCount > 0
+      ? '<div class="offline-pending-note">' + outboxCount + (outboxCount === 1 ? " local change" : " local changes") + " saved on this device, waiting to sync when you're back online.</div>"
+      : "";
 
-    // "Upcoming" = starts today or later (same interpretation as the
-    // Agenda widget's Upcoming range). Work allocations are split into
-    // their own section via the mirror's is_work_allocation field; an
-    // undated event (no start_at) is not "upcoming" and is left out.
-    // "Today" is the local calendar date (mirror start_at strings are
-    // naive local ISO -- UTC would drift a day near midnight).
+    // Dashboard Panel
+    const dashboardRoot = document.getElementById("offline-dashboard");
+    const dashboardEmpty = document.getElementById("offline-dashboard-empty");
+    if (dashboardRoot) {
+      if (dashboardEmpty) dashboardEmpty.style.display = "none";
+      const openTasks = tasks.filter((t) => t.status !== "completed").length;
+      const upcomingEvents = events.filter((e) => e.start_at && e.start_at.slice(0, 10) >= getTodayString()).length;
+      const timetabledCount = events.filter((e) => e.is_work_allocation && e.start_at && e.start_at.slice(0, 10) >= getTodayString()).length;
+      const contactCount = contacts.length;
+      const noteCount = notes.length;
+
+      let html = syncedHtml + pendingHtml;
+      html += '<div class="offline-dashboard-grid">';
+      html += '<div class="offline-dashboard-card"><h3>' + openTasks + '</h3><p>Open Tasks</p></div>';
+      html += '<div class="offline-dashboard-card"><h3>' + upcomingEvents + '</h3><p>Upcoming Events</p></div>';
+      html += '<div class="offline-dashboard-card"><h3>' + timetabledCount + '</h3><p>Timetabled Sessions</p></div>';
+      html += '<div class="offline-dashboard-card"><h3>' + contactCount + '</h3><p>Contacts</p></div>';
+      html += '<div class="offline-dashboard-card"><h3>' + noteCount + '</h3><p>Notes</p></div>';
+      html += '</div>';
+
+      if (openTasks === 0 && upcomingEvents === 0 && contactCount === 0 && noteCount === 0) {
+        html += '<div class="empty-state">No local data yet. Use Quick Add to get started.</div>';
+      }
+      dashboardRoot.innerHTML = html;
+    }
+
+    // Calendar Panel
+    const calendarRoot = document.getElementById("offline-calendar");
+    const calendarEmpty = document.getElementById("offline-calendar-empty");
+    if (calendarRoot) {
+      if (calendarEmpty) calendarEmpty.style.display = "none";
+      const today = getTodayString();
+      const upcomingEvents = events
+        .filter((e) => !e.is_work_allocation && e.start_at && e.start_at.slice(0, 10) >= today)
+        .sort(byStartAt);
+      const timetabledEvents = events
+        .filter((e) => e.is_work_allocation && e.start_at && e.start_at.slice(0, 10) >= today)
+        .sort(byStartAt);
+
+      let html = syncedHtml + pendingHtml;
+      html += '<h2 class="offline-section-title">Upcoming Events (' + upcomingEvents.length + ")</h2>";
+      if (upcomingEvents.length === 0) {
+        html += '<div class="empty-state">No upcoming events in the local mirror.</div>';
+      } else {
+        html += '<div class="checklist">';
+        for (const e of upcomingEvents) {
+          html += '<div class="checklist-row"><span class="offline-event-when">' + eventWhen(e) + '</span><span class="checklist-text">' + escapeHtml(e.title || "(untitled)") + '</span></div>';
+        }
+        html += '</div>';
+      }
+
+      html += '<h2 class="offline-section-title">Timetabled Sessions (' + timetabledEvents.length + ")</h2>";
+      if (timetabledEvents.length === 0) {
+        html += '<div class="empty-state">No scheduled work sessions in the local mirror.</div>';
+      } else {
+        html += '<div class="checklist">';
+        for (const e of timetabledEvents) {
+          html += '<div class="checklist-row"><span class="offline-event-when">' + eventWhen(e) + '</span><span class="checklist-text">' + escapeHtml(e.title || "(untitled)") + '</span><span class="pill-static pill-blue">Timetabled</span></div>';
+        }
+        html += '</div>';
+      }
+      calendarRoot.innerHTML = html;
+    }
+
+    // Tasks Panel
+    const tasksRoot = document.getElementById("offline-tasks");
+    const tasksEmpty = document.getElementById("offline-tasks-empty");
+    if (tasksRoot) {
+      if (tasksEmpty) tasksEmpty.style.display = "none";
+      const openTasks = tasks.filter((t) => t.status !== "completed").sort((a, b) => (a.due_at || "9999").localeCompare(b.due_at || "9999"));
+      const completedTasks = tasks.filter((t) => t.status === "completed").sort((a, b) => (a.completed_at || "9999").localeCompare(b.completed_at || "9999"));
+
+      let html = syncedHtml + pendingHtml;
+      html += '<h2 class="offline-section-title">Open Tasks (' + openTasks.length + ")</h2>";
+      if (openTasks.length === 0) {
+        html += '<div class="empty-state">No open tasks in the local mirror.</div>';
+      } else {
+        html += '<div class="checklist">';
+        for (const t of openTasks) {
+          html += '<div class="checklist-row" data-task-row="' + escapeHtml(t.uid) + '"><button type="button" class="checklist-check" data-offline-complete="' + escapeHtml(t.uid) + '" title="Mark done">' + iconSvg("square") + '</button><span class="checklist-text">' + escapeHtml(t.title || "(untitled)") + (t.due_at ? ' <span class="search-result-subtitle">due ' + escapeHtml(fmtWhen(t.due_at)) + '</span>' : '') + '</span><button type="button" class="checklist-delete btn ghost" data-offline-delete="' + escapeHtml(t.uid) + '" title="Delete task">' + iconSvg("trash") + '</button></div>';
+        }
+        html += '</div>';
+      }
+
+      if (completedTasks.length > 0) {
+        html += '<h2 class="offline-section-title">Completed Tasks (' + completedTasks.length + ")</h2>";
+        html += '<div class="checklist">';
+        for (const t of completedTasks) {
+          html += '<div class="checklist-row"><span class="checklist-text">' + escapeHtml(t.title || "(untitled)") + (t.completed_at ? ' <span class="search-result-subtitle">completed ' + escapeHtml(fmtWhen(t.completed_at)) + '</span>' : '') + '</span></div>';
+        }
+        html += '</div>';
+      }
+      tasksRoot.innerHTML = html;
+    }
+
+    // Contacts Panel
+    const contactsRoot = document.getElementById("offline-contacts");
+    const contactsEmpty = document.getElementById("offline-contacts-empty");
+    if (contactsRoot) {
+      if (contactsEmpty) contactsEmpty.style.display = "none";
+      let html = syncedHtml + pendingHtml;
+      html += '<h2 class="offline-section-title">Contacts (' + contacts.length + ")</h2>";
+      if (contacts.length === 0) {
+        html += '<div class="empty-state">No contacts in the local mirror.</div>';
+      } else {
+        html += '<div class="checklist">';
+        for (const c of contacts) {
+          html += '<div class="checklist-row"><span class="checklist-text">' + escapeHtml(c.full_name || c.title || "(unnamed)") + (c.email ? ' <span class="search-result-subtitle">' + escapeHtml(c.email) + '</span>' : '') + '</span><button type="button" class="checklist-delete btn ghost" data-offline-delete-contact="' + escapeHtml(c.uid) + '" title="Delete contact">' + iconSvg("trash") + '</button></div>';
+        }
+        html += '</div>';
+      }
+      contactsRoot.innerHTML = html;
+    }
+
+    // Notes Panel
+    const notesRoot = document.getElementById("offline-notes");
+    const notesEmpty = document.getElementById("offline-notes-empty");
+    if (notesRoot) {
+      if (notesEmpty) notesEmpty.style.display = "none";
+      let html = syncedHtml + pendingHtml;
+      html += '<h2 class="offline-section-title">Notes (' + notes.length + ")</h2>";
+      if (notes.length === 0) {
+        html += '<div class="empty-state">No notes in the local mirror.</div>';
+      } else {
+        html += '<div class="checklist">';
+        for (const n of notes) {
+          const content = n.content || "";
+          const preview = content.length > 100 ? content.slice(0, 100) + "..." : content;
+          html += '<div class="checklist-row"><span class="checklist-text">' + escapeHtml(preview) + (n.updated_at ? ' <span class="search-result-subtitle">updated ' + escapeHtml(fmtWhen(n.updated_at)) + '</span>' : '') + '</span><button type="button" class="checklist-delete btn ghost" data-offline-delete-note="' + escapeHtml(n.uid) + '" title="Delete note">' + iconSvg("trash") + '</button></div>';
+        }
+        html += '</div>';
+      }
+      notesRoot.innerHTML = html;
+    }
+  }
+
+  function getTodayString() {
     const now = new Date();
-    const today =
-      now.getFullYear() + "-" +
-      String(now.getMonth() + 1).padStart(2, "0") + "-" +
-      String(now.getDate()).padStart(2, "0");
-    const openTasks = tasks
-      .filter((t) => t.status !== "completed")
-      .sort((a, b) => (a.due_at || "9999").localeCompare(b.due_at || "9999"));
-    const upcomingEvents = events
-      .filter((e) => !e.is_work_allocation && e.start_at && e.start_at.slice(0, 10) >= today)
-      .sort(byStartAt);
-    const timetabledEvents = events
-      .filter((e) => e.is_work_allocation && e.start_at && e.start_at.slice(0, 10) >= today)
-      .sort(byStartAt);
-
-    const parts = [];
-    parts.push('<div class="offline-synced-at">Last synced from this device: ' + (lastSynced ? fmtWhen(lastSynced) : "never") + "</div>");
-    if (outboxCount > 0) {
-      parts.push(
-        '<div class="offline-pending-note">' +
-          outboxCount +
-          (outboxCount === 1 ? " local change" : " local changes") +
-          " saved on this device, waiting to sync when you're back online.</div>"
-      );
-    }
-
-    parts.push('<h2 class="offline-section-title">Tasks (' + openTasks.length + ")</h2>");
-    if (openTasks.length === 0) {
-      parts.push('<div class="empty-state">No open tasks in the local mirror.</div>');
-    } else {
-      // Reuses .checklist/.checklist-row/.checklist-check/.checklist-
-      // delete -- the same row shape task_detail.html's own checklist
-      // widget already establishes for "title + done-toggle + delete" --
-      // rather than inventing a second interactive-row style.
-      parts.push('<div class="checklist">');
-      for (const t of openTasks) {
-        parts.push(
-          '<div class="checklist-row" data-task-row="' + escapeHtml(t.uid) + '">' +
-            '<button type="button" class="checklist-check" data-offline-complete="' + escapeHtml(t.uid) + '" title="Mark done">' +
-            iconSvg("square") +
-            "</button>" +
-            '<span class="checklist-text">' +
-            escapeHtml(t.title || "(untitled)") +
-            (t.due_at ? ' <span class="search-result-subtitle">due ' + escapeHtml(fmtWhen(t.due_at)) + "</span>" : "") +
-            "</span>" +
-            '<button type="button" class="checklist-delete btn ghost" data-offline-delete="' + escapeHtml(t.uid) + '" title="Delete task">' +
-            iconSvg("trash") +
-            "</button></div>"
-        );
-      }
-      parts.push("</div>");
-    }
-
-    parts.push('<h2 class="offline-section-title">Upcoming events (' + upcomingEvents.length + ")</h2>");
-    if (upcomingEvents.length === 0) {
-      parts.push('<div class="empty-state">No upcoming events in the local mirror.</div>');
-    } else {
-      parts.push('<div class="checklist">');
-      for (const e of upcomingEvents) {
-        parts.push(
-          '<div class="checklist-row"><span class="offline-event-when">' +
-            eventWhen(e) +
-            "</span>" +
-            '<span class="checklist-text">' +
-            escapeHtml(e.title || "(untitled)") +
-            "</span></div>"
-        );
-      }
-      parts.push("</div>");
-    }
-
-    parts.push('<h2 class="offline-section-title">Timetabled events (' + timetabledEvents.length + ")</h2>");
-    if (timetabledEvents.length === 0) {
-      parts.push('<div class="empty-state">No scheduled work sessions in the local mirror.</div>');
-    } else {
-      parts.push('<div class="checklist">');
-      for (const e of timetabledEvents) {
-        parts.push(
-          '<div class="checklist-row"><span class="offline-event-when">' +
-            eventWhen(e) +
-            "</span>" +
-            '<span class="checklist-text">' +
-            escapeHtml(e.title || "(untitled)") +
-            '</span><span class="pill-static pill-blue">Timetabled</span></div>'
-        );
-      }
-      parts.push("</div>");
-    }
-
-    root.innerHTML = parts.join("\n");
+    return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
   }
 
   function showResult(text, isError) {
@@ -224,9 +275,12 @@
           all_day: parsed.all_day ? 1 : 0,
         });
         summary = "Event added: " + parsed.title;
-      } else {
+      } else if (parsed.type === "contact") {
         await window.CCOfflineWrite.createContact({ full_name: parsed.title });
         summary = "Contact added: " + parsed.title;
+      } else if (parsed.type === "note") {
+        await window.CCOfflineWrite.createNote({ content: parsed.title });
+        summary = "Note added: " + parsed.title;
       }
       const skipped = [];
       if (parsed.labels && parsed.labels.length > 0) skipped.push("labels can't be added offline");
@@ -239,6 +293,9 @@
       if (skipped.length > 0) summary += " (" + skipped.join("; ") + ")";
       showResult(summary, false);
       input.value = "";
+      // Close modal on success
+      const modal = document.getElementById("offline-quick-add-modal");
+      if (modal) modal.hidden = true;
     } catch (err) {
       showResult("Couldn't save: " + err.message, true);
     } finally {
@@ -246,15 +303,11 @@
     }
   }
 
-  // Delegated on `root` itself, which survives every re-render (only its
-  // innerHTML is replaced) -- attached once, not re-bound per render, per
-  // the button/form elements inside it being recreated from scratch each
-  // time. The quick-capture form lives outside #offline-local-data (it's
-  // static markup in the Quick add panel), so it gets its own listener.
   function wireWriteHandlers() {
-    const root = document.getElementById("offline-local-data");
-    if (root) {
-      root.addEventListener("click", async (event) => {
+    // Tasks
+    const tasksRoot = document.getElementById("offline-tasks");
+    if (tasksRoot) {
+      tasksRoot.addEventListener("click", async (event) => {
         const completeBtn = event.target.closest("[data-offline-complete]");
         if (completeBtn) {
           await window.CCOfflineWrite.updateTaskField(completeBtn.getAttribute("data-offline-complete"), "status", "completed");
@@ -266,23 +319,71 @@
         }
       });
     }
+
+    // Contacts
+    const contactsRoot = document.getElementById("offline-contacts");
+    if (contactsRoot) {
+      contactsRoot.addEventListener("click", async (event) => {
+        const deleteBtn = event.target.closest("[data-offline-delete-contact]");
+        if (deleteBtn) {
+          await window.CCOfflineWrite.deleteContact(deleteBtn.getAttribute("data-offline-delete-contact"));
+        }
+      });
+    }
+
+    // Notes
+    const notesRoot = document.getElementById("offline-notes");
+    if (notesRoot) {
+      notesRoot.addEventListener("click", async (event) => {
+        const deleteBtn = event.target.closest("[data-offline-delete-note]");
+        if (deleteBtn) {
+          await window.CCOfflineWrite.deleteNote(deleteBtn.getAttribute("data-offline-delete-note"));
+        }
+      });
+    }
+
+    // Quick capture form
     const form = document.getElementById("offline-quick-capture-form");
     if (form) form.addEventListener("submit", handleQuickCapture);
   }
 
   function wireTabs() {
-    const buttons = document.querySelectorAll("[data-offline-tab]");
+    const buttons = document.querySelectorAll("[data-offline-main-tab]");
     for (const btn of buttons) {
       btn.addEventListener("click", () => {
-        const kind = btn.dataset.offlineTab;
+        const kind = btn.dataset.offlineMainTab;
         for (const b of buttons) {
-          const active = b.dataset.offlineTab === kind;
+          const active = b.dataset.offlineMainTab === kind;
           b.classList.toggle("active", active);
           b.setAttribute("aria-selected", active ? "true" : "false");
         }
-        document.querySelectorAll("[data-offline-panel]").forEach((panel) => {
-          panel.classList.toggle("is-active", panel.dataset.offlinePanel === kind);
+        document.querySelectorAll("[data-offline-main-panel]").forEach((panel) => {
+          panel.classList.toggle("is-active", panel.dataset.offlineMainPanel === kind);
         });
+      });
+    }
+
+    // Quick Add FAB
+    const fab = document.getElementById("offline-quick-add-fab");
+    const modal = document.getElementById("offline-quick-add-modal");
+    const closeBtns = modal ? modal.querySelectorAll(".modal-close") : [];
+    if (fab && modal) {
+      fab.addEventListener("click", () => {
+        modal.hidden = false;
+        const input = modal.querySelector('input[name="capture"]');
+        if (input) input.focus();
+      });
+      for (const btn of closeBtns) {
+        btn.addEventListener("click", () => {
+          modal.hidden = true;
+          const resultEl = document.getElementById("offline-quick-capture-result");
+          if (resultEl) resultEl.textContent = "";
+          const input = modal.querySelector('input[name="capture"]');
+          if (input) input.value = "";
+        });
+      }
+      modal.querySelector(".modal-overlay").addEventListener("click", () => {
+        modal.hidden = true;
       });
     }
   }
@@ -292,6 +393,7 @@
     wireWriteHandlers();
     render();
   });
+
   // A pull that lands *while* /offline happens to be open (e.g. the
   // network came back mid-visit), or a local write this page's own form/
   // buttons just queued, should refresh this list immediately rather than

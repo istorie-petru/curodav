@@ -4001,6 +4001,44 @@ body.command-palette-open{overflow:hidden;}
 .offline-quick-capture-result{font-size:var(--text-footnote); color:var(--success);}
 .offline-quick-capture-result.is-error{color:var(--danger);}
 
+/* 2026-08-19 -- Dedicated Offline Mode page (templates/offline.html): full
+   tabbed interface mirroring the main app navigation (Dashboard, Calendar,
+   Tasks, Contacts, Notes) with read/write access to the local IndexedDB
+   mirror. Quick add is a floating action button on every tab. */
+.offline-main-tabs{width:100%; margin-bottom:var(--space-3);}
+.offline-main-panels{display:block;}
+.offline-main-panel{display:none;}
+.offline-main-panel.is-active{display:block;}
+.offline-dashboard-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:var(--space-3); margin-bottom:var(--space-4);}
+.offline-dashboard-card{background:var(--bg-elevated); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:var(--space-4); text-align:center;}
+.offline-dashboard-card h3{font-size:var(--text-display); font-weight:700; margin:0 0 var(--space-1); color:var(--accent);}
+.offline-dashboard-card p{font-size:var(--text-caption); color:var(--fg-tertiary); margin:0;}
+
+/* Floating Action Button for Quick Add */
+.fab{
+  position:fixed; right:var(--space-4); bottom:var(--space-4);
+  width:56px; height:56px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--elevation-3); z-index:100;
+  border:none; cursor:pointer;
+}
+.fab .icon{width:24px; height:24px;}
+
+/* Modal styles for quick add */
+.modal{position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;}
+.modal-overlay{position:absolute; inset:0; background:rgba(0,0,0,.5); backdrop-filter:blur(4px);}
+.modal-dialog{position:relative; background:var(--bg-elevated); border-radius:var(--radius-card); box-shadow:var(--elevation-4); width:100%; max-width:420px; margin:var(--space-4); max-height:90vh; overflow-y:auto;}
+.modal-header{display:flex; align-items:center; justify-content:space-between; padding:var(--space-4); border-bottom:1px solid var(--border-color);}
+.modal-header h2{margin:0; font-size:var(--text-headline);}
+.modal-close{background:none; border:none; font-size:var(--text-title2); line-height:1; color:var(--fg-tertiary); cursor:pointer; padding:var(--space-1);}
+.modal-footer{display:flex; justify-content:flex-end; gap:var(--space-2); padding:var(--space-4); border-top:1px solid var(--border-color);}
+.offline-quick-capture-form{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-4);}
+.offline-quick-capture-form input[type="text"]{width:100%;}
+.offline-quick-capture-hint{font-size:var(--text-caption); color:var(--fg-tertiary); margin:0 0 var(--space-2);}
+.offline-quick-capture-hint code{font-size:inherit;}
+.offline-quick-capture-result{font-size:var(--text-footnote); color:var(--success); margin-top:var(--space-2);}
+.offline-quick-capture-result.is-error{color:var(--danger);}
+
 /* --------------------------------------------------------------------- */
 /* Single-user login page (2026-08-16, src/auth.py + templates/login.html)
    -- the one surface a signed-out browser sees. Centered card on the app's

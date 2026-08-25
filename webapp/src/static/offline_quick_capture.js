@@ -4,11 +4,9 @@
 // (plans/quick-capture.md), sharing its token rules so the same sentence
 // means the same thing online and offline:
 //
-//   - An entity marker -- `!t` (task), `!e` (event), `!c` (contact) --
+//   - An entity marker -- `!t` (task), `!e` (event), `!c` (contact), `!n` (note) --
 //     selects the type. May appear anywhere; the first marker-looking
-//     token wins. `!n` (note) is deliberately rejected: notes aren't part
-//     of the sync pool (only task/event/contact are mirrored), so there's
-//     no offline write path for one.
+//     token wins.
 //   - `#label` tokens are labels, extracted independently of type. Labels
 //     aren't mirrored to a device (object_label ops are commutative, §7a,
 //     and never flow through the field-HLC pull/write path), so the shell
@@ -212,6 +210,13 @@
     return { type: "contact", title: name, labels: labelsInfo.labels, phone: phone, email: email };
   }
 
+  function parseNote(tokens) {
+    var labelsInfo = extractLabels(tokens);
+    var consumed = labelsInfo.consumed;
+    var content = joinUnconsumed(tokens, consumed);
+    return { type: "note", title: content, labels: labelsInfo.labels };
+  }
+
   function joinUnconsumed(tokens, consumed) {
     var kept = [];
     for (var i = 0; i < tokens.length; i++) {
@@ -225,27 +230,28 @@
       var m = MARKER_RE.exec(tokens[i]);
       if (m) return { index: i, type: MARKER_TYPES[m[1]] };
     }
-    throw new Error("No entity marker (!t task / !e event / !c contact) found.");
+    throw new Error("No entity marker (!t task / !e event / !c contact / !n note) found.");
   }
 
   function parse(text) {
     var tokens = (text || "").split(/\s+/).filter(Boolean);
     if (tokens.length === 0) throw new Error("Nothing to capture.");
     var marker = findMarker(tokens);
-    if (marker.type === "note") {
-      throw new Error("Notes can't be created offline yet.");
-    }
     var remaining = tokens.slice(0, marker.index).concat(tokens.slice(marker.index + 1));
     var today = todayTuple();
     var result =
       marker.type === "task" ? parseTask(remaining, today) :
       marker.type === "event" ? parseEvent(remaining, today) :
-      parseContact(remaining);
+      marker.type === "contact" ? parseContact(remaining) :
+      parseNote(remaining);
     if ((marker.type === "task" || marker.type === "contact") && !result.title) {
       throw new Error(marker.type === "task" ? "A task needs a title." : "A contact needs a name.");
     }
     if (marker.type === "event" && !result.title) {
       throw new Error("An event needs a title.");
+    }
+    if (marker.type === "note" && !result.title) {
+      throw new Error("A note needs content.");
     }
     return result;
   }
