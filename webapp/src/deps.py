@@ -5,6 +5,7 @@ CalDavBridge singleton (writes go through this to reach Radicale)."""
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
@@ -455,6 +456,47 @@ def _fmt_birthday(value: str | None) -> str:
 
 
 templates.env.filters["fmt_birthday"] = _fmt_birthday
+
+
+def _format_datetime_value(value: str, fmt: str) -> str:
+    """Shared formatting core for the fmt_dt filter below -- one stored ISO
+    timestamp ("2026-08-25T20:57:05", UTC like every timestamp this app
+    writes) rendered human-readably as "Aug 25, 2026, 8:57 PM" (12h pref)
+    or "Aug 25, 2026, 20:57" (24h pref). Aware timestamps are converted to
+    the server's local zone first (a backup made at 22:57 UTC should read
+    as the wall-clock time it was actually made at); naive ones are taken
+    as-is. Anything that doesn't parse is returned unchanged -- same
+    "display filter degrades to the original value" rule as
+    _format_time_value above."""
+    if not value:
+        return value
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()
+    date_part = f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+    hh = dt.hour % 12 or 12
+    minute = f"{dt.minute:02d}"
+    if fmt != "12h":
+        return f"{date_part}, {dt.hour:02d}:{minute}"
+    period = "AM" if dt.hour < 12 else "PM"
+    return f"{date_part}, {hh}:{minute} {period}"
+
+
+@pass_context
+def _fmt_dt(ctx, value: str) -> str:
+    """Jinja filter for whole-datetime display ("Aug 25, 2026, 8:57 PM")
+    -- Data & Maintenance's backup facts (2026-08-26 redesign: all raw ISO
+    timestamps on that page became human-readable ones). Same @pass_context
+    12h/24h-preference read as fmt_time above."""
+    request = ctx.get("request")
+    fmt = _time_format(request) if request is not None else "24h"
+    return _format_datetime_value(value, fmt)
+
+
+templates.env.filters["fmt_dt"] = _fmt_dt
 
 
 def _fmt_address(addr: dict) -> str:

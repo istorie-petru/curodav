@@ -8,6 +8,7 @@ scripts/data_health.py share) plus the Settings routes/page.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -252,8 +253,13 @@ class TestSettingsDataMaintenancePage:
     def test_health_status_uses_status_pills_not_plain_text(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        assert "pill-static pill-green" in body  # integrity OK
-        assert "pill-static pill-gray" in body  # sync not configured
+        # New System Status cards replace the old Health status section.
+        # Database card: healthy (integrity OK) -> status-card healthy
+        assert 'status-card healthy' in body
+        # Sync card: not configured -> status-card unknown
+        assert 'status-card unknown' in body
+        # Backup card: no backup -> status-card unknown
+        assert body.count('status-card unknown') >= 2
 
     def test_backup_route_creates_a_backup_and_redirects(self, conn, tmp_path):
         backups_dir = tmp_path / "backups"
@@ -307,6 +313,93 @@ class TestSettingsDataMaintenancePage:
         assert "/settings/data-maintenance" in urls
 
 
+class TestDataMaintenanceRedesign2026_08_26:
+    """The 2026-08-26 page redesign: below the (unchanged) System Status
+    cards, the page is now Maintenance & cleanup -> one unified Full
+    Backup & Restore hero -> Export & import -> a typed-confirmation-gated
+    Danger zone. The old Backups & storage card/table is gone -- the hero
+    is the only place on the page naming a backup's timestamp, size, or
+    filename."""
+
+    def _page(self, conn, tmp_path):
+        req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
+        return settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+
+    def test_purge_completed_lives_in_maintenance_before_the_danger_zone(self, conn, tmp_path):
+        body = self._page(conn, tmp_path)
+        assert 'action="/settings/purge-completed"' in body
+        assert 'action="/settings/purge-all"' in body
+        # Same page, new order: housekeeping first, danger last. (purge-all
+        # also appears earlier inside the untouched System Status menus, so
+        # anchor on the danger zone's own marker, not the action string.)
+        assert body.index('action="/settings/purge-completed"') < body.index("dm-danger-form")
+        # The moved action is now a soft grey button carrying its live count.
+        db.upsert_task(conn, {"uid": "done1", "title": "Old done task", "description": "",
+                              "status": "done", "due_at": None,
+                              "created_at": _now(), "updated_at": _now()})
+        body = self._page(conn, tmp_path)
+        assert "Purge completed tasks (1 right now)" in body
+
+    def test_danger_zone_is_gated_behind_a_typed_phrase(self, conn, tmp_path):
+        body = self._page(conn, tmp_path)
+        # The button ships disabled straight from the server...
+        assert '<button type="submit" class="btn danger" data-dm-danger-btn disabled>' in body
+        # ...behind an exact-phrase input, and it's the only purge there.
+        assert "data-dm-danger-phrase" in body
+        assert 'placeholder="DELETE ALL"' in body
+        assert "Permanently Delete Everything" in body
+        danger_tail = body.split("dm-danger-form", 1)[1]
+        assert "/settings/purge-all" in danger_tail
+        assert "/settings/purge-completed" not in danger_tail
+
+    def test_backup_facts_are_human_readable_and_only_in_the_hero(self, conn, tmp_path):
+        import re
+
+        resp = settings_router.data_health_backup(
+            _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
+        )
+        assert resp.status_code == 303
+        backup = data_health.list_backups(tmp_path / "backups")[0]
+        body = self._page(conn, tmp_path)
+        # Raw ISO timestamps became "Aug 25, 2026, 8:57 PM"-style text.
+        assert re.search(r"Last backup: [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
+        # The filename and a size appear inside the hero card's restore area.
+        assert backup["filename"] in body
+        assert re.search(r"\d+(\.\d+)? (kB|MB|bytes)", body)
+        # The old redundant surfaces are gone ("Backups & storage" as a
+        # phrase still appears in the hero card's own explanatory comment,
+        # so anchor on its unique rendering instead).
+        assert '<use href="#icon-bar-chart-2">' not in body
+        assert "<th>File</th>" not in body
+        assert "Database size" not in body
+
+    def test_verified_badge_appears_after_verification(self, conn, tmp_path):
+        settings_router.data_health_backup(
+            _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
+        )
+        backup = data_health.list_backups(tmp_path / "backups")[0]
+        settings_router.data_health_verify(
+            _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"),
+            filename=backup["filename"], conn=conn,
+        )
+        body = self._page(conn, tmp_path)
+        assert "dm-badge-ok" in body
+        assert "Verified &#10003;" in body
+
+    def test_redesigned_dropdown_labels_render(self, conn, tmp_path):
+        body = self._page(conn, tmp_path)
+        for label in ("After 1 week", "After 1 month", "Never", "Keep 30 days", "Keep 90 days", "Keep forever"):
+            assert label in body
+
+    def test_legacy_stored_value_stays_visible(self, conn, tmp_path):
+        # An install that picked "14 days" before the relabel still stores
+        # 14; the select must show that truthfully instead of silently
+        # displaying the first preset while storing something else.
+        db.set_app_meta(conn, "task_auto_archive_days", "14")
+        body = self._page(conn, tmp_path)
+        assert '<option value="14" selected>14 days (current)</option>' in body
+
+
 class TestSyncGcRoutes:
     """1.8 slice 7 -- Settings' side of tombstone GC: the retention preset
     field and the manual "Run cleanup now" action."""
@@ -351,3 +444,32 @@ class TestSyncGcRoutes:
         resp = settings_router.data_health_run_sync_gc(conn=conn)
         assert resp.status_code == 303
         assert data_health.sync_gc_last_run(conn) is not None
+
+
+class TestDataMaintenanceScriptGate:
+    """Structural checks over static/data_maintenance.js (2026-08-26
+    redesign) -- same grep-the-source style as the app's other page-local
+    scripts; no browser in this environment to drive the real DOM."""
+
+    JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "data_maintenance.js").read_text()
+
+    def test_delete_all_gate_is_exact_and_server_default_is_disabled(self):
+        # The client-side half of the two-lock danger zone: only the exact
+        # phrase arms the button, anything else disarms it again.
+        assert 'phrase.value === "DELETE ALL"' in self.JS
+        assert "btn.disabled = !armed" in self.JS
+
+    def test_export_preview_and_alt_upload_wiring_exists(self):
+        # The "Includes: ..." preview composes each option's own
+        # server-rendered data-dm-preview phrase with a packaging note...
+        assert "data-dm-preview" in self.JS or "dmPreview" in self.JS
+        # ...and the hero card's upload link echoes the chosen filename,
+        # revealing its submit button via the has-file class.
+        assert 'classList.toggle("has-file", !!picked)' in self.JS
+
+    def test_template_carries_the_data_attributes_the_script_reads(self):
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
+        for marker in ("data-dm-danger", "data-dm-danger-phrase", "data-dm-danger-btn",
+                       "data-dm-preview=", "data-dm-alt-form", "data-dm-alt-file",
+                       "data-dm-alt-name"):
+            assert marker in html

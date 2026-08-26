@@ -681,3 +681,33 @@ class TestSettingsAppearanceRelationsCard:
     def test_set_relations_card_route_stores_0_on_off(self, conn):
         settings_router.set_relations_card(show="0", conn=conn)
         assert db.get_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY) == "0"
+
+
+class TestFmtDtFilter:
+    """2026-08-26 Data & Maintenance redesign -- backup timestamps on that
+    page render through the new fmt_dt filter ("Aug 25, 2026, 8:57 PM")
+    instead of raw ISO strings. Pure-function checks against
+    _format_datetime_value (the filter's core), same 12h/24h-preference
+    convention as fmt_time."""
+
+    def test_24h_vs_12h_share_the_date_part(self):
+        value = "2026-08-25T20:57:05"
+        assert deps._format_datetime_value(value, "24h") == "Aug 25, 2026, 20:57"
+        assert deps._format_datetime_value(value, "12h") == "Aug 25, 2026, 8:57 PM"
+
+    def test_aware_input_is_converted_to_the_local_zone(self):
+        # 00:30 UTC is 20:30 on Aug 25 at UTC-4 -- whatever this machine's
+        # own zone is, the rendered wall clock must match astimezone()'s,
+        # not stay pinned to the stored UTC reading.
+        from datetime import datetime
+
+        dt = datetime.fromisoformat("2026-08-26T00:30:00+00:00").astimezone()
+        expected = f"{dt.strftime('%b')} {dt.day}, {dt.year}, {dt.hour:02d}:30"
+        assert deps._format_datetime_value("2026-08-26T00:30:00+00:00", "24h") == expected
+
+    def test_unparseable_input_passes_through(self):
+        value = "not-a-timestamp"
+        assert deps._format_datetime_value(value, "24h") == value
+
+    def test_empty_input_stays_empty(self):
+        assert deps._format_datetime_value("", "24h") == ""

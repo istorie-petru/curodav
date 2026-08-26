@@ -252,13 +252,21 @@ class TestDataAndBackupCategoryRemoved:
         assert resp.headers["location"] == "/settings/data-maintenance"
 
     def test_data_maintenance_page_has_the_export_buttons_inlined(self, conn, tmp_path):
+        # 2026-08-26 redesign of the inlined section: 8 individual download
+        # links + 4 separate import forms became two cards -- a Full Backup
+        # hero (data.json + its .json-only restore form) and one combined
+        # Export/Import card whose single GET form hits /export/download
+        # and whose single drop zone posts to /import/auto (server-side
+        # content sniffing). The old per-type URLs still exist as routes
+        # for old bookmarks/direct callers, just no longer linked from the
+        # page.
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
-        assert "standard formats" in body
-        assert 'href="/export/events.ics"' in body
         assert 'href="/export/data.json"' in body
-        assert 'action="/export/import/events"' in body
         assert 'action="/export/import/json"' in body
+        assert 'action="/export/download"' in body
+        assert 'action="/export/import/auto"' in body
+        assert "Full backup" in body
 
 
 class TestCustomWidgetsToggleRemoved:

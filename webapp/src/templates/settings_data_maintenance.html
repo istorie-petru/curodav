@@ -2,8 +2,8 @@
 {% block title %}Data & Maintenance - Settings{% endblock %}
 {% block content %}
 {% include "_settings_breadcrumb.html" with context %}
-<h1>Data &amp; Maintenance</h1>
-<p class="settings-hint">Backups, database integrity, sync conflicts, export &amp; import, and data lifecycle -- everything about your data's safety, in priority order.</p>
+<h1>Data & Maintenance</h1>
+<p class="settings-hint">Backups, database integrity, sync conflicts, export & import, and data lifecycle -- everything about your data's safety, in priority order.</p>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint" style="color:var(--md-primary,var(--accent))">{{ request.query_params.get('note') }}</div>
@@ -12,17 +12,6 @@
 <div class="settings-hint" style="color:var(--md-error,#b3261e)">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
-<!-- 1. Needs attention -- the merged-page reorg's whole point
-     (SETTINGS_UI_GUIDE.md: "Needs attention, first, visually urgent").
-     Unresolved sync conflicts and a failed integrity/verification check
-     belong at the very top, not buried in a page nobody visits unless
-     told to. The warning tone is deliberate -- the one place in Settings
-     where "looks the same as everything else" is the wrong outcome (the
-     M3 --tag-red-* tokens, not the neutral .card). Only rendered when
-     there is actually something to flag. The conflict-count badge on the
-     Settings hub row itself (settings_index.html) is the other half of
-     "visible" -- the hub doesn't need a visit to this page to show a
-     problem exists. -->
 {% set needs_attention = conflicts or not integrity.ok or (latest_verified_backup and not latest_verified_backup.verification.ok) %}
 {% if needs_attention %}
 <div class="settings-group">
@@ -44,7 +33,7 @@
             <tbody>
                 {% for c in conflicts %}
                 <tr>
-                    <td>{{ c.entity_type }} · {{ c.entity_uid }}</td>
+                    <td>{{ c.entity_type }} &middot; {{ c.entity_uid }}</td>
                     <td>{{ 'Project label' if c.field_name == 'project_label' else c.field_name }}</td>
                     <td>{{ c.losing_value if c.losing_value is not none else '(empty)' }}</td>
                     <td>{{ c.created_at }}</td>
@@ -61,122 +50,188 @@
             </tbody>
         </table>
         {% else %}
-        <p class="settings-hint">The database integrity check found problems -- see "Health status" below for the detail. Restore a verified backup if your data looks wrong.</p>
+        <p class="settings-hint">The database integrity check found problems -- see "System Status" below for the detail. Restore a verified backup if your data looks wrong.</p>
         {% endif %}
     </div>
 </div>
 {% endif %}
 
-<!-- 2. Health status -- scannable at a glance (SETTINGS_UI_GUIDE.md:
-     "Health status, visual, second"). The same success/warning/error M3
-     pill tokens the rest of the app uses for statuses (no new color
-     system), so OK vs. not-OK actually looks different. -->
+<!-- 2. System Status -- compact dashboard of three status cards replacing the old
+     Health status + Maintenance & upkeep sections. Each card shows status prominently
+     with a subtle tinted background, and a three-dot menu for actions. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('activity', 'icon-sm') }} Health status</h2>
-    <div class="card">
-        <div class="settings-field-row">
-            <span class="settings-field-label">Database integrity
-                <span class="settings-field-hint">{{ integrity.detail }}</span>
-            </span>
-            <span class="spacer"></span>
-            {% if integrity.ok %}
-            <span class="pill-static pill-green">OK</span>
-            {% else %}
-            <span class="pill-static pill-red">Problem found</span>
-            {% endif %}
-        </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Last successful backup
-                <span class="settings-field-hint">{{ latest_backup.filename if latest_backup else 'No backup has been made yet' }}</span>
-            </span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ latest_backup.created_at if latest_backup else '—' }}</span>
-        </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Last backup verification
-                <span class="settings-field-hint">
-                    {% if latest_verified_backup %}
-                        {{ latest_verified_backup.filename }} · {{ latest_verified_backup.verification.checked_at }}
-                    {% else %}
-                        No backup has been verified yet
-                    {% endif %}
-                </span>
-            </span>
-            <span class="spacer"></span>
-            {% if latest_verified_backup %}
-                {% if latest_verified_backup.verification.ok %}
-                <span class="pill-static pill-green">OK</span>
-                {% else %}
-                <span class="pill-static pill-red">{{ latest_verified_backup.verification.errors|length }} problem(s)</span>
+    <h2 class="section-label">{{ icon('activity', 'icon-sm') }} System Status</h2>
+
+    <div class="system-status-grid" role="region" aria-label="System status overview">
+
+        <!-- DATABASE CARD -->
+        {% set db_status_class = 'healthy' if integrity.ok else 'error' %}
+        {% set db_status_text = 'Healthy' if integrity.ok else 'Problem found' %}
+        {% set db_status_icon = 'check-circle' if integrity.ok else 'alert-circle' %}
+        <div class="status-card {{ db_status_class }}">
+            <div class="status-card-header">
+                <span class="status-card-title">{{ icon('database', 'icon-sm') }} Database</span>
+                <div class="action-menu" aria-label="Database actions">
+                    <button type="button" class="action-menu-trigger" aria-label="Database actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
+                    <div class="action-menu-panel" role="menu">
+                        <div class="action-menu-section">
+                            <form method="post" action="/settings/data-health/integrity-check" style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('eye', 'icon-sm') }} Check integrity</button>
+                            </form>
+                            <form method="post" action="/settings/data-health/verify" style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify latest backup</button>
+                            </form>
+                            <form method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database." style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
+                            </form>
+                        </div>
+                        <div class="action-menu-section">
+                            <form method="post" action="/settings/data-health/sync-gc" style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up sync data</button>
+                            </form>
+                            <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
+                        </div>
+                        <div class="action-menu-section">
+                            <form method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app &mdash; every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Export & backup, above)." style="display:contents;">
+                                <button type="submit" class="action-menu-item danger" role="menuitem">{{ icon('shield', 'icon-sm') }} Reset database (purge all)</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-card-status {{ db_status_class }}">
+                <svg class="icon" aria-hidden="true"><use href="#icon-{{ db_status_icon }}"></use></svg>
+                <span>{{ db_status_text }}</span>
+            </div>
+            <div class="status-card-meta">
+                <span>{{ entities.task_count + entities.event_count + entities.contact_count | int }} records &middot; {{ storage.db_size_bytes | filesizeformat }}</span>
+                {% if integrity.checked_at %}
+                <span class="text-muted">Last checked {{ integrity.checked_at }}</span>
                 {% endif %}
-            {% else %}
-            <span class="pill-static pill-gray">Never</span>
-            {% endif %}
+            </div>
         </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Synchronization
-                <span class="settings-field-hint">{{ sync.detail }}</span>
-            </span>
-            <span class="spacer"></span>
-            {% if sync.configured %}
-            <span class="pill-static pill-green">Configured</span>
-            {% else %}
-            <span class="pill-static pill-gray">Not configured</span>
-            {% endif %}
+
+        <!-- BACKUP CARD -->
+        {% set backup_status_class = 'healthy' %}
+        {% set backup_status_text = 'Up to date' %}
+        {% set backup_status_icon = 'check-circle' %}
+        {% if not latest_backup %}
+            {% set backup_status_class = 'unknown' %}
+            {% set backup_status_text = 'No backup' %}
+            {% set backup_status_icon = 'alert-circle' %}
+        {% elif latest_verified_backup and not latest_verified_backup.verification.ok %}
+            {% set backup_status_class = 'error' %}
+            {% set backup_status_text = 'Verification failed' %}
+            {% set backup_status_icon = 'alert-circle' %}
+        {% elif latest_verified_backup and latest_verified_backup.verification.ok %}
+            {% set backup_status_class = 'healthy' %}
+            {% set backup_status_text = 'Verified' %}
+            {% set backup_status_icon = 'check-circle' %}
+        {% else %}
+            {% set backup_status_class = 'warning' %}
+            {% set backup_status_text = 'Not verified' %}
+            {% set backup_status_icon = 'alert-triangle' %}
+        {% endif %}
+        <div class="status-card {{ backup_status_class }}">
+            <div class="status-card-header">
+                <span class="status-card-title">{{ icon('archive', 'icon-sm') }} Backup</span>
+                <div class="action-menu" aria-label="Backup actions">
+                    <button type="button" class="action-menu-trigger" aria-label="Backup actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
+                    <div class="action-menu-panel" role="menu">
+                        <div class="action-menu-section">
+                            <form method="post" action="/settings/data-health/backup" style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('archive', 'icon-sm') }} Backup now</button>
+                            </form>
+                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('backups-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('list', 'icon-sm') }} View backups</button>
+                        </div>
+                        <div class="action-menu-section">
+                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('import-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('upload', 'icon-sm') }} Restore&hellip;</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-card-status {{ backup_status_class }}">
+                <svg class="icon" aria-hidden="true"><use href="#icon-{{ backup_status_icon }}"></use></svg>
+                <span>{{ backup_status_text }}</span>
+            </div>
+            <div class="status-card-meta">
+                {% if latest_backup %}
+                <span>Last backup: {{ latest_backup.created_at }}</span>
+                {% if latest_verified_backup %}
+                <span class="text-muted">Verified {{ latest_verified_backup.verification.checked_at }}</span>
+                {% else %}
+                <span class="text-muted">Not yet verified</span>
+                {% endif %}
+                {% else %}
+                <span class="text-muted">No backup has been made yet</span>
+                {% endif %}
+            </div>
         </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Sync cleanup
-                <span class="settings-field-hint">
-                    {% if sync_gc.last_run %}
-                        Last ran {{ sync_gc.last_run.at }} -- {{ (sync_gc.last_run.purged_entities.values() | sum) + sync_gc.last_run.purged_applied_ops }} row(s) purged
-                    {% else %}
-                        Not run yet
-                    {% endif %}
-                </span>
-            </span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ sync_gc.retention_days ~ '-day retention' if sync_gc.retention_days else 'Disabled' }}</span>
+
+        <!-- SYNC CARD -->
+        {% set sync_status_class = 'healthy' if sync.configured else 'unknown' %}
+        {% set sync_status_text = 'Synced' if sync.configured else 'Not configured' %}
+        {% set sync_status_icon = 'check-circle' if sync.configured else 'alert-circle' %}
+        {% if sync.configured and sync.last_seen_at %}
+            {% set sync_status_text = 'Synced' %}
+        {% endif %}
+        <div class="status-card {{ sync_status_class }}">
+            <div class="status-card-header">
+                <span class="status-card-title">{{ icon('repeat', 'icon-sm') }} Sync</span>
+                <div class="action-menu" aria-label="Sync actions">
+                    <button type="button" class="action-menu-trigger" aria-label="Sync actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
+                    <div class="action-menu-panel" role="menu">
+                        <div class="action-menu-section">
+                            <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
+                        </div>
+                        <div class="action-menu-section">
+                            <form method="post" action="/settings/data-health/sync-gc" style="display:contents;">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up now</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-card-status {{ sync_status_class }}">
+                <svg class="icon" aria-hidden="true"><use href="#icon-{{ sync_status_icon }}"></use></svg>
+                <span>{{ sync_status_text }}</span>
+            </div>
+            <div class="status-card-meta">
+                {% if sync.configured %}
+                <span>{{ sync.detail }}</span>
+                {% if sync_gc.last_run %}
+                <span class="text-muted">Cleanup last ran {{ sync_gc.last_run.at }}</span>
+                {% else %}
+                <span class="text-muted">Sync cleanup not run yet</span>
+                {% endif %}
+                {% else %}
+                <span class="text-muted">{{ sync.detail }}</span>
+                {% endif %}
+            </div>
         </div>
+
     </div>
 </div>
 
-<!-- 3. Maintenance & upkeep -- the things a person actually comes here to
-     *do*, as real buttons (SETTINGS_UI_GUIDE.md: "Primary actions,
-     visible, third"), not competing for attention with informational
-     rows: `.btn primary` for the one most-likely action (Backup now),
-     `.btn ghost` for the rest. Also home to the two non-danger lifecycle
-     controls that used to sit on Advanced (reset layout, auto-archive) --
-     kept away from the danger zone below. -->
+<!-- 3. Maintenance & cleanup -- 2026-08-26 redesign: every row here is now
+     an inline actionable control (label left, control right). The two
+     lifecycle selects autosubmit on pick; "Purge completed tasks" moved
+     down from the old Danger zone into this card as a soft grey action --
+     it's routine housekeeping, not a catastrophe -- and shows its live
+     count. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('tool', 'icon-sm') }} Maintenance &amp; upkeep</h2>
+    <h2 class="section-label">{{ icon('sliders', 'icon-sm') }} Maintenance &amp; cleanup</h2>
     <div class="card">
-        <form class="settings-field-row" method="post" action="/settings/data-health/backup">
-            <span class="settings-field-label">Create a backup now
-                <span class="settings-field-hint">Saves a full snapshot you can restore from later if something goes wrong</span>
+        <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
+            <span class="settings-field-label">Auto-archive completed tasks
+                <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
             </span>
             <span class="spacer"></span>
-            <button type="submit" class="btn primary">{{ icon('archive', 'icon-sm') }} Backup now</button>
-        </form>
-        <form class="settings-field-row" method="post" action="/settings/data-health/verify">
-            <span class="settings-field-label">Verify latest backup
-                <span class="settings-field-hint">Confirms your most recent backup is complete and restorable</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('check-square', 'icon-sm') }} Verify</button>
-        </form>
-        <form class="settings-field-row" method="post" action="/settings/data-health/integrity-check">
-            <span class="settings-field-label">Check database integrity
-                <span class="settings-field-hint">Scans your data for corruption -- run this if something looks wrong</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('eye', 'icon-sm') }} Check</button>
-        </form>
-        <form class="settings-field-row" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
-            <span class="settings-field-label">Compact &amp; reindex
-                <span class="settings-field-hint">Speeds up the app and frees up disk space</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('tool', 'icon-sm') }} Repair</button>
+            <select name="days" onchange="this.form.requestSubmit()">
+                {% for value, label in days_choices %}
+                <option value="{{ value }}" {% if task_auto_archive_days == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
         </form>
         <form class="settings-field-row" method="post" action="/settings/data-health/sync-retention">
             <span class="settings-field-label">Sync cleanup retention
@@ -189,22 +244,6 @@
                 {% endfor %}
             </select>
         </form>
-        <form class="settings-field-row" method="post" action="/settings/data-health/sync-gc">
-            <span class="settings-field-label">Run sync cleanup now
-                <span class="settings-field-hint">Frees up space by removing old deleted items right away, instead of waiting</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Clean up</button>
-        </form>
-        <!-- Reset to default layout (item #1, dashboard usability rework,
-             2026-08-07; moved here 2026-08-08 when "Widgets" folded into
-             Advanced, and again 2026-08-17 when Advanced folded into this
-             page) -- deletes Home's own widgets and re-seeds the default
-             layout immediately (routers/dashboard.py's _reset_dashboard).
-             A Space/Project page's own reset lives on that page itself
-             instead (label_detail.html's edit-mode toolbar). Routine, not
-             destructive -- deliberately a sibling of the maintenance
-             actions, not of the purge actions in the danger zone. -->
         <form class="settings-field-row" method="post" action="/dashboard/reset" data-confirm-sheet="Reset the Home dashboard to its default widget layout? This deletes every widget you've added or customized here.">
             <span class="settings-field-label">Reset Home to default layout
                 <span class="settings-field-hint">Deletes your current Home widgets and restores the defaults</span>
@@ -212,214 +251,185 @@
             <span class="spacer"></span>
             <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset</button>
         </form>
-        <!-- Auto-archive completed tasks (2026-08-08) -- the automatic,
-             age-based sibling of "Purge completed" in the danger zone
-             below: checked lazily on every visit to the Tasks table view
-             (routers/tasks.py's _auto_archive_if_configured), not on a
-             schedule -- this app has no background job runner beyond the
-             Radicale sync loop. Fixed preset choices, not a free-typed
-             number (see routers/settings.py's DAYS_CHOICES) -- a select
-             autosubmits on pick. -->
-        <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
-            <span class="settings-field-label">Auto-archive completed tasks
-                <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
-            </span>
-            <span class="spacer"></span>
-            <select name="days" onchange="this.form.requestSubmit()">
-                {% for value, label in days_choices %}
-                <option value="{{ value }}" {% if task_auto_archive_days == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </form>
-    </div>
-</div>
-
-<!-- 4. Export & import (was Settings > Advanced's "Export & backup"
-     section, itself moved off its own /export page 2026-08-08 -- direct
-     feedback: "export and backup should be fully with all buttons... in
-     the advanced page"; /export is now a redirect here). Useful, not
-     urgent, not primary (SETTINGS_UI_GUIDE.md item 4). -->
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('download', 'icon-sm') }} Export · standard formats</h2>
-    <p class="settings-hint">Your own data in standard formats (.ics/.vcf/.csv) that open in any calendar or contacts app. Published lists sync via Radicale ({{ radicale_url }}) separately.</p>
-    <div class="card">
-        <a class="calendar-row settings-row" href="/export/events.ics">
-            <span class="settings-row-icon">{{ icon('calendar', 'icon-sm') }}</span>
-            <span class="settings-row-name">Events (.ics)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ event_count }} events · open in any calendar app</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/tasks.ics">
-            <span class="settings-row-icon">{{ icon('check-square', 'icon-sm') }}</span>
-            <span class="settings-row-name">Tasks (.ics)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ task_count }} tasks · VTODO</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/contacts.vcf">
-            <span class="settings-row-icon">{{ icon('users', 'icon-sm') }}</span>
-            <span class="settings-row-name">Contacts (.vcf)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ contact_count }} contacts · any address book app</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/tasks.csv">
-            <span class="settings-row-icon">{{ icon('grid', 'icon-sm') }}</span>
-            <span class="settings-row-name">Tasks (CSV)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">Spreadsheet</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/contacts.csv">
-            <span class="settings-row-icon">{{ icon('grid', 'icon-sm') }}</span>
-            <span class="settings-row-name">Contacts (CSV)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">Spreadsheet</span>
-        </a>
-    </div>
-</div>
-
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('package', 'icon-sm') }} Export · JSON backup</h2>
-    <div class="card">
-        <a class="calendar-row settings-row" href="/export/labels.json">
-            <span class="settings-row-icon">{{ icon('tag', 'icon-sm') }}</span>
-            <span class="settings-row-name">Labels (JSON)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">Every label, its config, and its membership</span>
-        </a>
-        <a class="calendar-row settings-row" href="/export/data.json">
-            <span class="settings-row-icon">{{ icon('archive', 'icon-sm') }}</span>
-            <span class="settings-row-name">Full backup (data.json)</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">Everything · restorable below</span>
-        </a>
-    </div>
-</div>
-
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('upload', 'icon-sm') }} Import &amp; restore</h2>
-    <p class="settings-hint">Each import is a merge, not a replace -- existing items are matched by their own identifiers and updated, everything else stays.</p>
-    <div class="card import-card">
-        <h3 class="import-title">Events</h3>
-        <form method="post" action="/export/import/events" enctype="multipart/form-data" class="import-form">
-            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .ics file
-                <input type="file" name="file" accept=".ics,text/calendar" class="sr-only" required>
-            </label>
-            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .ics</button>
-        </form>
-        <h3 class="import-title">Tasks</h3>
-        <form method="post" action="/export/import/tasks" enctype="multipart/form-data" class="import-form">
-            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .ics file
-                <input type="file" name="file" accept=".ics,text/calendar" class="sr-only" required>
-            </label>
-            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .ics</button>
-        </form>
-        <h3 class="import-title">Contacts</h3>
-        <form method="post" action="/export/import/contacts" enctype="multipart/form-data" class="import-form">
-            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose .vcf file
-                <input type="file" name="file" accept=".vcf,text/vcard" class="sr-only" required>
-            </label>
-            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Import .vcf</button>
-        </form>
-        <h3 class="import-title">Full backup</h3>
-        <form method="post" action="/export/import/json" enctype="multipart/form-data" class="import-form">
-            <label class="file-btn">{{ icon('folder-open', 'icon-sm') }} Choose data.json
-                <input type="file" name="file" accept=".json,application/json" class="sr-only" required>
-            </label>
-            <button type="submit" class="btn primary">{{ icon('upload', 'icon-sm') }} Restore data.json</button>
-        </form>
-    </div>
-</div>
-
-<!-- 5. Danger zone -- last, visually separated (SETTINGS_UI_GUIDE.md item
-     5): the two confirmed-destructive purge actions sit in their own
-     clearly-labeled section at the very bottom, never adjacent to routine
-     actions the way "Reset dashboard layout" used to sit directly above
-     "Purge all data" on Advanced. Scope confirmed directly with the user
-     (2026-08-07): "Purge completed" is tasks-only (every done/archived
-     task); "Purge all" is a full data wipe across the whole app (not just
-     tasks). -->
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('shield', 'icon-sm') }} Danger zone</h2>
-    <p class="settings-hint">Both actions below are permanent and cannot be undone.</p>
-    <div class="card">
         <form class="settings-field-row" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
             <span class="settings-field-label">Purge completed tasks
-                <span class="settings-field-hint">Deletes every done/archived task ({{ completed_task_count }} right now)</span>
+                <span class="settings-field-hint">Frees the clutter without touching anything else</span>
             </span>
             <span class="spacer"></span>
-            <button type="submit" class="btn danger subtle">{{ icon('trash', 'icon-sm') }} Purge completed</button>
-        </form>
-        <form class="settings-field-row" method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app — every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Export &amp; backup, above).">
-            <span class="settings-field-label">Purge all data
-                <span class="settings-field-hint">Deletes everything in the app — tasks, events, contacts, labels, habits, schedule, published lists</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn danger">{{ icon('shield', 'icon-sm') }} Purge all</button>
+            <button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Purge completed tasks ({{ completed_task_count }} right now)</button>
         </form>
     </div>
 </div>
 
-<!-- 6. Backups & storage -- reference information, kept last
-     (SETTINGS_UI_GUIDE.md item 6) and as the existing table pattern: it's
-     a log, and the guide's rule is that logs stay tables. -->
+<!-- 4. Full backup & restore -- 2026-08-26 redesign: the former three
+     surfaces (the Full Backup hero, the Backups & storage stats card, and
+     the per-backup table) collapsed into this ONE card. It is the only
+     place on the page that names a backup's timestamp, size, or filename;
+     everything about it reads top-to-bottom: facts, download, then
+     restore. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('bar-chart-2', 'icon-sm') }} Backups &amp; storage</h2>
-    <div class="card">
-        <div class="settings-field-row">
-            <span class="settings-field-label">Database size</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ storage.db_size_bytes | filesizeformat }}</span>
+    <h2 class="section-label">{{ icon('package', 'icon-sm') }} Full backup &amp; restore</h2>
+    <div class="card dm-hero" id="backups-section">
+        <div class="dm-hero-top">
+            <div class="dm-hero-facts">
+                {% if latest_backup %}
+                <span class="dm-fact">{{ icon('clock', 'icon-sm') }} Last backup: {{ latest_backup.created_at | fmt_dt }}</span>
+                <span class="dm-fact">{{ icon('file', 'icon-sm') }} {{ latest_backup.size_bytes | filesizeformat }}</span>
+                {% else %}
+                <span class="dm-fact">{{ icon('info', 'icon-sm') }} No backups yet -- "Backup now" in System Status above saves one on the server.</span>
+                {% endif %}
+            </div>
+            <a class="btn primary dm-hero-download" href="/export/data.json">&#128229; Download Full Backup</a>
         </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Backups ({{ storage.backup_count }})</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ storage.backups_dir_size_bytes | filesizeformat }}</span>
-        </div>
-        <div class="settings-field-row">
-            <span class="settings-field-label">Tasks / Events / Contacts</span>
-            <span class="spacer"></span>
-            <span class="tag-usage-count">{{ entities.task_count }} / {{ entities.event_count }} / {{ entities.contact_count }}</span>
+
+        <div class="dm-hero-divider"></div>
+
+        <div class="dm-restore">
+            {% if latest_backup %}
+            <div class="dm-restore-file">
+                <span class="dm-backup-file">{{ icon('archive', 'icon-sm') }} {{ latest_backup.filename }}</span>
+                {% if latest_verified_backup and latest_verified_backup.verification.ok %}
+                <span class="dm-badge dm-badge-ok">{{ icon('check-circle', 'icon-sm') }} Verified &#10003;</span>
+                {% elif latest_verified_backup and not latest_verified_backup.verification.ok %}
+                <span class="dm-badge dm-badge-bad">{{ icon('alert-triangle', 'icon-sm') }} Verification failed</span>
+                {% else %}
+                <span class="dm-badge dm-badge-warn">{{ icon('alert-triangle', 'icon-sm') }} Not yet verified</span>
+                {% endif %}
+            </div>
+            <div class="dm-restore-actions">
+                <form class="form-inline" method="post" action="/settings/data-health/verify">
+                    <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
+                    <button type="submit" class="btn ghost btn-sm">Verify integrity</button>
+                </form>
+                <form class="form-inline" method="post" action="/settings/data-health/restore" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
+                    <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
+                    <button type="submit" class="btn danger subtle btn-sm">Restore this backup</button>
+                </form>
+            </div>
+            {% endif %}
+            <form class="dm-upload-alt" method="post" action="/export/import/json" enctype="multipart/form-data" data-dm-alt-form>
+                <label class="dm-upload-alt-link">+ Upload a different .json file to restore
+                    <input type="file" name="file" accept=".json,application/json" class="sr-only" required data-dm-alt-file>
+                </label>
+                <span class="dm-upload-alt-name" data-dm-alt-name></span>
+                <button type="submit" class="btn ghost btn-sm dm-upload-alt-submit" data-dm-alt-submit>Restore</button>
+            </form>
+            <p class="dm-restore-hint">Restores only a full backup (.json) &mdash; matching items are updated, everything else stays.</p>
         </div>
     </div>
-    {% if backups %}
-    <div class="card table-scroll">
-    <table class="task-table">
-        <thead>
-            <tr>
-                <th>File</th>
-                <th>Created</th>
-                <th>Size</th>
-                <th>Verified</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for b in backups %}
-            <tr>
-                <td>{{ b.filename }}</td>
-                <td>{{ b.created_at }}</td>
-                <td>{{ b.size_bytes | filesizeformat }}</td>
-                <td>
-                    {% if b.verification %}
-                        {{ 'OK' if b.verification.ok else (b.verification.errors|length ~ ' problem(s)') }}
-                    {% else %}not yet{% endif %}
-                </td>
-                <td style="text-align:right;white-space:nowrap">
-                    <form class="form-inline" method="post" action="/settings/data-health/verify" style="display:inline">
-                        <input type="hidden" name="filename" value="{{ b.filename }}">
-                        <button type="submit" class="btn ghost btn-sm">Verify</button>
-                    </form>
-                    <form class="form-inline" method="post" action="/settings/data-health/restore" style="display:inline" data-confirm-sheet="Restore {{ b.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
-                        <input type="hidden" name="filename" value="{{ b.filename }}">
-                        <button type="submit" class="btn danger subtle btn-sm">Restore</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    </div>
-    {% else %}
-    <div class="empty-state">No backups yet -- click "Backup now" above to create the first one.</div>
-    {% endif %}
 </div>
+
+<!-- 5. Export & import -- unchanged two-dropdown/one-dropzone design (it was
+     already consolidated); 2026-08-26 additions: a live "Includes: ..."
+     preview under the Format dropdown, .csv accepted by the drop zone
+     alongside .ics/.vcf/.json, and plainer drop-zone copy. -->
+<div class="settings-group" id="import-section">
+    <h2 class="section-label">{{ icon('share-2', 'icon-sm') }} Export &amp; import</h2>
+    <p class="settings-hint">Move individual pieces of your data in formats any other app can open. Published lists keep syncing via Radicale ({{ radicale_url }}) separately.</p>
+    <div class="card dm-portable" data-dm-root>
+        <div class="segmented dm-mode">
+            <label class="seg-btn"><input type="radio" class="seg-radio" name="dm-mode" value="export" checked>Export</label>
+            <label class="seg-btn"><input type="radio" class="seg-radio" name="dm-mode" value="import">Import</label>
+        </div>
+
+        <!-- Export: two dropdowns, one button -- every (type, format)
+             combination resolves server-side to exactly one real file.
+             Each option carries its own server-rendered "Includes: ..."
+             phrase so the preview under Format can update with no fetch. -->
+        <div class="dm-pane dm-pane-export">
+            <form method="get" action="/export/download" class="dm-export-form">
+                <label class="dm-field">Data
+                    <select name="data_type" data-dm-type>
+                        <option value="all" data-dm-preview="Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts">All data</option>
+                        <option value="events" data-dm-preview="Includes: {{ event_count }} Events">Calendar</option>
+                        <option value="tasks" data-dm-preview="Includes: {{ task_count }} Tasks">Tasks</option>
+                        <option value="contacts" data-dm-preview="Includes: {{ contact_count }} Contacts">Address book</option>
+                        <option value="labels" data-dm-preview="Includes: every label and its settings">Labels</option>
+                    </select>
+                </label>
+                <label class="dm-field">Format
+                    <select name="format" data-dm-format>
+                        <option value="standard">Standard (.ics/.vcf)</option>
+                        <option value="csv">Spreadsheet (.csv)</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn primary">{{ icon('download', 'icon-sm') }} Download</button>
+            </form>
+            <p class="dm-count-hint" data-dm-hint>Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts &middot; All data downloads as one .zip bundle (.ics/.vcf).</p>
+        </div>
+
+        <!-- Import: one drop zone for every kind of file; the server sniffs
+             the content (vCard / iCalendar / CSV / JSON), so a renamed file
+             still lands correctly even with JavaScript off. -->
+        <div class="dm-pane dm-pane-import">
+            <form method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
+                <label class="dm-dropzone" data-dm-dropzone>
+                    <input type="file" name="file" accept=".ics,.vcf,.csv,.json,text/calendar,text/vcard,text/csv,application/json" class="sr-only" required data-dm-file>
+                    <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
+                    <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a file here &mdash; auto-detects type</span>
+                    <span class="dm-dropzone-formats">.ics calendar &middot; .vcf contacts &middot; .csv spreadsheet &middot; .json backup</span>
+                </label>
+                <p class="dm-status" data-dm-status role="status"></p>
+                <label class="dm-merge">
+                    <input type="checkbox" name="merge" value="1" checked>
+                    Merge with existing data
+                </label>
+                <p class="dm-merge-hint">Untick to only add items that don't exist yet -- nothing you already have gets overwritten.</p>
+                <button type="submit" class="btn primary" data-dm-submit>{{ icon('upload', 'icon-sm') }} Import</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 6. Danger zone -- 2026-08-26 redesign: one action only ("Purge
+     completed tasks" is routine housekeeping now, up in Maintenance &
+     cleanup), red-tinted and gated behind a typed confirmation phrase:
+     the button stays disabled until the input reads exactly DELETE ALL.
+     The confirm sheet on submit remains as the second of the two locks. -->
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('shield', 'icon-sm') }} Danger zone</h2>
+    <p class="settings-hint">One action lives here. It is permanent and cannot be undone.</p>
+    <div class="card dm-danger">
+        <form class="dm-danger-form" method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app &mdash; every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Full backup &amp; restore, above)." data-dm-danger>
+            <span class="settings-field-label">Purge all data
+                <span class="settings-field-hint">Deletes everything in the app &mdash; tasks, events, contacts, labels, habits, published lists. Type <strong>DELETE ALL</strong> below to unlock the button.</span>
+            </span>
+            <div class="dm-danger-controls">
+                <input type="text" class="dm-danger-phrase" data-dm-danger-phrase placeholder="DELETE ALL" aria-label='Type "DELETE ALL" to enable the delete button' autocomplete="off" spellcheck="false">
+                <button type="submit" class="btn danger" data-dm-danger-btn disabled>{{ icon('shield', 'icon-sm') }} Permanently Delete Everything</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('data_maintenance.js') }}"></script>
+<script>
+  async function forceSyncFromServer() {
+    const btn = document.querySelector('[onclick="forceSyncFromServer()"]');
+    if (!window.CCOfflineSync) {
+      window.ccToast({ message: 'Sync engine not available', variant: 'error' });
+      return;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = ' Syncing...';
+    }
+    try {
+      const ok = await window.CCOfflineSync.syncNow();
+      if (ok) {
+        window.ccToast({ title: 'Sync completed', message: 'All data synchronized successfully', variant: 'success' });
+      } else {
+        window.ccToast({ message: 'Sync completed with issues (check notifications)', variant: 'warning' });
+      }
+    } catch (err) {
+      window.ccToast({ message: 'Sync failed: ' + err.message, variant: 'error' });
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '{{ icon("download-cloud", "icon-sm") }} Force sync';
+      }
+    }
+  }
+</script>
 {% endblock %}

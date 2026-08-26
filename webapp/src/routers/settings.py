@@ -148,13 +148,15 @@ HUB_CATEGORIES = [
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
 
-# "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
-# of choices, not a free-typed number: a handful of sane presets is
-# faster to pick from and impossible to fat-finger into "archive after
+# "Auto-archive completed tasks" (settings_data_maintenance.html) -- a
+# fixed set of choices, not a free-typed number: a handful of sane presets
+# is faster to pick from and impossible to fat-finger into "archive after
 # 0.5 days" or a negative number. "0" is Never, this app's original
 # behavior (nothing auto-deletes) -- always the default for an existing
-# install that's never touched this control.
-DAYS_CHOICES = [("0", "Never"), ("7", "7 days"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days")]
+# install that's never touched this control. Relabeled 2026-08-26 (page
+# redesign): the plain day-counts became the plainer phrases below; the
+# stored values are unchanged, so existing settings keep working.
+DAYS_CHOICES = [("0", "Never"), ("7", "After 1 week"), ("30", "After 1 month")]
 
 
 @router.get("/settings")
@@ -697,13 +699,33 @@ def delete_time_block(uid: str, conn=Depends(get_db)):
 # other direct controls, and a validated preset can never end up storing
 # something typo'd/out-of-range. This app's sync design documents 90 days
 # as the retention horizon's own default (offline_sync.RETENTION_DAYS),
-# so unlike DAYS_CHOICES' "0/Never" default, this field's own default
-# selection is 90 -- see data_health.sync_gc_retention_days's docstring.
-SYNC_GC_DAYS_CHOICES = [("0", "Never (disabled)"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days"), ("180", "180 days")]
+# so this field's default selection is 90 -- see
+# data_health.sync_gc_retention_days's docstring. "0" disables the GC
+# outright -- tombstones are then kept forever, which is exactly what the
+# redesigned control's "Keep forever" label says (relabeled 2026-08-26,
+# stored values unchanged).
+SYNC_GC_DAYS_CHOICES = [("30", "Keep 30 days"), ("90", "Keep 90 days"), ("0", "Keep forever")]
 
 
 def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
+
+
+def _choices_with_stored_value(
+    choices: list[tuple[str, str]], stored: str
+) -> list[tuple[str, str]]:
+    """The rendered select's options, with one honest extra entry appended
+    when the currently-stored value isn't among the presets (2026-08-26:
+    the redesigned controls offer three presets each, but an install that
+    picked "14"/"90"/"180 days" before the relabel still stores one of
+    those). Without this, the browser would silently display the first
+    preset while the stored value stayed something else -- a lie. The
+    extra entry autosubmits like any other, so picking anything real
+    replaces it; it's never itself written back (the POST routes validate
+    against the preset lists only)."""
+    if any(value == stored for value, _ in choices):
+        return choices
+    return [*choices, (stored, f"{stored} days (current)")]
 
 
 @router.get("/settings/data-maintenance")
@@ -714,20 +736,26 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
     `latest_verified_backup`/`sync`/`sync_gc`/`storage`/`entities`/
     `backups`), the unresolved sync conflicts, and Advanced's export/
     import + purge/auto-archive context (export_context() plus the counts
-    and choices settings_data_maintenance.html renders)."""
+    and choices settings_data_maintenance.html renders).
+
+    2026-08-26 page redesign: the two Maintenance selects' choice lists go
+    through _choices_with_stored_value so a legacy stored value stays
+    visible; everything else about the context shape is unchanged."""
     backups_dir = _backups_dir(request)
     summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
     completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
+    auto_archive_days = db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0"
+    sync_gc_days = str(summary["sync_gc"]["retention_days"])
     ctx = {
         "request": request,
         "active_tab": "settings_data_maintenance",
         "crumbs": _ROOT_CRUMB,
         "title": "Data & Maintenance",
         "conflicts": db.list_sync_conflicts(conn),
-        "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
+        "sync_gc_days_choices": _choices_with_stored_value(SYNC_GC_DAYS_CHOICES, sync_gc_days),
         "completed_task_count": completed_task_count,
-        "task_auto_archive_days": db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0",
-        "days_choices": DAYS_CHOICES,
+        "task_auto_archive_days": auto_archive_days,
+        "days_choices": _choices_with_stored_value(DAYS_CHOICES, auto_archive_days),
         # Export & backup (was settings_advanced.html's, itself moved off
         # its own /export page -- direct feedback: "export and backup
         # should be fully with all buttons... in the advanced page").

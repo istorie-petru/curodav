@@ -300,3 +300,233 @@ class TestImportRestore:
         resp = export_router.import_events(UploadFile(file=BytesIO(b"")), conn=conn)
         assert resp.status_code == 303
         assert db.list_events(conn) == []
+
+
+class TestSelectiveDownload:
+    """2026-08-26 redesign -- GET /export/download is the one endpoint
+    behind Data & Maintenance's two-dropdown "Download" control. Every
+    (type, format) combination resolves to exactly one real file; "all"
+    bundles the three entity exports into a single .zip; labels always come
+    out as labels.json (the only lossless label export) regardless of
+    format."""
+
+    def test_events_standard_is_the_ics(self, conn):
+        _seed(conn)
+        resp = export_router.download_selective(data_type="events", file_format="standard", conn=conn)
+        assert resp.headers["Content-Disposition"].startswith("attachment")
+        assert b"Standup" in resp.body
+
+    def test_tasks_csv(self, conn):
+        _seed(conn)
+        resp = export_router.download_selective(data_type="tasks", file_format="csv", conn=conn)
+        assert b"Ship export" in resp.body
+
+    def test_contacts_standard_is_the_vcf(self, conn):
+        _seed(conn)
+        resp = export_router.download_selective(data_type="contacts", file_format="standard", conn=conn)
+        assert b"Ada Lovelace" in resp.body
+
+    def test_events_csv_is_a_spreadsheet(self, conn):
+        # The one format gap the old per-type links had -- events.csv
+        # didn't exist until the selective matrix needed it.
+        _seed(conn)
+        resp = export_router.export_events_csv(conn=conn)
+        assert b"Standup" in resp.body
+        assert b"Start" in resp.body
+
+    def test_labels_ignore_format_always_json(self, conn):
+        _seed(conn)
+        for fmt in ("standard", "csv"):
+            resp = export_router.download_selective(data_type="labels", file_format=fmt, conn=conn)
+            import json
+
+            data = json.loads(resp.body)
+            assert data["labels"] == []
+
+    def test_all_standard_bundles_one_zip(self, conn):
+        _seed(conn)
+        import io
+        import zipfile
+
+        resp = export_router.download_selective(data_type="all", file_format="standard", conn=conn)
+        assert resp.media_type == "application/zip"
+        names = zipfile.ZipFile(io.BytesIO(resp.body)).namelist()
+        assert sorted(names) == ["contacts.vcf", "events.ics", "tasks.ics"]
+
+    def test_all_csv_bundles_one_zip(self, conn):
+        _seed(conn)
+        import io
+        import zipfile
+
+        resp = export_router.download_selective(data_type="all", file_format="csv", conn=conn)
+        names = zipfile.ZipFile(io.BytesIO(resp.body)).namelist()
+        assert sorted(names) == ["contacts.csv", "events.csv", "tasks.csv"]
+
+    def test_unknown_selection_redirects_with_error(self, conn):
+        resp = export_router.download_selective(data_type="nonsense", file_format="standard", conn=conn)
+        assert resp.status_code == 303
+        assert "error" in resp.headers["location"]
+
+
+class TestAutoImport:
+    """The unified import endpoint behind the single drop zone -- sniffs
+    content (vCard / iCalendar / JSON backup), never trusts the filename,
+    and honors the merge checkbox (checked = upsert-merge as always;
+    unchecked = add-only, existing uids untouched)."""
+
+    def _auto(self, conn, raw: bytes, merge: str = "1"):
+        return export_router.import_auto(UploadFile(file=BytesIO(raw)), merge=merge, conn=conn)
+
+    def test_vcf_detected_and_imported(self, conn):
+        vcard = (
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:v1\r\nFN:Bob Brown\r\nN:Brown;Bob;;;\r\n"
+            "EMAIL:bob@example.com\r\nEND:VCARD\r\n"
+        ).encode("utf-8")
+        resp = self._auto(conn, vcard)
+        assert resp.status_code == 303
+        assert db.get_contact(conn, "v1")["full_name"] == "Bob Brown"
+        assert "contact" in resp.headers["location"]
+
+    def test_mixed_ics_imports_both_pools(self, conn):
+        body = (
+            "BEGIN:VCALENDAR\r\nPRODID:-//test//EN\r\nVERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\nUID:mix-e1\r\nDTSTART:20261005T090000\r\n"
+            "SUMMARY:Mixed event\r\nEND:VEVENT\r\n"
+            "BEGIN:VTODO\r\nUID:mix-t1\r\nSUMMARY:Mixed task\r\nEND:VTODO\r\n"
+            "END:VCALENDAR\r\n"
+        ).encode("utf-8")
+        resp = self._auto(conn, body)
+        assert db.get_event(conn, "mix-e1")["title"] == "Mixed event"
+        assert db.get_task(conn, "mix-t1")["title"] == "Mixed task"
+        loc = resp.headers["location"]
+        assert "event" in loc and "task" in loc
+
+    def test_json_backup_restored(self, conn):
+        payload = {
+            "events": [], "tasks": [], "contacts": [],
+            "labels": [{"name": "University", "generate_space": 1, "color": "blue", "created_at": _now()}],
+            "object_labels": [],
+        }
+        import json
+
+        resp = self._auto(conn, json.dumps(payload).encode("utf-8"))
+        assert db.get_label_config(conn, "University")["generate_space"] == 1
+        assert "restored" in resp.headers["location"].lower()
+
+    def test_unrecognized_content_rejected(self, conn):
+        resp = self._auto(conn, b"just some plain text, no markers")
+        assert resp.status_code == 303
+        assert "error" in resp.headers["location"]
+        assert db.list_events(conn) == [] and db.list_contacts(conn) == []
+
+    # ---- CSV acceptance (2026-08-26 page redesign: the drop zone takes
+    # .csv alongside .ics/.vcf/.json -- recognized only by this app's own
+    # three export header shapes, never by filename) ----
+
+    def _csv(self, conn, raw: bytes, merge: str = "1"):
+        return self._auto(conn, raw, merge=merge)
+
+    def _note(self, resp) -> str:
+        from urllib.parse import unquote
+
+        return unquote(resp.headers["location"])
+
+    def test_tasks_csv_round_trips_through_auto(self, conn):
+        csv_resp = export_router.export_tasks_csv(conn=conn)
+        assert csv_resp.status_code == 200
+        resp = self._csv(conn, b"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
+                               b'csv-t1,"Quoted, title",todo,2026-09-01,,,"Home, Work"\r\n')
+        assert resp.status_code == 303
+        assert "Imported 1 task(s)." in self._note(resp)
+        row = db.get_task(conn, "csv-t1")
+        assert row["title"] == "Quoted, title"
+        assert row["status"] == "todo"
+        assert row["due_at"] == "2026-09-01"
+        assert row["tags"] == ["Home", "Work"]
+
+    def test_events_and_contacts_csv_import(self, conn):
+        resp = self._csv(conn, b"UID,Title,Start,End,All day,Location,Meeting URL,Tags\r\n"
+                               b"csv-e1,Lecture,2026-09-01T09:00:00,2026-09-01T10:00:00,no,Room 1,,\r\n")
+        assert db.get_event(conn, "csv-e1")["title"] == "Lecture"
+        assert db.get_event(conn, "csv-e1")["all_day"] == 0
+        assert "Imported 1 event(s)." in self._note(resp)
+
+        resp = self._csv(conn, b"UID,Name,Organization,Phone,Email,Address,Tags\r\n"
+                               b"csv-c1,Ada Lovelace,Analytical Engines,+1 555 0100,ada@example.com,12 St James Sq,Friends\r\n")
+        contact = db.get_contact(conn, "csv-c1")
+        assert contact["full_name"] == "Ada Lovelace"
+        assert contact["org"] == "Analytical Engines"
+        assert [p["value"] for p in contact["phones"]] == ["+1 555 0100"]
+        assert [e["value"] for e in contact["emails"]] == ["ada@example.com"]
+        assert [a["street"] for a in contact["addresses"]] == ["12 St James Sq"]
+        assert contact["tags"] == ["Friends"]
+        assert "Imported 1 contact(s)." in self._note(resp)
+
+    def test_foreign_csv_header_is_rejected_not_half_imported(self, conn):
+        resp = self._csv(conn, b"name,city\nBob,Springfield\n")
+        assert resp.status_code == 303
+        assert "error" in resp.headers["location"]
+        assert db.list_contacts(conn) == [] and db.list_tasks(conn) == []
+
+    def test_merge_off_skips_existing_uids(self, conn):
+        _seed(conn)
+        existing = db.list_tasks(conn)[0]
+        body = (
+            f"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
+            f"{existing['uid']},Renamed by CSV,todo,,,,\r\n"
+        ).encode("utf-8")
+        resp = self._csv(conn, body, merge="")
+        assert resp.status_code == 303
+        assert "1 already existed (left untouched)." in self._note(resp)
+        assert db.get_task(conn, existing["uid"])["title"] == existing["title"]
+
+    def test_uidless_rows_are_skipped(self, conn):
+        resp = self._csv(conn, b"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
+                               b",No uid here,todo,,,,\r\n")
+        assert resp.status_code == 303
+        assert "Imported 0 task(s)." in self._note(resp)
+        assert db.list_tasks(conn) == []
+
+    def test_merge_off_skips_existing_uids_but_adds_new(self, conn):
+        _seed(conn)  # e1 / t1 / c1 already exist
+        body = (
+            "BEGIN:VCALENDAR\r\nPRODID:-//test//EN\r\nVERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20261005T090000\r\n"
+            "SUMMARY:OVERWRITTEN\r\nEND:VEVENT\r\n"
+            "BEGIN:VEVENT\r\nUID:e-new\r\nDTSTART:20261006T090000\r\n"
+            "SUMMARY:Brand new\r\nEND:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        ).encode("utf-8")
+        self._auto(conn, body, merge="")
+        assert db.get_event(conn, "e1")["title"] == "Standup"  # untouched
+        assert db.get_event(conn, "e-new")["title"] == "Brand new"
+
+    def test_merge_on_updates_existing(self, conn):
+        _seed(conn)
+        body = (
+            "BEGIN:VCALENDAR\r\nPRODID:-//test//EN\r\nVERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20261005T090000\r\n"
+            "SUMMARY:Updated via merge\r\nEND:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        ).encode("utf-8")
+        self._auto(conn, body, merge="1")
+        assert db.get_event(conn, "e1")["title"] == "Updated via merge"
+
+    def test_merge_off_json_restore_keeps_existing_entities(self, conn):
+        _seed(conn)
+        payload = {
+            "events": [{"uid": "e1", "title": "OVERWRITTEN",
+                        "description": "", "start_at": "2026-10-05T09:00:00", "end_at": None,
+                        "all_day": 0, "location": None, "meeting_url": None,
+                        "status": "active", "recurrence": None,
+                        "exdates_json": "[]", "reminders_json": "[]", "tags_json": "[]",
+                        "created_at": _now(), "updated_at": _now()}],
+            "tasks": [], "contacts": [],
+            "labels": [{"name": "Fresh", "color": "blue", "created_at": _now()}],
+            "object_labels": [],
+        }
+        import json
+
+        self._auto(conn, json.dumps(payload).encode("utf-8"), merge="")
+        assert db.get_event(conn, "e1")["title"] == "Standup"
+        assert db.get_label_config(conn, "Fresh") is not None  # metadata still merges

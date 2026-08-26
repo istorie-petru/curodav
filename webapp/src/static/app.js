@@ -1031,3 +1031,131 @@ window.CCBannerUpload = {
     img.src = url;
   },
 };
+
+// Action menu (three-dot dropdown for status cards) -- lightweight,
+// accessible dropdown that closes on outside click/Escape/scroll and
+// supports keyboard navigation. On open the panel is DETACHED to
+// document.body (the same portal technique #color-popover /
+// #multiselect-portal use): .status-card:hover carries a transform, and
+// a transformed ancestor becomes the containing block for position:fixed
+// descendants -- a panel left inside the card would be positioned
+// relative to the card and teleport as hover toggles, and its clicks
+// would still bubble into the wrapping <a>. At body level there is no
+// transformed ancestor, so fixed coordinates mean the real viewport.
+(function () {
+  let activeMenu = null; // { trigger, panel } -- at most one open at a time
+
+  function closeMenu() {
+    if (!activeMenu) return;
+    const { panel, trigger } = activeMenu;
+    panel.classList.remove("is-open");
+    // Return the panel to where the template put it.
+    if (panel.__ccHome && panel.__ccHome.parent && panel.__ccHome.parent.isConnected) {
+      panel.__ccHome.parent.insertBefore(panel, panel.__ccHome.next);
+    }
+    trigger.setAttribute("aria-expanded", "false");
+    activeMenu = null;
+  }
+
+  function showMenu(menu) {
+    closeMenu();
+    const { trigger, panel } = menu;
+    if (!panel.__ccHome) {
+      panel.__ccHome = { parent: panel.parentNode, next: panel.nextSibling };
+    }
+    document.body.appendChild(panel);
+
+    // Measure while invisible -- display:none has no box -- then clamp to
+    // the viewport and reveal in one place.
+    panel.classList.add("is-open");
+    panel.style.visibility = "hidden";
+    const rect = trigger.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    let left = rect.right - pr.width;
+    let top = rect.bottom + 4;
+    left = Math.max(8, Math.min(left, window.innerWidth - pr.width - 8));
+    if (top + pr.height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - pr.height - 4);
+      panel.dataset.side = "top";
+    } else {
+      panel.dataset.side = "bottom";
+    }
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+    panel.style.visibility = "";
+
+    trigger.setAttribute("aria-expanded", "true");
+    activeMenu = menu;
+  }
+
+  function handleKeydown(e, menu) {
+    const items = Array.from(menu.panel.querySelectorAll(".action-menu-item"));
+    const currentIndex = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMenu();
+      menu.trigger.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      (items[currentIndex + 1] || items[0])?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      (items[currentIndex - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!activeMenu) return;
+    if (activeMenu.panel.contains(e.target) || activeMenu.trigger.contains(e.target)) return;
+    closeMenu();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") closeMenu();
+  });
+
+  // A fixed panel doesn't follow page scroll -- closing on any scroll
+  // beats leaving it stranded next to content that has moved on.
+  document.addEventListener("scroll", () => closeMenu(), true);
+
+  function initActionMenus() {
+    document.querySelectorAll(".action-menu").forEach((root) => {
+      if (root.dataset.menuBound) return; // idempotent across pagereveal
+      root.dataset.menuBound = "1";
+      const trigger = root.querySelector(".action-menu-trigger");
+      const panel = root.querySelector(".action-menu-panel");
+      if (!trigger || !panel) return;
+
+      trigger.setAttribute("aria-haspopup", "true");
+      trigger.setAttribute("aria-expanded", "false");
+
+      const menu = { trigger, panel }; // ONE stable identity -- the toggle
+      // below compares object identity, so a per-click literal would never
+      // match activeMenu and the menu could open but never close.
+      trigger.addEventListener("click", (e) => {
+        e.preventDefault(); // keep the wrapping status-card <a> from navigating
+        e.stopPropagation();
+        if (activeMenu === menu) closeMenu();
+        else showMenu(menu);
+      }, true);
+
+      panel.addEventListener("keydown", (e) => handleKeydown(e, { trigger, panel }));
+
+      panel.querySelectorAll("form").forEach((form) => {
+        form.addEventListener("submit", () => closeMenu());
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", initActionMenus);
+  // Cross-document view transitions swap page content without a reload --
+  // pagereveal fires as the new page's content becomes live.
+  document.addEventListener("pagereveal", initActionMenus);
+  window.CCActionMenu = { close: closeMenu, init: initActionMenus };
+})();

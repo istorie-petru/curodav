@@ -34,10 +34,11 @@ from __future__ import annotations
 import csv
 import io
 import json
+import zipfile
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
 from .. import db, derived_state, ical_rows, vcard_rows
@@ -182,6 +183,23 @@ def export_tasks_csv(conn=Depends(get_db)):
     return _csv_response("tasks.csv", ["UID", "Title", "Status", "Due", "Importance", "Urgency", "Tags"], rows)
 
 
+@router.get("/events.csv")
+def export_events_csv(conn=Depends(get_db)):
+    rows = [
+        [
+            e["uid"], e["title"], e["start_at"] or "", e["end_at"] or "",
+            "yes" if e["all_day"] else "no", e["location"] or "", e["meeting_url"] or "",
+            ", ".join(e.get("tags") or []),
+        ]
+        for e in db.list_events(conn)
+    ]
+    return _csv_response(
+        "events.csv",
+        ["UID", "Title", "Start", "End", "All day", "Location", "Meeting URL", "Tags"],
+        rows,
+    )
+
+
 @router.get("/contacts.csv")
 def export_contacts_csv(conn=Depends(get_db)):
     # Contacts field parity slice 2 of 6: `c["phone"]`/`c["email"]` (the
@@ -285,8 +303,142 @@ def export_data_json(conn=Depends(get_db)):
 
 
 # --------------------------------------------------------------------- #
+# Selective download (2026-08-26 redesign) -- one endpoint behind Data &
+# Maintenance's two-dropdown "Download" control, replacing the wall of
+# per-type links. Every (type, format) combination resolves to exactly one
+# real file: a single type picks its own format's builder; "all" bundles
+# the three entity exports into one .zip (a mixed ICS+VCF can't be one
+# file, and a zip is still a single one-click download); labels always come
+# out as labels.json regardless of format -- that's the only lossless label
+# export there is. Each cell delegates to the same route function the old
+# individual link used, so there is exactly one definition of every export.
+# --------------------------------------------------------------------- #
+
+
+def _zip_response(filename: str, files: list[tuple[str, bytes]]) -> Response:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as bundle:
+        for name, body in files:
+            bundle.writestr(name, body)
+    return _attachment(filename, buf.getvalue(), "application/zip")
+
+
+_SELECTIVE_EXPORTS: dict[tuple[str, str], tuple[str, Any]] = {
+    ("events", "standard"): ("events.ics", lambda conn: export_events_ics(conn=conn)),
+    ("events", "csv"): ("events.csv", lambda conn: export_events_csv(conn=conn)),
+    ("tasks", "standard"): ("tasks.ics", lambda conn: export_tasks_ics(conn=conn)),
+    ("tasks", "csv"): ("tasks.csv", lambda conn: export_tasks_csv(conn=conn)),
+    ("contacts", "standard"): ("contacts.vcf", lambda conn: export_contacts_vcf(conn=conn)),
+    ("contacts", "csv"): ("contacts.csv", lambda conn: export_contacts_csv(conn=conn)),
+}
+
+
+@router.get("/download")
+def download_selective(
+    data_type: str = "all",
+    file_format: str = "standard",
+    conn=Depends(get_db),
+):
+    if data_type == "labels":
+        return export_labels_json(conn=conn)
+    if data_type == "all":
+        if file_format == "csv":
+            return _zip_response(
+                "data-spreadsheets.zip",
+                [
+                    ("events.csv", export_events_csv(conn=conn).body),
+                    ("tasks.csv", export_tasks_csv(conn=conn).body),
+                    ("contacts.csv", export_contacts_csv(conn=conn).body),
+                ],
+            )
+        return _zip_response(
+            "data-standard.zip",
+            [
+                ("events.ics", export_events_ics(conn=conn).body),
+                ("tasks.ics", export_tasks_ics(conn=conn).body),
+                ("contacts.vcf", export_contacts_vcf(conn=conn).body),
+            ],
+        )
+    entry = _SELECTIVE_EXPORTS.get((data_type, "csv" if file_format == "csv" else "standard"))
+    if entry is None:
+        return _redirect_with_error("/settings/data-maintenance", f"Unknown export selection ({data_type} / {file_format}).")
+    return entry[1](conn)
+
+
+# --------------------------------------------------------------------- #
 # Import / restore
 # --------------------------------------------------------------------- #
+
+
+# The four historical per-type endpoints below share their real work with
+# the unified /import/auto endpoint (2026-08-26 redesign of Data &
+# Maintenance's Export & import section into one drop zone) through these
+# content-sniffing helpers. Each takes the file *text* (not the upload) and
+# returns how many rows it wrote; `skip_existing=True` is the unified
+# endpoint's "merge" checkbox unchecked -- only rows whose uid isn't in the
+# pool yet are written, so nothing the user already has is overwritten.
+# The old per-type endpoints always merge (their behavior before this
+# refactor, unchanged).
+
+
+def _import_ics_text(conn, text: str, skip_existing: bool = False) -> tuple[int, int]:
+    """Import one iCalendar blob; returns (events_added, tasks_added). A
+    single .ics may legitimately carry both VEVENTs and VTODOs, so the
+    unified importer walks once and writes each component to its own pool."""
+    from icalendar import Calendar as ICalCalendar
+
+    events_added = tasks_added = 0
+    try:
+        parsed = ICalCalendar.from_ical(text)
+    except (ValueError, IndexError):
+        return (0, 0)
+    for component in parsed.walk():
+        if component.name == "VEVENT":
+            row = ical_rows.ical_to_event_row(component)
+            if skip_existing and db.get_event(conn, row["uid"]) is not None:
+                continue
+            db.upsert_event(conn, row)
+            events_added += 1
+        elif component.name == "VTODO":
+            row = ical_rows.ical_to_task_row(component)
+            if skip_existing and db.get_task(conn, row["uid"]) is not None:
+                continue
+            db.upsert_task(conn, row)
+            tasks_added += 1
+    return (events_added, tasks_added)
+
+
+def _import_vcf_text(conn, text: str, skip_existing: bool = False) -> int:
+    import vobject
+
+    added = 0
+    for card in vobject.readComponents(io.StringIO(text)):
+        row = vcard_rows.vcard_to_contact_row(card)
+        if skip_existing and db.get_contact(conn, row["uid"]) is not None:
+            continue
+        db.upsert_contact(conn, row)
+        added += 1
+    return added
+
+
+def _restore_json_text(conn, raw: bytes, skip_existing: bool = False) -> int:
+    """Parse a data.json backup and restore it; returns the number of rows
+    written. Raises ValueError on unparseable/non-backup JSON so callers
+    can turn that into a user-facing error redirect."""
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("not a JSON backup") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("not a JSON backup")
+    if skip_existing:
+        payload = {
+            **payload,
+            "events": [r for r in payload.get("events", []) if db.get_event(conn, r["uid"]) is None],
+            "tasks": [r for r in payload.get("tasks", []) if db.get_task(conn, r["uid"]) is None],
+            "contacts": [r for r in payload.get("contacts", []) if db.get_contact(conn, r["uid"]) is None],
+        }
+    return restore_backup_payload(conn, payload)
 
 
 @router.post("/import/events")
@@ -294,54 +446,23 @@ def import_events(file: UploadFile, conn=Depends(get_db)):
     """Re-import an .ics exported by this app or any CalDAV app into the
     universal events pool. Phase 1 (label-space rework) dropped
     `calendars` -- there's no collection to pick anymore, plain SQL write
-    straight into `events` (see db.py's Phase 1 comments)."""
-    from icalendar import Calendar as ICalCalendar
-
-    text = file.file.read().decode("utf-8")
-    added = 0
-    try:
-        parsed = ICalCalendar.from_ical(text)
-    except (ValueError, IndexError):
-        return _redirect_with_note("/export", "Imported 0 event(s).")
-    for component in parsed.walk():
-        if component.name != "VEVENT":
-            continue
-        row = ical_rows.ical_to_event_row(component)
-        db.upsert_event(conn, row)
-        added += 1
-    return _redirect_with_note("/export", f"Imported {added} event(s).")
+    straight into `events` (see db.py's Phase 1 comments). Kept as its own
+    URL after the 2026-08-26 unified-import redesign for old bookmarks and
+    direct callers; the page itself posts to /import/auto now."""
+    events_added, _ = _import_ics_text(conn, file.file.read().decode("utf-8"))
+    return _redirect_with_note("/settings/data-maintenance", f"Imported {events_added} event(s).")
 
 
 @router.post("/import/tasks")
 def import_tasks(file: UploadFile, conn=Depends(get_db)):
-    from icalendar import Calendar as ICalCalendar
-
-    text = file.file.read().decode("utf-8")
-    added = 0
-    try:
-        parsed = ICalCalendar.from_ical(text)
-    except (ValueError, IndexError):
-        return _redirect_with_note("/export", "Imported 0 task(s).")
-    for component in parsed.walk():
-        if component.name != "VTODO":
-            continue
-        row = ical_rows.ical_to_task_row(component)
-        db.upsert_task(conn, row)
-        added += 1
-    return _redirect_with_note("/export", f"Imported {added} task(s).")
+    _, tasks_added = _import_ics_text(conn, file.file.read().decode("utf-8"))
+    return _redirect_with_note("/settings/data-maintenance", f"Imported {tasks_added} task(s).")
 
 
 @router.post("/import/contacts")
 def import_contacts(file: UploadFile, conn=Depends(get_db)):
-    import vobject
-
-    text = file.file.read().decode("utf-8")
-    added = 0
-    for card in vobject.readComponents(io.StringIO(text)):
-        row = vcard_rows.vcard_to_contact_row(card)
-        db.upsert_contact(conn, row)
-        added += 1
-    return _redirect_with_note("/export", f"Imported {added} contact(s).")
+    added = _import_vcf_text(conn, file.file.read().decode("utf-8"))
+    return _redirect_with_note("/settings/data-maintenance", f"Imported {added} contact(s).")
 
 
 @router.post("/import/json")
@@ -350,9 +471,183 @@ def import_json(file: UploadFile, conn=Depends(get_db)):
     upserted straight into the cache -- Phase 1 (label-space rework)
     dropped the bridge from this path along with everything else in base
     CRUD (see db.py's Phase 1 comments)."""
-    payload = json.loads(file.file.read().decode("utf-8"))
-    restore_backup_payload(conn, payload)
-    return _redirect_with_note("/export", "Backup restored.")
+    try:
+        _restore_json_text(conn, file.file.read())
+    except ValueError:
+        return _redirect_with_error("/settings/data-maintenance", "That file isn't a readable backup.")
+    return _redirect_with_note("/settings/data-maintenance", "Backup restored.")
+
+
+# The drop zone's .csv acceptance (2026-08-26 page redesign): a CSV is
+# recognized only when its header row is exactly one of this app's own
+# three export shapes (tasks.csv/events.csv/contacts.csv above, compared
+# case-insensitively) -- an arbitrary spreadsheet from anywhere else isn't
+# silently half-imported, it's rejected with the standard unknown-file
+# error. Round-trip scope matches what the CSV exports themselves carry:
+# tasks keep title/status/due/labels; events add start/end/all-day/
+# location/meeting URL; contacts keep name/org/address and land their
+# first phone/email into the real child tables (the flat columns the CSV
+# columns are named after are dead for display -- see export_contacts_csv's
+# own comment). Importance/Urgency columns are accepted-and-ignored: they
+# were computed values on the way out (see export_tasks_csv), never stored.
+
+_CSV_SHAPES: dict[str, list[str]] = {
+    "tasks": ["uid", "title", "status", "due", "importance", "urgency", "tags"],
+    "events": ["uid", "title", "start", "end", "all day", "location", "meeting url", "tags"],
+    "contacts": ["uid", "name", "organization", "phone", "email", "address", "tags"],
+}
+
+
+def _csv_kind(text: str) -> str | None:
+    """Which of this app's own CSV export shapes `text`'s header row is
+    ("tasks"/"events"/"contacts"), or None. Only the first record is
+    parsed -- cheap sniffing, same spirit as the VCARD/VCALENDAR checks."""
+    try:
+        first = next(csv.reader(io.StringIO(text)))
+    except (StopIteration, csv.Error):
+        return None
+    cells = [cell.strip().lower() for cell in first]
+    for kind, shape in _CSV_SHAPES.items():
+        if cells == shape:
+            return kind
+    return None
+
+
+def _split_csv_labels(raw: str) -> list[str]:
+    return [label.strip() for label in raw.split(",") if label.strip()]
+
+
+def _import_csv_text(conn, text: str, skip_existing: bool = False) -> str:
+    """Import rows from one of this app's own CSV exports; returns the
+    user-facing note (import_auto redirects with it). Rows without a UID
+    are skipped -- uid-less rows can't round-trip or be merge-checked.
+    Raises ValueError only when the kind somehow shifted between sniffing
+    and here (defensive; callers treat it as unknown-file)."""
+    kind = _csv_kind(text)
+    if kind is None:
+        raise ValueError("not a recognized CSV export")
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        return f"Nothing to import -- that {kind}.csv has no data rows."
+    keys = {name.strip().lower(): name for name in reader.fieldnames}
+
+    def cell(row: dict[str, str], name: str) -> str:
+        actual = keys.get(name)
+        return (row.get(actual) or "").strip() if actual else ""
+
+    now = datetime.now(timezone.utc).isoformat()
+    added = 0
+    skipped = 0
+    for row in reader:
+        uid = cell(row, "uid")
+        if not uid:
+            continue
+        if skip_existing and (
+            db.get_task(conn, uid) if kind == "tasks"
+            else db.get_event(conn, uid) if kind == "events"
+            else db.get_contact(conn, uid)
+        ) is not None:
+            skipped += 1
+            continue
+        tags = _split_csv_labels(cell(row, "tags"))
+        if kind == "tasks":
+            db.upsert_task(conn, {
+                "uid": uid,
+                "title": cell(row, "title"),
+                # upsert_* name every column explicitly, so each NOT NULL
+                # column must be given its real default here (an explicit
+                # NULL never falls back to the column's own DEFAULT).
+                "description": "",
+                "status": cell(row, "status") or "todo",
+                "due_at": cell(row, "due") or None,
+                "created_at": now, "updated_at": now,
+                "tags": tags,
+            })
+        elif kind == "events":
+            db.upsert_event(conn, {
+                "uid": uid,
+                "title": cell(row, "title"),
+                "description": "",
+                "start_at": cell(row, "start") or None,
+                "end_at": cell(row, "end") or None,
+                "all_day": 1 if cell(row, "all day").lower() in ("yes", "true", "1") else 0,
+                # upsert_event names every column explicitly, so a NOT NULL
+                # column must be given its real default here (an explicit
+                # NULL never falls back to the column's own DEFAULT).
+                "status": "active",
+                "location": cell(row, "location") or None,
+                "meeting_url": cell(row, "meeting url") or None,
+                "created_at": now, "updated_at": now,
+                "tags": tags,
+            })
+        else:
+            phone = cell(row, "phone")
+            email = cell(row, "email")
+            address = cell(row, "address")
+            db.upsert_contact(conn, {
+                "uid": uid,
+                "full_name": cell(row, "name"),
+                "org": cell(row, "organization") or None,
+                "created_at": now, "updated_at": now,
+                "tags": tags,
+                "phones": [{"type": "Other", "value": phone}] if phone else [],
+                "emails": [{"type": "Other", "value": email}] if email else [],
+                "addresses": [{"type": "Other", "street": address}] if address else [],
+            })
+        added += 1
+    noun = {"tasks": "task", "events": "event", "contacts": "contact"}[kind]
+    parts = [f"Imported {added} {noun}(s)."]
+    if skipped:
+        parts.append(f"{skipped} already existed (left untouched).")
+    return " ".join(parts)
+
+
+@router.post("/import/auto")
+def import_auto(file: UploadFile, merge: str = Form(""), conn=Depends(get_db)):
+    """The unified import endpoint behind Data & Maintenance's single
+    drag-and-drop zone: sniffs the uploaded bytes and dispatches --
+    BEGIN:VCARD -> contacts; BEGIN:VCALENDAR -> events and/or tasks (one
+    walk, both pools); this app's own CSV export shapes -> their pools
+    (2026-08-26 page redesign added the drop zone's .csv acceptance);
+    anything else must parse as a data.json backup or it's rejected.
+    Detection is by *content*, not filename, so a renamed/misnamed file
+    still lands correctly.
+
+    `merge`: the zone's "Merge with existing data" checkbox (checked in the
+    UI sends "1"; an unchecked checkbox sends nothing at all, hence the ""
+    default). Checked (the default experience) is today's upsert-merge;
+    unchecked is add-only -- existing uids are left untouched, so a nervous
+    first import can't overwrite anything."""
+    raw = file.file.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return _redirect_with_error("/settings/data-maintenance", "Couldn't read that file as text (.ics/.vcf/.csv/.json expected).")
+    head = text.lstrip("\ufeff \t\r\n")[:64].upper()
+    skip_existing = merge != "1"
+    try:
+        if head.startswith("BEGIN:VCARD"):
+            added = _import_vcf_text(conn, text, skip_existing=skip_existing)
+            note = f"Imported {added} contact(s)."
+        elif "BEGIN:VCALENDAR" in head or "BEGIN:VCALENDAR" in text[:4096].upper():
+            events_added, tasks_added = _import_ics_text(conn, text, skip_existing=skip_existing)
+            parts = []
+            if events_added:
+                parts.append(f"{events_added} event(s)")
+            if tasks_added:
+                parts.append(f"{tasks_added} task(s)")
+            note = f"Imported {', '.join(parts)}." if parts else "Nothing to import -- no events or tasks found in that file."
+        elif _csv_kind(text) is not None:
+            note = _import_csv_text(conn, text, skip_existing=skip_existing)
+        else:
+            count = _restore_json_text(conn, raw, skip_existing=skip_existing)
+            note = f"Backup restored ({count} item{'s' if count != 1 else ''})."
+    except ValueError:
+        return _redirect_with_error(
+            "/settings/data-maintenance",
+            "Couldn't detect the file type -- use an .ics calendar, .vcf contacts, .csv spreadsheet, or a data.json backup.",
+        )
+    return _redirect_with_note("/settings/data-maintenance", note)
 
 
 def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
