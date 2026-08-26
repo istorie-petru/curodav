@@ -251,23 +251,38 @@ class TestDataAndBackupCategoryRemoved:
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/data-maintenance"
 
-    def test_data_maintenance_page_has_the_export_buttons_inlined(self, conn, tmp_path):
-        # 2026-08-26 redesign of the inlined section: 8 individual download
-        # links + 4 separate import forms became one combined Export/Import
-        # card (single GET form -> /export/download, single drop zone ->
-        # /import/auto with server-side content sniffing); the second pass
-        # the same day folded the Full Backup card into the Backup status
-        # card's own menu (its "Download full backup" item is the data.json
-        # link below). The old per-type URLs still exist as routes for old
-        # bookmarks/direct callers, just no longer linked from the page --
-        # including /export/import/json, since the drop zone's sniffer
-        # handles data.json backups too.
+    def test_export_import_live_in_sync_menu_dialogs_not_on_the_page(self, conn, tmp_path):
+        # 2026-08-26 third pass: the standalone Export & import card is
+        # gone from the merged page entirely -- Export… / Import… are menu
+        # items on the Sync status card now, each opening its own dialog;
+        # the Backup card's "Restore a file…" opens the same Import one
+        # (restoring a downloaded data.json goes through it too).
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/export/data.json"' in body
+        assert 'href="/export/modal" data-modal' in body
+        assert body.count('href="/export/import-modal" data-modal') == 2  # Sync menu + Backup card
+        # Neither form lives on the page anymore.
+        assert "/export/download" not in body
+        assert "/export/import/auto" not in body
+
+    def test_export_modal_renders_the_download_form(self, conn):
+        resp = export_router.export_modal(_request_with_radicale("/export/modal"), conn=conn)
+        assert resp.status_code == 200
+        body = resp.body.decode()
         assert 'action="/export/download"' in body
+        assert 'method="get"' in body
+        assert "data-modal-get" in body  # keeps modal.js's POST interceptor out of the way
+        assert "data-dm-preview=" in body
+        assert "Includes:" in body
+
+    def test_import_modal_renders_the_drop_zone(self, conn):
+        resp = export_router.import_modal(_request_with_radicale("/export/import-modal"))
+        assert resp.status_code == 200
+        body = resp.body.decode()
         assert 'action="/export/import/auto"' in body
-        assert "Download full backup" in body
+        assert "data-dm-dropzone" in body
+        assert "auto-detects type" in body
+        assert 'name="merge"' in body
 
 
 class TestCustomWidgetsToggleRemoved:

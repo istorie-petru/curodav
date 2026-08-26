@@ -84,6 +84,35 @@ def export_index(request: Request, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
+# The two export/import dialogs (2026-08-26 third pass: the Data &
+# Maintenance page's standalone Export & import card is gone -- Export…
+# and Import… are menu items on the Sync status card now, each opening one
+# of these modals. Same #modal-target shape as every other utility modal.)
+
+@router.get("/modal")
+def export_modal(request: Request, conn=Depends(get_db)):
+    """The Export dialog: Data + Format dropdowns and a Download button,
+    posting the same GET /export/download form the old card did. The
+    per-option `data-dm-preview` phrases feed the modal's live
+    "Includes: ..." line (static/data_maintenance.js)."""
+    ctx = {"request": request, "active_tab": "settings_data_maintenance"}
+    ctx.update(export_context(conn))
+    return templates.TemplateResponse("export_modal.html", ctx)
+
+
+@router.get("/import-modal")
+def import_modal(request: Request):
+    """The Import dialog: the single content-sniffing drop zone (.ics/
+    .vcf/.csv/.json), posting to the unchanged /export/import/auto.
+    Success closes the dialog and reloads the page (the same close-and-
+    reload every other modal form gets); the server-side note rides back
+    as a redirect the fetch follows."""
+    return templates.TemplateResponse(
+        "import_modal.html",
+        {"request": request, "active_tab": "settings_data_maintenance"},
+    )
+
+
 def export_context(conn) -> dict:
     """The data Settings > Data & Maintenance's "Export & import" section
     needs -- factored out of the old export_index page route (above) so

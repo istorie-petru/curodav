@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Export data{% endblock %}
+{% block content %}
+<!-- Export dialog (2026-08-26 third pass: opened from the Sync status
+     card's "Export…" menu item). Same two-dropdown form the old Export &
+     import card rendered -- every (type, format) combination resolves
+     server-side to exactly one real file via GET /export/download. The
+     form carries data-modal-get so modal.js's POST interceptor stands
+     down and the submit navigates natively to the attachment (the browser
+     downloads it without leaving the page); openModal's own fetch of the
+     file finds no #modal-target and falls back to exactly that
+     navigation. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Export data</h1>
+</div>
+<div class="modal-body">
+<p class="settings-hint">Download a piece of your data in a format any other app can open. Published lists keep syncing via Radicale separately.</p>
+<form method="get" action="/export/download" class="dm-export-form" data-dm-export-root data-modal-get>
+    <label class="dm-field">Data
+        <select name="data_type" data-dm-type>
+            <option value="all" data-dm-preview="Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts">All data</option>
+            <option value="events" data-dm-preview="Includes: {{ event_count }} Events">Calendar</option>
+            <option value="tasks" data-dm-preview="Includes: {{ task_count }} Tasks">Tasks</option>
+            <option value="contacts" data-dm-preview="Includes: {{ contact_count }} Contacts">Address book</option>
+            <option value="labels" data-dm-preview="Includes: every label and its settings">Labels</option>
+        </select>
+    </label>
+    <label class="dm-field">Format
+        <select name="format" data-dm-format>
+            <option value="standard">Standard (.ics/.vcf)</option>
+            <option value="csv">Spreadsheet (.csv)</option>
+        </select>
+    </label>
+    <p class="dm-count-hint" data-dm-hint>Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts &middot; All data downloads as one .zip bundle (.ics/.vcf).</p>
+    <button type="submit" class="btn primary">{{ icon('download', 'icon-sm') }} Download</button>
+</form>
+</div>
+{% set footer_back_url = '/settings/data-maintenance' %}
+{% set footer_back_label = 'Cancel' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

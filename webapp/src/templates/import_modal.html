@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Import data{% endblock %}
+{% block content %}
+<!-- Import dialog (2026-08-26 third pass: opened from the Sync status
+     card's "Import…" menu item, and from the Backup card's "Restore a
+     file…" -- restoring a downloaded data.json goes through here too).
+     One content-sniffing drop zone; the server detects vCard / iCalendar
+     / this app's own CSV shapes / JSON backups by CONTENT, not filename.
+     Success closes the dialog and reloads the page, like every other
+     modal form. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Import data</h1>
+</div>
+<div class="modal-body">
+<form method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
+    <label class="dm-dropzone" data-dm-dropzone>
+        <input type="file" name="file" accept=".ics,.vcf,.csv,.json,text/calendar,text/vcard,text/csv,application/json" class="sr-only" required data-dm-file>
+        <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
+        <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a file here &mdash; auto-detects type</span>
+        <span class="dm-dropzone-formats">.ics calendar &middot; .vcf contacts &middot; .csv spreadsheet &middot; .json backup</span>
+    </label>
+    <p class="dm-status" data-dm-status role="status"></p>
+    <label class="dm-merge">
+        <input type="checkbox" name="merge" value="1" checked>
+        Merge with existing data
+    </label>
+    <p class="dm-merge-hint">Untick to only add items that don't exist yet -- nothing you already have gets overwritten.</p>
+    <button type="submit" class="btn primary" data-dm-submit>{{ icon('upload', 'icon-sm') }} Import</button>
+</form>
+</div>
+{% set footer_back_url = '/settings/data-maintenance' %}
+{% set footer_back_label = 'Cancel' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

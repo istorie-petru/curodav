@@ -3440,3 +3440,32 @@ session checked `git status`).
   shape (phase8's purge assertions split page-vs-modal;
   TestDataMaintenanceRedesign2026_08_26 rewritten around card-menu/meta
   facts; ScriptGate reads both templates), full suite **1737 passed**.
+- **Shipped:** side work — **Data & Maintenance third pass: export/import
+  folded into the Sync card as dialogs**, complete (2026-08-26), immediate
+  follow-up on the second pass ("Export and Import should be incorporated
+  into the sync box... entries in the three dots menu... direct to modal
+  windows"). The standalone Export & import card is gone from the page
+  entirely:
+  - The Sync status card's menu gains a first section with **Export
+    data…** and **Import data…**, each opening its own dialog (new GET
+    /export/modal + GET /export/import-modal in routers/export.py,
+    export_modal.html / import_modal.html, both standard #modal-target +
+    _modal_footer Cancel footers). Export = the same two-dropdown
+    data-dm-preview GET form posting /export/download, marked
+    `data-modal-get` so modal.js's POST interceptor stands down and the
+    submit navigates to the attachment natively (openModal's own fetch of
+    the file finds no #modal-target and falls back to exactly that
+    navigation). Import = the same content-sniffing drop zone (.ics/.vcf/
+    .csv/.json) posting /export/import/auto; success closes the dialog and
+    reloads the page like every other modal form. The Backup card's
+    "Restore a file…" item now opens the Import dialog too (it was a
+    scroll-to before; the section it scrolled to no longer exists).
+  - static/data_maintenance.js rewired from load-time binding to fully
+    document-level delegation (change/input/dragenter/dragover/dragleave/
+    drop), since all three dialogs' markup injects after the script runs —
+    the same no-wireContent-hook precedent modal.js documents for the
+    command palette's delegated listeners. CSS: pane-switching/:has() rules
+    removed; dropdown-field/preview/dropzone styles remain for the dialogs.
+  Tests: phase8's inlined-export assertions rewritten around the two menu
+  triggers + dialog renders; ScriptGate reads all three dialog templates
+  and pins the delegation-only wiring. Full suite **1739 passed**.

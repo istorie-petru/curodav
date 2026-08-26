@@ -454,32 +454,49 @@ class TestSyncGcRoutes:
 
 
 class TestDataMaintenanceScriptGate:
-    """Structural checks over static/data_maintenance.js and the purge
-    confirmation modal (2026-08-26 redesign, second pass) -- same
+    """Structural checks over static/data_maintenance.js and the three
+    dialog templates (2026-08-26 redesign, third pass) -- same
     grep-the-source style as the app's other page-local scripts; no browser
     in this environment to drive the real DOM."""
 
     JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "data_maintenance.js").read_text()
     PAGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
-    MODAL = (Path(__file__).resolve().parent.parent / "src" / "templates" / "purge_modal.html").read_text()
+    PURGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "purge_modal.html").read_text()
+    EXPORT = (Path(__file__).resolve().parent.parent / "src" / "templates" / "export_modal.html").read_text()
+    IMPORT = (Path(__file__).resolve().parent.parent / "src" / "templates" / "import_modal.html").read_text()
 
     def test_delete_all_gate_is_exact_and_server_default_is_disabled(self):
         # The client-side half of the check-then-delete flow: only the
         # exact phrase arms the button, anything else disarms it again --
-        # and it binds by delegation, because the dialog's markup is
-        # injected into the modal overlay after this script has run.
+        # and every binding is document-level delegation, because all three
+        # dialogs' markup is injected into the modal overlay after this
+        # script has run.
         assert 'phrase.value === "DELETE ALL"' in self.JS
         assert "btn.disabled = !armed" in self.JS
         assert 'document.addEventListener("input"' in self.JS
 
-    def test_export_preview_wiring_exists(self):
-        # The "Includes: ..." preview composes each option's own
-        # server-rendered data-dm-preview phrase with a packaging note.
-        assert "dmPreview" in self.JS
+    def test_all_dialog_bindings_are_delegated_not_load_time_bound(self):
+        # The dropzone's drag pair, the file/change previews and the export
+        # preview must all attach at the document level -- nothing may query
+        # for dialog elements at load time. (The four drag events ride two
+        # forEach loops over event-name arrays.)
+        for evt in ("change", "drop", "input"):
+            assert f'document.addEventListener("{evt}"' in self.JS
+        for evt in ("dragenter", "dragover", "dragleave", "drop"):
+            assert f'"{evt}"' in self.JS
+        assert "[data-dm-root]" not in self.JS
 
     def test_templates_carry_the_data_attributes_the_script_reads(self):
-        for marker in ("data-dm-preview=", "data-dm-root", "data-dm-dropzone", "data-dm-file"):
-            assert marker in self.PAGE
+        # The page itself hosts no dialog markup -- the Sync card's menu
+        # items and the Backup card's "Restore a file…" are data-modal
+        # triggers; the attributes live in the three dialog templates.
+        assert 'href="/export/modal" data-modal' in self.PAGE
+        assert self.PAGE.count('href="/export/import-modal" data-modal') == 2  # Sync + Backup card
+        assert 'href="/settings/purge-confirm" data-modal' in self.PAGE
+        for marker in ("data-dm-preview=", "data-dm-export-root", "data-modal-get", 'action="/export/download"'):
+            assert marker in self.EXPORT
+        for marker in ("data-dm-dropzone", "data-dm-file", 'name="merge"', 'action="/export/import/auto"'):
+            assert marker in self.IMPORT
         for marker in ("data-purge-gate", "data-purge-phrase", "data-purge-btn disabled",
                        'action="/settings/purge-all"', "_modal_footer.html"):
-            assert marker in self.MODAL
+            assert marker in self.PURGE

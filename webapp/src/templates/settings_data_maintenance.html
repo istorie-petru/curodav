@@ -168,7 +168,7 @@
                         </div>
                         {% endif %}
                         <div class="action-menu-section">
-                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('import-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('upload', 'icon-sm') }} Restore a file&hellip;</button>
+                            <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Restore a file&hellip;</a>
                         </div>
                     </div>
                 </div>
@@ -204,6 +204,13 @@
                 <div class="action-menu" aria-label="Sync actions">
                     <button type="button" class="action-menu-trigger" aria-label="Sync actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
                     <div class="action-menu-panel" role="menu">
+                        <!-- 2026-08-26 third pass: export/import moved off
+                             their own page section into this menu -- each
+                             opens its own dialog. -->
+                        <div class="action-menu-section">
+                            <a class="action-menu-item" role="menuitem" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export data&hellip;</a>
+                            <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
+                        </div>
                         <div class="action-menu-section">
                             <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
                         </div>
@@ -284,69 +291,6 @@
     </div>
 </div>
 
-<!-- 4. Export & import -- unchanged two-dropdown/one-dropzone design (it was
-     already consolidated); 2026-08-26 additions: a live "Includes: ..."
-     preview under the Format dropdown, .csv accepted by the drop zone
-     alongside .ics/.vcf/.json, and plainer drop-zone copy. The Backup
-     card's "Restore a file…" menu item lands here -- this drop zone is
-     also how a downloaded data.json gets restored. -->
-<div class="settings-group" id="import-section">
-    <h2 class="section-label">{{ icon('share-2', 'icon-sm') }} Export &amp; import</h2>
-    <p class="settings-hint">Move individual pieces of your data in formats any other app can open. Published lists keep syncing via Radicale ({{ radicale_url }}) separately.</p>
-    <div class="card dm-portable" data-dm-root>
-        <div class="segmented dm-mode">
-            <label class="seg-btn"><input type="radio" class="seg-radio" name="dm-mode" value="export" checked>Export</label>
-            <label class="seg-btn"><input type="radio" class="seg-radio" name="dm-mode" value="import">Import</label>
-        </div>
-
-        <!-- Export: two dropdowns, one button -- every (type, format)
-             combination resolves server-side to exactly one real file.
-             Each option carries its own server-rendered "Includes: ..."
-             phrase so the preview under Format can update with no fetch. -->
-        <div class="dm-pane dm-pane-export">
-            <form method="get" action="/export/download" class="dm-export-form">
-                <label class="dm-field">Data
-                    <select name="data_type" data-dm-type>
-                        <option value="all" data-dm-preview="Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts">All data</option>
-                        <option value="events" data-dm-preview="Includes: {{ event_count }} Events">Calendar</option>
-                        <option value="tasks" data-dm-preview="Includes: {{ task_count }} Tasks">Tasks</option>
-                        <option value="contacts" data-dm-preview="Includes: {{ contact_count }} Contacts">Address book</option>
-                        <option value="labels" data-dm-preview="Includes: every label and its settings">Labels</option>
-                    </select>
-                </label>
-                <label class="dm-field">Format
-                    <select name="format" data-dm-format>
-                        <option value="standard">Standard (.ics/.vcf)</option>
-                        <option value="csv">Spreadsheet (.csv)</option>
-                    </select>
-                </label>
-                <button type="submit" class="btn primary">{{ icon('download', 'icon-sm') }} Download</button>
-            </form>
-            <p class="dm-count-hint" data-dm-hint>Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts &middot; All data downloads as one .zip bundle (.ics/.vcf).</p>
-        </div>
-
-        <!-- Import: one drop zone for every kind of file; the server sniffs
-             the content (vCard / iCalendar / CSV / JSON), so a renamed file
-             still lands correctly even with JavaScript off. -->
-        <div class="dm-pane dm-pane-import">
-            <form method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
-                <label class="dm-dropzone" data-dm-dropzone>
-                    <input type="file" name="file" accept=".ics,.vcf,.csv,.json,text/calendar,text/vcard,text/csv,application/json" class="sr-only" required data-dm-file>
-                    <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
-                    <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a file here &mdash; auto-detects type</span>
-                    <span class="dm-dropzone-formats">.ics calendar &middot; .vcf contacts &middot; .csv spreadsheet &middot; .json backup</span>
-                </label>
-                <p class="dm-status" data-dm-status role="status"></p>
-                <label class="dm-merge">
-                    <input type="checkbox" name="merge" value="1" checked>
-                    Merge with existing data
-                </label>
-                <p class="dm-merge-hint">Untick to only add items that don't exist yet -- nothing you already have gets overwritten.</p>
-                <button type="submit" class="btn primary" data-dm-submit>{{ icon('upload', 'icon-sm') }} Import</button>
-            </form>
-        </div>
-    </div>
-</div>
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ static_url('data_maintenance.js') }}"></script>
