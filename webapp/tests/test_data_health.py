@@ -314,45 +314,44 @@ class TestSettingsDataMaintenancePage:
 
 
 class TestDataMaintenanceRedesign2026_08_26:
-    """The 2026-08-26 page redesign: below the (unchanged) System Status
-    cards, the page is now Maintenance & cleanup -> one unified Full
-    Backup & Restore hero -> Export & import -> a typed-confirmation-gated
-    Danger zone. The old Backups & storage card/table is gone -- the hero
-    is the only place on the page naming a backup's timestamp, size, or
-    filename."""
+    """The 2026-08-26 page redesign (second pass same day): below the
+    (unchanged) System Status cards there is no separate backup or danger
+    surface anymore -- backup actions live in the Backup status card's own
+    menu (its meta line is the only place naming a last-backup timestamp or
+    size), restore-a-file goes through the unified Export & import drop
+    zone, and reset-database opens a confirmation dialog carrying the typed
+    DELETE ALL check."""
 
     def _page(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         return settings_router.settings_data_maintenance(req, conn=conn).body.decode()
 
-    def test_purge_completed_lives_in_maintenance_before_the_danger_zone(self, conn, tmp_path):
-        body = self._page(conn, tmp_path)
-        assert 'action="/settings/purge-completed"' in body
-        assert 'action="/settings/purge-all"' in body
-        # Same page, new order: housekeeping first, danger last. (purge-all
-        # also appears earlier inside the untouched System Status menus, so
-        # anchor on the danger zone's own marker, not the action string.)
-        assert body.index('action="/settings/purge-completed"') < body.index("dm-danger-form")
-        # The moved action is now a soft grey button carrying its live count.
+    def test_purge_completed_is_housekeeping_and_danger_zone_is_gone(self, conn, tmp_path):
         db.upsert_task(conn, {"uid": "done1", "title": "Old done task", "description": "",
                               "status": "done", "due_at": None,
                               "created_at": _now(), "updated_at": _now()})
         body = self._page(conn, tmp_path)
+        # The soft grey count button in Maintenance & cleanup...
+        assert 'action="/settings/purge-completed"' in body
         assert "Purge completed tasks (1 right now)" in body
+        # ...and no Danger zone anywhere: the full wipe moved behind the
+        # Database card's own confirmation-dialog trigger.
+        assert "Danger zone" not in body
+        assert 'action="/settings/purge-all"' not in body
+        assert 'href="/settings/purge-confirm" data-modal' in body
 
-    def test_danger_zone_is_gated_behind_a_typed_phrase(self, conn, tmp_path):
+    def test_backup_actions_live_in_the_backup_cards_menu(self, conn, tmp_path):
+        settings_router.data_health_backup(
+            _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
+        )
         body = self._page(conn, tmp_path)
-        # The button ships disabled straight from the server...
-        assert '<button type="submit" class="btn danger" data-dm-danger-btn disabled>' in body
-        # ...behind an exact-phrase input, and it's the only purge there.
-        assert "data-dm-danger-phrase" in body
-        assert 'placeholder="DELETE ALL"' in body
-        assert "Permanently Delete Everything" in body
-        danger_tail = body.split("dm-danger-form", 1)[1]
-        assert "/settings/purge-all" in danger_tail
-        assert "/settings/purge-completed" not in danger_tail
+        assert 'href="/export/data.json"' in body          # Download full backup
+        assert "Download full backup" in body
+        assert "Verify integrity" in body                   # per-backup actions
+        assert "Restore this backup" in body
+        assert "Restore a file" in body                     # -> unified drop zone
 
-    def test_backup_facts_are_human_readable_and_only_in_the_hero(self, conn, tmp_path):
+    def test_backup_facts_are_human_readable_and_only_in_the_backup_card(self, conn, tmp_path):
         import re
 
         resp = settings_router.data_health_backup(
@@ -361,30 +360,38 @@ class TestDataMaintenanceRedesign2026_08_26:
         assert resp.status_code == 303
         backup = data_health.list_backups(tmp_path / "backups")[0]
         body = self._page(conn, tmp_path)
-        # Raw ISO timestamps became "Aug 25, 2026, 8:57 PM"-style text.
+        # Raw ISO timestamps became "Aug 25, 2026, 8:57 PM"-style text, and
+        # the filename never renders as visible text -- it exists only as
+        # the two menu forms' hidden inputs (verify + restore).
         assert re.search(r"Last backup: [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
-        # The filename and a size appear inside the hero card's restore area.
-        assert backup["filename"] in body
+        assert f">{backup['filename']}" not in body
+        assert body.count(f'value="{backup["filename"]}"') == 2
         assert re.search(r"\d+(\.\d+)? (kB|MB|bytes)", body)
-        # The old redundant surfaces are gone ("Backups & storage" as a
-        # phrase still appears in the hero card's own explanatory comment,
-        # so anchor on its unique rendering instead).
-        assert '<use href="#icon-bar-chart-2">' not in body
+        # The old redundant surfaces stay gone.
         assert "<th>File</th>" not in body
         assert "Database size" not in body
+        assert '<use href="#icon-bar-chart-2">' not in body
 
-    def test_verified_badge_appears_after_verification(self, conn, tmp_path):
+    def test_verification_state_flips_the_card_meta_line(self, conn, tmp_path):
+        import re
+
         settings_router.data_health_backup(
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
         )
+        body = self._page(conn, tmp_path)
+        assert "Not yet verified" in body
         backup = data_health.list_backups(tmp_path / "backups")[0]
         settings_router.data_health_verify(
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"),
             filename=backup["filename"], conn=conn,
         )
         body = self._page(conn, tmp_path)
-        assert "dm-badge-ok" in body
-        assert "Verified &#10003;" in body
+        assert "Not yet verified" not in body
+        assert re.search(r"Verified [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
+
+    def test_no_backup_yet_message_lives_in_the_card_meta(self, conn, tmp_path):
+        body = self._page(conn, tmp_path)
+        assert "No backups yet" in body
 
     def test_redesigned_dropdown_labels_render(self, conn, tmp_path):
         body = self._page(conn, tmp_path)
@@ -447,29 +454,32 @@ class TestSyncGcRoutes:
 
 
 class TestDataMaintenanceScriptGate:
-    """Structural checks over static/data_maintenance.js (2026-08-26
-    redesign) -- same grep-the-source style as the app's other page-local
-    scripts; no browser in this environment to drive the real DOM."""
+    """Structural checks over static/data_maintenance.js and the purge
+    confirmation modal (2026-08-26 redesign, second pass) -- same
+    grep-the-source style as the app's other page-local scripts; no browser
+    in this environment to drive the real DOM."""
 
     JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "data_maintenance.js").read_text()
+    PAGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
+    MODAL = (Path(__file__).resolve().parent.parent / "src" / "templates" / "purge_modal.html").read_text()
 
     def test_delete_all_gate_is_exact_and_server_default_is_disabled(self):
-        # The client-side half of the two-lock danger zone: only the exact
-        # phrase arms the button, anything else disarms it again.
+        # The client-side half of the check-then-delete flow: only the
+        # exact phrase arms the button, anything else disarms it again --
+        # and it binds by delegation, because the dialog's markup is
+        # injected into the modal overlay after this script has run.
         assert 'phrase.value === "DELETE ALL"' in self.JS
         assert "btn.disabled = !armed" in self.JS
+        assert 'document.addEventListener("input"' in self.JS
 
-    def test_export_preview_and_alt_upload_wiring_exists(self):
+    def test_export_preview_wiring_exists(self):
         # The "Includes: ..." preview composes each option's own
-        # server-rendered data-dm-preview phrase with a packaging note...
-        assert "data-dm-preview" in self.JS or "dmPreview" in self.JS
-        # ...and the hero card's upload link echoes the chosen filename,
-        # revealing its submit button via the has-file class.
-        assert 'classList.toggle("has-file", !!picked)' in self.JS
+        # server-rendered data-dm-preview phrase with a packaging note.
+        assert "dmPreview" in self.JS
 
-    def test_template_carries_the_data_attributes_the_script_reads(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
-        for marker in ("data-dm-danger", "data-dm-danger-phrase", "data-dm-danger-btn",
-                       "data-dm-preview=", "data-dm-alt-form", "data-dm-alt-file",
-                       "data-dm-alt-name"):
-            assert marker in html
+    def test_templates_carry_the_data_attributes_the_script_reads(self):
+        for marker in ("data-dm-preview=", "data-dm-root", "data-dm-dropzone", "data-dm-file"):
+            assert marker in self.PAGE
+        for marker in ("data-purge-gate", "data-purge-phrase", "data-purge-btn disabled",
+                       'action="/settings/purge-all"', "_modal_footer.html"):
+            assert marker in self.MODAL

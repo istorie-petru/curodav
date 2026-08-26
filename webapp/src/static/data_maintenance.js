@@ -2,14 +2,16 @@
  *
  * Progressive enhancement only -- every section works without this script:
  * both Export/Import panes are plain forms and pane switching is CSS (:has()
- * on the segmented radio); the danger-zone submit button ships disabled from
- * the server and only this script can arm it. What JS adds is the live
- * "Includes: ..." export preview, the drag-and-drop affordance with a
- * "Detected: ..." preview before anything is uploaded, gating Import on a
- * recognizable file, the chosen-filename echo next to the hero card's
- * "Upload a different .json" link, and the DELETE ALL typed-phrase gate.
+ * on the segmented radio); the reset-database dialog's submit button ships
+ * disabled from the server and only this script can arm it. What JS adds is
+ * the live "Includes: ..." export preview, the drag-and-drop affordance with
+ * a "Detected: ..." preview before anything is uploaded, gating Import on a
+ * recognizable file, and the DELETE ALL typed-phrase gate.
  *
- * Page-local: only settings_data_maintenance.html loads it.
+ * Page-local: only settings_data_maintenance.html loads it. The purge
+ * confirmation lives in a modal injected AFTER load (purge_modal.html), so
+ * the gate binds via event delegation at the document level -- it works no
+ * matter when the dialog's markup appears.
  */
 (function () {
   "use strict";
@@ -178,43 +180,23 @@
     }
   }
 
-  // ---- Hero card: "Upload a different .json file to restore" --------------
+  // ---- Reset-database dialog: the DELETE ALL gate -------------------------
   //
-  // Echoes the chosen filename and reveals the small Restore submit button
-  // once there is something to restore (without JS the button is always
-  // visible so the plain form still completes).
+  // purge_modal.html is injected into the modal overlay after this script
+  // has long since run, so the gate is delegated at the document level
+  // instead of bound to elements queried at load. The submit button renders
+  // disabled straight from the server; typing the exact phrase arms it (and
+  // typing anything else disarms it again). That typed phrase IS the check
+  // -- there is no second confirm popover on top of it.
 
-  var altForm = document.querySelector("[data-dm-alt-form]");
-  if (altForm) {
-    var altFile = altForm.querySelector("[data-dm-alt-file]");
-    var altName = altForm.querySelector("[data-dm-alt-name]");
-    if (altFile && altName) {
-      altFile.addEventListener("change", function () {
-        var picked = altFile.files && altFile.files[0];
-        altName.textContent = picked ? "Selected: " + picked.name : "";
-        altForm.classList.toggle("has-file", !!picked);
-      });
-    }
-  }
-
-  // ---- Danger zone: the DELETE ALL gate ------------------------------------
-  //
-  // The submit button renders disabled straight from the server; typing the
-  // exact phrase arms it (and typing anything else disarms it again). The
-  // confirm-sheet on submit remains as the second of the two locks.
-
-  var dangerForm = document.querySelector("[data-dm-danger]");
-  if (dangerForm) {
-    var phrase = dangerForm.querySelector("[data-dm-danger-phrase]");
-    var btn = dangerForm.querySelector("[data-dm-danger-btn]");
-    if (phrase && btn) {
-      var syncGate = function () {
-        var armed = phrase.value === "DELETE ALL";
-        btn.disabled = !armed;
-        phrase.classList.toggle("is-armed", armed);
-      };
-      phrase.addEventListener("input", syncGate);
-      syncGate();
-    }
-  }
+  document.addEventListener("input", function (e) {
+    var phrase = e.target;
+    if (!phrase.matches || !phrase.matches("[data-purge-phrase]")) return;
+    var form = phrase.closest("form");
+    var btn = form && form.querySelector("[data-purge-btn]");
+    if (!btn) return;
+    var armed = phrase.value === "DELETE ALL";
+    btn.disabled = !armed;
+    phrase.classList.toggle("is-armed", armed);
+  });
 })();

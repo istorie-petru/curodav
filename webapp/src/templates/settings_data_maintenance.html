@@ -92,9 +92,13 @@
                             <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
                         </div>
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app &mdash; every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Export & backup, above)." style="display:contents;">
-                                <button type="submit" class="action-menu-item danger" role="menuitem">{{ icon('shield', 'icon-sm') }} Reset database (purge all)</button>
-                            </form>
+                            <!-- 2026-08-26 second pass: opens the
+                                 confirmation dialog (typed DELETE ALL check,
+                                 then delete) instead of jumping straight to
+                                 a confirm popover -- the old standalone
+                                 danger section is gone, this IS the purge
+                                 path now. -->
+                            <a class="action-menu-item danger" role="menuitem" href="/settings/purge-confirm" data-modal>{{ icon('shield', 'icon-sm') }} Reset database (purge all)</a>
                         </div>
                     </div>
                 </div>
@@ -112,6 +116,13 @@
         </div>
 
         <!-- BACKUP CARD -->
+        <!-- 2026-08-26 second pass: the former "Full backup & restore"
+             section is folded INTO this card's menu -- download, verify,
+             and restore live one click away here, and the card's own meta
+             line is the only place on the page naming a last-backup
+             timestamp or size. Restoring a *file* (a downloaded data.json
+             or any .ics/.vcf/.csv) goes through the unified drop zone in
+             Export & import below, which auto-detects the type. -->
         {% set backup_status_class = 'healthy' %}
         {% set backup_status_text = 'Up to date' %}
         {% set backup_status_icon = 'check-circle' %}
@@ -142,10 +153,22 @@
                             <form method="post" action="/settings/data-health/backup" style="display:contents;">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('archive', 'icon-sm') }} Backup now</button>
                             </form>
-                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('backups-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('list', 'icon-sm') }} View backups</button>
+                            <a class="action-menu-item" role="menuitem" href="/export/data.json">{{ icon('download', 'icon-sm') }} Download full backup</a>
                         </div>
+                        {% if latest_backup %}
                         <div class="action-menu-section">
-                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('import-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('upload', 'icon-sm') }} Restore&hellip;</button>
+                            <form method="post" action="/settings/data-health/verify" style="display:contents;">
+                                <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify integrity</button>
+                            </form>
+                            <form method="post" action="/settings/data-health/restore" style="display:contents;" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
+                                <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('repeat', 'icon-sm') }} Restore this backup</button>
+                            </form>
+                        </div>
+                        {% endif %}
+                        <div class="action-menu-section">
+                            <button type="button" class="action-menu-item" role="menuitem" onclick="document.getElementById('import-section')?.scrollIntoView({behavior:'smooth'})">{{ icon('upload', 'icon-sm') }} Restore a file&hellip;</button>
                         </div>
                     </div>
                 </div>
@@ -156,14 +179,14 @@
             </div>
             <div class="status-card-meta">
                 {% if latest_backup %}
-                <span>Last backup: {{ latest_backup.created_at }}</span>
+                <span>Last backup: {{ latest_backup.created_at | fmt_dt }} &middot; {{ latest_backup.size_bytes | filesizeformat }}</span>
                 {% if latest_verified_backup %}
-                <span class="text-muted">Verified {{ latest_verified_backup.verification.checked_at }}</span>
+                <span class="text-muted">Verified {{ latest_verified_backup.verification.checked_at | fmt_dt }}</span>
                 {% else %}
                 <span class="text-muted">Not yet verified</span>
                 {% endif %}
                 {% else %}
-                <span class="text-muted">No backup has been made yet</span>
+                <span class="text-muted">No backups yet -- "Backup now" saves one on the server.</span>
                 {% endif %}
             </div>
         </div>
@@ -216,7 +239,7 @@
 <!-- 3. Maintenance & cleanup -- 2026-08-26 redesign: every row here is now
      an inline actionable control (label left, control right). The two
      lifecycle selects autosubmit on pick; "Purge completed tasks" moved
-     down from the old Danger zone into this card as a soft grey action --
+     down from the old danger section into this card as a soft grey action --
      it's routine housekeeping, not a catastrophe -- and shows its live
      count. -->
 <div class="settings-group">
@@ -261,68 +284,12 @@
     </div>
 </div>
 
-<!-- 4. Full backup & restore -- 2026-08-26 redesign: the former three
-     surfaces (the Full Backup hero, the Backups & storage stats card, and
-     the per-backup table) collapsed into this ONE card. It is the only
-     place on the page that names a backup's timestamp, size, or filename;
-     everything about it reads top-to-bottom: facts, download, then
-     restore. -->
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('package', 'icon-sm') }} Full backup &amp; restore</h2>
-    <div class="card dm-hero" id="backups-section">
-        <div class="dm-hero-top">
-            <div class="dm-hero-facts">
-                {% if latest_backup %}
-                <span class="dm-fact">{{ icon('clock', 'icon-sm') }} Last backup: {{ latest_backup.created_at | fmt_dt }}</span>
-                <span class="dm-fact">{{ icon('file', 'icon-sm') }} {{ latest_backup.size_bytes | filesizeformat }}</span>
-                {% else %}
-                <span class="dm-fact">{{ icon('info', 'icon-sm') }} No backups yet -- "Backup now" in System Status above saves one on the server.</span>
-                {% endif %}
-            </div>
-            <a class="btn primary dm-hero-download" href="/export/data.json">&#128229; Download Full Backup</a>
-        </div>
-
-        <div class="dm-hero-divider"></div>
-
-        <div class="dm-restore">
-            {% if latest_backup %}
-            <div class="dm-restore-file">
-                <span class="dm-backup-file">{{ icon('archive', 'icon-sm') }} {{ latest_backup.filename }}</span>
-                {% if latest_verified_backup and latest_verified_backup.verification.ok %}
-                <span class="dm-badge dm-badge-ok">{{ icon('check-circle', 'icon-sm') }} Verified &#10003;</span>
-                {% elif latest_verified_backup and not latest_verified_backup.verification.ok %}
-                <span class="dm-badge dm-badge-bad">{{ icon('alert-triangle', 'icon-sm') }} Verification failed</span>
-                {% else %}
-                <span class="dm-badge dm-badge-warn">{{ icon('alert-triangle', 'icon-sm') }} Not yet verified</span>
-                {% endif %}
-            </div>
-            <div class="dm-restore-actions">
-                <form class="form-inline" method="post" action="/settings/data-health/verify">
-                    <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
-                    <button type="submit" class="btn ghost btn-sm">Verify integrity</button>
-                </form>
-                <form class="form-inline" method="post" action="/settings/data-health/restore" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
-                    <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
-                    <button type="submit" class="btn danger subtle btn-sm">Restore this backup</button>
-                </form>
-            </div>
-            {% endif %}
-            <form class="dm-upload-alt" method="post" action="/export/import/json" enctype="multipart/form-data" data-dm-alt-form>
-                <label class="dm-upload-alt-link">+ Upload a different .json file to restore
-                    <input type="file" name="file" accept=".json,application/json" class="sr-only" required data-dm-alt-file>
-                </label>
-                <span class="dm-upload-alt-name" data-dm-alt-name></span>
-                <button type="submit" class="btn ghost btn-sm dm-upload-alt-submit" data-dm-alt-submit>Restore</button>
-            </form>
-            <p class="dm-restore-hint">Restores only a full backup (.json) &mdash; matching items are updated, everything else stays.</p>
-        </div>
-    </div>
-</div>
-
-<!-- 5. Export & import -- unchanged two-dropdown/one-dropzone design (it was
+<!-- 4. Export & import -- unchanged two-dropdown/one-dropzone design (it was
      already consolidated); 2026-08-26 additions: a live "Includes: ..."
      preview under the Format dropdown, .csv accepted by the drop zone
-     alongside .ics/.vcf/.json, and plainer drop-zone copy. -->
+     alongside .ics/.vcf/.json, and plainer drop-zone copy. The Backup
+     card's "Restore a file…" menu item lands here -- this drop zone is
+     also how a downloaded data.json gets restored. -->
 <div class="settings-group" id="import-section">
     <h2 class="section-label">{{ icon('share-2', 'icon-sm') }} Export &amp; import</h2>
     <p class="settings-hint">Move individual pieces of your data in formats any other app can open. Published lists keep syncing via Radicale ({{ radicale_url }}) separately.</p>
@@ -378,27 +345,6 @@
                 <button type="submit" class="btn primary" data-dm-submit>{{ icon('upload', 'icon-sm') }} Import</button>
             </form>
         </div>
-    </div>
-</div>
-
-<!-- 6. Danger zone -- 2026-08-26 redesign: one action only ("Purge
-     completed tasks" is routine housekeeping now, up in Maintenance &
-     cleanup), red-tinted and gated behind a typed confirmation phrase:
-     the button stays disabled until the input reads exactly DELETE ALL.
-     The confirm sheet on submit remains as the second of the two locks. -->
-<div class="settings-group">
-    <h2 class="section-label">{{ icon('shield', 'icon-sm') }} Danger zone</h2>
-    <p class="settings-hint">One action lives here. It is permanent and cannot be undone.</p>
-    <div class="card dm-danger">
-        <form class="dm-danger-form" method="post" action="/settings/purge-all" data-confirm-sheet="Delete EVERYTHING in this app &mdash; every task, event, contact, label, habit, schedule class, and published list? This cannot be undone and there is no backup unless you've made one yourself (Full backup &amp; restore, above)." data-dm-danger>
-            <span class="settings-field-label">Purge all data
-                <span class="settings-field-hint">Deletes everything in the app &mdash; tasks, events, contacts, labels, habits, published lists. Type <strong>DELETE ALL</strong> below to unlock the button.</span>
-            </span>
-            <div class="dm-danger-controls">
-                <input type="text" class="dm-danger-phrase" data-dm-danger-phrase placeholder="DELETE ALL" aria-label='Type "DELETE ALL" to enable the delete button' autocomplete="off" spellcheck="false">
-                <button type="submit" class="btn danger" data-dm-danger-btn disabled>{{ icon('shield', 'icon-sm') }} Permanently Delete Everything</button>
-            </div>
-        </form>
     </div>
 </div>
 {% endblock %}

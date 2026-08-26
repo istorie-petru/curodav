@@ -1246,6 +1246,107 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 .multiselect-manage:hover{background:var(--bg-secondary); text-decoration:none; color:var(--fg-primary);}
 
+/* Dropdown menu (action menus for status cards) -- a lightweight, portable
+   menu component used by the System Status cards' three-dot menus. Uses
+   the same portal technique as .multiselect-panel/.color-popover so it
+   renders above modals and other overflow-clipped containers. */
+.action-menu{position:relative; display:inline-flex;}
+.action-menu-trigger{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; border-radius:var(--radius-control);
+  background:transparent; border:1px solid transparent; color:var(--fg-tertiary);
+  cursor:pointer; padding:0;
+  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.action-menu-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.action-menu-trigger:focus-visible{outline:2px solid var(--accent-neutral); outline-offset:2px;}
+.action-menu-trigger .icon{width:16px; height:16px;}
+
+.action-menu-panel{
+  display:none; position:fixed; z-index:150; min-width:180px; max-width:260px;
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-3); padding:var(--space-1); overflow:hidden;
+}
+/* Opened panels are detached to document.body by app.js (a transformed
+   .status-card:hover ancestor hijacks position:fixed containment), so
+   left/top are always true viewport coordinates. */
+.action-menu-panel.is-open{display:block;}
+
+.action-menu-section{padding:var(--space-1) 0;}
+.action-menu-section + .action-menu-section{border-top:1px solid var(--separator); margin-top:var(--space-1); padding-top:var(--space-2);}
+
+.action-menu-item{
+  display:flex; align-items:center; gap:var(--space-2); width:100%;
+  padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
+  background:none; border:none; font-family:inherit; font-size:var(--text-footnote);
+  color:var(--fg-primary); cursor:pointer; text-align:left; white-space:nowrap;
+  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.action-menu-item:hover{background:var(--bg-secondary);}
+.action-menu-item:focus-visible{outline:none; background:var(--accent-neutral-subtle);}
+
+.action-menu-item .icon{width:14px; height:14px; color:var(--fg-secondary); flex-shrink:0;}
+.action-menu-item:hover .icon{color:var(--fg-primary);}
+
+.action-menu-item.danger{color:var(--danger);}
+.action-menu-item.danger:hover{background:var(--tag-red-bg);}
+.action-menu-item.danger .icon{color:var(--danger);}
+
+.action-menu-divider{height:1px; background:var(--separator); margin:var(--space-1) 0;}
+
+/* System Status cards -- compact status dashboard for Data & Maintenance page */
+.system-status-grid{
+  display:grid; gap:var(--space-3);
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  margin-bottom:var(--space-5);
+}
+@media (max-width: 900px){
+  .system-status-grid{grid-template-columns:1fr;}
+}
+
+.status-card{
+  position:relative;
+  background:var(--surface-container-high);
+  border:1px solid var(--separator);
+  border-radius:var(--radius-card);
+  padding:var(--space-4);
+  box-shadow:var(--elevation-1);
+  display:flex; flex-direction:column; gap:var(--space-2);
+}
+
+/* Status card backgrounds -- solid tonal fill across the whole card,
+   same --tag-* token pairing (pastel bg / saturated fg) every pill and
+   the Needs-attention card use; vars are theme-aware, no dark overrides.
+   Border is a whisper of the fg tone so the fill reads as deliberate. */
+.status-card.healthy{background:var(--tag-green-bg); border-color:color-mix(in srgb, var(--tag-green-fg) 30%, transparent);}
+.status-card.warning{background:var(--tag-yellow-bg); border-color:color-mix(in srgb, var(--tag-yellow-fg) 30%, transparent);}
+.status-card.error{background:var(--tag-red-bg); border-color:color-mix(in srgb, var(--tag-red-fg) 30%, transparent);}
+.status-card.unknown{background:var(--tag-gray-bg); border-color:color-mix(in srgb, var(--tag-gray-fg) 30%, transparent);}
+
+.status-card-header{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-2);
+}
+.status-card-title{
+  font-size:var(--text-headline); font-weight:600; color:var(--fg-primary);
+  line-height:1.2; flex:1; min-width:0;
+}
+.status-card-status{
+  display:flex; align-items:center; gap:var(--space-1);
+  font-size:var(--text-body); font-weight:500; color:var(--fg-primary);
+  margin-top:var(--space-1);
+}
+.status-card-status .icon{width:10px; height:10px; flex-shrink:0;}
+.status-card-status.healthy .icon{color:var(--tag-green-fg);}
+.status-card-status.warning .icon{color:var(--tag-yellow-fg);}
+.status-card-status.error .icon{color:var(--tag-red-fg);}
+.status-card-status.unknown .icon{color:var(--tag-gray-fg);}
+
+.status-card-meta{
+  display:flex; flex-direction:column; gap:2px;
+  font-size:var(--text-caption); color:var(--fg-secondary); line-height:1.35;
+}
+.status-card-meta .text-muted{color:var(--fg-tertiary);}
+
 /* Task table view (tasks_list.html/tasks_table.js) -- status/importance/
    urgency
    render as a native <select> disguised as a colored pill: the base
@@ -4014,30 +4115,45 @@ body.command-palette-open{overflow:hidden;}
 .offline-dashboard-card h3{font-size:var(--text-display); font-weight:700; margin:0 0 var(--space-1); color:var(--accent);}
 .offline-dashboard-card p{font-size:var(--text-caption); color:var(--fg-tertiary); margin:0;}
 
-/* Floating Action Button for Quick Add */
-.fab{
-  position:fixed; right:var(--space-4); bottom:var(--space-4);
-  width:56px; height:56px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:var(--elevation-3); z-index:100;
-  border:none; cursor:pointer;
+/* Offline mode quick-add builder (2026-08-19 expansion) -- inline visual
+   builder replacing the floating FAB + modal. Appears at the bottom of each
+   panel. */
+.offline-quick-add-builder{
+  background:var(--bg-secondary); border:1px solid var(--border-color);
+  border-radius:var(--radius-card); padding:var(--space-4); margin-top:var(--space-4);
 }
-.fab .icon{width:24px; height:24px;}
-
-/* Modal styles for quick add */
-.modal{position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;}
-.modal-overlay{position:absolute; inset:0; background:rgba(0,0,0,.5); backdrop-filter:blur(4px);}
-.modal-dialog{position:relative; background:var(--bg-elevated); border-radius:var(--radius-card); box-shadow:var(--elevation-4); width:100%; max-width:420px; margin:var(--space-4); max-height:90vh; overflow-y:auto;}
-.modal-header{display:flex; align-items:center; justify-content:space-between; padding:var(--space-4); border-bottom:1px solid var(--border-color);}
-.modal-header h2{margin:0; font-size:var(--text-headline);}
-.modal-close{background:none; border:none; font-size:var(--text-title2); line-height:1; color:var(--fg-tertiary); cursor:pointer; padding:var(--space-1);}
-.modal-footer{display:flex; justify-content:flex-end; gap:var(--space-2); padding:var(--space-4); border-top:1px solid var(--border-color);}
-.offline-quick-capture-form{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-4);}
-.offline-quick-capture-form input[type="text"]{width:100%;}
-.offline-quick-capture-hint{font-size:var(--text-caption); color:var(--fg-tertiary); margin:0 0 var(--space-2);}
-.offline-quick-capture-hint code{font-size:inherit;}
-.offline-quick-capture-result{font-size:var(--text-footnote); color:var(--success); margin-top:var(--space-2);}
-.offline-quick-capture-result.is-error{color:var(--danger);}
+.offline-quick-add-title{
+  margin:0 0 var(--space-3); font-size:var(--text-title2); font-weight:600;
+  display:flex; align-items:center; gap:var(--space-2);
+}
+.offline-quick-add-form{
+  display:flex; flex-direction:column; gap:var(--space-3);
+}
+.offline-entity-fields{
+  display:flex; flex-direction:column; gap:var(--space-3);
+}
+.offline-entity-fields[hidden]{display:none;}
+.field-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3);
+}
+.offline-label-multiselect{
+  min-height:100px; background:var(--bg-elevated); border:1px solid var(--border-color);
+  border-radius:var(--radius-md); padding:var(--space-1);
+}
+.offline-label-multiselect option{padding:var(--space-1);}
+.offline-capture-text{
+  font-family:monospace; font-size:var(--text-caption); background:var(--bg-elevated);
+  border:1px solid var(--border-color); border-radius:var(--radius-md);
+  padding:var(--space-2); min-height:60px; resize:vertical; color:var(--fg-secondary);
+}
+.offline-capture-text:read-only{background:var(--bg-tertiary);}
+.offline-quick-add-result{
+  margin-top:var(--space-2); padding:var(--space-2); border-radius:var(--radius-md);
+  font-size:var(--text-footnote); color:var(--success); background:var(--success-subtle);
+}
+.offline-quick-add-result.is-error{
+  color:var(--danger); background:var(--danger-subtle);
+}
 
 /* --------------------------------------------------------------------- */
 /* Single-user login page (2026-08-16, src/auth.py + templates/login.html)
@@ -4133,3 +4249,69 @@ body.command-palette-open{overflow:hidden;}
 .dtp-hour.is-start, .dtp-hour.is-end{background:var(--accent); color:var(--fg-on-accent); font-weight:600;}
 .dtp-panel-footer{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);}
 .dtp-panel--range .dtp-panel-footer{grid-column:1 / -1;}
+
+/* --------------------------------------------------------------------- */
+/* Data & Maintenance page (2026-08-26 redesign, second pass same day)    */
+/*                                                                        */
+/* The page below the (untouched) System Status cards is now: one         */
+/* Maintenance card of inline controls, the combined Export/Import card   */
+/* (segmented radio -> CSS :has() pane switching, same progressive-        */
+/* disclosure pattern as the event form's holiday fields) -- and nothing  */
+/* else. Backup actions live in the Backup status card's own menu, and    */
+/* reset-database opens a confirmation dialog whose typed-phrase gate is  */
+/* styled here (.dm-danger-*). Everything reads off the shared tokens so  */
+/* both themes follow.                                                    */
+/* --------------------------------------------------------------------- */
+
+/* Combined Export/Import card */
+.dm-portable .dm-mode{margin-bottom:var(--space-4);}
+.dm-pane-export{display:block;}
+.dm-pane-import{display:block;}
+/* Pane switching without JS -- the segmented control's own radios drive it
+   (same :has() mechanism as label.seg-btn above). */
+.dm-portable:has(.seg-radio[value="export"]:checked) .dm-pane-import{display:none;}
+.dm-portable:has(.seg-radio[value="import"]:checked) .dm-pane-export{display:none;}
+
+.dm-export-form{display:flex; flex-wrap:wrap; align-items:end; gap:var(--space-4);}
+.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-caption); color:var(--fg-secondary); min-width:160px; flex:1;}
+.dm-field select{width:100%;}
+/* The live "Includes: ..." preview under Format (server renders the default
+   phrase; data_maintenance.js keeps it current on every selection change). */
+.dm-count-hint{margin:10px 0 0; font-size:var(--text-caption); font-style:italic; color:var(--fg-tertiary);}
+
+.dm-dropzone{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer;
+  border:1.5px dashed var(--border-strong); border-radius:var(--radius-md);
+  background:var(--bg-secondary); color:var(--fg-secondary);
+  transition:border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.dm-dropzone:hover, .dm-dropzone:focus-within{border-color:var(--accent); background:var(--accent-subtle);}
+.dm-dropzone.is-dragover{border-color:var(--accent); background:var(--accent-subtle-strong);}
+.dm-dropzone-icon .icon{width:24px; height:24px; color:var(--fg-tertiary);}
+.dm-dropzone.is-dragover .dm-dropzone-icon .icon,
+.dm-dropzone:hover .dm-dropzone-icon .icon{color:var(--accent);}
+.dm-dropzone-title{font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);}
+.dm-dropzone-formats{font-size:var(--text-caption); color:var(--fg-tertiary);}
+.dm-status{margin:8px 0 0; font-size:var(--text-footnote); color:var(--success);}
+.dm-status-error{color:var(--danger);}
+.dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-footnote); color:var(--fg-primary); cursor:pointer;}
+.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-caption); color:var(--fg-tertiary);}
+
+/* Reset-database confirmation dialog (opened from the Database status
+   card's own menu): the typed-phrase gate. The submit button ships
+   disabled from the server, so the protection doesn't depend on
+   JavaScript being fast or present; the delegated input listener in
+   data_maintenance.js arms it only on the exact phrase. */
+.dm-danger-form{display:flex; flex-direction:column; gap:var(--space-3); margin:var(--space-3) 0 var(--space-4);}
+.dm-danger-typein{display:flex; flex-direction:column; gap:6px; font-size:var(--text-caption); color:var(--fg-secondary);}
+.dm-danger-phrase{
+  width:220px; max-width:100%;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing:.08em;
+}
+.dm-danger-phrase.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
+button.btn.danger[data-purge-btn][disabled]{
+  opacity:.45; cursor:not-allowed;
+  transform:none; box-shadow:none;
+}

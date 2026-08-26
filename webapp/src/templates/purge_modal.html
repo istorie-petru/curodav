@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Reset database{% endblock %}
+{% block content %}
+<!-- Reset-database confirmation modal (2026-08-26 second-pass redesign:
+     the old Danger zone section is gone -- "Reset database (purge all)"
+     in the Database status card's own menu opens THIS dialog instead, so
+     the destructive action lives where the user already is, behind the
+     same typed-phrase check the section used to carry: the button ships
+     disabled straight from the server and data_maintenance.js arms it
+     only while the input reads exactly DELETE ALL. The POST target is
+     the unchanged /settings/purge-all. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Reset database</h1>
+</div>
+<div class="modal-body">
+<p class="settings-hint">This deletes <strong>everything</strong> in this app &mdash; every task, event, contact, label, habit, and published list. This cannot be undone, and there is no backup unless you made one yourself (Backup card &rarr; Download full backup).</p>
+<form class="dm-danger-form" method="post" action="/settings/purge-all" data-purge-gate>
+    <label class="dm-danger-typein">Type <strong>DELETE ALL</strong> to unlock
+        <input type="text" class="dm-danger-phrase" data-purge-phrase placeholder="DELETE ALL" aria-label='Type "DELETE ALL" to enable the delete button' autocomplete="off" spellcheck="false">
+    </label>
+    <button type="submit" class="btn danger dm-danger-submit" data-purge-btn disabled>{{ icon('shield', 'icon-sm') }} Permanently Delete Everything</button>
+</form>
+</div>
+{% set footer_back_url = '/settings/data-maintenance' %}
+{% set footer_back_label = 'Cancel' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

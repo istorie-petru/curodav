@@ -253,20 +253,21 @@ class TestDataAndBackupCategoryRemoved:
 
     def test_data_maintenance_page_has_the_export_buttons_inlined(self, conn, tmp_path):
         # 2026-08-26 redesign of the inlined section: 8 individual download
-        # links + 4 separate import forms became two cards -- a Full Backup
-        # hero (data.json + its .json-only restore form) and one combined
-        # Export/Import card whose single GET form hits /export/download
-        # and whose single drop zone posts to /import/auto (server-side
-        # content sniffing). The old per-type URLs still exist as routes
-        # for old bookmarks/direct callers, just no longer linked from the
-        # page.
+        # links + 4 separate import forms became one combined Export/Import
+        # card (single GET form -> /export/download, single drop zone ->
+        # /import/auto with server-side content sniffing); the second pass
+        # the same day folded the Full Backup card into the Backup status
+        # card's own menu (its "Download full backup" item is the data.json
+        # link below). The old per-type URLs still exist as routes for old
+        # bookmarks/direct callers, just no longer linked from the page --
+        # including /export/import/json, since the drop zone's sniffer
+        # handles data.json backups too.
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/data.json"' in body
-        assert 'action="/export/import/json"' in body
         assert 'action="/export/download"' in body
         assert 'action="/export/import/auto"' in body
-        assert "Full backup" in body
+        assert "Download full backup" in body
 
 
 class TestCustomWidgetsToggleRemoved:
@@ -297,20 +298,36 @@ class TestCustomWidgetsToggleRemoved:
 
 
 class TestSettingsAdvanced:
-    """2026-08-07 -- two explicit, confirmed-destructive purge actions,
-    now living on the merged Data & Maintenance page's "Danger zone"
-    section (2026-08-17; formerly their own Settings > Advanced page
-    rather than a "Danger zone" section at the bottom of one long hub).
-    Scope confirmed directly with the user before building: "Purge
-    completed" is tasks-only; "Purge all" is a full data wipe across the
-    whole app, not just tasks."""
+    """2026-08-07 -- two explicit, confirmed-destructive purge actions.
+    2026-08-17 they lived on the merged Data & Maintenance page's "Danger
+    zone" section; 2026-08-26's second-pass redesign removed that section
+    entirely: "Purge completed" is routine housekeeping now (a grey button
+    in the Maintenance & cleanup card), and purge-all lives behind the
+    Database status card's own "Reset database (purge all)" menu item,
+    which opens a confirmation dialog carrying the typed-DELETE-ALL check
+    (check first, then delete)."""
 
-    def test_renders_both_purge_actions(self, conn, tmp_path):
+    def test_purge_completed_on_page_and_purge_all_behind_the_modal(self, conn, tmp_path):
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
+        # Housekeeping purge is a plain form on the page...
         assert 'action="/settings/purge-completed"' in body
+        # ...while the full wipe is NOT on the page at all anymore -- it's
+        # reachable only through the Database card's modal trigger.
+        assert 'action="/settings/purge-all"' not in body
+        assert 'href="/settings/purge-confirm" data-modal' in body
+
+    def test_purge_confirm_modal_carries_the_typed_phrase_gate(self, conn):
+        resp = settings_router.purge_confirm_page(_request_with_radicale("/settings/purge-confirm"))
+        assert resp.status_code == 200
+        body = resp.body.decode()
         assert 'action="/settings/purge-all"' in body
+        assert "data-purge-phrase" in body
+        assert 'placeholder="DELETE ALL"' in body
+        # The gate doesn't depend on JS: the button ships disabled.
+        assert "data-purge-btn disabled" in body
+        assert "Permanently Delete Everything" in body
 
     def test_also_has_reset_layout_now_that_widgets_folded_in(self, conn, tmp_path):
         # 2026-08-08: "Widgets" (Custom widgets toggle + reset layout) was

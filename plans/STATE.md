@@ -3353,3 +3353,90 @@ session checked `git status`).
   **1735 passed**. Committed deliberately alongside — but separate from —
   the still-uncommitted offline-mode WIP this file's tail documents; only
   this feature stream's files are in the commit.
+- **Shipped:** side work — **Data & Maintenance page redesign**, complete
+  (2026-08-26), direct request ("redesign the HTML/CSS for a data maintenance
+  settings page... eliminate redundancy, improve hierarchy, minimize clutter")
+  with one hard constraint: the three System Status cards stay visually
+  identical (they do — byte-for-byte). Everything below them is now four
+  sections in priority order:
+  - **Maintenance & cleanup** — every row an inline control: auto-archive
+    (`After 1 week / After 1 month / Never`) and sync retention (`Keep 30 /
+    Keep 90 / Keep forever`, where "forever" is literally what retention 0
+    already meant — GC disabled) autosubmitting selects, both relabeled
+    without changing stored values; a legacy value from before the relabel
+    renders as an honest `"14 days (current)"` extra option
+    (`_choices_with_stored_value`) instead of silently displaying the first
+    preset while storing something else. "Purge completed tasks" moved here
+    from the Danger zone as routine housekeeping — soft grey button carrying
+    its live count ("(0 right now)"). Reset Home stays.
+  - **Full backup & restore** — the former hero + Backups & storage stats +
+    per-backup table collapsed into ONE card, now the only place on the page
+    naming a backup's timestamp, size, or filename: facts row (last backup
+    through the new `fmt_dt` Jinja filter — "Aug 25, 2026, 8:57 PM", local
+    zone, 12h/24h-preference aware — plus size), blue Download button,
+    full-bleed divider, then restore area (filename + green `Verified ✓`
+    badge, Verify integrity / Restore this backup inline buttons, a subtle
+    "+ Upload a different .json file to restore" link whose submit button
+    appears only once a file is chosen — no-JS fallback keeps it visible),
+    helper text last. `id="backups-section"` moved onto the hero so the
+    status cards' "View backups" menu item still scrolls somewhere real.
+  - **Export & import** — tabbed structure and both dropdowns kept; each Data
+    option carries a server-rendered `data-dm-preview` phrase composed into
+    the live "*Includes: N Events, N Tasks, N Contacts*" line under Format.
+    The drop zone now also accepts .csv: `routers/export.py::_import_csv_text`
+    recognizes ONLY this app's own three CSV export header rows (case-
+    insensitive) and round-trips them — tasks (title/status/due/labels),
+    events (+start/end/all-day/location/meeting URL), contacts (+org/address,
+    first phone/email landing in the real child tables the flat columns feed);
+    uid-less rows skipped, merge-off skips existing uids, any other CSV
+    rejected rather than half-imported. Client detection mirrors the same
+    sniffing for its "Detected: ..." preview.
+  - **Danger zone** — one action left, red-tinted like `.status-card.error`,
+    gated twice: the red "Permanently Delete Everything" button ships
+    `disabled` straight from the server and `data_maintenance.js` arms it
+    only while the input reads exactly `DELETE ALL`; the confirm sheet
+    remains as the second lock.
+  New CSS replaces the old dm-* block (hero top/divider/badges/upload-alt/
+  danger styles, generous whitespace on shared tokens). Tests:
+  `test_phase10_export.py`'s TestAutoImport gained five CSV cases;
+  `test_data_health.py` gained TestDataMaintenanceRedesign2026_08_26 (order,
+  gate markup, human-readable facts-only-in-hero, verified badge, relabeled
+  options, legacy-value visibility) + TestDataMaintenanceScriptGate;
+  `test_display_prefs_settings.py` gained TestFmtDtFilter. Full suite
+  **1735 passed**. Committed deliberately alongside — but separate from —
+  the still-uncommitted offline-mode WIP this file's tail documents; only
+  this feature stream's files are in the commit.
+- **Shipped:** side work — **Data & Maintenance second pass: no backup
+  section, no danger section**, complete (2026-08-26), immediate follow-up
+  on the redesign above ("Full backup & restore should be integrated into
+  the Backup inside System Status - in the hamburger menu. Also the Danger
+  Zone should be deleted because Reset Database should do the same thing
+  (check then delete)"). Two structural moves:
+  - **The Full Backup & Restore card is gone entirely.** Its actions are
+    menu items on the Backup status card itself now: Backup now / Download
+    full backup (/export/data.json) / Verify integrity / Restore this
+    backup (both posting the latest backup's filename, restore keeping its
+    safety-snapshot confirm sheet), plus "Restore a file…" scrolling to the
+    unified Export & import drop zone (which already auto-detects a
+    data.json). The card's own meta line is the page's single mention of a
+    last-backup timestamp ("Last backup: Aug 25, 2026, 8:57 PM · 7.0 kB",
+    through fmt_dt) and verification state; "No backups yet -- 'Backup
+    now' saves one on the server." when there's nothing yet; the backup
+    filename never renders as visible text at all (only hidden inputs).
+    The dead "View backups" item is gone with the table it scrolled to.
+  - **The Danger zone section is gone too.** The Database card's existing
+    "Reset database (purge all)" item is now the one purge path: it opens
+    a new confirmation dialog (`GET /settings/purge-confirm`,
+    `templates/purge_modal.html`, standard `_modal_footer` Cancel footer)
+    carrying the typed-DELETE-ALL check the section used to have — the
+    red button ships disabled from the server and
+    `static/data_maintenance.js` arms it only on the exact phrase, bound
+    by document-level delegation since the dialog injects after load.
+    Check first, then delete; POST target unchanged
+    (`/settings/purge-all`). Purge-completed stays a grey count button in
+    Maintenance & cleanup.
+  CSS: every hero/badge/restore/upload style removed; the .dm-danger-*
+  phrase-gate styles remain for the dialog. Tests updated to the new
+  shape (phase8's purge assertions split page-vs-modal;
+  TestDataMaintenanceRedesign2026_08_26 rewritten around card-menu/meta
+  facts; ScriptGate reads both templates), full suite **1737 passed**.
