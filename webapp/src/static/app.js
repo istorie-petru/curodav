@@ -1147,6 +1147,13 @@ window.CCBannerUpload = {
 
       panel.addEventListener("keydown", (e) => handleKeydown(e, { trigger, panel }));
 
+      // Any action closes the menu -- including plain anchor items (the
+      // Export…/Import…/Restore a file…/Reset database dialog triggers),
+      // which otherwise stayed open behind the opened modal overlay. The
+      // click still completes: closing only re-homes the panel, the
+      // activated item keeps working.
+      panel.addEventListener("click", () => closeMenu());
+
       panel.querySelectorAll("form").forEach((form) => {
         form.addEventListener("submit", () => closeMenu());
       });

@@ -3469,3 +3469,15 @@ session checked `git status`).
   Tests: phase8's inlined-export assertions rewritten around the two menu
   triggers + dialog renders; ScriptGate reads all three dialog templates
   and pins the delegation-only wiring. Full suite **1739 passed**.
+- **Fixed:** side work — **status-card menus close on any action; menu
+  items non-bold**, complete (2026-08-26), direct feedback on the third
+  pass ("the three dots menu should close after any action... also the
+  entries should not be bold"). app.js's action menu already closed on
+  form submits but not on plain anchor items, so Export…/Import…/Restore a
+  file…/Reset database left the open panel stranded behind the modal
+  overlay -- a single delegated `panel.addEventListener("click", () =>
+  closeMenu())` now closes it for every entry (the activated item still
+  completes: closing only re-homes the panel). `.action-menu-item` pins
+  `font-weight:400` so entries can never inherit a heavier weight.
+  One structural test added (TestDataMaintenanceScriptGate); full suite
+  **1740 passed**.

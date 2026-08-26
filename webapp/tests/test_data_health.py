@@ -486,6 +486,17 @@ class TestDataMaintenanceScriptGate:
             assert f'"{evt}"' in self.JS
         assert "[data-dm-root]" not in self.JS
 
+    def test_action_menu_closes_on_any_item_and_items_are_not_bold(self):
+        # 2026-08-26 direct feedback: clicking ANY entry in a status card's
+        # three-dot menu must close it (anchor items opening the export/
+        # import/reset dialogs previously left it stranded behind the
+        # overlay), and entries render non-bold.
+        app = (Path(__file__).resolve().parent.parent / "src" / "static" / "app.js").read_text()
+        assert 'panel.addEventListener("click", () => closeMenu())' in app
+        css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
+        block = css.split(".action-menu-item{", 1)[1].split("}", 1)[0]
+        assert "font-weight:400" in block
+
     def test_templates_carry_the_data_attributes_the_script_reads(self):
         # The page itself hosts no dialog markup -- the Sync card's menu
         # items and the Backup card's "Restore a file…" are data-modal
