@@ -113,13 +113,13 @@
       });
   }
 
-  // Generic "mark this done" handler for forms with `data-cc-complete`
-  // (dashboard widget check-offs, currently the agenda widget's rows).
-  // Posts to the form's own action (POST /tasks/{uid}/complete) with the
-  // fetch header and dispatches the change event; the dashboard listener
-  // below (cc-entity-changed -> task widgets) owns the card refresh, so
-  // there's exactly one refresh path per surface.
-  document.addEventListener("submit", function (e) {
+// Generic "mark this done" handler for forms with `data-cc-complete`
+// (dashboard widget check-offs, currently the agenda widget's rows).
+// Posts to the form's own action (POST /tasks/{uid}/complete) with the
+// fetch header and dispatches the change event; the dashboard listener
+// below (cc-entity-changed -> task widgets) owns the card refresh, so
+// there's exactly one refresh path per surface.
+document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!form || !form.matches || !form.matches("[data-cc-complete]")) return;
     e.preventDefault();
@@ -133,6 +133,36 @@
         window.ccToast({ message: err.message || "Could not mark that done.", variant: "error" });
       })
       .finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove("is-loading");
+        }
+      });
+  });
+
+  // Generic handler for page forms with data-cc-change (not in modals).
+  // These are progressive-enhancement: async submit + region refresh on success,
+  // fallback to reload on failure/no region. Matches modal.js's behavior.
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.matches || !form.matches("[data-cc-change]") || form.matches("[data-cc-complete]")) return;
+    // Skip GET forms (handled elsewhere) and forms already handled by modal.js
+    // (modal.js handles forms inside #modal-body, which this listener won't see
+    // because modal content is injected into #modal-body after this listener runs).
+    if (form.hasAttribute("data-modal-get")) return;
+    var modalOverlay = document.getElementById("modal-overlay");
+    if (modalOverlay && modalOverlay.classList.contains("is-open") && modalOverlay.contains(form)) return;
+    e.preventDefault();
+    var btn = form.querySelector("button[type='submit']");
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+    }
+    var changeType = form.getAttribute("data-cc-change");
+    var changeAction = form.getAttribute("data-cc-action") || "edit";
+    post(form.action, form, { change: { type: changeType, action: changeAction, uid: uidFromUrl(form.action) } })
+      .catch(function (err) {
+        window.ccToast({ message: err.message || "Could not save.", variant: "error" });
         if (btn) {
           btn.disabled = false;
           btn.classList.remove("is-loading");

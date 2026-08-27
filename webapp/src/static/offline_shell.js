@@ -32,6 +32,11 @@
 // with read/write access to the local IndexedDB mirror. Quick add is now a
 // floating action button on every tab. This file now renders all five
 // panels from the local mirror.
+//
+// 2026-08-19 (expansion) -- Merge Upcoming and Quick Add into single view:
+// each panel now shows its data with an integrated visual Quick Add builder
+// (entity type dropdown, label picker, date/time inputs) instead of a
+// separate modal. The floating FAB and modal are removed.
 (function () {
   function fmtWhen(iso) {
     if (!iso) return "";
@@ -76,6 +81,18 @@
     return (a.start_at || "9999").localeCompare(b.start_at || "9999");
   }
 
+  function getTodayString() {
+    const now = new Date();
+    return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+  }
+
+  // Quick Add Builder state per panel
+  const quickAddState = {
+    currentPanel: "dashboard",
+    selectedEntityType: "task",
+    labels: [],
+  };
+
   async function render() {
     const [tasks, events, contacts, notes, lastSynced, outboxCount] = await Promise.all([
       window.CCOfflineDB.getAllTasks ? window.CCOfflineDB.getAllTasks() : Promise.resolve([]),
@@ -85,6 +102,16 @@
       window.CCOfflineDB.getLastSyncedAt ? window.CCOfflineDB.getLastSyncedAt() : Promise.resolve(null),
       window.CCOfflineDB.getOutboxCount ? window.CCOfflineDB.getOutboxCount() : Promise.resolve(0),
     ]);
+
+    // Collect all unique labels from tasks and events
+    const allLabels = new Set();
+    for (const t of tasks) {
+      if (t.tags) t.tags.forEach(l => allLabels.add(l));
+    }
+    for (const e of events) {
+      if (e.tags) e.tags.forEach(l => allLabels.add(l));
+    }
+    quickAddState.labels = Array.from(allLabels).sort();
 
     // Common header for all panels
     const syncedHtml = '<div class="offline-synced-at">Last synced from this device: ' + (lastSynced ? fmtWhen(lastSynced) : "never") + "</div>";
@@ -113,7 +140,7 @@
       html += '</div>';
 
       if (openTasks === 0 && upcomingEvents === 0 && contactCount === 0 && noteCount === 0) {
-        html += '<div class="empty-state">No local data yet. Use Quick Add to get started.</div>';
+        html += '<div class="empty-state">No local data yet. Use Quick Add below to get started.</div>';
       }
       dashboardRoot.innerHTML = html;
     }
@@ -226,80 +253,207 @@
       }
       notesRoot.innerHTML = html;
     }
+
+    // Initialize Quick Add builders for all panels
+    initializeQuickAddBuilders();
   }
 
-  function getTodayString() {
-    const now = new Date();
-    return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
-  }
+  function initializeQuickAddBuilders() {
+    const builders = document.querySelectorAll("[data-offline-quick-add]");
+    for (const builder of builders) {
+      const form = builder.querySelector("#offline-quick-add-form");
+      if (!form) continue;
+      
+      const entityTypeSelect = builder.querySelector("#offline-entity-type");
+      const taskFields = builder.querySelector("#offline-task-fields");
+      const eventFields = builder.querySelector("#offline-event-fields");
+      const contactFields = builder.querySelector("#offline-contact-fields");
+      const noteFields = builder.querySelector("#offline-note-fields");
+      const labelsSelectTask = builder.querySelector("#offline-task-labels");
+      const labelsSelectEvent = builder.querySelector("#offline-event-labels");
+      const captureText = builder.querySelector("#offline-capture-text");
+      const cancelBtn = builder.querySelector("#offline-quick-add-cancel");
+      const resultEl = builder.querySelector("#offline-quick-add-result");
 
-  function showResult(text, isError) {
-    const el = document.getElementById("offline-quick-capture-result");
-    if (!el) return;
-    el.textContent = text;
-    el.classList.toggle("is-error", !!isError);
-  }
+      // Populate label multiselects
+      populateLabelSelect(labelsSelectTask);
+      populateLabelSelect(labelsSelectEvent);
 
-  async function handleQuickCapture(event) {
-    const form = event.target.closest("#offline-quick-capture-form");
-    if (!form) return;
-    event.preventDefault();
-    const input = form.elements.capture;
-    const text = input.value.trim();
-    if (!text) return;
-    if (!window.CCOfflineCapture || !window.CCOfflineWrite) {
-      showResult("Quick add isn't available on this device.", true);
-      return;
+      // Entity type change handler
+      if (entityTypeSelect) {
+        entityTypeSelect.addEventListener("change", () => {
+          const type = entityTypeSelect.value;
+          quickAddState.selectedEntityType = type;
+          // Show/hide fieldsets
+          taskFields.hidden = type !== "task";
+          eventFields.hidden = type !== "event";
+          contactFields.hidden = type !== "contact";
+          noteFields.hidden = type !== "note";
+          updateCaptureText();
+        });
+      }
+
+      // Input change handlers to update capture text
+      const inputs = builder.querySelectorAll("input, select, textarea");
+      for (const input of inputs) {
+        input.addEventListener("input", updateCaptureText);
+        input.addEventListener("change", updateCaptureText);
+      }
+
+      // Capture text manual edit
+      if (captureText) {
+        captureText.addEventListener("input", () => {
+          // Allow manual editing of capture text
+        });
+      }
+
+      // Cancel button
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+          form.reset();
+          updateCaptureText();
+          if (resultEl) resultEl.textContent = "";
+        });
+      }
+
+      // Form submit
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await handleQuickAddSubmit(builder, form, resultEl);
+      });
+
+      // Initial capture text
+      updateCaptureText();
     }
-    let parsed;
-    try {
-      parsed = window.CCOfflineCapture.parse(text);
-    } catch (err) {
-      showResult(err.message, true);
-      return;
+  }
+
+  function populateLabelSelect(select) {
+    if (!select) return;
+    select.innerHTML = "";
+    for (const label of quickAddState.labels) {
+      const opt = document.createElement("option");
+      opt.value = label;
+      opt.textContent = label;
+      select.appendChild(opt);
     }
-    const button = form.querySelector('button[type="submit"]');
-    button.disabled = true;
+  }
+
+  function updateCaptureText() {
+    const builders = document.querySelectorAll("[data-offline-quick-add]");
+    for (const builder of builders) {
+      const entityTypeSelect = builder.querySelector("#offline-entity-type");
+      const captureText = builder.querySelector("#offline-capture-text");
+      if (!entityTypeSelect || !captureText) continue;
+
+      const type = entityTypeSelect.value;
+      let parts = [];
+
+      if (type === "task") {
+        const title = builder.querySelector("#offline-task-title")?.value?.trim();
+        const due = builder.querySelector("#offline-task-due")?.value;
+        const labels = Array.from(builder.querySelector("#offline-task-labels")?.selectedOptions || []).map(o => o.value);
+        if (title) parts.push("!t " + title);
+        if (due) parts.push(due.split("-").reverse().join("/")); // YYYY-MM-DD -> DD/MM/YYYY (actually D/M format)
+        for (const label of labels) parts.push("#" + label);
+      } else if (type === "event") {
+        const title = builder.querySelector("#offline-event-title")?.value?.trim();
+        const start = builder.querySelector("#offline-event-start")?.value;
+        const end = builder.querySelector("#offline-event-end")?.value;
+        const allDay = builder.querySelector("#offline-event-all-day")?.checked;
+        const labels = Array.from(builder.querySelector("#offline-event-labels")?.selectedOptions || []).map(o => o.value);
+        if (title) parts.push("!e " + title);
+        if (start) {
+          const datePart = start.split("T")[0];
+          const timePart = start.split("T")[1];
+          if (!allDay && timePart) {
+            parts.push(datePart.split("-").reverse().join("/") + " " + timePart);
+          } else {
+            parts.push(datePart.split("-").reverse().join("/"));
+          }
+        }
+        if (end && !allDay) {
+          const endTime = end.split("T")[1];
+          if (endTime) parts[parts.length - 1] += "-" + endTime;
+        }
+        for (const label of labels) parts.push("#" + label);
+      } else if (type === "contact") {
+        const name = builder.querySelector("#offline-contact-name")?.value?.trim();
+        const email = builder.querySelector("#offline-contact-email")?.value?.trim();
+        const phone = builder.querySelector("#offline-contact-phone")?.value?.trim();
+        if (name) parts.push("!c " + name);
+        if (email) parts.push(email);
+        if (phone) parts.push(phone);
+      } else if (type === "note") {
+        const content = builder.querySelector("#offline-note-content")?.value?.trim();
+        if (content) parts.push("!n " + content);
+      }
+
+      captureText.value = parts.join(" ");
+    }
+  }
+
+  async function handleQuickAddSubmit(builder, form, resultEl) {
+    const entityTypeSelect = builder.querySelector("#offline-entity-type");
+    const type = entityTypeSelect?.value || quickAddState.selectedEntityType;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+
     try {
       let summary;
-      if (parsed.type === "task") {
-        const fields = { title: parsed.title };
-        if (parsed.due_date_iso) fields.due_at = parsed.due_date_iso + "T00:00:00";
+      if (type === "task") {
+        const title = builder.querySelector("#offline-task-title")?.value?.trim();
+        const due = builder.querySelector("#offline-task-due")?.value;
+        const labels = Array.from(builder.querySelector("#offline-task-labels")?.selectedOptions || []).map(o => o.value);
+        if (!title) throw new Error("Task title is required");
+        const fields = { title };
+        if (due) fields.due_at = due + "T00:00:00";
         await window.CCOfflineWrite.createTask(fields);
-        summary = "Task added: " + parsed.title;
-      } else if (parsed.type === "event") {
+        summary = "Task added: " + title;
+        if (labels.length > 0) summary += " (labels can't be added offline)";
+      } else if (type === "event") {
+        const title = builder.querySelector("#offline-event-title")?.value?.trim();
+        const start = builder.querySelector("#offline-event-start")?.value;
+        const end = builder.querySelector("#offline-event-end")?.value;
+        const allDay = builder.querySelector("#offline-event-all-day")?.checked;
+        const labels = Array.from(builder.querySelector("#offline-event-labels")?.selectedOptions || []).map(o => o.value);
+        if (!title) throw new Error("Event title is required");
+        if (!start) throw new Error("Event start date/time is required");
         await window.CCOfflineWrite.createEvent({
-          title: parsed.title,
-          start_at: parsed.start_iso,
-          end_at: parsed.end_iso,
-          all_day: parsed.all_day ? 1 : 0,
+          title,
+          start_at: allDay ? start.split("T")[0] + "T00:00:00" : start,
+          end_at: allDay ? start.split("T")[0] + "T23:59:59" : (end || start),
+          all_day: allDay ? 1 : 0,
         });
-        summary = "Event added: " + parsed.title;
-      } else if (parsed.type === "contact") {
-        await window.CCOfflineWrite.createContact({ full_name: parsed.title });
-        summary = "Contact added: " + parsed.title;
-      } else if (parsed.type === "note") {
-        await window.CCOfflineWrite.createNote({ content: parsed.title });
-        summary = "Note added: " + parsed.title;
+        summary = "Event added: " + title;
+        if (labels.length > 0) summary += " (labels can't be added offline)";
+      } else if (type === "contact") {
+        const name = builder.querySelector("#offline-contact-name")?.value?.trim();
+        const email = builder.querySelector("#offline-contact-email")?.value?.trim();
+        const phone = builder.querySelector("#offline-contact-phone")?.value?.trim();
+        if (!name) throw new Error("Contact name is required");
+        await window.CCOfflineWrite.createContact({ full_name: name });
+        summary = "Contact added: " + name;
+        if (email || phone) summary += " (phone/email can't be added offline)";
+      } else if (type === "note") {
+        const content = builder.querySelector("#offline-note-content")?.value?.trim();
+        if (!content) throw new Error("Note content is required");
+        await window.CCOfflineWrite.createNote({ content });
+        summary = "Note added";
       }
-      const skipped = [];
-      if (parsed.labels && parsed.labels.length > 0) skipped.push("labels can't be added offline");
-      if (parsed.type === "task" && parsed.timeblocks && parsed.timeblocks.length > 0) {
-        skipped.push("scheduled time blocks can't be added offline");
+
+      if (resultEl) {
+        resultEl.textContent = summary;
+        resultEl.classList.remove("is-error");
       }
-      if (parsed.type === "contact" && (parsed.phone || parsed.email)) {
-        skipped.push("phone/email can't be added offline");
-      }
-      if (skipped.length > 0) summary += " (" + skipped.join("; ") + ")";
-      showResult(summary, false);
-      input.value = "";
-      // Close modal on success
-      const modal = document.getElementById("offline-quick-add-modal");
-      if (modal) modal.hidden = true;
+      form.reset();
+      updateCaptureText();
     } catch (err) {
-      showResult("Couldn't save: " + err.message, true);
+      if (resultEl) {
+        resultEl.textContent = "Couldn't save: " + err.message;
+        resultEl.classList.add("is-error");
+      }
     } finally {
-      button.disabled = false;
+      submitBtn.disabled = false;
     }
   }
 
@@ -341,10 +495,6 @@
         }
       });
     }
-
-    // Quick capture form
-    const form = document.getElementById("offline-quick-capture-form");
-    if (form) form.addEventListener("submit", handleQuickCapture);
   }
 
   function wireTabs() {
@@ -360,30 +510,7 @@
         document.querySelectorAll("[data-offline-main-panel]").forEach((panel) => {
           panel.classList.toggle("is-active", panel.dataset.offlineMainPanel === kind);
         });
-      });
-    }
-
-    // Quick Add FAB
-    const fab = document.getElementById("offline-quick-add-fab");
-    const modal = document.getElementById("offline-quick-add-modal");
-    const closeBtns = modal ? modal.querySelectorAll(".modal-close") : [];
-    if (fab && modal) {
-      fab.addEventListener("click", () => {
-        modal.hidden = false;
-        const input = modal.querySelector('input[name="capture"]');
-        if (input) input.focus();
-      });
-      for (const btn of closeBtns) {
-        btn.addEventListener("click", () => {
-          modal.hidden = true;
-          const resultEl = document.getElementById("offline-quick-capture-result");
-          if (resultEl) resultEl.textContent = "";
-          const input = modal.querySelector('input[name="capture"]');
-          if (input) input.value = "";
-        });
-      }
-      modal.querySelector(".modal-overlay").addEventListener("click", () => {
-        modal.hidden = true;
+        quickAddState.currentPanel = kind;
       });
     }
   }

@@ -7,14 +7,10 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
     <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
-    <!-- PWA shell (1.8 slice 3) -- manifest.webmanifest is plain, unversioned
-         static content (no cache-busting needed, its icons are referenced by
-         stable /static/icons/... paths); theme-color matches style.css's
-         light-mode --accent so the installed app's OS chrome (title bar,
-         task switcher) isn't a jarring mismatch even before dark-mode-aware
-         theming is worth the complexity here. -->
+    {# PWA shell (1.8 slice 3) -- DISABLED
     <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
     <meta name="theme-color" content="#007aff">
+    #}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
          (app.js used to do this at the bottom of <body>, which painted the
@@ -86,6 +82,7 @@
          Calendar events (`recurrence_picker.js`), which fully superseded
          Schedule's one distinguishing feature; see plans/STATE.md's
          removal entry. -->
+    {% if not hide_tabbar %}
     <nav class="tabbar" role="navigation" aria-label="Main">
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
@@ -165,6 +162,7 @@
            (settings_appearance.html), keeping the topbar free of a second,
            less capable way to change the same setting. #}
     </nav>
+{% endif %}
     <!-- 2026-08-07: the main-class block below lets a page opt out of the
          default 1120px-max-width centered column -- Calendar (Month/
          Week/Day, Agenda merged into Day 2026-08-08) is the first user of
@@ -333,28 +331,14 @@
      <script> tags), so modal.js's wireContent() calls CCQuickAdd.init(body)
      against the freshly-injected content to wire its Task/Event tab switch. -->
 <script src="{{ static_url('quick_add.js') }}"></script>
-<!-- PWA shell (1.8 slice 3) -- registers static/sw.js (served at /sw.js,
-     not this /static/pwa.js path -- see routers/pwa.py's own comment on
-     why the service worker script itself can't live under /static/ and
-     keep the scope it needs). Loaded last, after everything the page
-     actually needs to function, since it's a pure enhancement. -->
+{# PWA shell (1.8 slice 3) -- DISABLED
 <script src="{{ static_url('pwa.js') }}"></script>
-<!-- Local read/sync path (1.8 slices 4-6) -- offline_db.js is the
-     IndexedDB mirror + outbox; offline_sync_client.js is the full §8 push/
-     pull sync engine (retry/backoff included) that keeps it warm and
-     flushes any locally-queued writes. Loaded globally (not just on
-     /offline) so the mirror already has data -- and a pending write
-     already has a chance to flush -- by the time the network actually
-     drops, or the moment it's back. offline_status.js is the small
-     status-indicator renderer (offline/synchronizing/pending/synced);
-     it listens for events the sync engine dispatches and touches no
-     IndexedDB/network itself. offline_write.js (the create, edit, and
-     removal UI hooks) stays specific to the /offline page itself -- see
-     offline.html's own extra_scripts block -- since nothing outside that
-     page has an offline write UI yet. -->
+#}
+{# Local read/sync path (1.8 slices 4-6) -- DISABLED
 <script src="{{ static_url('offline_db.js') }}"></script>
 <script src="{{ static_url('offline_sync_client.js') }}"></script>
 <script src="{{ static_url('offline_status.js') }}"></script>
+#}
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -31,10 +31,16 @@
    2026-08-19 -- Dedicated Offline Mode page: full tabbed interface
    mirroring the main app navigation (Dashboard, Calendar, Tasks, Contacts,
    Notes) with read/write access to the local IndexedDB mirror. Quick add
-   is now available as a floating action button on every tab. #}
+   is now available as a floating action button on every tab.
+
+   2026-08-19 (expansion) -- Merge Upcoming and Quick Add into single view:
+   each panel now shows its data with an integrated visual Quick Add builder
+   (entity type dropdown, label picker, date/time inputs) instead of a
+   separate modal. The floating FAB is removed. #}
 
 {% extends "base.html" %}
 {% block title %}Offline Mode{% endblock %}
+{% set hide_tabbar = true %}
 {% block content %}
 <div class="toolbar top-app-bar">
     <h1>{{ icon('wifi-off', 'icon-sm') }} Offline Mode</h1>
@@ -46,6 +52,7 @@
     <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="tasks">{{ icon('checklist', 'icon-sm') }} Tasks</button>
     <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="contacts">{{ icon('users', 'icon-sm') }} Contacts</button>
     <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="notes">{{ icon('file-text', 'icon-sm') }} Notes</button>
+    <span class="offline-indicator" aria-live="polite">{{ icon('wifi-off', 'icon-sm') }} You're offline</span>
 </div>
 
 <div class="offline-main-panels">
@@ -55,8 +62,9 @@
         <div class="empty-state empty-state-rich" id="offline-dashboard-empty">
             <div class="empty-state-icon">{{ icon('home') }}</div>
             <div class="empty-state-title">No local data yet</div>
-            <div class="empty-state-text">Your dashboard will appear here once you have synced data. Use Quick Add to create tasks, events, or contacts while offline.</div>
+            <div class="empty-state-text">Your dashboard will appear here once you have synced data. Use Quick Add below to create tasks, events, or contacts while offline.</div>
         </div>
+        {% include "_offline_quick_add.html" with context %}
     </section>
 
     <!-- Calendar Panel -->
@@ -65,8 +73,9 @@
         <div class="empty-state empty-state-rich" id="offline-calendar-empty">
             <div class="empty-state-icon">{{ icon('calendar') }}</div>
             <div class="empty-state-title">No events yet</div>
-            <div class="empty-state-text">Your calendar events will appear here after sync. Use Quick Add to create events offline.</div>
+            <div class="empty-state-text">Your calendar events will appear here after sync. Use Quick Add below to create events offline.</div>
         </div>
+        {% include "_offline_quick_add.html" with context %}
     </section>
 
     <!-- Tasks Panel -->
@@ -75,8 +84,9 @@
         <div class="empty-state empty-state-rich" id="offline-tasks-empty">
             <div class="empty-state-icon">{{ icon('checklist') }}</div>
             <div class="empty-state-title">No tasks yet</div>
-            <div class="empty-state-text">Your tasks will appear here after sync. Use Quick Add to create tasks offline.</div>
+            <div class="empty-state-text">Your tasks will appear here after sync. Use Quick Add below to create tasks offline.</div>
         </div>
+        {% include "_offline_quick_add.html" with context %}
     </section>
 
     <!-- Contacts Panel -->
@@ -85,8 +95,9 @@
         <div class="empty-state empty-state-rich" id="offline-contacts-empty">
             <div class="empty-state-icon">{{ icon('users') }}</div>
             <div class="empty-state-title">No contacts yet</div>
-            <div class="empty-state-text">Your contacts will appear here after sync. Use Quick Add to create contacts offline.</div>
+            <div class="empty-state-text">Your contacts will appear here after sync. Use Quick Add below to create contacts offline.</div>
         </div>
+        {% include "_offline_quick_add.html" with context %}
     </section>
 
     <!-- Notes Panel -->
@@ -95,34 +106,10 @@
         <div class="empty-state empty-state-rich" id="offline-notes-empty">
             <div class="empty-state-icon">{{ icon('file-text') }}</div>
             <div class="empty-state-title">No notes yet</div>
-            <div class="empty-state-text">Your notes will appear here after sync. Use Quick Add to create notes offline.</div>
+            <div class="empty-state-text">Your notes will appear here after sync. Use Quick Add below to create notes offline.</div>
         </div>
+        {% include "_offline_quick_add.html" with context %}
     </section>
-</div>
-
-<!-- Floating Quick Add Button -->
-<button type="button" class="btn primary fab" id="offline-quick-add-fab" aria-label="Quick add" title="Quick add">
-    {{ icon('plus') }}
-</button>
-
-<!-- Quick Add Modal -->
-<div class="modal" id="offline-quick-add-modal" role="dialog" aria-modal="true" aria-labelledby="offline-quick-add-title" hidden>
-    <div class="modal-overlay" tabindex="-1"></div>
-    <div class="modal-dialog">
-        <header class="modal-header">
-            <h2 id="offline-quick-add-title">{{ icon('plus', 'icon-sm') }} Quick Add</h2>
-            <button type="button" class="modal-close" aria-label="Close">&times;</button>
-        </header>
-        <form id="offline-quick-capture-form" class="offline-quick-capture-form" autocomplete="off">
-            <input type="text" name="capture" placeholder="!t Buy milk 5/09" required maxlength="300" autofocus>
-            <div class="modal-footer">
-                <button type="button" class="btn ghost modal-close">Cancel</button>
-                <button type="submit" class="btn primary">{{ icon('plus') }} Add</button>
-            </div>
-        </form>
-        <div class="offline-quick-capture-hint">Quick capture: <code>!t</code> task &middot; <code>!e</code> event &middot; <code>!c</code> contact &middot; <code>!n</code> note. Dates as <code>D/M</code> (e.g. <code>5/09</code>), time ranges as <code>10:00-11:00</code>.</div>
-        <div id="offline-quick-capture-result" class="offline-quick-capture-result" role="status"></div>
-    </div>
 </div>
 {% endblock %}
 {% block extra_scripts %}

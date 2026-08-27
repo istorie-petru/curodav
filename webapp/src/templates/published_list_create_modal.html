@@ -1,0 +1,50 @@
+<div id="modal-target" class="modal-stable-height">
+    <div class="modal-header">
+        <h1>Create a published list</h1>
+    </div>
+    <div class="modal-body">
+        {% if not all_labels %}
+        <div class="empty-state empty-state-rich" style="padding: var(--space-8) var(--space-5);">
+            <div class="empty-state-icon">{{ icon('tag', 'icon-lg') }}</div>
+            <h2 class="empty-state-title">No labels available</h2>
+            <p class="empty-state-text">You need to create a label first to build a filter.</p>
+            <a href="/settings/labels" class="btn tonal" data-modal-cancel>{{ icon('external-link', 'icon-sm') }} Go to Labels</a>
+        </div>
+        {% else %}
+        <form method="post" action="/published-lists/create" id="create-list-form">
+            <div class="field">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" required autocomplete="off">
+            </div>
+
+            <div class="field">
+                <label for="entity_type">Type</label>
+                <select id="entity_type" name="entity_type" required>
+                    {% for et in entity_types %}
+                    <option value="{{ et }}">{{ entity_labels[et] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field field-wide">
+                <label>Filter by labels</label>
+                <p class="settings-hint" style="margin: 0 0 8px;">Items matching any selected label will be included in this list.</p>
+                <div class="field-toggle-group" id="label-checkboxes">
+                    {% for name in all_labels %}
+                    <label class="field-toggle">
+                        <input type="checkbox" name="labels" value="{{ name }}">
+                        {{ name }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="modal-footer" style="border-top: none; padding-top: 0; margin-top: var(--space-4);">
+                <div class="spacer"></div>
+                <button type="button" class="btn ghost" data-modal-cancel>Cancel</button>
+                <button type="submit" class="btn primary" id="publish-btn" disabled>{{ icon('share-2', 'icon-sm') }} Publish List</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>

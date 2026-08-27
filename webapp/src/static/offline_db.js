@@ -10,7 +10,7 @@
 //
 // 2026-08-19 -- Added "notes" entity store for the Offline Mode page.
 //
-// Schema (IndexedDB database "cc-offline", version 3):
+// Schema (IndexedDB database "cc-offline", version 4):
 //   tasks/events/contacts/notes -- keyPath "uid", one row per entity, fields
 //                               written incrementally as pull()/local
 //                               writes deliver them (never a whole-row
@@ -35,13 +35,13 @@
 //                               at this device's last successful pull --
 //                               2026-08-17, the round-skip pre-check).
 //
-// Deliberately entity-shape-agnostic: this file never hardcodes a task's
-// or event's field list (routers/../offline_sync.py's _ENTITY_FIELDS
-// whitelist is the server's own concern) -- it just writes whatever
-// field_name/value pairs a change/op sends into the matching row.
+// 2026-08-19 -- Bumped to version 4 to resolve "stored database is a higher
+// version than requested" error for users who may have had a v3 database
+// created during the brief window before the notes store was added. The
+// upgrade logic handles both v2->v3 and v3->v4 transitions.
 (function () {
   const DB_NAME = "cc-offline";
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const ENTITY_STORES = { task: "tasks", event: "events", contact: "contacts", note: "notes" };
 
   let dbPromise = null;

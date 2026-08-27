@@ -4551,6 +4551,7 @@ ENTITY_TABLES: dict[str, str] = {
     "task": "tasks",
     "event": "events",
     "contact": "contacts",
+    "note": "notes",
 }
 
 ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
@@ -4566,8 +4567,11 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
         "created_at", "updated_at", "deleted_at",
     },
     "contact": {
-        "full_name", "org", "phone", "email", "address", "notes",
+        "full_name", "title", "org", "phone", "email", "address", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
+    },
+    "note": {
+        "content", "created_at", "updated_at", "deleted_at",
     },
 }
 

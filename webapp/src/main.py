@@ -155,9 +155,7 @@ def create_app() -> FastAPI:
     # `sync` (the unrelated Radicale Published-Lists background sync).
     app.include_router(sync_api.router)
     # 1.8 slice 3 -- the PWA shell's own two routes (GET /sw.js, GET
-    # /offline). Neither path collides with anything else already
-    # registered, so ordering relative to the rest of this list doesn't
-    # matter the way timeline.router's does below.
+    # /offline)
     app.include_router(pwa.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)

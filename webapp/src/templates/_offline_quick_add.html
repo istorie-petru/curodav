@@ -1,0 +1,105 @@
+{# Offline Quick Add Builder (2026-08-19 expansion) -- visual builder
+   replacing the single-field capture input. Includes:
+   - Entity type dropdown (task/event/contact/note)
+   - Label picker (for tasks/events, populated from local mirror)
+   - Date/time inputs (due date for tasks, start/end for events)
+   - Capture text box that syncs with visual inputs
+   - Creates entities via CCOfflineWrite #}
+
+<div class="offline-quick-add-builder" data-offline-quick-add>
+    <h3 class="offline-quick-add-title">{{ icon('plus', 'icon-sm') }} Quick Add</h3>
+
+    <form id="offline-quick-add-form" class="offline-quick-add-form" autocomplete="off">
+        <!-- Entity Type Selector -->
+        <div class="field">
+            <label for="offline-entity-type">{{ icon('tag', 'icon-sm') }} Type</label>
+            <select id="offline-entity-type" name="entity_type" class="offline-entity-type-select">
+                <option value="task">Task</option>
+                <option value="event">Event</option>
+                <option value="contact">Contact</option>
+                <option value="note">Note</option>
+            </select>
+        </div>
+
+        <!-- Task-specific fields -->
+        <fieldset id="offline-task-fields" class="offline-entity-fields" data-entity="task">
+            <div class="field">
+                <label for="offline-task-title">{{ icon('checklist', 'icon-sm') }} Title</label>
+                <input type="text" id="offline-task-title" name="title" placeholder="Task title" required maxlength="200">
+            </div>
+            <div class="field">
+                <label for="offline-task-due">{{ icon('calendar', 'icon-sm') }} Due Date</label>
+                <input type="date" id="offline-task-due" name="due_date">
+            </div>
+            <div class="field">
+                <label for="offline-task-labels">{{ icon('label', 'icon-sm') }} Labels</label>
+                <select id="offline-task-labels" name="labels" multiple class="offline-label-multiselect" size="4"></select>
+                <small class="field-hint">Hold Ctrl/Cmd to select multiple</small>
+            </div>
+        </fieldset>
+
+        <!-- Event-specific fields -->
+        <fieldset id="offline-event-fields" class="offline-entity-fields" data-entity="event" hidden>
+            <div class="field">
+                <label for="offline-event-title">{{ icon('calendar', 'icon-sm') }} Title</label>
+                <input type="text" id="offline-event-title" name="title" placeholder="Event title" required maxlength="200">
+            </div>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="offline-event-start">{{ icon('play', 'icon-sm') }} Start</label>
+                    <input type="datetime-local" id="offline-event-start" name="start_at">
+                </div>
+                <div class="field">
+                    <label for="offline-event-end">{{ icon('stop', 'icon-sm') }} End</label>
+                    <input type="datetime-local" id="offline-event-end" name="end_at">
+                </div>
+            </div>
+            <div class="field">
+                <label for="offline-event-all-day">{{ icon('sun', 'icon-sm') }} All day</label>
+                <input type="checkbox" id="offline-event-all-day" name="all_day">
+            </div>
+            <div class="field">
+                <label for="offline-event-labels">{{ icon('label', 'icon-sm') }} Labels</label>
+                <select id="offline-event-labels" name="labels" multiple class="offline-label-multiselect" size="4"></select>
+                <small class="field-hint">Hold Ctrl/Cmd to select multiple</small>
+            </div>
+        </fieldset>
+
+        <!-- Contact-specific fields -->
+        <fieldset id="offline-contact-fields" class="offline-entity-fields" data-entity="contact" hidden>
+            <div class="field">
+                <label for="offline-contact-name">{{ icon('user', 'icon-sm') }} Name</label>
+                <input type="text" id="offline-contact-name" name="full_name" placeholder="Contact name" required maxlength="200">
+            </div>
+            <div class="field">
+                <label for="offline-contact-email">{{ icon('mail', 'icon-sm') }} Email</label>
+                <input type="email" id="offline-contact-email" name="email" placeholder="email@example.com">
+            </div>
+            <div class="field">
+                <label for="offline-contact-phone">{{ icon('phone', 'icon-sm') }} Phone</label>
+                <input type="tel" id="offline-contact-phone" name="phone" placeholder="+1 555-000-0000">
+            </div>
+        </fieldset>
+
+        <!-- Note-specific fields -->
+        <fieldset id="offline-note-fields" class="offline-entity-fields" data-entity="note" hidden>
+            <div class="field">
+                <label for="offline-note-content">{{ icon('file-text', 'icon-sm') }} Content</label>
+                <textarea id="offline-note-content" name="content" placeholder="Note content" rows="4" maxlength="5000"></textarea>
+            </div>
+        </fieldset>
+
+        <!-- Capture text box (synced with visual inputs) -->
+        <div class="field">
+            <label for="offline-capture-text">{{ icon('code', 'icon-sm') }} Quick Capture Syntax</label>
+            <textarea id="offline-capture-text" name="capture_text" class="offline-capture-text" readonly placeholder="Fill in the fields above to generate capture syntax"></textarea>
+            <small class="field-hint">This is the capture syntax that will be parsed. You can also edit it directly.</small>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--control-border);">
+            <button type="button" class="btn ghost" id="offline-quick-add-cancel">{{ icon('x') }} Cancel</button>
+            <button type="submit" class="btn primary">{{ icon('plus') }} Add</button>
+        </div>
+    </form>
+    <div id="offline-quick-add-result" class="offline-quick-add-result" role="status" aria-live="polite"></div>
+</div>

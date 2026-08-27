@@ -3300,6 +3300,7 @@ session checked `git status`).
 - Commit message convention: `Released X.Y — <summary>` for a release-closing
   commit (see `git log`); plain descriptive messages for side-work-only or
   partial slices that don't close a release.
+
 - **Shipped:** side work — **Data & Maintenance page redesign**, complete
   (2026-08-26), direct request ("redesign the HTML/CSS for a data maintenance
   settings page... eliminate redundancy, improve hierarchy, minimize clutter")
@@ -3353,59 +3354,7 @@ session checked `git status`).
   **1735 passed**. Committed deliberately alongside — but separate from —
   the still-uncommitted offline-mode WIP this file's tail documents; only
   this feature stream's files are in the commit.
-- **Shipped:** side work — **Data & Maintenance page redesign**, complete
-  (2026-08-26), direct request ("redesign the HTML/CSS for a data maintenance
-  settings page... eliminate redundancy, improve hierarchy, minimize clutter")
-  with one hard constraint: the three System Status cards stay visually
-  identical (they do — byte-for-byte). Everything below them is now four
-  sections in priority order:
-  - **Maintenance & cleanup** — every row an inline control: auto-archive
-    (`After 1 week / After 1 month / Never`) and sync retention (`Keep 30 /
-    Keep 90 / Keep forever`, where "forever" is literally what retention 0
-    already meant — GC disabled) autosubmitting selects, both relabeled
-    without changing stored values; a legacy value from before the relabel
-    renders as an honest `"14 days (current)"` extra option
-    (`_choices_with_stored_value`) instead of silently displaying the first
-    preset while storing something else. "Purge completed tasks" moved here
-    from the Danger zone as routine housekeeping — soft grey button carrying
-    its live count ("(0 right now)"). Reset Home stays.
-  - **Full backup & restore** — the former hero + Backups & storage stats +
-    per-backup table collapsed into ONE card, now the only place on the page
-    naming a backup's timestamp, size, or filename: facts row (last backup
-    through the new `fmt_dt` Jinja filter — "Aug 25, 2026, 8:57 PM", local
-    zone, 12h/24h-preference aware — plus size), blue Download button,
-    full-bleed divider, then restore area (filename + green `Verified ✓`
-    badge, Verify integrity / Restore this backup inline buttons, a subtle
-    "+ Upload a different .json file to restore" link whose submit button
-    appears only once a file is chosen — no-JS fallback keeps it visible),
-    helper text last. `id="backups-section"` moved onto the hero so the
-    status cards' "View backups" menu item still scrolls somewhere real.
-  - **Export & import** — tabbed structure and both dropdowns kept; each Data
-    option carries a server-rendered `data-dm-preview` phrase composed into
-    the live "*Includes: N Events, N Tasks, N Contacts*" line under Format.
-    The drop zone now also accepts .csv: `routers/export.py::_import_csv_text`
-    recognizes ONLY this app's own three CSV export header rows (case-
-    insensitive) and round-trips them — tasks (title/status/due/labels),
-    events (+start/end/all-day/location/meeting URL), contacts (+org/address,
-    first phone/email landing in the real child tables the flat columns feed);
-    uid-less rows skipped, merge-off skips existing uids, any other CSV
-    rejected rather than half-imported. Client detection mirrors the same
-    sniffing for its "Detected: ..." preview.
-  - **Danger zone** — one action left, red-tinted like `.status-card.error`,
-    gated twice: the red "Permanently Delete Everything" button ships
-    `disabled` straight from the server and `data_maintenance.js` arms it
-    only while the input reads exactly `DELETE ALL`; the confirm sheet
-    remains as the second lock.
-  New CSS replaces the old dm-* block (hero top/divider/badges/upload-alt/
-  danger styles, generous whitespace on shared tokens). Tests:
-  `test_phase10_export.py`'s TestAutoImport gained five CSV cases;
-  `test_data_health.py` gained TestDataMaintenanceRedesign2026_08_26 (order,
-  gate markup, human-readable facts-only-in-hero, verified badge, relabeled
-  options, legacy-value visibility) + TestDataMaintenanceScriptGate;
-  `test_display_prefs_settings.py` gained TestFmtDtFilter. Full suite
-  **1735 passed**. Committed deliberately alongside — but separate from —
-  the still-uncommitted offline-mode WIP this file's tail documents; only
-  this feature stream's files are in the commit.
+
 - **Shipped:** side work — **Data & Maintenance second pass: no backup
   section, no danger section**, complete (2026-08-26), immediate follow-up
   on the redesign above ("Full backup & restore should be integrated into
@@ -3440,6 +3389,7 @@ session checked `git status`).
   shape (phase8's purge assertions split page-vs-modal;
   TestDataMaintenanceRedesign2026_08_26 rewritten around card-menu/meta
   facts; ScriptGate reads both templates), full suite **1737 passed**.
+
 - **Shipped:** side work — **Data & Maintenance third pass: export/import
   folded into the Sync card as dialogs**, complete (2026-08-26), immediate
   follow-up on the second pass ("Export and Import should be incorporated
@@ -3469,6 +3419,7 @@ session checked `git status`).
   Tests: phase8's inlined-export assertions rewritten around the two menu
   triggers + dialog renders; ScriptGate reads all three dialog templates
   and pins the delegation-only wiring. Full suite **1739 passed**.
+
 - **Fixed:** side work — **status-card menus close on any action; menu
   items non-bold**, complete (2026-08-26), direct feedback on the third
   pass ("the three dots menu should close after any action... also the
@@ -3481,3 +3432,19 @@ session checked `git status`).
   `font-weight:400` so entries can never inherit a heavier weight.
   One structural test added (TestDataMaintenanceScriptGate); full suite
   **1740 passed**.
+
+## Bug fixes (2026-08-19 session)
+- Fixed modal centering: removed conflicting CSS that redefined global `.modal`/`.modal-overlay`/`.modal-header`/`.modal-footer` classes (offline mode's quick-add modal CSS was overriding the app's real dialog chrome)
+- Datetime picker: date mode now auto-commits on day selection (like native `<input type="date">`)
+- Datetime picker: time/range mode now auto-commits when both start and end hours are selected
+- "Move this occurrence" form: added `submit=true` to datetime picker so Apply submits the form
+- Added generic async handler for page forms with `data-cc-change` (not in modals) in `async_crud.js` — progressive enhancement, falls back to reload
+
+## Next session: Offline mode expansion (deferred from this session)
+Per user request, these are scoped for the next session:
+- Hide tabbar in offline mode
+- "You're offline" label at end of segmented offline-tabs (non-clickable)
+- Merge Upcoming and Quick Add into single view
+- Improve Upcoming views for events/tasks (more pleasing)
+- Visual Quick Add builder: dropdown to choose entity type (task/event/contact/note), label picker, date/time inputs that update the capture text box — one unified UI instead of pure text capture
+- Ensure all contacts always synced to offline mirror

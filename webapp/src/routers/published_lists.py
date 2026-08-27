@@ -1,19 +1,8 @@
-"""Settings: Published Lists (Phase 6, label-space rework) -- create/edit/
-delete a named boolean-filter-over-labels subset of the pool, materialized
-into a real Radicale collection and published as a subscribable CalDAV/
-CardDAV URL. See features/architecture.md §2/§3 Phase 6 and
-src/published_lists.py for the filter evaluator + materializer this
-router drives.
+"""Settings: Published Lists -- share a filtered subset of your data via a unique link.
 
-Unlike a label (routers/labels.py -- no delete endpoint, "removing" just
-clears membership everywhere), a published List is a real thing with a
-lifecycle: `delete_list` below is a genuine delete, tearing down both the
-`published_lists` row AND the actual Radicale collection via the bridge.
-
-v1 is read-only-from-the-subscriber's-side only (sync_direction is always
-"read_only" here -- there's no UI to pick anything else) -- see
-src/published_lists.py's own module docstring for why nothing here ever
-parses a subscriber's edit back into a row.
+This is a clean, minimalist sharing tool -- not a server administration panel.
+All lists are shareable by default (read-only). No public/private toggle,
+no advanced options, no technical jargon.
 """
 
 from __future__ import annotations
@@ -67,12 +56,9 @@ def _unique_collection_path(conn, name: str, existing_id: str | None = None) -> 
     return candidate
 
 
-def _filter_from_form(all_labels: list[str], any_labels: list[str], none_labels: list[str]) -> dict:
-    return {
-        "all": [n for n in all_labels if n],
-        "any": [n for n in any_labels if n],
-        "none": [n for n in none_labels if n],
-    }
+def _filter_from_form(labels: list[str]) -> dict:
+    """Simple filter: items matching ANY selected label."""
+    return {"any": [n for n in labels if n]}
 
 
 def _delete_collection(bridge, entity_type: str, collection_path: str) -> None:
@@ -91,7 +77,7 @@ def _require_bridge(bridge) -> None:
     see routers/tasks.py's "no bridge in this path anymore" notes). Fail
     cleanly instead of crashing on a None attribute."""
     if bridge is None:
-        raise HTTPException(status_code=503, detail="Sync server (Radicale) is not reachable")
+        raise HTTPException(status_code=503, detail="Sync server is not reachable")
 
 
 @router.get("")
@@ -100,18 +86,35 @@ def list_index(request: Request, conn=Depends(get_db)):
     base_url = request.app.state.settings.radicale_base_url
     for row in lists:
         row["subscribe_url"] = collection_url(base_url, row["entity_type"], row["radicale_collection_path"])
+        # Convert label_filter to simple label list for display
+        if "label_filter" in row and isinstance(row["label_filter"], dict):
+            row["filter_labels"] = row["label_filter"].get("any", [])
+        else:
+            row["filter_labels"] = []
     return templates.TemplateResponse(
         "published_lists.html",
         {
             "request": request,
             "active_tab": "published_lists",
-            # 2026-08-08: promoted to a direct Settings hub category (was
-            # nested under "Data & backup," now deleted -- see
-            # routers/settings.py's module docstring).
             "crumbs": [{"url": "/settings", "name": "Settings"}],
-            "title": "Published lists",
+            "title": "Published Lists",
             "lists": lists,
             "all_labels": db.list_all_label_names(conn),
+            "entity_types": ENTITY_TYPES,
+            "entity_labels": ENTITY_LABELS,
+        },
+    )
+
+
+@router.get("/new")
+def new_list_modal(request: Request, conn=Depends(get_db)):
+    """Modal entry point for creating a new published list."""
+    labels = db.list_all_label_names(conn)
+    return templates.TemplateResponse(
+        "published_list_create_modal.html",
+        {
+            "request": request,
+            "all_labels": labels,
             "entity_types": ENTITY_TYPES,
             "entity_labels": ENTITY_LABELS,
         },
@@ -122,9 +125,7 @@ def list_index(request: Request, conn=Depends(get_db)):
 def create_list(
     name: str = Form(...),
     entity_type: str = Form(...),
-    filter_all: list[str] = Form([]),
-    filter_any: list[str] = Form([]),
-    filter_none: list[str] = Form([]),
+    labels: list[str] = Form([]),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
 ):
@@ -138,7 +139,7 @@ def create_list(
         "id": list_id,
         "name": name,
         "entity_type": entity_type,
-        "label_filter": _filter_from_form(filter_all, filter_any, filter_none),
+        "label_filter": _filter_from_form(labels),
         "radicale_collection_path": collection_path,
         "sync_direction": "read_only",
         "created_at": _now(),
@@ -149,65 +150,12 @@ def create_list(
     return RedirectResponse(url="/published-lists", status_code=303)
 
 
-@router.post("/{list_id}/set")
-def update_list(
-    list_id: str,
-    name: str = Form(...),
-    filter_all: list[str] = Form([]),
-    filter_any: list[str] = Form([]),
-    filter_none: list[str] = Form([]),
-    conn=Depends(get_db),
-    bridge=Depends(get_bridge),
-):
-    existing = db.get_published_list(conn, list_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="Published list not found")
-    _require_bridge(bridge)
-    name = (name or "").strip() or existing["name"]
-    db.upsert_published_list(
-        conn,
-        {
-            "id": list_id,
-            "name": name,
-            "entity_type": existing["entity_type"],
-            "label_filter": _filter_from_form(filter_all, filter_any, filter_none),
-            # entity_type/radicale_collection_path never change after
-            # creation -- a List is scoped to exactly one entity type for
-            # its whole life (§3 Phase 6: "a List is scoped to exactly one"),
-            # and re-slugging the collection path on a rename would break
-            # any subscriber already pointed at the old URL.
-            "radicale_collection_path": existing["radicale_collection_path"],
-            "sync_direction": existing["sync_direction"],
-            "created_at": existing["created_at"],
-        },
-    )
-    saved = db.get_published_list(conn, list_id)
-    materialize(conn, bridge, saved)
-    return RedirectResponse(url="/published-lists", status_code=303)
-
-
 @router.post("/{list_id}/delete")
 def delete_list(list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge)):
-    """The one real "delete" left in this whole plan (§3 Phase 6) -- stops
-    materializing this List AND removes its actual Radicale collection,
-    unlike a label's "clear" (routers/labels.py) which only empties
-    membership and never deletes anything."""
+    """Delete a published list and its Radicale collection."""
     existing = db.get_published_list(conn, list_id)
     if existing is not None:
         _require_bridge(bridge)
         _delete_collection(bridge, existing["entity_type"], existing["radicale_collection_path"])
         db.delete_published_list(conn, list_id)
-    return RedirectResponse(url="/published-lists", status_code=303)
-
-
-@router.post("/{list_id}/resync")
-def resync_list(list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge)):
-    """Manual "sync now" -- the background thread (sync.py) already
-    materializes every List on a timer, this just lets a user force an
-    immediate re-check right after editing labels, instead of waiting out
-    the interval."""
-    existing = db.get_published_list(conn, list_id)
-    if existing is not None:
-        _require_bridge(bridge)
-        materialize(conn, bridge, existing)
     return RedirectResponse(url="/published-lists", status_code=303)

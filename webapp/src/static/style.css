@@ -753,6 +753,14 @@ label.seg-btn{display:inline-flex; align-items:center; gap:0;}
 label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
 label.seg-btn[hidden]{display:none;}
 .segmented{flex-wrap:wrap;}
+/* Offline mode indicator (2026-08-19) -- a non-clickable label at the end
+   of the offline main tabs showing the offline state. */
+.offline-indicator{
+  display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:var(--text-footnote);
+  font-weight:500; color:var(--fg-tertiary); background:transparent; border-radius:18px;
+  pointer-events:none; user-select:none;
+}
+.offline-indicator .icon{width:14px; height:14px; color:var(--danger);}
 /* Vertical variant (2026-08-07 follow-up) -- .segmented's compact pill
    look (transparent buttons floating on one shared grey pill background,
    only the checked one getting a visible surface) only reads as "a row
@@ -4306,4 +4314,232 @@ body.command-palette-open{overflow:hidden;}
 button.btn.danger[data-purge-btn][disabled]{
   opacity:.45; cursor:not-allowed;
   transform:none; box-shadow:none;
+}
+
+/* ============ Published Lists (minimalist sharing page) ============ */
+
+.published-lists-page {
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: var(--space-6);
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-title1);
+    margin-bottom: var(--space-2);
+}
+
+.page-description {
+    color: var(--fg-secondary);
+    font-size: var(--text-body);
+    margin: 0;
+    max-width: 600px;
+}
+
+.lists-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-4);
+}
+
+.lists-table-container {
+    overflow-x: auto;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--separator);
+    background: var(--bg-elevated);
+}
+
+.lists-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-callout);
+}
+
+.lists-table thead th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--fg-secondary);
+    font-size: var(--text-caption);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 2px solid var(--separator);
+    white-space: nowrap;
+    background: var(--surface-container);
+}
+
+.lists-table tbody tr {
+    border-bottom: 1px solid var(--separator);
+    transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.lists-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.lists-table tbody tr:hover {
+    background: var(--row-alt);
+}
+
+.lists-table tbody td {
+    padding: var(--space-3) var(--space-4);
+    vertical-align: middle;
+}
+
+.lists-table .link-col {
+    min-width: 280px;
+}
+
+.lists-table .actions-col {
+    width: 60px;
+    text-align: right;
+}
+
+.link-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.truncated-url {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-caption);
+    color: var(--fg-secondary);
+    background: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.copy-link-btn {
+    flex-shrink: 0;
+    color: var(--fg-tertiary);
+}
+
+.copy-link-btn:hover {
+    color: var(--accent);
+    background: var(--accent-subtle);
+}
+
+.copy-link-btn.copied {
+    color: var(--success);
+}
+
+.filter-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+.filter-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-caption);
+    font-weight: 500;
+    background: var(--accent-neutral-subtle);
+    color: var(--fg-secondary);
+}
+
+.tag-task { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }
+.tag-event { background: var(--tag-green-bg); color: var(--tag-green-fg); }
+.tag-contact { background: var(--tag-purple-bg); color: var(--tag-purple-fg); }
+
+/* Create modal form */
+#create-list-form .field-wide .field-toggle-group {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: var(--space-2);
+}
+
+#create-list-form .field-toggle {
+    font-size: var(--text-body);
+}
+
+#create-list-form .field-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
+
+/* Empty state in modal */
+.modal-body .empty-state-rich {
+    padding: var(--space-6) var(--space-4);
+}
+
+/* Mobile adjustments */
+@media (max-width: 720px) {
+    .lists-table thead {
+        display: none;
+    }
+
+    .lists-table tbody tr {
+        display: block;
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--separator);
+    }
+
+    .lists-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) 0;
+        border: none;
+    }
+
+    .lists-table tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--fg-tertiary);
+        font-size: var(--text-caption);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .lists-table .link-col {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-2);
+    }
+
+    .lists-table .link-col::before {
+        display: none;
+    }
+
+    .link-wrapper {
+        width: 100%;
+    }
+
+    .truncated-url {
+        width: 100%;
+    }
+
+    .lists-table .actions-col {
+        justify-content: flex-end;
+    }
+
+    .lists-table .actions-col::before {
+        display: none;
+    }
+}
+
+/* Create modal adjustments */
+@media (max-width: 560px) {
+    .modal {
+        min-height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .modal-body {
+        padding: var(--space-4);
+    }
 }

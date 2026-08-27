@@ -127,7 +127,7 @@ class TestSettingsHub:
         assert urls == {
             "/settings/general",
             "/settings/appearance",
-            "/labels",
+            "/settings/labels",
             "/settings/holidays",
             "/settings/time-blocks",
             "/settings/data-maintenance",

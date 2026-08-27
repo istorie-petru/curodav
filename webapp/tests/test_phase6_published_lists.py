@@ -280,11 +280,12 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         _make_task(conn, "t1", "A", ["University"])
+        _make_task(conn, "t2", "B", ["Personal"])
         bridge = FakeBridge()
 
         router.create_list(
             name="Uni tasks", entity_type="task",
-            filter_all=["University"], filter_any=[], filter_none=[],
+            labels=["University"],
             conn=conn, bridge=bridge,
         )
         rows = db.list_published_lists(conn)
@@ -293,15 +294,7 @@ class TestPublishedListsRouterCrud:
         assert rows[0]["radicale_collection_path"] == "published-uni-tasks"
         assert set(bridge.task_collections["published-uni-tasks"]) == {"t1"}
 
-        # Edit: broaden the filter to include a second label via "any".
-        _make_task(conn, "t2", "B", ["Personal"])
-        router.update_list(
-            list_id, name="Uni tasks", filter_all=[], filter_any=["University", "Personal"],
-            filter_none=[], conn=conn, bridge=bridge,
-        )
-        updated = db.get_published_list(conn, list_id)
-        assert updated["label_filter"] == {"all": [], "any": ["University", "Personal"], "none": []}
-        assert set(bridge.task_collections["published-uni-tasks"]) == {"t1", "t2"}
+        # Edit not supported in new simplified API -- only create and delete
 
         # Delete: row gone AND the collection torn down via the bridge.
         router.delete_list(list_id, conn=conn, bridge=bridge)
@@ -312,8 +305,8 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="My List!!", entity_type="task", filter_all=[], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
-        router.create_list(name="My List!!", entity_type="task", filter_all=[], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
         rows = db.list_published_lists(conn)
         paths = {r["radicale_collection_path"] for r in rows}
         assert paths == {"published-my-list", "published-my-list-2"}
@@ -324,7 +317,7 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", filter_all=["University"], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
 
         request = Request(
             {
@@ -362,7 +355,7 @@ class TestReadOnlyness:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", filter_all=["University"], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
         row = db.list_published_lists(conn)[0]
         assert row["sync_direction"] == "read_only"
 

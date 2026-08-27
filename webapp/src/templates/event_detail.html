@@ -132,7 +132,7 @@
                 {% from "_datetime_picker.html" import datetime_picker with context %}
                 <div class="field field-wide">
                     <label>New start & end</label>
-                    {{ datetime_picker('start_at', 'end_at', occurrence_date[:16], '', 'range', required=true) }}
+                    {{ datetime_picker('start_at', 'end_at', occurrence_date[:16], '', 'range', true, required=true) }}
                 </div>
                 <button type="submit" class="btn primary btn-sm">Move</button>
             </form>

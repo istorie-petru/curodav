@@ -60,11 +60,8 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 # Paths that must never require a session. /login is the whole point;
 # /static is shared, cacheable, non-sensitive assets (a signed-out browser
-# still needs the CSS to render the login page itself); /sw.js is the
-# service-worker script, effectively a static asset too, and keeping it
-# public lets the PWA update even while signed out (it contains no private
-# data -- just a precache list).
-PUBLIC_PATHS = {"/login", "/sw.js"}
+# still needs the CSS to render the login page itself).
+PUBLIC_PATHS = {"/login"}
 
 
 def auth_enabled(settings) -> bool:

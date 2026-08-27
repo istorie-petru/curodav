@@ -138,7 +138,7 @@ router = APIRouter(tags=["settings"])
 HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
+    {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
@@ -173,6 +173,12 @@ def settings_index(request: Request, conn=Depends(get_db)):
             "conflict_count": len(db.list_sync_conflicts(conn)),
         },
     )
+
+
+@router.get("/settings/labels")
+def settings_labels_redirect():
+    """Redirect /settings/labels to /labels for Settings hub integration."""
+    return RedirectResponse(url="/labels", status_code=303)
 
 
 @router.get("/settings/general")

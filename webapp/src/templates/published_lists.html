@@ -1,130 +1,82 @@
 {% extends "base.html" %}
-{% block title %}Published lists{% endblock %}
+{% block title %}Published Lists{% endblock %}
 {% block content %}
 {% include "_settings_breadcrumb.html" with context %}
-<h1>{{ icon('share-2') }} Published lists</h1>
-<p class="settings-hint">A Published List is a named boolean filter over labels, for one entity type (task/event/contact). The app keeps a real Radicale collection in sync with whatever currently matches the filter and gives you a URL any standard CalDAV/CardDAV client can subscribe to. <b>Read-only</b> in this version -- a subscriber can view the list, but editing through the subscribed URL will be silently overwritten on the next sync, not merged back.</p>
 
-{% if lists %}
-<div class="calendar-list">
-{% for l in lists %}
-<div class="calendar-row tag-manage-row" style="flex-direction:column; align-items:stretch; gap:8px">
-    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
-        <span class="cell-tag tag-blue">{{ entity_labels[l.entity_type] }}</span>
-        <b>{{ l.name }}</b>
-        <span class="spacer"></span>
-        <form method="post" action="/published-lists/{{ l.id }}/resync">
-            <button type="submit" class="btn ghost btn-sm">{{ icon('repeat', 'icon-sm') }} Sync now</button>
-        </form>
-        <form method="post" action="/published-lists/{{ l.id }}/delete" data-confirm-sheet="Delete &quot;{{ l.name }}&quot;? This removes the published collection too -- any subscriber loses access.">
-            <button type="submit" class="icon-btn" title="Delete list and its collection">{{ icon('x', 'icon-sm') }}</button>
-        </form>
+<div class="published-lists-page">
+    <header class="page-header">
+        <h1>{{ icon('share-2') }} Published Lists</h1>
+        <p class="page-description">Share a live, read-only snapshot of your data with anyone via a unique link.</p>
+    </header>
+
+    <div class="lists-toolbar">
+        <a href="/published-lists/new" class="btn primary" data-modal>
+            {{ icon('plus', 'icon-sm') }} New List
+        </a>
     </div>
 
-    <div class="settings-hint" style="margin:0">
-        Filter: {{ l.label_filter.all|join(' AND ') if l.label_filter.all }}{% if l.label_filter.all and (l.label_filter.any or l.label_filter.none) %} AND {% endif %}{% if l.label_filter.any %}({{ l.label_filter.any|join(' OR ') }}){% endif %}{% if l.label_filter.none %} AND NOT ({{ l.label_filter.none|join(' OR ') }}){% endif %}{% if not l.label_filter.all and not l.label_filter.any and not l.label_filter.none %}(no criteria -- matches nothing){% endif %}
-    </div>
-    <div class="settings-hint" style="margin:0">
-        Subscribe URL: <code>{{ l.subscribe_url }}</code>
-        {% if l.last_materialized_at %}&middot; last synced {{ l.last_materialized_at }}{% else %}&middot; not synced yet{% endif %}
-    </div>
-
-    <details data-modal-keep-open>
-        <summary class="btn ghost btn-sm" style="display:inline-block; cursor:pointer">{{ icon('edit', 'icon-sm') }} Edit filter</summary>
-        <form method="post" action="/published-lists/{{ l.id }}/set" class="card" style="margin-top:8px">
-            <div class="field">
-                <label>Name</label>
-                <input type="text" name="name" value="{{ l.name }}" required>
-            </div>
-            <div class="field field-wide">
-                <label>Must have ALL of these labels</label>
-                <div class="field-toggle-group">
-                    {% for name in all_labels %}
-                    <label class="field-toggle">
-                        <input type="checkbox" name="filter_all" value="{{ name }}" {% if name in (l.label_filter.all or []) %}checked{% endif %}>
-                        {{ name }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="field field-wide">
-                <label>Must have AT LEAST ONE of these labels</label>
-                <div class="field-toggle-group">
-                    {% for name in all_labels %}
-                    <label class="field-toggle">
-                        <input type="checkbox" name="filter_any" value="{{ name }}" {% if name in (l.label_filter.any or []) %}checked{% endif %}>
-                        {{ name }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="field field-wide">
-                <label>Must have NONE of these labels</label>
-                <div class="field-toggle-group">
-                    {% for name in all_labels %}
-                    <label class="field-toggle">
-                        <input type="checkbox" name="filter_none" value="{{ name }}" {% if name in (l.label_filter.none or []) %}checked{% endif %}>
-                        {{ name }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            <button type="submit" class="btn primary">{{ icon('check-square', 'icon-sm') }} Save & re-sync</button>
-        </form>
-    </details>
-</div>
-{% endfor %}
-</div>
-{% else %}
-<div class="empty-state">No published lists yet -- create one below to publish a subscribable subset of your tasks/events/contacts.</div>
-{% endif %}
-
-<h2 style="margin-top:24px">{{ icon('plus', 'icon-sm') }} New published list</h2>
-<form method="post" action="/published-lists/create" class="card">
-    <div class="field-grid">
-        <div class="field">
-            <label>Name</label>
-            <input type="text" name="name" placeholder="e.g. University (public)" required>
-        </div>
-        <div class="field">
-            <label>Entity type</label>
-            <select name="entity_type" required>
-                {% for et in entity_types %}
-                <option value="{{ et }}">{{ entity_labels[et] }}</option>
+    {% if lists %}
+    <div class="lists-table-container">
+        <table class="lists-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Filter</th>
+                    <th>Shareable Link</th>
+                    <th class="actions-col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in lists %}
+                <tr>
+                    <td data-label="Name">
+                        <strong>{{ l.name }}</strong>
+                    </td>
+                    <td data-label="Type">
+                        <span class="cell-tag tag-{{ l.entity_type }}">{{ entity_labels[l.entity_type] }}</span>
+                    </td>
+                    <td data-label="Filter">
+                        {% if l.filter_labels %}
+                            <span class="filter-labels">
+                                {% for label in l.filter_labels %}
+                                <span class="filter-label">{{ label }}</span>
+                                {% endfor %}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">No labels selected</span>
+                        {% endif %}
+                    </td>
+                    <td class="link-col" data-label="Shareable Link">
+                        <div class="link-wrapper">
+                            <code class="truncated-url" data-full-url="{{ l.subscribe_url }}">{{ l.subscribe_url | truncate(45, true, '…') }}</code>
+                            <button type="button" class="icon-btn copy-link-btn" data-url="{{ l.subscribe_url }}" aria-label="Copy link" title="Copy link">
+                                {{ icon('link', 'icon-sm') }}
+                            </button>
+                        </div>
+                    </td>
+                    <td class="actions-col" data-label="Actions">
+                        <form method="post" action="/published-lists/{{ l.id }}/delete" data-confirm-sheet='Unpublish "{{ l.name }}"? This removes the shared list -- anyone with the link will lose access.'>
+                            <button type="submit" class="icon-btn danger" aria-label="Unpublish {{ l.name }}" title="Unpublish">
+                                {{ icon('trash', 'icon-sm') }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
                 {% endfor %}
-            </select>
-        </div>
-    </div>
-
-    {% if all_labels %}
-    <div class="field field-wide">
-        <label>Must have ALL of these labels</label>
-        <div class="field-toggle-group">
-            {% for name in all_labels %}
-            <label class="field-toggle"><input type="checkbox" name="filter_all" value="{{ name }}"> {{ name }}</label>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="field field-wide">
-        <label>Must have AT LEAST ONE of these labels</label>
-        <div class="field-toggle-group">
-            {% for name in all_labels %}
-            <label class="field-toggle"><input type="checkbox" name="filter_any" value="{{ name }}"> {{ name }}</label>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="field field-wide">
-        <label>Must have NONE of these labels</label>
-        <div class="field-toggle-group">
-            {% for name in all_labels %}
-            <label class="field-toggle"><input type="checkbox" name="filter_none" value="{{ name }}"> {{ name }}</label>
-            {% endfor %}
-        </div>
+            </tbody>
+        </table>
     </div>
     {% else %}
-    <p class="settings-hint">No labels exist yet -- apply a label to a task/event/contact first, then come back to build a filter.</p>
+    <div class="empty-state empty-state-rich">
+        <div class="empty-state-icon">{{ icon('share-2', 'icon-lg') }}</div>
+        <h2 class="empty-state-title">No lists published yet</h2>
+        <p class="empty-state-text">Click <strong>"+ New List"</strong> to share a filtered subset of your data.</p>
+    </div>
     {% endif %}
+</div>
+{% endblock %}
 
-    <button type="submit" class="btn primary">{{ icon('plus', 'icon-sm') }} Create & publish</button>
-</form>
+{% block extra_scripts %}
+<script src="{{ static_url('published_lists.js') }}"></script>
 {% endblock %}

@@ -29,7 +29,7 @@
 // /static/offline_quick_capture.js to the precache list (the offline
 // "Quick add" toolbar's client-side capture parser), forcing a fresh shell
 // install so /offline loads it.
-const CACHE_NAME = "cc-shell-v12";
+const CACHE_NAME = "cc-shell-v14";
 
 const SHELL_ASSETS = [
   "/offline",

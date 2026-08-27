@@ -337,7 +337,12 @@
         btn.addEventListener("click", () => {
           if (disabled) return;
           state.date = key;
-          renderPanel();
+          if (mode === "date") {
+            // Date mode: auto-commit on selection (like native <input type="date">)
+            applySelection();
+          } else {
+            renderPanel();
+          }
         });
         grid.appendChild(btn);
       }
@@ -409,6 +414,12 @@
           state.startHour = h;
         } else {
           state.endHour = h;
+        }
+        // Auto-commit when both start and end are selected (range/time mode)
+        if (hoursGrid) paintHours(hoursGrid);
+        if (mode !== "date") {
+          applySelection();
+          return;
         }
       } else {
         state.startHour = h;
