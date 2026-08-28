@@ -240,9 +240,13 @@ class TestHabitRowAsyncSubmit:
     rendering the real page template, same pattern as
     test_phase1_derived_states.py's own template-render assertions.
 
-    2026-08-28 follow-up: the checkbox/"+1"/reset trio these tests used to
-    cover is gone -- one `<input type="number">` per row now, wrapped in a
-    single `.habit-checkin-value` form."""
+    2026-08-28 follow-ups: first the checkbox/"+1"/reset trio became one
+    always-visible `<input type="number">`; same day, direct feedback
+    ("like Notion... click twice and it becomes editable in a non-discrete
+    way") turned that visible input into a `data-inline-edit` span (plain
+    text by default, static/inline_edit.js swaps in a real input on
+    double-click) plus a hidden `name="value"` input carrying the actual
+    value, both wrapped in the same `.habit-checkin-value` form."""
 
     def _render_tasks_page(self, conn, req=None):
         req = req or _request("/tasks")
@@ -250,19 +254,20 @@ class TestHabitRowAsyncSubmit:
         ctx = {"request": req, **resp.context}
         return tasks_router.templates.get_template("tasks_list.html").render(ctx)
 
-    def test_plain_habit_task_number_input_has_data_cc_change_task(self, conn):
+    def test_plain_habit_task_has_data_cc_change_task(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
         body = self._render_tasks_page(conn)
         assert 'class="form-inline habit-checkin-value" data-cc-change="task" data-cc-action="checkin"' in body
-        assert 'type="number" name="value" class="habit-checkin-input"' in body
-        assert 'max="999999"' in body
+        assert 'data-inline-edit data-field="value" data-min="0" data-max="999999"' in body
+        assert 'type="hidden" name="value" value="0"' in body
 
-    def test_quantity_habit_number_input_shows_target_and_today_value(self, conn):
+    def test_quantity_habit_shows_target_and_today_value(self, conn):
         _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
         today = date.today().isoformat()
         db.upsert_task_completion(conn, "h2", today, _now(), value=3)
         body = self._render_tasks_page(conn)
-        assert 'value="3"' in body
+        assert 'type="hidden" name="value" value="3"' in body
+        assert '>3</span>' in body  # the inline-edit cell's own display text
         assert 'habit-checkin-target">/ 8</span>' in body
 
     def test_standalone_habit_entity_form_has_data_cc_change_habit(self, conn):

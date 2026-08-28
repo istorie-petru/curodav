@@ -275,6 +275,15 @@
      Loaded before every page/extra script so modal.js, app.js and each
      page's own listeners can rely on window.ccApi existing. -->
 <script src="{{ static_url('async_crud.js') }}"></script>
+<!-- Notion-style click-to-edit table cells (2026-08-28, direct feedback:
+     "once you click two times on an element it becomes editable in a
+     non-discrete way") -- a plain `[data-inline-edit]` span renders as
+     bare text; double-click swaps it for a real input in place. Loaded
+     globally (like async_crud.js just above, which it reuses via
+     form.requestSubmit()) so any future table cell can opt in with the
+     same data attributes -- the Habits group's check-in counter
+     (_habit_row.html) is the first, not the only intended user. -->
+<script src="{{ static_url('inline_edit.js') }}"></script>
 <script src="{{ static_url('tag_input.js') }}"></script>
 <script src="{{ static_url('recurrence_picker.js') }}"></script>
 <script src="{{ static_url('reminders_picker.js') }}"></script>

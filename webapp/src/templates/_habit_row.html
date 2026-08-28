@@ -14,18 +14,24 @@
 
    2026-08-28 follow-up, direct feedback ("their status is a simple
    increment and delete buttons, not enough -- it should be a direct
-   number input"): the checkbox/"+1"/reset trio this used to render is
-   replaced by one plain `<input type="number">` per row, for both a
-   target=1 habit and a quantity habit alike -- typing a value and
-   blurring/tabbing away (`onchange`) posts it straight to the same
-   explicit-value endpoints (`plus_url` -- routers/tasks.py's
+   number input"): the checkbox/"+1"/reset trio this used to render was
+   first replaced by an always-visible `<input type="number">`, then
+   (same-day second follow-up, "like Notion -- click twice on an element
+   and it becomes editable in a non-discrete way") that visible input
+   itself was replaced by a plain `data-inline-edit` span (static/
+   inline_edit.js, a new generic click-to-edit contract -- this is its
+   first user, not its only intended one) -- the cell reads as bare text
+   until double-clicked, at which point a real number input appears in
+   place, commits on Enter/blur, and reverts on Escape. The actual value
+   lives in a hidden `name="value"` input the whole time; inline_edit.js
+   writes into it and calls `form.requestSubmit()` on commit, which is
+   exactly the same `plus_url` explicit-value POST (routers/tasks.py's
    set_task_completion / routers/habits.py's add_entry, both already
-   accepted an arbitrary `value`, only the old "+1" button ever called
-   them with one before now) via the same data-cc-change/async_crud.js
-   path. `max="999999"` bounds what a typo or a stray scroll-wheel nudge
-   can submit -- "any whole number under a reasonable integer limit," not
-   truly unbounded -- and is mirrored server-side (routers/tasks.py/
-   habits.py's own clamp) since an HTML `max` is only ever advisory.
+   accepted an arbitrary `value`) via the same data-cc-change/
+   async_crud.js path as before -- no new endpoint. `data-max="999999"`
+   bounds what a typo can submit -- "any whole number under a reasonable
+   integer limit," not truly unbounded -- and is mirrored server-side
+   (routers/tasks.py's/habits.py's own clamp) since it's advisory only.
 
    Same-day follow-up, direct feedback ("the due date for habits should
    display a text with the streak... that can be playful depending on the
@@ -52,9 +58,10 @@
             {% set cc_change = 'habit' if item.kind == 'entity' else 'task' %}
             <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-value" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
                 {% if item.kind == 'entity' %}<input type="hidden" name="entry_date" value="{{ today_iso }}">{% else %}<input type="hidden" name="completion_date" value="{{ today_iso }}">{% endif %}
-                <input type="number" name="value" class="habit-checkin-input" value="{{ item.today_value|int }}" min="0" max="999999" step="1" inputmode="numeric"
-                       title="Today's count{% if item.is_quantity %} (target {{ item.target|int }}){% endif %}"
-                       aria-label="Today's count for {{ item.title }}" onchange="this.form.requestSubmit()">
+                <input type="hidden" name="value" value="{{ item.today_value|int }}">
+                <span class="inline-edit-cell habit-checkin-display" data-inline-edit data-field="value" data-min="0" data-max="999999" tabindex="0"
+                      title="Double-click to edit today's count{% if item.is_quantity %} (target {{ item.target|int }}){% endif %}"
+                      aria-label="Today's count for {{ item.title }}, double-click to edit">{{ item.today_value|int }}</span>
                 {% if item.is_quantity %}<span class="text-muted habit-checkin-target">/ {{ item.target|int }}</span>{% endif %}
             </form>
         </div>

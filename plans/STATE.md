@@ -3832,3 +3832,46 @@ settings)."
   `test_recurrence_terminology.py` established, needed because
   `deps._cached_app_meta` reads `request.app.state.settings.db_path` and
   a bare `Request({...})` has no `.app` at all). Full suite 1696 passed.
+
+## Side work (2026-08-28, same-day follow-up) — Notion-style click-to-edit,
+starting with the habit check-in counter
+
+Direct feedback on the number input above: "how in notion we see a table
+with just text and colored pills, but once you click two times on an
+element it becomes editable in a non-discrete way? Yes, I want this,
+starting with the counter in the status column for habits."
+
+- New generic contract, `data-inline-edit` (`static/inline_edit.js`, ~100
+  lines, loaded globally in `base.html` right after `async_crud.js`, which
+  it reuses): any element carrying it renders as bare text -- no input
+  border/background, just a subtle hover background and a dashed
+  underline on keyboard focus -- until double-clicked (or Enter/Space
+  while focused, for keyboard users). At that point its text is swapped
+  for a real `<input type="number">` in place, focused and pre-selected;
+  Enter or blur commits (clamped to `data-min`/`data-max`), Escape
+  reverts. Committing writes the new value into the nearest `<form>`'s
+  hidden `name="{data-field}"` input and calls `form.requestSubmit()` --
+  picked up by async_crud.js's existing `[data-cc-change]` submit
+  listener exactly like any other form on the page, so this adds no new
+  network path. Deliberately generic (not habit-specific) -- the Habits
+  group's check-in counter is its first user, per the request, not
+  intended to be its only one.
+- `_habit_row.html`'s check-in cell: the always-visible number input
+  (this same day, entry above) is now a `data-inline-edit` span holding
+  just the digit(s), plus a hidden `name="value"` input carrying the real
+  value (`item.today_value`) the form submits. `plus_url`/the server-side
+  clamp are completely unchanged -- this was presentation-only, same as
+  every other step in this same-day thread.
+- New CSS: `.inline-edit-cell`/`.inline-edit-input` (`static/style.css`),
+  generic (not `.habit-*`-prefixed) for the same reuse reason;
+  `.habit-checkin-input` (the old always-visible input's own rule) is
+  gone, replaced by these.
+- Tests: `TestHabitRowAsyncSubmit`'s two check-in-cell tests updated to
+  assert the `data-inline-edit`/hidden-input markup instead of a visible
+  `<input type="number">` (renamed to `test_plain_habit_task_has_data_cc_
+  change_task`/`test_quantity_habit_shows_target_and_today_value`) --
+  double-click-to-edit itself is a client-side interaction with no
+  Python-side behavior to unit test beyond "the right markup and data
+  attributes are present," same level this app's other JS-behavior tests
+  (e.g. the ScriptGate-style ones) already operate at. Full suite 1696
+  passed (net zero -- no tests added or removed, two rewritten in place).
