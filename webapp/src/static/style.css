@@ -1019,10 +1019,16 @@ thead th{
 tbody tr{border-bottom:1px solid var(--separator);}
 tbody tr:last-child{border-bottom:none;}
 tbody tr:hover{background:var(--row-alt);}
-tbody td{padding:6px 8px; vertical-align:middle;}
+tbody td{padding:10px 8px; vertical-align:middle;}
 
 /* Labels manage table -- clean, airy table for the Labels settings page.
-   Color dot + name, optional Group badge, Usage count, icon actions. */
+   Color dot + name, optional Group badge, Usage count, icon actions.
+   2026-08-28 fix: the compact 6px row padding below was originally written
+   as a *global* `tbody td` override -- it silently shrank every other
+   plain table in the app (Tasks, Holidays, Time blocks, ...) along with
+   this one. Scoped to #labels-table only; the global rule above is back
+   to its pre-existing 10px. */
+#labels-table tbody td { padding: 6px 8px; }
 #labels-table th:last-child,
 #labels-table td:last-child { text-align: right; padding-right: 12px; }
 #labels-table th:first-child,

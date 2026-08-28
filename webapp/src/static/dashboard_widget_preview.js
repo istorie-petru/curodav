@@ -288,7 +288,11 @@ window.CCWidgetPreview = {
     // silently lost (the debounced save fires after the page has already
     // navigated). `e.preventDefault()` holds the navigation; once every
     // flush resolves, `window.location` does the actual navigate.
-    const doneBtn = root.querySelector("a.btn[href='/'], a.btn[href^='/labels/']");
+    // Selects by class + text rather than a hardcoded href pattern, so it
+    // doesn't silently stop matching whenever the label/space page's own
+    // URL prefix changes (2026-08-28: broke once already when the labels
+    // router moved from /labels to /settings/labels).
+    const doneBtn = root.querySelector("a.btn.primary");
     if (doneBtn && doneBtn.textContent.trim().match(/Done/i)) {
       doneBtn.addEventListener("click", async (e) => {
         if (pendingFlushes.length === 0) return; // nothing to flush -- let it navigate

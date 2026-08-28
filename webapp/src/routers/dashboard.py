@@ -927,7 +927,7 @@ def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
     tiles = []
     for lbl in db.list_space_labels(conn):
         tiles.append({
-            "name": lbl["name"], "href": f"/labels/{lbl['name']}",
+            "name": lbl["name"], "href": f"/spaces/{lbl['name']}",
             "icon": lbl.get("icon") or "layers", "color": lbl.get("color") or "blue",
             "kind": "Space",
         })
@@ -1762,19 +1762,29 @@ def _build_widget_contexts(conn, widgets: list[dict], nav: dict | None = None) -
     return contexts
 
 
-def _return_url(label_name: str | None, _legacy: str | None = None, edit: bool = False) -> str:
+def _return_url(label_name: str | None, _legacy: str | None = None, edit: bool = False, conn=None) -> str:
     """Where a widget-mutating POST should redirect back to -- Home ("/")
     when the acted-on widget has no page identity, or that label's
-    generated page (/labels/{name}) otherwise. Derived from the widget
-    itself wherever one already exists (edit/resize/stack/unstack/delete/
-    move/reorder below); only add_widget has no existing widget to derive
-    it from, so it takes `label_name` as a hidden form field instead (see
-    _widget_builder_fields.html). `_legacy` accepts a second positional
-    arg so every pre-Phase-2 call site passing (space_uid, project_uid)
-    -- both now the same value, see _widget_row_to_dict's aliasing --
-    keeps working unchanged; only the first non-empty of the two is used."""
+    generated page otherwise: `/spaces/{name}` directly for a Space
+    (`conn` passed -- avoids bouncing through label_detail's own 301,
+     2026-08-28 fix, see plans/STATE.md), `/settings/labels/{name}`
+    (labels.py's label_detail, which itself 301s on to /spaces/{name}
+    for a Space) when no `conn` is available to check. Derived from the
+    widget itself wherever one already exists (edit/resize/stack/unstack/
+    delete/move/reorder below); only add_widget has no existing widget to
+    derive it from, so it takes `label_name` as a hidden form field
+    instead (see _widget_builder_fields.html). `_legacy` accepts a second
+    positional arg so every pre-Phase-2 call site passing (space_uid,
+    project_uid) -- both now the same value, see _widget_row_to_dict's
+    aliasing -- keeps working unchanged; only the first non-empty of the
+    two is used."""
     label_name = label_name or _legacy
-    base = f"/labels/{label_name}" if label_name else "/"
+    if not label_name:
+        base = "/"
+    elif conn is not None and db.effective_label_config(conn, label_name).get("generate_space"):
+        base = f"/spaces/{label_name}"
+    else:
+        base = f"/settings/labels/{label_name}"
     return f"{base}?edit=1" if edit else base
 
 
@@ -1806,7 +1816,7 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
         "project_uid": label_name or "",
         "label_name": label_name or "",
         "page_scope": scope,
-        "page_url": _return_url(label_name),
+        "page_url": _return_url(label_name, conn=conn),
         "edit_mode": edit,
         "widget_contexts": widget_contexts,
         "widget_types": _widget_types_for_scope(scope),
@@ -1949,7 +1959,7 @@ def reset_dashboard(label_name: str = Form(""), edit: bool = Form(False), conn=D
     pattern), same mechanism every other destructive action in this app
     already uses, not a second confirmation UI."""
     _reset_dashboard(conn, label_name or None)
-    return RedirectResponse(url=_return_url(label_name or None, edit=edit), status_code=303)
+    return RedirectResponse(url=_return_url(label_name or None, edit=edit, conn=conn), status_code=303)
 
 
 def _flatten_customize(contexts: list[dict]) -> list[dict]:
@@ -2210,10 +2220,10 @@ def add_widget(
     anything on the page."""
     page_label = space_uid or project_uid or None
     if source not in WIDGET_SOURCES:
-        return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+        return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
     wtype, extra = _resolve_selection(source, view, range or None)
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
-        return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+        return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
     show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
@@ -2234,7 +2244,7 @@ def add_widget(
             "label_name": page_label,
         },
     )
-    return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+    return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
 
 
 @router.post("/dashboard/widgets/{uid}/edit")
@@ -2278,7 +2288,7 @@ def edit_widget(
         wtype = existing["type"]
         extra = {}
     elif source not in WIDGET_SOURCES:
-        return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+        return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
     else:
         wtype, extra = _resolve_selection(source, view, range or None)
     # Scope guard (2026-08-05) -- an excluded type can only arrive from a
@@ -2287,7 +2297,7 @@ def edit_widget(
     # turning a project widget into something that can't mean anything
     # there.
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
-        return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+        return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
     row = dict(existing)
     show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
     new_config = _config_from_form(
@@ -2308,7 +2318,7 @@ def edit_widget(
         new_config["label_name"] = page_label
     row.update({"type": wtype, "title": title.strip() or None, "config": new_config})
     db.upsert_dashboard_widget(conn, row)
-    return RedirectResponse(url=_return_url(page_label, edit=edit), status_code=303)
+    return RedirectResponse(url=_return_url(page_label, edit=edit, conn=conn), status_code=303)
 
 
 def _dissolve_stack(conn, stack: dict) -> None:
@@ -2472,7 +2482,7 @@ def unstack_widget(uid: str, edit: bool = Form(False), conn=Depends(get_db)):
         widget["config"] = widget_config
     db.upsert_dashboard_widget(conn, widget)
     _dissolve_if_singleton(conn, stack_uid)
-    return RedirectResponse(url=_return_url(space_uid, project_uid, edit), status_code=303)
+    return RedirectResponse(url=_return_url(space_uid, project_uid, edit, conn=conn), status_code=303)
 
 
 @router.post("/dashboard/widgets/{uid}/delete")
@@ -2486,12 +2496,12 @@ def delete_widget(uid: str, edit: bool = Form(False), conn=Depends(get_db)):
             # a real owner of the widgets inside it, so removing it should
             # never take your Filters config for those widgets with it.
             _dissolve_stack(conn, widget)
-            return RedirectResponse(url=_return_url(space_uid, project_uid, edit), status_code=303)
+            return RedirectResponse(url=_return_url(space_uid, project_uid, edit, conn=conn), status_code=303)
         stack_uid = widget.get("group_uid")
         db.delete_dashboard_widget(conn, uid)
         if stack_uid:
             _dissolve_if_singleton(conn, stack_uid)
-        return RedirectResponse(url=_return_url(space_uid, project_uid, edit), status_code=303)
+        return RedirectResponse(url=_return_url(space_uid, project_uid, edit, conn=conn), status_code=303)
     db.delete_dashboard_widget(conn, uid)
     return RedirectResponse(url="/", status_code=303)
 
@@ -2506,11 +2516,11 @@ def move_widget(uid: str, direction: str = Form(...), edit: bool = Form(False), 
     widgets = db.list_dashboard_widgets(conn, space_uid=space_uid, project_uid=project_uid)
     idx = next((i for i, w in enumerate(widgets) if w["uid"] == uid), None)
     if idx is None:
-        return RedirectResponse(url=_return_url(space_uid, project_uid, edit), status_code=303)
+        return RedirectResponse(url=_return_url(space_uid, project_uid, edit, conn=conn), status_code=303)
     swap_idx = idx - 1 if direction == "up" else idx + 1
     if 0 <= swap_idx < len(widgets):
         db.swap_dashboard_widget_positions(conn, widgets[idx]["uid"], widgets[swap_idx]["uid"])
-    return RedirectResponse(url=_return_url(space_uid, project_uid, edit), status_code=303)
+    return RedirectResponse(url=_return_url(space_uid, project_uid, edit, conn=conn), status_code=303)
 
 
 @router.post("/dashboard/widgets/{uid}/reorder")

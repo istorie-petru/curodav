@@ -58,7 +58,7 @@ def _safe_page_url(page_url: str, scope: str) -> str:
     erving a bare 303 with no Location."""
     if isinstance(page_url, str) and page_url.startswith("/") and "://" not in page_url:
         return page_url
-    return f"/labels/{scope}" if scope else "/"
+    return f"/settings/labels/{scope}" if scope else "/"
 
 
 @router.get("/banners/editor")

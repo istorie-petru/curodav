@@ -316,7 +316,7 @@ class TestResetToDefault:
         assert db.list_dashboard_widgets(conn, label_name="CS101") == []
 
         resp = dashboard_router.reset_dashboard(label_name="CS101", edit=False, conn=conn)
-        assert resp.headers["location"] == "/labels/CS101"
+        assert resp.headers["location"] == "/settings/labels/CS101"
         types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
         assert types == original_types
 

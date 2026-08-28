@@ -118,15 +118,14 @@
             <span class="settings-field-hint">Which views appear in the Calendar view switcher</span>
         </span>
         <span class="spacer"></span>
-        {% include "_widget_list_multiselect.html" with
-            ms_name="views"
-            ms_label="Calendar views"
-            ms_items=[{"uid": "month", "name": "Month"}, {"uid": "fourweek", "name": "4-Week"}, {"uid": "week", "name": "Week"}, {"uid": "day", "name": "Day"}]
-            ms_selected=current_calendar_views
-            ms_mode="filter"
-            ms_form_id="calendar-views-form"
-            ms_autosubmit=true
-        %}
+        {% set ms_name = "views" %}
+        {% set ms_label = "Calendar views" %}
+        {% set ms_items = [{"uid": "month", "name": "Month"}, {"uid": "fourweek", "name": "4-Week"}, {"uid": "week", "name": "Week"}, {"uid": "day", "name": "Day"}] %}
+        {% set ms_selected = current_calendar_views %}
+        {% set ms_mode = "filter" %}
+        {% set ms_form_id = "calendar-views-form" %}
+        {% set ms_autosubmit = true %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
 </div>
 {% endblock %}

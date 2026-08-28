@@ -9,10 +9,10 @@ optional dict keyed by the label's name (`label_config`), not a row other
 tables hold a hard foreign key into.
 
 This router owns:
-  1. The manage page (`/labels`) -- rename/merge/recolor/icon/parent/
-     generate_space/"clear" (strip from everywhere), same "flat row list"
-     pattern tags.py/projects.py used to have.
-  2. The generated label page (`/labels/{name}`) -- for a `generate_space`
+  1. The manage page (`/settings/labels`) -- rename/merge/recolor/icon/
+     parent/generate_space/"clear" (strip from everywhere), same "flat row
+     list" pattern tags.py/projects.py used to have.
+  2. The generated label page (`/settings/labels/{name}`) -- for a `generate_space`
      label this is what used to be a Space's own page (aggregating its
      child labels' content); for a plain label it's what used to be a
      Project's own page (that label's own tasks/events/contacts/classes).
@@ -505,7 +505,8 @@ def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(g
 
     if is_space:
         from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=f"/spaces/{name}", status_code=301)
+        url = f"/spaces/{name}" + ("?edit=1" if edit else "")
+        return RedirectResponse(url=url, status_code=301)
 
     dashboard_router._ensure_default_label_widgets(conn, name)
     ctx = dashboard_router.widget_page_context(conn, project_uid=name, edit=edit)

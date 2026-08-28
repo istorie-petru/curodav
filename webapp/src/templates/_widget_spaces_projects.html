@@ -14,7 +14,7 @@
 {% if data.cards %}
 <div class="filled-cards-grid">
     {% for card in data.cards %}
-    {{ filled_card(card.name, '/labels/' ~ card.uid, card.color, description=card.description, meta=(card.project_count ~ (' project' if card.project_count == 1 else ' projects'))) }}
+    {{ filled_card(card.name, '/spaces/' ~ card.uid, card.color, description=card.description, meta=(card.project_count ~ (' project' if card.project_count == 1 else ' projects'))) }}
     {% endfor %}
 </div>
 {% else %}

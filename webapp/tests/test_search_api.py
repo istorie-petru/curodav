@@ -238,7 +238,7 @@ class TestPageNavigation:
         data = json.loads(search_router.api_search(q="Univers", conn=conn).body.decode())
         pages = [r for r in data["results"] if r["type"] == "page"]
         assert pages == [
-            {"type": "page", "uid": "/labels/University", "url": "/labels/University", "title": "University", "subtitle": "Space", "tags": [], "status": None}
+            {"type": "page", "uid": "/spaces/University", "url": "/spaces/University", "title": "University", "subtitle": "Space", "tags": [], "status": None}
         ]
 
     def test_type_filtered_search_excludes_pages(self, conn):

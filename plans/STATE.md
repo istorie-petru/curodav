@@ -3440,11 +3440,116 @@ session checked `git status`).
 - "Move this occurrence" form: added `submit=true` to datetime picker so Apply submits the form
 - Added generic async handler for page forms with `data-cc-change` (not in modals) in `async_crud.js` — progressive enhancement, falls back to reload
 
-## Next session: Offline mode expansion (deferred from this session)
-Per user request, these are scoped for the next session:
-- Hide tabbar in offline mode
-- "You're offline" label at end of segmented offline-tabs (non-clickable)
-- Merge Upcoming and Quick Add into single view
-- Improve Upcoming views for events/tasks (more pleasing)
-- Visual Quick Add builder: dropdown to choose entity type (task/event/contact/note), label picker, date/time inputs that update the capture text box — one unified UI instead of pure text capture
-- Ensure all contacts always synced to offline mirror
+## Bug fixes (2026-08-28 session) — breakage from the uncommitted-workflow
+"Reworked settings" commits (14971d3, 2c896d1)
+Two commits landed changes to labels/spaces routing and settings pages
+outside the normal one-slice-per-session discipline (no STATE.md update,
+several call sites left stale). Direct user report: `/labels/Debate` and
+`/labels/Debate?edit=1` 404ing, `POST /dashboard/widgets` redirecting
+somewhere broken, Settings > General template broken, Labels modal design
+off. Root causes and fixes:
+- `routers/labels.py`'s router prefix moved from `/labels` to
+  `/settings/labels` but ~6 other call sites (breadcrumb-adjacent dashboard
+  tiles, search results, the widget-mutation `_return_url` helper,
+  `banners.py`'s redirect fallback) still built the old `/labels/{name}`
+  URL — every one of those now 404s. Fixed every live call site (dead
+  templates `label_edit_modal.html`/`_labels_body.html`/
+  `label_merge_modal.html`/`_breadcrumb.html`, already unreferenced,
+  left alone). `routers/dashboard.py::_return_url` also gained an optional
+  `conn` param so a widget-mutating redirect can check `generate_space`
+  and point straight at `/spaces/{name}` for a real Space instead of
+  bouncing through `/settings/labels/{name}`'s own 301 (which was also
+  fixed to preserve `?edit=1` across that redirect). `static/
+  dashboard_widget_preview.js`'s "Done" button flush-before-navigate
+  selector matched on the old href pattern — switched to matching by
+  class (`a.btn.primary`) instead, so it can't silently stop working the
+  next time this URL shape changes.
+- `templates/settings_general.html`'s new "Calendar views" multiselect
+  used `{% include "..." with ms_name=... %}` — not valid Jinja2 (this
+  app's own convention is `{% set ms_name = ... %}` before a bare
+  `{% include %}`, see every other `_widget_list_multiselect.html`
+  caller) — a straight `TemplateSyntaxError` on every page load, which is
+  why General looked "broken." Fixed to the established `{% set %}`
+  pattern.
+- `static/style.css`'s new Labels-table styling added `tbody
+  td{padding:6px 8px}` as a **global** rule (no `#labels-table` scope),
+  silently shrinking row padding on every other plain table in the app
+  (Holidays, Time blocks, ...) as a side effect. Reverted the global rule
+  to its original `10px 8px`, moved the tighter 6px spacing onto
+  `#labels-table tbody td` specifically. The label form modal's own
+  markup (`label_form_modal.html`) was otherwise verified structurally
+  sound (rendered server-side and inspected directly — matches
+  `habit_form.html`'s established color/icon-swatch-picker + Advanced
+  `<details>` pattern byte-for-byte in shape); no headless browser was
+  available in this sandbox to confirm the visual result pixel-for-pixel,
+  so if the modal still looks off after this fix, that's the next thing
+  to report back with specifics (which field, what it looks like).
+- Updated 5 stale test assertions (`test_dashboard_router.py`,
+  `test_dashboard_usability_rework.py`, `test_search_api.py`) that were
+  still asserting the pre-rework `/labels/{name}` redirect target; added
+  one new test (`TestSpaceWidgets::
+  test_add_widget_redirects_straight_to_spaces_for_a_real_space`) covering
+  the new direct-to-`/spaces` redirect path. Full suite **1741 passed**.
+
+Deliberately NOT done this session (out of scope for "fix active
+breakage," belongs to the redesign queue below): `/projects/{name}` is
+still deliberately retired (redirects to `/tasks?label=...`, see
+`routers/projects.py`'s own docstring, a 2026-08-15 decision) — reviving
+it as a 2:1 kanban+agenda page is new feature work, not a bug fix.
+
+## Next session queue — major rework requested 2026-08-28 (scoped, not yet started)
+
+Direct user request, much larger than one slice — broken into the pieces
+below, **one per session** per this file's own discipline. Pick the next
+one in rough dependency order (sync model design first, since it's
+docs-only and everything else is independent of it):
+
+1. **Design doc: fixed-IP DB sync, transport swap only** — the PWA/
+   IndexedDB/service-worker offline model (all of 1.8) is being scrapped
+   as unreliable. Replacement: the app links to a database at a fixed
+   IP/hostname (e.g. `192.168.1.111:8080` or `app.site.com`) from
+   Settings, and syncs against it directly — no browser-side mirror, no
+   offline-first editing model. Per direct answer when asked: **keep**
+   the existing per-field HLC/LWW conflict logic (`field_versions`,
+   `sync_devices`, `sync_conflicts`, `src/offline_sync.py`'s `apply_op`/
+   `apply_batch`) — only the transport changes (direct device-to-server
+   over LAN/HTTP instead of through a service worker's local IndexedDB
+   mirror), and the server is explicitly the priority/authoritative side
+   on conflict. Write this as its own docs-only slice in
+   `open-priority.md` (same precedent as 1.8's original sync model
+   write-up) before touching code; then a real implementation breakdown.
+   Everything under `static/offline_*.js`, `static/sw.js`, `templates/
+   offline.html`, `routers/pwa.py` needs an explicit keep/replace/delete
+   decision as part of that doc.
+2. **Merge Habits into the Tasks table** as a grouped section (see #3's
+   grouping rule below); remove the standalone Habits page/nav entry.
+3. **Tasks table rework** — filtering reduced to date only; grouping is
+   now **always on, not user-choosable**: Project → Habits (its own
+   group) → Unassigned → Completed (most-recent-first, always last), each
+   group sorted by due date. Remove Importance/Urgency (columns +
+   underlying filter/sort). Remove filter-by-label, filter-by-status, and
+   the group-by-project toggle (grouping is no longer optional). Add a
+   "+" add-row at the end of every group (colored like a normal row, same
+   affordance the Unscheduled-work panel doesn't have but Settings tables
+   should share, see #8).
+4. **Tasks page: table view only** — disable Kanban and Timeline
+   entirely (remove the view switcher entries, keep or redirect the
+   routes per this app's usual retirement precedent).
+5. **Project page: 2:1 layout** — left column (2 parts) a Kanban of the
+   project's tasks, right column (1 part) an agenda of the project's
+   events. Revives `/projects/{name}` (currently a redirect, see the Bug
+   fixes section above) as a real page again — reconcile with the
+   2026-08-15 "retire /projects" decision record in `plans/open.md`
+   before building.
+6. **Calendar split into two pages** — one page with only the 4-Week
+   view, another with only the Week view (currently both live as tabs
+   inside one Calendar page alongside Month/Day/Timetable).
+7. **Contacts page cleanup** — currently renders both a `.card` wrapper
+   and a separate `.contacts-body` div; collapse to one card containing
+   the list.
+8. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
+   replicas of the Tasks table view** — same row markup/spacing/column
+   conventions (see the `tbody td` padding-leak fix above, which was this
+   session's warning sign that these tables have been drifting from the
+   Tasks table's own styling), including the same per-group "+" add-row
+   from #3.
