@@ -1509,15 +1509,17 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 }
 .inline-edit-cell:focus{outline:none; text-decoration-color:var(--fg-secondary);}
 /* The real input that replaces .inline-edit-cell's text while editing --
-   still no box (no border/background/radius -- same "much simpler, much
-   less visible" note as .inline-edit-cell above): just the text plus a
-   solid underline, the "obvious line that shows editing" itself,
-   replacing the resting dotted one so mid-edit unmistakably reads as a
-   different state from "just displaying a number" without needing a
-   bordered field to say so. */
+   direct feedback (2026-08-29): no border at all, and its background
+   should match the row instead of standing out as its own field --
+   `background:transparent` rather than a hardcoded surface color so it
+   always matches whatever's actually behind it (row hover state, light/
+   dark theme) instead of potentially mismatching one of them. There is no
+   more visual difference between "displaying" and "editing" beyond the
+   text literally becoming an editable field -- as close to invisible
+   chrome as an `<input>` can get. */
 .inline-edit-input{
   all:unset; width:44px !important; text-align:center; font:inherit; color:inherit;
-  border-bottom:1.5px solid var(--accent-neutral) !important; cursor:text;
+  background:transparent; border:none; cursor:text;
   -moz-appearance:textfield; /* Firefox's native up/down spinner */
 }
 /* Chrome/Safari/Edge's native number spinner -- direct feedback: hide it,

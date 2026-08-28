@@ -3981,3 +3981,18 @@ real `<input type="number">` (keyboard up/down arrows and scroll-wheel
 adjustment still work), just without the visible spinner widget.
 Presentation-only, `static/style.css` only. Full suite still 1728 passed
 (no test asserts CSS specifics, same as the passes before it).
+
+## Side work (2026-08-29, immediate follow-up) — inline-edit input: no
+border, background matches the row
+
+Direct feedback: "for this input have the same background as the rows and
+no border." `.inline-edit-input` (the real `<input>` shown mid-edit) drops
+its `border-bottom` entirely and switches from a hardcoded surface color
+to `background:transparent` -- transparent rather than a specific
+`--surface-container-*` variable so it always matches whatever's actually
+behind it (a row's hover state, light/dark theme) instead of risking a
+mismatch against either. There is now no visual boundary at all between
+"displaying" and "editing" beyond the text becoming an editable field --
+as close to invisible chrome as an `<input>` can get, in line with every
+prior pass on this control trending the same direction. Presentation-only,
+`static/style.css` only. Full suite still 1728 passed.
