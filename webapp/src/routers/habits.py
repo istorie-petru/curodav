@@ -56,12 +56,15 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 # single source of truth.
 ICONS = LABEL_ICONS
 
-# How many weeks the full detail-page heatmap shows -- 53 weeks is "a bit
-# over a year" (the extra partial week is whatever's needed to complete the
-# grid from a Monday), matching the GitHub contribution graph's convention.
-# PREVIEW_WEEKS (the list page's shorter compact preview) is gone with the
-# list page itself (2026-08-28 "major rework" session, item 2).
-DETAIL_WEEKS = 53
+# How many weeks the full detail-page heatmap shows -- moved to
+# habit_heatmap.py (2026-08-29) so routers/tasks.py's habit-task detail
+# modal can share the exact same "full year" window instead of its own
+# much-narrower default (see that constant's own docstring for why: a
+# narrower window left visible empty space in the modal). Re-exported under
+# the old name here so every existing reference in this file/its tests is
+# unchanged. PREVIEW_WEEKS (the list page's shorter compact preview) is gone
+# with the list page itself (2026-08-28 "major rework" session, item 2).
+DETAIL_WEEKS = habit_heatmap.DETAIL_WEEKS
 
 
 def _now() -> str:

@@ -16,6 +16,22 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+# How many weeks a "full history" heatmap shows -- 53 weeks is "a bit over a
+# year" (the extra partial week is whatever's needed to complete the grid
+# from a Monday), matching the GitHub contribution graph's convention.
+# Shared by both heatmap call sites that want the full-year view (routers/
+# habits.py's standalone habit detail modal, and routers/tasks.py's
+# habit-tracked-task detail modal) rather than each picking its own week
+# count -- 2026-08-29 direct feedback ("the heatmap graph should not have
+# empty space... prefer to show more months, empty cells, but not empty
+# space"): the task modal used to default to a 12-week window, which at the
+# heatmap's fixed 11px cell size is far narrower than the ~660px modal body
+# it sits in, leaving a large blank gap to the right. A single shared
+# constant sized to comfortably fill that modal width (rather than a value
+# tuned to one specific container) keeps both heatmaps visually consistent
+# and avoids the same gap reappearing wherever else this grid gets reused.
+DETAIL_WEEKS = 53
+
 
 def heatmap_weeks(
     entries_by_date: dict[str, float], target: float, weeks: int, today: date | None = None

@@ -4083,3 +4083,30 @@ mode starts, so no JS change was needed, just this one rule. Bumped
 `static/style.css`-only edit needs this too, now proven not just
 written down) and updated the matching pinned test assertion. Full suite
 1728 passed.
+
+## Bug fix (2026-08-29, immediate follow-up) — habit-task heatmap's empty
+space in its detail modal
+
+Direct report: "for habits, the heatmap graph should not have empty
+space. Prefer to show more months, empty cells, but not empty space."
+Confirmed by inspecting `static/style.css`: the heatmap's cells are a
+fixed 11px (+3px gap), and `routers/tasks.py::_completion_heatmap_weeks`
+(the habit-tracked-task detail modal's heatmap, `habit_task_detail.html`)
+defaulted to 12 weeks — 168px wide — inside a `.detail-card` that renders
+at roughly 616-660px in the 700px modal (`.modal` width minus
+`.modal-body`/`.detail-card` padding), leaving a ~450px blank gap to the
+right. The standalone habit detail modal (`_habit_detail_body.html`,
+`routers/habits.py`) already used a wider `DETAIL_WEEKS = 53` ("a bit
+over a year," matching GitHub's contribution-graph convention) and
+doesn't show the same gap.
+
+Fix: moved `DETAIL_WEEKS` into the shared `habit_heatmap.py` module (both
+routers already depend on it, so this isn't a new coupling) and pointed
+`_completion_heatmap_weeks`'s default at it instead of the literal `12` —
+`routers/habits.py` re-exports the name unchanged so its own call sites
+and tests are untouched. The extra weeks beyond "today" still render as
+blank *cells within the grid* (`level -1`, non-interactive) rather than
+literal empty space around it — same mechanism the standalone habit
+heatmap already relies on, just applied consistently to the task-tracked
+variant too. No CSS/JS touched, so no service-worker cache bump needed.
+Full suite 1728 passed.

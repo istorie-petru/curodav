@@ -999,13 +999,23 @@ def _completion_streaks(completions: dict[str, str], today: date | None = None) 
 
 
 def _completion_heatmap_weeks(
-    completions: dict[str, str], weeks: int = 12, today: date | None = None
+    completions: dict[str, str], weeks: int = habit_heatmap.DETAIL_WEEKS, today: date | None = None
 ) -> list[list[dict]]:
     """Monday-aligned grid of `weeks` columns x 7 rows ending on `today`,
     same shape habits' _heatmap_weeks produces (so the shared
     _habit_heatmap.html macro can paint it). A present date is "full"
     (level 4 -- there's no target-per-day concept for task check-offs);
-    future days render blank/non-interactive (level -1)."""
+    future days render blank/non-interactive (level -1).
+
+    Default was 12 weeks until 2026-08-29 direct feedback ("the heatmap
+    graph should not have empty space... prefer to show more months, empty
+    cells, but not empty space"): at the heatmap's fixed 11px cell size, 12
+    weeks (~168px) was far narrower than the ~660px modal body
+    habit_task_detail.html renders it in, leaving a large blank gap.
+    Reusing habit_heatmap.DETAIL_WEEKS (53 weeks, "a bit over a year") both
+    fills that width with real grid (extra future days render as blank
+    *cells* within the grid, not blank space around it) and keeps this
+    heatmap visually consistent with the standalone habit detail modal's."""
     today = today or date.today()
     start = today - timedelta(days=weeks * 7 - 1)
     start -= timedelta(days=start.weekday())  # snap back to the preceding Monday
