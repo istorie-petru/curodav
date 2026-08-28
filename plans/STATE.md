@@ -3717,3 +3717,29 @@ docs-only and everything else is independent of it):
    table's own styling), including the same per-group "+" add-row the
    2026-08-28 major rework session added to the Tasks table (see that
    session's entry above).
+
+## Bug fix (2026-08-28 follow-up) — editing a habit force-reloaded the page
+
+Direct user report: "editing habits force a page refresh. it should not.
+save smarter." Root cause: the same-day "major rework" session (see above)
+retired `/habits` as a standalone list page — habit rows now render inside
+the Tasks table's own "Habits" group (`_tasks_body.html`'s `grp.kind ==
+'habits'` block), with the Tasks page's `#tasks-body` region as their real
+home. But `habit_form.html`'s edit/create form still dispatches
+`data-cc-change="habit"` on save (unchanged, still correct for `/habits/
+{uid}`'s own standalone detail page), and nothing on the Tasks page ever
+claimed a `"habit"`-typed `cc-entity-changed` event — `static/
+tasks_table.js`'s one listener only checked `detail.type === "task"`.
+`window.ccApi.dispatchChange` came back unclaimed every time, so
+`modal.js`'s generic form handler fell back to its unclaimed-change branch,
+a full `window.location.reload()`.
+
+Fix: `tasks_table.js`'s listener now claims `"habit"` alongside `"task"` —
+both types refresh the exact same `#tasks-body` region
+(`/tasks/regions?region=table`, already includes the Habits group
+regardless of which type triggered it), so a habit edit now re-renders in
+place exactly like a task edit does, no full reload. One-line-condition
+fix in `static/tasks_table.js`; no server/template changes needed. Full
+suite still 1687 passed (JS-only change, not exercised by the Python test
+suite — `habits.js`'s own listener and its `/habits/{uid}` coverage in
+`test_habits_router.py` are untouched and still pass).

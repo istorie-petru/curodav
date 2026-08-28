@@ -302,12 +302,25 @@
   // actions, command palette) dispatches cc-entity-changed; this refreshes
   // the #tasks-body region from the server. Falls back to a full reload if
   // the fragment fetch itself fails after the mutation already succeeded.
+  //
+  // Also claims "habit" changes (2026-08-28 fix): the Habits group renders
+  // as part of this same #tasks-body region (`_tasks_body.html`'s
+  // `grp.kind == 'habits'` block, since /habits was retired the same day in
+  // favor of "the Tasks table's Habits group, this form's real home now" --
+  // see plans/STATE.md). habit_form.html's edit/create form still dispatches
+  // `data-cc-change="habit"` (habits.js's own listener, unchanged, still
+  // covers /habits/{uid}'s standalone detail page), but nothing on the Tasks
+  // page ever claimed that type, so modal.js's dispatchChange() always came
+  // back unclaimed here and fell back to a full `window.location.reload()`
+  // -- reported directly ("editing habits force a page refresh"). Reusing
+  // the exact same table-region refresh as an ordinary task edit fixes it
+  // the same way.
   // ------------------------------------------------------------------ //
   document.addEventListener("cc-entity-changed", (e) => {
     const detail = e.detail || {};
-    if (detail.type !== "task") return;
+    if (detail.type !== "task" && detail.type !== "habit") return;
     // Claim the event only when the region is actually on this page --
-    // otherwise (task edited from a calendar/timeline modal) leave it
+    // otherwise (task/habit edited from a calendar/timeline modal) leave it
     // unclaimed so modal.js falls back to a reload rather than going stale.
     if (!document.getElementById("tasks-body")) return;
     detail.claimed = true;
