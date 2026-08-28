@@ -4175,3 +4175,15 @@ deleted `static/heatmap_scroll.js`, and removed its `<script>` tag
 (`base.html`) and its `wireContent()` hook (`modal.js`). Bumped
 `CACHE_NAME` to `"cc-shell-v18"` (style.css changed again) and updated
 the pinned test assertion. Full suite 1728 passed.
+
+## Follow-up (2026-08-29, same day) — bigger heatmap cells
+
+Direct request: "could you make the cells a bit bigger." With both
+detail heatmaps now on `heatmap-wide` (previous entry), cell size is
+`container width / DETAIL_WEEKS` -- there's no fixed-px cell size left to
+bump directly, so the lever is `habit_heatmap.DETAIL_WEEKS` itself: fewer
+columns dividing the same container width renders each one bigger.
+Dropped it from 53 (~1 year) to 32 (~7.5 months) -- a real size increase
+(roughly 1.6x wider per cell) while still showing well over half a year
+of history. No CSS/JS touched, pure Python constant, so no
+service-worker cache bump needed. Full suite 1728 passed.
