@@ -21,7 +21,6 @@ from __future__ import annotations
 import calendar as py_calendar
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -365,21 +364,25 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
     Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue` moved
     from a `date_filter` value to a `status_filter` value, and `important`/
     `urgent` from `date_filter` values to `importance_filter`/
-    `urgency_filter` "(any level)" values -- see routers/tasks.py's
-    STATUS_FILTERS/IMPORTANCE_FILTERS/URGENCY_FILTERS. `_tasks_link` now
-    takes the query param name alongside the value so each stat can point
-    at its own axis's dropdown."""
+    `urgency_filter` "(any level)" values.
+
+    2026-08-28 "major rework" session update: Status/Importance/Urgency
+    filtering is gone from the Tasks page entirely now (item 3, "filtering
+    reduced to date only") -- there's no longer a filtered-view destination
+    for overdue/important/urgent to link to, only Date's `today`/
+    `this_week` survive. `overdue_link`/`important_link`/`urgent_link` now
+    point at the plain Table view (still a real, useful destination -- the
+    count itself, computed independently via count_by_state, is unaffected
+    either way); `today_link`/`week_link` are unchanged since `date_filter`
+    is still live."""
     tasks = _filtered_tasks(conn, config)
     label_rules = db.list_label_rules(conn)
     counts = derived_state.count_by_state(tasks, label_rules)
 
-    label_name = config.get("label_name")
-
-    def _tasks_link(param: str, value: str) -> str:
-        url = f"/tasks?{param}={value}"
-        if label_name:
-            url += f"&label={label_name}"
-        return url
+    def _tasks_link(param: str | None = None, value: str | None = None) -> str:
+        if not param:
+            return "/tasks"
+        return f"/tasks?{param}={value}"
 
     return {
         "overdue_count": counts["overdue"],
@@ -387,11 +390,11 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
         "week_count": counts["this_week"],
         "important_count": counts["important"],
         "urgent_count": counts["urgent"],
-        "overdue_link": _tasks_link("status_filter", "overdue"),
+        "overdue_link": _tasks_link(),
         "today_link": _tasks_link("date_filter", "today"),
         "week_link": _tasks_link("date_filter", "this_week"),
-        "important_link": _tasks_link("importance_filter", "important"),
-        "urgent_link": _tasks_link("urgency_filter", "urgent"),
+        "important_link": _tasks_link(),
+        "urgent_link": _tasks_link(),
     }
 
 
@@ -936,9 +939,13 @@ def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
             continue
         tiles.append({
             # 2026-08-15: /projects/{name} is gone (see routers/projects.py's
-            # module docstring) -- points at the Tasks table filtered to this
-            # project's label instead, the closest existing equivalent.
-            "name": lbl["name"], "href": f"/tasks?label={quote(lbl['name'])}",
+            # module docstring) -- points at the Tasks table instead, the
+            # closest existing equivalent. 2026-08-28 "major rework" session:
+            # was `/tasks?label={name}` (a pre-filtered view) -- the Tasks
+            # table's label filter is gone (item 3), so this just opens the
+            # plain Table view, where the project already surfaces as its
+            # own group (routers/tasks.py's _build_task_groups).
+            "name": lbl["name"], "href": "/tasks",
             "icon": lbl.get("icon") or "folder", "color": lbl.get("color") or "blue",
             "kind": "Project",
         })

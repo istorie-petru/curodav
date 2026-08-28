@@ -78,42 +78,57 @@ class TestListHabitTasks:
         assert titles == ["Aaa", "Zzz"]
 
 
-class TestHabitsView:
-    def test_renders_a_card_per_habit_task_with_streak_and_heatmap(self, conn):
+class TestHabitsViewRetired:
+    """2026-08-28 "major rework" session (items 2+3): the dedicated Tasks >
+    Habits page is gone -- `GET /tasks/habits` now redirects to the plain
+    Table view, where every habit-labeled task (and every standalone Habit
+    entity, see test_habits_router.py) renders as a row in the Habits
+    group instead (routers/tasks.py's _habit_group_items/
+    _build_task_groups)."""
+
+    def test_habits_view_redirects_to_tasks(self, conn):
+        resp = tasks_router.habits_view_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks"
+
+    def test_habit_labeled_task_appears_in_the_habits_group_with_streak(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
         today = date.today().isoformat()
         db.upsert_task_completion(conn, "h1", today, _now())
 
-        resp = tasks_router.habits_view(_request(), conn=conn)
-        cards = resp.context["cards"]
-        assert len(cards) == 1
-        card = cards[0]
-        assert card["task"]["uid"] == "h1"
-        assert card["current_streak"] == 1
-        assert card["today_value"] == 1
-        assert card["weeks"]  # a real heatmap grid, not empty
+        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
+        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
+        items = habits_group["habit_items"]
+        assert len(items) == 1
+        item = items[0]
+        assert item["uid"] == "h1"
+        assert item["kind"] == "task"
+        assert item["current_streak"] == 1
+        assert item["today_value"] == 1
 
     def test_quantity_habit_task_reports_is_quantity_and_next_value(self, conn):
         _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
         today = date.today().isoformat()
         db.upsert_task_completion(conn, "h2", today, _now(), value=3)
 
-        resp = tasks_router.habits_view(_request(), conn=conn)
-        card = resp.context["cards"][0]
-        assert card["is_quantity"] is True
-        assert card["today_value"] == 3
-        assert card["next_value"] == 4
+        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
+        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
+        item = habits_group["habit_items"][0]
+        assert item["is_quantity"] is True
+        assert item["today_value"] == 3
+        assert item["next_value"] == 4
 
-    def test_q_filters_by_title(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        _seed_task(conn, "h2", tags=["Habit"], title="Water")
-        resp = tasks_router.habits_view(_request("/tasks/habits?q=medit"), q="medit", conn=conn)
-        assert [c["task"]["uid"] for c in resp.context["cards"]] == ["h1"]
-
-    def test_plain_tasks_never_appear_here(self, conn):
+    def test_plain_tasks_never_appear_in_the_habits_group(self, conn):
         _seed_task(conn, "plain")
-        resp = tasks_router.habits_view(_request(), conn=conn)
-        assert resp.context["cards"] == []
+        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
+        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
+        assert habits_group["habit_items"] == []
+
+    def test_habit_labeled_task_excluded_from_project_and_unassigned_groups(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
+        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
+        unassigned = next(g for g in resp.context["groups"] if g["kind"] == "unassigned")
+        assert unassigned["tasks"] == []
 
 
 class TestSetTaskCompletion:

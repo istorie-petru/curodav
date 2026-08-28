@@ -4,89 +4,68 @@
    Rendered alone by the fragment route it carries the exact id the page's
    own copy uses -- #tasks-body -- so static/async_crud.js's refreshRegion()
    can swap it in place by id after a mutation.
-   Expects the same context list_tasks builds (open_tasks, completed_tasks,
-   group_by, open_groups, completed_groups, paginated, total_pages, page,
-   sort, dir, active_* filters, q, active_label). The `sort_link` macro and
-   the active_group_uid/active_project_uid helpers it references must also
-   be in context -- the page defines them at block scope above this include;
-   the fragment route must supply the same defaults. #}
+
+   2026-08-28 "major rework" session (item 3): grouping is now always on
+   (Project -> Habits -> Unassigned -> Completed, routers/tasks.py's
+   _build_task_groups) -- there is no more ungrouped flat table, no more
+   `group_by` toggle, and no more column-header sort links (every group but
+   Completed is fixed due-date-ascending; Completed is most-recent-first).
+   Expects: groups, has_any, today_iso, q, active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
-{% macro sort_link(key, label) %}
-<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&importance_filter={{ active_importance_filter }}&urgency_filter={{ active_urgency_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}{% if group_by and group_by != 'none' %}&group_by={{ group_by }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
-{% endmacro %}
+{% from "_habit_row.html" import habit_row with context %}
 <div id="tasks-body">
-{% if open_tasks or completed_tasks %}
+{% if has_any %}
 <div class="card table-scroll">
 <table class="task-table" id="task-table">
     <thead>
         <tr>
             <th style="width:26px"></th>
-            <th>{{ sort_link('title', 'Title') }}</th>
-            <th>{{ sort_link('status', 'Status') }}</th>
-            <th>{{ sort_link('due_at', 'Due') }}</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Due</th>
             <th>Scheduled</th>
             <th>Labels</th>
             <th style="width:40px"></th>
         </tr>
     </thead>
-    {# Row-select checkbox for bulk actions (static/tasks_table.js) --
-       2026-08-01. This column used to be a "Mark done" checkbox, but it
-       duplicated the Status pill two columns over (which already covers
-       "set to Done" inline, no reload) -- one control per outcome, not
-       two. Marking a task done is now the pill's job exclusively; this
-       checkbox's only job is selection. #}
-    {% if group_by == 'project' %}
-    {% for grp in open_groups %}
+    {% for grp in groups %}
+    {% set _grp_count = (grp.habit_items|length) if grp.kind == 'habits' else (grp.tasks|length) %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
+        <tr class="task-section-divider"><td colspan="9">{{ grp.name if grp.name else 'Unassigned' }} ({{ _grp_count }})</td></tr>
     </tbody>
     <tbody>
+        {% if grp.kind == 'habits' %}
+        {% for item in grp.habit_items %}{{ habit_row(item) }}{% endfor %}
+        {% else %}
         {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
+        {% endif %}
+        {# "+" add-row -- every group but Completed (adding an already-
+           completed task makes no sense) gets one, styled as a normal
+           table row (same "colored like a normal row" affordance named
+           in the session brief's item 3/item 8 cross-reference). Each
+           reuses the existing task-creation modal/endpoint rather than a
+           new inline form: a Project group pre-checks that project's
+           label (task_form.html's existing ?project= prefill, same as
+           the old project detail page's "+ New task" used), the Habits
+           group opens the existing habit-task form (?habit=1, unchanged),
+           Unassigned opens the plain form. #}
+        {% if grp.kind == 'project' %}
+        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal>{{ icon('plus', 'icon-sm') }} Add task to {{ grp.name }}</a></td></tr>
+        {% elif grp.kind == 'habits' %}
+        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new?habit=1" data-modal>{{ icon('plus', 'icon-sm') }} Add habit</a></td></tr>
+        {% elif grp.kind == 'unassigned' %}
+        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new" data-modal>{{ icon('plus', 'icon-sm') }} Add task</a></td></tr>
+        {% endif %}
     </tbody>
     {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% if paginated and total_pages > 1 %}
-    <tbody>
-        <tr class="task-pager-row"><td colspan="9">{% include "_tasks_pager.html" %}</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks and open_tasks %}
-    <!-- Completed tasks stay visible rather than vanishing on check-off,
-         but are clearly separated and pushed to the bottom -- a dedicated
-         header row (not just a CSS class) makes the boundary obvious even
-         scrolling through a long table. -->
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">Completed ({{ completed_tasks|length }})</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks %}
-    {% if group_by == 'project' %}
-    {% for grp in completed_groups %}
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
-    </tbody>
-    <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in completed_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% endif %}
 </table>
 </div>
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_importance_filter != 'all' or active_urgency_filter != 'all' or _apuid or _aguid %}
+    {% if q or active_date_filter != 'all' %}
     <div class="empty-state-title">No tasks match this filter</div>
-    <div class="empty-state-text">Try a different label, or clear the search and filters above.</div>
+    <div class="empty-state-text">Try a different date range, or clear the search.</div>
     {% elif is_inbox %}
     <div class="empty-state-title">Nothing to triage</div>
     <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>

@@ -29,7 +29,6 @@ from src import db
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
 from src.routers import tasks as tasks_router
-from src.routers import timeline as timeline_router
 
 
 @pytest.fixture()
@@ -129,90 +128,13 @@ def _toolbar_div_count(body: str) -> int:
     return len(_TOOLBAR_DIV_RE.findall(body))
 
 
-class TestBoardTimelineFiltersRespected:
-    def test_board_respects_status_filter_without_removing_columns(self, conn):
-        _seed_task(conn, "a1", status="active")
-        _seed_task(conn, "w1", status="waiting")
-        resp = tasks_router.board_view(_request("/tasks/board"), status_filter="active", conn=conn)
-        columns = resp.context["columns"]
-        # Board's whole layout is a status grouping -- status_filter narrows
-        # *which* tasks land in each column, it doesn't remove columns.
-        assert "waiting" in columns
-        assert columns["waiting"] == []
-        assert [t["uid"] for t in columns["active"]] == ["a1"]
-
-    def test_board_respects_importance_filter(self, conn):
-        _seed_task(conn, "hi", status="active", importance=3)
-        _seed_task(conn, "lo", status="active", importance=1)
-        resp = tasks_router.board_view(_request("/tasks/board"), importance_filter="3", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"hi"}
-
-    def test_board_respects_urgency_filter(self, conn):
-        _seed_task(conn, "now", status="active", urgency=3)
-        _seed_task(conn, "later", status="active", due_at=(date.today() + timedelta(days=20)).isoformat())
-        resp = tasks_router.board_view(_request("/tasks/board"), urgency_filter="3", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"now"}
-
-    def test_board_respects_date_filter(self, conn):
-        today = date.today()
-        _seed_task(conn, "today_task", status="active", due_at=today.isoformat())
-        _seed_task(conn, "future_task", status="active", due_at=(today + timedelta(days=20)).isoformat())
-        resp = tasks_router.board_view(_request("/tasks/board"), date_filter="today", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"today_task"}
-
-    def test_timeline_respects_status_and_importance_filters(self, conn):
-        today = date.today()
-        _seed_task(conn, "keep", status="active", importance=3, due_at=today.isoformat())
-        _seed_task(conn, "drop_status", status="waiting", importance=3, due_at=today.isoformat())
-        _seed_task(conn, "drop_importance", status="active", importance=1, due_at=today.isoformat())
-        resp = timeline_router.timeline_view(
-            _request("/tasks/timeline"), status_filter="active", importance_filter="3", conn=conn
-        )
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"keep"}
-
-    def test_timeline_respects_date_filter(self, conn):
-        today = date.today()
-        _seed_task(conn, "today_task", status="active", due_at=today.isoformat())
-        _seed_task(conn, "overdue_task", status="active", due_at=(today - timedelta(days=5)).isoformat())
-        resp = timeline_router.timeline_view(_request("/tasks/timeline"), date_filter="overdue", conn=conn)
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"overdue_task"}
-
-
-class TestTaskLabelFilter:
-    def test_table_view_narrows_by_label(self, conn):
-        _seed_task(conn, "work1", tags=["Work"])
-        _seed_task(conn, "home1", tags=["Home"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="Work", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"work1"}
-        assert resp.context["active_label"] == "Work"
-        assert "Work" in resp.context["task_label_names"]
-
-    def test_board_view_narrows_by_label(self, conn):
-        _seed_task(conn, "work1", status="active", tags=["Work"])
-        _seed_task(conn, "home1", status="active", tags=["Home"])
-        resp = tasks_router.board_view(_request("/tasks/board"), label="Work", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"work1"}
-
-    def test_timeline_view_narrows_by_label(self, conn):
-        today = date.today()
-        _seed_task(conn, "work1", status="active", due_at=today.isoformat(), tags=["Work"])
-        _seed_task(conn, "home1", status="active", due_at=today.isoformat(), tags=["Home"])
-        resp = timeline_router.timeline_view(_request("/tasks/timeline"), label="Work", conn=conn)
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"work1"}
-
-    def test_label_filter_is_case_insensitive(self, conn):
-        _seed_task(conn, "work1", tags=["Work"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="work", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"work1"}
+# 2026-08-28 "major rework" session (items 3+4): TestBoardTimelineFilters
+# Respected and TestTaskLabelFilter are both deleted -- Kanban/Timeline are
+# retired to plain redirects (routers/tasks.py::board_view_redirect,
+# routers/timeline.py's whole-file rewrite) and the Tasks table's label
+# filter is gone entirely (item 3, "filtering reduced to date only"), so
+# none of this coverage has anything left to exercise. See
+# test_timeline_router.py/test_tasks_view_rework.py for what replaced it.
 
 
 class TestEventLabelFilter:
@@ -299,27 +221,13 @@ class TestActiveFilterShownInDropdown:
     collapsible panel left to auto-open. Contacts still uses the
     checkbox-hack, so its assertions below are unchanged."""
 
-    def test_tasks_status_filter_is_the_checked_radio(self, conn):
-        _seed_task(conn, "a", status="active")
-        resp = tasks_router.list_tasks(_request("/tasks"), status_filter="active", conn=conn)
-        body = resp.body.decode()
-        assert ("active", True) in _radios(body, "status_filter")
-        assert ("all", False) in _radios(body, "status_filter")
-        # the checkbox-hack is gone entirely
-        assert "toolbar-filters-checkbox" not in body
-
-    def test_tasks_no_filter_selects_all_statuses(self, conn):
-        _seed_task(conn, "a", status="active")
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        body = resp.body.decode()
-        assert ("all", True) in _radios(body, "status_filter")
-
-    def test_tasks_label_filter_is_the_checked_radio(self, conn):
-        _seed_task(conn, "a", tags=["Work"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="Work", conn=conn)
-        body = resp.body.decode()
-        assert ("Work", True) in _radios(body, "label")
-        assert ("", False) in _radios(body, "label")
+    # 2026-08-28 "major rework" session (item 3): Tasks' Status/label
+    # dropdowns are gone -- the old test_tasks_status_filter_is_the_checked_
+    # radio/test_tasks_no_filter_selects_all_statuses/test_tasks_label_
+    # filter_is_the_checked_radio all exercised removed machinery. Tasks'
+    # one surviving dropdown (Date) is unaffected by this rework and has no
+    # dedicated radio-checked test here to begin with (pre-existing gap,
+    # not introduced by this session).
 
     def test_calendar_label_filter_is_the_checked_radio(self, conn):
         today = date.today()

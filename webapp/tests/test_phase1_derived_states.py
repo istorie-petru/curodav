@@ -34,7 +34,6 @@ from icalendar import Todo
 from src import db, derived_state, ical_rows
 from src.ical_rows import ical_to_task_row, task_row_to_ical
 from src.routers import tasks as tasks_router
-from src.routers import timeline as timeline_router
 
 
 @pytest.fixture()
@@ -267,11 +266,30 @@ def _request_with_app(path, db_path):
     )
 
 
+def _open_uids(resp):
+    """2026-08-28 "major rework" session: `resp.context["open_tasks"]` is
+    gone -- an open task now lives inside one of the fixed groups
+    (`groups`, routers/tasks.py's _build_task_groups). Walks every non-
+    Habits group's `tasks` list, same helper other rewritten test files in
+    this session use."""
+    return {
+        t["uid"]
+        for g in resp.context["groups"]
+        if g["kind"] != "habits"
+        for t in g["tasks"]
+    }
+
+
 class TestVirtualStateFilters:
     """Slice 2: the temporal/derived virtual states surface as query-driven
-    projections in the Tasks Table/Board/Timeline filters -- tomorrow,
-    this_month, important, urgent -- computed from derived values, never
-    stored, never labels."""
+    projections in the Tasks Table filter -- tomorrow, this_month,
+    important, urgent -- computed from derived values, never stored, never
+    labels. `_apply_date_filter` itself is untouched by the 2026-08-28
+    "major rework" session (it still intersects against every state
+    `derived_state.virtual_states` computes, including `important`/
+    `urgent`, regardless of what DATE_FILTERS' own dropdown offers) -- only
+    the UI surface (Board/Timeline, both retired; the dropdown's own
+    option list) narrowed, covered below."""
 
     def test_table_tomorrow_filter(self, conn):
         today = date.today()
@@ -279,8 +297,7 @@ class TestVirtualStateFilters:
         _seed_task(conn, "due_tomorrow", due_at=tomorrow_iso)
         _seed_task(conn, "due_today", due_at=today.isoformat())
         resp = tasks_router.list_tasks(_request(), date_filter="tomorrow", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"due_tomorrow"}
+        assert _open_uids(resp) == {"due_tomorrow"}
 
     def test_table_this_month_filter(self, conn):
         today = date.today()
@@ -290,24 +307,21 @@ class TestVirtualStateFilters:
         _seed_task(conn, "end_month", due_at=month_end.isoformat())
         _seed_task(conn, "next_month", due_at=(month_end + timedelta(days=1)).isoformat())
         resp = tasks_router.list_tasks(_request(), date_filter="this_month", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"in_month", "end_month"}
+        assert _open_uids(resp) == {"in_month", "end_month"}
 
     def test_important_filter_is_purely_label_derived(self, conn):
         db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})
         _seed_task(conn, "important_exam", tags=["Exam"])
         _seed_task(conn, "untagged", tags=[])
         resp = tasks_router.list_tasks(_request(), date_filter="important", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"important_exam"}
+        assert _open_uids(resp) == {"important_exam"}
 
     def test_urgent_filter_uses_temporal_urgency(self, conn):
         today = date.today()
         _seed_task(conn, "overdue", due_at=(today - timedelta(days=1)).isoformat())
         _seed_task(conn, "far_out", due_at=(today + timedelta(days=30)).isoformat())
         resp = tasks_router.list_tasks(_request(), date_filter="urgent", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"overdue"}
+        assert _open_uids(resp) == {"overdue"}
 
     def test_urgent_filter_uses_label_threshold_and_time(self, conn):
         db.upsert_label_config(conn, {"name": "Conference", "urgency_threshold_days": 7, "created_at": _now()})
@@ -316,8 +330,7 @@ class TestVirtualStateFilters:
         _seed_task(conn, "conf_later", due_at=(today + timedelta(days=30)).isoformat(), tags=["Conference"])
         _seed_task(conn, "overdue", due_at=(today - timedelta(days=1)).isoformat())
         resp = tasks_router.list_tasks(_request(), date_filter="urgent", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"conf_soon", "overdue"}
+        assert _open_uids(resp) == {"conf_soon", "overdue"}
 
     def test_important_and_urgent_are_not_labels_in_data(self, conn):
         # The virtual states never create object_labels rows or label_config
@@ -332,26 +345,22 @@ class TestVirtualStateFilters:
         assert "tomorrow" not in {l.lower() for l in labels}
         assert "this month" not in {l.lower() for l in labels}
 
-    def test_board_and_timeline_respect_virtual_filters(self, conn):
-        today = date.today()
-        db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})
-        _seed_task(conn, "imp", status="active", tags=["Exam"])
-        _seed_task(conn, "not_imp", status="active")
-        board = tasks_router.board_view(_request("/tasks/board"), date_filter="important", conn=conn)
-        board_uids = {t["uid"] for col in board.context["columns"].values() for t in col}
-        assert board_uids == {"imp"}
-        _seed_task(conn, "imp2", status="active", tags=["Exam"], due_at=today.isoformat())
-        tl = timeline_router.timeline_view(_request("/tasks/timeline"), date_filter="important", conn=conn)
-        tl_uids = {b["task"]["uid"] for b in tl.context["bars"]}
-        assert "imp2" in tl_uids
+    # 2026-08-28 "major rework" session (item 4): Kanban/Timeline are
+    # retired to plain redirects -- test_board_and_timeline_respect_
+    # virtual_filters exercised removed routes, deleted.
 
     def test_tomorrow_and_this_month_are_in_the_toolbar_dropdown(self, conn):
+        # 2026-08-28 "major rework" session (item 3): important/urgent were
+        # never DATE_FILTERS values (they're still reachable programmatically
+        # via `_apply_date_filter`, see the tests above) -- they were only
+        # ever exposed through the now-removed Importance/Urgency filter
+        # dropdowns, so those two assertions are gone; tomorrow/this_month
+        # are real DATE_FILTERS entries and stay in the one surviving Date
+        # dropdown.
         resp = tasks_router.list_tasks(_request(), conn=conn)
         body = resp.body.decode()
         assert 'value="tomorrow"' in body
         assert 'value="this_month"' in body
-        assert 'value="important"' in body
-        assert 'value="urgent"' in body
 
 
 class TestAggregationService:
@@ -395,7 +404,7 @@ class TestAggregationService:
         # size -- the single source of truth guarantees the agreement.
         for state, n in counts.items():
             resp = tasks_router.list_tasks(_request(), date_filter=state, conn=conn)
-            filtered = resp.context["open_tasks"]
+            filtered = _open_uids(resp)
             assert len(filtered) == n, f"state {state}: filter {len(filtered)} != aggregate {n}"
 
     def test_label_rule_fed_counts(self, conn):
@@ -423,7 +432,10 @@ class TestAtAGlanceWidget:
         assert data["important_count"] == 1
         # The overdue and due-today tasks are both urgent (temporal urgency).
         assert data["urgent_count"] == 2
-        assert data["overdue_link"].startswith("/tasks?status_filter=overdue")
+        # 2026-08-28 "major rework" session: Status filtering is gone from
+        # the Tasks page (item 3) -- overdue_link just points at the plain
+        # Table view now.
+        assert data["overdue_link"] == "/tasks"
 
     def test_at_a_glance_widget_renders_five_stats(self, conn):
         from src.routers import dashboard as dashboard_router
@@ -521,24 +533,14 @@ class TestSlice5AxesInUI:
         req._receive = receive
         return req
 
-    def test_active_filter_count_counts_both_axes(self):
-        assert tasks_router._active_filter_count("all", "all", "all", "all", None) == 0
-        assert tasks_router._active_filter_count("all", "all", "3", "all", None) == 1
-        assert tasks_router._active_filter_count("all", "all", "all", "2", None) == 1
-        assert tasks_router._active_filter_count("all", "all", "3", "2", None) == 2
-
-    def test_sort_keys_have_importance_and_urgency(self):
-        # _SORT_KEYS is a factory now (needs label_rules to compute the
-        # effective value) rather than a plain module-level dict.
-        keys = tasks_router._sort_keys({})
-        assert "importance" in keys
-        assert "urgency" in keys
-        assert "priority" not in keys
-        # Higher = first; unset sorts as 0.
-        assert keys["importance"]({"tags": ["Exam"]}) == 0  # no rule for Exam here
-        rules = {"Exam": {"importance": 3}}
-        keys = tasks_router._sort_keys(rules)
-        assert keys["importance"]({"tags": ["Exam"]}) > keys["importance"]({"tags": []})
+    # 2026-08-28 "major rework" session (item 3): `_active_filter_count`
+    # and the factory `_sort_keys` are both gone -- filtering is date-only
+    # now (no more per-axis "how many filters are active" badge), and
+    # sorting is fixed (due-date ascending per group, see
+    # routers/tasks.py's `_due_at_key`/`_build_task_groups`), not a
+    # user-choosable column-header link with importance/urgency entries.
+    # test_active_filter_count_counts_both_axes/test_sort_keys_have_
+    # importance_and_urgency both exercised removed functions, deleted.
 
     def test_updatable_fields_no_longer_include_either_axis(self):
         # Side work, post-1.1: neither axis is inline-editable anymore --
@@ -563,30 +565,19 @@ class TestSlice5AxesInUI:
         resp = asyncio.run(tasks_router.update_field("t1", self._json_request({"field": "priority", "value": "1"}), conn=conn))
         assert resp.status_code == 400
 
-    def test_list_filters_by_effective_importance_and_urgency_independently(self, conn):
-        db.upsert_label_config(conn, {"name": "Imp3", "importance": 3, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Imp1", "importance": 1, "created_at": _now()})
-        today = date.today()
-        overdue = (today - timedelta(days=1)).isoformat()  # temporal urgency 3
-        far_out = (today + timedelta(days=30)).isoformat()  # temporal urgency 0
-        _seed_task(conn, "a", tags=["Imp3"], due_at=far_out)  # importance 3, urgency 0
-        _seed_task(conn, "b", tags=["Imp1"], due_at=overdue)  # importance 1, urgency 3
-        _seed_task(conn, "c", tags=["Imp3"], due_at=overdue)  # importance 3, urgency 3
-        resp = tasks_router.list_tasks(_request(), importance_filter="3", conn=conn)
-        assert {t["uid"] for t in resp.context["open_tasks"]} == {"a", "c"}
-        resp = tasks_router.list_tasks(_request(), urgency_filter="3", conn=conn)
-        assert {t["uid"] for t in resp.context["open_tasks"]} == {"b", "c"}
-        resp = tasks_router.list_tasks(_request(), importance_filter="3", urgency_filter="3", conn=conn)
-        assert {t["uid"] for t in resp.context["open_tasks"]} == {"c"}
+    # 2026-08-28 "major rework" session (item 3): the Tasks page's
+    # Importance/Urgency filters are gone entirely -- test_list_filters_by_
+    # effective_importance_and_urgency_independently exercised removed
+    # `importance_filter`/`urgency_filter` params, deleted.
 
     def test_table_does_not_render_either_axis(self, conn):
         # Further follow-up feedback ("I don't want importance and urgency
         # to show in the tasks table view"): the Table view dropped the
         # two columns entirely (first made read-only, then removed
         # outright) -- both axes are still fully computed and still shown
-        # on Board/Detail (see test_board_renders_both_pills/
-        # test_detail_renders_both_meta_items below), this is a Table-view-
-        # only removal.
+        # on Detail (see test_detail_renders_both_meta_items below); Board
+        # (which used to also render both as pills) is retired entirely as
+        # of the 2026-08-28 "major rework" session, item 4.
         db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})
         today = date.today()
         _seed_task(conn, "t1", tags=["Exam"], due_at=(today + timedelta(days=1)).isoformat())
@@ -596,28 +587,17 @@ class TestSlice5AxesInUI:
         assert 'data-field="importance"' not in body
         assert 'data-field="urgency"' not in body
         assert "pill-static" not in body
-        # The toolbar's Importance/Urgency filter dropdowns are untouched
-        # (this feedback was about the table's own columns, not the
-        # filters) -- so "Importance"/"Urgency" text legitimately still
-        # appears there; what's gone is the sortable column header link.
-        assert "&urgency_filter=" in body  # toolbar filter still present
-        assert "sort=importance" not in body  # no column header link to it
+        # 2026-08-28 "major rework" session: the toolbar's Importance/
+        # Urgency filter dropdowns are gone too now (item 3), not just the
+        # table's own columns -- neither the filter querystring nor a
+        # sortable column-header link exists anymore.
+        assert "&urgency_filter=" not in body
+        assert "sort=importance" not in body
         assert "sort=urgency" not in body
 
-    def test_board_renders_both_pills(self, conn, tmp_path):
-        db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})
-        today = date.today()
-        _seed_task(conn, "t1", tags=["Exam"], due_at=(today + timedelta(days=1)).isoformat(), status="active")
-        req = _request_with_app("/tasks/board", tmp_path / "cache.sqlite")
-        resp = tasks_router.board_view(req, conn=conn)
-        ctx = {"request": req, **resp.context}
-        body = tasks_router.templates.get_template("tasks_board.html").render(ctx)
-        assert 'title="Importance"' in body
-        assert 'title="Urgency"' in body
-        # Task is importance 3 (Exam) and urgency 2 (due tomorrow) -- both
-        # pills render.
-        assert "High" in body
-        assert "Medium" in body
+    # 2026-08-28 "major rework" session (item 4): Kanban is retired
+    # entirely -- test_board_renders_both_pills exercised the removed
+    # `board_view`/tasks_board.html, deleted.
 
     def test_detail_renders_both_meta_items(self, conn, tmp_path):
         db.upsert_label_config(conn, {"name": "Exam", "importance": 3, "created_at": _now()})

@@ -197,17 +197,24 @@ class TestAtAGlanceWidget:
         assert data["week_count"] == 0
 
     def test_links_use_real_tasks_date_filters(self, conn):
+        # 2026-08-28 "major rework" session: Status/Importance/Urgency
+        # filtering is gone from the Tasks page entirely (item 3) -- overdue_
+        # link now just points at the plain Table view; today_link/week_link
+        # are unchanged since `date_filter` is still a real Tasks page param.
         data = dashboard_router._render_at_a_glance(conn, {})
-        assert data["overdue_link"] == "/tasks?status_filter=overdue"
+        assert data["overdue_link"] == "/tasks"
         assert data["today_link"] == "/tasks?date_filter=today"
         assert data["week_link"] == "/tasks?date_filter=this_week"
 
-    def test_links_append_label_when_scoped_to_a_label_page(self, conn):
+    def test_links_no_longer_append_label_since_the_tasks_label_filter_is_gone(self, conn):
+        # 2026-08-28 "major rework" session: was `&label=CS101` (the Tasks
+        # page's label filter, now removed, item 3) -- links are scope-
+        # agnostic now, same for every label page.
         _make_project(conn, "CS101")
         data = dashboard_router._render_at_a_glance(conn, {"label_name": "CS101"})
-        assert data["overdue_link"] == "/tasks?status_filter=overdue&label=CS101"
-        assert data["today_link"] == "/tasks?date_filter=today&label=CS101"
-        assert data["week_link"] == "/tasks?date_filter=this_week&label=CS101"
+        assert data["overdue_link"] == "/tasks"
+        assert data["today_link"] == "/tasks?date_filter=today"
+        assert data["week_link"] == "/tasks?date_filter=this_week"
 
     def test_scoped_to_project_label_excludes_other_tasks(self, conn):
         _make_project(conn, "CS101")

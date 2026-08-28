@@ -231,9 +231,14 @@ class TestDataAndBackupCategoryRemoved:
         assert not hasattr(settings_router, "settings_data")
         assert not hasattr(settings_router, "DATA_ENTRIES")
 
-    def test_habits_page_breadcrumbs_straight_to_settings(self, conn):
-        resp = habits_router.list_habits(_request("/habits"), conn=conn)
-        assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
+    def test_habits_list_page_is_retired_redirects_to_tasks(self, conn):
+        # 2026-08-28 "major rework" session (item 2): the standalone Habits
+        # list page (and its "straight to Settings" breadcrumb) is gone --
+        # every Habit entity now renders as a row in the Tasks table's own
+        # Habits group instead (routers/tasks.py's _habit_group_items).
+        resp = habits_router.list_habits_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks"
 
     def test_published_lists_page_breadcrumbs_straight_to_settings(self, conn):
         resp = published_lists_router.list_index(_request_with_radicale("/published-lists"), conn=conn)

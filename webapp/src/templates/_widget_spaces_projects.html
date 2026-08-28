@@ -24,7 +24,12 @@
 {% if data.previews %}
 <div class="project-preview-list">
     {% for pv in data.previews %}
-    <a class="project-preview-row" href="/tasks?label={{ pv.project.uid|urlencode }}">
+    {# 2026-08-28 "major rework" session: was `/tasks?label={name}` --
+       the Tasks table's label filter is gone (item 3), so this now
+       lands on the plain Table view, where the project already
+       surfaces as its own group (routers/tasks.py's _build_task_groups)
+       rather than the whole page pre-scoped to it. #}
+    <a class="project-preview-row" href="/tasks">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
         {% if pv.progress is not none %}
         <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>

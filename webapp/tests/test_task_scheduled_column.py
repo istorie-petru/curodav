@@ -64,12 +64,29 @@ def _task(conn, uid, tags=None, status="active", due_at=None, title=None):
     )
 
 
+def _find_task(groups, uid):
+    """2026-08-28 "major rework" session: the Table view's context no
+    longer exposes a flat `open_tasks` list -- every open task lives inside
+    one of the fixed groups (`groups`, routers/tasks.py's
+    _build_task_groups). This walks every group's own `tasks` list (skips
+    the Habits group, which uses `habit_items` instead) to find one by
+    uid, same "find it wherever it landed" helper other rewritten test
+    files in this session use."""
+    for g in groups:
+        if g["kind"] == "habits":
+            continue
+        for t in g["tasks"]:
+            if t["uid"] == uid:
+                return t
+    raise AssertionError(f"task {uid} not found in any group")
+
+
 class TestGlobalTasksPage:
     def test_no_allocations_renders_dash_not_error(self, conn):
         _task(conn, "t1")
         resp = tasks_router.list_tasks(_request(), conn=conn)
         assert resp.status_code == 200
-        task = next(t for t in resp.context["open_tasks"] if t["uid"] == "t1")
+        task = _find_task(resp.context["groups"], "t1")
         assert task["work_hours"] == {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}
         body = resp.body.decode()
         assert "Scheduled" in body
@@ -89,7 +106,7 @@ class TestGlobalTasksPage:
             (now + timedelta(days=1) + timedelta(hours=1)).isoformat(),
         )
         resp = tasks_router.list_tasks(_request(), conn=conn)
-        task = next(t for t in resp.context["open_tasks"] if t["uid"] == "t1")
+        task = _find_task(resp.context["groups"], "t1")
         assert task["work_hours"]["scheduled"] == pytest.approx(3.0)
         assert task["work_hours"]["completed"] == pytest.approx(2.0)
         assert task["work_hours"]["remaining"] == pytest.approx(1.0)

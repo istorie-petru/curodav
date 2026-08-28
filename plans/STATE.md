@@ -3497,7 +3497,94 @@ still deliberately retired (redirects to `/tasks?label=...`, see
 `routers/projects.py`'s own docstring, a 2026-08-15 decision) — reviving
 it as a 2:1 kanban+agenda page is new feature work, not a bug fix.
 
-## Next session queue — major rework requested 2026-08-28 (scoped, not yet started)
+## Major rework session (2026-08-28) — items 2+3+4 of the queue below,
+bundled into one session with explicit user approval
+
+Direct user request to bundle three normally-separate "one slice per
+session" queue items into a single session, since they're interdependent
+(the habits merge and the grouping rework both touch the same table) —
+a deliberate, user-approved exception to this file's usual one-slice
+discipline, not an oversight.
+
+- **Item 2, "Merge Habits into the Tasks table"**: the standalone Habits
+  feature (`routers/habits.py`, `habits`/`habit_entries` tables) is
+  presentation-merged into the Tasks Table view as its own "Habits"
+  group, alongside habit-*labeled tasks* (the pre-existing "Tasks >
+  Habits" mechanism, task_habit_settings/target_per_day/
+  task_completions) — both normalize into one shared row shape
+  (`routers/tasks.py::_habit_group_items`, new `templates/_habit_row.
+  html`) since they're conceptually the same thing (a habit) tracked two
+  different ways in this codebase's history. The row repurposes the
+  Status column for the check-in control itself (checkbox/stepper, same
+  as the Dashboard's existing habit check-in widget) and Scheduled for a
+  streak readout, since Due/Scheduled-as-hours don't apply to a habit.
+  `GET /habits` (the standalone list page) and `GET /tasks/habits` (the
+  old dedicated view) both retire to `RedirectResponse(url="/tasks")`,
+  same "any bookmark still lands somewhere real" precedent `/projects`'s
+  own retirement set; every habit *mutation* endpoint
+  (create/edit/archive/unarchive/delete/entries/toggle in
+  `routers/habits.py`, completion endpoints in `routers/tasks.py`) is
+  completely unchanged — this was presentation-only, not a data-model
+  change. `habits_list.html`/`_habits_body.html`/`tasks_habits.html`/
+  `static/task_habit_checkin.js` deleted (dead once their one page each
+  was gone); `habit_detail.html` (`/habits/{uid}`) survives as the
+  Habits group row's detail link.
+- **Item 3, "Tasks table rework"**: filtering reduced to Date only —
+  Status/Importance/Urgency/label filter dropdowns and the group-by
+  toggle are gone from `_tasks_toolbar.html`
+  (`_apply_status_filter`/`_apply_importance_filter`/
+  `_apply_urgency_filter`/`_apply_label_filter`/`_active_filter_count`
+  deleted from `routers/tasks.py`; `IMPORTANCE_LABELS`/`COLORS`/
+  `URGENCY_LABELS`/`COLORS` stay, since `task_detail.html`'s read-only
+  meta row still uses them — a Table-page-only cut, not a full retirement
+  of the axes, confirmed against `src/derived_state.py`'s other callers
+  first). Grouping is unconditional now (`routers/tasks.py::
+  _build_task_groups`): Project (one group per project label,
+  alphabetical) → Habits → Unassigned → Completed, in that fixed order;
+  every group but Completed is due-date ascending
+  (`_due_at_key`, the one sort key left — column-header sort links and
+  `sort`/`dir` are gone too), Completed is most-recent-first by
+  `updated_at` and pulls every completed task out of its project's own
+  group (the only way "completed always last" can hold across every
+  project at once). Sorting/grouping being unconditional retired
+  pagination as a direct consequence — the 1.9 pagination slice already
+  special-cased "grouped mode shows everything, don't paginate it," which
+  is now simply the whole page's behavior (`_tasks_pager.html` deleted).
+  A "+" add-row closes every group but Completed (styled as a normal
+  table row, `.task-add-row`), reusing the existing task-creation
+  modal/endpoint per group (`?project=<name>`/`?habit=1`/plain, same
+  `/tasks/new` flow the toolbar's own "+ New" button already used) rather
+  than a new inline creator.
+- **Item 4, "Tasks page: table view only"**: Kanban (`/tasks/board`) and
+  Timeline (`/tasks/timeline`) both retire to redirects
+  (`board_view_redirect` in `routers/tasks.py`;
+  `routers/timeline.py` rewritten to a two-route redirect stub, same
+  precedent as `/projects`'s own retirement — `timeline_layout.py`/
+  `static/timeline.js` stay on disk, unimported by anything live).
+  `tasks_board.html`/`tasks_timeline.html` deleted; `_tasks_toolbar.html`
+  no longer has a view switcher at all (Table is the only view left, so
+  there's nothing to switch between).
+- Fallout fixed in the same session: `/tasks?label=...`/`?group_by=
+  project` links that used to pre-filter/pre-group the Tasks page
+  (`routers/projects.py`'s three redirects, `dashboard.py`'s project
+  quick-links tile, `_widget_spaces_projects.html`'s project preview
+  rows, `_widget_at_a_glance.html`'s overdue/important/urgent stat
+  links) all repointed at the plain `/tasks` — grouping is automatic now,
+  so a project already surfaces as its own group without a filter query
+  param to ask for it.
+- Tests: `test_tasks_grouping.py`/`test_tasks_habits_view.py` rewritten
+  for the new `groups`/`habit_items` context shape; `test_timeline_
+  router.py` rewritten to two redirect tests; `test_tasks_pagination.py`
+  deleted (pagination retired); `test_tasks_view_rework.py`/
+  `test_phase9b_toolbar_filters.py`/`test_phase1_derived_states.py`/
+  `test_async_crud.py`/`test_project_stack.py`/`test_task_scheduled_
+  column.py`/`test_dashboard_usability_rework.py`/`test_phase8_settings_
+  hub.py` trimmed of assertions against removed filters/views/context
+  keys. Full suite **1683 passed** (down from 1741 pre-session — net
+  fewer tests than before since several whole test classes exercised code
+  that's now gone, not a coverage regression on anything still live).
+
+## Next session queue — major rework requested 2026-08-28 (items 2/3/4 done, see the session entry directly above; renumbered to close the gap)
 
 Direct user request, much larger than one slice — broken into the pieces
 below, **one per session** per this file's own discipline. Pick the next
@@ -3521,35 +3608,22 @@ docs-only and everything else is independent of it):
    Everything under `static/offline_*.js`, `static/sw.js`, `templates/
    offline.html`, `routers/pwa.py` needs an explicit keep/replace/delete
    decision as part of that doc.
-2. **Merge Habits into the Tasks table** as a grouped section (see #3's
-   grouping rule below); remove the standalone Habits page/nav entry.
-3. **Tasks table rework** — filtering reduced to date only; grouping is
-   now **always on, not user-choosable**: Project → Habits (its own
-   group) → Unassigned → Completed (most-recent-first, always last), each
-   group sorted by due date. Remove Importance/Urgency (columns +
-   underlying filter/sort). Remove filter-by-label, filter-by-status, and
-   the group-by-project toggle (grouping is no longer optional). Add a
-   "+" add-row at the end of every group (colored like a normal row, same
-   affordance the Unscheduled-work panel doesn't have but Settings tables
-   should share, see #8).
-4. **Tasks page: table view only** — disable Kanban and Timeline
-   entirely (remove the view switcher entries, keep or redirect the
-   routes per this app's usual retirement precedent).
-5. **Project page: 2:1 layout** — left column (2 parts) a Kanban of the
+2. **Project page: 2:1 layout** — left column (2 parts) a Kanban of the
    project's tasks, right column (1 part) an agenda of the project's
    events. Revives `/projects/{name}` (currently a redirect, see the Bug
    fixes section above) as a real page again — reconcile with the
    2026-08-15 "retire /projects" decision record in `plans/open.md`
    before building.
-6. **Calendar split into two pages** — one page with only the 4-Week
+3. **Calendar split into two pages** — one page with only the 4-Week
    view, another with only the Week view (currently both live as tabs
    inside one Calendar page alongside Month/Day/Timetable).
-7. **Contacts page cleanup** — currently renders both a `.card` wrapper
+4. **Contacts page cleanup** — currently renders both a `.card` wrapper
    and a separate `.contacts-body` div; collapse to one card containing
    the list.
-8. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
+5. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
    replicas of the Tasks table view** — same row markup/spacing/column
-   conventions (see the `tbody td` padding-leak fix above, which was this
-   session's warning sign that these tables have been drifting from the
-   Tasks table's own styling), including the same per-group "+" add-row
-   from #3.
+   conventions (see the `tbody td` padding-leak fix above, which was a
+   warning sign that these tables have been drifting from the Tasks
+   table's own styling), including the same per-group "+" add-row the
+   2026-08-28 major rework session added to the Tasks table (see that
+   session's entry above).

@@ -1,0 +1,54 @@
+{# Shared Habits-group row (new 2026-08-28, "major rework" session, item 2:
+   "Merge Habits into the Tasks table"). Renders ONE normalized item built
+   by routers/tasks.py's _habit_group_items -- either a habit-labeled task
+   (kind='task', the pre-existing "Tasks > Habits" tracking mechanism) or a
+   standalone Habit entity (kind='entity', routers/habits.py's `habits`
+   table, whose own dedicated list page is retired by this session). Both
+   normalize to the exact same shape so this one row template covers both,
+   the same "figure out how a habit's row should look/behave inside a table
+   built for tasks" judgment call the session brief asked for: Due/
+   Scheduled/Labels don't apply the same way to a habit as to a plain task
+   (a habit has no deadline, "scheduled hours" isn't a thing it tracks), so
+   this row repurposes the Status column for the check-in control itself
+   (checkbox for a target=1 habit, count + "+1" stepper above 1 -- the same
+   controls _widget_habit_checkin.html/tasks_habits.html already used) and
+   the Scheduled column for a streak readout, leaving Due blank. #}
+{% macro habit_row(item) %}
+<tr data-uid="{{ item.uid }}" data-kind="{{ item.kind }}">
+    <td></td>
+    <td>
+        <a href="{{ item.detail_url }}" data-modal>{{ item.title }}</a>
+    </td>
+    <td>
+        <div class="habit-checkin-row habit-checkin-row-inline" data-uid="{{ item.uid }}" data-target="{{ item.target|int }}">
+            {% if item.is_quantity %}
+            <span class="tag-usage-count habit-checkin-count">{{ item.today_value|int }}/{{ item.target|int }}</span>
+            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-plus" data-value="{{ item.next_value }}">
+                {% if item.kind == 'entity' %}<input type="hidden" name="entry_date" value="{{ today_iso }}">{% else %}<input type="hidden" name="completion_date" value="{{ today_iso }}">{% endif %}
+                <input type="hidden" name="value" value="{{ item.next_value }}">
+                <button type="submit" class="icon-btn" title="Log one more">{{ icon('plus', 'icon-sm') }}</button>
+            </form>
+            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-reset" style="{% if not item.today_value %}display:none{% endif %}">
+                <button type="submit" class="icon-btn" title="Reset today">{{ icon('x', 'icon-sm') }}</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-toggle">
+                <button type="submit" class="checklist-check {% if item.done_today %}is-done{% endif %}" title="{% if item.done_today %}Done today -- click to undo{% else %}Mark done today{% endif %}">
+                    {{ icon('check-square') if item.done_today else icon('square') }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </td>
+    <td class="text-muted">&mdash;</td>
+    <td class="task-scheduled-cell">
+        <span title="Current streak">{{ icon('repeat', 'icon-sm') }} {{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}</span>
+    </td>
+    <td>{% for tag in item.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}</td>
+    <td style="text-align:right">
+        <form class="form-inline" method="post" action="{{ item.delete_url }}" data-delete-undo="{{ item.title }}" data-cc-change="task">
+            <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+        </form>
+    </td>
+</tr>
+{% endmacro %}

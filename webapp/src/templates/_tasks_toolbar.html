@@ -1,97 +1,26 @@
-<!-- Phase 9b toolbar rework: one shared two-row toolbar for all three Tasks
-     views (Table/Timeline/Board), included by tasks_list.html/
-     tasks_timeline.html/tasks_board.html. Row 1 (always visible) stays
-     light -- title, the Table/Timeline/Board segmented switcher, search,
-     "New task" -- so it never overflows/wraps at a normal desktop width
-     (the screenshot-reported bug this rework fixes).
+<!-- 2026-08-28 "major rework" session (item 3+4): Table is now the ONLY
+     Tasks view -- the Table/Timeline/Board/Habits segmented switcher is
+     gone entirely (routers/tasks.py's board_view_redirect/habits_view_
+     redirect, routers/timeline.py's whole-file retirement), along with
+     every filter but Date (Status/Importance/Urgency/label dropdowns and
+     the Group by toggle -- grouping is fixed/always-on now, see
+     routers/tasks.py's _build_task_groups). What's left is one light row:
+     a page title, search, the one remaining Date dropdown, and "+ New".
 
-     2026-08-08: the collapsible row-2 filter body is GONE. Direct
-     feedback ("make all the other filters on calendar, task, contact
-     page also fancy dropdown menus. remove the filters details button
-     and reintegrate these drop down menus into the topbar") -- the
-     date/status/importance/urgency `<select>`s and the label chips that used
-     to
-     live behind the "Filters" button are now inline fancy dropdowns
-     (templates/_filter_dropdown.html, the same .multiselect component
-     the widget builder's View/Range uses, single-select mode), sitting
-     right in row 1 next to search. Every dropdown's radios are
-     associated with the shared `#tasks-filters-form` via form="...", and
-     each pick submits immediately (onchange -> requestSubmit), exactly
-     like the `<select>`s did.
-
-     1.1 (virtual & derived states, plans/open-priority.md § Virtual &
-     derived states): the single Priority dropdown (the old 1-4 WebDAV
-     axis) is now two independent dropdowns -- Importance and Urgency
-     (each all/1/2/3, matching the stored explicit value).
-
-     Tasks page filter cleanup (2026-08-15, plans/open.md): the derived
-     `important`/`urgent` states used to live in the Date dropdown as extra
-     values; direct feedback said that read as clutter/wrong-drawer, so
-     they moved into their own axis's dropdown instead -- Importance gained
-     an "Important (any level)" option, Urgency gained "Urgent (any level)",
-     each alongside the existing all/1/2/3 explicit values. `overdue`
-     (also formerly a Date dropdown value) moved into the Status dropdown
-     as a virtual pseudo-status instead, since it isn't a value on any real
-     axis -- see routers/tasks.py's STATUS_FILTERS/_apply_status_filter.
-
-     Context this partial expects (all optional except request/q):
-       q, active_date_filter, active_status_filter, active_importance_filter,
-       active_urgency_filter, active_label, date_filters, date_filter_labels,
-       status_filters, status_filter_labels, importance_filters,
-       importance_filter_labels, urgency_filters, urgency_filter_labels,
-       task_label_names, active_filter_count, is_inbox (Table only),
-       sort/dir (Table only -- guarded with `is defined` so Timeline/Board,
-       which have no sort concept, don't need to pass them). -->
+     Context this partial expects: q, active_date_filter, date_filters,
+     date_filter_labels, is_inbox. -->
 {% set _df = active_date_filter | default('all') %}
-{% set _sf = active_status_filter | default('all') %}
-{% set _if = active_importance_filter | default('all') %}
-{% set _uf = active_urgency_filter | default('all') %}
-{% set _lbl = active_label | default('') %}
 {% set _q = q | default('') %}
-{% set _has_sort = sort is defined %}
-{% set _gb = group_by | default('none') %}
-
-{% macro _switcher_qs() %}date_filter={{ _df }}&status_filter={{ _sf }}&importance_filter={{ _if }}&urgency_filter={{ _uf }}{% if _q %}&q={{ _q|urlencode }}{% endif %}{% if _lbl %}&label={{ _lbl|urlencode }}{% endif %}{% endmacro %}
 
 <div class="toolbar top-app-bar toolbar-2row">
     <div class="toolbar-row">
         <h1 class="sr-only">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
-        <div class="segmented">
-            <a class="seg-btn {% if request.url.path == '/tasks' %}active{% endif %}" href="/tasks?{{ _switcher_qs() }}{% if _has_sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}{% if _gb != 'none' %}&group_by={{ _gb }}{% endif %}">Table</a>
-            <a class="seg-btn {% if request.url.path == '/tasks/timeline' %}active{% endif %}" href="/tasks/timeline?{{ _switcher_qs() }}">Timeline</a>
-            <a class="seg-btn {% if request.url.path == '/tasks/board' %}active{% endif %}" href="/tasks/board?{{ _switcher_qs() }}">Board</a>
-            <!-- 2026-08-08 ("add habits page as a view on tasks") -- a 4th
-                 tab, deliberately not carrying the date/status/importance/
-                 urgency/label querystring the other three share (see
-                 routers/tasks.py's habits_view -- none of those concepts
-                 apply to habit-labeled tasks), just its own optional
-                 search term. -->
-            <a class="seg-btn {% if request.url.path == '/tasks/habits' %}active{% endif %}" href="/tasks/habits{% if _q %}?q={{ _q|urlencode }}{% endif %}">Habits</a>
-        </div>
         <div class="spacer"></div>
-        <form method="get" action="{{ request.url.path }}" class="filter-bar" id="tasks-filters-form">
-            <input type="search" name="q" placeholder="Search {{ 'habits' if request.url.path == '/tasks/habits' else 'tasks' }}..." value="{{ _q }}">
-            {% if _has_sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+        <form method="get" action="/tasks" class="filter-bar" id="tasks-filters-form">
+            <input type="search" name="q" placeholder="Search tasks..." value="{{ _q }}">
         </form>
-        {% if request.url.path != '/tasks/habits' %}
-        {% set _lf_items = [{'value': '', 'name': 'All labels'}] %}
-        {% for _n in task_label_names %}{% set _ = _lf_items.append({'value': _n, 'name': _n}) %}{% endfor %}
         {% set _df_items = [] %}
         {% for _v in date_filters %}{% set _ = _df_items.append({'value': _v, 'name': date_filter_labels[_v]}) %}{% endfor %}
-        {% set _sf_items = [] %}
-        {% for _v in status_filters %}{% set _ = _sf_items.append({'value': _v, 'name': status_filter_labels[_v]}) %}{% endfor %}
-        {% set _if_items = [] %}
-        {% for _v in importance_filters %}{% set _ = _if_items.append({'value': _v, 'name': importance_filter_labels[_v]}) %}{% endfor %}
-        {% set _uf_items = [] %}
-        {% for _v in urgency_filters %}{% set _ = _uf_items.append({'value': _v, 'name': urgency_filter_labels[_v]}) %}{% endfor %}
-
-        {% set fd_name = 'label' %}
-        {% set fd_label = 'Label' %}
-        {% set fd_items = _lf_items %}
-        {% set fd_selected = _lbl %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
 
         {% set fd_name = 'date_filter' %}
         {% set fd_label = 'Date' %}
@@ -101,49 +30,6 @@
         {% set fd_form_id = 'tasks-filters-form' %}
         {% include '_filter_dropdown.html' %}
 
-        {% set fd_name = 'status_filter' %}
-        {% set fd_label = 'Status' %}
-        {% set fd_items = _sf_items %}
-        {% set fd_selected = _sf %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
-
-        {% set fd_name = 'importance_filter' %}
-        {% set fd_label = 'Importance' %}
-        {% set fd_items = _if_items %}
-        {% set fd_selected = _if %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
-
-        {% set fd_name = 'urgency_filter' %}
-        {% set fd_label = 'Urgency' %}
-        {% set fd_items = _uf_items %}
-        {% set fd_selected = _uf %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
-
-        {% if _has_sort %}
-        <!-- 1.5 slice ("Tasks page as a table groupable by project",
-             plans/open-priority.md § Task model): Group by is Table-only
-             (gated on _has_sort, same signal the sort_link/segmented
-             switcher use to tell Table apart from Timeline/Board, which
-             have no grouping concept either) -- reuses this same
-             _filter_dropdown.html single-select pattern as every other
-             filter here, submitting into the shared #tasks-filters-form
-             so switching the toggle preserves every other active filter,
-             q, and sort/dir. -->
-        {% set fd_name = 'group_by' %}
-        {% set fd_label = 'Group by' %}
-        {% set fd_items = [{'value': 'none', 'name': 'None'}, {'value': 'project', 'name': 'Project'}] %}
-        {% set fd_selected = _gb %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
-        {% endif %}
-        {% endif %}
-        <a class="btn primary" href="{{ '/tasks/new' if request.url.path != '/tasks/habits' else '/tasks/new?habit=1' }}" data-modal data-fab title="{{ 'New habit task' if request.url.path == '/tasks/habits' else 'New task' }}">{{ icon('plus') }} New</a>
+        <a class="btn primary" href="/tasks/new" data-modal data-fab title="New task">{{ icon('plus') }} New</a>
     </div>
 </div>

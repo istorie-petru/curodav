@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ habit.name if habit else "Habit" }}{% endblock %}
 {% block content %}
-<p class="breadcrumb"><a href="/habits">{{ icon('chevron-left', 'icon-sm') }} Habits</a></p>
+{# 2026-08-28 "major rework" session: /habits (the standalone list page)
+   is retired to a redirect -- this breadcrumb now points straight at the
+   Tasks table, where this habit shows as a row in the Habits group. #}
+<p class="breadcrumb"><a href="/tasks">{{ icon('chevron-left', 'icon-sm') }} Tasks</a></p>
 
 {% include "_habit_detail_body.html" %}
 {% endblock %}

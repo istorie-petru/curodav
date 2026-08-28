@@ -107,15 +107,16 @@
         {# 2026-08-15 -- the "Projects" tabbar destination (1.3) is gone,
            following the same fold-then-redirect precedent already set for
            the /today and /week tabbar removals above: the standalone
-           /projects page and its two child views were redundant with
-           /tasks?group_by=project and the merged /calendar/week grid (see
-           routers/projects.py's own module docstring and plans/open.md's
-           "Retire the standalone /projects page" decision record). The old
-           paths still redirect (any bookmark still lands somewhere real),
-           they just no longer have their own tabbar entry. A Jinja comment
-           here, not an HTML comment, for the same reason as the /today//week
-           note above -- no stale path text should leak into rendered
-           markup. #}
+           /projects page and its two child views were redundant with the
+           Tasks table (grouped by project unconditionally now, 2026-08-28
+           "major rework" session, item 3) and the merged /calendar/week
+           grid (see routers/projects.py's own module docstring and
+           plans/open.md's "Retire the standalone /projects page" decision
+           record). The old paths still redirect (any bookmark still lands
+           somewhere real), they just no longer have their own tabbar
+           entry. A Jinja comment here, not an HTML comment, for the same
+           reason as the /today//week note above -- no stale path text
+           should leak into rendered markup. #}
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
         <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
              user-defined list in the same rail, directly below the five

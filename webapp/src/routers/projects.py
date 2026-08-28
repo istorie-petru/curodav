@@ -45,17 +45,31 @@ def _now() -> str:
 @router.get("")
 def list_projects_redirect():
     """The `/projects` listing page is gone (see this module's docstring)
-    -- redirect to the Table view grouped by project, the closest existing
-    equivalent."""
-    return RedirectResponse(url="/tasks?group_by=project", status_code=302)
+    -- redirect to the Table view, the closest existing equivalent.
+
+    2026-08-28 "major rework" session update: `?group_by=project` dropped
+    from this URL -- the Table view's grouping is unconditional now (every
+    project gets its own group automatically, see routers/tasks.py's
+    _build_task_groups), so the query param has nothing left to opt into
+    and would just be silently ignored by list_tasks."""
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 @router.get("/{name}")
 def project_detail_redirect(name: str):
     """The project detail page (Tasks view + Week Calendar view) is gone
-    (see this module's docstring) -- redirect to the global Tasks table
-    filtered to this project's label, the closest existing equivalent."""
-    return RedirectResponse(url=f"/tasks?label={quote(name)}", status_code=302)
+    (see this module's docstring) -- redirect to the global Tasks table,
+    the closest existing equivalent.
+
+    2026-08-28 "major rework" session update: this used to redirect to
+    `/tasks?label={name}`, pre-filtered to just this project -- the Table
+    view's label filter is gone entirely now (item 3, "filtering reduced
+    to date only"), so there's no query param left to carry the same
+    precision. Landing on the plain Table view still surfaces this
+    project's tasks, just as one of its own groups rather than the whole
+    page scoped to it -- the smaller, safer change per this session's own
+    scoping instructions, not a redesign of the redirect's purpose."""
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 @router.get("/{name}/calendar")
@@ -64,7 +78,7 @@ def project_calendar_redirect(name: str):
     docstring) -- redirect the same place project_detail_redirect does;
     the merged `/calendar/week` grid already shows this project's work
     allocations, just not pre-filtered to only them."""
-    return RedirectResponse(url=f"/tasks?label={quote(name)}", status_code=302)
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 def _redirect_with_conflict(name: str, start_date: str, end_date: str, conflict_name: str) -> RedirectResponse:

@@ -79,10 +79,16 @@ data.
 ### Configurable views
 
 Settings allow enabling/disabling the available views per major module —
-Calendar: Month / 4-Week / Week / Day; Tasks: Table / Board / Timeline. Disabled
-views disappear from the relevant navigation and view switchers but must not
-delete data or alter the underlying model; re-enabling restores access.
-Deliberately simple — not a general-purpose UI customization system.
+Calendar: Month / 4-Week / Week / Day. Disabled views disappear from the
+relevant navigation and view switchers but must not delete data or alter the
+underlying model; re-enabling restores access. Deliberately simple — not a
+general-purpose UI customization system.
+
+**2026-08-28 update:** the Tasks half of this ("Table / Board / Timeline")
+is superseded — the 2026-08-28 "major rework" session retired Kanban and
+Timeline outright (`plans/STATE.md`'s entry for that session), so Table is
+now the Tasks page's only view; there is nothing left to toggle there. The
+Calendar half is untouched and still open.
 
 ### Optional Schedule module
 

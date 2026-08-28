@@ -242,17 +242,23 @@ class TestProjectPageRedirects:
     decision record). These three routes now just redirect; the actual
     promote/set_dates/demote/archive behavior above is unchanged."""
 
-    def test_list_projects_redirects_to_grouped_tasks_table(self, conn):
+    # 2026-08-28 "major rework" session update: the Tasks table's grouping
+    # is unconditional now (no more `?group_by=project` to opt into) and its
+    # label filter is gone entirely (item 3, "filtering reduced to date
+    # only") -- all three redirects below just land on the plain Table
+    # view now, where a project already surfaces as its own group.
+
+    def test_list_projects_redirects_to_tasks_table(self, conn):
         resp = projects_router.list_projects_redirect()
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks?group_by=project"
+        assert resp.headers["location"] == "/tasks"
 
-    def test_project_detail_redirects_to_filtered_tasks_table(self, conn):
+    def test_project_detail_redirects_to_tasks_table(self, conn):
         resp = projects_router.project_detail_redirect("Trip")
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks?label=Trip"
+        assert resp.headers["location"] == "/tasks"
 
-    def test_project_calendar_redirects_to_filtered_tasks_table(self, conn):
+    def test_project_calendar_redirects_to_tasks_table(self, conn):
         resp = projects_router.project_calendar_redirect("Trip")
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks?label=Trip"
+        assert resp.headers["location"] == "/tasks"

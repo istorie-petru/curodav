@@ -1,17 +1,16 @@
 <!-- Data: {overdue_count, today_count, week_count, important_count,
      urgent_count, overdue_link, today_link, week_link, important_link,
      urgent_link} -- see routers/dashboard.py::_render_at_a_glance. Five
-     number+label stat blocks, each a link to the matching filtered Tasks
-     view (?date_filter=today/this_week, ?status_filter=overdue,
-     ?importance_filter=important, ?urgency_filter=urgent -- Tasks page
-     filter cleanup, 2026-08-15, moved overdue/important/urgent off
-     date_filter -- plus &label=<name> when this widget is scoped to a
-     label page). Zero counts
-     still render -- "nothing's overdue" is itself useful at-a-glance
-     information, not an empty state to hide. The counts come from the
-     shared aggregation service (src/derived_state.py's count_by_state), so
-     they can never disagree with what the linked filtered Tasks view
-     actually shows. Blocks render through the shared stat_block macro
+     number+label stat blocks. today_link/week_link still point at a
+     filtered Tasks view (?date_filter=today/this_week -- the one filter
+     axis the Tasks table kept, 2026-08-28 "major rework" session, item 3);
+     overdue_link/important_link/urgent_link now just point at the plain
+     Table view since Status/Importance/Urgency filtering no longer exists
+     there to link into. Zero counts still render -- "nothing's overdue" is
+     itself useful at-a-glance information, not an empty state to hide. The
+     counts come from the shared aggregation service (src/derived_state.py's
+     count_by_state), independent of whatever the Tasks page's own filtering
+     currently supports. Blocks render through the shared stat_block macro
      (_widget_items.html). -->
 {% from "_widget_items.html" import stat_block %}
 <div class="at-a-glance-row">

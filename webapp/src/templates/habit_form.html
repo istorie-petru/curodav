@@ -102,7 +102,10 @@
 </form>
 </div>
 </div>
-{% set footer_back_url = '/habits' %}
+{# 2026-08-28 "major rework" session: /habits (the standalone list page)
+   is retired -- back/cancel goes straight to the Tasks table's Habits
+   group, this form's real home now. #}
+{% set footer_back_url = '/tasks' %}
 {% set footer_back_label = 'Cancel' %}
 {% if habit %}
 {% set footer_delete_url = '/habits/' ~ habit.uid ~ '/delete' %}

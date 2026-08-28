@@ -2,17 +2,6 @@
 {% from "_task_row.html" import task_row with context %}
 {% block title %}Tasks{% endblock %}
 {% block content %}
-{# active_group_uid/active_project_uid helpers -- defined at block scope so
-   they're available in the sort_link macro and empty-state links below.
-   Always empty today: nothing populates these query params since the dead
-   Space/Project filter dropdowns were removed 2026-08-07. The real
-   label-based filter Phase 9b added uses a separate `label` param/
-   `active_label` context key instead (see _tasks_toolbar.html) -- these
-   two are kept as plain default('') reads rather than deleted outright
-   since the URLs below still harmlessly reference them, not because
-   they're still load-bearing. #}
-{% set _aguid = active_group_uid | default('') %}
-{% set _apuid = active_project_uid | default('') %}
 {% include "_tasks_toolbar.html" %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
@@ -75,11 +64,10 @@
    them, and the fragment route supplies its own defaults. #}
 {% include "_tasks_body.html" %}
 
-{# "Habits & Recurring" section removed 2026-08-08 -- superseded by the
-   real Tasks > Habits tab (tasks_habits.html), which shows every
-   habit-labeled task with a proper check-in row + heatmap grid instead of
-   this one flat table. Habit-labeled tasks are excluded from this page
-   entirely now (db.list_tasks' default include_habit_tasks=False) so
-   they don't appear in both places. #}
+{# The Tasks > Habits tab and the standalone Habits page are both retired
+   (2026-08-28 "major rework" session, items 2+3) -- every habit-labeled
+   task and every standalone Habit entity now renders inline as a row in
+   the "Habits" group below, right alongside Project/Unassigned/Completed
+   (see _tasks_body.html and routers/tasks.py's _build_task_groups). #}
 {% endblock %}
 {% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

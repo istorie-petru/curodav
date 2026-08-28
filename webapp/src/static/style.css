@@ -1463,12 +1463,24 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   padding:8px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
 }
-/* Tasks Table view's Open-section pager (1.9, Webapp usability Phase B,
-   _tasks_pager.html) -- one row spanning the table, reusing .icon-btn for
-   Prev/Next rather than introducing a new button variant. */
-.task-pager-row td{padding:6px 10px; border-bottom:none;}
-.pager{display:flex; align-items:center; gap:4px;}
-.pager-summary{font-size:var(--text-caption); color:var(--fg-tertiary);}
+/* 2026-08-28 "major rework" session (item 3): the "+" add-row at the end
+   of every Tasks-table group (except Completed) -- _tasks_body.html.
+   "Colored like a normal row" per the session brief: same row height/
+   hover affordance as a real task row (not a muted/disabled look), just
+   its one cell spans every column and reads as an action rather than
+   data. Settings tables (Labels/Holidays/Time blocks) are meant to grow
+   the identical row shape later (queue item 8) -- kept as its own class
+   rather than folded into .task-section-divider so that reuse doesn't
+   drag Tasks-specific styling along with it. */
+.task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
+.task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-caption);}
+.task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}
+/* Habits-group check-in control (_habit_row.html) reuses the Dashboard
+   widget's own .habit-checkin-row layout (_widget_habit_checkin.html) but
+   needs to sit inside one narrow table cell instead of a full-width
+   widget row -- this modifier drops the outer row's own padding/min-width
+   so it doesn't fight the table cell's. */
+.habit-checkin-row-inline{padding:0; min-width:0;}
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;

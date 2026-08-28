@@ -3,12 +3,21 @@ feature otherwise -- see db.py's `habits`/`habit_entries` CREATE TABLE
 comments for the storage rationale). Entirely local, same category as
 projects/tags -- no CalDAV/CardDAV equivalent.
 
-Three things this router owns:
-  1. Manage/list page (`/habits`) -- create/archive/delete, mini heatmap
-     preview per habit.
-  2. Detail page (`/habits/{uid}`) -- full heatmap, current/longest streak,
-     a backfill form for entering exact past data.
-  3. The heatmap itself (`_heatmap_weeks`) -- a GitHub-style calendar grid
+2026-08-28 "major rework" session (item 2, "Merge Habits into the Tasks
+table"): the standalone manage/list page (`GET /habits`) is retired to a
+redirect -- every Habit entity now renders as a row in the Tasks table's
+own Habits group instead (routers/tasks.py's _habit_group_items/
+_build_task_groups). Presentation-only: nothing below this docstring
+changed except `list_habits`/`habits_regions`'s `region=list` branch (both
+only ever backed that one retired page) -- create/edit/archive/unarchive/
+delete/entries/toggle are exactly as before, and the Dashboard's own habit
+check-in widget (`_render_habit_checkin`) still calls them unchanged.
+
+Two things this router still owns:
+  1. Detail page (`/habits/{uid}`) -- full heatmap, current/longest streak,
+     a backfill form for entering exact past data. Reached from the Tasks
+     table's Habits group row now, not a list page.
+  2. The heatmap itself (`_heatmap_weeks`) -- a GitHub-style calendar grid
      built server-side as plain HTML (each day cell is a tiny <form>
      posting a toggle), not a canvas/JS widget, so it works with no JS and
      the "easy editing" requirement (click a day) is a single request with
@@ -47,14 +56,12 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 # single source of truth.
 ICONS = LABEL_ICONS
 
-# How many weeks the full detail-page heatmap shows vs. the compact
-# preview on the list page -- 53 weeks is "a bit over a year" (the extra
-# partial week is whatever's needed to complete the grid from a Monday),
-# matching the GitHub contribution graph's convention. The list page's
-# preview is deliberately much shorter (12 weeks, ~3 months) since it's
-# one of possibly several habits shown at once.
+# How many weeks the full detail-page heatmap shows -- 53 weeks is "a bit
+# over a year" (the extra partial week is whatever's needed to complete the
+# grid from a Monday), matching the GitHub contribution graph's convention.
+# PREVIEW_WEEKS (the list page's shorter compact preview) is gone with the
+# list page itself (2026-08-28 "major rework" session, item 2).
 DETAIL_WEEKS = 53
-PREVIEW_WEEKS = 12
 
 
 def _now() -> str:
@@ -77,38 +84,20 @@ def _streaks(entries_by_date: dict[str, float], today: date | None = None) -> tu
     return habit_heatmap.streaks(entries_by_date, today)
 
 
-def _habits_cards(conn) -> list[dict]:
-    cards = []
-    for h in db.list_habits(conn):
-        entries = db.habit_entries_by_date(conn, h["uid"])
-        current, longest = _streaks(entries)
-        cards.append(
-            {
-                "habit": h,
-                "weeks": _heatmap_weeks(entries, h["target_per_day"], PREVIEW_WEEKS),
-                "current_streak": current,
-                "longest_streak": longest,
-            }
-        )
-    return cards
-
-
-def _habits_list_context(conn, request: Request) -> dict:
-    return {
-        "request": request,
-        "active_tab": "habits",
-        # 2026-08-08: promoted to a direct Settings hub category (was
-        # nested under "Data & backup," now deleted -- see
-        # routers/settings.py's module docstring).
-        "crumbs": [{"url": "/settings", "name": "Settings"}],
-        "title": "Habits",
-        "cards": _habits_cards(conn),
-    }
-
-
 @router.get("")
-def list_habits(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("habits_list.html", _habits_list_context(conn, request))
+def list_habits_redirect():
+    """The standalone Habits list page is retired (2026-08-28 "major
+    rework" session, item 2: "Merge Habits into the Tasks table") -- every
+    standalone Habit entity now renders as a row in the Table view's own
+    Habits group instead (routers/tasks.py's _habit_group_items/
+    _build_task_groups), alongside habit-labeled tasks. Redirect rather
+    than a bare 404, same "any bookmark still lands somewhere real"
+    precedent `/projects`'s own retirement established. `_habits_cards`/
+    habits_list.html/_habits_body.html are gone with it; every mutation
+    endpoint below (create/edit/archive/unarchive/delete/entries/toggle)
+    is untouched -- this was presentation-only, per the session brief's own
+    "not a deletion of habit semantics" instruction."""
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 def _habit_detail_context(conn, request: Request, uid: str) -> dict:
@@ -133,19 +122,16 @@ def _habit_detail_context(conn, request: Request, uid: str) -> dict:
 @router.get("/regions")
 def habits_regions(
     request: Request,
-    region: str = "list",
+    region: str = "detail",
     uid: str = "",
     conn=Depends(get_db),
 ):
-    """Async-CRUD region fragments (features/async-crud.md) -- `region=list`
-    renders the #habits-body div shared with habits_list.html; `region=detail`
+    """Async-CRUD region fragment (features/async-crud.md) -- `region=detail`
     (with uid) renders the #habit-detail-body div shared with
-    habit_detail.html. Lets refreshRegion() swap a habit surface in place
-    after a mutation instead of a full reload."""
-    if region == "list":
-        ctx = _habits_list_context(conn, request)
-        html = templates.env.get_template("_habits_body.html").render(ctx)
-        return HTMLResponse(html)
+    habit_detail.html, so refreshRegion() can swap it in place after a
+    mutation instead of a full reload. `region=list` is gone (2026-08-28
+    "major rework" session, item 2) along with habits_list.html/
+    _habits_body.html -- the list page it backed is retired."""
     if region == "detail":
         ctx = _habit_detail_context(conn, request, uid)
         html = templates.env.get_template("_habit_detail_body.html").render(ctx)
@@ -191,7 +177,7 @@ def create_habit(
 ):
     name = name.strip()
     if not name:
-        return respond(x_requested_with, "/habits")
+        return respond(x_requested_with, "/tasks")
     now = _now()
     tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     uid = str(uuid.uuid4())
@@ -210,7 +196,7 @@ def create_habit(
             "updated_at": now,
         },
     )
-    return respond(x_requested_with, "/habits", status_code=201, uid=uid)
+    return respond(x_requested_with, "/tasks", status_code=201, uid=uid)
 
 
 @router.get("/{uid}/edit")
@@ -277,7 +263,7 @@ def archive_habit(
     conn=Depends(get_db),
 ):
     db.archive_habit(conn, uid, _now())
-    return respond(x_requested_with, "/habits")
+    return respond(x_requested_with, "/tasks")
 
 
 @router.post("/{uid}/unarchive")
@@ -287,7 +273,7 @@ def unarchive_habit(
     conn=Depends(get_db),
 ):
     db.unarchive_habit(conn, uid)
-    return respond(x_requested_with, "/habits")
+    return respond(x_requested_with, "/tasks")
 
 
 @router.post("/{uid}/delete")
@@ -297,7 +283,7 @@ def delete_habit(
     conn=Depends(get_db),
 ):
     db.delete_habit(conn, uid)
-    return respond(x_requested_with, "/habits")
+    return respond(x_requested_with, "/tasks")
 
 
 @router.get("/{uid}")

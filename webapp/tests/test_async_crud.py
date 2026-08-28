@@ -89,33 +89,29 @@ class TestTasksRegionFragment:
 
     def test_region_table_matches_the_full_page_rows(self, conn):
         # The fragment must be the same single source of truth as the full
-        # Table view -- same rows, same filters/sort/page honored.
+        # Table view -- same rows, same filters honored. 2026-08-28 "major
+        # rework" session: `open_tasks`/pagination are gone from the
+        # context -- every open task now lives inside one of the fixed
+        # groups (`groups`), so this walks all of them instead.
         for i in range(5):
             _task(conn, f"t{i:03d}", due_at=f"2026-08-{i + 1:02d}")
         page = tasks_router.list_tasks(_request(), conn=conn)
         fragment = tasks_router.tasks_regions(_request(), conn=conn).body.decode()
-        assert _rows(fragment) == {t["uid"] for t in page.context["open_tasks"]}
+        page_uids = {
+            t["uid"]
+            for g in page.context["groups"]
+            if g["kind"] != "habits"
+            for t in g["tasks"]
+        }
+        assert _rows(fragment) == page_uids
         assert "t001" in fragment
 
-    def test_region_table_honors_filters_and_pagination(self, conn):
-        for i in range(60):
-            _task(conn, f"t{i:03d}", due_at=f"2026-08-{1 + (i % 28):02d}")
-        _task(conn, "done1", status="done", due_at="2026-08-20")
-        # Page 2, limit 10 -- completed tasks are never paginated, so the
-        # fragment carries 10 open rows (page 2) plus done1 in the Completed
-        # section below.
-        resp = tasks_router.tasks_regions(_request(query_string=b"page=2&limit=10"), page=2, limit=10, conn=conn)
-        body = resp.body.decode()
-        rows = _rows(body)
-        assert len(rows) == 11
-        assert "done1" in rows
-        assert len({u for u in rows if u != "done1"}) == 10
-
-    def test_region_table_renders_pager_when_multiple_pages(self, conn):
-        for i in range(25):
-            _task(conn, f"t{i:03d}")
-        resp = tasks_router.tasks_regions(_request(), limit=10, conn=conn)
-        assert "task-pager-row" in resp.body.decode()
+    # 2026-08-28 "major rework" session: pagination is retired (grouping is
+    # unconditional now, and the 1.9 pagination slice already special-cased
+    # "grouped mode shows everything, don't paginate it" -- that's simply
+    # the whole page's behavior now) -- test_region_table_honors_filters_
+    # and_pagination/test_region_table_renders_pager_when_multiple_pages
+    # both exercised removed machinery (_tasks_pager.html is deleted).
 
     def test_region_table_empty_state(self, conn):
         resp = tasks_router.tasks_regions(_request(), conn=conn)
