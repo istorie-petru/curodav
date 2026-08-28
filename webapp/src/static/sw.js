@@ -50,7 +50,15 @@
 // real, not theoretical -- the very next style.css edit (suppressing
 // .inline-edit-cell's text-decoration while `[data-editing]`, see that
 // rule's own comment) needed this same bump to actually reach a browser.
-const CACHE_NAME = "cc-shell-v16";
+// v17 (2026-08-29): the habit heatmap's DETAIL_WEEKS widening fix left it
+// scrollable with no visible scrollbar on several platforms -- added
+// `.heatmap`'s scrollbar-width/::-webkit-scrollbar rules (style.css) plus a
+// new static/heatmap_scroll.js (not shell-critical -- same category as
+// inline_edit.js/async_crud.js above, so not added to SHELL_ASSETS) that
+// defaults the scroll position to today's end. Bumped per the v15/v16
+// lesson: any style.css change needs this regardless of whether a script
+// also changed.
+const CACHE_NAME = "cc-shell-v17";
 
 const SHELL_ASSETS = [
   "/offline",

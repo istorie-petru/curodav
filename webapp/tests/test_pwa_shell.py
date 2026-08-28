@@ -351,9 +351,11 @@ class TestLocalWritePath:
         # precached style.css never goes stale on its own, so a style-only
         # change now has to bump CACHE_NAME too, not just a script rewrite;
         # v16 (2026-08-29) is the very next style.css-only edit proving that
-        # lesson had to actually be followed, not just written down.
+        # lesson had to actually be followed, not just written down; v17
+        # (2026-08-29) is the heatmap scrollbar-visibility rules added for
+        # the "no scrollbar" follow-up.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v16"' in script
+        assert 'CACHE_NAME = "cc-shell-v17"' in script
 
 
 class TestOfflineToolbar:

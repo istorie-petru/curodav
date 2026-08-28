@@ -284,6 +284,13 @@
      same data attributes -- the Habits group's check-in counter
      (_habit_row.html) is the first, not the only intended user. -->
 <script src="{{ static_url('inline_edit.js') }}"></script>
+<!-- Scrolls any GitHub-style heatmap (_habit_heatmap.html) to its right
+     edge (today, and whatever real entries sit near it) on load and on
+     every region/modal refresh -- 2026-08-29 direct feedback, see the
+     script's own docstring. Loaded globally since heatmaps render on the
+     standalone Habits detail page, the habit-task detail modal, and
+     wherever else this shared macro gets reused. -->
+<script src="{{ static_url('heatmap_scroll.js') }}"></script>
 <script src="{{ static_url('tag_input.js') }}"></script>
 <script src="{{ static_url('recurrence_picker.js') }}"></script>
 <script src="{{ static_url('reminders_picker.js') }}"></script>

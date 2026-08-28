@@ -3324,7 +3324,23 @@ body.command-palette-open{overflow:hidden;}
    color -- every habit's heatmap uses the same accent-at-increasing-
    opacity scale (level-1..4), keeping habits visually comparable at a
    glance and avoiding needing 8 colors x 5 levels of CSS. */
-.heatmap{overflow-x:auto; padding-bottom:4px;}
+/* 2026-08-29 direct feedback ("no scrollbar") on the DETAIL_WEEKS widening
+   fix just above -- once the grid is wider than its card/modal,
+   overflow-x:auto makes it scrollable, but plain `auto` leaves scrollbar
+   *appearance* to the OS/browser default, which on several platforms
+   (macOS "when scrolling" trackpad setting, most mobile browsers) is a
+   transient overlay that's invisible until actively scrolling -- there was
+   no visible affordance telling anyone more history existed to scroll to.
+   `scrollbar-width:thin` (Firefox) + the ::-webkit-scrollbar rules below
+   (Chrome/Safari/Edge) force a slim but always-present, always-visible
+   track/thumb instead. static/heatmap_scroll.js separately defaults the
+   scroll position to the right edge (today) so scrolling is only needed to
+   reach *older* history, not to find today's entry in the first place. */
+.heatmap{overflow-x:auto; padding-bottom:4px; scrollbar-width:thin;}
+.heatmap::-webkit-scrollbar{height:6px;}
+.heatmap::-webkit-scrollbar-track{background:transparent;}
+.heatmap::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:3px;}
+.heatmap::-webkit-scrollbar-thumb:hover{background:var(--fg-tertiary);}
 .heatmap-months{display:flex; gap:3px; margin-left:1px; margin-bottom:2px;}
 .heatmap-month-label{width:11px; flex:none; font-size:9px; color:var(--fg-tertiary); overflow:visible; white-space:nowrap;}
 .heatmap-grid{display:flex; gap:3px;}

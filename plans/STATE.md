@@ -4110,3 +4110,43 @@ literal empty space around it — same mechanism the standalone habit
 heatmap already relies on, just applied consistently to the task-tracked
 variant too. No CSS/JS touched, so no service-worker cache bump needed.
 Full suite 1728 passed.
+
+## Bug fix (2026-08-29, immediate follow-up) — widened heatmap left no
+visible scrollbar, and scrolled to the wrong end by default
+
+Direct report on the widening fix above: "better. but no scrollbar. and
+the actual entries are a priority." Two real problems, not one:
+`.heatmap{overflow-x:auto}` does make the grid scrollable once it's wider
+than its card, but (1) plain `auto` leaves the scrollbar's *appearance* to
+the OS/browser default, which on several platforms (macOS's "when
+scrolling" trackpad setting, most mobile browsers) is a transient overlay
+invisible until actively mid-scroll -- no visible affordance that there
+was more to see; and (2) a freshly rendered scroll container starts
+pinned to its left edge, i.e. the *oldest* end of the grid, while
+`heatmap_weeks`/`heatmap_range` always end the grid on `today` -- so the
+most relevant cells (today, and whatever real entries sit near it) were
+exactly the ones scrolled out of view by default, behind an invisible
+scrollbar.
+
+Fix, two parts:
+- `style.css`'s `.heatmap` now sets `scrollbar-width:thin` (Firefox) plus
+  `::-webkit-scrollbar`/`-track`/`-thumb` rules (Chrome/Safari/Edge) for a
+  slim but always-present, always-visible track/thumb instead of relying
+  on the OS default.
+- New `static/heatmap_scroll.js` (`window.CCHeatmapScroll.init(root)`,
+  same re-init-after-inject convention as `avatar_cropper.js`/
+  `contact_phone_email_rows.js`) sets `el.scrollLeft = el.scrollWidth` on
+  every `.heatmap` in `root`. Wired to `DOMContentLoaded` (full-page
+  loads), the existing `cc-region-swapped` event `async_crud.js`'s
+  `refreshRegion` already dispatches (the standalone habit modal's
+  `#habit-detail-body` refresh), and `modal.js`'s `wireContent()` (both a
+  modal's first open and the view<->edit swap-in-place) -- the same three
+  places every other per-fragment behavior in this app already re-inits
+  from. Loaded globally in `base.html` (not shell-critical, so not added
+  to `sw.js`'s `SHELL_ASSETS`, same category as `inline_edit.js`/
+  `async_crud.js`). Scrolling left still reaches the older history; this
+  only changes where an untouched heatmap starts.
+
+Bumped `CACHE_NAME` to `"cc-shell-v17"` (`style.css` changed again, per
+the v15/v16 lesson) and updated the matching pinned test assertion. Full
+suite 1728 passed.
