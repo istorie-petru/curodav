@@ -372,20 +372,6 @@ input:focus, select:focus, textarea:focus{
 input:disabled, select:disabled, textarea:disabled{opacity:.5; cursor:not-allowed;}
 input:read-only{cursor:default;}
 
-/* Inline-editable text (2026-08-02 -- "rework the text input to only
-   look special on input, but normal when not, just like any other
-   text"). A project/Space/list name is a label most of the time; it only
-   needs to look like a form control right when you're about to type in
-   it, not permanently boxed like the rest of a real form. Padding is
-   left alone (only border/background change) so nothing shifts position
-   when the box appears on hover/focus. Focus itself still gets the same
-   accent border + ring every other input has -- that's the un-overridden
-   `input:focus` rule above, which wins on specificity (a pseudo-class
-   attached to the base element type still out-ranks this plain class
-   selector) the moment the field is actually focused. */
-.inline-edit-input{border-color:transparent; background:transparent;}
-.inline-edit-input:hover{border-color:var(--control-border);}
-.inline-edit-input:focus{background:var(--control-bg);}
 textarea{resize:vertical; min-height:60px; line-height:1.4;}
 
 /* Every <select> in the app gets the same custom chevron (appearance:none
@@ -1509,18 +1495,34 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 }
 .inline-edit-cell:focus{outline:none; text-decoration-color:var(--fg-secondary);}
 /* The real input that replaces .inline-edit-cell's text while editing --
-   direct feedback (2026-08-29): no border at all, and its background
-   should match the row instead of standing out as its own field --
+   direct feedback (2026-08-29): no border at all, background matches the
+   row instead of standing out as its own field.
+
+   This class name collided with a DEAD rule that used to live where
+   `textarea{...}` now starts just above (a 2026-08-02 "inline-editable
+   text" convention for project/Space/list names -- its own comment is
+   gone now, it had no live consumer left: nothing in any template or
+   script still applied that class). Its `.inline-edit-input:focus{
+   background:var(--control-bg)}` had higher specificity than this plain
+   class rule (a pseudo-class beats a bare class) and this input is
+   focused essentially the entire time it's ever visible (inline_edit.js
+   calls `.focus()` the moment it's created) -- so that old rule was
+   silently repainting a background on it regardless of what this rule
+   said, which is why the previous "background matches the row, no
+   border" pass didn't visibly do anything. Removed rather than
+   out-specificity'd, since it was dead weight either way.
    `background:transparent` rather than a hardcoded surface color so it
    always matches whatever's actually behind it (row hover state, light/
-   dark theme) instead of potentially mismatching one of them. There is no
-   more visual difference between "displaying" and "editing" beyond the
-   text literally becoming an editable field -- as close to invisible
-   chrome as an `<input>` can get. */
+   dark theme). `-webkit-appearance:none`/`appearance:none` are kept
+   defensively even after removing the collision -- `all:unset` alone
+   doesn't reliably strip a number input's native platform chrome in
+   every browser, and this is the standard fix. `-moz-appearance:
+   textfield` is a different, unrelated concern (Firefox's up/down
+   spinner, the earlier "hide the native spinner arrows" pass). */
 .inline-edit-input{
   all:unset; width:44px !important; text-align:center; font:inherit; color:inherit;
-  background:transparent; border:none; cursor:text;
-  -moz-appearance:textfield; /* Firefox's native up/down spinner */
+  background:transparent; border:none; box-shadow:none; cursor:text;
+  -webkit-appearance:none; appearance:none; -moz-appearance:textfield;
 }
 /* Chrome/Safari/Edge's native number spinner -- direct feedback: hide it,
    same "no chrome, just the text + underline" intent as the rest of this

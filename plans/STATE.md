@@ -3996,3 +3996,27 @@ mismatch against either. There is now no visual boundary at all between
 as close to invisible chrome as an `<input>` can get, in line with every
 prior pass on this control trending the same direction. Presentation-only,
 `static/style.css` only. Full suite still 1728 passed.
+
+## Bug fix (2026-08-29, immediate follow-up) — the "no border, background
+matches the row" pass directly above hadn't actually done anything
+
+Direct report: "i don't think it worked." Verified live (seeded a habit
+task, ran the real app, curled the served `/static/style.css`) rather than
+re-guessing at CSS blind a third time -- found a real bug, not a
+perception issue. `.inline-edit-input` collided with an unrelated, dead
+rule higher up the same file (a 2026-08-02 "inline-editable text"
+convention for project/Space/list names, its own comment gone, no live
+consumer left anywhere in a template or script): `.inline-edit-input:
+focus{background:var(--control-bg)}`. A `:focus` pseudo-class beats a
+plain class on specificity regardless of source order, and this input is
+focused essentially the entire time it's ever visible (`inline_edit.js`
+calls `.focus()` right after creating it) -- so that dead rule was
+silently repainting a background on it no matter what the real rule said.
+Removed the dead rule outright (it had nothing left to style) rather than
+just out-specificity'ing it. Also hardened `.inline-edit-input` itself
+while in there: `-webkit-appearance:none`/`appearance:none` added
+defensively (`all:unset` alone doesn't reliably strip a number input's
+native platform chrome in every browser -- the standard, separate fix).
+Presentation-only, `static/style.css` only -- confirmed via a live curl of
+the served CSS that the collision is gone and only one `.inline-edit-
+input` rule remains. Full suite still 1728 passed.
