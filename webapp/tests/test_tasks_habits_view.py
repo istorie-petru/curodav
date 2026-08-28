@@ -9,7 +9,8 @@ and a per-task heatmap sourced from task_completions/tasks.target_per_day.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from starlette.requests import Request
@@ -44,6 +45,29 @@ def _seed_task(conn, uid, tags=None, target_per_day=1, **overrides):
 
 def _request(path="/tasks/habits", method="GET"):
     return Request({"type": "http", "method": method, "path": path, "headers": []})
+
+
+def _request_with_app(path, db_path):
+    """A Request whose `.app.state.settings.db_path` resolves, needed to
+    exercise deps.py's habit_streak_text()/_cached_app_meta() -- a bare
+    `_request()` above has no `.app` at all, so that global silently falls
+    back to its "standard" default every time regardless of what's stored
+    in `conn`. Same pattern as test_recurrence_terminology.py's own helper
+    of the same name."""
+    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path, radicale_base_url="http://localhost:5232")))
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "root_path": "",
+            "headers": [],
+            "app": fake_app,
+        }
+    )
 
 
 class TestListTasksExcludesHabitLabel:
@@ -208,13 +232,17 @@ class TestToggleTaskCompletion:
 
 
 class TestHabitRowAsyncSubmit:
-    """The Habits group's check-in forms (_habit_row.html) need
+    """The Habits group's check-in form (_habit_row.html) needs
     `data-cc-change` for async_crud.js's global data-cc-change submit
-    listener (loaded in base.html) to intercept them at all -- without it, a
-    click falls through to a plain native form submit (full-page reload,
+    listener (loaded in base.html) to intercept it at all -- without it, a
+    submit falls through to a plain native form submit (full-page reload,
     reported directly). Guards against that gap silently coming back by
     rendering the real page template, same pattern as
-    test_phase1_derived_states.py's own template-render assertions."""
+    test_phase1_derived_states.py's own template-render assertions.
+
+    2026-08-28 follow-up: the checkbox/"+1"/reset trio these tests used to
+    cover is gone -- one `<input type="number">` per row now, wrapped in a
+    single `.habit-checkin-value` form."""
 
     def _render_tasks_page(self, conn, req=None):
         req = req or _request("/tasks")
@@ -222,25 +250,45 @@ class TestHabitRowAsyncSubmit:
         ctx = {"request": req, **resp.context}
         return tasks_router.templates.get_template("tasks_list.html").render(ctx)
 
-    def test_checkbox_habit_toggle_form_has_data_cc_change_task(self, conn):
+    def test_plain_habit_task_number_input_has_data_cc_change_task(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
         body = self._render_tasks_page(conn)
-        assert 'class="form-inline habit-checkin-toggle" data-cc-change="task"' in body
+        assert 'class="form-inline habit-checkin-value" data-cc-change="task" data-cc-action="checkin"' in body
+        assert 'type="number" name="value" class="habit-checkin-input"' in body
+        assert 'max="999999"' in body
 
-    def test_quantity_habit_plus_and_reset_forms_have_data_cc_change_task(self, conn):
+    def test_quantity_habit_number_input_shows_target_and_today_value(self, conn):
         _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
+        today = date.today().isoformat()
+        db.upsert_task_completion(conn, "h2", today, _now(), value=3)
         body = self._render_tasks_page(conn)
-        assert 'class="form-inline habit-checkin-plus" data-value="1" data-cc-change="task"' in body
-        assert 'data-cc-change="task" data-cc-action="checkin"' in body
+        assert 'value="3"' in body
+        assert 'habit-checkin-target">/ 8</span>' in body
 
-    def test_standalone_habit_entity_forms_have_data_cc_change_habit(self, conn):
+    def test_standalone_habit_entity_form_has_data_cc_change_habit(self, conn):
         db.upsert_habit(
             conn,
             {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "created_at": _now()},
         )
         body = self._render_tasks_page(conn)
-        assert 'action="/habits/e1/entries/' in body
-        assert 'class="form-inline habit-checkin-toggle" data-cc-change="habit"' in body
+        assert 'action="/habits/e1/entries"' in body
+        assert 'class="form-inline habit-checkin-value" data-cc-change="habit" data-cc-action="checkin"' in body
+
+    def test_due_column_renders_streak_text_standard_by_default(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
+        today = date.today().isoformat()
+        db.upsert_task_completion(conn, "h1", today, _now())
+        body = self._render_tasks_page(conn)
+        assert "1 day streak" in body
+
+    def test_due_column_renders_playful_streak_text_when_configured(self, conn, tmp_path):
+        db.set_app_meta(conn, "habit_streak_terminology", "playful")
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
+        for i in range(8):
+            db.upsert_task_completion(conn, "h1", (date.today() - timedelta(days=i)).isoformat(), _now())
+        req = _request_with_app("/tasks", tmp_path / "cache.sqlite")
+        body = self._render_tasks_page(conn, req=req)
+        assert "This week has been full" in body
 
 
 class TestHabitSettings:

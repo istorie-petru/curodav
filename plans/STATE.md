@@ -3782,3 +3782,53 @@ it). `_habit_row.html`'s three forms now carry `data-cc-change="task"` (or
 (`TestSetTaskCompletion`/`TestToggleTaskCompletion`'s new fetch-header
 cases, `TestHabitRowAsyncSubmit`'s rendered-template assertions), full
 suite 1694 passed.
+
+## Side work (2026-08-28) — Habits group: direct number input + streak text
+
+Direct user request against the Habits group's row in the Tasks table:
+"their status is a simple increment and delete buttons, not enough, it
+should be a direct number input... the due date for habits should display
+a text with the streak, custom and that can be playful (depending on the
+settings)."
+
+- **Check-in control**: `_habit_row.html`'s checkbox/"+1"/reset trio is
+  replaced by one plain `<input type="number" min="0" max="999999"
+  step="1">` per row (both a target=1 habit and a quantity habit alike),
+  auto-submitting on `onchange` through the same `.habit-checkin-value`
+  form + `data-cc-change`/async_crud.js path the old controls used. No new
+  endpoint needed -- `plus_url` (`routers/tasks.py::set_task_completion` /
+  `routers/habits.py::add_entry`) already accepted an arbitrary `value`,
+  only the old "+1" button ever called it with one; `toggle_url` and the
+  reset form are unused by this row now (still live for the Dashboard's
+  own check-in widget, `_widget_habit_checkin.html`/`static/
+  habit_checkin.js`, an untouched separate surface). "Reasonable integer
+  limit to save on memory": the input's own `max="999999"` is advisory
+  only, so both `set_task_completion` and `add_entry` clamp server-side
+  too (`_MAX_HABIT_VALUE` in `routers/tasks.py`, a literal `999999` in
+  `routers/habits.py` -- kept as a duplicated constant rather than a
+  cross-router import).
+- **Streak text**: new `habit_heatmap.streak_text(days, playful)` --
+  standard mode is a plain `"{n} day streak"`; playful mode escalates
+  through `"This week has been full"` (7-13 days), `"{n} weeks strong"`
+  (14-29), `"Consistent for {n} months"` (30+), matching the concrete
+  examples from the request. Wired as a new Settings > General toggle,
+  "Habit streak terminology" (`deps.py`'s `HABIT_STREAK_TERMINOLOGY_KEY`,
+  `habit_streak_terminology()`/`habit_streak_text()` Jinja globals; `POST
+  /settings/habit-streak-terminology`), same presentation-layer-only
+  app_meta pattern as 1.6's `recurrence_terminology` (default
+  `"standard"`). `_habit_row.html`'s Due column (previously a blank em
+  dash) now renders `habit_streak_text(request, item.current_streak)`;
+  Scheduled takes over the blank em dash Due used to show, since
+  "scheduled hours" doesn't apply to a habit any more than a due date
+  does.
+- New CSS: `.habit-checkin-value`/`.habit-checkin-input`/
+  `.habit-checkin-target` (`static/style.css`) -- the number input is
+  deliberately narrower than a `.stepper-input` and keeps its native
+  spinner (no flanking -/+ buttons here to duplicate it).
+- Tests: `TestHabitRowAsyncSubmit` (`test_tasks_habits_view.py`) rewritten
+  off the retired checkbox/plus/reset assertions to the one number-input
+  form, plus two new streak-text tests (standard default, playful via a
+  `_request_with_app` fake-ASGI-app Request -- same pattern
+  `test_recurrence_terminology.py` established, needed because
+  `deps._cached_app_meta` reads `request.app.state.settings.db_path` and
+  a bare `Request({...})` has no `.app` at all). Full suite 1696 passed.

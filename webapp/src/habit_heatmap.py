@@ -170,3 +170,32 @@ def streaks(entries_by_date: dict[str, float], today: date | None = None) -> tup
         current += 1
         cursor -= timedelta(days=1)
     return current, longest
+
+
+def streak_text(days: int, playful: bool = False) -> str:
+    """Human-readable phrase for a `streaks()`-computed current streak --
+    2026-08-28 direct feedback ("the due date for habits should display a
+    text with the streak... that can be playful depending on the
+    settings"). `days` is the same integer either way; only the wording
+    changes (Settings > General's "Habit streak terminology", same
+    presentation-layer-only pattern as 1.6's recurrence terminology --
+    see deps.py's HABIT_STREAK_TERMINOLOGY_KEY). Standard mode is a plain,
+    neutral count that reads the same at any length; playful mode
+    escalates through weekly/monthly language as the streak grows,
+    matching the concrete examples the feature request gave ("1 day
+    streak", "This Week has been full", "Consistent for 1 Month")."""
+    if days <= 0:
+        return "Let's get started" if playful else "No streak yet"
+    if not playful:
+        return f"{days} day{'s' if days != 1 else ''} streak"
+    if days == 1:
+        return "1 day streak"
+    if days < 7:
+        return f"{days} days strong"
+    if days < 14:
+        return "This week has been full"
+    if days < 30:
+        weeks = days // 7
+        return f"{weeks} weeks strong"
+    months = days // 30
+    return f"Consistent for {months} month{'s' if months != 1 else ''}"

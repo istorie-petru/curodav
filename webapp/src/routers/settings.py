@@ -104,6 +104,7 @@ from .. import auth, data_health, db, offline_sync
 from ..deps import (
     CALENDAR_VIEWS_KEY,
     FOUR_WEEK_POSITION_KEY,
+    HABIT_STREAK_TERMINOLOGY_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
     SHOW_RELATIONS_CARD_KEY,
@@ -218,6 +219,10 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # labels on the recurrence editor's holiday-calendar/weekend
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
             "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
+            # 2026-08-28 -- "Habit streak terminology" -- "standard" or
+            # "playful" wording for the Habits group's streak readout
+            # (Tasks table). See deps.py's HABIT_STREAK_TERMINOLOGY_KEY.
+            "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
             # 2026-08-28 -- "Calendar views" (Settings > General) -- which of the
             # Month/Day switcher's two views appear. 4-Week and Week moved to
             # their own standalone tabbar destinations the same day ("Calendar
@@ -337,6 +342,18 @@ def set_recurrence_terminology(terminology: str = Form("standard"), conn=Depends
     underlying holiday_calendar/exclude_saturday/exclude_sunday fields on
     events and schedule_settings never change name or meaning."""
     db.set_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/habit-streak-terminology")
+def set_habit_streak_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
+    """"Habit streak terminology" -- "standard" or "playful" wording for
+    the Habits group's streak readout (Tasks table, _habit_row.html via
+    deps.py's habit_streak_text() global). Only ever stores one of the two
+    offered choices; anything else falls back to "standard", same
+    convention as set_recurrence_terminology above. Presentation-layer
+    only -- the underlying current_streak integer never changes."""
+    db.set_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

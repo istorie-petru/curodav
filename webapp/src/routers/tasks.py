@@ -24,6 +24,14 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # almost always a no-op costs nothing meaningful to run on each visit.
 TASK_AUTO_ARCHIVE_DAYS_KEY = "task_auto_archive_days"
 
+# 2026-08-28 follow-up ("direct number input" for the Habits group's
+# check-in cell) -- server-side mirror of the input's `max="999999"`, see
+# set_task_completion below. Shared with routers/habits.py's own copy
+# (kept as a plain duplicated constant rather than a cross-router import,
+# same "small enough to just repeat" call this app makes elsewhere for a
+# one-line bound rather than adding an import edge between two routers).
+_MAX_HABIT_VALUE = 999999
+
 
 def _auto_archive_if_configured(conn) -> None:
     raw = db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0"
@@ -1040,6 +1048,12 @@ def set_task_completion(
         parsed_value = float(value) if value else 1.0
     except ValueError:
         parsed_value = 1.0
+    # 2026-08-28 follow-up (direct number input replacing the "+1"/reset
+    # buttons): the input's own `max="999999"` is advisory only -- an HTML
+    # `max` doesn't stop a hand-crafted request, so clamp here too. Keeps
+    # a typo or scroll-wheel nudge from writing an arbitrarily large value.
+    if parsed_value > _MAX_HABIT_VALUE:
+        parsed_value = _MAX_HABIT_VALUE
     if parsed_value <= 0:
         db.delete_task_completion(conn, uid, completion_date)
     else:

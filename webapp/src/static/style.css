@@ -1481,6 +1481,14 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    widget row -- this modifier drops the outer row's own padding/min-width
    so it doesn't fight the table cell's. */
 .habit-checkin-row-inline{padding:0; min-width:0;}
+/* Habits-group check-in input (_habit_row.html, 2026-08-28 follow-up --
+   direct feedback replacing the checkbox/"+1"/reset trio with one plain
+   number field per row). Compact enough to sit in a table cell; the
+   native spinner is left on (unlike .stepper-input) since there are no
+   flanking -/+ buttons here to duplicate it. */
+.habit-checkin-value{display:flex; align-items:center; gap:4px;}
+.habit-checkin-input{width:52px !important; padding:3px 4px !important; text-align:center;}
+.habit-checkin-target{font-size:var(--text-caption); white-space:nowrap;}
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;

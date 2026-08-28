@@ -332,6 +332,12 @@ def add_entry(
         parsed_value = float(value) if value else 1.0
     except ValueError:
         parsed_value = 1.0
+    # 2026-08-28 follow-up ("direct number input" for the Habits group's
+    # check-in cell, routers/tasks.py's set_task_completion carries the
+    # same clamp/comment) -- server-side mirror of the input's own
+    # `max="999999"`, which is advisory only.
+    if parsed_value > 999999:
+        parsed_value = 999999
     if parsed_value <= 0:
         db.delete_habit_entry(conn, uid, entry_date)
     else:

@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db, derived_state
+from . import db, derived_state, habit_heatmap
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -61,6 +61,13 @@ RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
 # default and shows the card, matching the behavior that predates the
 # setting), "0" hides it.
 SHOW_RELATIONS_CARD_KEY = "show_relations_card"
+# 2026-08-28 -- "Habit streak terminology" (Settings > General) -- "standard"
+# (default) or "playful" wording for the Habits group's streak readout
+# (Tasks table, _habit_row.html). Same presentation-layer-only pattern as
+# RECURRENCE_TERMINOLOGY_KEY above (1.6): the underlying current_streak
+# integer (habit_heatmap.streaks) never changes, only how it's phrased --
+# see habit_heatmap.streak_text for the actual wording.
+HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 # 2026-08-28 -- "Calendar views" (Settings > General) -- which of the four
 # Calendar views (Month, 4-Week, Week, Day) appear in the view switcher.
 # Stored as a comma-separated list of view keys: "month,fourweek,week,day".
@@ -296,6 +303,35 @@ def _recurrence_terminology(request: Request) -> str:
 
 
 templates.env.globals["recurrence_terminology"] = _recurrence_terminology
+
+
+def _habit_streak_terminology(request: Request) -> str:
+    """"standard" (default) or "playful" -- see HABIT_STREAK_TERMINOLOGY_KEY
+    above. Read directly by settings_general.html's toggle; every other
+    caller should use habit_streak_text() below instead of reading this
+    and calling habit_heatmap.streak_text itself."""
+    return _cached_app_meta(request, HABIT_STREAK_TERMINOLOGY_KEY, "standard")
+
+
+templates.env.globals["habit_streak_terminology"] = _habit_streak_terminology
+
+
+def _habit_streak_text(request: Request, days) -> str:
+    """The Habits group's streak readout (_habit_row.html), phrased per
+    HABIT_STREAK_TERMINOLOGY_KEY -- "3 day streak" (standard) or "This
+    week has been full" (playful) for the same `current_streak` integer
+    either way. `days` arrives as whatever _habit_group_items stored
+    (an int already, but tolerate None/a stray float defensively rather
+    than letting a template render crash on a bad value)."""
+    try:
+        days_int = int(days or 0)
+    except (TypeError, ValueError):
+        days_int = 0
+    playful = _habit_streak_terminology(request) == "playful"
+    return habit_heatmap.streak_text(days_int, playful)
+
+
+templates.env.globals["habit_streak_text"] = _habit_streak_text
 
 
 def _show_relations_card(request: Request) -> bool:

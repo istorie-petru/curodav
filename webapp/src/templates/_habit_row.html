@@ -9,10 +9,33 @@
    built for tasks" judgment call the session brief asked for: Due/
    Scheduled/Labels don't apply the same way to a habit as to a plain task
    (a habit has no deadline, "scheduled hours" isn't a thing it tracks), so
-   this row repurposes the Status column for the check-in control itself
-   (checkbox for a target=1 habit, count + "+1" stepper above 1 -- the same
-   controls _widget_habit_checkin.html/tasks_habits.html already used) and
-   the Scheduled column for a streak readout, leaving Due blank. #}
+   this row repurposes the Status column for the check-in control and the
+   Due column for a streak readout, leaving Scheduled blank.
+
+   2026-08-28 follow-up, direct feedback ("their status is a simple
+   increment and delete buttons, not enough -- it should be a direct
+   number input"): the checkbox/"+1"/reset trio this used to render is
+   replaced by one plain `<input type="number">` per row, for both a
+   target=1 habit and a quantity habit alike -- typing a value and
+   blurring/tabbing away (`onchange`) posts it straight to the same
+   explicit-value endpoints (`plus_url` -- routers/tasks.py's
+   set_task_completion / routers/habits.py's add_entry, both already
+   accepted an arbitrary `value`, only the old "+1" button ever called
+   them with one before now) via the same data-cc-change/async_crud.js
+   path. `max="999999"` bounds what a typo or a stray scroll-wheel nudge
+   can submit -- "any whole number under a reasonable integer limit," not
+   truly unbounded -- and is mirrored server-side (routers/tasks.py/
+   habits.py's own clamp) since an HTML `max` is only ever advisory.
+
+   Same-day follow-up, direct feedback ("the due date for habits should
+   display a text with the streak... that can be playful depending on the
+   settings"): the Due column (previously a blank em dash) now renders
+   deps.py's habit_streak_text() global -- "3 day streak" (standard,
+   Settings > General default) or "This week has been full" (playful),
+   phrasing the exact same `current_streak` integer either way. The
+   Scheduled column takes over the blank em dash Due used to show, since
+   "scheduled hours" doesn't apply to a habit any more than a due date
+   does. #}
 {% macro habit_row(item) %}
 <tr data-uid="{{ item.uid }}" data-kind="{{ item.kind }}">
     <td></td>
@@ -21,46 +44,25 @@
     </td>
     <td>
         <div class="habit-checkin-row habit-checkin-row-inline" data-uid="{{ item.uid }}" data-target="{{ item.target|int }}">
-            {# 2026-08-28 follow-up fix: these three forms had no
-               `data-cc-change` at all (only the row's Delete form, below,
-               did) -- with no attribute for async_crud.js's global
-               data-cc-change submit listener to match, they fell through to
-               a plain native form submit on every click, a full-page
-               reload/re-navigate on the Tasks page for something that
-               should be an instant in-place check-in (reported directly:
-               a `POST /tasks/{uid}/completions ... 303 See Other` server
-               log from a plain browser navigation, not a fetch). The
-               `plus_url`/`toggle_url` server routes now support the
-               dual-mode fetch response too (routers/tasks.py's
-               toggle_task_completion/set_task_completion, deps.respond) --
-               entity-kind's /habits/... routes already did. `data-cc-change`
-               is `item.kind`-typed (habits.js still owns the entity kind's
-               own /habits/{uid} detail page; tasks_table.js now claims both
-               "task" and "habit" on this page, see plans/STATE.md). #}
+            {# `data-cc-change` is `item.kind`-typed (habits.js still owns
+               the entity kind's own /habits/{uid} detail page;
+               tasks_table.js claims both "task" and "habit" on this page,
+               see plans/STATE.md) -- same reasoning as every other form in
+               this row. #}
             {% set cc_change = 'habit' if item.kind == 'entity' else 'task' %}
-            {% if item.is_quantity %}
-            <span class="tag-usage-count habit-checkin-count">{{ item.today_value|int }}/{{ item.target|int }}</span>
-            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-plus" data-value="{{ item.next_value }}" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
+            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-value" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
                 {% if item.kind == 'entity' %}<input type="hidden" name="entry_date" value="{{ today_iso }}">{% else %}<input type="hidden" name="completion_date" value="{{ today_iso }}">{% endif %}
-                <input type="hidden" name="value" value="{{ item.next_value }}">
-                <button type="submit" class="icon-btn" title="Log one more">{{ icon('plus', 'icon-sm') }}</button>
+                <input type="number" name="value" class="habit-checkin-input" value="{{ item.today_value|int }}" min="0" max="999999" step="1" inputmode="numeric"
+                       title="Today's count{% if item.is_quantity %} (target {{ item.target|int }}){% endif %}"
+                       aria-label="Today's count for {{ item.title }}" onchange="this.form.requestSubmit()">
+                {% if item.is_quantity %}<span class="text-muted habit-checkin-target">/ {{ item.target|int }}</span>{% endif %}
             </form>
-            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-reset" style="{% if not item.today_value %}display:none{% endif %}" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
-                <button type="submit" class="icon-btn" title="Reset today">{{ icon('x', 'icon-sm') }}</button>
-            </form>
-            {% else %}
-            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-toggle" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
-                <button type="submit" class="checklist-check {% if item.done_today %}is-done{% endif %}" title="{% if item.done_today %}Done today -- click to undo{% else %}Mark done today{% endif %}">
-                    {{ icon('check-square') if item.done_today else icon('square') }}
-                </button>
-            </form>
-            {% endif %}
         </div>
     </td>
-    <td class="text-muted">&mdash;</td>
-    <td class="task-scheduled-cell">
-        <span title="Current streak">{{ icon('repeat', 'icon-sm') }} {{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}</span>
+    <td>
+        <span title="{{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}">{{ icon('repeat', 'icon-sm') }} {{ habit_streak_text(request, item.current_streak) }}</span>
     </td>
+    <td class="task-scheduled-cell text-muted">&mdash;</td>
     <td>{% for tag in item.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}</td>
     <td style="text-align:right">
         <form class="form-inline" method="post" action="{{ item.delete_url }}" data-delete-undo="{{ item.title }}" data-cc-change="task">

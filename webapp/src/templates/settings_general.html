@@ -95,6 +95,21 @@
             <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_recurrence_terminology == 'playful' %}checked{% endif %} onchange="this.form.requestSubmit()"> Playful</label>
         </div>
     </form>
+    <!-- Habit streak terminology (2026-08-28, direct feedback) -- which
+         wording the Habits group's streak readout uses (Tasks table,
+         _habit_row.html via deps.py's habit_streak_text() global). Same
+         presentation-layer-only autosubmit segmented pattern as Recurrence
+         terminology above. -->
+    <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology">
+        <span class="settings-field-label">Habit streak terminology
+            <span class="settings-field-hint">Wording for the Habits group's streak readout</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Habit streak terminology">
+            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_habit_streak_terminology == 'standard' %}checked{% endif %} onchange="this.form.requestSubmit()"> Standard</label>
+            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_habit_streak_terminology == 'playful' %}checked{% endif %} onchange="this.form.requestSubmit()"> Playful</label>
+        </div>
+    </form>
     <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
          in the app (deps.py's fmt_time/fmt_hour filters) plus the
          Calendar/Schedule drag-preview labels. Same autosubmit segmented
