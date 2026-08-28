@@ -172,6 +172,40 @@ def streaks(entries_by_date: dict[str, float], today: date | None = None) -> tup
     return current, longest
 
 
+def recurrence_frequency(rrule: str | None) -> str:
+    """Coarse recurrence bucket ("daily"/"weekly"/"monthly"/"yearly"/
+    "custom"/"") for an RRULE string -- looks only at FREQ=, so an
+    INTERVAL/BYDAY/COUNT/UNTIL qualifier beyond the bare FREQ still
+    resolves to its FREQ bucket (e.g. "FREQ=WEEKLY;INTERVAL=2" is still
+    "weekly"). Used both for display (recurrence_label below) and for
+    sizing a habit-tracked task's "how many work sessions does the
+    displayed week still need" requirement (routers/calendar.py's
+    Unscheduled work panel, 2026-08-29 "habit work sessions" slice)."""
+    if not rrule:
+        return ""
+    parts = dict(p.split("=", 1) for p in rrule.split(";") if "=" in p)
+    freq = (parts.get("FREQ") or "").upper()
+    if freq in ("DAILY", "WEEKLY", "MONTHLY", "YEARLY"):
+        return freq.lower()
+    return "custom"
+
+
+def recurrence_label(rrule: str | None) -> str:
+    """Human phrasing for an RRULE string -- "Daily"/"Weekly"/"Monthly"/
+    "Yearly"/"Custom" -- never the raw "FREQ=DAILY" a task's `recurrence`
+    column stores (2026-08-29 direct feedback: the Habits group's Due
+    column showed the raw RRULE verbatim). Every real caller only ever
+    feeds this something that IS recurring (a habit is defined by
+    recurring), so an empty/unrecognized value reads as "Custom" rather
+    than blank."""
+    return {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+    }.get(recurrence_frequency(rrule), "Custom")
+
+
 def streak_text(days: int, playful: bool = False) -> str:
     """Human-readable phrase for a `streaks()`-computed current streak --
     2026-08-28 direct feedback ("the due date for habits should display a

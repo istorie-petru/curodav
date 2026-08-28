@@ -37,6 +37,29 @@
     <span class="unscheduled-project-pill" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
     {% endif %}
     <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
+    {% if item.is_habit %}
+    {# A habit's number here is "sessions still needed this period"
+       (db.habit_work_sessions_status's `needed`), not "sessions still
+       needing placement" -- a daily habit reads e.g. "5" (2 of 7 days
+       already scheduled) and counts down as sessions get dated, staying
+       on the panel until it hits 0 for the currently displayed week/
+       month. Same +/- actions as the generic stepper below (add/remove
+       an undated placeholder session), just a different number and
+       tooltip so "why is this still here" is legible at a glance. #}
+    <span class="unscheduled-stepper">
+        {% if item.sessions.undated_count > 0 %}
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
+        </form>
+        {% endif %}
+        <span class="unscheduled-count" title="Sessions still needed this period">{{ item.habit_sessions.needed }}</span>
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this habit onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
+        </form>
+    </span>
+    {% else %}
     <span class="unscheduled-stepper">
         {% if item.sessions.undated_count > 0 %}
         <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
@@ -50,5 +73,6 @@
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this task onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
         </form>
     </span>
+    {% endif %}
 </div>
 {% endmacro %}

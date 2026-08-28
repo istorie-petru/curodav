@@ -3899,3 +3899,68 @@ though nothing was being edited yet, exactly the "bulky" look reported.
   field on top of the underline.
 - Presentation-only, `static/style.css` only -- no markup, router, or test
   changes (nothing asserts CSS specifics). Full suite still 1696 passed.
+
+## Side work (2026-08-29) — Habits UI rework: row columns, dedicated
+edit/view modals, non-interactive heatmaps, habit work sessions
+
+Direct feedback, five parts:
+
+1. **Habits row (`_habit_row.html`)**: dropped the `repeat` icon next to
+   the streak, and swapped the Due/Scheduled columns back the other way
+   from the 2026-08-28 side work above -- Scheduled now shows the streak
+   (plain text, `habit_streak_text()`), Due shows the habit's cadence.
+2. **Human recurrence label, not raw RRULE**: `habit_heatmap.py` gained
+   `recurrence_frequency(rrule)`/`recurrence_label(rrule)` ("Daily"/
+   "Weekly"/"Monthly"/"Yearly"/"Custom" -- an INTERVAL/BYDAY/COUNT/UNTIL
+   qualifier beyond the bare FREQ still resolves to its FREQ bucket).
+   Exposed as a jinja global (`recurrence_label`, deps.py) and used by
+   `_habit_group_items` (a habit-labeled task reads its own `recurrence`
+   column; a standalone Habit entity has no recurrence field at all --
+   implicitly "Daily", same as `habit_task_form.html`'s create default).
+3. **Dedicated habit-task edit/view modals**: a habit-labeled task used
+   to reuse the generic `task_form.html`/`task_detail.html` for edit/view
+   (label dropdown, status dropdown, due date, start date, no heatmap at
+   all) -- direct feedback that none of those belong on a habit. New
+   `routers/tasks.py::_is_habit_task(conn, task)` routes `GET /tasks/
+   {uid}/edit` to `habit_task_form.html` (now handles edit as well as
+   create -- title/description/recurrence/target_per_day plus a Work
+   sessions card, reusing `_task_work_allocations.html` unchanged) and
+   `GET /tasks/{uid}` to the new `habit_task_detail.html` (recurrence
+   label, streak, a non-interactive heatmap built from the same
+   `completion_weeks`/`_completion_heatmap_weeks` task_detail.html already
+   computed but never rendered, and the same Work sessions card). A plain
+   task (no habit label) is completely unaffected -- both routes still
+   fall through to the generic templates.
+4. **Non-interactive heatmap**: `_habit_heatmap.html`'s `heatmap()` macro
+   gained `interactive=false` -- renders a plain `<span>` per day instead
+   of a `<form>`/`<button>` toggle, no click target at all. Used by the
+   new `habit_task_detail.html` above and, for the standalone Habit
+   entity's own view (`_habit_detail_body.html`), same feedback ("a
+   heatmap graph should be able to be visible... not interactable").
+   `habit_form.html` (the entity's edit modal) also dropped its Labels
+   chip multiselect -- unlike a habit task's due/start/status (which
+   `update_task` simply leaves alone when unsent), `edit_habit`'s `tags`
+   argument is NOT additive, so the field is now hidden inputs that
+   re-submit the existing tags unchanged (preserved, no longer editable
+   from this modal) rather than just deleted outright.
+5. **Habit work sessions, persistent per period**: a habit-tracked task
+   is deliberately excluded from `db.list_tasks`' default query (lives
+   only on Tasks > Habits), so it never reached the Week view's
+   Unscheduled work panel at all before this. `routers/calendar.py::
+   week_view` now also fetches `db.list_habit_tasks` directly and applies
+   a different visibility rule via the new `db.habit_work_sessions_status
+   (conn, task_uid, recurrence, period_start, period_end)`: a daily habit
+   needs 7 dated sessions in the displayed week, weekly/monthly/anything
+   else just needs 1 (monthly's period is that week's calendar month, not
+   the week itself) -- "a daily habit remains persistent and disappears
+   from the unscheduled work only when the current week has all been
+   taken care of; for a weekly task it's enough to add only one, and
+   monthly the same." An undated placeholder session (the panel's own "+"
+   button) counts toward the requirement same as a dated one, same "+"/"−"
+   affordance as any other task (`_unscheduled_task_item.html` branches on
+   a new `item.is_habit` to show "sessions still needed this period"
+   instead of "sessions still needing placement"). A plain (non-habit)
+   recurring task is untouched -- still the original "every session has a
+   date" rule.
+
+32 new tests (`test_habit_ui_rework.py`), full suite 1728 passed.

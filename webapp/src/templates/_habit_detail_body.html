@@ -23,7 +23,11 @@
 </div>
 
 <div class="card">
-{{ heatmap(habit.uid, weeks) }}
+{# 2026-08-29 direct feedback ("in their view habit modal window, a
+   heatmap graph should be able to be visible for that habit, not
+   interactable") -- view-only now; the "Log past data" form below is
+   still the way to edit a specific day. #}
+{{ heatmap(habit.uid, weeks, interactive=false) }}
 </div>
 
 <div class="card" style="margin-top:16px">

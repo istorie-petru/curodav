@@ -334,6 +334,18 @@ def _habit_streak_text(request: Request, days) -> str:
 templates.env.globals["habit_streak_text"] = _habit_streak_text
 
 
+def _recurrence_label(rrule) -> str:
+    """"Daily"/"Weekly"/"Monthly"/"Yearly"/"Custom" for an RRULE string --
+    see habit_heatmap.recurrence_label's own docstring for why this never
+    renders the raw "FREQ=DAILY" text. A plain jinja global (no request
+    needed, unlike habit_streak_text) since the phrasing doesn't depend on
+    any per-app terminology setting."""
+    return habit_heatmap.recurrence_label(rrule)
+
+
+templates.env.globals["recurrence_label"] = _recurrence_label
+
+
 def _show_relations_card(request: Request) -> bool:
     """Whether the Relations card renders on task/event detail and edit
     modals (Settings > Appearance's "Show the Relations card", 2026-08-14).

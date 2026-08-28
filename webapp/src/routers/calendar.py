@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, recurrence_expand
+from .. import db, grid_layout, habit_heatmap, recurrence_expand
 from ..deps import _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
@@ -763,6 +763,38 @@ def _week_view_context(conn, request, date_, label):
             continue
         project = db.project_label_config_for(conn, "task", t["uid"])
         unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
+
+    # 2026-08-29 ("habit work sessions" slice, direct feedback): a
+    # habit-tracked task is deliberately excluded from `db.list_tasks`'
+    # default query (it's meant to live only on Tasks > Habits) so
+    # `open_tasks` above never contains one -- fetched separately here so
+    # this week's grid can still offer "schedule this habit's work" the
+    # same way it does for any other task. Follows a different "am I
+    # still unscheduled" rule than the loop above: see
+    # db.habit_work_sessions_status's own docstring for why "every
+    # session has a date" isn't the right test for a recurring habit.
+    for t in db.list_habit_tasks(conn):
+        if t.get("status") in ("done", "archived") or not t.get("recurrence"):
+            continue
+        if habit_heatmap.recurrence_frequency(t.get("recurrence")) == "monthly":
+            period_start = week_start_date.replace(day=1).isoformat()
+            next_month = (week_start_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+            period_end = (next_month - timedelta(days=1)).isoformat()
+        else:
+            period_start, period_end = week_start_date.isoformat(), week_end_date.isoformat()
+        info = db.habit_work_sessions_status(conn, t["uid"], t.get("recurrence"), period_start, period_end)
+        if info["needed"] <= 0:
+            continue
+        project = db.project_label_config_for(conn, "task", t["uid"])
+        unscheduled_tasks.append(
+            {
+                "task": t,
+                "project": project,
+                "sessions": {"undated_count": info["undated_count"]},
+                "is_habit": True,
+                "habit_sessions": info,
+            }
+        )
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     return {

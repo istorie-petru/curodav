@@ -281,6 +281,11 @@ def _habit_group_items(conn) -> list[dict]:
                 "next_value": today_value + 1,
                 "done_today": today_value > 0,
                 "current_streak": current_streak,
+                # 2026-08-29 direct feedback: the Due column shows this
+                # habit's cadence ("Daily"/"Weekly"/...), not its streak --
+                # habit_heatmap.recurrence_label never renders the raw
+                # "FREQ=DAILY" the task's own `recurrence` column stores.
+                "recurrence_label": habit_heatmap.recurrence_label(t.get("recurrence")),
                 "detail_url": f"/tasks/{t['uid']}",
                 "toggle_url": f"/tasks/{t['uid']}/completion/{today_iso}/toggle",
                 "plus_url": f"/tasks/{t['uid']}/completions",
@@ -304,6 +309,11 @@ def _habit_group_items(conn) -> list[dict]:
                 "next_value": today_value + 1,
                 "done_today": today_value > 0,
                 "current_streak": current_streak,
+                # A standalone Habit entity has no recurrence field at all
+                # (habit_entries is inherently a per-day log) -- it's
+                # implicitly daily, same as habit_task_form.html's "New
+                # habit" flow defaults its own Recurrence field to.
+                "recurrence_label": "Daily",
                 "detail_url": f"/habits/{h['uid']}",
                 "toggle_url": f"/habits/{h['uid']}/entries/{today_iso}/toggle",
                 "plus_url": f"/habits/{h['uid']}/entries",
@@ -509,6 +519,7 @@ def new_task_form(
             {
                 "request": request,
                 "active_tab": "tasks",
+                "task": None,
                 "habit_label": habit_label,
             },
         )
@@ -752,9 +763,41 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
     return JSONResponse({"error": f"unknown action '{action}'"}, status_code=400)
 
 
+def _is_habit_task(conn, task: dict | None) -> bool:
+    """True if `task` carries the configured habit label -- the same test
+    `db.list_habit_tasks`' own filter applies, done directly against a
+    single already-fetched task instead of a second query. Used to route
+    a habit-tracked task's edit/view to the dedicated habit_task_form.html/
+    habit_task_detail.html templates (2026-08-29 direct feedback: "habits
+    should not have in their edit modal a label dropdown, a status
+    dropdown, a due or a start date") instead of the generic task_form.
+    html/task_detail.html every other task uses."""
+    if not task:
+        return False
+    habit_label = db.get_task_habit_settings(conn)["habit_label"]
+    return habit_label in (task.get("tags") or [])
+
+
 @router.get("/{uid}/edit")
 def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
     task = db.get_task(conn, uid)
+    if _is_habit_task(conn, task):
+        # Dedicated stripped-down edit form (2026-08-29) -- see
+        # habit_task_form.html's own docstring for why the generic
+        # task_form.html (label dropdown, status dropdown, due/start date)
+        # is wrong for a habit-tracked task, and _is_habit_task above.
+        return templates.TemplateResponse(
+            "habit_task_form.html",
+            {
+                "request": request,
+                "active_tab": "tasks",
+                "task": task,
+                "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+                # Work sessions card (2026-08-29 addition to this form) --
+                # see _work_allocation_context above.
+                **_work_allocation_context(conn, task),
+            },
+        )
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "task_form.html",
@@ -819,6 +862,13 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
                 "longest_streak": 0,
             }
         )
+    if _is_habit_task(conn, task):
+        # Dedicated view modal (2026-08-29) -- see habit_task_detail.html's
+        # own docstring/_is_habit_task above. Every context key it needs
+        # (task, completion_weeks, current_streak, work_allocations,
+        # work_hours, habit_label) is already on `ctx`/available here.
+        ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
+        return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)
 
 

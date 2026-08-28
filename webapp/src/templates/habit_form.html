@@ -85,19 +85,20 @@
                 {% endfor %}
             </select>
         </div>
-        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
-             Phase B), same pattern as task_form.html -- see that
-             template's own comment. -->
-        <div class="field field-wide">
-            {% set ms_name = 'tags_labels' %}
-            {% set ms_icon = 'tag' %}
-            {% set ms_label = 'Labels' %}
-            {% set ms_items = tag_name_items %}
-            {% set ms_selected = habit.tags if habit else [] %}
-            {% set ms_mode = 'select' %}
-            {% set ms_allow_new = true %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
+        <!-- 2026-08-29 direct feedback ("habits should not have in their
+             edit modal a label dropdown"): the Labels chip multiselect
+             that used to be here is gone. Unlike habit_task_form.html's
+             due_at/start_at/status (which update_task simply leaves alone
+             when the form doesn't resend them), edit_habit's `tags`
+             argument is NOT additive -- it always overwrites the habit's
+             tags with whatever this form submits, so just deleting the
+             field would silently wipe a habit's existing tags on its next
+             save. These hidden inputs re-submit them unchanged instead --
+             preserved, just no longer user-editable from this modal. The
+             Project select above is a distinct, single-purpose field
+             (which label is *the* project), not a general labels picker,
+             so it stays. -->
+        {% for tag in (habit.tags if habit else []) %}<input type="hidden" name="tags_labels" value="{{ tag }}">{% endfor %}
     </div>
 </form>
 </div>

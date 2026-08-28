@@ -1,60 +1,99 @@
 {% extends "base.html" %}
-{% block title %}New habit{% endblock %}
+{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
+{% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
-<!-- Tasks > Habits' own "New" form (2026-08-08 direct feedback) -- a
-     stripped-down, dedicated create form, not task_form.html with fields
+<!-- Tasks > Habits' own create form (2026-08-08 direct feedback) -- a
+     stripped-down, dedicated form, not task_form.html with fields
      pre-filled. A habit-labeled task doesn't have a due date, a start
      date, a status worth choosing (it's just always "active" -- there's
      no "done" for a thing you do every day), or importance/urgency, so
-     none of
-     those fields are here at all; Recurrence is required instead of
-     optional (a habit is defined by recurring, defaults to "Daily") and
-     the habit label is a hidden field, always applied, not a removable
-     checkbox -- "adding a task in that view should automatically add the
-     default habit label." Posts to the exact same POST /tasks
-     (create_task) every other task uses; nothing server-side is
-     habit-specific except which fields this particular form happens to
-     send. -->
+     none of those fields are here at all; Recurrence is required instead
+     of optional (a habit is defined by recurring, defaults to "Daily")
+     and the habit label is a hidden field, always applied, not a
+     removable checkbox -- "adding a task in that view should
+     automatically add the default habit label." Posts to the exact same
+     POST /tasks (create_task) every other task uses; nothing server-side
+     is habit-specific except which fields this particular form happens
+     to send.
+
+     2026-08-29 direct feedback ("in the edit and view of habits, the
+     user should be able to put work sessions... habits should not have
+     in their edit modal a label dropdown, a status dropdown, a due or a
+     start date"): this template now also handles EDIT, not just create
+     -- routers/tasks.py's edit_task_form renders this instead of the
+     generic task_form.html whenever the task being edited carries the
+     habit label, so a habit-tracked task never sees those fields even on
+     an edit round-trip. `task` is None for the create path (unchanged)
+     or the existing row for edit; the form posts to `/tasks` (create) or
+     `/tasks/{uid}` (update_task, its own POST /{uid}) accordingly.
+     update_task's `due_at`/`start_at`/`status` all fall back to their own
+     Form(...) defaults ("", "", "active") when this form omits them --
+     the exact same "always blank/always active" values the create path
+     already relies on producing for a brand-new habit task, so an edit
+     round-trip through this form can't accidentally introduce a due
+     date, a start date, or a non-active status a habit task was never
+     supposed to have in the first place. `tags_labels` still carries only
+     the hidden habit label -- a habit task's other tags (e.g. a project
+     label) survive because update_task's `tags` Form field defaults to
+     "" and _combine_tags treats an absent `tags`/`tags_labels` pairing as
+     "nothing to add beyond what's listed", so this form only ever
+     round-trips the habit label itself; any additional labels a habit
+     task carries are left exactly as edit_task_form loaded them since
+     this form doesn't re-send or clear them. -->
 <div id="modal-target">
 <div class="modal-header">
-<h1>New habit</h1>
+<h1>{% if task %}Edit habit{% else %}New habit{% endif %}</h1>
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="habit-task-form" action="/tasks" data-cc-change="task" data-cc-action="create">
+<form method="post" id="habit-task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
-            <input type="text" name="title" required autofocus>
+            <input type="text" name="title" required autofocus value="{{ task.title if task else '' }}">
         </div>
         <div class="field field-wide">
             <label>Description</label>
-            <textarea name="description" rows="2"></textarea>
+            <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
         <div class="field field-wide">
             <!-- static/recurrence_picker.js turns this into the same
                  preset dropdown task_form.html/event_form.html use --
-                 required and pre-set to "Daily" here (task_form.html's
-                 equivalent field defaults to blank/"Does not repeat")
-                 since a habit that doesn't recur isn't a habit. -->
+                 required and pre-set to "Daily" for a new habit
+                 (task_form.html's equivalent field defaults to blank/
+                 "Does not repeat") since a habit that doesn't recur isn't
+                 a habit; an existing habit task keeps whatever it was
+                 already set to. -->
             <label class="field-required">Recurrence</label>
-            <input type="text" name="recurrence" class="recurrence-input" value="FREQ=DAILY" required>
+            <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
         </div>
         <div class="field">
             <label>Daily target</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
-                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="1">
+                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day if task else 1 }}">
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
             </div>
         </div>
     </div>
+    {% if task %}
+    <div class="detail-section-gap">
+        {{ task_work_allocations_section(task, work_allocations, work_hours) }}
+    </div>
+    {% endif %}
 </form>
 </div>
 </div>
 {% set footer_back_url = '/tasks/habits' %}
 {% set footer_back_label = 'Cancel' %}
+{% if task %}
+{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = task.title %}
+{% set footer_delete_redirect = '/tasks' %}
+{% set footer_delete_cc_change = 'task' %}
+{% endif %}
 {% set footer_primary_form = 'habit-task-form' %}
 {% set footer_primary_label = 'Save' %}
 {% set footer_primary_icon = 'check-square' %}

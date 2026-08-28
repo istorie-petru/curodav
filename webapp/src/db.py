@@ -57,6 +57,12 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+# habit_heatmap imports nothing from this module (or any router) -- see its
+# own module docstring -- so db.py depending on it for
+# habit_work_sessions_status's recurrence_frequency() lookup below doesn't
+# risk a cycle.
+from . import habit_heatmap
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
@@ -2150,6 +2156,45 @@ def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[
         "scheduled_hours": scheduled,
         "total_hours": scheduled + undated,
         "undated_count": undated,
+    }
+
+
+def habit_work_sessions_status(
+    conn: sqlite3.Connection, task_uid: str, recurrence: str | None, period_start: str, period_end: str
+) -> dict[str, Any]:
+    """Unscheduled-work visibility for a habit-tracked recurring task,
+    scoped to `period_start`/`period_end` (ISO dates, inclusive) --
+    routers/calendar.py's week_view picks the period per the habit's own
+    cadence (the displayed week for daily/weekly, that week's calendar
+    month for monthly/anything else) and passes it in here rather than
+    this function guessing at "which week" from the task alone.
+
+    Unlike a plain task's `work_allocation_panel_info` (which only ever
+    asks "does every session have a date, at all, ever"), a habit needs a
+    specific NUMBER of dated sessions before it's "handled" for the
+    period: one per day for a daily habit (`required=7` for a 7-day
+    period), just one for weekly/monthly/anything else -- 2026-08-29
+    direct feedback ("a daily habit remains persistent and disappears
+    from the unscheduled work only when the current week has all been
+    taken care of; for a weekly task it's enough to add only one, and
+    monthly the same"). `needed` (dated-in-period sessions still short of
+    `required`, after crediting any undated placeholder sessions already
+    added and awaiting placement) is what the caller checks for inclusion
+    -- 0 means this period is fully covered and the habit drops off the
+    panel; every value in between is the picture, ready-computed rather
+    than callers reaching into `list_work_allocations_for_task`
+    themselves."""
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    dated_in_period = sum(
+        1 for a in allocations if a.get("start_at") and period_start <= a["start_at"][:10] <= period_end
+    )
+    undated = sum(1 for a in allocations if not a.get("start_at"))
+    required = 7 if habit_heatmap.recurrence_frequency(recurrence) == "daily" else 1
+    return {
+        "dated_in_period": dated_in_period,
+        "undated_count": undated,
+        "required": required,
+        "needed": max(0, required - dated_in_period - undated),
     }
 
 

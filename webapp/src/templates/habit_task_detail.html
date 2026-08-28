@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
+{% from "_habit_heatmap.html" import heatmap %}
+{% block title %}{{ task.title if task else "Habit" }}{% endblock %}
+{% block content %}
+<!-- Dedicated view modal for a habit-tracked task (2026-08-29 direct
+     feedback -- see habit_task_form.html's own docstring for the full
+     context). routers/tasks.py's task_detail renders this instead of the
+     generic task_detail.html whenever the task carries the habit label:
+     no Status/Due/Start meta (a habit doesn't have those), a non-
+     interactable heatmap (_habit_heatmap.html's `interactive=false`) built
+     from this task's own check-off history (task_completions, the same
+     source _completion_heatmap_weeks/_habit_group_items already read),
+     current streak via the same habit_streak_text() phrasing the Habits
+     group's row uses, and the Work sessions card so sessions can be added
+     here exactly like any other task's Work sessions card. -->
+<div id="modal-target" class="modal-stable-height">
+{% if task %}
+<div class="modal-header">
+    <div class="detail-heading-text">
+        <h1 class="detail-title">{{ task.title }}</h1>
+    </div>
+</div>
+
+<div class="modal-body">
+<div class="detail-card">
+    <div class="detail-meta-grid">
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Recurrence</span>
+            <span class="detail-meta-value">{{ recurrence_label(task.recurrence) }}</span>
+        </div>
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Streak</span>
+            <span class="detail-meta-value">{{ habit_streak_text(request, current_streak) }}</span>
+        </div>
+        {% set _other_tags = (task.tags or [])|reject('equalto', habit_label)|list %}
+        {% if _other_tags %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Labels</span>
+            <span class="detail-meta-value">{% for tag in _other_tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% if task.description %}
+    <div class="detail-meta-description">
+        <span class="detail-meta-label">Description</span>
+        <p>{{ task.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="detail-card detail-section-gap">
+    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', interactive=false) }}
+</div>
+
+<div class="detail-card detail-section-gap">
+    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
+</div>
+
+</div>
+
+{% set footer_back_url = '/tasks' %}
+{% set footer_back_label = 'Done' %}
+{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
+{% set footer_delete_mode = 'undo' %}
+{% set footer_delete_label = task.title %}
+{% set footer_delete_redirect = '/tasks' %}
+{% set footer_delete_cc_change = 'task' %}
+{% set footer_primary_href = '/tasks/' ~ task.uid ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+{% else %}
+<div class="modal-body">
+<div class="empty-state">Task not found.</div>
+<p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
+</div>
+{% endif %}
+</div>
+{% endblock %}

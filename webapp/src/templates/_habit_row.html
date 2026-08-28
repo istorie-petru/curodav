@@ -41,7 +41,18 @@
    phrasing the exact same `current_streak` integer either way. The
    Scheduled column takes over the blank em dash Due used to show, since
    "scheduled hours" doesn't apply to a habit any more than a due date
-   does. #}
+   does.
+
+   2026-08-29 direct feedback ("interchange the data... in the scheduled
+   column we see the streak (with no icon, only label), and in due column
+   we see 'daily'/'weekly' etc"): swapped back the other way from the
+   note just above -- Scheduled now carries the streak readout (plain
+   text, the `repeat` icon dropped), and Due carries the habit's cadence
+   via `recurrence_label()` (deps.py global -> habit_heatmap.
+   recurrence_label) instead of a second streak readout. Both are always
+   read-only text, never an editable cell (a habit doesn't have "due" or
+   "scheduled hours" in the task sense; both column labels are reused
+   purely for layout, not their normal task meaning). #}
 {% macro habit_row(item) %}
 <tr data-uid="{{ item.uid }}" data-kind="{{ item.kind }}">
     <td></td>
@@ -67,9 +78,11 @@
         </div>
     </td>
     <td>
-        <span title="{{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}">{{ icon('repeat', 'icon-sm') }} {{ habit_streak_text(request, item.current_streak) }}</span>
+        <span class="text-muted">{{ item.recurrence_label }}</span>
     </td>
-    <td class="task-scheduled-cell text-muted">&mdash;</td>
+    <td class="task-scheduled-cell">
+        <span title="{{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}">{{ habit_streak_text(request, item.current_streak) }}</span>
+    </td>
     <td>{% for tag in item.tags %}<span class="cell-tag tag-blue">{{ tag }}</span>{% endfor %}</td>
     <td style="text-align:right">
         <form class="form-inline" method="post" action="{{ item.delete_url }}" data-delete-undo="{{ item.title }}" data-cc-change="task">
