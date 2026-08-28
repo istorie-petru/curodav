@@ -4020,3 +4020,44 @@ native platform chrome in every browser -- the standard, separate fix).
 Presentation-only, `static/style.css` only -- confirmed via a live curl of
 the served CSS that the collision is gone and only one `.inline-edit-
 input` rule remains. Full suite still 1728 passed.
+
+## Bug fix (2026-08-29, immediate follow-up) — the real root cause: the
+PWA service worker had been serving a stale style.css all session
+
+Direct report, after the dead-CSS-rule fix above still didn't visibly
+change anything: "it did not work. i guess it's fine." Worth chasing
+down properly rather than accepting it, since every fix up to this point
+had verified correct on the live server (curl bypasses a service worker
+entirely, which is exactly why server-side verification kept looking
+right while the browser didn't change).
+
+Root cause: `static/sw.js` (the PWA app-shell service worker,
+`pwa.js`-registered globally on every page load, 1.8 slice 3) precaches
+`/static/style.css` under `CACHE_NAME` ("cc-shell-v14" -- last bumped
+2026-08-26, for an unrelated redesign, and not touched since). Its fetch
+handler tries an exact versioned-URL (`?v=<mtime>`) match first, but
+falls back to `caches.match(request, {ignoreSearch:true})` against that
+precache's un-versioned entry the moment the exact match misses (v11,
+2026-08-18, added on purpose so /offline's scripts load on a device's
+first-ever offline visit) -- and for a file that's never been re-fetched
+under a brand-new `?v=` during a runtime-cached online visit, that's
+*every* request. So every single CSS edit this session (five rounds:
+number-input replacing the checkbox trio, the box-removal pass, the
+spinner-arrow hide, the border/background pass, the dead-rule fix) kept
+being served the SAME install-time style.css out of the service worker
+cache, completely independent of what the server actually returned or
+how correct the source file was.
+
+Fix: bumped `CACHE_NAME` to `"cc-shell-v15"` -- the only thing that
+forces a fresh precache; `activate`'s existing cleanup (deletes any
+`cc-shell-*` cache except the current one) then evicts the stale v14
+cache entirely. `sw.js`'s own version-history comment updated with the
+lesson: a `static/style.css`-only change has to bump `CACHE_NAME` too
+now, not just a JS rewrite, given the ignoreSearch fallback means a
+precached CSS file never naturally goes stale on its own. Test:
+`test_pwa_shell.py`'s `TestServiceWorkerCacheVersioning`-equivalent
+assertion updated from `"cc-shell-v14"` to `"cc-shell-v15"`. Full suite
+1728 passed. **This should be the actual fix for every CSS-not-showing-
+up report from this entire session** -- a hard refresh (or reopening the
+tab after the new service worker activates) should finally show all of
+today's habit check-in cell changes at once.

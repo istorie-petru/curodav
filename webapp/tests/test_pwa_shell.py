@@ -345,10 +345,14 @@ class TestLocalWritePath:
         # visible; v12 (2026-08-18) added offline_quick_capture.js to the
         # precache list (the "Quick add" toolbar's capture parser); v14
         # (2026-08-26) picked up the Data & Maintenance export/import
-        # redesign's style.css additions. Both force a fresh shell install
-        # with the new handler/assets.
+        # redesign's style.css additions; v15 (2026-08-29) is the root-cause
+        # fix for a session's worth of style.css edits silently not showing
+        # up in the browser -- the ignoreSearch fallback (v11) means a
+        # precached style.css never goes stale on its own, so a style-only
+        # change now has to bump CACHE_NAME too, not just a script rewrite.
+        # Each bump forces a fresh shell install with the new handler/assets.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v14"' in script
+        assert 'CACHE_NAME = "cc-shell-v15"' in script
 
 
 class TestOfflineToolbar:

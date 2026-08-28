@@ -28,8 +28,26 @@
 // on a device's first offline visit). v12 (2026-08-18): added
 // /static/offline_quick_capture.js to the precache list (the offline
 // "Quick add" toolbar's client-side capture parser), forcing a fresh shell
-// install so /offline loads it.
-const CACHE_NAME = "cc-shell-v14";
+// install so /offline loads it. v15 (2026-08-29): root-cause fix for a
+// whole session's worth of "I edited style.css but the browser still
+// shows the old look" reports (habit check-in cell CSS, several rounds).
+// This wasn't a CSS bug at all -- v14's precached `/static/style.css` had
+// gone stale across every one of those edits, because NOTHING bumps
+// CACHE_NAME when only static/style.css itself changes (every prior bump
+// here was for a *script* rewrite). The fetch handler below tries an
+// exact versioned-URL match first, but falls back to `caches.match(
+// request, {ignoreSearch:true})` against the precache's un-versioned
+// entry the moment that exact match misses -- which, for a file that's
+// never been re-fetched under a brand new `?v=` in a runtime-cached
+// visit, is every single request. So every reload kept serving the
+// install-time (long before today) style.css regardless of what the
+// server actually returned, confirmed by curling the live server
+// directly (bypasses the SW) and seeing the fix already correct there.
+// Bumping CACHE_NAME is the only thing that forces a fresh precache;
+// going forward, treat static/style.css changes the same as a script
+// rewrite for this purpose -- bump on every edit expected to be visible
+// immediately, not just JS.
+const CACHE_NAME = "cc-shell-v15";
 
 const SHELL_ASSETS = [
   "/offline",
