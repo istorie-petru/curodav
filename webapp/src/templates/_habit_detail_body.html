@@ -26,8 +26,12 @@
 {# 2026-08-29 direct feedback ("in their view habit modal window, a
    heatmap graph should be able to be visible for that habit, not
    interactable") -- view-only now; the "Log past data" form below is
-   still the way to edit a specific day. #}
-{{ heatmap(habit.uid, weeks, interactive=false) }}
+   still the way to edit a specific day.
+   Same-day follow-up ("no empty space... no scrollbar ever, only what's
+   necessary") -- `heatmap-wide` (see style.css) stretches the grid's
+   cells to always exactly fill this card's width instead of overflowing
+   or leaving a gap at a fixed cell size. #}
+{{ heatmap(habit.uid, weeks, extra_class='heatmap-wide', interactive=false) }}
 </div>
 
 <div class="card" style="margin-top:16px">

@@ -263,15 +263,6 @@
     // _event_form_fields.html's Format field (clears the other field's
     // value on switch) -- same re-init reasoning.
     if (window.CCEventFormatToggle) window.CCEventFormatToggle.init(body);
-    // Habit/habit-task detail heatmaps (_habit_heatmap.html) -- scroll to
-    // their right edge (today) on open, same re-init reasoning. Needed here
-    // specifically (not just the global DOMContentLoaded in
-    // heatmap_scroll.js) because a modal's content is injected via
-    // innerHTML, which never fires that event, and because the view<->edit
-    // swap-in-place (this same wireContent call) can bring a heatmap back
-    // into view after Cancel that a stale scroll position would otherwise
-    // leave scrolled left.
-    if (window.CCHeatmapScroll) window.CCHeatmapScroll.init(body);
     // Relations cards' add-row picker (1.2 side work, static/
     // command_palette.js) needs no re-init call here -- its entry points
     // are document-level delegated listeners, which already cover content

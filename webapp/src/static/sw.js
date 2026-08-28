@@ -57,8 +57,15 @@
 // inline_edit.js/async_crud.js above, so not added to SHELL_ASSETS) that
 // defaults the scroll position to today's end. Bumped per the v15/v16
 // lesson: any style.css change needs this regardless of whether a script
-// also changed.
-const CACHE_NAME = "cc-shell-v17";
+// also changed. v18 (2026-08-29): superseded v17's approach per direct
+// feedback ("I just never want for a scrollbar to ever be needed there") --
+// both detail heatmaps now use the existing `heatmap-wide` cell-stretching
+// variant instead, so there's structurally nothing to scroll; reverted
+// style.css's scrollbar-visibility rules and deleted static/
+// heatmap_scroll.js entirely (it's gone from disk, was never in
+// SHELL_ASSETS to begin with, so nothing to remove from this list). Bumped
+// because style.css changed again.
+const CACHE_NAME = "cc-shell-v18";
 
 const SHELL_ASSETS = [
   "/offline",

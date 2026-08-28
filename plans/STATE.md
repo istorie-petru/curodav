@@ -4150,3 +4150,28 @@ Fix, two parts:
 Bumped `CACHE_NAME` to `"cc-shell-v17"` (`style.css` changed again, per
 the v15/v16 lesson) and updated the matching pinned test assertion. Full
 suite 1728 passed.
+
+## Bug fix (2026-08-29, immediate follow-up) — stopped chasing the
+scrollbar, removed the possibility of one instead
+
+Direct feedback on the v17 fix above: "I just never want for a
+[scroll]bar to ever be needed there. Only have what is necessary." Right
+call -- v17 made an already-present overflow visible and better-
+positioned, but a fixed-cell-size grid wider than its container will
+always overflow *something* eventually (a longer DETAIL_WEEKS, a narrower
+window, a different modal). The actual fix is to remove the overflow
+case entirely rather than manage it. `.heatmap-wide` (style.css, added
+2026-08-08 for the exact same "cover all the width, no scrollbar" reason,
+already used by Tasks > Habits' cards) stretches each week column's cells
+to fill the available width instead of rendering them at a fixed 11px --
+so the grid's rendered width always exactly equals its container's,
+regardless of DETAIL_WEEKS or container size. Passed `extra_class=
+'heatmap-wide'` into both detail heatmaps (`_habit_detail_body.html`,
+`habit_task_detail.html`) that v16/v17 touched.
+
+With that in place there's nothing left to scroll, so v17's whole
+apparatus came back out: reverted `.heatmap`'s scrollbar-visibility CSS,
+deleted `static/heatmap_scroll.js`, and removed its `<script>` tag
+(`base.html`) and its `wireContent()` hook (`modal.js`). Bumped
+`CACHE_NAME` to `"cc-shell-v18"` (style.css changed again) and updated
+the pinned test assertion. Full suite 1728 passed.

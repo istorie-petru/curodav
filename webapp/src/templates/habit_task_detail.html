@@ -8,7 +8,9 @@
      context). routers/tasks.py's task_detail renders this instead of the
      generic task_detail.html whenever the task carries the habit label:
      no Status/Due/Start meta (a habit doesn't have those), a non-
-     interactable heatmap (_habit_heatmap.html's `interactive=false`) built
+     interactable heatmap (_habit_heatmap.html's `interactive=false`,
+     `heatmap-wide` so its cells stretch to fill this card's width instead
+     of ever needing a scrollbar -- 2026-08-29 direct feedback) built
      from this task's own check-off history (task_completions, the same
      source _completion_heatmap_weeks/_habit_group_items already read),
      current streak via the same habit_streak_text() phrasing the Habits
@@ -50,7 +52,7 @@
 </div>
 
 <div class="detail-card detail-section-gap">
-    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', interactive=false) }}
+    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide', interactive=false) }}
 </div>
 
 <div class="detail-card detail-section-gap">

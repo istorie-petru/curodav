@@ -353,9 +353,11 @@ class TestLocalWritePath:
         # v16 (2026-08-29) is the very next style.css-only edit proving that
         # lesson had to actually be followed, not just written down; v17
         # (2026-08-29) is the heatmap scrollbar-visibility rules added for
-        # the "no scrollbar" follow-up.
+        # the "no scrollbar" follow-up; v18 (2026-08-29) superseded that with
+        # heatmap-wide cell-stretching instead (no scrollbar ever needed) and
+        # reverted the v17 CSS.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v17"' in script
+        assert 'CACHE_NAME = "cc-shell-v18"' in script
 
 
 class TestOfflineToolbar:
