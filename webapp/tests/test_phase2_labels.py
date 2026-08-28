@@ -43,6 +43,7 @@ import migrate_labels  # noqa: E402
 
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
+from src.routers import spaces as spaces_router
 
 
 @pytest.fixture()
@@ -172,9 +173,10 @@ class TestMerge:
 
 
 class TestNoDeleteJustClear:
-    def test_labels_router_exposes_no_delete_route(self, conn):
+    def test_labels_router_exposes_delete_route_that_clears(self, conn):
+        """Delete endpoint exists but clears membership instead of deleting config (§0.1)."""
         route_paths = {r.path for r in labels_router.router.routes}
-        assert not any(p.endswith("/delete") for p in route_paths)
+        assert any(p.endswith("/delete") for p in route_paths)
 
     def test_clear_empties_membership_but_keeps_config_row(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
@@ -210,7 +212,7 @@ class TestGeneratedSpacePage:
                                "tags": ["Uni"], "created_at": _now()})
         db.upsert_task(conn, {"uid": "t2", "title": "ChildOnly", "description": "", "status": "active",
                                "tags": ["CS101"], "created_at": _now()})
-        resp = labels_router.label_detail("Uni", _request("/labels/Uni"), conn=conn)
+        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni"), conn=conn)
         assert resp.status_code == 200
         task_uids = {t["uid"] for t in resp.context["tasks"]}
         assert task_uids == {"t1"}

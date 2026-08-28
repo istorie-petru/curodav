@@ -96,7 +96,7 @@ def promote(
     start_date = start_date.strip()
     end_date = end_date.strip()
     if not name or not start_date or not end_date:
-        return RedirectResponse(url="/labels", status_code=303)
+        return RedirectResponse(url="/settings/labels", status_code=303)
     conflict = db.find_overlapping_project(conn, name, start_date, end_date)
     if conflict and confirm_overlap not in ("1", "true", "on"):
         return _redirect_with_conflict(name, start_date, end_date, conflict["name"])
@@ -111,7 +111,7 @@ def promote(
             "created_at": _now(),
         },
     )
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/dates")
@@ -128,7 +128,7 @@ def set_dates(
     if conflict and confirm_overlap not in ("1", "true", "on"):
         return _redirect_with_conflict(name, start_date, end_date, conflict["name"])
     db.upsert_label_config(conn, {"name": name, "start_date": start_date, "end_date": end_date})
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/demote")
@@ -138,7 +138,7 @@ def demote(name: str, conn=Depends(get_db)):
     Project behavior drops its project-specific semantics and views but
     preserves the label and every entity associated with it")."""
     db.upsert_label_config(conn, {"name": name, "is_project": 0, "start_date": None, "end_date": None, "archived_at": None})
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/archive")
@@ -146,4 +146,4 @@ def archive(name: str, conn=Depends(get_db)):
     """The user's explicit confirmation that a project is finished (§
     Project lifecycle) -- never automatic, see db.project_status."""
     db.archive_project(conn, name)
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)

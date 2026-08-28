@@ -56,20 +56,21 @@ class TestSettingsHolidaysPage:
         resp = settings_router.settings_holidays(_request(), conn=conn)
         body = resp.body.decode()
         assert "No holidays configured yet" in body
-        assert 'id="holiday-list"' not in body
+        assert 'id="holidays-table"' in body
         assert 'href="/settings/holidays/new"' in body
 
     def test_lists_existing_holidays_as_rows_with_edit_buttons(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Winter break", "date_from": "2026-12-20", "date_to": "2027-01-05"})
         resp = settings_router.settings_holidays(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'id="holiday-list"' in body
+        assert 'id="holidays-table"' in body
         assert "Winter break" in body
-        assert "University &middot; 2026-12-20 &rarr; 2027-01-05" in body
+        assert "University" in body
+        assert "2026-12-20" in body
+        assert "2027-01-05" in body
         assert 'href="/settings/holidays/h1/edit"' in body
         assert "data-modal" in body
         assert 'class="inline-text"' not in body
-        assert 'id="holiday-table"' not in body
 
     def test_hub_links_to_holidays(self, conn):
         resp = settings_router.settings_index(_request("/settings"), conn=conn)

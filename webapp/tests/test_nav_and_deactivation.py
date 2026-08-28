@@ -38,6 +38,7 @@ from src import db
 from src.routers import contacts as contacts_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
+from src.routers import spaces as spaces_router
 
 
 def _now() -> str:
@@ -152,14 +153,14 @@ class TestSpacePageNavHighlighting:
 
     def test_label_detail_sets_independent_active_tab(self, conn):
         self._make_space(conn, "Uni")
-        resp = labels_router.label_detail("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
-        assert resp.context["active_tab"] == "label"
+        resp = spaces_router.space_detail("Uni", self._space_page_request("/spaces/Uni", conn), conn=conn)
+        assert resp.context["active_tab"] == "space"
 
     def test_space_page_highlights_only_its_own_rail_link(self, conn):
         self._make_space(conn, "Uni")
-        resp = labels_router.label_detail("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
+        resp = spaces_router.space_detail("Uni", self._space_page_request("/spaces/Uni", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/labels/Uni" class="tab-btn tab-btn-space active"' in body
+        assert 'href="/spaces/Uni" class="tab-btn tab-btn-space active"' in body
         assert 'data-tab="settings" class="tab-btn active"' not in body
 
     def test_plain_label_page_has_no_settings_or_rail_highlight(self, conn):

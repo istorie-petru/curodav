@@ -1,32 +1,79 @@
 {% extends "base.html" %}
 {% block title %}Labels{% endblock %}
-{# Jinja macros don't inherit the calling template's render context (only
-   globals like icon() do) -- has_multiple_labels must be passed in
-   explicitly as show_merge, or the merge button silently never renders
-   regardless of how many labels actually exist. #}
-{# The router's grouping context is named `space_groups`, NOT `spaces` --
-   base.html's own nav rail does `{% set spaces = sidebar_spaces(request) %}`
-   at its top level (outside any block), which silently shadows a
-   same-named `spaces` context variable for the rest of the render (Jinja
-   `{% set %}` writes to the shared Context.vars, which resolve() checks
-   before the original passed-in context dict) -- found live, the hard
-   way: this page rendered its "No labels yet" empty state even with
-   real, populated `spaces` in the router's own returned context. #}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
+
 <h1>Labels</h1>
-<p class="settings-hint">One label replaces tags, projects, and spaces -- apply it to anything, optionally give it a color/icon/group, and turn it into a Space (aggregates its child labels onto their own page) or a Project (a bounded period + lifecycle). Click Edit on a label below to change any of that.</p>
 
-{% include "_labels_body.html" %}
+<p class="settings-hint">Organize your data. Create labels and apply them to tasks, events, or contacts.</p>
 
-<div class="toolbar" style="margin-top:16px">
-    <a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Done</a>
+<div class="card">
+    <div class="table-scroll" id="labels-table-wrapper">
+        <table id="labels-table">
+            <thead>
+                <tr>
+                    <th>Label</th>
+                    <th>Group</th>
+                    <th>Usage</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="labels-body">
+                {% if labels %}
+                    {% for l in labels %}
+                    <tr data-label-name="{{ l.name }}">
+                        <td>
+                            <div class="label-cell">
+                                <span class="color-dot cal-{{ l.color or 'blue' }}"></span>
+                                <span class="label-name">{{ l.name }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if l.label_group %}
+                                <span class="group-badge">{{ l.label_group }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if l.usage_count and l.usage_count > 0 %}
+                                <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
+                            {% else %}
+                                <span class="text-muted">Not used</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <a href="/settings/labels/{{ l.name }}/edit" class="icon-btn" data-modal title="Edit label">{{ icon('edit', 'icon-sm') }}</a>
+                                <form method="post" action="/settings/labels/{{ l.name }}/delete" data-confirm-sheet="Remove "{{ l.name }}" from every object that carries it? This doesn't delete the label config, just clears its usage.">
+                                    <button type="submit" class="icon-btn danger" title="Delete label">{{ icon('trash', 'icon-sm') }}</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr id="empty-state-row">
+                        <td colspan="3" class="text-muted" style="font-size: var(--text-footnote);">No labels yet</td>
+                        <td></td>
+                    </tr>
+                {% endif %}
+                <tr class="add-label-row">
+                    <td colspan="3">
+                        <a href="/settings/labels/new" class="icon-btn add-label-btn" data-modal data-modal-size="wide" title="Add label">
+                            {{ icon('plus', 'icon-sm') }}
+                        </a>
+                    </td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 </div>
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('label_search.js') }}"></script>
 <script src="{{ static_url('labels_manage.js') }}"></script>
 {% endblock %}

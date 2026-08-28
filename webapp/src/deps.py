@@ -61,6 +61,12 @@ RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
 # default and shows the card, matching the behavior that predates the
 # setting), "0" hides it.
 SHOW_RELATIONS_CARD_KEY = "show_relations_card"
+# 2026-08-28 -- "Calendar views" (Settings > General) -- which of the four
+# Calendar views (Month, 4-Week, Week, Day) appear in the view switcher.
+# Stored as a comma-separated list of view keys: "month,fourweek,week,day".
+# Default is all four views enabled. Read by the calendar templates to filter
+# the segmented control.
+CALENDAR_VIEWS_KEY = "calendar_views"
 
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
@@ -303,6 +309,20 @@ def _show_relations_card(request: Request) -> bool:
 
 
 templates.env.globals["show_relations_card"] = _show_relations_card
+
+
+def _calendar_views(request: Request) -> list[str]:
+    """Which Calendar views are enabled (Settings > General's "Calendar views").
+    Returns a list of view keys: "month", "fourweek", "week", "day".
+    Default is all four views enabled. Empty/invalid values fall back to all."""
+    raw = _cached_app_meta(request, CALENDAR_VIEWS_KEY, "month,fourweek,week,day")
+    views = [v.strip() for v in raw.split(",") if v.strip()]
+    valid = {"month", "fourweek", "week", "day"}
+    filtered = [v for v in views if v in valid]
+    return filtered if filtered else ["month", "fourweek", "week", "day"]
+
+
+templates.env.globals["calendar_views"] = _calendar_views
 
 
 def _label_icon(request: Request, label: str) -> str:

@@ -53,7 +53,7 @@
          yet, and this pass doesn't add new prefill plumbing for it).
          Hidden in edit mode, same reasoning as dashboard.html. -->
     <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
-    <a href="/labels/{{ label.uid }}?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
+    <a href="{{ '/spaces/' ~ label.uid if is_space else '/settings/labels/' ~ label.uid }}?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
     {% endif %}
 </div>
 </div>
@@ -65,7 +65,8 @@
 <h2>{{ icon('folder', 'icon-sm') }} Projects <span class="tag-usage-count">{{ children|length }}</span></h2>
 <div class="card">
 {% for child in children %}
-<a class="calendar-row settings-row" href="/labels/{{ child.uid }}">
+{% set child_is_space = child.generate_space %}
+<a class="calendar-row settings-row" href="{{ '/spaces/' ~ child.uid if child_is_space else '/settings/labels/' ~ child.uid }}">
     <span class="cell-tag cal-{{ child.color }}">{{ icon(child.icon or 'folder', 'icon-sm') }} {{ child.name }}</span>
     <span class="spacer"></span>
     <span class="tag-usage-count">Open</span>

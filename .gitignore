@@ -28,3 +28,5 @@ webapp/.dev/radicale/users
 # credentials). The read-only configs in these dirs ARE tracked.
 deploy/docker/radicale/users
 deploy/systemd/radicale/users
+
+.opencode

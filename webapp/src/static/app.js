@@ -496,6 +496,44 @@ document.addEventListener("submit", (event) => {
       closeOpenPanel();
     }
   });
+
+  // Handle "New label..." input in multiselect -- when user types a new
+  // label and presses Enter, add it as a selected checkbox option in the
+  // dropdown so it can be combined with other labels before form submit.
+  document.addEventListener("keydown", (e) => {
+    const input = e.target.closest(".multiselect-new-input");
+    if (!input || e.key !== "Enter") return;
+    const value = input.value.trim();
+    if (!value) return;
+    const panel = input.closest(".multiselect-panel");
+    if (!panel) return;
+    const ms = panel.closest(".multiselect") || (openPanel && openPanel.panel === panel ? openPanel.anchor : null);
+    if (!ms) return;
+    const msName = ms.querySelector('input[type="checkbox"], input[type="radio"]').name;
+    const formId = input.getAttribute("form");
+    const newOption = document.createElement("label");
+    newOption.className = "multiselect-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = ms.dataset.msMode === "single" ? "radio" : "checkbox";
+    checkbox.name = msName;
+    checkbox.value = value;
+    checkbox.checked = true;
+    if (formId) checkbox.setAttribute("form", formId);
+    const span = document.createElement("span");
+    span.textContent = value;
+    newOption.appendChild(checkbox);
+    newOption.appendChild(span);
+    const newOptionWrapper = input.closest(".multiselect-new-option");
+    if (newOptionWrapper) {
+      newOptionWrapper.parentNode.insertBefore(newOption, newOptionWrapper);
+    } else {
+      panel.appendChild(newOption);
+    }
+    input.value = "";
+    updateMsSummary(ms);
+    e.preventDefault();
+  });
+
   document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);
 })();
 

@@ -50,7 +50,7 @@ from .. import db
 from ..deps import get_db, templates
 from . import dashboard as dashboard_router
 
-router = APIRouter(prefix="/labels", tags=["labels"])
+router = APIRouter(prefix="/settings/labels", tags=["labels"])
 
 # 2026-08-08: grew from 8 to 16 -- direct feedback ("more colors options
 # (16) with small label under each color"). Order is a rough rainbow
@@ -213,7 +213,7 @@ def labels_regions(region: str, request: Request, conn=Depends(get_db)):
     """async-CRUD region fragment (features/async-crud.md): re-renders the
     labels list body after a label edit/merge instead of a full reload."""
     if region == "list":
-        return templates.TemplateResponse("_labels_body.html", _labels_context(conn, request))
+        return templates.TemplateResponse("_labels_table_body.html", _labels_context(conn, request))
     return JSONResponse({"error": f"unknown labels region: {region}"}, status_code=400)
 
 
@@ -226,41 +226,15 @@ def _labels_context(conn, request: Request) -> dict:
         if lbl.get("is_project"):
             lbl["project_status"] = db.project_status(conn, lbl)
 
-    space_names = {l["name"] for l in labels if l.get("generate_space")}
-    children_of: dict[str, list[dict]] = {}
-    top_level_spaces = []
-    ungrouped = []
-    for lbl in labels:
-        parent = lbl.get("parent_name")
-        if lbl.get("generate_space"):
-            if parent in space_names and parent != lbl["name"]:
-                children_of.setdefault(parent, []).append(lbl)
-            else:
-                top_level_spaces.append(lbl)
-        elif parent in space_names:
-            children_of.setdefault(parent, []).append(lbl)
-        else:
-            ungrouped.append(lbl)
-
-    top_level_spaces.sort(key=lambda l: l["name"].lower())
-    ungrouped.sort(key=lambda l: l["name"].lower())
-    for name in children_of:
-        children_of[name].sort(key=lambda l: l["name"].lower())
-    space_groups = [dict(s, children=children_of.get(s["name"], [])) for s in top_level_spaces]
+    # Return flat list sorted by name for the new table design
+    labels.sort(key=lambda l: l["name"].lower())
 
     return {
         "request": request,
         "active_tab": "labels",
         "crumbs": [{"url": "/settings", "name": "Settings"}],
         "title": "Labels",
-        # Named `space_groups`, not `spaces` -- base.html's nav rail
-        # already binds a template-local `spaces` via `{% set %}` (the
-        # sidebar's own Space list), which would silently shadow a
-        # same-named context variable for this page's whole render.
-        # See labels_manage.html's own comment on this.
-        "space_groups": space_groups,
-        "has_multiple_labels": len(labels) > 1,
-        "ungrouped": ungrouped,
+        "labels": labels,
         "has_labels": bool(labels),
     }
 
@@ -282,44 +256,15 @@ def _label_role(cfg: dict) -> str:
 
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
-    """The label edit modal (side work, 2026-08-15 direct feedback: "a
-    button that opens a modal window to edit labels with all the colors,
-    icons, etc."). Replaces labels_manage.html's old per-row inline forms
-    (rename/color/icon/parent/abbreviation/space-checkbox) AND the Project
-    <details> popover (promote/dates/archive/demote) that had briefly
-    lived there (2026-08-15, same day) -- both now live in one form here,
-    submitted together to update_label below.
-
-    2026-08-15 follow-up: "Group" (formerly "Parent label") only ever
-    offers actual Space labels -- `space_label_names` below, everything
-    else about a label's grouping is display-only (manage_labels' own
-    Space-children grouping). Merge moved back out to its own small
-    modal (merge_modal below), so it's no longer built here."""
+    """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
-    role = _label_role(cfg)
-    has_children = bool(db.list_child_labels(conn, name))
-    project_status = db.project_status(conn, cfg) if role == "project" else None
-    space_label_names = sorted(
-        (l["name"] for l in db.list_labels(conn) if l.get("generate_space") and l["name"] != name),
-        key=str.lower,
-    )
-    # A stale parent_name from before this rework (any label could be a
-    # parent) might not name a current Space -- keep it selectable so
-    # Save can't silently drop it just because the label opened this
-    # modal without touching Group at all.
-    if cfg.get("parent_name") and cfg["parent_name"] not in space_label_names:
-        space_label_names = sorted(space_label_names + [cfg["parent_name"]], key=str.lower)
     return templates.TemplateResponse(
-        "label_edit_modal.html",
+        "label_form_modal.html",
         {
             "request": request,
             "l": cfg,
-            "role": role,
-            "has_children": has_children,
-            "project_status": project_status,
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
-            "space_label_names": space_label_names,
         },
     )
 
@@ -342,74 +287,47 @@ def update_label(
     name: str,
     new_name: str = Form(""),
     color: str = Form("blue"),
-    icon: str = Form(""),
+    label_group: str = Form(""),
     description: str = Form(""),
-    parent_name: str = Form(""),
-    abbreviation: str = Form(""),
-    role: str = Form("none"),
+    generate_space: str = Form(""),
+    is_project: str = Form(""),
     start_date: str = Form(""),
     end_date: str = Form(""),
     conn=Depends(get_db),
 ):
-    """The label edit modal's single Save button -- one endpoint for every
-    field the old rename/set/promote/dates/demote endpoints each handled
-    separately, since they're now one form instead of five small ones.
-    Those older endpoints (this file's rename_label/set_label,
-    routers/projects.py's promote/set_dates/demote/archive) are untouched
-    and still work standalone -- nothing else in the app calls them, but
-    removing them isn't this slice's job and `tests/test_project_stack.py`
-    still exercises routers/projects.py's directly.
-
-    Role replaces the old independent generate_space checkbox + is_project
-    promote flow with one mutually-exclusive choice (side work, 2026-08-15
-    direct feedback) -- picking "project" always clears generate_space and
-    picking "space" always clears is_project/dates/archived_at, so a label
-    saved through this form can never end up with both set at once.
-
-    2026-08-15 follow-up (same day): two more direct-feedback changes --
-    (1) overlapping project periods are always allowed now, no confirm
-    step (the old `confirm_overlap` checkbox/409-conflict flow removed
-    entirely, per "Allow this period to overlap another project shouldn't
-    exist because it should always be true"); (2) `parent_name` ("Group")
-    must be blank or name an actual Space -- the modal's own dropdown
-    already only offers Spaces, this is the server-side backstop for
-    whatever it's handed."""
+    """The label edit modal's single Save button -- handles the unified
+    label_form_modal.html form with checkboxes for Space/Project."""
     new_name = (new_name or "").strip() or name
-    abbreviation = abbreviation if isinstance(abbreviation, str) else ""
-    abbreviation = abbreviation.strip()[:5] or None
+    label_group = (label_group or "").strip() or None
     start_date = start_date.strip() if isinstance(start_date, str) else ""
     end_date = end_date.strip() if isinstance(end_date, str) else ""
-    role = role if role in ("space", "project") else "none"
-    parent_name = (parent_name or "").strip() or None
 
-    if role == "project" and (not start_date or not end_date):
+    # Checkboxes: "on" when checked, missing when unchecked
+    generate_space = 1 if generate_space in ("1", "true", "on") else 0
+    is_project = 1 if is_project in ("1", "true", "on") else 0
+
+    # Mutual exclusivity: Space and Project can't both be on
+    if generate_space and is_project:
+        is_project = 0  # Space wins if both somehow submitted
+
+    if is_project and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
-
-    if parent_name:
-        parent_cfg = db.get_label_config(conn, parent_name)
-        if parent_name == name or not parent_cfg or not parent_cfg.get("generate_space"):
-            raise HTTPException(400, f'"{parent_name}" is not a Space -- Group can only be an existing Space.')
 
     if new_name != name:
         db.rename_label(conn, name, new_name)
-        # rename_label merges into new_name if it already names a
-        # different existing label (see its own docstring) -- either way,
-        # every field below now belongs under new_name.
         name = new_name
 
     existing = db.get_label_config(conn, name) or {}
     row = {
         "name": name,
         "color": color or "blue",
-        "icon": icon.strip() or None,
+        "label_group": label_group,
         "description": description,
-        "parent_name": parent_name,
-        "abbreviation": abbreviation,
-        "generate_space": 1 if role == "space" else 0,
-        "is_project": 1 if role == "project" else 0,
+        "generate_space": generate_space,
+        "is_project": is_project,
         "created_at": existing.get("created_at") or _now(),
     }
-    if role == "project":
+    if is_project:
         row["start_date"] = start_date
         row["end_date"] = end_date
         # Keep an existing project's archived_at as-is (editing dates on an
@@ -421,20 +339,20 @@ def update_label(
         row["end_date"] = None
         row["archived_at"] = None
     db.upsert_label_config(conn, row)
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/rename")
 def rename_label(name: str, new_name: str = Form(...), conn=Depends(get_db)):
     db.rename_label(conn, name, new_name)
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/merge")
 def merge_label(name: str, dest_name: str = Form(...), conn=Depends(get_db)):
     if dest_name and dest_name != name:
         db.merge_labels(conn, name, dest_name)
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/clear")
@@ -444,7 +362,68 @@ def clear_label(name: str, conn=Depends(get_db)):
     being deleted, just membership being emptied. `label_config` keeps
     whatever stale row it had, harmlessly."""
     db.clear_label(conn, name)
-    return RedirectResponse(url="/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
+
+
+@router.get("/new")
+def new_label_modal(request: Request, conn=Depends(get_db)):
+    """The "+ New Label" entry point -- opens the same label_form_modal.html
+    the Edit buttons open, empty. Opens via data-modal, posts to create_label below."""
+    return templates.TemplateResponse(
+        "label_form_modal.html",
+        {
+            "request": request,
+            "l": None,
+            "colors": COLORS,
+            "icon_groups": ICON_GROUPS,
+        },
+    )
+
+
+@router.post("/create")
+def create_label(
+    new_name: str = Form(...),
+    color: str = Form("blue"),
+    label_group: str = Form(""),
+    generate_space: str = Form(""),
+    is_project: str = Form(""),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Create a new label with zero items attached -- labels are first-class
+    organizational tools, not tied to any object."""
+    new_name = new_name.strip()
+    if not new_name:
+        raise HTTPException(400, "Label name is required")
+
+    label_group = label_group.strip() or None
+    role = "project" if is_project in ("1", "true", "on") else ("space" if generate_space in ("1", "true", "on") else "none")
+
+    if role == "project" and (not start_date or not end_date):
+        raise HTTPException(400, "A project needs both a start and end date.")
+
+    row = {
+        "name": new_name,
+        "color": color or "blue",
+        "label_group": label_group,
+        "generate_space": 1 if role == "space" else 0,
+        "is_project": 1 if role == "project" else 0,
+        "created_at": _now(),
+    }
+    if role == "project":
+        row["start_date"] = start_date
+        row["end_date"] = end_date
+    db.upsert_label_config(conn, row)
+    return RedirectResponse(url="/settings/labels", status_code=303)
+
+
+@router.post("/{name}/delete")
+def delete_label(name: str, conn=Depends(get_db)):
+    """Remove this label from every object (same as clear) -- the config row
+    remains harmlessly. Named "delete" in the UI for clarity."""
+    db.clear_label(conn, name)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/set")
@@ -484,7 +463,7 @@ def set_label(
             "created_at": _now(),
         },
     )
-    redirect_url = return_to if isinstance(return_to, str) and return_to.startswith("/") else "/labels"
+    redirect_url = return_to if isinstance(return_to, str) and return_to.startswith("/") else "/settings/labels"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
@@ -523,6 +502,10 @@ def _label_scope(conn, name: str) -> dict:
 def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(get_db)):
     label = db.effective_label_config(conn, name)
     is_space = label.get("generate_space")
+
+    if is_space:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"/spaces/{name}", status_code=301)
 
     dashboard_router._ensure_default_label_widgets(conn, name)
     ctx = dashboard_router.widget_page_context(conn, project_uid=name, edit=edit)

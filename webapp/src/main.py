@@ -143,7 +143,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
     app.include_router(auth.router)
     app.include_router(dashboard.router)
@@ -179,6 +179,7 @@ def create_app() -> FastAPI:
     # not query).
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
+    app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
     app.include_router(banners.router)

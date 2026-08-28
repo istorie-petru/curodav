@@ -6,14 +6,23 @@
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar/day/' ~ day %}
+{% set _enabled_views = calendar_views(request) %}
 <div class="toolbar top-app-bar toolbar-2row">
     <div class="toolbar-row">
         <h1 class="sr-only">{{ day }}</h1>
         <div class="segmented calendar-subnav">
-            <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
-            <a class="seg-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
-            <a class="seg-btn" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
-            <a class="seg-btn active" href="/calendar/day/{{ day }}{{ _lq }}">Day</a>
+            {% if 'month' in _enabled_views %}
+            <a class="seg-btn {% if 'fourweek' not in _enabled_views and 'week' not in _enabled_views and 'day' not in _enabled_views %}active{% endif %}" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
+            {% endif %}
+            {% if 'fourweek' in _enabled_views %}
+            <a class="seg-btn {% if 'month' not in _enabled_views and 'week' not in _enabled_views and 'day' not in _enabled_views %}active{% endif %}" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
+            {% endif %}
+            {% if 'week' in _enabled_views %}
+            <a class="seg-btn {% if 'month' not in _enabled_views and 'fourweek' not in _enabled_views and 'day' not in _enabled_views %}active{% endif %}" href="/calendar/week{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Week</a>
+            {% endif %}
+            {% if 'day' in _enabled_views %}
+            <a class="seg-btn {% if 'month' not in _enabled_views and 'fourweek' not in _enabled_views and 'week' not in _enabled_views %}active{% endif %}" href="/calendar/day/{{ day }}{{ _lq }}">Day</a>
+            {% endif %}
         </div>
         <div class="spacer"></div>
         <a class="icon-btn" href="/calendar/day/{{ prev_day }}{{ _lq }}" title="Previous day" aria-label="Previous day">{{ icon('chevron-left', 'icon-sm') }}</a>

@@ -109,5 +109,24 @@
             <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 12-hour</label>
         </div>
     </form>
+    <!-- Calendar views (2026-08-28) -- which of the four Calendar views
+         (Month, 4-Week, Week, Day) appear in the view switcher. A
+         multiselect dropdown with checkboxes, autosubmits on change.
+         Default is all four views enabled. -->
+    <form class="settings-field-row" method="post" action="/settings/calendar-views" id="calendar-views-form">
+        <span class="settings-field-label">Calendar views
+            <span class="settings-field-hint">Which views appear in the Calendar view switcher</span>
+        </span>
+        <span class="spacer"></span>
+        {% include "_widget_list_multiselect.html" with
+            ms_name="views"
+            ms_label="Calendar views"
+            ms_items=[{"uid": "month", "name": "Month"}, {"uid": "fourweek", "name": "4-Week"}, {"uid": "week", "name": "Week"}, {"uid": "day", "name": "Day"}]
+            ms_selected=current_calendar_views
+            ms_mode="filter"
+            ms_form_id="calendar-views-form"
+            ms_autosubmit=true
+        %}
+    </form>
 </div>
 {% endblock %}

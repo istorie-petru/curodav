@@ -425,6 +425,7 @@ CREATE TABLE IF NOT EXISTS label_config (
     icon TEXT,
     description TEXT,
     parent_name TEXT,
+    label_group TEXT,
     generate_space INTEGER NOT NULL DEFAULT 0,
     dashboard_preset_json TEXT,
     -- 2026-08-09: a short alias (max 5 characters) for a label, used as a
@@ -3626,13 +3627,23 @@ def list_all_label_names(conn: sqlite3.Connection) -> list[str]:
     return [r["label_name"] for r in rows]
 
 
+def list_all_known_label_names(conn: sqlite3.Connection) -> list[str]:
+    """Every label name known to the system -- the union of labels in use
+    (object_labels) and labels with config (label_config). Used for the
+    label picker dropdowns so a label created in the manage page appears
+    immediately even before it's applied to anything."""
+    names = set(list_all_label_names(conn))
+    names |= {r["name"] for r in conn.execute("SELECT name FROM label_config").fetchall()}
+    return sorted(names, key=str.lower)
+
+
 def list_tag_names_in_use(conn: sqlite3.Connection) -> list[str]:
     """Phase 2 (label-space rework): the old tag registry is gone --
-    labels are the only vocabulary now, so this is just an alias for
-    list_all_label_names, kept under its old name so every existing
-    caller (the tag-chip autocomplete on task/event/contact/habit/
-    database forms) needed no renaming."""
-    return list_all_label_names(conn)
+    labels are the only vocabulary now. Returns all known label names
+    (from both object_labels and label_config) so the chip multiselect
+    dropdown includes labels created in the manage page before they're
+    applied to any object."""
+    return list_all_known_label_names(conn)
 
 
 _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
@@ -3640,6 +3651,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "icon": None,
     "description": None,
     "parent_name": None,
+    "label_group": None,
     "generate_space": 0,
     "dashboard_preset_json": None,
     "abbreviation": None,
@@ -3698,7 +3710,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     same "only touch what you're told to" convention as every setter in
     this file."""
     cols = (
-        "name", "color", "icon", "description", "parent_name",
+        "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
         "importance", "urgency_threshold_days",
         "is_project", "start_date", "end_date", "archived_at",

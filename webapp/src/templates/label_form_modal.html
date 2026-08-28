@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit label' if l else 'New Label' }}{% endblock %}
+{% block content %}
+<!-- Everything fits in one modal: Name, Color (16 presets), Icon, Group,
+     plus collapsible Advanced (Space / Project toggles). See
+     routers/labels.py's edit_label_modal / create_label for the
+     server-side split; static/label_role_picker.js handles the
+     client-side show/hide of Project date fields and the switch-away
+     confirm when a real Space/Project is being turned off. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ 'Edit label' if l else 'New Label' }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="label-form" action="{{ '/settings/labels/' ~ l.name ~ '/update' if l else '/settings/labels/create' }}" data-cc-change="label" data-cc-action="{{ 'edit' if l else 'create' }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            <input type="text" name="new_name" value="{{ l.name if l else '' }}" required {% if not l %}autofocus{% endif %}>
+        </div>
+        <div class="field">
+            <label>Color</label>
+            {% set cp_current = l.color if l else 'blue' %}
+            {% set cp_colors = colors %}
+            {% set cp_form_id = 'label-form' %}
+            {% include "_color_swatch_picker.html" %}
+        </div>
+        <div class="field">
+            <label>Icon</label>
+            {% set ip_current = l.icon %}
+            {% set ip_groups = icon_groups %}
+            {% set ip_form_id = 'label-form' %}
+            {% set ip_default_icon = 'tag' %}
+            {% include "_icon_swatch_picker.html" %}
+        </div>
+        <div class="field">
+            <label>Group</label>
+            <input type="text" name="label_group" value="{{ l.label_group if l else '' }}" placeholder="e.g. Work, Priority">
+        </div>
+    </div>
+
+    <!-- Advanced options (collapsible, de-emphasized) -->
+    <details class="advanced-section" id="advanced-section">
+        <summary class="advanced-summary">
+            {{ icon('chevron-down', 'icon-sm') }} Advanced options
+        </summary>
+        <div class="advanced-fields">
+            <div class="field field-toggle">
+                <input type="checkbox" name="generate_space" id="generate_space" {% if l and l.generate_space %}checked{% endif %}>
+                <label for="generate_space">Enable Space — aggregates child labels onto their own page</label>
+            </div>
+            <div class="field field-toggle">
+                <input type="checkbox" name="is_project" id="is_project" {% if l and l.is_project %}checked{% endif %}>
+                <label for="is_project">Enable Project — adds start/end date fields</label>
+            </div>
+
+            <!-- Project period fields -- shown only when is_project is checked -->
+            <div class="field field-wide label-project-fields" {% if not l or not l.is_project %}hidden{% endif %}>
+                <div class="field-grid">
+                    <div class="field">
+                        <label>Start date</label>
+                        {% from "_datetime_picker.html" import datetime_picker with context %}
+                        {{ datetime_picker('start_date', '', l.start_date if l else '', '', 'date') }}
+                    </div>
+                    <div class="field">
+                        <label>End date</label>
+                        {{ datetime_picker('end_date', '', l.end_date if l else '', '', 'date') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </details>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/labels' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_delete_url = '/settings/labels/' ~ l.name ~ '/delete' if l else '' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete anything else.' if l else '' %}
+{% set footer_primary_form = 'label-form' %}
+{% set footer_primary_label = 'Save' if l else 'Create Label' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

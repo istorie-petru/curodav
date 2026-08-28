@@ -55,8 +55,8 @@ class TestSettingsTimeBlocksPage:
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
         assert "No sleep time configured yet" in body
         assert "No leisure time configured yet" in body
-        assert 'id="sleep-block-list"' not in body
-        assert 'id="leisure-block-list"' not in body
+        assert 'id="sleep-block-table"' in body
+        assert 'id="leisure-block-table"' in body
         assert 'href="/settings/time-blocks/new?kind=sleep"' in body
         assert 'href="/settings/time-blocks/new?kind=leisure"' in body
 
@@ -64,15 +64,15 @@ class TestSettingsTimeBlocksPage:
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
         db.upsert_time_block(conn, {"uid": "l1", "kind": "leisure", "label": "Evening", "start_time": "21:00", "end_time": "21:59", "days": "Monday"})
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert 'id="sleep-block-list"' in body
-        assert 'id="leisure-block-list"' in body
+        assert 'id="sleep-block-table"' in body
+        assert 'id="leisure-block-table"' in body
         assert "Night" in body
         assert "Evening" in body
-        assert "00:00&ndash;05:59 &middot; Mon Tue" in body
+        assert "00:00&ndash;05:59" in body
+        assert "Mon Tue" in body
         assert 'href="/settings/time-blocks/s1/edit"' in body
         assert 'href="/settings/time-blocks/l1/edit"' in body
         assert 'class="inline-text"' not in body
-        assert 'id="sleep-block-table"' not in body
 
     def test_hub_links_to_time_blocks(self, conn):
         body = settings_router.settings_index(_request("/settings"), conn=conn).body.decode()
@@ -92,7 +92,8 @@ class TestSettingsTimeBlocksPage:
     def test_partial_day_sets_are_abbreviated_in_canonical_order(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Wednesday,Friday"})
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert "00:00&ndash;05:59 &middot; Mon Wed Fri" in body
+        assert "00:00&ndash;05:59" in body
+        assert "Mon Wed Fri" in body
 
 
 class TestCreateTimeBlock:

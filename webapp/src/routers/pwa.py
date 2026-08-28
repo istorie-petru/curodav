@@ -61,3 +61,11 @@ def offline_shell(request: Request):
         "offline.html",
         {"request": request, "active_tab": ""},
     )
+
+
+@router.get("/favicon.ico")
+def favicon():
+    return FileResponse(
+        _STATIC_DIR / "favicon-32.png",
+        media_type="image/x-icon",
+    )

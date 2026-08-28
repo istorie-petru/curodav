@@ -133,7 +133,7 @@
         {% if spaces %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
         {% for l in spaces %}
-        <a href="/labels/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/labels/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+        <a href="/spaces/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/spaces/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>
@@ -309,6 +309,10 @@
      modal.js's wireContent() calls CCLabelRolePicker.init(body) against
      the freshly-injected content. -->
 <script src="{{ static_url('label_role_picker.js') }}"></script>
+<!-- label_form_modal.html's Space/Project checkbox toggles -- same reason:
+     page is only opened via data-modal, modal.js's wireContent() calls
+     CCLabelFormPicker.init(body) against the freshly-injected content. -->
+<script src="{{ static_url('label_form_picker.js') }}"></script>
 <!-- _event_form_fields.html's Format field (2026-08-15) -- loaded globally
      for the same reason as the scripts above: event_form.html/quick_add.html
      are normally injected into the modal via innerHTML, so modal.js's

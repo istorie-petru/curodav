@@ -1,72 +1,126 @@
 {% extends "base.html" %}
 {% block title %}Sleep & Leisure Time - Settings{% endblock %}
 {% block content %}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
-<h1>Sleep &amp; Leisure Time</h1>
-<p class="settings-hint" style="margin-bottom:12px">
-    Weekly recurring hours -- no dates, just a time-of-day range and which
-    days it applies to (e.g. 00:00&ndash;05:59 Monday-Sunday). The Week and
-    Day calendar views hatch these hours (red for Sleep, green for Leisure)
-    and warn -- but never block -- when an event or scheduled work session
-    is placed inside one.
-</p>
 
-<!-- Sleep Time -- simple list (2026-08-17 settings HTML uniformity pass,
-     SETTINGS_UI_GUIDE.md pattern B) -- replaces the old inline-add form +
-     inline-editable table (static/settings_time_blocks.js's per-field PATCH).
-     A row is read-only display plus an Edit button opening
-     time_block_edit_modal.html; Delete lives in that modal's footer. Same
-     grouped-list shape as _labels_body.html's label rows. Deliberately two
-     separate top-level sections rather than one Jinja macro/include loop --
-     _widget_list_multiselect.html's own set-then-include pattern is only
-     proven directly inside a template body, not inside a macro's local
-     scope. -->
+<h1>Sleep & Leisure Time</h1>
+
+<p class="settings-hint">Weekly recurring hours -- no dates, just a time-of-day range and which days it applies to (e.g. 00:00&ndash;05:59 Monday-Sunday). The Week and Day calendar views hatch these hours (red for Sleep, green for Leisure) and warn -- but never block -- when an event or scheduled work session is placed inside one.</p>
+
+<!-- Sleep Time -->
 <h2 style="margin:20px 0 8px">Sleep Time</h2>
-{% if sleep_blocks %}
 <div class="card">
-<div class="label-list" id="sleep-block-list">
-    {% for b in sleep_blocks %}
-    <div class="label-list-row" data-uid="{{ b.uid }}">
-        <span class="label-list-icon">{{ icon('moon') }}</span>
-        <span class="label-list-name">
-            {{ b.label or '(untitled)' }}
-            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days_label }}</span>
-        </span>
-        <span class="spacer"></span>
-        <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    <div class="table-scroll" id="sleep-block-table-wrapper">
+        <table id="sleep-block-table">
+            <thead>
+                <tr>
+                    <th>Block</th>
+                    <th>Hours</th>
+                    <th>Days</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="sleep-block-body">
+                {% if sleep_blocks %}
+                    {% for b in sleep_blocks %}
+                    <tr data-uid="{{ b.uid }}">
+                        <td>
+                            <div class="label-cell">
+                                <span class="label-name">{{ b.label or '(untitled)' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.days_label }}</span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <a href="/settings/time-blocks/{{ b.uid }}/edit" class="icon-btn" data-modal title="Edit sleep time">{{ icon('edit', 'icon-sm') }}</a>
+                                <form method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-confirm-sheet="Delete "{{ b.label or 'sleep time block' }}"? This stops the Week/Day grid from hatching these hours.">
+                                    <button type="submit" class="icon-btn danger" title="Delete sleep time">{{ icon('trash', 'icon-sm') }}</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr id="empty-state-row">
+                        <td colspan="3" class="text-muted" style="font-size: var(--text-footnote);">No sleep time configured yet</td>
+                        <td></td>
+                    </tr>
+                {% endif %}
+                <tr class="add-row">
+                    <td colspan="3">
+                        <a href="/settings/time-blocks/new?kind=sleep" class="icon-btn add-row-btn" data-modal title="Add sleep time">
+                            {{ icon('plus', 'icon-sm') }}
+                        </a>
+                    </td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
     </div>
-    {% endfor %}
-</div>
-</div>
-{% else %}
-<div class="empty-state">No sleep time configured yet -- add one below.</div>
-{% endif %}
-<div class="toolbar" style="margin-top:16px">
-    <a href="/settings/time-blocks/new?kind=sleep" class="btn ghost btn-sm" data-modal>{{ icon('plus', 'icon-sm') }} Add sleep time</a>
 </div>
 
-<!-- Leisure Time -- identical shape to Sleep Time above, kind="leisure". -->
+<!-- Leisure Time -->
 <h2 style="margin:24px 0 8px">Leisure Time</h2>
-{% if leisure_blocks %}
 <div class="card">
-<div class="label-list" id="leisure-block-list">
-    {% for b in leisure_blocks %}
-    <div class="label-list-row" data-uid="{{ b.uid }}">
-        <span class="label-list-icon">{{ icon('sun') }}</span>
-        <span class="label-list-name">
-            {{ b.label or '(untitled)' }}
-            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }} &middot; {{ b.days_label }}</span>
-        </span>
-        <span class="spacer"></span>
-        <a href="/settings/time-blocks/{{ b.uid }}/edit" class="btn ghost btn-sm" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+    <div class="table-scroll" id="leisure-block-table-wrapper">
+        <table id="leisure-block-table">
+            <thead>
+                <tr>
+                    <th>Block</th>
+                    <th>Hours</th>
+                    <th>Days</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="leisure-block-body">
+                {% if leisure_blocks %}
+                    {% for b in leisure_blocks %}
+                    <tr data-uid="{{ b.uid }}">
+                        <td>
+                            <div class="label-cell">
+                                <span class="label-name">{{ b.label or '(untitled)' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.days_label }}</span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <a href="/settings/time-blocks/{{ b.uid }}/edit" class="icon-btn" data-modal title="Edit leisure time">{{ icon('edit', 'icon-sm') }}</a>
+                                <form method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-confirm-sheet="Delete "{{ b.label or 'leisure time block' }}"? This stops the Week/Day grid from hatching these hours.">
+                                    <button type="submit" class="icon-btn danger" title="Delete leisure time">{{ icon('trash', 'icon-sm') }}</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr id="empty-state-row">
+                        <td colspan="3" class="text-muted" style="font-size: var(--text-footnote);">No leisure time configured yet</td>
+                        <td></td>
+                    </tr>
+                {% endif %}
+                <tr class="add-row">
+                    <td colspan="3">
+                        <a href="/settings/time-blocks/new?kind=leisure" class="icon-btn add-row-btn" data-modal title="Add leisure time">
+                            {{ icon('plus', 'icon-sm') }}
+                        </a>
+                    </td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
     </div>
-    {% endfor %}
 </div>
-</div>
-{% else %}
-<div class="empty-state">No leisure time configured yet -- add one below.</div>
-{% endif %}
-<div class="toolbar" style="margin-top:16px">
-    <a href="/settings/time-blocks/new?kind=leisure" class="btn ghost btn-sm" data-modal>{{ icon('plus', 'icon-sm') }} Add leisure time</a>
 </div>
 {% endblock %}

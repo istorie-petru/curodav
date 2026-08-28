@@ -103,8 +103,8 @@ class TestLabelEditModalFooter:
         assert 'class="detail-delete-link"' in body
         assert 'class="btn danger"' not in body
         assert "data-confirm-sheet=" in body
-        assert "/labels/work/clear" in body
-        assert 'form="label-edit-form"' in body
+        assert "/labels/work/delete" in body
+        assert 'form="label-form"' in body
 
 
 class TestLabelMergeModalFooter:

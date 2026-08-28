@@ -257,6 +257,9 @@
     // label_edit_modal.html's Role picker (Space/Project date-field
     // reveal + switch-away confirm) -- same re-init reasoning.
     if (window.CCLabelRolePicker) window.CCLabelRolePicker.init(body);
+    // label_form_modal.html's Space/Project checkbox toggles -- same
+    // re-init reasoning.
+    if (window.CCLabelFormPicker) window.CCLabelFormPicker.init(body);
     // _event_form_fields.html's Format field (clears the other field's
     // value on switch) -- same re-init reasoning.
     if (window.CCEventFormatToggle) window.CCEventFormatToggle.init(body);

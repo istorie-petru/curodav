@@ -135,8 +135,8 @@ class TestLabelsManageRowRendersSwatchGridNotSelect:
         # on the page (the picker's grid gets reparented out to
         # #color-popover on open, and only the explicit form="" attribute
         # keeps it part of the real form's submission).
-        assert 'id="label-edit-form"' in body
-        assert 'form="label-edit-form"' in body
+        assert 'id="label-form"' in body
+        assert 'form="label-form"' in body
 
 
 class TestLabelsManageRowColorAutoSubmit:

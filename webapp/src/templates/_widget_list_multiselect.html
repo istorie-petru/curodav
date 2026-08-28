@@ -142,14 +142,17 @@
                      picker rather than giving them a separate field
                      entirely. Each item: {name, id, label, checked,
                      form (optional, defaults to ms_form_id)}.
-     ms_hidden    -- when true, the outer `.field` starts with the
-                     `hidden` attribute set (e.g. a field that's only
-                     meaningful given some other field's state -- see
-                     style.css's `.field[hidden]` note: plain `hidden`
-                     alone does nothing on a `.field`, a caller doing this
-                     needs its own `.field.<class>[hidden]{display:none;}`
-                     override, same as `_event_form_fields.html`'s
-                     `.holiday-field` via `ms_extra_class`). #}
+ms_hidden    -- when true, the outer `.field` starts with the
+                      `hidden` attribute set (e.g. a field that's only
+                      meaningful given some other field's state -- see
+                      style.css's `.field[hidden]` note: plain `hidden`
+                      alone does nothing on a `.field`, a caller doing this
+                      needs its own `.field.<class>[hidden]{display:none;}`
+                      override, same as `_event_form_fields.html`'s
+                      `.holiday-field` via `ms_extra_class`).
+      ms_autosubmit -- when true, adds `onchange="this.form.requestSubmit()"`
+                      to checkbox/radio inputs so the form submits immediately
+                      on selection change (for settings that auto-save). #}
 {% set _mode = ms_mode | default('filter') %}
 {% set _single = _mode == 'single' %}
 {% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
@@ -158,6 +161,7 @@
 {% set _total = ms_items | length %}
 {% set _wide = ms_wide | default(true) %}
 {% set _sel_item = (ms_items | selectattr('uid', 'equalto', ms_selected) | list | first) if (_single and ms_selected) else ((ms_items | first) if (_single and ms_items) else none) %}
+{% set _autosubmit = ms_autosubmit | default(false) %}
 <div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
     <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
@@ -171,7 +175,8 @@
                 <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ ms_name }}" value="{{ it.uid }}"
                        {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
-                       {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}>
+                       {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}
+                       {% if _autosubmit %}onchange="this.form.requestSubmit()"{% endif %}>
                 <span>{{ it.name }}</span>
             </label>
             {% endfor %}

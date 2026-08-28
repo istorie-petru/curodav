@@ -102,6 +102,7 @@ from fastapi.responses import RedirectResponse
 
 from .. import auth, data_health, db, offline_sync
 from ..deps import (
+    CALENDAR_VIEWS_KEY,
     FOUR_WEEK_POSITION_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
@@ -175,12 +176,6 @@ def settings_index(request: Request, conn=Depends(get_db)):
     )
 
 
-@router.get("/settings/labels")
-def settings_labels_redirect():
-    """Redirect /settings/labels to /labels for Settings hub integration."""
-    return RedirectResponse(url="/labels", status_code=303)
-
-
 @router.get("/settings/general")
 def settings_general(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
@@ -223,6 +218,11 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # labels on the recurrence editor's holiday-calendar/weekend
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
             "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
+            # 2026-08-28 -- "Calendar views" (Settings > General) -- which of the
+            # four Calendar views (Month, 4-Week, Week, Day) appear in the view
+            # switcher. Default is all four enabled. Stored as comma-separated
+            # list: "month,fourweek,week,day".
+            "current_calendar_views": (db.get_app_meta(conn, CALENDAR_VIEWS_KEY) or "month,fourweek,week,day").split(","),
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -343,6 +343,19 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     minutesToDisplayTime(), which reads this via base.html's
     `data-time-format` body attribute)."""
     db.set_app_meta(conn, TIME_FORMAT_KEY, "12h" if time_format == "12h" else "24h")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/calendar-views")
+def set_calendar_views(views: list[str] = Form([]), conn=Depends(get_db)):
+    """"Calendar views" -- which of the four Calendar views (Month, 4-Week,
+    Week, Day) appear in the view switcher. Only ever stores one of the
+    offered choices; an unrecognized value falls back to all four views
+    rather than silently hiding all views. Read by deps.py's
+    _calendar_views global used in the calendar templates."""
+    valid = {"month", "fourweek", "week", "day"}
+    filtered = [v for v in views if v in valid]
+    db.set_app_meta(conn, CALENDAR_VIEWS_KEY, ",".join(filtered) if filtered else "month,fourweek,week,day")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
