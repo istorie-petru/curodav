@@ -599,7 +599,7 @@ def four_week_view(
         "calendar_fourweek.html",
         {
             "request": request,
-            "active_tab": "calendar",
+            "active_tab": "calendar_fourweek",
             "calendar_view": "fourweek",
             "today_iso": today.isoformat(),
             "weeks": weeks,
@@ -736,7 +736,7 @@ def _week_view_context(conn, request, date_, label):
 
     return {
         "request": request,
-        "active_tab": "calendar",
+        "active_tab": "calendar_week",
         "calendar_view": "week",
         "today_iso": date.today().isoformat(),
         "days": days,

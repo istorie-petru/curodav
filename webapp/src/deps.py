@@ -313,13 +313,18 @@ templates.env.globals["show_relations_card"] = _show_relations_card
 
 def _calendar_views(request: Request) -> list[str]:
     """Which Calendar views are enabled (Settings > General's "Calendar views").
-    Returns a list of view keys: "month", "fourweek", "week", "day".
-    Default is all four views enabled. Empty/invalid values fall back to all."""
-    raw = _cached_app_meta(request, CALENDAR_VIEWS_KEY, "month,fourweek,week,day")
+    Returns a list of view keys: "month", "day" -- 2026-08-28 "Calendar split
+    into two pages" moved 4-Week and Week off this shared Month/Day switcher
+    onto their own standalone tabbar destinations (base.html), so this toggle
+    no longer governs them at all; an install with an old "month,fourweek,
+    week,day"-shaped stored value just has those two extra tokens filtered
+    out below, harmlessly. Default is both views enabled. Empty/invalid
+    values fall back to both."""
+    raw = _cached_app_meta(request, CALENDAR_VIEWS_KEY, "month,day")
     views = [v.strip() for v in raw.split(",") if v.strip()]
-    valid = {"month", "fourweek", "week", "day"}
+    valid = {"month", "day"}
     filtered = [v for v in views if v in valid]
-    return filtered if filtered else ["month", "fourweek", "week", "day"]
+    return filtered if filtered else ["month", "day"]
 
 
 templates.env.globals["calendar_views"] = _calendar_views

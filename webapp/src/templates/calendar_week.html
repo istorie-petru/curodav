@@ -7,24 +7,13 @@
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar/week?date_=' ~ monday.isoformat() %}
-{% set _enabled_views = calendar_views(request) %}
+<!-- 2026-08-28 "Calendar split into two pages" -- Week is a standalone
+     tabbar destination now (base.html), not one of four tabs inside a
+     shared Month/4-Week/Week/Day subnav -- no more cross-links to the
+     other calendar views here. -->
 <div class="toolbar top-app-bar toolbar-2row">
     <div class="toolbar-row">
         <h1 class="sr-only">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }}</h1>
-        <div class="segmented calendar-subnav">
-            {% if 'month' in _enabled_views %}
-            <a class="seg-btn {% if 'fourweek' not in _enabled_views and 'week' not in _enabled_views %}active{% endif %}" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
-            {% endif %}
-            {% if 'fourweek' in _enabled_views %}
-            <a class="seg-btn {% if 'month' not in _enabled_views and 'week' not in _enabled_views %}active{% endif %}" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
-            {% endif %}
-            {% if 'week' in _enabled_views %}
-            <a class="seg-btn {% if 'month' not in _enabled_views and 'fourweek' not in _enabled_views %}active{% endif %}" href="/calendar/week?date_={{ monday.isoformat() }}{{ _lq }}">Week</a>
-            {% endif %}
-            {% if 'day' in _enabled_views %}
-            <a class="seg-btn {% if 'month' not in _enabled_views and 'fourweek' not in _enabled_views and 'week' not in _enabled_views %}active{% endif %}" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
-            {% endif %}
-        </div>
         <div class="spacer"></div>
         <a class="icon-btn" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
         <a class="icon-btn" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>

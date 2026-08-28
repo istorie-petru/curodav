@@ -309,10 +309,14 @@ class TestFourWeekViewRoute:
 
 
 class TestFourWeekViewTemplate:
-    def test_body_has_nav_tabs_and_four_week_grids(self, conn):
+    def test_body_has_four_week_grids(self, conn):
+        # 2026-08-28 "Calendar split into two pages": 4-Week is a standalone
+        # tabbar destination now, no more Month/Week/Day cross-links on this
+        # page's own subnav (base.html's tabbar carries the "4-Week" entry
+        # instead -- asserted in test_tabbar_has_dedicated_fourweek_and_week_
+        # entries below).
         resp = calendar_router.four_week_view(_bare_request(), conn=conn)
         body = resp.body.decode()
-        assert ">Month<" in body and ">4-Week<" in body and ">Week<" in body and ">Day<" in body
         assert body.count('class="month-week-grid"') == 4
 
     def test_no_adjacent_month_cells(self, conn):
@@ -330,18 +334,48 @@ class TestFourWeekViewTemplate:
         assert "calendar_month.js" in body
         assert "month-weekday-row" in body
 
-    def test_month_view_subnav_now_links_to_fourweek(self, conn):
+    @staticmethod
+    def _subnav(body: str) -> str:
+        # base.html's own tabbar now also contains the literal text
+        # "4-Week"/"Week" (their own dedicated tab entries), so a bare
+        # substring check on the whole body would false-positive -- isolate
+        # just the page's own `.calendar-subnav` segment first.
+        start = body.index('class="segmented calendar-subnav"')
+        end = body.index("</div>", start)
+        return body[start:end]
+
+    def test_month_view_subnav_is_month_day_only(self, conn):
+        # 2026-08-28 "Calendar split into two pages": Month's own subnav no
+        # longer cross-links to 4-Week/Week -- reaching them is via the
+        # tabbar now.
         resp = calendar_router.month_view(_bare_request("/calendar"), year=2026, month=8, conn=conn)
-        assert '>4-Week<' in resp.body.decode()
+        subnav = self._subnav(resp.body.decode())
+        assert '>4-Week<' not in subnav and '>Week<' not in subnav
+        assert '>Month<' in subnav and '>Day<' in subnav
 
-    def test_week_view_subnav_now_links_to_fourweek(self, conn):
-        resp = calendar_router.week_view(_bare_request("/calendar/week"), conn=conn)
-        assert '>4-Week<' in resp.body.decode()
-
-    def test_day_view_subnav_now_links_to_fourweek(self, conn):
+    def test_day_view_subnav_is_month_day_only(self, conn):
         today_iso = date.today().isoformat()
         resp = calendar_router.day_view(today_iso, _bare_request(f"/calendar/day/{today_iso}"), conn=conn)
-        assert '>4-Week<' in resp.body.decode()
+        subnav = self._subnav(resp.body.decode())
+        assert '>4-Week<' not in subnav and '>Week<' not in subnav
+        assert '>Month<' in subnav and '>Day<' in subnav
+
+    def test_fourweek_page_has_no_subnav_cross_links(self, conn):
+        resp = calendar_router.four_week_view(_bare_request(), conn=conn)
+        assert 'calendar-subnav' not in resp.body.decode()
+
+    def test_week_page_has_no_subnav_cross_links(self, conn):
+        resp = calendar_router.week_view(_bare_request("/calendar/week"), conn=conn)
+        assert 'calendar-subnav' not in resp.body.decode()
+
+    def test_tabbar_has_dedicated_fourweek_and_week_entries(self, conn):
+        # base.html now carries "4-Week"/"Week" as their own fixed tabbar
+        # destinations (data-tab="calendar_fourweek"/"calendar_week"),
+        # alongside "Calendar" (Month/Day).
+        body = calendar_router.four_week_view(_bare_request(), conn=conn).body.decode()
+        assert 'data-tab="calendar_fourweek"' in body
+        assert 'data-tab="calendar_week"' in body
+        assert 'data-tab="calendar" ' in body
 
 
 class TestFourWeekPositionSetting:

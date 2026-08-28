@@ -3584,7 +3584,54 @@ discipline, not an oversight.
   fewer tests than before since several whole test classes exercised code
   that's now gone, not a coverage regression on anything still live).
 
-## Next session queue — major rework requested 2026-08-28 (items 2/3/4 done, see the session entry directly above; renumbered to close the gap)
+## Shipped — Calendar split + Contacts cleanup (2026-08-28), items 3+4 of the
+queue below, bundled into one session with explicit user approval
+
+Direct user request to do both queue items in one go.
+
+- **Calendar split into two pages**: 4-Week and Week are standalone tabbar
+  destinations now (`base.html`, `icon-grid`/`icon-clock`, `data-tab=
+  "calendar_fourweek"`/`"calendar_week"`) instead of two of the four tabs in
+  the shared Month/4-Week/Week/Day segmented subnav
+  (`routers/calendar.py::four_week_view`/`_week_view_context` now set
+  `active_tab` to those two new values so the tabbar highlights correctly).
+  `calendar_fourweek.html`/`calendar_week.html` dropped the subnav entirely
+  (no more cross-links to Month/Day/each other); `calendar_month.html`/
+  `calendar_day.html`'s own subnav is Month|Day only now, each hardcoding
+  its own tab as active rather than the pre-existing (and, on inspection,
+  already-buggy — Day's tab was never marked active by default) "active
+  when the others are disabled" conditional logic. Settings > General's
+  "Calendar views" toggle (2026-08-28, same day, from the "major rework"
+  session) is trimmed to Month/Day only — `deps.py::_calendar_views`/
+  `routers/settings.py::set_calendar_views` both narrowed their valid set
+  from `{month, fourweek, week, day}` to `{month, day}` and their default
+  from `"month,fourweek,week,day"` to `"month,day"`; an install with an old
+  stored value carrying the two retired tokens just has them filtered out
+  harmlessly, no migration needed. See `features/calendar.md`.
+- **Contacts page cleanup**: `contacts_list.html` was wrapping `.card` around
+  `_contacts_body.html`, which itself opened a second, nested `.card` inside
+  its own `#contacts-body` root — collapsed to one: `_contacts_body.html`'s
+  root div now carries `id="contacts-body" class="card"` directly and the
+  redundant inner `.card` is gone; `contacts_list.html` just includes the
+  partial with no wrapper of its own. `#contacts-body` has to stay the
+  fragment's own root either way — `static/async_crud.js::refreshRegion`
+  does `current.replaceWith(fragment)` after a contact mutation, matching by
+  that id — so the fix was removing the *duplicate* card, not the id itself.
+  See `features/contacts.md`.
+- Tests: `test_calendar_fourweek.py`'s `TestFourWeekViewTemplate` rewritten
+  (subnav-cross-link assertions replaced with "no `.calendar-subnav` on the
+  4-Week/Week pages at all" + "tabbar carries the two new `data-tab`
+  entries" + "Month/Day's own subnav is Month|Day only", isolating just the
+  `.calendar-subnav` segment before asserting, since the tabbar itself now
+  also contains the literal text "4-Week"/"Week"). No contacts test asserted
+  the old nested-card markup, so nothing there needed updating. Full suite
+  1685 passed (up from 1683 — 2 net-new tests replacing 3 retired ones plus
+  a few new assertions folded into existing tests).
+
+## Next session queue — major rework requested 2026-08-28 (items 2/3/4 of the
+original numbering done in the "Major rework session" entry above; items 3/4
+of the renumbered list below done in the "Calendar split + Contacts cleanup"
+entry directly below; renumbered again to close the gap)
 
 Direct user request, much larger than one slice — broken into the pieces
 below, **one per session** per this file's own discipline. Pick the next
@@ -3614,13 +3661,7 @@ docs-only and everything else is independent of it):
    fixes section above) as a real page again — reconcile with the
    2026-08-15 "retire /projects" decision record in `plans/open.md`
    before building.
-3. **Calendar split into two pages** — one page with only the 4-Week
-   view, another with only the Week view (currently both live as tabs
-   inside one Calendar page alongside Month/Day/Timetable).
-4. **Contacts page cleanup** — currently renders both a `.card` wrapper
-   and a separate `.contacts-body` div; collapse to one card containing
-   the list.
-5. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
+3. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
    replicas of the Tasks table view** — same row markup/spacing/column
    conventions (see the `tbody td` padding-leak fix above, which was a
    warning sign that these tables have been drifting from the Tasks

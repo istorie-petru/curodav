@@ -219,10 +219,15 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
             "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
             # 2026-08-28 -- "Calendar views" (Settings > General) -- which of the
-            # four Calendar views (Month, 4-Week, Week, Day) appear in the view
-            # switcher. Default is all four enabled. Stored as comma-separated
-            # list: "month,fourweek,week,day".
-            "current_calendar_views": (db.get_app_meta(conn, CALENDAR_VIEWS_KEY) or "month,fourweek,week,day").split(","),
+            # Month/Day switcher's two views appear. 4-Week and Week moved to
+            # their own standalone tabbar destinations the same day ("Calendar
+            # split into two pages") and are no longer valid choices here; an
+            # install with an old "month,fourweek,week,day"-shaped stored
+            # value just has those two extra tokens filtered out. Default is
+            # both enabled. Stored as comma-separated list: "month,day".
+            "current_calendar_views": [
+                v for v in (db.get_app_meta(conn, CALENDAR_VIEWS_KEY) or "month,day").split(",") if v in ("month", "day")
+            ],
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -348,14 +353,16 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
 
 @router.post("/settings/calendar-views")
 def set_calendar_views(views: list[str] = Form([]), conn=Depends(get_db)):
-    """"Calendar views" -- which of the four Calendar views (Month, 4-Week,
-    Week, Day) appear in the view switcher. Only ever stores one of the
-    offered choices; an unrecognized value falls back to all four views
-    rather than silently hiding all views. Read by deps.py's
-    _calendar_views global used in the calendar templates."""
-    valid = {"month", "fourweek", "week", "day"}
+    """"Calendar views" -- which of the Month/Day switcher's two views appear.
+    2026-08-28 "Calendar split into two pages": 4-Week and Week are their own
+    standalone tabbar destinations now (base.html), not part of this
+    switcher, so they're no longer valid choices here. Only ever stores one
+    of the offered choices; an unrecognized value falls back to both views
+    rather than silently hiding both. Read by deps.py's _calendar_views
+    global used in the calendar templates."""
+    valid = {"month", "day"}
     filtered = [v for v in views if v in valid]
-    db.set_app_meta(conn, CALENDAR_VIEWS_KEY, ",".join(filtered) if filtered else "month,fourweek,week,day")
+    db.set_app_meta(conn, CALENDAR_VIEWS_KEY, ",".join(filtered) if filtered else "month,day")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
