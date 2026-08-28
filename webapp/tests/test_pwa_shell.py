@@ -349,10 +349,11 @@ class TestLocalWritePath:
         # fix for a session's worth of style.css edits silently not showing
         # up in the browser -- the ignoreSearch fallback (v11) means a
         # precached style.css never goes stale on its own, so a style-only
-        # change now has to bump CACHE_NAME too, not just a script rewrite.
-        # Each bump forces a fresh shell install with the new handler/assets.
+        # change now has to bump CACHE_NAME too, not just a script rewrite;
+        # v16 (2026-08-29) is the very next style.css-only edit proving that
+        # lesson had to actually be followed, not just written down.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v15"' in script
+        assert 'CACHE_NAME = "cc-shell-v16"' in script
 
 
 class TestOfflineToolbar:

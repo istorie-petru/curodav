@@ -4061,3 +4061,25 @@ assertion updated from `"cc-shell-v14"` to `"cc-shell-v15"`. Full suite
 up report from this entire session** -- a hard refresh (or reopening the
 tab after the new service worker activates) should finally show all of
 today's habit check-in cell changes at once.
+
+## Bug fix (2026-08-29, immediate follow-up) — the underline itself was
+the leftover "border"
+
+Direct report after the service-worker fix above: "the border is still
+there." Real bug, not another stale-cache echo (confirmed the new SW had
+actually taken over first). `.inline-edit-input`'s own border/background
+were already gone (the two passes above), but `.inline-edit-cell` (the
+outer `<span>`) keeps its resting-state dotted `text-decoration` the
+entire time -- `inline_edit.js`'s `enterEditMode` only swaps the span's
+*content* (text -> a real `<input>` child via `appendChild`), it never
+leaves the span itself, so that dotted underline kept drawing underneath
+the input while editing (browsers propagate an ancestor's text-decoration
+line across descendant inline content, including form controls) -- which
+is what was actually being reported as a leftover border. Fix: `.inline-
+edit-cell[data-editing]{text-decoration:none}` -- `[data-editing]` is the
+same attribute `enterEditMode` already sets on the cell the moment edit
+mode starts, so no JS change was needed, just this one rule. Bumped
+`CACHE_NAME` to `"cc-shell-v16"` (per the v15 lesson two entries up: a
+`static/style.css`-only edit needs this too, now proven not just
+written down) and updated the matching pinned test assertion. Full suite
+1728 passed.

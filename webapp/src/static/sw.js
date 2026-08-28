@@ -46,8 +46,11 @@
 // Bumping CACHE_NAME is the only thing that forces a fresh precache;
 // going forward, treat static/style.css changes the same as a script
 // rewrite for this purpose -- bump on every edit expected to be visible
-// immediately, not just JS.
-const CACHE_NAME = "cc-shell-v15";
+// immediately, not just JS. v16 (2026-08-29): proof the v15 lesson was
+// real, not theoretical -- the very next style.css edit (suppressing
+// .inline-edit-cell's text-decoration while `[data-editing]`, see that
+// rule's own comment) needed this same bump to actually reach a browser.
+const CACHE_NAME = "cc-shell-v16";
 
 const SHELL_ASSETS = [
   "/offline",

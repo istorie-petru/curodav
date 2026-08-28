@@ -1494,6 +1494,19 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   text-decoration:underline dotted var(--fg-tertiary); text-underline-offset:2px;
 }
 .inline-edit-cell:focus{outline:none; text-decoration-color:var(--fg-secondary);}
+/* 2026-08-29 direct feedback ("the border is still there") after the
+   .inline-edit-input pass above already stripped its own border/
+   background: the *cell's* dotted underline was the real culprit --
+   inline_edit.js only swaps this span's text content for a real <input>
+   while editing (`cell.appendChild(input)`), it never leaves the span
+   itself, so `.inline-edit-cell`'s own `text-decoration` kept drawing
+   underneath the input the whole time (browsers propagate an ancestor's
+   text-decoration line across descendant inline content, including form
+   controls) -- reading as exactly the leftover border/line being
+   reported. `[data-editing]` is the same attribute inline_edit.js already
+   sets on the cell the moment edit mode starts (enterEditMode), so no JS
+   change was needed, just this rule. */
+.inline-edit-cell[data-editing]{text-decoration:none;}
 /* The real input that replaces .inline-edit-cell's text while editing --
    direct feedback (2026-08-29): no border at all, background matches the
    row instead of standing out as its own field.
