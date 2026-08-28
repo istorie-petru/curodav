@@ -149,6 +149,99 @@ class TestSetTaskCompletion:
         )
         assert db.get_task_completion(conn, "h1", today) is None
 
+    def test_no_fetch_header_still_redirects(self, conn):
+        """Plain-HTML fallback (no JS): unchanged 303 behavior."""
+        _seed_task(conn, "h1", tags=["Habit"])
+        today = date.today().isoformat()
+        resp = tasks_router.set_task_completion(
+            "h1", _request("/tasks/h1/completions", method="POST"), completion_date=today, value="1", conn=conn
+        )
+        assert resp.status_code == 303
+
+    def test_fetch_header_returns_json_instead_of_a_redirect(self, conn):
+        """2026-08-28 follow-up fix: this endpoint used to always 303
+        regardless of `X-Requested-With`, so the Habits group's "+1" button
+        (_habit_row.html) had no JSON success path and fell back to a plain
+        native form submit -- a full-page reload on every check-in
+        (reported directly against a `POST .../completions ... 303 See
+        Other` server log). Now dual-mode like every other mutation route."""
+        _seed_task(conn, "h1", tags=["Habit"], target_per_day=8)
+        today = date.today().isoformat()
+        req = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/tasks/h1/completions",
+                "headers": [(b"x-requested-with", b"fetch")],
+            }
+        )
+        resp = tasks_router.set_task_completion(
+            "h1", req, completion_date=today, value="5", x_requested_with="fetch", conn=conn
+        )
+        assert resp.status_code == 200
+        assert db.get_task_completion(conn, "h1", today)["value"] == 5
+
+
+class TestToggleTaskCompletion:
+    def test_no_fetch_header_still_redirects(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"])
+        today = date.today().isoformat()
+        resp = tasks_router.toggle_task_completion(
+            "h1", today, _request("/tasks/h1/completion/" + today + "/toggle", method="POST"), conn=conn
+        )
+        assert resp.status_code == 303
+
+    def test_fetch_header_returns_json_and_toggles(self, conn):
+        """Same dual-mode fix as TestSetTaskCompletion above, applied to the
+        plain checkbox habit's toggle route (_habit_row.html's
+        `habit-checkin-toggle` form)."""
+        _seed_task(conn, "h1", tags=["Habit"])
+        today = date.today().isoformat()
+        req = _request("/tasks/h1/completion/" + today + "/toggle", method="POST")
+        resp = tasks_router.toggle_task_completion("h1", today, req, x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert db.get_task_completion(conn, "h1", today) is not None
+        # toggling again removes it
+        resp = tasks_router.toggle_task_completion("h1", today, req, x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert db.get_task_completion(conn, "h1", today) is None
+
+
+class TestHabitRowAsyncSubmit:
+    """The Habits group's check-in forms (_habit_row.html) need
+    `data-cc-change` for async_crud.js's global data-cc-change submit
+    listener (loaded in base.html) to intercept them at all -- without it, a
+    click falls through to a plain native form submit (full-page reload,
+    reported directly). Guards against that gap silently coming back by
+    rendering the real page template, same pattern as
+    test_phase1_derived_states.py's own template-render assertions."""
+
+    def _render_tasks_page(self, conn, req=None):
+        req = req or _request("/tasks")
+        resp = tasks_router.list_tasks(req, conn=conn)
+        ctx = {"request": req, **resp.context}
+        return tasks_router.templates.get_template("tasks_list.html").render(ctx)
+
+    def test_checkbox_habit_toggle_form_has_data_cc_change_task(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
+        body = self._render_tasks_page(conn)
+        assert 'class="form-inline habit-checkin-toggle" data-cc-change="task"' in body
+
+    def test_quantity_habit_plus_and_reset_forms_have_data_cc_change_task(self, conn):
+        _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
+        body = self._render_tasks_page(conn)
+        assert 'class="form-inline habit-checkin-plus" data-value="1" data-cc-change="task"' in body
+        assert 'data-cc-change="task" data-cc-action="checkin"' in body
+
+    def test_standalone_habit_entity_forms_have_data_cc_change_habit(self, conn):
+        db.upsert_habit(
+            conn,
+            {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "created_at": _now()},
+        )
+        body = self._render_tasks_page(conn)
+        assert 'action="/habits/e1/entries/' in body
+        assert 'class="form-inline habit-checkin-toggle" data-cc-change="habit"' in body
+
 
 class TestHabitSettings:
     def test_defaults_to_habit(self, conn):

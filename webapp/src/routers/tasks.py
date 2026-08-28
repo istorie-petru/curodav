@@ -984,14 +984,26 @@ def _completion_heatmap_weeks(
 
 @router.post("/{uid}/completion/{completion_date}/toggle")
 def toggle_task_completion(
-    uid: str, completion_date: str, request: Request, conn=Depends(get_db)
-) -> RedirectResponse:
+    uid: str,
+    completion_date: str,
+    request: Request,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     """The heatmap/list toggle for a recurring task's daily check-off: no
     completion for that date -> record one; already logged -> remove it
     (back to true "not done", not a hidden zero row). Redirects back to the
     referer (the tasks list's Today column), falling back to the task's own
     detail page when there's no referer -- same pattern as the habits
-    toggle."""
+    toggle.
+
+    2026-08-28 follow-up fix: this endpoint always redirected regardless of
+    `X-Requested-With`, so the Habits group's checkbox (_habit_row.html,
+    posts here for a plain kind='task' habit) never had a JSON success path
+    to key off of -- it fell back to a plain, unenhanced native form submit
+    (no `data-cc-change` was even set), causing a full-page reload/re-
+    navigate on every check-in. Now dual-mode like every other mutation
+    endpoint in this router (deps.respond)."""
     if db.get_task_completion(conn, uid, completion_date) is not None:
         db.delete_task_completion(conn, uid, completion_date)
     else:
@@ -999,7 +1011,7 @@ def toggle_task_completion(
             conn, uid, completion_date, datetime.now(timezone.utc).isoformat()
         )
     referer = request.headers.get("referer")
-    return RedirectResponse(url=referer or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, referer or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/completions")
@@ -1008,6 +1020,7 @@ def set_task_completion(
     request: Request,
     completion_date: str = Form(...),
     value: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """Explicit-value counterpart to toggle_task_completion above -- same
@@ -1018,7 +1031,11 @@ def set_task_completion(
     detail page). Only relevant for a habit-labeled task with
     target_per_day > 1 -- a plain checkbox habit (or an ordinary recurring
     task) never has anything that posts here, it just uses the toggle
-    route above."""
+    route above.
+
+    2026-08-28 follow-up fix: same always-redirects gap as the toggle route
+    above -- now dual-mode (deps.respond) so the Habits group's "+1" button
+    can succeed via fetch instead of a full native form submit."""
     try:
         parsed_value = float(value) if value else 1.0
     except ValueError:
@@ -1028,7 +1045,7 @@ def set_task_completion(
     else:
         db.upsert_task_completion(conn, uid, completion_date, datetime.now(timezone.utc).isoformat(), parsed_value)
     referer = request.headers.get("referer")
-    return RedirectResponse(url=referer or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, referer or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/delete")

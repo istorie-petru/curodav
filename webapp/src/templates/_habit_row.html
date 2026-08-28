@@ -21,18 +21,35 @@
     </td>
     <td>
         <div class="habit-checkin-row habit-checkin-row-inline" data-uid="{{ item.uid }}" data-target="{{ item.target|int }}">
+            {# 2026-08-28 follow-up fix: these three forms had no
+               `data-cc-change` at all (only the row's Delete form, below,
+               did) -- with no attribute for async_crud.js's global
+               data-cc-change submit listener to match, they fell through to
+               a plain native form submit on every click, a full-page
+               reload/re-navigate on the Tasks page for something that
+               should be an instant in-place check-in (reported directly:
+               a `POST /tasks/{uid}/completions ... 303 See Other` server
+               log from a plain browser navigation, not a fetch). The
+               `plus_url`/`toggle_url` server routes now support the
+               dual-mode fetch response too (routers/tasks.py's
+               toggle_task_completion/set_task_completion, deps.respond) --
+               entity-kind's /habits/... routes already did. `data-cc-change`
+               is `item.kind`-typed (habits.js still owns the entity kind's
+               own /habits/{uid} detail page; tasks_table.js now claims both
+               "task" and "habit" on this page, see plans/STATE.md). #}
+            {% set cc_change = 'habit' if item.kind == 'entity' else 'task' %}
             {% if item.is_quantity %}
             <span class="tag-usage-count habit-checkin-count">{{ item.today_value|int }}/{{ item.target|int }}</span>
-            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-plus" data-value="{{ item.next_value }}">
+            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-plus" data-value="{{ item.next_value }}" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
                 {% if item.kind == 'entity' %}<input type="hidden" name="entry_date" value="{{ today_iso }}">{% else %}<input type="hidden" name="completion_date" value="{{ today_iso }}">{% endif %}
                 <input type="hidden" name="value" value="{{ item.next_value }}">
                 <button type="submit" class="icon-btn" title="Log one more">{{ icon('plus', 'icon-sm') }}</button>
             </form>
-            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-reset" style="{% if not item.today_value %}display:none{% endif %}">
+            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-reset" style="{% if not item.today_value %}display:none{% endif %}" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
                 <button type="submit" class="icon-btn" title="Reset today">{{ icon('x', 'icon-sm') }}</button>
             </form>
             {% else %}
-            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-toggle">
+            <form method="post" action="{{ item.toggle_url }}" class="form-inline habit-checkin-toggle" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
                 <button type="submit" class="checklist-check {% if item.done_today %}is-done{% endif %}" title="{% if item.done_today %}Done today -- click to undo{% else %}Mark done today{% endif %}">
                     {{ icon('check-square') if item.done_today else icon('square') }}
                 </button>

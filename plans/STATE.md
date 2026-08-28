@@ -3743,3 +3743,42 @@ fix in `static/tasks_table.js`; no server/template changes needed. Full
 suite still 1687 passed (JS-only change, not exercised by the Python test
 suite — `habits.js`'s own listener and its `/habits/{uid}` coverage in
 `test_habits_router.py` are untouched and still pass).
+
+## Bug fix (2026-08-28 second follow-up) — habit check-ins (checkbox/"+1")
+also force-reloaded, and the underlying endpoints never supported async at
+all
+
+Direct user report: a server log line, `POST /tasks/{uid}/completions
+HTTP/1.1" 303 See Other` — a real browser navigation, not a background
+fetch. Same root cause family as the habit-edit fix just above (the
+2026-08-28 "major rework" session merged habits into the Tasks table
+without finishing the async wiring for every surface it touched), but a
+second, independent gap:
+- `_habit_row.html`'s three check-in forms (the plain-habit checkbox
+  `habit-checkin-toggle`, and the quantity-habit `habit-checkin-plus`
+  "+1"/`habit-checkin-reset` pair) had **no `data-cc-change` attribute at
+  all** — only the row's own Delete form did. `static/async_crud.js`'s
+  global "forms with `data-cc-change`" submit listener (loaded in
+  `base.html`, the mechanism every other async mutation on this page relies
+  on) had nothing to match, so these three forms fell straight through to
+  a plain, unenhanced native `<form>` submit on every click.
+- Independently, the two server routes those forms post to
+  (`routers/tasks.py`'s `toggle_task_completion` /
+  `set_task_completion`) never implemented the dual-mode
+  redirect-vs-JSON convention (`deps.respond`, `X-Requested-With: fetch`)
+  every other mutation endpoint in this router already follows — they
+  always returned a 303, full stop. Adding `data-cc-change` alone would
+  not have been enough; even a fetch-based submit would have silently
+  "succeeded" by following the redirect rather than getting a real JSON
+  ack.
+Fixed both: `toggle_task_completion`/`set_task_completion` now take
+`x_requested_with` and return `respond(x_requested_with, ...)` like
+`complete_task`/`delete_task`/etc. already do (habits.py's equivalent
+`/habits/{uid}/entries...` routes, used by the Habits group's *entity*-kind
+rows, already supported this — only the *task*-kind routes were missing
+it). `_habit_row.html`'s three forms now carry `data-cc-change="task"` (or
+`"habit"` for an entity-kind row, `{% set cc_change %}` on `item.kind`) +
+`data-cc-action="checkin"`. 7 new tests in `test_tasks_habits_view.py`
+(`TestSetTaskCompletion`/`TestToggleTaskCompletion`'s new fetch-header
+cases, `TestHabitRowAsyncSubmit`'s rendered-template assertions), full
+suite 1694 passed.
