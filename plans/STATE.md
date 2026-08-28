@@ -3875,3 +3875,27 @@ starting with the counter in the status column for habits."
   attributes are present," same level this app's other JS-behavior tests
   (e.g. the ScriptGate-style ones) already operate at. Full suite 1696
   passed (net zero -- no tests added or removed, two rewritten in place).
+
+## Side work (2026-08-28, immediate CSS follow-up) — inline-edit cell:
+much less visible at rest
+
+Direct feedback on the pass directly above: "I don't want in this case
+specifically to have the bulky cell like with different background and
+counter. Much simpler, much less visible besides the obvious line that
+shows editing." The first pass's `.inline-edit-cell` had padding, a
+border-radius and a hover background -- a visible little pill/box even
+though nothing was being edited yet, exactly the "bulky" look reported.
+
+- `.inline-edit-cell` (resting state) now has **no box at all** -- no
+  padding, no border-radius, no hover background, so it reads as the
+  exact same plain text as every other cell around it. The only hint it's
+  interactive is a light dotted underline, always on rather than
+  hover-only (so a mouse user gets the same affordance a keyboard user's
+  `:focus` state already implied) -- that's "the obvious line."
+- `.inline-edit-input` (the real input, mid-edit) dropped its bordered
+  box too (`all:unset` + only `border-bottom` left) -- a solid underline
+  replacing the resting dotted one is now the *only* visual difference
+  between "displaying" and "editing," rather than a bordered/backgrounded
+  field on top of the underline.
+- Presentation-only, `static/style.css` only -- no markup, router, or test
+  changes (nothing asserts CSS specifics). Full suite still 1696 passed.

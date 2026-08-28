@@ -1490,28 +1490,34 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .habit-checkin-target{font-size:var(--text-caption); white-space:nowrap;}
 /* Notion-style click-to-edit cell (static/inline_edit.js, 2026-08-28,
    direct feedback: "just text and colored pills... click two times on an
-   element and it becomes editable in a non-discrete way"). Bare text by
-   default -- no border/background, so it reads exactly like any other
-   plain-text table cell -- with only a subtle hover affordance hinting
-   it's interactive; a dashed underline on focus (keyboard: Tab lands
-   here, Enter/Space opens edit mode, same as a double-click) since a
-   focus ring alone is easy to miss on a cell this small. Deliberately NOT
-   habit-specific despite the two current instances both being counts --
-   any future `[data-inline-edit]` cell (text or number) gets this same
-   look for free. */
+   element and it becomes editable in a non-discrete way"). Deliberately
+   NO box at all in the resting state -- no padding/border-radius/hover
+   background ("I don't want the bulky cell... much simpler, much less
+   visible besides the obvious line that shows editing", 2026-08-28
+   follow-up on the first pass, which did have a hover background/padding
+   and was reported as too heavy) -- it has to read as the exact same
+   plain text as every other cell around it, right up until you're
+   editing it. The one hint it's interactive at all is a light dotted
+   underline, always on (not hover-only, so a mouse user gets the same
+   signal a keyboard user does from :focus) -- that's the "obvious line."
+   Deliberately NOT habit-specific despite the two current instances both
+   being counts -- any future `[data-inline-edit]` cell (text or number)
+   gets this same look for free. */
 .inline-edit-cell{
-  display:inline-block; min-width:1.5em; padding:1px 4px; border-radius:var(--radius-sm);
   cursor:text; -webkit-user-select:none; user-select:none;
+  text-decoration:underline dotted var(--fg-tertiary); text-underline-offset:2px;
 }
-.inline-edit-cell:hover{background:var(--control-bg-hover, var(--bg-secondary));}
-.inline-edit-cell:focus{outline:none; text-decoration:underline dashed var(--fg-tertiary); text-underline-offset:2px;}
+.inline-edit-cell:focus{outline:none; text-decoration-color:var(--fg-secondary);}
 /* The real input that replaces .inline-edit-cell's text while editing --
-   sized to disappear into the row rather than look like a form field,
-   consistent with "non-discrete" (no chrome until you're actually
-   interacting with it). */
+   still no box (no border/background/radius -- same "much simpler, much
+   less visible" note as .inline-edit-cell above): just the text plus a
+   solid underline, the "obvious line that shows editing" itself,
+   replacing the resting dotted one so mid-edit unmistakably reads as a
+   different state from "just displaying a number" without needing a
+   bordered field to say so. */
 .inline-edit-input{
-  width:52px !important; padding:1px 4px !important; border:1.5px solid var(--accent-neutral) !important;
-  border-radius:var(--radius-sm) !important; text-align:center; background:var(--surface-container-high) !important;
+  all:unset; width:44px !important; text-align:center; font:inherit; color:inherit;
+  border-bottom:1.5px solid var(--accent-neutral) !important; cursor:text;
 }
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
