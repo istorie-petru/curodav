@@ -522,6 +522,31 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
 
 
 @router.get("")
+def calendar_root_redirect(label: str | None = None):
+    """The "Calendar" tabbar destination is the 4-Week view now, not Month
+    (2026-08-28 follow-up to "Calendar split into two pages" -- direct
+    feedback: "in the month view it should be the 4 week view, not actually
+    the month view"). Registered at the bare `/calendar` root (same URL
+    base.html's "Calendar" tab links to and every event-mutation redirect
+    already targets, e.g. create_event's `respond(x_requested_with,
+    "/calendar", ...)`), so this is a plain retire-to-redirect, same
+    precedent as week_redirect/timetable_view_redirect below -- any old
+    `/calendar?year=&month=` bookmark still lands somewhere real, just on
+    4-Week instead of Month.
+
+    `month_view` itself (and everything it renders -- calendar_month.html,
+    _calendar_month_grid.html, _month_view_context/_month_grid) is
+    deliberately NOT deleted, just un-routed: it's still exercised directly
+    by test_calendar_month_bars.py and several other test files (this app's
+    router-function-call convention), and `_month_day_cells`/
+    `_bucket_month_items` underneath it are shared with the 4-Week grid, so
+    there's no dead-weight cost to keeping it importable."""
+    url = "/calendar/fourweek"
+    if label:
+        url += f"?label={label}"
+    return RedirectResponse(url=url, status_code=302)
+
+
 def month_view(
     request: Request,
     year: int | None = None,
@@ -529,6 +554,9 @@ def month_view(
     label: str | None = None,
     conn=Depends(get_db),
 ):
+    """No longer routed (see calendar_root_redirect above) -- kept as a
+    plain callable for its own tests and as the 'month' region's renderer
+    below."""
     return templates.TemplateResponse("calendar_month.html", _month_view_context(conn, request, year, month, label))
 
 
@@ -599,7 +627,10 @@ def four_week_view(
         "calendar_fourweek.html",
         {
             "request": request,
-            "active_tab": "calendar_fourweek",
+            # "calendar" (not "calendar_fourweek"): 4-Week IS what the
+            # "Calendar" tabbar destination opens now (see
+            # calendar_root_redirect's docstring above).
+            "active_tab": "calendar",
             "calendar_view": "fourweek",
             "today_iso": today.isoformat(),
             "weeks": weeks,

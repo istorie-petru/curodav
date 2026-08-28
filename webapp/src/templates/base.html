@@ -102,17 +102,22 @@
            path text discoverable in every page's markup -- exactly the
            string test_calendar_week_scheduling.py's own
            test_no_separate_timetable_link_in_subnav asserts is gone. #}
-        <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
-        {# 2026-08-28 "Calendar split into two pages" -- 4-Week and Week used
-           to be two of the four entries in Month/4-Week/Week/Day's shared
-           segmented view-switcher (calendar_month.html/calendar_day.html
-           still carry that switcher, now Month|Day only). They're standalone
-           destinations now: their own tabbar icon, no cross-links back to
-           Month/Day or each other. Settings > General's "Calendar views"
-           toggle no longer governs either (deps.py's _calendar_views is
-           Month/Day-only now) -- these two are always here, same as every
-           other fixed tabbar destination. #}
-        <a href="/calendar/fourweek" data-tab="calendar_fourweek" class="tab-btn {% if active_tab == 'calendar_fourweek' %}active{% endif %}">{{ icon('grid') }}<span>4-Week</span></a>
+        {# 2026-08-28 "Calendar split into two pages," then same-day follow-up
+           feedback ("in the month view it should be the 4 week view, not
+           actually the month view" / "in the sidebar it should be actually
+           the WEEK view"): the standalone "4-Week" tab added earlier that
+           session is gone again -- "Calendar" IS the 4-Week view now
+           (routers/calendar.py's calendar_root_redirect sends the bare
+           /calendar root straight to /calendar/fourweek; this link points
+           there directly so there's no redirect round-trip on click).
+           Month and Day are both nav-disabled: Month has no reachable route
+           at all anymore (its code stays on disk, only reachable by its own
+           tests -- see calendar_root_redirect's docstring), Day keeps its
+           route (reached by direct link, e.g. 4-Week's day-number/"+N more"
+           links) but no tabbar or subnav entry of its own. Week stays a
+           second, separate destination -- the planner, not folded into
+           "Calendar." #}
+        <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
         <a href="/calendar/week" data-tab="calendar_week" class="tab-btn {% if active_tab == 'calendar_week' %}active{% endif %}">{{ icon('clock') }}<span>Week</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
         {# 2026-08-15 -- the "Projects" tabbar destination (1.3) is gone,

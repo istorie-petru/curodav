@@ -345,20 +345,24 @@ class TestFourWeekViewTemplate:
         return body[start:end]
 
     def test_month_view_subnav_is_month_day_only(self, conn):
-        # 2026-08-28 "Calendar split into two pages": Month's own subnav no
-        # longer cross-links to 4-Week/Week -- reaching them is via the
-        # tabbar now.
+        # month_view is un-routed now (see calendar_root_redirect), but the
+        # function/template are still exercised directly by this and other
+        # test files -- its own internal Month|Day subnav is unchanged.
         resp = calendar_router.month_view(_bare_request("/calendar"), year=2026, month=8, conn=conn)
         subnav = self._subnav(resp.body.decode())
         assert '>4-Week<' not in subnav and '>Week<' not in subnav
         assert '>Month<' in subnav and '>Day<' in subnav
 
-    def test_day_view_subnav_is_month_day_only(self, conn):
+    def test_day_view_has_no_subnav_and_links_back_to_fourweek(self, conn):
+        # 2026-08-28 follow-up ("day view should also be disabled"): Day
+        # dropped its own Month|Day subnav entirely -- it's link-only now,
+        # reached via 4-Week's day-number/"+N more" links, with a plain
+        # "back to Calendar" pointing at /calendar/fourweek.
         today_iso = date.today().isoformat()
         resp = calendar_router.day_view(today_iso, _bare_request(f"/calendar/day/{today_iso}"), conn=conn)
-        subnav = self._subnav(resp.body.decode())
-        assert '>4-Week<' not in subnav and '>Week<' not in subnav
-        assert '>Month<' in subnav and '>Day<' in subnav
+        body = resp.body.decode()
+        assert 'calendar-subnav' not in body
+        assert 'href="/calendar/fourweek"' in body
 
     def test_fourweek_page_has_no_subnav_cross_links(self, conn):
         resp = calendar_router.four_week_view(_bare_request(), conn=conn)
@@ -368,14 +372,29 @@ class TestFourWeekViewTemplate:
         resp = calendar_router.week_view(_bare_request("/calendar/week"), conn=conn)
         assert 'calendar-subnav' not in resp.body.decode()
 
-    def test_tabbar_has_dedicated_fourweek_and_week_entries(self, conn):
-        # base.html now carries "4-Week"/"Week" as their own fixed tabbar
-        # destinations (data-tab="calendar_fourweek"/"calendar_week"),
-        # alongside "Calendar" (Month/Day).
+    def test_calendar_root_redirects_to_fourweek(self, conn):
+        # 2026-08-28 follow-up: the bare /calendar root -- what every
+        # event-mutation redirect and the "Calendar" tabbar link ultimately
+        # resolve through -- now lands on 4-Week, not Month.
+        resp = calendar_router.calendar_root_redirect()
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/calendar/fourweek"
+
+    def test_calendar_root_redirect_preserves_label(self, conn):
+        resp = calendar_router.calendar_root_redirect(label="Work")
+        assert resp.headers["location"] == "/calendar/fourweek?label=Work"
+
+    def test_tabbar_has_calendar_and_week_only(self, conn):
+        # base.html carries exactly two calendar-domain tabbar entries now:
+        # "Calendar" (data-tab="calendar", -> 4-Week) and "Week" (data-tab=
+        # "calendar_week", the planner). No separate "4-Week" tab, no "Day"
+        # tab -- both retired the same session they were added/considered.
         body = calendar_router.four_week_view(_bare_request(), conn=conn).body.decode()
-        assert 'data-tab="calendar_fourweek"' in body
+        assert 'data-tab="calendar"' in body
         assert 'data-tab="calendar_week"' in body
-        assert 'data-tab="calendar" ' in body
+        assert 'data-tab="calendar_fourweek"' not in body
+        assert 'data-tab="calendar_day"' not in body
+        assert 'href="/calendar/fourweek" data-tab="calendar"' in body
 
 
 class TestFourWeekPositionSetting:

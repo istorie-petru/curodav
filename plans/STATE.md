@@ -3628,6 +3628,55 @@ Direct user request to do both queue items in one go.
   1685 passed (up from 1683 — 2 net-new tests replacing 3 retired ones plus
   a few new assertions folded into existing tests).
 
+## Shipped — Calendar split follow-up: Calendar tab = 4-Week, Day nav-disabled
+(2026-08-28), same-day direct feedback on the entry above
+
+Feedback after the first pass: "the day view should also be disabled. also
+in the month view it should be the 4 week view, not actually the month
+view. and in the sidebar it should be actually the WEEK view." Clarified via
+AskUserQuestion (Day: remove from nav, keep the route reachable by direct
+link; Calendar tab: repoint at 4-Week, retiring the just-added separate
+"4-Week" tab as now-redundant; Week tab: no bug, just confirming it stays a
+second, separate destination) before changing anything.
+
+- **"Calendar" tabbar entry now opens 4-Week, not Month.** `base.html`'s
+  Calendar link points straight at `/calendar/fourweek` (`data-tab=
+  "calendar"`); the separate "4-Week" tab added earlier the same day is
+  gone (redundant with Calendar now). New `routers/calendar.py::
+  calendar_root_redirect` takes over the bare `GET /calendar` route
+  (302 -> `/calendar/fourweek`, preserving `?label=`) — the same URL every
+  event-mutation redirect (`create_event`/`update_event`/`delete_event`/
+  `cancel_occurrence`) and `event_detail.html`'s "Back to calendar" link
+  already target, so those all resolve one hop further to 4-Week now with
+  no call-site changes needed. `four_week_view`'s own `active_tab` changed
+  from `"calendar_fourweek"` to `"calendar"` so the tabbar highlights
+  correctly. Month itself (`month_view`, `calendar_month.html`,
+  `_calendar_month_grid.html`, `_month_view_context`) is deliberately left
+  in place, just un-routed — `_month_day_cells`/`_bucket_month_items`
+  underneath it are shared with the 4-Week grid, and the function is still
+  exercised directly by `test_calendar_month_bars.py` and several other
+  test files (this app's router-function-call test convention), so keeping
+  it importable costs nothing. Settings > General's "Calendar views"
+  toggle is left as-is too — it's now vestigial (only reachable code path
+  left is the un-routed Month page), a known follow-up if anyone notices,
+  not cleaned up this session to keep the diff to the actual nav change.
+- **Day is nav-disabled**, not deleted: `calendar_day.html` dropped its own
+  Month|Day subnav entirely (Month has no route to link to anymore anyway)
+  in favor of a plain "back to Calendar" icon-link to `/calendar/fourweek`,
+  matching `event_detail.html`'s existing back-link pattern. `GET
+  /calendar/day/{day}` itself is untouched and still reachable by direct
+  link — 4-Week's own day-number and "+N more" overflow links
+  (`calendar_fourweek.html`) still point there, so drilling into a specific
+  day still works, there's just no persistent nav entry for it anymore.
+- Tests: `test_calendar_fourweek.py`'s `TestFourWeekViewTemplate` updated —
+  the old "4-Week tab exists" assertions replaced with "Calendar/Week tabs
+  exist, no separate 4-Week/Day tab," a new pair of tests on
+  `calendar_root_redirect` (redirects to `/calendar/fourweek`, preserves
+  `label`), and the Day subnav test rewritten to assert no `.calendar-subnav`
+  plus the back-to-Calendar link. `test_month_view_subnav_is_month_day_only`
+  (month_view's own internal subnav) left as-is since that page/test are
+  intentionally unchanged. Full suite 1687 passed.
+
 ## Next session queue — major rework requested 2026-08-28 (items 2/3/4 of the
 original numbering done in the "Major rework session" entry above; items 3/4
 of the renumbered list below done in the "Calendar split + Contacts cleanup"
