@@ -3964,3 +3964,20 @@ Direct feedback, five parts:
    date" rule.
 
 32 new tests (`test_habit_ui_rework.py`), full suite 1728 passed.
+
+## Side work (2026-08-29) — inline-edit input: hide the native number
+spinner arrows
+
+Direct follow-up on the Habits-group check-in cell's click-to-edit
+control (`.inline-edit-cell`/`.inline-edit-input`, `static/inline_edit.js`)
+once it was confirmed actually working live: the real `<input
+type="number">` that appears mid-edit still showed the browser's native
+up/down spinner buttons, a small bordered-looking control that undercuts
+the "no chrome, just text + an underline" look the last two passes on
+this element were about. `.inline-edit-input` now sets `-moz-appearance:
+textfield` (Firefox) and hides `::-webkit-outer-spin-button`/
+`::-webkit-inner-spin-button` (Chrome/Safari/Edge) -- the field is still a
+real `<input type="number">` (keyboard up/down arrows and scroll-wheel
+adjustment still work), just without the visible spinner widget.
+Presentation-only, `static/style.css` only. Full suite still 1728 passed
+(no test asserts CSS specifics, same as the passes before it).
