@@ -14,12 +14,15 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from starlette.requests import Request
 
 from src import db
 from src.routers import tasks as tasks_router
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
 
 
 @pytest.fixture()
@@ -150,3 +153,40 @@ class TestTableMarkup:
         assert "data-inline-edit-linked" in body
         assert 'data-field="title"' in body
         assert 'data-type="text"' in body
+
+    def test_status_options_render_as_colored_pills(self, conn):
+        # Direct follow-up ("status options still aren't pills") -- the
+        # trigger already showed the current status as a colored pill; the
+        # open panel's own options needed the same `.pill-static pill-
+        # <color>` treatment, not just plain text next to a radio.
+        _seed_task(conn, "t1")
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        assert "pill-static pill-blue" in body  # "active"'s color
+
+
+class TestStatusLabelChangeListenerNotAncestorScoped:
+    """Regression guard (2026-08-29, direct report: "the label inline
+    editor still doesn't work") -- static/tasks_table.js's `change`
+    listener used to gate the Status/Labels branches behind `target.
+    matches("#tasks-body input.task-status-radio")` (an ancestor-scoped
+    selector). That's only true while the dropdown is closed: app.js's
+    generic `.multiselect` handling portals an *open* panel's whole
+    subtree (radios/checkboxes included) out to #multiselect-portal, a
+    sibling of #tasks-body, not a descendant -- so the one moment this
+    branch needed to fire (a real click on an option) was exactly the
+    moment its own `.matches()` check went false. No browser/JS harness in
+    this suite (see this file's own header note), so this is a structural
+    source check -- same style test_toast_rework.py/test_pwa_shell.py use
+    for JS-only changes -- rather than a simulated click."""
+
+    def test_status_and_label_inputs_are_not_ancestor_scoped(self):
+        # Checks the actual `target.matches(...)` call sites, not just
+        # "the old string doesn't appear anywhere" -- the old (buggy)
+        # selector is deliberately still quoted in this file's own
+        # explanatory comment above the fix, so a bare substring-absence
+        # check would false-positive against that documentation.
+        js = (_STATIC_DIR / "tasks_table.js").read_text(encoding="utf-8")
+        assert 'target.matches("input.task-status-radio")' in js
+        assert 'target.matches("input.task-label-checkbox")' in js
+        assert 'target.matches("#tasks-body input.task-status-radio")' not in js
+        assert 'target.matches("#tasks-body input.task-label-checkbox")' not in js

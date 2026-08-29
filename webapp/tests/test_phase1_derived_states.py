@@ -586,7 +586,16 @@ class TestSlice5AxesInUI:
         body = tasks_router.templates.get_template("tasks_list.html").render(ctx)
         assert 'data-field="importance"' not in body
         assert 'data-field="urgency"' not in body
-        assert "pill-static" not in body
+        # `pill-static` used to be a reliable proxy for "importance/urgency
+        # rendered somewhere on this page" (it was, at the time this test
+        # was written, the only thing that used that class) -- no longer
+        # true as of 2026-08-29 (STATE.md backlog item 9 follow-up): the
+        # Status dropdown's own options now legitimately render as
+        # `.pill-static pill-<color>` badges too (_task_row.html). The two
+        # `data-field` assertions above are the real, still-valid check for
+        # either axis leaking into this view; dropped the stale `pill-
+        # static` assertion rather than keep a check that no longer tests
+        # what its own name/comment claims.
         # 2026-08-28 "major rework" session: the toolbar's Importance/
         # Urgency filter dropdowns are gone too now (item 3), not just the
         # table's own columns -- neither the filter querystring nor a

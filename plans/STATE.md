@@ -4782,3 +4782,50 @@ Direct follow-up on the slice just above, five requests in one go:
   fixes have no Python-side assertions (style-only) -- verified by reading
   the resulting cascade by hand (computing which selector wins) rather
   than a visual/browser check, since this suite has none.
+
+## Bug fix (2026-08-29, immediate follow-up) -- Status/Labels dropdown
+changes never actually saved; Status options still weren't pills
+
+Direct report right after the slice above: "the label inline editor still
+doesn't work. Also the status options still aren't pills."
+
+- **Root cause of the save bug** -- static/tasks_table.js's `change`
+  listener gated the Status/Labels branches behind an ancestor-scoped
+  selector, `target.matches("#tasks-body input.task-status-radio")` (and
+  the `task-label-checkbox` equivalent). That's only true while the
+  dropdown is *closed*: static/app.js's generic `.multiselect` handling
+  portals an *open* panel's entire subtree -- radios/checkboxes included
+  -- out to `#multiselect-portal`, a sibling of `#tasks-body`, not a
+  descendant of it. A radio/checkbox can only ever fire `change` while its
+  panel is open, so this `.matches()` check was false on literally every
+  real click -- the branch never ran, `updateField` never got called, and
+  nothing was ever saved. Status *looked* like it worked anyway because
+  app.js's own, unrelated summary-sync (`.ms-summary` text + auto-close
+  for single-select) doesn't care about `#tasks-body` scoping -- so the
+  trigger's visible label updated even though the underlying save silently
+  never fired. Fixed by dropping the `#tasks-body` prefix for these two
+  checks (the class names alone are specific enough to this row template);
+  `input.inline-date` and `[data-inline-edit]` keep their ancestor scoping
+  since neither of those elements is ever portaled (only the date picker's
+  floating calendar panel moves, not its hidden input).
+- **Status options still weren't pills** -- the *trigger* already showed
+  the current status as a colored pill; each option inside the open panel
+  was still plain text next to a radio. Each option's label span now
+  carries `.pill-static pill-<color>` too (same classes the trigger and
+  the old read-only Importance/Urgency badges already use), so the list of
+  choices reads as colored pills, not just the one picked.
+- One pre-existing test (`test_phase1_derived_states.py::
+  TestSlice5AxesInUI::test_table_does_not_render_either_axis`) asserted
+  `"pill-static" not in body` as a proxy for "importance/urgency didn't
+  leak into the table" -- no longer a valid proxy now that Status options
+  legitimately use that class too. Its two `data-field="importance"/
+  "urgency"` assertions are the real check and still hold; dropped the
+  stale proxy assertion rather than keep a check that no longer tests what
+  it claims to.
+- 2 new tests (`test_tasks_table_labels_status_title.py`): Status options
+  render with `pill-static pill-<color>`, and a structural source check
+  (same style as `test_toast_rework.py`/`test_pwa_shell.py` use for
+  JS-only changes, since this suite has no browser harness) confirming the
+  `change` listener's `target.matches(...)` call sites are no longer
+  ancestor-scoped for Status/Labels specifically. Full suite: **1831
+  passed** (1829 + 2 new, net of the one stale assertion dropped).

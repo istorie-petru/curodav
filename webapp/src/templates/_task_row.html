@@ -88,7 +88,17 @@
                     <input type="radio" name="task-status-{{ t.uid }}" value="{{ s }}"
                            class="task-status-radio" data-uid="{{ t.uid }}" data-field="status" data-color="{{ status_colors[s] }}"
                            {% if t.status == s %}checked{% endif %}>
-                    <span>{{ status_labels[s] }}</span>
+                    {# 2026-08-29 direct follow-up ("status options still
+                       aren't pills") -- the trigger already shows the
+                       current status as a colored pill; each option in the
+                       open panel gets the same `.pill-static pill-<color>`
+                       treatment so the *list* of choices reads as colored
+                       pills too, not just the picked one. app.js's summary
+                       sync reads this span's `.textContent` via `span:
+                       last-child` regardless of the extra classes, so
+                       nothing else needed to change for that to keep
+                       working. #}
+                    <span class="pill-static pill-{{ status_colors[s] }}">{{ status_labels[s] }}</span>
                 </label>
                 {% endfor %}
             </div>

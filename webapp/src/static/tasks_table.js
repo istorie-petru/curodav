@@ -107,10 +107,31 @@
   // they survive a region swap. These stay optimistic with NO region
   // refresh (the design's explicit choice): a swap after every dropdown
   // change would lose the table's scroll/focus for no benefit.
+  //
+  // Bug fix (2026-08-29, direct report: "the label inline editor still
+  // doesn't work"): the Status/Labels checks below used to be scoped
+  // `"#tasks-body input.task-status-radio"` / `"...task-label-checkbox"`,
+  // an ancestor-scoped selector that requires the input to currently be a
+  // DOM descendant of #tasks-body -- true when the dropdown is closed, but
+  // FALSE the moment it's open, because static/app.js's generic
+  // `.multiselect` handling portals the whole open panel (radios/
+  // checkboxes included) out to `#multiselect-portal`, a sibling of
+  // #tasks-body, not a descendant of it (see app.js's own header comment).
+  // Since a radio/checkbox can only ever fire `change` *while its panel is
+  // open*, that `.matches()` check was silently false on every real click,
+  // so nothing here ever ran -- app.js's own unrelated summary-sync still
+  // updated the trigger's visible text for Status (and closed the panel,
+  // single-select mode), which is why picking a status LOOKED like it
+  // worked even though the actual save never fired. Dropped the `#tasks-
+  // body` ancestor requirement for these two -- the class names alone are
+  // specific enough to this row template, unlike `input.inline-date` and
+  // `[data-inline-edit]` below, which are never portaled (only the date
+  // picker's floating calendar panel moves; its hidden input stays put)
+  // and so can keep the ancestor scoping safely.
   document.addEventListener("change", (e) => {
     const target = e.target;
     if (!target || !target.matches) return;
-    if (target.matches("#tasks-body input.task-status-radio")) {
+    if (target.matches("input.task-status-radio")) {
       const uid = target.dataset.uid;
       const color = target.dataset.color || "gray";
       const trigger = currentBody().querySelector('.task-status-select[data-uid="' + uid + '"] .pill-select-trigger');
@@ -121,7 +142,7 @@
       // doesn't know about.)
       if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + color;
       updateField(uid, target.dataset.field, target.value);
-    } else if (target.matches("#tasks-body input.task-label-checkbox")) {
+    } else if (target.matches("input.task-label-checkbox")) {
       const uid = target.dataset.uid;
       const panel = target.closest(".multiselect-panel");
       const checked = panel
