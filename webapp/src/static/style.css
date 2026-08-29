@@ -687,6 +687,22 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
+/* 2026-08-29 immediate follow-up (direct report): the app name never had
+   room to show. `html[data-sidebar-expanded] .tab-btn` below (the rule
+   every rail row shares) sets width:100% -- `.sidebar-header`'s toggle
+   button carries that same `.tab-btn` class, so it filled the entire row
+   by itself, leaving `.sidebar-app-name` with nothing next to it. The
+   header row needs its own compact treatment, not the wide nav-row one
+   every other entry gets: the toggle shrinks to a small fixed icon button
+   (targeted by its existing `#sidebar-expand-toggle` id, not a new class --
+   see base.html's comment on why) instead of stretching, and the header
+   row gets its own tighter horizontal padding so it reads as a compact
+   title bar sitting above the nav list, not one more nav row. Scoped to
+   the same html[data-sidebar-expanded] media query as the sizing rule
+   below (not left unscoped here) -- collapsed mode's icon button stays
+   pixel-identical to before, per this whole block's own "nothing here
+   touches collapsed mode" rule. */
+
 /* "+ New" rail button (plans/sidebar-redesign.md's "Sidebar Controls").
    Accent-colored (icon + text) so it reads as an action, not a nav
    destination -- every other .tab-btn uses --fg-secondary/--fg-primary,
@@ -743,8 +759,25 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      sidebar-expand-toggle"`) beats the single-class generic rule's
      specificity regardless of source order. */
   html[data-sidebar-expanded] .tab-btn.sidebar-expand-toggle{justify-content:center;}
-  html[data-sidebar-expanded] .sidebar-header{flex-direction:row; align-items:center; gap:10px; padding:0 0 10px;}
-  html[data-sidebar-expanded] .sidebar-app-name{display:block;}
+  /* Header row is compact and left-aligned, distinct from the wide,
+     padded nav-item rows below it: fixed-height title bar (a small square
+     icon button + text), not another full-width `.tab-btn`. The id
+     selector (`#sidebar-expand-toggle`, already unique) beats the generic
+     `.tab-btn` width:100%/min-height:36px/padding rule above on
+     specificity, so the button shrinks instead of stretching to fill the
+     row -- no new class needed on the button itself (base.html's comment
+     explains why: keeps the dedicated-icon test's fixed-size markup
+     window intact). */
+  html[data-sidebar-expanded] .sidebar-header{
+    flex-direction:row; align-items:center; gap:8px; width:100%;
+    padding:2px 6px 10px; box-sizing:border-box;
+  }
+  html[data-sidebar-expanded] #sidebar-expand-toggle{
+    width:32px; min-width:32px; min-height:32px; height:32px; flex:none; padding:0;
+    border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);
+  }
+  html[data-sidebar-expanded] #sidebar-expand-toggle:hover{background:var(--bg-hover, var(--separator));}
+  html[data-sidebar-expanded] .sidebar-app-name{display:block; flex:1; min-width:0;}
 
   html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
   html[data-sidebar-expanded] .sidebar-tree-row{justify-content:flex-start; gap:4px;}

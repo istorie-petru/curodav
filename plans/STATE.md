@@ -5389,3 +5389,32 @@ comment -- a lone icon shouldn't pick up the generic left-align every other
 - Full suite: **1852 passed** (ran in four file-glob chunks to stay under
   the sandbox's per-command time budget: 479 + 605 + 438 + 330 = 1852, no
   tests added/removed).
+
+## Bug fix (2026-08-29, immediate follow-up) -- app name still wasn't
+showing next to the toggle
+
+Direct report: the fix above didn't actually work. Root cause --
+`.sidebar-header`'s toggle button carries the base `.tab-btn` class, and
+the expanded-mode ruleset (`html[data-sidebar-expanded] .tab-btn{width:
+100%; ...}`) applies to every `.tab-btn` including this one, so the button
+filled the entire header row by itself; `.sidebar-app-name` had nowhere
+left to sit.
+
+- `style.css`: `#sidebar-expand-toggle` (its existing unique id, no new
+  class -- see below) now gets a fixed 32px-square size under
+  `html[data-sidebar-expanded]`, beating the generic `.tab-btn` rule on
+  specificity instead of stretching with it. Added a small hover
+  background + border-radius (same `var(--bg-hover, ...)` fallback
+  pattern `.task-add-row:hover` already uses), scoped to the same media
+  query so collapsed mode's icon button stays pixel-identical. `.sidebar-
+  header` gets its own compact row padding, distinct from the wide
+  padded nav-item rows below it -- reads as a title bar, not one more nav
+  row.
+- `base.html`: deliberately did *not* add a new class to the button for
+  this (tried `sidebar-header-toggle` first, reverted) -- doing so pushed
+  `test_expand_toggle_uses_the_dedicated_sidebar_icon_not_a_chevron`'s
+  fixed-size (200-char) markup-window assertion past the icon symbol it
+  checks for. The id selector achieves the same specificity win without
+  growing the button's own opening tag.
+- Full suite: **1852 passed** (three file-glob chunks: 819 + 525 + 508 =
+  1852, no tests added/removed).

@@ -133,7 +133,22 @@
              it still spans the full row now that the row has two
              children. Plain text, not a link -- "Command Center" isn't a
              destination, just the wordmark next to the toggle that
-             already controls the whole sidebar. -->
+             already controls the whole sidebar.
+
+             2026-08-29 immediate follow-up (direct report -- name still
+             didn't show): the button carries the base `.tab-btn` class,
+             which the expanded-mode ruleset sets to width:100% -- it filled
+             `.sidebar-header`'s whole row by itself, leaving nothing for
+             `.sidebar-app-name` to sit next to. style.css now targets
+             `#sidebar-expand-toggle` directly (already a unique id, no new
+             class needed -- keeps this button's own
+             test_expand_toggle_uses_the_dedicated_sidebar_icon_not_a_chevron
+             assertion window, which slices a fixed number of characters
+             after the id attribute, from growing past the icon markup it
+             checks for) to shrink just this button to a small fixed 32px
+             square -- a compact title-bar control, distinct from the wide
+             nav-item rows below it -- instead of it stretching like every
+             other `.tab-btn`. -->
         <div class="sidebar-header">
           <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
           <span class="sidebar-app-name">Command Center</span>
