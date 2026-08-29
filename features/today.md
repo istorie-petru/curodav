@@ -12,16 +12,14 @@ established for `/calendar/timetable` (see `features/calendar.md`).
 
 Before this page existed, the Dashboard already covered most of what it
 showed (via `today_agenda`/`at_a_glance`/`overdue_tasks`); the two sections
-that were genuinely unique to `/today` are now their own Dashboard widget
+that were genuinely unique to `/today` became their own Dashboard widget
 types (`routers/dashboard.py`'s `WIDGET_TYPES` registry), addable/removable/
 stackable/scopable exactly like every other widget:
 
-- **Important & urgent, not due today** → the `important_urgent` widget type
-  (`_render_important_urgent` / `_widget_important_urgent.html`). Same
-  underlying logic /today used — open tasks whose
-  `derived_state.virtual_states` includes `important`/`urgent`, excluding
-  anything already overdue or due today, sorted by effective importance then
-  urgency then due date.
+- **Important & urgent, not due today** became the `important_urgent`
+  widget type. Both that widget type and the Importance/Urgency feature
+  behind it (`src/derived_state.py`) are since removed outright — no
+  longer something this app offers.
 - **Scheduled work hours today** (the at-a-glance strip's "scheduled work"
   stat + the "Today's schedule" list's work-allocation half) → the
   `scheduled_work_today` widget type (`_render_scheduled_work_today` /
@@ -39,7 +37,8 @@ two.
 
 - The `/today` tabbar entry is gone (`base.html`) — Home, Calendar, Tasks,
   Projects, Schedule, and Contacts remain.
-- No data was lost: both new widget types read the exact same
-  `db.list_tasks`/`db.list_events`/`src/derived_state.py` sources /today did,
-  confirmed working (rendered + tested) before /today's own router/template/
-  tests were deleted, per this session's own content-loss guard.
+- No data was lost at the time of the port: both new widget types read the
+  exact same `db.list_tasks`/`db.list_events`/`src/derived_state.py` sources
+  /today did, confirmed working (rendered + tested) before /today's own
+  router/template/tests were deleted, per this session's own content-loss
+  guard.

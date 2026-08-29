@@ -51,25 +51,6 @@
             <span class="detail-meta-label">Status</span>
             <span class="detail-meta-value"><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></span>
         </div>
-        {# Importance/Urgency (side work, post-1.1): computed, read-only --
-           no manual per-task value exists anymore (src/derived_state.py).
-           `effective_importance`/`effective_urgency` (deps.py globals)
-           resolve label rules once per request and derive from those +
-           temporal state. #}
-        {% set _imp = effective_importance(request, task) %}
-        {% if _imp %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Importance</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ importance_colors[_imp] }}">{{ importance_labels[_imp] }}</span></span>
-        </div>
-        {% endif %}
-        {% set _urg = effective_urgency(request, task) %}
-        {% if _urg %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Urgency</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ urgency_colors[_urg] }}">{{ urgency_labels[_urg] }}</span></span>
-        </div>
-        {% endif %}
         {% if task_list %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">List</span>

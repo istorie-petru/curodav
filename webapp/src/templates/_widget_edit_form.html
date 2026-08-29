@@ -86,7 +86,7 @@
         {% set ms_root_class = 'widget-range-select' %}
         {% include "_widget_list_multiselect.html" %}
         {% endif %}
-        <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list', 'important_urgent') %}style="display:none"{% endif %}>
+        <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list') %}style="display:none"{% endif %}>
             <label>Limit</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>

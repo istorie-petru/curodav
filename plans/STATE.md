@@ -6092,3 +6092,46 @@ drifted apart across this session's earlier slices:
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Removed — Importance/Urgency feature (2026-08-30, direct request)
+
+The whole Importance/Urgency feature (1.1's two 1–3 axes, replacing the old
+WebDAV `priority`) is removed outright, not just its Table-view filters
+(already cut by the 2026-08-28 "major rework") — no longer something this
+app offers. `src/derived_state.py` now only derives the purely temporal
+virtual states (`overdue`/`today`/`tomorrow`/`this_week`/`this_month`);
+`IMPORTANCE_*`/`URGENCY_*` constants, `effective_importance`/
+`effective_urgency`, `is_important`/`is_urgent`, and `label_rules_for` are
+gone from that module. Removed along with it: the Dashboard's "Important &
+Urgent" widget (`important_urgent` type, `_widget_important_urgent.html`,
+its `important_urgent_view`/`WIDGET_VIEWS`/`_SELECTION_TO_TYPE`/
+`_TYPE_TO_SELECTION` entries) and the Important/Urgent stat blocks on the
+At a Glance widget; the Organize Today widget's "Urgent, unscheduled"
+section; the task detail modal's read-only Importance/Urgency meta row and
+`deps.py`'s `effective_importance`/`effective_urgency` Jinja globals;
+`routers/tasks.py`'s `IMPORTANCE_LABELS`/`URGENCY_LABELS`/
+`IMPORTANCE_COLORS`/`URGENCY_COLORS` and the matching `_task_context` keys;
+the iCal PRIORITY export/`ical_rows._priority_to_ical` (tasks.ics no longer
+writes PRIORITY at all) and the CSV export's Importance/Urgency columns
+(`_CSV_SHAPES["tasks"]` narrowed to match); `db.list_label_rules` (now
+unused everywhere) and `label_config.importance`/`urgency_threshold_days`
+from `_LABEL_CONFIG_DEFAULTS`/`upsert_label_config`'s column list (the
+columns themselves stay physically on disk, unused — same "never
+force-drop old data" convention as every other removed column in `db.py`).
+`features/tasks.md`'s "Importance, Urgency, and the virtual states"
+section is kept as history, header changed to "— removed"; same treatment
+for the `important_urgent` mentions in `features/dashboard.md`/
+`features/today.md`. Test changes: `test_phase1_derived_states.py` deleted
+outright (the whole file tested this feature; its few independent
+assertions — tomorrow/this_month date filters, priority-import-rejection —
+are already covered elsewhere, confirmed before deleting); `important_urgent`-
+specific test classes/cases removed from `test_dashboard_router.py`/
+`test_dashboard_today_week_widgets.py`/`test_widget_library.py`; CSV
+round-trip tests in `test_phase10_export.py` updated to the narrower
+header shape; a handful of test files' `_seed_task` helpers had dead
+`importance`/`urgency` parameters (label-config-rule workarounds for the
+already-computed axes) trimmed since nothing called them with real values.
+Full suite **1869 passed** (four file-glob chunks: 608 + 433 + 498 + 330 =
+1869; down from 1921 — the 46 tests in the deleted file minus the 6 test
+files' worth of updates that stayed, i.e. no coverage silently lost, only
+coverage of the removed feature itself).

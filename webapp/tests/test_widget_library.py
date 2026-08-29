@@ -1,7 +1,7 @@
 """Tests for the shared widget-body component library (_widget_items.html).
 
 2026-08-17 widget uniformity pass -- see features/design-system.md's
-"Widget bodies" section and plans/STATE.md. The 13 visual dashboard widgets
+"Widget bodies" section and plans/STATE.md. The visual dashboard widgets
 used to hand-roll the same row / pill / stat / empty-state / filled-card
 markup with small differences (a bare `.cell-tag` with no color class
 rendered as a transparent pill, three arbitrary fixed-width time columns,
@@ -20,7 +20,6 @@ VISUAL_WIDGETS = [
     "_widget_at_a_glance.html",
     "_widget_contact_list.html",
     "_widget_habit_checkin.html",
-    "_widget_important_urgent.html",
     "_widget_mini_month_calendar.html",
     "_widget_next_deadline.html",
     "_widget_organize_today.html",

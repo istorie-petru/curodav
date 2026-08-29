@@ -1,28 +1,20 @@
 # Tasks
 
 `routers/tasks.py` — four views over the universal `tasks` pool. Statuses
-`active / in_progress / waiting / done / archived`; two 1–3 axes — **Importance**
-and **Urgency** (0/None = unset) — replace the old single WebDAV priority (1.1,
-see [`open-priority.md`](open-priority.md) § Virtual & derived states); progress
-is derived from status (`_progress_for_status`). Side work (post-1.1, direct
-feedback: "just calculated automatically, no manual input") later removed the
-per-task *explicit* axes entirely — both are now purely computed, see the
-section below.
+`active / in_progress / waiting / done / archived`; progress is derived from
+status (`_progress_for_status`). 1.1 added two 1–3 axes — Importance and
+Urgency — replacing the old single WebDAV priority; that whole feature is
+since removed outright, see "Importance, Urgency, and the virtual states"
+below.
 
 ## Views (shared `_tasks_toolbar.html`)
 
 - **Table** (`/tasks`) — open/completed split into two tbody sections; sortable
   (title/due/status); status has an inline pill-select + inline date cell →
-  `POST /tasks/{uid}/update-field` (JSON, single field, no reload). Importance/
-  Urgency do **not** appear as table columns (direct feedback: "I don't want
-  importance and urgency to show in the tasks table view" — a further
-  follow-up on the axes rework below; they were briefly read-only pills here
-  first, then dropped from this view entirely). Both axes are still fully
-  computed and still shown on Board (pills) and the task detail modal (meta
-  grid); the toolbar's Importance/Urgency filter dropdowns are untouched —
-  this was a column removal, not a filter removal. `_sort_keys` still knows
-  how to sort by either axis (used by Board/other surfaces if ever needed),
-  it's just not linked from a Table column header anymore. Bulk-actions bar
+  `POST /tasks/{uid}/update-field` (JSON, single field, no reload). (This
+  section describes Table as it stood before the 2026-08-28 "major rework"
+  and before Importance/Urgency was removed outright as a feature -- see
+  "Importance, Urgency, and the virtual states" below.) Bulk-actions bar
   (checkbox select → `POST /tasks/bulk` with `delete`/`status`/`tag`
   add-remove). Every task delete is the undo path — tasks are flat (1.2), so
   no delete cascades. **Pagination (1.9, Webapp usability Phase B)** — the
@@ -46,13 +38,24 @@ section below.
   `POST /tasks/timeline/create`. Double-click opens the card.
 - **Habits** (`/tasks/habits`) — see `habits.md`.
 
-Search box + five inline fancy dropdowns (Date / Status / Importance / Urgency /
-Label) in row 1, all submitting immediately; active-filter badge. Filters AND
-together. The Date dropdown also carries the virtual states `overdue` / `today` /
-`tomorrow` / `this_week` / `this_month` / `important` / `urgent` — query
-projections over the derived values, not labels (see below).
+(This paragraph also describes Table as it stood before the "major rework"
+and before Importance/Urgency was removed: search box + five inline fancy
+dropdowns -- Date / Status / Importance / Urgency / Label -- in row 1, the
+Date dropdown also carrying the virtual states `overdue` / `today` /
+`tomorrow` / `this_week` / `this_month` / `important` / `urgent`. Today
+Table has just the one Date dropdown, and `important`/`urgent` are gone
+along with the rest of the feature -- see "Importance, Urgency, and the
+virtual states" below and "Tasks page filter cleanup" further down.)
 
-## Importance, Urgency, and the virtual states (1.1; explicit axes removed, side work)
+## Importance, Urgency, and the virtual states — removed
+
+**Fully removed** (no longer a feature this app offers): the two axes, the
+Important/Urgent virtual states and Dashboard widget/at-a-glance stats, the
+task detail meta row, the Table filters, and the iCal/CSV export columns.
+See `src/derived_state.py`'s module docstring for what replaced it (the
+module now only derives the purely temporal virtual states). What follows
+is kept as history of how the feature worked before removal (1.1; explicit
+axes removed, side work).
 
 Two 1–3 axes replace the single priority. 1.1 shipped them as *explicit*
 per-task fields (`tasks.importance`/`tasks.urgency`) combined with label
@@ -340,6 +343,12 @@ Timeline) updated; the Dashboard's At-a-glance widget and Important & Urgent
 widget's outbound links updated to match (`status_filter=overdue`,
 `importance_filter=important`, `urgency_filter=urgent` instead of
 `date_filter=...`). See `tests/test_tasks_view_rework.py`.
+
+**Both the Importance/Urgency filters described above and the whole
+Importance/Urgency feature they belonged to (the two axes, the Important &
+Urgent Dashboard widget, the task detail meta row, and the iCal/CSV export
+columns) are since removed outright — no longer something this app
+offers. See `src/derived_state.py`'s module docstring.**
 
 ## Search & the command surface
 

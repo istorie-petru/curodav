@@ -295,21 +295,13 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         events_pool: list[dict] = []
         if "events" in show:
             events_pool = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{end.isoformat()}T23:59:59")
-        # Importance/Urgency are computed, not stored columns (side work,
-        # post-1.1, src/derived_state.py) -- resolved once per widget
-        # render, same convention every other importance/urgency call
-        # site in this app follows.
-        label_rules = db.list_label_rules(conn)
 
         by_day = []
         for d in days:
             iso = d.isoformat()
             day_tasks = sorted(
                 [t for t in tasks_pool if t["due_at"][:10] == iso],
-                key=lambda t: (
-                    -derived_state.effective_importance(t, label_rules),
-                    -derived_state.effective_urgency(t, label_rules, today),
-                ),
+                key=lambda t: (t.get("title") or "").lower(),
             )
             day_events = sorted([e for e in events_pool if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
             by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today_iso, "tasks": day_tasks, "events": day_events})
@@ -344,10 +336,9 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
     `_render_today_agenda`/`_render_weekly_overview` already query (via
     `_filtered_tasks`, so this is correctly scoped to a label page now that
     the `_effective_tags_filter` fix applies there too): Overdue, Due
-    today, Due this week, plus (1.1) Important and Urgent. Every widget
-    type here renders a *list*; this is the one that renders a *number*, so
-    "how am I doing" is answerable in under two seconds without reading
-    through any other widget's content.
+    today, Due this week. Every widget type here renders a *list*; this is
+    the one that renders a *number*, so "how am I doing" is answerable in
+    under two seconds without reading through any other widget's content.
 
     Zero counts still render (not hidden/suppressed) -- confirming
     "nothing's overdue" is itself useful information for an at-a-glance
@@ -362,22 +353,20 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
     disagree.
 
     Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue` moved
-    from a `date_filter` value to a `status_filter` value, and `important`/
-    `urgent` from `date_filter` values to `importance_filter`/
-    `urgency_filter` "(any level)" values.
+    from a `date_filter` value to a `status_filter` value.
 
-    2026-08-28 "major rework" session update: Status/Importance/Urgency
-    filtering is gone from the Tasks page entirely now (item 3, "filtering
-    reduced to date only") -- there's no longer a filtered-view destination
-    for overdue/important/urgent to link to, only Date's `today`/
-    `this_week` survive. `overdue_link`/`important_link`/`urgent_link` now
-    point at the plain Table view (still a real, useful destination -- the
-    count itself, computed independently via count_by_state, is unaffected
-    either way); `today_link`/`week_link` are unchanged since `date_filter`
-    is still live."""
+    2026-08-28 "major rework" session update: Status filtering is gone from
+    the Tasks page entirely now (item 3, "filtering reduced to date only")
+    -- there's no longer a filtered-view destination for overdue to link
+    to, only Date's `today`/`this_week` survive. `overdue_link` now points
+    at the plain Table view (still a real, useful destination -- the count
+    itself, computed independently via count_by_state, is unaffected either
+    way); `today_link`/`week_link` are unchanged since `date_filter` is
+    still live. The Important/Urgent stat blocks this widget used to show
+    (1.1) are removed along with the rest of that feature -- see
+    src/derived_state.py's module docstring."""
     tasks = _filtered_tasks(conn, config)
-    label_rules = db.list_label_rules(conn)
-    counts = derived_state.count_by_state(tasks, label_rules)
+    counts = derived_state.count_by_state(tasks)
 
     def _tasks_link(param: str | None = None, value: str | None = None) -> str:
         if not param:
@@ -388,13 +377,9 @@ def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:
         "overdue_count": counts["overdue"],
         "today_count": counts["today"],
         "week_count": counts["this_week"],
-        "important_count": counts["important"],
-        "urgent_count": counts["urgent"],
         "overdue_link": _tasks_link(),
         "today_link": _tasks_link("date_filter", "today"),
         "week_link": _tasks_link("date_filter", "this_week"),
-        "important_link": _tasks_link(),
-        "urgent_link": _tasks_link(),
     }
 
 
@@ -579,9 +564,8 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
     consolidation, expanded scope, plans/open.md § Widget consolidation)
     -- surfaces *decisions to make*, distinct from Agenda (which lists
     what's already scheduled): open tasks due within 3 days with no work
-    session yet, open Urgency=3 tasks with no session at all regardless of
-    date, and today's/tomorrow's events with no location or meeting link
-    set. "No session yet" reuses the exact same unscheduled rule
+    session yet, and today's/tomorrow's events with no location or meeting
+    link set. "No session yet" reuses the exact same unscheduled rule
     `routers/calendar.py::week_view`'s own "Unscheduled work" panel
     applies (`db.work_allocation_panel_info`: no allocations at all, OR
     at least one still undated -- only a task whose every session is
@@ -593,6 +577,11 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
     ships, since `location`/`meeting_url` stay the underlying columns
     either way.
 
+    This widget also used to surface open Urgency=3 tasks with no session
+    at all regardless of date, in a separate "Urgent, unscheduled" section
+    -- removed along with the rest of the Importance/Urgency feature (1.1);
+    see src/derived_state.py's module docstring.
+
     Each task row reuses the exact `{"task", "project", "sessions"}` item
     shape `week_view` builds for its own panel, so the shared
     `_unscheduled_task_item.html` partial (project pill + title + the
@@ -603,11 +592,8 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
     today_iso = today.isoformat()
     horizon_iso = (today + timedelta(days=3)).isoformat()
     tomorrow_iso = (today + timedelta(days=1)).isoformat()
-    label_rules = db.list_label_rules(conn)
 
     due_soon: list[dict] = []
-    urgent: list[dict] = []
-    seen: set[str] = set()
     for t in _filtered_tasks(conn, config):
         info = db.work_allocation_panel_info(conn, t["uid"])
         if info["count"] and not info["undated_count"]:
@@ -616,9 +602,6 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
         if due_at and due_at[:10] <= horizon_iso:
             item = {"task": t, "project": db.project_label_config_for(conn, "task", t["uid"]), "sessions": info}
             due_soon.append(item)
-            seen.add(t["uid"])
-        elif t["uid"] not in seen and derived_state.effective_urgency(t, label_rules, today) == 3:
-            urgent.append({"task": t, "project": db.project_label_config_for(conn, "task", t["uid"]), "sessions": info})
     due_soon.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{tomorrow_iso}T23:59:59")
@@ -629,7 +612,7 @@ def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
     ]
     unclear_format.sort(key=lambda e: e.get("start_at") or "")
 
-    return {"due_soon": due_soon, "urgent": urgent, "unclear_format": unclear_format}
+    return {"due_soon": due_soon, "unclear_format": unclear_format}
 
 
 # The 2026-08-15 "Weekly Schedule" widget's own threshold for "this
@@ -844,55 +827,17 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     return {"rows": rows}
 
 
-def _render_important_urgent(conn, config: dict, nav: dict | None = None) -> dict:
-    """Important & Urgent -- open tasks whose derived_state.virtual_states
-    includes "important"/"urgent" that aren't already overdue or due today
-    (1.9 side work, porting routers/today.py's own "Important & urgent, not
-    due today" section into the Dashboard's widget registry ahead of that
-    page's retirement -- see plans/STATE.md). Reuses the exact same shared
-    aggregation service (src/derived_state.py) /today already used, so this
-    widget can never disagree with what /tasks?importance_filter=important
-    or ?urgency_filter=urgent shows (Tasks page filter cleanup, 2026-08-15,
-    moved these off `date_filter`). Scoped like every other widget via
-    `_filtered_tasks` (a Space/
-    Project page's Important & Urgent widget only considers that page's own
-    tasks), which /today itself never needed since it was always a whole-app
-    view."""
-    today = date.today()
-    today_iso = today.isoformat()
-    tasks = _filtered_tasks(conn, config)
-    overdue_or_due_today = {
-        t["uid"] for t in tasks if t.get("due_at") and t["due_at"][:10] <= today_iso
-    }
-    label_rules = db.list_label_rules(conn)
-    # "rows", not "items" -- data is a plain dict, and Jinja's attribute-then-
-    # item lookup (`data.items`) would silently resolve to dict.items (the
-    # builtin method) instead of this key, since attribute lookup is tried
-    # first. Found live while rendering this exact widget the first time.
-    rows = []
-    for t in tasks:
-        if t["uid"] in overdue_or_due_today:
-            continue
-        states = derived_state.virtual_states(t, label_rules, today)
-        if "important" in states or "urgent" in states:
-            rows.append((t, states))
-    rows.sort(
-        key=lambda pair: (
-            -derived_state.effective_importance(pair[0], label_rules),
-            -derived_state.effective_urgency(pair[0], label_rules, today),
-            pair[0].get("due_at") or "9999-99-99",
-        )
-    )
-    limit = int(config.get("limit") or 8)
-    return {"rows": rows[:limit]}
-
-
 def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) -> dict:
     """Scheduled Work Hours Today -- today's work-allocation sessions plus a
     completed/total hours readout (1.9 side work, porting routers/today.py's
     own "scheduled hours today" computation, the other piece /today had that
     no existing widget covered -- see plans/STATE.md). Scoped like every
-    other widget via `_filtered_events`."""
+    other widget via `_filtered_events`.
+
+    /today also had an "Important & urgent, not due today" section, ported
+    to its own Dashboard widget type at the same time -- that widget type
+    (and the whole Importance/Urgency feature behind it) is now removed;
+    see src/derived_state.py's module docstring."""
     today_iso = date.today().isoformat()
     events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{today_iso}T23:59:59")
     events = [e for e in events if e.get("start_at") and e["start_at"][:10] == today_iso]
@@ -924,9 +869,10 @@ def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
     language. Home-only (excluded on Space/Project pages, same as
     filled_cards/project_preview -- see _SCOPE_EXCLUDED_TYPES): "every Space
     + every project" is meaningless once you're already inside one of them."""
-    # "tiles", not "items" -- see _render_important_urgent's own comment on
-    # why a plain dict key named "items" is unsafe with Jinja's attribute
-    # lookup.
+    # "tiles", not "items" -- a plain dict key named "items" is unsafe with
+    # Jinja's attribute-then-item lookup (`data.items` silently resolves to
+    # dict.items, the builtin method, since attribute lookup is tried
+    # first).
     tiles = []
     for lbl in db.list_space_labels(conn):
         tiles.append({
@@ -1084,13 +1030,6 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": set(),
         "default_width": "third",
     },
-    "important_urgent": {
-        "label": "Important & Urgent",
-        "template": "_widget_important_urgent.html",
-        "render": _render_important_urgent,
-        "uses": {"tasks"},
-        "default_width": "half",
-    },
     "scheduled_work_today": {
         "label": "Scheduled Work Hours Today",
         "template": "_widget_scheduled_work_today.html",
@@ -1202,15 +1141,13 @@ WIDGET_VIEWS: dict[str, dict] = {
     "mini_calendar": {"label": "Mini calendar", "source": "calendar_tasks", "has_range": False},
     "checklist": {"label": "Checklist", "source": "habits", "has_range": False},
     # `has_limit` (2026-08-15, expanded scope: "widgets should be more
-    # customizable") -- contact_list/important_urgent's own render
-    # functions already read `config["limit"]` (`_render_contact_list`/
-    # `_render_important_urgent`), but the builder never offered a way to
-    # set it -- a real, narrow customizability gap, not the "Range/Show/
-    # Style toggles already cover it" case. Fixed by generalizing the
-    # Limit field's gate from a single hardcoded view name to this flag,
-    # same `has_range`/`has_show`/`has_style` pattern.
+    # customizable") -- contact_list's own render function already reads
+    # `config["limit"]` (`_render_contact_list`), but the builder never
+    # offered a way to set it -- a real, narrow customizability gap, not
+    # the "Range/Show/Style toggles already cover it" case. Fixed by
+    # generalizing the Limit field's gate from a single hardcoded view name
+    # to this flag, same `has_range`/`has_show`/`has_style` pattern.
     "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False, "has_limit": True},
-    "important_urgent_view": {"label": "Important & urgent", "source": "calendar_tasks", "has_range": False, "has_limit": True},
     "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
     "quick_links_view": {"label": "Quick links (tiles)", "source": "quick_links", "has_range": False},
     # "spaces_projects_view"/"streak_view"/"next_deadline_view"
@@ -1257,7 +1194,6 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("mini_calendar", None): ("mini_month_calendar", {}),
     ("checklist", None): ("habit_checkin", {}),
     ("contact_list_view", None): ("contact_list", {}),
-    ("important_urgent_view", None): ("important_urgent", {}),
     ("scheduled_work_view", None): ("scheduled_work_today", {}),
     ("quick_links_view", None): ("quick_links", {}),
     ("spaces_projects_view", None): ("spaces_projects", {}),
@@ -1280,7 +1216,6 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("spaces_projects", None): ("spaces_projects", "spaces_projects_view", None),
     ("habit_checkin", None): ("habits", "checklist", None),
     ("contact_list", None): ("contacts", "contact_list_view", None),
-    ("important_urgent", None): ("calendar_tasks", "important_urgent_view", None),
     ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
     ("quick_links", None): ("quick_links", "quick_links_view", None),
     ("streak", None): ("calendar_tasks", "streak_view", None),
@@ -1928,11 +1863,13 @@ def dashboard_view(
 def today_redirect():
     """The standalone /today page (1.7 slice 1, "Today -- execution") is
     retired (1.9 side work) -- its two sections that no existing Dashboard
-    widget covered (Important & urgent, Scheduled work hours today) are now
-    the important_urgent/scheduled_work_today widget types above; everything
-    else it showed (Due & overdue, today's calendar events) already had a
-    direct Dashboard equivalent (today_agenda). Kept as a redirect rather
-    than a bare 404, same "any bookmark still lands somewhere real"
+    widget covered (Important & urgent, Scheduled work hours today) became
+    the important_urgent/scheduled_work_today widget types; everything else
+    it showed (Due & overdue, today's calendar events) already had a direct
+    Dashboard equivalent (today_agenda). important_urgent has since been
+    removed outright along with the rest of the Importance/Urgency feature
+    -- see src/derived_state.py's module docstring. Kept as a redirect
+    rather than a bare 404, same "any bookmark still lands somewhere real"
     precedent `routers/calendar.py::week_redirect`/`timetable_view_redirect`
     already established for the analogous /calendar/timetable retirement --
     see plans/STATE.md."""

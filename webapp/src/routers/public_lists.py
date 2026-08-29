@@ -26,7 +26,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
-from .. import db, derived_state, ical_rows, vcard_rows
+from .. import db, ical_rows, vcard_rows
 from ..deps import get_db
 from ..published_lists import evaluate_label_filter
 
@@ -54,15 +54,11 @@ def _ics_feed(conn, row: dict) -> Response:
     cal.add("prodid", "-//Command Center//published-list.ics//EN")
     cal.add("version", "2.0")
     if entity_type == "task":
-        label_rules = db.list_label_rules(conn)
         for object_id in member_ids:
             task = db.get_task(conn, object_id)
             if task is None:
                 continue
-            task = dict(task)
-            task["importance"] = derived_state.effective_importance(task, label_rules) or None
-            task["urgency"] = derived_state.effective_urgency(task, label_rules) or None
-            cal.add_component(Todo.from_ical(ical_rows.task_row_to_ical(task)))
+            cal.add_component(Todo.from_ical(ical_rows.task_row_to_ical(dict(task))))
     else:
         for object_id in member_ids:
             event = db.get_event(conn, object_id)

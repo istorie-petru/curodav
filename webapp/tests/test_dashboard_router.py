@@ -1054,7 +1054,6 @@ class TestOrganizeTodayWidget:
         _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
         data = dashboard_router._render_organize_today(conn, {})
         assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
-        assert data["urgent"] == []
 
     def test_task_due_soon_but_already_fully_scheduled_is_excluded(self, conn):
         today = date.today()
@@ -1075,28 +1074,6 @@ class TestOrganizeTodayWidget:
         _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat())
         data = dashboard_router._render_organize_today(conn, {})
         assert data["due_soon"] == []
-        assert data["urgent"] == []
-
-    def test_label_urgent_unallocated_task_beyond_the_due_soon_horizon_is_listed(self, conn):
-        # A label's urgency_threshold_days can make a task Urgency=3 well
-        # beyond the 3-day due-soon horizon (effective_urgency = max(label-
-        # derived, temporal); label-derived only needs a due date within
-        # the label's own window, not the widget's 3-day one).
-        db.upsert_label_config(conn, {"name": "Conference", "created_at": _now(), "urgency_threshold_days": 30})
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat(), tags=["Conference"])
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
-        assert [item["task"]["uid"] for item in data["urgent"]] == ["t1"]
-
-    def test_task_already_in_due_soon_is_not_duplicated_in_urgent(self, conn):
-        # Overdue/due-today is itself URGENCY_HIGH (temporal component) --
-        # a due-soon task that's also urgent must only appear once.
-        today = date.today()
-        _seed_task(conn, "t1", due_at=today.isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
-        assert data["urgent"] == []
 
     def test_event_with_no_location_or_url_is_unclear(self, conn):
         today = date.today()
@@ -1128,32 +1105,13 @@ class TestOrganizeTodayWidget:
 
 class TestLimitFieldExposedForMoreViews:
     """2026-08-15, widget consolidation expanded scope ("widgets should be
-    more customizable"): contact_list/important_urgent's own render
-    functions already read config['limit'] -- the builder just never
-    offered a way to set it. Verified via _resolve_selection + the stored
-    config, not the JS (no browser in this test environment)."""
-
-    def test_important_urgent_view_has_limit_flag(self):
-        assert dashboard_router.WIDGET_VIEWS["important_urgent_view"]["has_limit"] is True
+    more customizable"): contact_list's own render function already reads
+    config['limit'] -- the builder just never offered a way to set it.
+    Verified via _resolve_selection + the stored config, not the JS (no
+    browser in this test environment)."""
 
     def test_contact_list_view_has_limit_flag(self):
         assert dashboard_router.WIDGET_VIEWS["contact_list_view"]["has_limit"] is True
-
-    def test_add_widget_with_limit_on_important_urgent(self, conn):
-        dashboard_router.add_widget(
-            source="calendar_tasks", view="important_urgent_view", range="", title="", project_uid="",
-            tags="", task_list_uids=[], calendar_uids=[], limit="3", style="", scope="",
-            show_overdue=False, show_tasks=False, show_events=False, space_uid="", conn=conn,
-        )
-        w = db.list_dashboard_widgets(conn)[0]
-        assert w["config"]["limit"] == 3
-
-    def test_important_urgent_render_respects_the_stored_limit(self, conn):
-        db.upsert_label_config(conn, {"name": "Important", "created_at": _now(), "importance": 3})
-        for i in range(5):
-            _seed_task(conn, f"t{i}", tags=["Important"])
-        data = dashboard_router._render_important_urgent(conn, {"limit": 2})
-        assert len(data["rows"]) == 2
 
 
 class TestIsLongLivedRecurrence:

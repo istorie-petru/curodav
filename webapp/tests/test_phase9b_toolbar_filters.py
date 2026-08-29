@@ -4,8 +4,10 @@ collapsible filters, auto-open when a filter is active) applied to Tasks
 (Table/Timeline/Board), Calendar (Month/Week/Day/Agenda), and Contacts.
 
 Covers:
-  1. Board/Timeline now respect date_filter/status_filter/importance_filter/
-     urgency_filter (previously Table-only).
+  1. Board/Timeline now respect date_filter/status_filter (previously
+     Table-only; both Board/Timeline and the Importance/Urgency filters
+     are since removed outright, see the module comment below and
+     src/derived_state.py's module docstring).
   2. The new Tasks label filter narrows results in all three views.
   3. The new Calendar event label filter narrows results in month + day
      views, including the task chips Day also shows.
@@ -57,22 +59,7 @@ def _request(path="/"):
     )
 
 
-def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None, tags=None):
-    """importance/urgency are computed, not stored columns (side work,
-    post-1.1, src/derived_state.py) -- a given importance level is
-    reproduced via a dedicated per-task label with that label_config rule.
-    urgency only ever supports level 3 here (due today, temporal) --
-    that's the only level every call site in this file actually needs;
-    level 1 has no source at all in the purely-computed model (label
-    thresholds only ever imply URGENCY_HIGH, temporal state only ever
-    yields 0/2/3), so it isn't reproducible via seeding."""
-    all_tags = list(tags or [])
-    if importance is not None:
-        label = f"{uid}-imp-label"
-        db.upsert_label_config(conn, {"name": label, "importance": importance})
-        all_tags.append(label)
-    if urgency == 3 and due_at is None:
-        due_at = date.today().isoformat()
+def _seed_task(conn, uid, due_at=None, status="active", tags=None):
     db.upsert_task(
         conn,
         {
@@ -81,7 +68,7 @@ def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency
             "description": "",
             "status": status,
             "due_at": due_at,
-            "tags": all_tags,
+            "tags": list(tags or []),
             "created_at": _now(),
         },
     )
@@ -232,9 +219,8 @@ class TestContactsNoArchivedState:
 class TestActiveFilterShownInDropdown:
     """2026-08-08: Tasks' and Calendar's row-2 collapsible filter body is
     gone (feedback: "remove the filters details button and reintegrate
-    these drop down menus into the topbar") -- date/status/importance/
-    urgency/label
-    are inline "fancy dropdowns" (_filter_dropdown.html) in row 1, each a
+    these drop down menus into the topbar") -- date/status/label are
+    inline "fancy dropdowns" (_filter_dropdown.html) in row 1, each a
     radio list that navigates on pick. The active filter is simply the
     checked radio (mirrored in the trigger's summary text), so there's no
     collapsible panel left to auto-open. Contacts still uses the

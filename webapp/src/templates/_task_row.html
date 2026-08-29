@@ -5,23 +5,17 @@
    the delete-with-undo form) without duplicating ~50 lines of markup, so
    it moved here and both pages `{% from "_task_row.html" import task_row
    with context %}` -- `with context` so the macro still reads
-   `statuses`/`status_colors`/`status_labels`/`importance_labels`/
-   `importance_colors`/`urgency_labels`/`urgency_colors` straight from
-   whichever page's context provides them (both tasks.py's `_task_context`
-   and projects.py's project_detail route supply the same keys), same as
-   when this was an inline macro. The project detail page itself is gone
+   `statuses`/`status_colors`/`status_labels` straight from whichever
+   page's context provides them (both tasks.py's `_task_context` and
+   projects.py's project_detail route supply the same keys), same as when
+   this was an inline macro. The project detail page itself is gone
    (2026-08-15) but the `with context` import stays -- this is now the
    Tasks Table view's only caller (_tasks_body.html).
 
-   Importance/Urgency (side work, post-1.1) don't render as columns here
-   at all anymore -- first made read-only, then dropped from this view
-   entirely per direct feedback ("I don't want importance and urgency to
-   show in the tasks table view"). Both are still fully computed and
-   still visible on the task detail modal (task_detail.html) and the
-   Board view (tasks_board.html) -- this was a Table-view-only removal,
-   not a removal of the feature. The `effective_importance`/
-   `effective_urgency` template globals (deps.py) still exist for those
-   other surfaces.
+   Importance/Urgency don't render as columns here -- that whole feature
+   (the two axes, their task detail meta row, and everywhere else they
+   surfaced) is removed outright; see src/derived_state.py's module
+   docstring.
 
    `show_select` (default true) gates the row-select checkbox column --
    only the global Tasks page's bulk-actions bar (static/tasks_table.js)

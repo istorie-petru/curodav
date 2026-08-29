@@ -1,9 +1,11 @@
-"""Tests for Phase 9 of the projects/tags rework: independent date/status/
-importance/urgency filters replacing the old combined 'smart filter',
-completed tasks staying visible but separated, and start_at always
-defaulting to today on creation. No bridge/Radicale dependency for the
-pure filter logic; create_task needs a fake bridge (no live server) same
-pattern as test_project_linking.py."""
+"""Tests for Phase 9 of the projects/tags rework: independent date/status
+filters replacing the old combined 'smart filter' (Importance/Urgency were
+also part of that filter set at the time; that whole feature is since
+removed outright, see src/derived_state.py's module docstring), completed
+tasks staying visible but separated, and start_at always defaulting to
+today on creation. No bridge/Radicale dependency for the pure filter logic;
+create_task needs a fake bridge (no live server) same pattern as
+test_project_linking.py."""
 
 from __future__ import annotations
 
@@ -26,23 +28,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None):
-    """importance/urgency are computed, not stored columns (side work,
-    post-1.1, src/derived_state.py) -- importance is reproduced via a
-    dedicated per-task label with that label_config rule; urgency only
-    supports level 3 (due today, temporal), the only level this file
-    needs."""
-    tags = []
-    if importance is not None:
-        label = f"{uid}-imp-label"
-        db.upsert_label_config(conn, {"name": label, "importance": importance})
-        tags.append(label)
-    if urgency == 3 and due_at is None:
-        due_at = date.today().isoformat()
+def _seed_task(conn, uid, due_at=None, status="active"):
     db.upsert_task(conn, {
         "uid": uid, "title": uid,
         "description": "", "status": status, "due_at": due_at,
-        "tags": tags, "created_at": _now(),
+        "tags": [], "created_at": _now(),
     })
 
 

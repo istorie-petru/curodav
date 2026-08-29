@@ -1,11 +1,11 @@
-<!-- Data: {overdue_count, today_count, week_count, important_count,
-     urgent_count, overdue_link, today_link, week_link, important_link,
-     urgent_link} -- see routers/dashboard.py::_render_at_a_glance. Five
-     number+label stat blocks. today_link/week_link still point at a
-     filtered Tasks view (?date_filter=today/this_week -- the one filter
-     axis the Tasks table kept, 2026-08-28 "major rework" session, item 3);
-     overdue_link/important_link/urgent_link now just point at the plain
-     Table view since Status/Importance/Urgency filtering no longer exists
+<!-- Data: {overdue_count, today_count, week_count, overdue_link, today_link,
+     week_link} -- see routers/dashboard.py::_render_at_a_glance. Three
+     number+label stat blocks (used to be five -- Important/Urgent removed
+     along with the rest of that feature, see src/derived_state.py's module
+     docstring). today_link/week_link still point at a filtered Tasks view
+     (?date_filter=today/this_week -- the one filter axis the Tasks table
+     kept, 2026-08-28 "major rework" session, item 3); overdue_link now just
+     points at the plain Table view since Status filtering no longer exists
      there to link into. Zero counts still render -- "nothing's overdue" is
      itself useful at-a-glance information, not an empty state to hide. The
      counts come from the shared aggregation service (src/derived_state.py's
@@ -17,6 +17,4 @@
     {{ stat_block(data.overdue_count, 'Overdue', href=data.overdue_link, number_class='is-overdue') }}
     {{ stat_block(data.today_count, 'Due today', href=data.today_link) }}
     {{ stat_block(data.week_count, 'Due this week', href=data.week_link) }}
-    {{ stat_block(data.important_count, 'Important', href=data.important_link) }}
-    {{ stat_block(data.urgent_count, 'Urgent', href=data.urgent_link, number_class='is-overdue') }}
 </div>

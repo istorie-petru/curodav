@@ -4,7 +4,7 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (13)
+## Widget types (12)
 
 2026-08-15 widget consolidation (`plans/open.md` § Widget consolidation):
 the original 11 types (`today_agenda`/`weekly_overview`/`upcoming_events`/
@@ -15,8 +15,12 @@ collapsed to 8 — four Agenda-family types merged into one configurable
 `calendar_agenda` cut outright (reproduce it by placing Mini Calendar next
 to Agenda), plus two brand-new types, Streak and Next Deadline. The three
 1.9-side-work additions (`important_urgent`/`scheduled_work_today`/
-`quick_links`) were untouched by this pass, so the live registry is 11
-types today. A one-time `app_meta`-guarded migration
+`quick_links`) were untouched by this pass, so the live registry was 11
+types at that point (`important_urgent` is since removed outright along
+with the rest of the Importance/Urgency feature, see
+`src/derived_state.py`'s module docstring; two more types, Organize Today
+and Weekly Schedule, were added later -- see the table below for the
+current 12). A one-time `app_meta`-guarded migration
 (`_migrate_widget_consolidation`) rewrote every existing dashboard's
 stored widget rows in place — nothing was lost, see its own docstring for
 the exact old-type -> new-config translation, and "Migration" below for
@@ -30,18 +34,16 @@ the one visual side effect (width).
 | `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares per Space, linking to `/labels/{name}`). Scope (`config["scope"]`, `space` default or `everything`, Space/Project pages only) picks whether a page's own instance stays auto-scoped to that page's children (projects AND sub-Spaces both) or shows the app-wide list instead | third |
 | `habit_checkin` | check-off-today per active habit (checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
 | `contact_list` | contacts filtered by labels, `limit` | third |
-| `important_urgent` | open tasks flagged important/urgent that aren't already due/overdue (`limit`, default 8) — ported from the retired `/today` page (1.9 side work), see `features/today.md` | half |
 | `scheduled_work_today` | today's work-allocation sessions + a completed-hours total — ported from the retired `/today` page (1.9 side work) | third |
 | `quick_links` | visual tile grid of every Space + every open project (label icon/color, `spaces_projects`' Cards-style CSS reused) — Home-only, 1.9 side work | full |
 | `streak` | current + longest run of consecutive days with >=1 task completed (`tasks.completed_at`) | third |
 | `next_deadline` | the single soonest open task due date and the single soonest upcoming event | third |
-| `organize_today` | "what needs organizing" — open tasks due within 3 days with no work session yet, open Urgency=3 tasks with none (regardless of date), and today's/tomorrow's events with no location or meeting link set (a proxy for the not-yet-shipped Format field, `plans/open.md`). Task rows reuse the planning grids' own `_unscheduled_task_item.html` partial (project pill + title + a "+"/"−" session stepper, `POST /tasks/{uid}/work-allocations[...]`), so a session can be added right from the widget | half |
+| `organize_today` | "what needs organizing" — open tasks due within 3 days with no work session yet, and today's/tomorrow's events with no location or meeting link set (a proxy for the not-yet-shipped Format field, `plans/open.md`). Task rows reuse the planning grids' own `_unscheduled_task_item.html` partial (project pill + title + a "+"/"−" session stepper, `POST /tasks/{uid}/work-allocations[...]`), so a session can be added right from the widget. (Used to also surface open Urgency=3 tasks in a separate section — removed along with the rest of the Importance/Urgency feature.) | half |
 | `weekly_schedule` | a compact, **static** weekly-pattern grid of a label's long-lived recurring events (a "university timetable" without reviving the removed Schedule module, `plans/abandoned.md`) — a recurring event qualifies once its own rule spans >= 30 days from first to last occurrence (`_is_long_lived_recurrence`, filters out a short recurring reminder while keeping a real standing pattern); every qualifying event's grid slot comes straight from its own `start_at`/`end_at` weekday+time-of-day, not from expanding any one real calendar week — holidays/manual exceptions are deliberately not reflected. Only weekdays with a block become columns, the vertical range is tightened to the events' own time span (not a full 24h day), and a plain agenda-style list renders below the grid for full readable detail | half |
 
-`important_urgent`/`scheduled_work_today`/`streak`/`next_deadline`/
-`organize_today`/`weekly_schedule` are addable through the existing
-Source/View picker (all under the `calendar_tasks` source); `quick_links`
-and `spaces_projects`
+`scheduled_work_today`/`streak`/`next_deadline`/`organize_today`/
+`weekly_schedule` are addable through the existing Source/View picker (all
+under the `calendar_tasks` source); `quick_links` and `spaces_projects`
 each have their own source (`quick_links`/`spaces_projects`), since both
 read `label_config` directly and have no tasks/events filter (`uses:
 set()`). Agenda's own view (`agenda_view`, source `calendar_tasks`) is
@@ -50,11 +52,12 @@ form (`has_range`/`has_show` on its `WIDGET_VIEWS` entry); Spaces &
 Projects' view (`spaces_projects_view`) exposes the Style radio
 (`has_style`) and, on a Space/Project page only, the Scope radio.
 `has_limit` (2026-08-15, expanded scope) marks which Views expose the
-Limit field at all — `agenda_view`, `contact_list_view`, and
-`important_urgent_view` (the three render functions that actually read
-`config["limit"]`); generalized from an earlier hardcoded single-view
-check once `contact_list`/`important_urgent` turned out to already
-support a limit with no way to set one.
+Limit field at all — `agenda_view` and `contact_list_view` (the render
+functions that actually read `config["limit"]`; `important_urgent_view`
+used to be a third such view, removed along with the rest of the
+Importance/Urgency feature); generalized from an earlier hardcoded
+single-view check once `contact_list` turned out to already support a
+limit with no way to set one.
 
 Plus the `stack` container type (not in the registry): drag a widget onto another
 card → one shared-width card with both stacked; members share `group_uid`; stacks
@@ -144,7 +147,7 @@ typical flat/today-range widget.
 
 ## Widget bodies (shared library, 2026-08-17)
 
-All 13 visual widgets' *bodies* — the content between the shared card
+All visual widgets' *bodies* — the content between the shared card
 chrome (`_widget_inner.html`) and the widget's own header — compose the
 same small component library now, `_widget_items.html`. Before this pass
 each widget hand-rolled the same row / pill / stat / empty-state /

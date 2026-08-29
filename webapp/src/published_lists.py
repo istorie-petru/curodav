@@ -130,14 +130,6 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
     created = updated = 0
     getter = _GETTERS[entity_type]
     path_field = _PATH_FIELD[entity_type]
-    # Importance/Urgency are computed, not stored columns (side work,
-    # post-1.1, src/derived_state.py) -- a task row from db.get_task no
-    # longer carries them, but ical_rows.task_row_to_ical's PRIORITY
-    # export still reads row.get("importance")/row.get("urgency"), so a
-    # published task needs the effective values attached before the push
-    # below, same as every other importance/urgency call site in this app
-    # resolves label rules once rather than per row.
-    label_rules = db.list_label_rules(conn) if entity_type == "task" else None
     for object_id in member_ids:
         row = getter(conn, object_id)
         if row is None:
@@ -154,10 +146,6 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
             continue
         push_row = dict(row)
         push_row[path_field] = collection_path
-        if entity_type == "task":
-            from . import derived_state
-            push_row["importance"] = derived_state.effective_importance(row, label_rules) or None
-            push_row["urgency"] = derived_state.effective_urgency(row, label_rules) or None
         _SAVE_ROW[entity_type](bridge, push_row)
         if object_id in existing_uids:
             updated += 1

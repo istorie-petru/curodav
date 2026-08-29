@@ -89,24 +89,13 @@ STATUS_COLORS = {
     "archived": "gray",
 }
 # 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states): the single 1-4 WebDAV `priority` axis is gone from the UI,
-# replaced by two independent 1-3 axes -- Importance and Urgency (higher =
-# more; 0/None = unset). The display labels live in src/derived_state.py
-# (the one source of truth for the axes); colors are a UI concern kept
-# here. The old `tasks.priority` column stays physically on disk, unused.
-#
-# 2026-08-28 "major rework" session (plans/STATE.md, item 3): the Table
-# view's Importance/Urgency *filter dropdowns and sort keys* are gone (see
-# the removed IMPORTANCE_FILTERS/URGENCY_FILTERS/_apply_importance_filter/
-# _apply_urgency_filter below, in a previous revision of this file) -- but
-# these two label/color maps stay, since task_detail.html's read-only
-# Importance/Urgency meta row (_task_context) still reads them, and that
-# surface was never in scope for this session's cut (only the Table page's
-# own filtering/columns were named in the request).
-IMPORTANCE_LABELS = derived_state.IMPORTANCE_LABELS
-URGENCY_LABELS = derived_state.URGENCY_LABELS
-IMPORTANCE_COLORS = {1: "gray", 2: "yellow", 3: "red"}
-URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
+# states) introduced two independent 1-3 axes -- Importance and Urgency --
+# replacing the single 1-4 WebDAV `priority` axis. That whole feature (the
+# axes, their filters/sort keys, the task detail meta row, the Dashboard
+# widgets that read them, and the export columns) is removed outright --
+# no longer a feature this app offers. The old `tasks.priority` column
+# stays physically on disk, unused, same "never force-drop old data"
+# convention as every other removed column in db.py.
 
 # 2026-08-08 direct feedback ("rework Priority/Status/Recurrence to look
 # the same as Range/View/Labels") -- task_form.html's Status field moved
@@ -116,8 +105,8 @@ URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 # single-mode multiselect panel View/Range/Labels already share. {uid,
 # name} pairs, the same shape that partial expects everywhere else.
 # Importance/Urgency used to have their own *_ITEMS lists here too (the
-# 1.1 manual multiselect fields); side work (post-1.1) removed the fields
-# entirely -- see _task_form_fields.html's header comment.
+# 1.1 manual multiselect fields); removed along with the rest of that
+# feature -- see this module's other Importance/Urgency comments.
 STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 
 # 2026-08-28 "major rework" session (item 3, "filtering reduced to date
@@ -140,7 +129,7 @@ DATE_FILTER_LABELS = {
 DONE_STATUSES = ("done", "archived")
 
 
-def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | None = None) -> list[dict]:
+def _apply_date_filter(tasks: list[dict], date_filter: str) -> list[dict]:
     """Filters tasks by the real date buckets (today/tomorrow/this_week/
     this_month). Delegates to src/derived_state.py's `virtual_states`
     predicate -- the single place per-state membership is computed -- so
@@ -152,24 +141,13 @@ def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | 
     `important`/`urgent` used to live here too (1.1) but moved to
     Status/Importance/Urgency filters instead -- all of which are gone
     entirely as of the 2026-08-28 "major rework" session (item 3,
-    "filtering reduced to date only"). `label_rules` is kept as a
-    parameter (unused by the remaining, purely temporal buckets) rather
-    than dropped, since derived_state.virtual_states' own signature takes
-    it and other callers of that function still need it."""
+    "filtering reduced to date only"), and Importance/Urgency itself is now
+    gone as a feature -- `virtual_states` no longer takes a `label_rules`
+    argument at all."""
     if date_filter == "all":
         return tasks
     states = {date_filter}
-    return [t for t in tasks if states & derived_state.virtual_states(t, label_rules or {})]
-
-
-def _task_label_rules(conn) -> dict[str, dict]:
-    """{label name: effective label config} for every label -- the resolved
-    rules the `important`/`urgent` derived-state filters feed to
-    src/derived_state.py. Delegates to db.list_label_rules (one call, never
-    per task) -- see that function's docstring. Kept as a thin alias so the
-    router's call sites read naturally and so dashboard.py (which imports
-    this helper for its aggregation-service widget) has one stable name."""
-    return db.list_label_rules(conn)
+    return [t for t in tasks if states & derived_state.virtual_states(t)]
 
 
 def _tags_list(tags: str) -> list[str]:
@@ -208,10 +186,6 @@ def _task_context(request: Request) -> dict:
         "statuses": STATUSES,
         "status_labels": STATUS_LABELS,
         "status_colors": STATUS_COLORS,
-        "importance_labels": IMPORTANCE_LABELS,
-        "importance_colors": IMPORTANCE_COLORS,
-        "urgency_labels": URGENCY_LABELS,
-        "urgency_colors": URGENCY_COLORS,
     }
 
 
@@ -340,8 +314,7 @@ def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]
     # lookup falls back to `dict.items` (the bound method every plain dict
     # already carries) if a `grp.items` template expression is used, which
     # would silently shadow a real "items" dict key with the builtin
-    # instead of erroring (the exact class of bug _render_important_urgent's
-    # "rows, not items" comment elsewhere in this app already warns about).
+    # instead of erroring.
     groups.append({"kind": "habits", "name": "Habits", "habit_items": _habit_group_items(conn)})
     groups.append({"kind": "unassigned", "name": "Unassigned", "tasks": buckets.get(None, [])})
     completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
@@ -371,9 +344,8 @@ def _tasks_list_context(
     grouping is unconditional now, so that's simply the whole page's
     behavior, not a narrower special case anymore."""
     _auto_archive_if_configured(conn)
-    label_rules = _task_label_rules(conn)
     tasks = db.list_tasks(conn, q=q)
-    tasks = _apply_date_filter(tasks, date_filter, label_rules)
+    tasks = _apply_date_filter(tasks, date_filter)
     tasks.sort(key=_due_at_key)
 
     # Completed tasks (done/archived) stay visible in every view -- Today,

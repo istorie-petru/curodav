@@ -5,8 +5,8 @@
 counting logic, just fed from different tables. Factored out of
 routers/habits.py into its own module (not left there and imported by
 routers/tasks.py) specifically to avoid a circular import:
-routers/labels.py imports from routers/tasks.py (IMPORTANCE_COLORS etc.),
-and routers/tasks.py needs this logic too now -- if it lived in
+routers/labels.py imports label/color maps from routers/tasks.py, and
+routers/tasks.py needs this logic too now -- if it lived in
 routers/habits.py (which itself imports from routers/labels.py for
 LABEL_ICONS), that would close a labels -> tasks -> habits -> labels
 cycle. This module imports nothing from any router, so both can depend on

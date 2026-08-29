@@ -41,7 +41,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
-from .. import db, derived_state, ical_rows, vcard_rows
+from .. import db, ical_rows, vcard_rows
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -158,18 +158,8 @@ def export_tasks_ics(conn=Depends(get_db)):
     cal = ICalCalendar()
     cal.add("prodid", "-//Command Center//command-center.ics//EN")
     cal.add("version", "2.0")
-    # Importance/Urgency are computed, not stored columns (side work,
-    # post-1.1) -- attach the effective values before handing each row to
-    # ical_rows.task_row_to_ical, which still reads row["importance"]/
-    # row["urgency"] to build PRIORITY (see that module's own comment: this
-    # app is the write-source, export still round-trips the effective
-    # urgency-dominant value).
-    label_rules = db.list_label_rules(conn)
     for row in db.list_tasks(conn, include_habit_tasks=True):
-        row = dict(row)
-        row["importance"] = derived_state.effective_importance(row, label_rules) or None
-        row["urgency"] = derived_state.effective_urgency(row, label_rules) or None
-        cal.add_component(Todo.from_ical(ical_rows.task_row_to_ical(row)))
+        cal.add_component(Todo.from_ical(ical_rows.task_row_to_ical(dict(row))))
     return _attachment("tasks.ics", cal.to_ical(), "text/calendar")
 
 
@@ -194,22 +184,11 @@ def _csv_response(filename: str, header: list[str], rows: list[list[Any]]) -> Re
 
 @router.get("/tasks.csv")
 def export_tasks_csv(conn=Depends(get_db)):
-    # Importance/Urgency are computed, not stored columns (side work,
-    # post-1.1, src/derived_state.py) -- label rules resolved once for the
-    # whole export rather than per row, same convention every other
-    # importance/urgency call site in this app follows. The CSV column
-    # values are now the *effective* values, not a raw explicit field.
-    label_rules = db.list_label_rules(conn)
     rows = [
-        [
-            t["uid"], t["title"], t["status"], t["due_at"],
-            derived_state.effective_importance(t, label_rules) or "",
-            derived_state.effective_urgency(t, label_rules) or "",
-            ", ".join(t.get("tags") or []),
-        ]
+        [t["uid"], t["title"], t["status"], t["due_at"], ", ".join(t.get("tags") or [])]
         for t in db.list_tasks(conn, include_habit_tasks=True)
     ]
-    return _csv_response("tasks.csv", ["UID", "Title", "Status", "Due", "Importance", "Urgency", "Tags"], rows)
+    return _csv_response("tasks.csv", ["UID", "Title", "Status", "Due", "Tags"], rows)
 
 
 @router.get("/events.csv")
@@ -517,11 +496,13 @@ def import_json(file: UploadFile, conn=Depends(get_db)):
 # location/meeting URL; contacts keep name/org/address and land their
 # first phone/email into the real child tables (the flat columns the CSV
 # columns are named after are dead for display -- see export_contacts_csv's
-# own comment). Importance/Urgency columns are accepted-and-ignored: they
-# were computed values on the way out (see export_tasks_csv), never stored.
+# own comment). Tasks used to also carry Importance/Urgency columns
+# (accepted-and-ignored on import, computed values on the way out) -- both
+# are gone now along with the rest of that feature, see
+# src/derived_state.py's module docstring.
 
 _CSV_SHAPES: dict[str, list[str]] = {
-    "tasks": ["uid", "title", "status", "due", "importance", "urgency", "tags"],
+    "tasks": ["uid", "title", "status", "due", "tags"],
     "events": ["uid", "title", "start", "end", "all day", "location", "meeting url", "tags"],
     "contacts": ["uid", "name", "organization", "phone", "email", "address", "tags"],
 }

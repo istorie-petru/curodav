@@ -134,11 +134,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- derived states) introduced Importance/Urgency as two explicit 1..3
     -- axes, replacing the old WebDAV `priority` concept. A later rework
     -- (side work, see this file's `_drop_column` calls below) removed the
-    -- explicit axes entirely -- both are now purely computed
-    -- (src/derived_state.py) from label rules + temporal state, never
-    -- manually set, so the `importance`/`urgency` columns no longer exist
-    -- on new databases. The old `priority` column stays physically on disk
-    -- for pre-1.1 databases but is no longer referenced by app code.
+    -- explicit axes' per-task columns, replacing them with a purely
+    -- computed derivation (src/derived_state.py) from label rules +
+    -- temporal state; that whole feature is since removed outright (no
+    -- longer something this app offers). The old `priority` column stays
+    -- physically on disk for pre-1.1 databases but is no longer
+    -- referenced by app code.
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
@@ -448,15 +449,12 @@ CREATE TABLE IF NOT EXISTS label_config (
     -- full name everywhere.
     abbreviation TEXT,
     -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
-    -- derived states): label behavior rules feeding the Importance/Urgency
-    -- effective-value derivation. `importance` is the importance this label
-    -- implies for anything carrying it (1..3, NULL = no rule); `urgency_
-    -- threshold_days` makes this label imply urgency (level 3) once the
-    -- carrying entity's date falls within that many days ahead (NULL = no
-    -- rule). Persistent, stored configuration belonging to the label -- the
-    -- one category of derived-state input that is deliberately *not* a
-    -- query-time calculation (see that section's "Project behavior and
-    -- other persistent label behaviors are the exception").
+    -- derived states) added these two columns as label behavior rules
+    -- feeding the Importance/Urgency effective-value derivation. That
+    -- whole feature is since removed outright (no longer something this
+    -- app offers) -- app code no longer reads or writes either column.
+    -- Both stay physically on disk, unused, same "never force-drop old
+    -- data" convention as every other removed column in this file.
     importance INTEGER,
     urgency_threshold_days INTEGER,
     -- 1.3 (Project-enabled label stack, plans/open-priority.md § Project-
@@ -1251,9 +1249,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # convention as every other column; an existing on-disk database that
     # never wrote one simply defaults to NULL (= no abbreviation).
     _ensure_column(conn, "label_config", "abbreviation", "TEXT")
-    # 1.1 (virtual & derived states) -- label behavior rules feeding the
-    # Importance/Urgency derivation (see the label_config CREATE TABLE
-    # comment above).
+    # 1.1 (virtual & derived states) -- label behavior rules that used to
+    # feed the Importance/Urgency derivation, a feature since removed
+    # outright (see the label_config CREATE TABLE comment above).
     _ensure_column(conn, "label_config", "importance", "INTEGER")
     _ensure_column(conn, "label_config", "urgency_threshold_days", "INTEGER")
     # 1.3 (Project-enabled label stack) -- see the label_config CREATE
@@ -1898,11 +1896,8 @@ def list_tasks(
             params.extend(excluded_uids)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    # Importance/Urgency no longer sort here -- both are purely computed
-    # (src/derived_state.py, label rules + temporal state), not raw
-    # columns SQL can order by; a caller that needs importance/urgency
-    # ordering does it in Python via derived_state's effective values
-    # (see routers/tasks.py's _SORT_KEYS).
+    # Importance/Urgency used to sort here before that whole feature was
+    # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
@@ -2538,11 +2533,8 @@ def _search_tasks(
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    # Importance/Urgency no longer sort here -- both are purely computed
-    # (src/derived_state.py, label rules + temporal state), not raw
-    # columns SQL can order by; a caller that needs importance/urgency
-    # ordering does it in Python via derived_state's effective values
-    # (see routers/tasks.py's _SORT_KEYS).
+    # Importance/Urgency used to sort here before that whole feature was
+    # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
     out: list[dict[str, Any]] = []
@@ -3787,8 +3779,6 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "generate_space": 0,
     "dashboard_preset_json": None,
     "abbreviation": None,
-    "importance": None,
-    "urgency_threshold_days": None,
     "is_project": 0,
     "start_date": None,
     "end_date": None,
@@ -3844,7 +3834,6 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     cols = (
         "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
-        "importance", "urgency_threshold_days",
         "is_project", "start_date", "end_date", "archived_at",
         "created_at",
     )
@@ -3862,17 +3851,6 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         [data.get(c) for c in cols],
     )
     conn.commit()
-
-
-def list_label_rules(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    """{label name: effective label config} for every label -- the resolved
-    rules the `important`/`urgent` derived-state filters and the dashboard's
-    aggregation service feed to src/derived_state.py. Built once per view
-    (never per task) via list_labels, which already returns each label's
-    effective config filled with defaults, so an `Exam` label with
-    `importance=3` configured contributes that rule to every task carrying
-    it."""
-    return {cfg["name"]: cfg for cfg in list_labels(conn)}
 
 
 def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:

@@ -1,7 +1,9 @@
 """Tests for the 1.9 side-work "port /today and /week into the Dashboard"
-slice (plans/STATE.md): the new important_urgent/scheduled_work_today/
-quick_links widget types (routers/dashboard.py), the /today and /week
-redirects, and the widget-partial double-line date+time audit fix."""
+slice (plans/STATE.md): the scheduled_work_today/quick_links widget types
+(routers/dashboard.py; important_urgent was a third such type, removed
+outright along with the rest of the Importance/Urgency feature -- see
+src/derived_state.py's module docstring), the /today and /week redirects,
+and the widget-partial double-line date+time audit fix."""
 
 from __future__ import annotations
 
@@ -25,29 +27,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _seed_task(conn, uid, due_at=None, tags=None, status="active", importance=None, urgency=None):
-    """importance/urgency are computed, not stored columns (side work,
-    post-1.1, src/derived_state.py) -- to get a task to *effectively* carry
-    a given level, this seeds a dedicated per-task label with that
-    label_config rule and tags the task with it, instead of writing the
-    (now nonexistent) explicit columns directly."""
-    all_tags = list(tags or [])
-    if importance is not None:
-        label = f"{uid}-imp-label"
-        db.upsert_label_config(conn, {"name": label, "importance": importance})
-        all_tags.append(label)
-    if urgency is not None:
-        # No direct "explicit urgency" label rule exists -- urgency_threshold_
-        # days implies URGENCY_HIGH (3) once due_at falls inside the window,
-        # so this only faithfully reproduces urgency=3 callers; nothing in
-        # this file currently asks for 1/2, so that's not implemented here.
-        label = f"{uid}-urg-label"
-        db.upsert_label_config(conn, {"name": label, "urgency_threshold_days": 9999})
-        all_tags.append(label)
+def _seed_task(conn, uid, due_at=None, tags=None, status="active"):
     db.upsert_task(conn, {
         "uid": uid,
         "title": uid, "description": "", "status": status, "due_at": due_at,
-        "tags": all_tags, "created_at": _now(),
+        "tags": list(tags or []), "created_at": _now(),
     })
 
 
@@ -58,43 +42,6 @@ def _seed_event(conn, uid, start_at=None, end_at=None, tags=None):
         "start_at": start_at, "end_at": end_at,
         "tags": tags or [], "created_at": _now(),
     })
-
-
-class TestImportantUrgentWidget:
-    def test_includes_important_and_urgent_open_tasks(self, conn):
-        _seed_task(conn, "imp", importance=3)
-        _seed_task(conn, "plain")
-        data = dashboard_router._render_important_urgent(conn, {})
-        uids = {t["uid"] for t, _states in data["rows"]}
-        assert "imp" in uids
-        assert "plain" not in uids
-
-    def test_excludes_tasks_already_overdue_or_due_today(self, conn):
-        today = date.today().isoformat()
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
-        _seed_task(conn, "overdue_and_important", due_at=yesterday, importance=3)
-        _seed_task(conn, "due_today_and_important", due_at=today, importance=3)
-        data = dashboard_router._render_important_urgent(conn, {})
-        uids = {t["uid"] for t, _states in data["rows"]}
-        assert uids.isdisjoint({"overdue_and_important", "due_today_and_important"})
-
-    def test_respects_tag_filter(self, conn):
-        _seed_task(conn, "uni_important", importance=3, tags=["Uni"])
-        _seed_task(conn, "other_important", importance=3, tags=["Other"])
-        data = dashboard_router._render_important_urgent(conn, {"tags": ["Uni"]})
-        uids = {t["uid"] for t, _states in data["rows"]}
-        assert uids == {"uni_important"}
-
-    def test_respects_limit(self, conn):
-        for i in range(10):
-            _seed_task(conn, f"t{i}", importance=3)
-        data = dashboard_router._render_important_urgent(conn, {"limit": 3})
-        assert len(data["rows"]) == 3
-
-    def test_registered_in_widget_types(self):
-        spec = dashboard_router.WIDGET_TYPES["important_urgent"]
-        assert spec["template"] == "_widget_important_urgent.html"
-        assert spec["render"] is dashboard_router._render_important_urgent
 
 
 class TestScheduledWorkTodayWidget:
@@ -173,14 +120,6 @@ class TestQuickLinksWidget:
 
 
 class TestNewWidgetsAddableThroughBuilder:
-    def test_important_urgent_addable_via_source_view(self, conn):
-        dashboard_router.add_widget(
-            source="calendar_tasks", view="important_urgent_view", range="", title="",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
-        )
-        w = db.list_dashboard_widgets(conn)[0]
-        assert w["type"] == "important_urgent"
-
     def test_scheduled_work_addable_via_source_view(self, conn):
         dashboard_router.add_widget(
             source="calendar_tasks", view="scheduled_work_view", range="", title="",
@@ -198,7 +137,7 @@ class TestNewWidgetsAddableThroughBuilder:
         assert w["type"] == "quick_links"
 
     def test_selection_round_trips_for_each_new_type(self):
-        for wtype in ("important_urgent", "scheduled_work_today", "quick_links"):
+        for wtype in ("scheduled_work_today", "quick_links"):
             source, view, range_ = dashboard_router._selection_from_widget({"type": wtype, "config": {}})
             resolved_type, resolved_range = dashboard_router._resolve_selection(source, view, range_)
             assert resolved_type == wtype

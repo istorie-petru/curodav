@@ -90,7 +90,7 @@ def _seed(conn):
         conn,
         {"uid": "t1",
          "title": "Ship export", "description": "", "start_at": None, "due_at": "2026-10-06",
-         "importance": 3, "urgency": 2, "status": "active", "progress": None, "tags_json": '["work"]',
+         "status": "active", "progress": None, "tags_json": '["work"]',
          "recurrence": None, "exdates_json": "[]",
          "created_at": _now(), "updated_at": _now()},
     )
@@ -434,8 +434,8 @@ class TestAutoImport:
     def test_tasks_csv_round_trips_through_auto(self, conn):
         csv_resp = export_router.export_tasks_csv(conn=conn)
         assert csv_resp.status_code == 200
-        resp = self._csv(conn, b"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
-                               b'csv-t1,"Quoted, title",todo,2026-09-01,,,"Home, Work"\r\n')
+        resp = self._csv(conn, b"UID,Title,Status,Due,Tags\r\n"
+                               b'csv-t1,"Quoted, title",todo,2026-09-01,"Home, Work"\r\n')
         assert resp.status_code == 303
         assert "Imported 1 task(s)." in self._note(resp)
         row = db.get_task(conn, "csv-t1")
@@ -472,8 +472,8 @@ class TestAutoImport:
         _seed(conn)
         existing = db.list_tasks(conn)[0]
         body = (
-            f"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
-            f"{existing['uid']},Renamed by CSV,todo,,,,\r\n"
+            f"UID,Title,Status,Due,Tags\r\n"
+            f"{existing['uid']},Renamed by CSV,todo,,\r\n"
         ).encode("utf-8")
         resp = self._csv(conn, body, merge="")
         assert resp.status_code == 303
@@ -481,8 +481,8 @@ class TestAutoImport:
         assert db.get_task(conn, existing["uid"])["title"] == existing["title"]
 
     def test_uidless_rows_are_skipped(self, conn):
-        resp = self._csv(conn, b"UID,Title,Status,Due,Importance,Urgency,Tags\r\n"
-                               b",No uid here,todo,,,,\r\n")
+        resp = self._csv(conn, b"UID,Title,Status,Due,Tags\r\n"
+                               b",No uid here,todo,,\r\n")
         assert resp.status_code == 303
         assert "Imported 0 task(s)." in self._note(resp)
         assert db.list_tasks(conn) == []
