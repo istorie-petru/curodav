@@ -46,8 +46,16 @@ RUN useradd --create-home --home-dir /var/lib/curodav --uid 1000 curodav \
  && chown -R curodav:curodav /var/lib/curodav /var/lib/radicale
 
 WORKDIR /app/webapp
+# CC_DEPLOY_MODE=production (2026-08-29, webapp/src/auth.py) -- this is a
+# real deploy path, not local dev, so an install with no account
+# configured yet (no CC_AUTH_USERNAME/PASSWORD in curodav.env) is forced
+# through GET/POST /setup instead of staying fully open. curodav.env
+# (docker-compose.yml's optional env_file) is applied at container runtime
+# and can still override this if an operator deliberately sets
+# CC_DEPLOY_MODE=local there.
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH=/app/webapp/src
+    PYTHONPATH=/app/webapp/src \
+    CC_DEPLOY_MODE=production
 
 EXPOSE 8000 5232
 

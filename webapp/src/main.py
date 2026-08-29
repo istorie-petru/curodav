@@ -15,7 +15,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from . import db, sync
-from .auth import AuthMiddleware
+from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import load_settings
 
@@ -116,12 +116,22 @@ def create_app() -> FastAPI:
     # overhead would net-lose.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+    # CSRF protection (2026-08-29, src/auth.py::CSRFMiddleware) -- added
+    # before AuthMiddleware below so Auth ends up the outer layer (Starlette
+    # runs the most-recently-added middleware first): an unauthenticated
+    # forged request gets Auth's normal 401/redirect, never reaching this
+    # check at all; only a request that already carries a session cookie
+    # goes through the Origin/Referer verification.
+    app.add_middleware(CSRFMiddleware)
+
     # Single-user login (2026-08-16, src/auth.py) -- a no-op gate when no
     # CC_AUTH_USERNAME/CC_AUTH_PASSWORD are configured, otherwise every
     # request except /login and /static needs a valid session cookie. The
     # middleware reads its settings off `app.state.settings` (set by the
     # lifespan below), so an unset pair keeps the app behaving exactly as
-    # it always has.
+    # it always has. 2026-08-29: also forces GET/POST /setup on an
+    # unconfigured production deploy (CC_DEPLOY_MODE=production) -- see
+    # auth.py's module docstring.
     app.add_middleware(AuthMiddleware)
 
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")

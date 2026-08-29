@@ -14,14 +14,22 @@ The optional CalDAV/CardDAV server is added with `--with-radicale` and is
 only needed if you want to sync the calendar/tasks/contacts to a phone or
 another CalDAV client.
 
-> **Security first:** the app ships with **no authentication** and only
-> enforces a login when you configure it (set `CC_AUTH_USERNAME` +
-> `CC_AUTH_PASSWORD` in the env file — see the configuration table below and
-> [`features/auth.md`](../features/auth.md) for how the single-user login
-> works). Until you do, both deploys publish the app on `127.0.0.1:8000`
-> and expect you to reach it over a trusted network (e.g. Tailscale) or
-> through a reverse proxy that adds auth. Do not expose the port directly
-> to the internet — at minimum, set the `CC_AUTH_*` variables.
+> **Security first:** both of these deploy paths require a login by default
+> (2026-08-29) — the first time you open the app after installing, you'll
+> land on a **first-run setup page** to choose the single account's
+> username and password (see [`features/auth.md`](../features/auth.md)).
+> Everything is blocked until that's done. If you'd rather configure the
+> account yourself ahead of time (scripted installs, etc.), set
+> `CC_AUTH_USERNAME` + `CC_AUTH_PASSWORD` in the env file before first
+> boot and the setup page never appears. Either way, both deploys still
+> publish the app on `127.0.0.1:8000` by default — reach it over a trusted
+> network (e.g. Tailscale) or through a reverse proxy before exposing it
+> more widely; login is a front door, not a substitute for TLS.
+>
+> This forced setup only applies to these two deploy paths
+> (`CC_DEPLOY_MODE=production`, baked into the systemd unit and the Docker
+> image). Running the app directly for local dev keeps the original
+> behavior — fully open unless you set the `CC_AUTH_*` variables yourself.
 
 ## Quick start
 
@@ -63,9 +71,10 @@ The important variables (see `deploy/*/curodav.env.example` for all of them):
 | `CC_BACKUP_DIR` | next to the DB | Where Settings > Data health stores backups |
 | `CC_SYNC_INTERVAL` | `60` | Background Radicale pull interval, seconds |
 | `CC_RADICALE_URL` | `http://127.0.0.1:5232/devuser/` | Radicale principal URL — see below |
-| `CC_AUTH_USERNAME` | *(none)* | Single-user login — set **both** with `CC_AUTH_PASSWORD` to require a login on every page |
+| `CC_AUTH_USERNAME` | *(none)* | Single-user login — set **both** with `CC_AUTH_PASSWORD` to pre-configure the account and skip the first-run setup page |
 | `CC_AUTH_PASSWORD` | *(none)* | The one account's password (see above) |
 | `CC_AUTH_SECRET` | *(auto-generated)* | Session-cookie signing key; unset = auto-generated and stored in the app DB |
+| `CC_DEPLOY_MODE` | `production` (baked in) | Controls the forced first-run `/setup` page — `production` (both deploys' default) forces it until an account exists; `local` restores the old always-open-unless-configured behavior. Not in the env example on purpose: it's set by the unit/image, not meant for casual editing |
 
 ### Enabling phone sync (optional Radicale)
 

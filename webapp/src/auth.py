@@ -27,6 +27,19 @@ Requests that want JSON (the `/api/*` routes, the async-CRUD `X-Requested-
 With: fetch` header, or an `Accept: application/json`) get a clean 401
 instead of a redirect so fetch-driven surfaces never try to parse the
 login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
+
+2026-08-29: three additions, all still stdlib-only.
+  - A production deploy (`CC_DEPLOY_MODE=production` -- systemd/docker set
+    this; local dev/manual runs default to "local" and are unaffected)
+    with no account configured is forced through `GET/POST /setup`
+    instead of staying open: see `setup_required`, `AuthMiddleware`'s
+    forced-setup branch, and `routers/auth.py`'s setup routes. A
+    /setup-created account is persisted hashed (PBKDF2-HMAC-SHA256,
+    `hash_password`) in `app_meta`, not an env var.
+  - `CSRFMiddleware`: Origin/Referer verification for state-changing
+    requests carrying a session cookie (see its own docstring).
+  - `login_rate_limited`/`record_failed_login`: an in-memory per-IP
+    sliding-window lockout on `POST /login`.
 """
 
 from __future__ import annotations
@@ -37,7 +50,7 @@ import hmac
 import json
 import secrets
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
@@ -50,6 +63,26 @@ from . import db
 # wiring) can reference them without importing each other.
 SESSION_COOKIE = "cc_session"
 AUTH_SECRET_KEY = "auth_session_secret"
+
+# app_meta keys the forced first-run /setup flow persists its
+# operator-chosen account under (2026-08-29). Unlike CC_AUTH_USERNAME/
+# CC_AUTH_PASSWORD (plaintext env vars, still supported for local/manual
+# overrides -- see auth_enabled), a /setup-created account only ever exists
+# hashed in the database -- the same "persist in app_meta, not disk config"
+# convention AUTH_SECRET_KEY already uses for the auto-generated session
+# secret.
+AUTH_USERNAME_KEY = "auth_username"
+AUTH_PASSWORD_HASH_KEY = "auth_password_hash"
+
+# The route the forced first-run flow lives at. Public only conditionally
+# (see setup_required) -- unlike PUBLIC_PATHS below, which is unconditional.
+SETUP_PATH = "/setup"
+
+# PBKDF2-HMAC-SHA256 iteration count for hashing a /setup-chosen password.
+# 260_000 matches Django's current default (a well-reviewed, still-current
+# figure for this primitive as of 2024) -- stdlib-only (hashlib), so no new
+# runtime dependency, consistent with the rest of this module.
+PBKDF2_ITERATIONS = 260_000
 
 # How long a login stays valid. 30 days -- a personal single-user app where
 # "log me in once, keep me logged in" is the expected UX; the deploy's own
@@ -64,28 +97,129 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 PUBLIC_PATHS = {"/login"}
 
 
-def auth_enabled(settings) -> bool:
-    """Whether login is enforced for this install: only when BOTH the
-    username and password are configured (see config.py's docstring on the
-    pair). A `None` settings (middleware before the lifespan set it, or a
-    bare test app) counts as disabled."""
-    return bool(settings and settings.auth_username and settings.auth_password)
+def auth_enabled(settings, conn=None) -> bool:
+    """Whether login is enforced for this install: true when EITHER the
+    env-var pair (CC_AUTH_USERNAME/PASSWORD, see config.py's docstring) is
+    configured, OR a first-run /setup account has been persisted
+    (has_persisted_credentials). A `None` settings (middleware before the
+    lifespan set it, or a bare test app) counts as disabled.
+
+    `conn` is optional -- pass one in when the caller already holds it
+    (routers do); otherwise a short-lived connection is opened only when
+    the env pair is absent, the same "conn optional, opened on demand"
+    convention session_secret uses."""
+    if not settings:
+        return False
+    if settings.auth_username and settings.auth_password:
+        return True
+    if settings.deploy_mode == "local":
+        # Local dev/manual runs never consult the DB for this -- the
+        # env-var pair is the only way to turn login on there, so the
+        # common "nothing configured" case costs zero DB hits per request,
+        # exactly like before this function grew a persisted-credentials
+        # fallback at all.
+        return False
+    return has_persisted_credentials(settings, conn)
 
 
-def verify_credentials(settings, username: str | None, password: str | None) -> bool:
-    """Constant-time comparison of a login attempt against the configured
-    single user. `hmac.compare_digest` on both fields (not just the
-    password) so a wrong username doesn't short-circuit with a measurable
-    timing difference. Returns False for anything missing/empty."""
-    if not auth_enabled(settings):
+def has_persisted_credentials(settings, conn=None) -> bool:
+    """Whether a /setup-created account exists in app_meta, regardless of
+    the env-var pair."""
+    if not settings:
         return False
-    expected_user = settings.auth_username
-    expected_pass = settings.auth_password
-    if not username or not password:
+    if conn is not None:
+        return get_persisted_credentials(conn) is not None
+    with db.connect(settings.db_path) as c:
+        return get_persisted_credentials(c) is not None
+
+
+def get_persisted_credentials(conn) -> tuple[str, str] | None:
+    """The (username, password_hash) pair /setup persisted, or None when no
+    account has been created yet."""
+    username = db.get_app_meta(conn, AUTH_USERNAME_KEY)
+    password_hash = db.get_app_meta(conn, AUTH_PASSWORD_HASH_KEY)
+    if username and password_hash:
+        return username, password_hash
+    return None
+
+
+def set_persisted_credentials(conn, username: str, password: str) -> None:
+    """Persists a /setup-chosen account: the username in the clear (it's
+    not a secret) and the password hashed (hash_password)."""
+    db.set_app_meta(conn, AUTH_USERNAME_KEY, username)
+    db.set_app_meta(conn, AUTH_PASSWORD_HASH_KEY, hash_password(password))
+
+
+def setup_required(settings, conn=None) -> bool:
+    """Whether an unconfigured install must be forced through GET/POST
+    /setup before anything else works. Only true for a deploy_mode other
+    than "local" (systemd/docker set CC_DEPLOY_MODE=production -- see
+    config.py) that has neither the env-var pair nor a persisted account
+    yet. Local dev/manual runs (deploy_mode == "local") are never forced --
+    they keep the original "open unless you configure it" default."""
+    if not settings:
         return False
-    return hmac.compare_digest(username, expected_user) and hmac.compare_digest(
-        password, expected_pass
+    if settings.deploy_mode == "local":
+        return False
+    return not auth_enabled(settings, conn)
+
+
+def hash_password(password: str) -> str:
+    """PBKDF2-HMAC-SHA256, self-describing so the iteration count/salt
+    travel with the hash: `pbkdf2_sha256$<iterations>$<salt-hex>$<hash-hex>`.
+    stdlib-only (hashlib), no new runtime dependency."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS
     )
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+def _verify_password_hash(password: str, encoded: str) -> bool:
+    """Constant-time check of `password` against a hash_password() value.
+    Any malformed/unrecognized encoding fails closed (False), never
+    raises -- a corrupted app_meta row must not crash the login path."""
+    try:
+        algo, iterations_s, salt_hex, hash_hex = encoded.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations_s)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+    except (ValueError, AttributeError):
+        return False
+    candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(candidate, expected)
+
+
+def verify_credentials(
+    settings, username: str | None, password: str | None, conn=None
+) -> bool:
+    """Constant-time comparison of a login attempt against whichever
+    account is configured: the env-var pair first (if both are set), else
+    the persisted /setup account (hashed). `hmac.compare_digest` on the
+    username too (not just the password/hash) so a wrong username doesn't
+    short-circuit with a measurable timing difference. Returns False for
+    anything missing/empty, and for a disabled install."""
+    if not username or not password or not settings:
+        return False
+    if settings.auth_username and settings.auth_password:
+        if hmac.compare_digest(username, settings.auth_username) and hmac.compare_digest(
+            password, settings.auth_password
+        ):
+            return True
+    if conn is not None:
+        persisted = get_persisted_credentials(conn)
+    else:
+        with db.connect(settings.db_path) as c:
+            persisted = get_persisted_credentials(c)
+    if persisted:
+        stored_user, stored_hash = persisted
+        if hmac.compare_digest(username, stored_user) and _verify_password_hash(
+            password, stored_hash
+        ):
+            return True
+    return False
 
 
 def session_secret(settings, conn=None) -> str:
@@ -191,10 +325,25 @@ class AuthMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         settings = self._get_settings(scope)
-        if not auth_enabled(settings):
-            return await self.app(scope, receive, send)
         path = scope["path"]
         if path in PUBLIC_PATHS or path.startswith("/static/"):
+            return await self.app(scope, receive, send)
+
+        # Forced first-run setup (2026-08-29): a production deploy
+        # (deploy_mode != "local", see config.py) with no account
+        # configured yet -- env pair or persisted -- must be walked through
+        # GET/POST /setup before anything else is reachable. This check
+        # comes before the auth_enabled early-out below on purpose: an
+        # unconfigured production install is NOT "auth disabled", it's
+        # "not set up yet." Local dev/manual runs skip this branch
+        # entirely -- auth_enabled's own env-pair-only check below is all
+        # that applies there, same as before this feature existed.
+        if settings and settings.deploy_mode != "local":
+            if not self._configured(settings, scope):
+                if path == SETUP_PATH:
+                    return await self.app(scope, receive, send)
+                return await self._deny(scope, receive, send, SETUP_PATH)
+        elif not auth_enabled(settings):
             return await self.app(scope, receive, send)
 
         request = Request(scope)
@@ -204,17 +353,41 @@ class AuthMiddleware:
             if read_session_token(secret, token):
                 return await self.app(scope, receive, send)
 
+        return await self._deny(scope, receive, send, "/login")
+
+    async def _deny(self, scope, receive, send, target: str):
         if _wants_json(scope):
             response = JSONResponse(
                 {"ok": False, "detail": "Authentication required"}, status_code=401
             )
         else:
+            path = scope["path"]
             query = scope.get("query_string") or b""
             qs = f"?{query.decode('latin-1')}" if query else ""
             response = RedirectResponse(
-                url=f"/login?{urlencode({'next': path + qs})}", status_code=302
+                url=f"{target}?{urlencode({'next': path + qs})}", status_code=302
             )
         return await response(scope, receive, send)
+
+    def _configured(self, settings, scope) -> bool:
+        """Cached "does this install have an account yet" check (env pair
+        or persisted /setup account) -- only meaningful for a non-"local"
+        deploy_mode, where an unconfigured install must be forced to
+        /setup (see __call__). Once True, it stays True for the process
+        lifetime except for Settings > Purge all, which resets the cache
+        (see routers/settings.py::purge_all) -- a fresh install then needs
+        /setup again, matching a wiped database's actual state. The False
+        path (genuinely not set up yet) re-checks the DB every request,
+        same as _get_secret's own on-demand connection; that's expected
+        only for the brief window between install and finishing /setup."""
+        app = scope.get("app")
+        state = getattr(app, "state", None)
+        if state is not None and getattr(state, "_cc_auth_configured", False):
+            return True
+        configured = auth_enabled(settings)
+        if configured and state is not None:
+            state._cc_auth_configured = True
+        return configured
 
     def _get_secret(self, settings, scope) -> str:
         """The signing secret, cached on `app.state` for the process
@@ -232,3 +405,142 @@ class AuthMiddleware:
         if state is not None:
             state._cc_auth_secret = secret
         return secret
+
+
+# --------------------------------------------------------------------- #
+# Login attempt rate limiting (2026-08-29)
+# --------------------------------------------------------------------- #
+#
+# A plain in-memory sliding window, keyed by client IP -- this is a
+# single-process app (uvicorn, no reload/workers in the deploy configs), so
+# a module-level dict is a real, if not restart-durable, lockout: exactly
+# the tradeoff the auto-generated session secret already makes for
+# simplicity (stdlib-only, no schema/dependency). Losing the counters on a
+# restart is an acceptable gap for a personal single-user app -- the
+# threat this defends against (a slow online guessing loop) still has to
+# survive the window in one process lifetime to matter.
+
+RATE_LIMIT_MAX_ATTEMPTS = 5
+RATE_LIMIT_WINDOW_SECONDS = 15 * 60
+
+_login_attempts: dict[str, list[float]] = {}
+
+
+def _prune(key: str, now: float) -> list[float]:
+    attempts = [t for t in _login_attempts.get(key, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    _login_attempts[key] = attempts
+    return attempts
+
+
+def login_rate_limited(key: str) -> bool:
+    """True once `key` (a client IP) has RATE_LIMIT_MAX_ATTEMPTS failed
+    logins within the last RATE_LIMIT_WINDOW_SECONDS. A locked-out key
+    stays locked until its oldest attempt ages out of the window (a
+    rolling lockout, not a fixed one -- each new attempt while locked
+    keeps pushing it back out, same as most login-throttling
+    implementations)."""
+    return len(_prune(key, time.time())) >= RATE_LIMIT_MAX_ATTEMPTS
+
+
+def record_failed_login(key: str) -> None:
+    now = time.time()
+    _prune(key, now)
+    _login_attempts.setdefault(key, []).append(now)
+
+
+def clear_login_attempts(key: str) -> None:
+    _login_attempts.pop(key, None)
+
+
+def reset_rate_limits() -> None:
+    """Test-only escape hatch: the module-level dict above is process-wide
+    state, so a test suite exercising login_submit repeatedly needs a way
+    to start each test with a clean slate rather than tripping a lockout
+    left over from an earlier test."""
+    _login_attempts.clear()
+
+
+def client_ip(request: Request) -> str:
+    """The rate-limit bucket key. `request.client` is None for a
+    hand-built scope with no "client" entry (this suite's direct
+    router-function-call tests) -- "unknown" groups those together, which
+    is fine for tests (reset_rate_limits clears it between them) and never
+    happens for a real request, where an ASGI server always sets it."""
+    return request.client.host if request.client else "unknown"
+
+
+# --------------------------------------------------------------------- #
+# CSRF protection (2026-08-29)
+# --------------------------------------------------------------------- #
+#
+# Origin/Referer verification for state-changing requests, enforced only
+# when a session cookie is riding along -- see CSRFMiddleware's own
+# docstring for the full reasoning. Deliberately NOT a per-form token: this
+# app's forms/JS live across dozens of templates and a token would need
+# threading through every one of them (plus every fetch() call) for
+# comparatively little extra protection over Origin verification, which
+# OWASP lists as an accepted primary defense in its own right (see the CSRF
+# prevention cheat sheet's "Verifying Origin with Standard Headers"
+# section) and needs zero template changes.
+
+CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
+
+def _request_origin_host(request: Request) -> str | None:
+    """The host:port a same-origin browser request's Origin (preferred) or
+    Referer header would carry. None when neither header is present."""
+    source = request.headers.get("origin") or request.headers.get("referer")
+    if not source:
+        return None
+    try:
+        return urlsplit(source).netloc or None
+    except ValueError:
+        return None
+
+
+def is_same_origin_request(request: Request) -> bool:
+    """False (reject) whenever the Origin/Referer host doesn't match the
+    request's own Host -- including when both headers are absent, since
+    every modern browser sends at least one on a cross-origin or
+    same-origin POST; a mutating request with neither is itself
+    suspicious enough to fail closed rather than assume same-origin."""
+    host = request.headers.get("host")
+    origin_host = _request_origin_host(request)
+    return bool(host) and bool(origin_host) and origin_host == host
+
+
+class CSRFMiddleware:
+    """Rejects cross-origin state-changing requests (POST/PUT/PATCH/
+    DELETE/...) that carry this app's session cookie. Only relevant when
+    auth is enabled and a session exists: without a cookie-based session,
+    there is no ambient credential for a forged cross-site request to ride
+    on, so the check is a no-op on a fully-open install -- consistent with
+    this app's existing "disabled auth changes nothing" convention
+    (AuthMiddleware). SameSite=Lax on the session cookie already blocks
+    most of this in current browsers; this is the second, explicit layer
+    the still-open "CSRF protection is genuinely missing" gap called for,
+    without threading a token through every form/fetch() in the app."""
+
+    def __init__(self, app, *, get_settings=_settings_from_scope):
+        self.app = app
+        self._get_settings = get_settings
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] in CSRF_SAFE_METHODS:
+            return await self.app(scope, receive, send)
+        settings = self._get_settings(scope)
+        if not auth_enabled(settings):
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        if request.cookies.get(SESSION_COOKIE) is None:
+            # Nothing for a forged request to exploit yet -- covers the
+            # login/setup POSTs themselves, which run before any session
+            # cookie exists.
+            return await self.app(scope, receive, send)
+        if is_same_origin_request(request):
+            return await self.app(scope, receive, send)
+        response = JSONResponse(
+            {"ok": False, "detail": "CSRF check failed: request origin does not match host"},
+            status_code=403,
+        )
+        return await response(scope, receive, send)

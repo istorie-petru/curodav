@@ -31,6 +31,16 @@ class Settings:
     auth_username: str | None = None
     auth_password: str | None = None
     auth_session_secret: str | None = None
+    # Deploy-mode default posture (2026-08-29, src/auth.py's setup_required).
+    # "local" (default -- covers local dev and any manual/unrecognized run)
+    # keeps today's behavior: open unless CC_AUTH_USERNAME/PASSWORD are both
+    # set. The systemd unit and the Docker image both set
+    # CC_DEPLOY_MODE=production, which forces a first-run GET/POST /setup
+    # flow (credentials persisted hashed in app_meta) whenever neither the
+    # env pair nor a persisted account exists yet -- those are the two
+    # deploy paths an operator is likely to expose beyond localhost, so
+    # "fully open by default" is no longer an acceptable default there.
+    deploy_mode: str = "local"
 
 
 def load_settings() -> Settings:
@@ -61,4 +71,5 @@ def load_settings() -> Settings:
         auth_username=os.environ.get("CC_AUTH_USERNAME") or None,
         auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,
         auth_session_secret=os.environ.get("CC_AUTH_SECRET") or None,
+        deploy_mode=os.environ.get("CC_DEPLOY_MODE", "local"),
     )

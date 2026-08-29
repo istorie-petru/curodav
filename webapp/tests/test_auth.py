@@ -1,24 +1,41 @@
 """Single-user authentication (2026-08-16, src/auth.py + routers/auth.py).
+2026-08-29: forced first-run /setup for production deploys, CSRF
+middleware, and login rate limiting -- all added to this same file.
 
-The app runs with NO login by default; configure CC_AUTH_USERNAME +
-CC_AUTH_PASSWORD and every request except /login and /static requires a
-signed session cookie. Coverage, following this suite's usual conventions:
+The app runs with NO login by default (CC_DEPLOY_MODE="local", the
+default); configure CC_AUTH_USERNAME + CC_AUTH_PASSWORD and every request
+except /login, /setup and /static requires a signed session cookie.
+Coverage, following this suite's usual conventions:
 
-  - config: load_settings maps the CC_AUTH_* env vars onto Settings.
+  - config: load_settings maps the CC_AUTH_*/CC_DEPLOY_MODE env vars onto
+    Settings.
   - src/auth.py's pure functions: auth_enabled, verify_credentials
     (constant-time, disabled install), and the signed-cookie round trip
     (valid, tampered, wrong-secret, malformed, expired).
+  - src/auth.py's password hashing (hash_password/_verify_password_hash)
+    and persisted-credential helpers (get/set/has_persisted_credentials),
+    plus setup_required's deploy_mode gating.
   - src/auth.py's AuthMiddleware over a real (minimal) FastAPI app via
     TestClient -- the middleware is the one layer this suite can't reach
     through router-function calls, so it gets its own tiny ASGI app with
     settings pointed at a test secret (no DB needed). Covers: 302-to-login
     for a signed-out page request, 401 JSON for /api/fetch requests, the
-    public-path exemptions, and a valid cookie passing through.
-  - routers/auth.py's login/logout routes via direct calls (the suite's
-    router-function-call convention): disabled-install redirect, renders
-    the form, already-logged-in redirect, successful login sets the cookie
-    and honors a safe `next`, wrong credentials get a 401 + error message,
-    logout clears the cookie, and `next` open-redirect safety.
+    public-path exemptions, a valid cookie passing through, and the forced
+    /setup redirect for an unconfigured production install.
+  - src/auth.py's CSRFMiddleware over the same kind of tiny app: same-origin
+    POST passes, cross-origin POST is rejected, GET is never checked, and a
+    request with no session cookie is never checked either.
+  - src/auth.py's login rate limiting (login_rate_limited/
+    record_failed_login/clear_login_attempts): a sliding window, keyed by
+    client IP.
+  - routers/auth.py's login/logout/setup routes via direct calls (the
+    suite's router-function-call convention): disabled-install redirect,
+    renders the form, already-logged-in redirect, successful login sets
+    the cookie and honors a safe `next`, wrong credentials get a 401 +
+    error message, rate-limited attempts get a 429, logout clears the
+    cookie, `next` open-redirect safety, and the /setup flow (rendered
+    only when required, validates the chosen password, persists it
+    hashed, logs the browser in, and refuses to re-run once configured).
 """
 
 from __future__ import annotations
@@ -37,6 +54,17 @@ from src import auth, db
 from src.config import Settings
 from src.routers import auth as auth_router
 from src.routers import settings as settings_router
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The login rate limiter is a module-level dict (src/auth.py) --
+    process-wide state that would otherwise leak between tests (and
+    between test files, though only this one exercises login_submit
+    directly)."""
+    auth.reset_rate_limits()
+    yield
+    auth.reset_rate_limits()
 
 
 def _settings(*, enabled=True, **overrides) -> Settings:
@@ -61,26 +89,29 @@ def _settings(*, enabled=True, **overrides) -> Settings:
     return replace(base, **overrides)
 
 
-def _request(settings, *, cookies=None, path="/login", state_extra=None) -> Request:
+def _request(
+    settings, *, cookies=None, path="/login", state_extra=None, client_host=None
+) -> Request:
     headers = []
     if cookies:
         cookie = "; ".join(f"{k}={v}" for k, v in cookies.items())
         headers.append((b"cookie", cookie.encode()))
     state = SimpleNamespace(settings=settings, **(state_extra or {}))
     fake_app = SimpleNamespace(state=state)
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": b"",
-            "scheme": "http",
-            "server": ("testserver", 80),
-            "root_path": "",
-            "headers": headers,
-            "app": fake_app,
-        }
-    )
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "query_string": b"",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "root_path": "",
+        "headers": headers,
+        "app": fake_app,
+    }
+    if client_host:
+        scope["client"] = (client_host, 12345)
+    return Request(scope)
 
 
 def _token(settings, username="alice", **overrides) -> str:
@@ -122,6 +153,19 @@ class TestConfig:
         assert s.auth_password == "hunter2"
         assert s.auth_session_secret == "env-secret"
 
+    def test_deploy_mode_defaults_to_local(self, monkeypatch):
+        monkeypatch.delenv("CC_DEPLOY_MODE", raising=False)
+        from src.config import load_settings
+
+        assert load_settings().deploy_mode == "local"
+
+    def test_deploy_mode_reads_env(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        monkeypatch.setenv("CC_DEPLOY_MODE", "production")
+        from src.config import load_settings
+
+        assert load_settings().deploy_mode == "production"
+
 
 # --------------------------------------------------------------------- #
 # src/auth.py -- pure functions
@@ -138,6 +182,92 @@ class TestAuthEnabled:
 
     def test_no_settings_disables(self):
         assert not auth.auth_enabled(None)
+
+    def test_local_deploy_mode_ignores_persisted_credentials(self, conn):
+        # deploy_mode="local" (the default) never consults the DB -- a
+        # persisted /setup account only matters for a production deploy.
+        settings = _settings(enabled=False)
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        assert not auth.auth_enabled(settings, conn)
+
+    def test_production_deploy_mode_honors_persisted_credentials(self, conn):
+        settings = _settings(enabled=False, deploy_mode="production")
+        assert not auth.auth_enabled(settings, conn)
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        assert auth.auth_enabled(settings, conn)
+
+    def test_production_deploy_mode_opens_own_connection(self, tmp_path):
+        settings = _settings(
+            enabled=False, deploy_mode="production", db_path=tmp_path / "cache.sqlite"
+        )
+        assert not auth.auth_enabled(settings)
+        with db.connect(settings.db_path) as c:
+            auth.set_persisted_credentials(c, "alice", "s3cret123")
+        assert auth.auth_enabled(settings)
+
+    def test_env_pair_wins_even_in_production(self, conn):
+        # Both configured -- the env pair is enough on its own, no DB hit
+        # needed (and none happens, since conn is never touched here).
+        settings = _settings(enabled=True, deploy_mode="production")
+        assert auth.auth_enabled(settings, conn)
+
+
+class TestPersistedCredentials:
+    def test_none_when_unset(self, conn):
+        assert auth.get_persisted_credentials(conn) is None
+        assert not auth.has_persisted_credentials(_settings(deploy_mode="production"), conn)
+
+    def test_set_then_get(self, conn):
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        username, password_hash = auth.get_persisted_credentials(conn)
+        assert username == "alice"
+        assert password_hash.startswith("pbkdf2_sha256$")
+        assert auth.has_persisted_credentials(
+            _settings(deploy_mode="production"), conn
+        )
+
+    def test_password_is_never_stored_in_the_clear(self, conn):
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        _, password_hash = auth.get_persisted_credentials(conn)
+        assert "s3cret123" not in password_hash
+
+
+class TestPasswordHashing:
+    def test_round_trip(self):
+        encoded = auth.hash_password("s3cret123")
+        assert auth._verify_password_hash("s3cret123", encoded)
+
+    def test_wrong_password_fails(self):
+        encoded = auth.hash_password("s3cret123")
+        assert not auth._verify_password_hash("nope", encoded)
+
+    def test_different_salts_for_the_same_password(self):
+        assert auth.hash_password("s3cret123") != auth.hash_password("s3cret123")
+
+    def test_malformed_hash_fails_closed(self):
+        assert not auth._verify_password_hash("anything", "garbage")
+        assert not auth._verify_password_hash("anything", "pbkdf2_sha256$not-an-int$aa$bb")
+        assert not auth._verify_password_hash("anything", "bcrypt$12$salt$hash")
+
+
+class TestSetupRequired:
+    def test_local_deploy_mode_never_requires_setup(self, conn):
+        assert not auth.setup_required(_settings(enabled=False), conn)
+        assert not auth.setup_required(_settings(enabled=True), conn)
+
+    def test_production_with_no_account_requires_setup(self, conn):
+        assert auth.setup_required(_settings(enabled=False, deploy_mode="production"), conn)
+
+    def test_production_with_env_pair_does_not_require_setup(self, conn):
+        assert not auth.setup_required(_settings(enabled=True, deploy_mode="production"), conn)
+
+    def test_production_with_persisted_account_does_not_require_setup(self, conn):
+        settings = _settings(enabled=False, deploy_mode="production")
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        assert not auth.setup_required(settings, conn)
+
+    def test_no_settings_never_requires_setup(self):
+        assert not auth.setup_required(None)
 
 
 class TestVerifyCredentials:
@@ -156,6 +286,21 @@ class TestVerifyCredentials:
 
     def test_disabled_install(self):
         assert not auth.verify_credentials(_settings(enabled=False), "alice", "s3cret")
+
+    def test_persisted_account(self, conn):
+        settings = _settings(enabled=False)
+        auth.set_persisted_credentials(conn, "bob", "hunter22")
+        assert auth.verify_credentials(settings, "bob", "hunter22", conn)
+        assert not auth.verify_credentials(settings, "bob", "wrong", conn)
+        assert not auth.verify_credentials(settings, "mallory", "hunter22", conn)
+
+    def test_env_pair_checked_before_persisted_account(self, conn):
+        # Both an env pair and a (different) persisted account exist --
+        # the env pair alone is sufficient and checked first.
+        settings = _settings(enabled=True)
+        auth.set_persisted_credentials(conn, "bob", "hunter22")
+        assert auth.verify_credentials(settings, "alice", "s3cret", conn)
+        assert auth.verify_credentials(settings, "bob", "hunter22", conn)
 
 
 class TestSessionToken:
@@ -284,6 +429,181 @@ class TestAuthMiddleware:
         assert resp.json()["detail"] == "Authentication required"
 
 
+def _prod_settings(tmp_path, **overrides):
+    return _settings(
+        enabled=False, deploy_mode="production", db_path=tmp_path / "cache.sqlite", **overrides
+    )
+
+
+class TestAuthMiddlewareForcedSetup:
+    """2026-08-29: a production deploy (CC_DEPLOY_MODE=production) with no
+    account yet is forced to GET/POST /setup instead of staying open."""
+
+    def test_unconfigured_production_redirects_to_setup(self, tmp_path):
+        client = TestClient(_auth_app(_prod_settings(tmp_path)), follow_redirects=False)
+        resp = client.get("/hello")
+        assert resp.status_code == 302
+        assert resp.headers["location"].startswith("/setup?next=")
+
+    def test_unconfigured_production_setup_path_passes_through(self, tmp_path):
+        client = TestClient(_auth_app(_prod_settings(tmp_path)), follow_redirects=False)
+        # No /setup route on this tiny test app -- a 404 (not a 302/401)
+        # proves the middleware let the request through to the app instead
+        # of redirecting/denying it.
+        resp = client.get("/setup")
+        assert resp.status_code == 404
+
+    def test_unconfigured_production_api_gets_401_json(self, tmp_path):
+        client = TestClient(_auth_app(_prod_settings(tmp_path)), follow_redirects=False)
+        resp = client.get("/api/ping")
+        assert resp.status_code == 401
+
+    def test_configured_production_behaves_like_normal_auth(self, tmp_path):
+        settings = _prod_settings(tmp_path)
+        with db.connect(settings.db_path) as c:
+            auth.set_persisted_credentials(c, "alice", "s3cret123")
+        client = TestClient(_auth_app(settings), follow_redirects=False)
+        resp = client.get("/hello")
+        assert resp.status_code == 302
+        assert resp.headers["location"].startswith("/login?next=")
+
+    def test_configured_production_with_valid_session_passes(self, tmp_path):
+        settings = _prod_settings(tmp_path, auth_session_secret="test-signing-secret")
+        with db.connect(settings.db_path) as c:
+            auth.set_persisted_credentials(c, "alice", "s3cret123")
+        client = TestClient(_auth_app(settings), follow_redirects=False)
+        client.cookies.set(
+            auth.SESSION_COOKIE,
+            auth.make_session_token(settings.auth_session_secret, "alice"),
+        )
+        assert client.get("/hello").json() == {"hello": "world"}
+
+    def test_configured_cache_is_sticky(self, tmp_path):
+        # Once the middleware has seen a configured install, it doesn't
+        # re-check the DB -- deleting the persisted account afterwards
+        # must not flip the install back to "needs setup" mid-process.
+        settings = _prod_settings(tmp_path)
+        with db.connect(settings.db_path) as c:
+            auth.set_persisted_credentials(c, "alice", "s3cret123")
+        client = TestClient(_auth_app(settings), follow_redirects=False)
+        first = client.get("/hello")
+        assert first.status_code == 302 and "/login?next=" in first.headers["location"]
+        with db.connect(settings.db_path) as c:
+            db.set_app_meta(c, auth.AUTH_USERNAME_KEY, "")
+            db.set_app_meta(c, auth.AUTH_PASSWORD_HASH_KEY, "")
+        second = client.get("/hello")
+        assert second.status_code == 302 and "/login?next=" in second.headers["location"]
+
+
+# --------------------------------------------------------------------- #
+# src/auth.py -- CSRFMiddleware over a real ASGI app
+# --------------------------------------------------------------------- #
+
+
+def _csrf_app(settings):
+    app = FastAPI()
+    app.state.settings = settings
+    app.state.bridge = None
+
+    @app.get("/hello")
+    def hello():
+        return JSONResponse({"hello": "world"})
+
+    @app.post("/mutate")
+    def mutate():
+        return JSONResponse({"ok": True})
+
+    app.add_middleware(auth.CSRFMiddleware)
+    return app
+
+
+class TestCSRFMiddleware:
+    def test_get_is_never_checked(self):
+        client = TestClient(_csrf_app(_settings()))
+        assert client.get("/hello").status_code == 200
+
+    def test_post_without_session_cookie_passes(self):
+        # Nothing for a forged request to exploit yet (e.g. the login POST
+        # itself, before any cookie exists).
+        client = TestClient(_csrf_app(_settings()))
+        assert client.post("/mutate").status_code == 200
+
+    def test_post_with_session_and_matching_origin_passes(self):
+        client = TestClient(_csrf_app(_settings()), base_url="http://testserver")
+        client.cookies.set(auth.SESSION_COOKIE, "any-value")
+        resp = client.post("/mutate", headers={"Origin": "http://testserver"})
+        assert resp.status_code == 200
+
+    def test_post_with_session_and_cross_origin_is_rejected(self):
+        client = TestClient(_csrf_app(_settings()), base_url="http://testserver")
+        client.cookies.set(auth.SESSION_COOKIE, "any-value")
+        resp = client.post("/mutate", headers={"Origin": "https://evil.example"})
+        assert resp.status_code == 403
+        assert resp.json()["ok"] is False
+
+    def test_post_with_session_and_matching_referer_passes(self):
+        client = TestClient(_csrf_app(_settings()), base_url="http://testserver")
+        client.cookies.set(auth.SESSION_COOKIE, "any-value")
+        resp = client.post(
+            "/mutate", headers={"Referer": "http://testserver/tasks"}
+        )
+        assert resp.status_code == 200
+
+    def test_post_with_session_and_no_origin_or_referer_is_rejected(self):
+        client = TestClient(_csrf_app(_settings()), base_url="http://testserver")
+        client.cookies.set(auth.SESSION_COOKIE, "any-value")
+        assert client.post("/mutate").status_code == 403
+
+    def test_disabled_auth_skips_the_check_entirely(self):
+        # Auth off means no ambient credential worth protecting -- a
+        # cross-origin POST goes through untouched, same as today.
+        client = TestClient(_csrf_app(_settings(enabled=False)), base_url="http://testserver")
+        client.cookies.set(auth.SESSION_COOKIE, "any-value")
+        resp = client.post("/mutate", headers={"Origin": "https://evil.example"})
+        assert resp.status_code == 200
+
+
+# --------------------------------------------------------------------- #
+# src/auth.py -- login rate limiting
+# --------------------------------------------------------------------- #
+
+
+class TestLoginRateLimiting:
+    def test_not_limited_before_the_threshold(self):
+        key = "203.0.113.1"
+        for _ in range(auth.RATE_LIMIT_MAX_ATTEMPTS - 1):
+            auth.record_failed_login(key)
+        assert not auth.login_rate_limited(key)
+
+    def test_limited_at_the_threshold(self):
+        key = "203.0.113.2"
+        for _ in range(auth.RATE_LIMIT_MAX_ATTEMPTS):
+            auth.record_failed_login(key)
+        assert auth.login_rate_limited(key)
+
+    def test_different_keys_are_independent(self):
+        key_a, key_b = "203.0.113.3", "203.0.113.4"
+        for _ in range(auth.RATE_LIMIT_MAX_ATTEMPTS):
+            auth.record_failed_login(key_a)
+        assert auth.login_rate_limited(key_a)
+        assert not auth.login_rate_limited(key_b)
+
+    def test_clear_resets_the_window(self):
+        key = "203.0.113.5"
+        for _ in range(auth.RATE_LIMIT_MAX_ATTEMPTS):
+            auth.record_failed_login(key)
+        assert auth.login_rate_limited(key)
+        auth.clear_login_attempts(key)
+        assert not auth.login_rate_limited(key)
+
+    def test_client_ip_falls_back_to_unknown(self):
+        assert auth.client_ip(_request(_settings())) == "unknown"
+
+    def test_client_ip_reads_the_real_client(self):
+        req = _request(_settings(), client_host="198.51.100.7")
+        assert auth.client_ip(req) == "198.51.100.7"
+
+
 # --------------------------------------------------------------------- #
 # routers/auth.py -- login/logout routes
 # --------------------------------------------------------------------- #
@@ -291,12 +611,12 @@ class TestAuthMiddleware:
 
 class TestLoginPage:
     def test_disabled_install_redirects_home(self, conn):
-        resp = auth_router.login_page(_request(_settings(enabled=False)))
+        resp = auth_router.login_page(_request(_settings(enabled=False)), conn=conn)
         assert resp.status_code == 302
         assert resp.headers["location"] == "/"
 
     def test_renders_the_form(self, conn):
-        resp = auth_router.login_page(_request(_settings()))
+        resp = auth_router.login_page(_request(_settings()), conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
         assert "name=\"username\"" in body
@@ -306,7 +626,7 @@ class TestLoginPage:
     def test_already_logged_in_redirects(self, conn):
         settings = _settings()
         resp = auth_router.login_page(
-            _request(settings, cookies={auth.SESSION_COOKIE: _token(settings)})
+            _request(settings, cookies={auth.SESSION_COOKIE: _token(settings)}), conn=conn
         )
         assert resp.status_code == 302
         assert resp.headers["location"] == "/"
@@ -316,6 +636,7 @@ class TestLoginPage:
         resp = auth_router.login_page(
             _request(settings, cookies={auth.SESSION_COOKIE: _token(settings)}),
             next="/tasks",
+            conn=conn,
         )
         assert resp.headers["location"] == "/tasks"
 
@@ -324,6 +645,7 @@ class TestLoginPage:
         resp = auth_router.login_page(
             _request(settings, cookies={auth.SESSION_COOKIE: _token(settings)}),
             next="https://evil.example/",
+            conn=conn,
         )
         assert resp.headers["location"] == "/"
 
@@ -385,6 +707,31 @@ class TestLoginSubmit:
         token = header.split(auth.SESSION_COOKIE + "=", 1)[1].split(";", 1)[0]
         assert auth.read_session_token(settings.auth_session_secret, token) == "alice"
 
+    def test_rate_limited_after_repeated_failures(self, conn):
+        settings = _settings()
+        req = _request(settings, client_host="198.51.100.9")
+        for _ in range(auth.RATE_LIMIT_MAX_ATTEMPTS):
+            resp = auth_router.login_submit(
+                req, username="alice", password="nope", next="", conn=conn
+            )
+            assert resp.status_code == 401
+        locked = auth_router.login_submit(
+            req, username="alice", password="s3cret", next="", conn=conn
+        )
+        assert locked.status_code == 429
+        assert "Too many attempts" in locked.body.decode()
+        assert "set-cookie" not in locked.headers
+
+    def test_successful_login_clears_the_rate_limit(self, conn):
+        settings = _settings()
+        req = _request(settings, client_host="198.51.100.10")
+        auth_router.login_submit(req, username="alice", password="nope", next="", conn=conn)
+        resp = auth_router.login_submit(
+            req, username="alice", password="s3cret", next="", conn=conn
+        )
+        assert resp.status_code == 303
+        assert not auth.login_rate_limited("198.51.100.10")
+
 
 class TestLogout:
     def test_clears_cookie_and_returns_to_login(self, conn):
@@ -398,6 +745,138 @@ class TestLogout:
 
 
 # --------------------------------------------------------------------- #
+# routers/auth.py -- the forced first-run /setup flow (2026-08-29)
+# --------------------------------------------------------------------- #
+
+
+def _prod_no_account_settings(**overrides) -> Settings:
+    return _settings(enabled=False, deploy_mode="production", **overrides)
+
+
+class TestSetupPage:
+    def test_renders_when_required(self, conn):
+        resp = auth_router.setup_page(_request(_prod_no_account_settings(), path="/setup"), conn=conn)
+        assert resp.status_code == 200
+        body = resp.body.decode()
+        assert "name=\"username\"" in body
+        assert "name=\"password\"" in body
+        assert "name=\"password_confirm\"" in body
+        assert "action=\"/setup\"" in body
+
+    def test_redirects_home_when_local_deploy_mode(self, conn):
+        resp = auth_router.setup_page(_request(_settings(enabled=False)), conn=conn)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/"
+
+    def test_redirects_to_login_once_configured_via_env(self, conn):
+        resp = auth_router.setup_page(
+            _request(_prod_no_account_settings(auth_username="alice", auth_password="s3cret")),
+            conn=conn,
+        )
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/login"
+
+    def test_redirects_to_login_once_configured_via_persisted_account(self, conn):
+        settings = _prod_no_account_settings()
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        resp = auth_router.setup_page(_request(settings), conn=conn)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/login"
+
+
+class TestSetupSubmit:
+    def test_success_persists_hashed_account_and_logs_in(self, conn):
+        settings = _prod_no_account_settings(auth_session_secret="test-signing-secret")
+        resp = auth_router.setup_submit(
+            _request(settings),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            conn=conn,
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+        set_cookie = resp.headers["set-cookie"]
+        assert auth.SESSION_COOKIE in set_cookie
+        username, password_hash = auth.get_persisted_credentials(conn)
+        assert username == "alice"
+        assert auth._verify_password_hash("s3cret123", password_hash)
+        token = set_cookie.split(auth.SESSION_COOKIE + "=", 1)[1].split(";", 1)[0]
+        assert auth.read_session_token(settings.auth_session_secret, token) == "alice"
+
+    def test_marks_app_state_configured(self, conn):
+        settings = _prod_no_account_settings()
+        req = _request(settings)
+        auth_router.setup_submit(
+            req, username="alice", password="s3cret123", password_confirm="s3cret123", conn=conn
+        )
+        assert req.app.state._cc_auth_configured is True
+
+    def test_rejects_blank_username(self, conn):
+        resp = auth_router.setup_submit(
+            _request(_prod_no_account_settings()),
+            username="  ",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            conn=conn,
+        )
+        assert resp.status_code == 400
+        assert "Choose a username" in resp.body.decode()
+        assert auth.get_persisted_credentials(conn) is None
+
+    def test_rejects_short_password(self, conn):
+        resp = auth_router.setup_submit(
+            _request(_prod_no_account_settings()),
+            username="alice",
+            password="short",
+            password_confirm="short",
+            conn=conn,
+        )
+        assert resp.status_code == 400
+        assert "at least 8 characters" in resp.body.decode()
+
+    def test_rejects_mismatched_confirmation(self, conn):
+        resp = auth_router.setup_submit(
+            _request(_prod_no_account_settings()),
+            username="alice",
+            password="s3cret123",
+            password_confirm="different",
+            conn=conn,
+        )
+        assert resp.status_code == 400
+        assert "do not match" in resp.body.decode()
+        assert auth.get_persisted_credentials(conn) is None
+
+    def test_refuses_to_run_again_once_configured(self, conn):
+        settings = _prod_no_account_settings()
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        resp = auth_router.setup_submit(
+            _request(settings),
+            username="mallory",
+            password="hijacked1",
+            password_confirm="hijacked1",
+            conn=conn,
+        )
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/login"
+        # The original account is untouched.
+        username, _ = auth.get_persisted_credentials(conn)
+        assert username == "alice"
+
+    def test_disabled_in_local_deploy_mode(self, conn):
+        resp = auth_router.setup_submit(
+            _request(_settings(enabled=False)),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            conn=conn,
+        )
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/"
+        assert auth.get_persisted_credentials(conn) is None
+
+
+# --------------------------------------------------------------------- #
 # Settings > Purge all + the session (Settings > Advanced). A purge wipes
 # app_meta -- where the auto-generated session signing secret lives -- so it
 # must behave like a fresh install: the memoized secret is dropped and the
@@ -407,7 +886,10 @@ class TestLogout:
 
 class TestPurgeAllInvalidatesSession:
     def test_drops_secret_cache_and_clears_cookie(self, conn):
-        req = _request(_settings(), state_extra={"_cc_auth_secret": "old-secret"})
+        req = _request(
+            _settings(),
+            state_extra={"_cc_auth_secret": "old-secret", "_cc_auth_configured": True},
+        )
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/data-maintenance"
@@ -418,6 +900,10 @@ class TestPurgeAllInvalidatesSession:
         assert req.app.state._cc_auth_secret is None
         # app_meta is wiped, so an auto-generated secret is gone with it.
         assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+        # 2026-08-29: the "install is configured" cache (a /setup-created
+        # account) is dropped too, so a purged production install is
+        # forced back through /setup like a genuinely fresh database.
+        assert req.app.state._cc_auth_configured is False
 
     def test_auto_generated_secret_re_mints_after_purge(self, tmp_path):
         settings = _settings(auth_session_secret=None, db_path=tmp_path / "cache.sqlite")

@@ -981,9 +981,17 @@ def purge_all(request: Request, conn=Depends(get_db)):
     # CC_AUTH_SECRET is configured instead, the secret isn't in the DB so
     # it's unaffected, but clearing the cookie forces the re-login there
     # too.
+    #
+    # 2026-08-29: a purge also wipes any /setup-created account (it lives
+    # in app_meta too, see auth.py's AUTH_USERNAME_KEY/AUTH_PASSWORD_HASH_
+    # KEY), so the "is this install configured" cache AuthMiddleware keeps
+    # on app.state._cc_auth_configured must be dropped as well -- otherwise
+    # a purged production install would still look configured and skip
+    # the forced /setup flow a fresh database should trigger.
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_secret = None
+        state._cc_auth_configured = False
     response = RedirectResponse(url="/settings/data-maintenance", status_code=303)
     response.delete_cookie(auth.SESSION_COOKIE, path="/")
     return response

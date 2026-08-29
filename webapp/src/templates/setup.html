@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>First-run setup — Command Center</title>
+    <!-- Same standalone-page convention as login.html: no app chrome for a
+         signed-out (and, here, not-yet-configured) browser. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script>
+      (function () {
+        var KEY = "commandCenterWeb.theme";
+        var stored = localStorage.getItem(KEY);
+        var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+      })();
+    </script>
+</head>
+<body>
+    <div class="auth-wrap">
+        <div class="auth-card">
+            <h1 class="auth-brand">{{ icon('command') }} Command Center</h1>
+            <p class="auth-subtitle text-muted">This install isn't set up yet. Choose the username and password you'll log in with — there's only one account, and this is the only time you'll set it.</p>
+            {% if error %}
+            <p class="auth-error" role="alert">{{ error }}</p>
+            {% endif %}
+            <form method="post" action="/setup">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+                </div>
+                <div class="field">
+                    <label for="password_confirm">Confirm password</label>
+                    <input id="password_confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
+                </div>
+                <button type="submit" class="btn primary auth-submit">Create account &amp; log in</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

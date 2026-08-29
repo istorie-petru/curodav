@@ -4176,6 +4176,134 @@ deleted `static/heatmap_scroll.js`, and removed its `<script>` tag
 `CACHE_NAME` to `"cc-shell-v18"` (style.css changed again) and updated
 the pinned test assertion. Full suite 1728 passed.
 
+## Next session queue — direct request 2026-08-29 (new backlog, not yet
+started)
+
+Direct user request, dumped as a raw list — broken into pieces below per
+this file's one-slice-per-session discipline. Not ordered by priority;
+pick whichever is smallest/cleanest next. Some overlap with items already
+queued elsewhere (noted inline).
+
+**Direct steer, 2026-08-29 (later the same day), reorders item 12 below to
+the front of this queue — security is a first priority:** auth
+(`features/auth.md`) should be **on by default**, not opt-in via
+`CC_AUTH_USERNAME`/`CC_AUTH_PASSWORD`. Today's behavior — fully open
+unless both env vars are set — was flagged as a live bug ("auth right now
+is not working correctly" / "not enforcing, bypassable") before tracing
+it to this by-design default; the correction is to change the default
+itself, not just document it.
+
+**Shipped 2026-08-29 (same day, follow-up)** — design finalized then built
+in the same session:
+- First-run setup is a forced **web setup page** (`GET/POST /setup`,
+  `routers/auth.py`), not a generated password: the operator picks their
+  own username/password (8+ chars, confirmed) on first visit. Credentials
+  are persisted hashed (PBKDF2-HMAC-SHA256, 260k iterations,
+  `auth.hash_password`) in `app_meta` (`auth_username`/
+  `auth_password_hash`), not env vars — matches the existing
+  auto-generated-session-secret precedent (`AUTH_SECRET_KEY`) of "persist
+  in app_meta, not disk config." `auth.verify_credentials`/`auth_enabled`
+  now check this persisted account as a fallback to the env pair.
+- Local dev **keeps today's opt-out** (open unless `CC_AUTH_USERNAME`/
+  `CC_AUTH_PASSWORD` are both set) — the default only flips for real
+  deploys. Distinguished by a new `CC_DEPLOY_MODE` setting (`config.py`,
+  default `"local"`, read from `CC_DEPLOY_MODE`); `deploy/systemd/
+  curodav.service` and `deploy/docker/Dockerfile` both set
+  `CC_DEPLOY_MODE=production` so only those two deploy paths force
+  first-run setup (`auth.setup_required`, enforced by `AuthMiddleware`,
+  which caches "already configured" on `app.state` — reset by Settings >
+  Purge all, `routers/settings.py::purge_all`). Local dev, and anyone
+  running the app manually without that var, is unaffected — confirmed by
+  a live smoke test (fresh install → forced `/setup` → account creation →
+  logged in; a second, uncookied client still hits `/login`; `/setup`
+  itself 302s away once configured).
+- Still single-user, per `features/auth.md` § Out of scope — unchanged.
+- Bundled in the same slice per direct request, both pulled forward from
+  item 12 below: **CSRF protection** (`auth.CSRFMiddleware` — Origin/
+  Referer verification for state-changing requests carrying the session
+  cookie, only enforced when auth is enabled; no per-form tokens, no
+  template changes, confirmed live against `/tasks`) and **login rate
+  limiting** (`auth.login_rate_limited`/`record_failed_login` — in-memory
+  per-IP sliding window, 5 attempts / 15 minutes, wired into
+  `routers/auth.py::login_submit` as a 429).
+- 99 new/updated tests across `test_auth.py`; full suite 1780 passed.
+  Docs: `features/auth.md` rewritten (deploy-mode default, /setup, CSRF,
+  rate limiting), `deploy/README.md` + both `curodav.env.example` files
+  updated for the new default posture.
+
+1. **Bulk actions on tables** — every table/table-like surface in the app
+   (Tasks first, since it's the precedent; then Habits, Contacts, Labels,
+   Holidays, Time blocks, etc. wherever a table exists), not just Tasks'
+   existing bulk bar.
+2. **Undo history (Ctrl+Z), 15-30 actions deep** — a real undo stack across
+   the app, not the current per-row "delete with undo" toast pattern
+   (`_task_row.html` et al.) — this is a bigger, general mechanism sitting
+   on top of/replacing that.
+3. **Recurrence affected by holiday calendars, for both tasks and habits**
+   — the named holiday calendars already exist for events/scheduling
+   (`open-priority.md`'s shipped Schedule & recurrence rework); extend the
+   same non-working-day policy to task and habit recurrence.
+4. **Fully disable Relations as a feature** — not the work-allocations
+   half of `event_task_relations` (keep that), the separate task↔event
+   Relations *card*/picker described in `features/tasks.md` § "Relations
+   (task ↔ event)". Already has a presentation-layer toggle
+   (`deps.py::show_relations_card()`, default on) — this asks to go
+   further: fully disable/remove the feature, not just hide the card.
+5. **Remove the "Configurable views" Calendar setting** — see `open.md` §
+   Configurable views; its Calendar half (Month/4-Week/Day toggles) is
+   still live and should come out. (The Tasks half was already superseded
+   2026-08-28 — see that section.)
+6. **Label modal window** — better visual picker for Space / Project /
+   None (currently unclear which is selected); fix a font-size mismatch
+   between `.usage-badge` and the table it sits in.
+7. **Holidays and Time blocks settings tables not on latest CSS** —
+   already queued above ("Settings tables (Labels, Holidays, Time blocks)
+   restyled as exact replicas of the Tasks table view") — this is a
+   direct re-confirmation that item is still open.
+8. **Cleaner modal for creating/editing a published list** — bring it in
+   line with the rest of the app's modal styling (post-modal-
+   uniformization pass, `features/design-system.md` § Modal windows).
+9. **Tasks table view, several changes bundled together:**
+   - Labels and Status columns become always-clickable checkbox dropdown
+     menus (not click-to-open-then-pick).
+   - Title column: double-click to edit inline (same inline-edit
+     convention as this session's habit work, `inline_edit.js`).
+   - Rename the "Due" column to "Date".
+   - Date-picker dropdown: remove the Apply button entirely; Clear button
+     loses its text label, becomes icon-only (near an arrow, but with
+     visible separation, not crowded against it).
+10. **Rename "Week" to "Planner" in the sidebar** — label change only,
+    confirm it doesn't collide with a different Planner concept elsewhere.
+11. **Mobile responsiveness audit** — pass over the app's existing
+    surfaces on small viewports; scope (which pages, phone vs. tablet) to
+    be defined when this is picked up.
+12. **Production-readiness / infra cluster** — grouped because they're
+    likely to share a session or two, not because they're one slice.
+    **Correction to this file's earlier note:** auth already exists —
+    single-user login shipped 2026-08-16, see `features/auth.md` +
+    `webapp/src/auth.py::AuthMiddleware` (optional, on when both
+    `CC_AUTH_USERNAME`/`CC_AUTH_PASSWORD` are set; signed `HttpOnly`/
+    `SameSite=Lax` session cookie gating every route). Nothing here needs
+    "build auth first" — these are gaps on top of what's already shipped:
+    - Gzip compression + database indexes (performance).
+    - Alembic migrations (schema upgrades — currently no migration
+      framework; check `features/architecture.md` before starting).
+    - Security headers (CSP, HSTS).
+    - ~~CSRF protection~~ — **shipped 2026-08-29**, see the entry below;
+      `src/auth.py::CSRFMiddleware`, Origin/Referer verification, no
+      per-form tokens.
+    - HTTPS redirect / `Secure` cookie flag — explicitly out of scope
+      today (`features/auth.md` § Out of scope: threat model assumes a
+      trusted network or TLS-terminating reverse proxy); only relevant
+      once/if the app is exposed beyond LAN — see the DAVx5 item in
+      `open.md`, same "needs a domain/server" precondition.
+    - Session timeout — today's cookie is a flat 30-day expiry from
+      login, not an idle/activity timeout; "session timeout" likely means
+      adding the latter.
+    - ~~Login attempt rate limiting / lockout~~ — **shipped 2026-08-29**,
+      see the entry below; `src/auth.py::login_rate_limited`, in-memory
+      per-IP sliding window.
+
 ## Follow-up (2026-08-29, same day) — bigger heatmap cells
 
 Direct request: "could you make the cells a bit bigger." With both
