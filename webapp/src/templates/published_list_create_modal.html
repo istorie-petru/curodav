@@ -39,6 +39,15 @@
                 </div>
             </div>
 
+            <div class="field field-wide">
+                <label for="visibility">Visibility</label>
+                <select id="visibility" name="visibility">
+                    <option value="private" selected>Private -- only your synced devices (Radicale account)</option>
+                    <option value="public">Public -- also get a link anyone can open, no account needed</option>
+                </select>
+                <p class="settings-hint" style="margin: 4px 0 0;">You can change this any time from the list below, or archive a list to pause it without deleting it.</p>
+            </div>
+
             <div class="modal-footer" style="border-top: none; padding-top: 0; margin-top: var(--space-4);">
                 <div class="spacer"></div>
                 <button type="button" class="btn ghost" data-modal-cancel>Cancel</button>

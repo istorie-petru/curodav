@@ -60,6 +60,24 @@ configured install requires a valid session to even reach `/setup`) and the
 route itself (`setup_required()` re-checked on every call) treat it as
 already done, so it can never be used to overwrite an existing account.
 
+`/setup` also offers an optional, skippable "Connect to a CalDAV/CardDAV
+server" section (Radicale URL/username/password) when the environment
+hasn't already configured one (`config.py::radicale_env_configured`, true
+when `CC_RADICALE_URL` was set — e.g. by `--with-radicale`'s auto-generated
+credentials). Submitted values are persisted in `app_meta`
+(`config.RADICALE_URL_KEY`/`RADICALE_USERNAME_KEY`/`RADICALE_PASSWORD_KEY`)
+and applied on the *next* restart (`main.py`'s lifespan calls
+`config.apply_persisted_radicale_overrides` before building the
+`CalDavBridge`, which itself is only ever constructed once at process
+start — no live reload). Unlike the app's own login password, the Radicale
+password is stored retrievable, not hashed: the app has to replay it as an
+HTTP Basic Auth credential on every sync request. Since `/setup` only ever
+renders once per install, the same fields are also editable later from
+Settings > Data & Maintenance's "CalDAV / Radicale sync" card
+(`routers/settings.py::settings_radicale`) — same persistence, same
+"takes effect after a restart" caveat, and also a no-op display when
+env-configured.
+
 ## What it looks like
 
 - A signed-out visitor to any page gets redirected to `GET /login` — a
@@ -94,6 +112,14 @@ auth. Exempt:
 - `GET /sw.js` — the service-worker script, effectively a static asset too
   (its precache list contains no private data); keeping it public lets the
   PWA update while signed out.
+- `GET/POST /setup` — conditionally public: only reachable when
+  `setup_required()` is true (see "Deploy-mode default" above); once an
+  account exists it requires a valid session like everything else.
+- `/public/*` (2026-08-29) — Published Lists' standalone public feed
+  (`routers/public_lists.py`, `features/published-lists.md`). Unlike every
+  other exemption above, this one is checked *before* the forced-setup
+  redirect too, so a link already shared with someone outside the
+  household keeps working even while the operator is mid-setup.
 
 For requests that want JSON — any `/api/*` path, the async-CRUD
 `X-Requested-With: fetch` header, or an `Accept: application/json` — the
@@ -107,7 +133,13 @@ Stateless signed cookie, stdlib only (`hmac`/`hashlib`/`secrets`/`base64`):
 `base64url(json({"sub": <username>, "exp": <unix ts>})) + "." + HMAC-SHA256`.
 Signed, not encrypted — the payload is non-sensitive (a username + expiry)
 and signing is what prevents forging a session. No schema change, no new
-runtime dependency.
+runtime dependency. Cookie flags: `HttpOnly`, `SameSite=Lax`, `Path=/`, and
+(2026-08-29) `Secure` whenever the request's own scheme is `"https"`
+(`src/auth.py::is_secure_request`) — both deploys already pass uvicorn
+`--proxy-headers`, so this is accurate behind a TLS-terminating reverse
+proxy too, not just for the app serving TLS directly. Omitted over plain
+HTTP (the common LAN/Tailscale case) since a `Secure` cookie sent over HTTP
+would just get silently dropped by the browser, locking the operator out.
 
 ## The `?next=` redirect
 
@@ -141,6 +173,38 @@ this middleware (a "login CSRF" is a narrower, lower-severity concern than
 what this protects — a signed-in session being used to mutate data — and
 is out of scope here).
 
+## Security response headers (2026-08-29)
+
+`src/security_headers.py::SecurityHeadersMiddleware`, wired in `main.py` as
+the outermost middleware (added last, after CSRF and Auth) so these land on
+*every* response, including a 302/401/403 another middleware short-circuits
+— a denied response is still one a browser renders/acts on. Unconditional,
+no settings dependency, applies whether or not login is even configured:
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY` + CSP's `frame-ancestors 'none'` (clickjacking —
+  this app has no legitimate reason to render inside another site's iframe;
+  two headers for the same protection since some older user agents only
+  honor the first)
+- `Referrer-Policy: strict-origin-when-cross-origin` — tightened now that
+  Published Lists' public links (`features/published-lists.md`) put an
+  unguessable token in a URL path; cross-origin navigation only gets the
+  origin, same-origin still gets the full path (needed for this app's own
+  `?next=`/`?note=` conventions)
+- `Content-Security-Policy` — `default-src 'self'` plus `'unsafe-inline'`
+  on `script-src`/`style-src`. Stated tradeoff, not an oversight: this
+  app's templates use inline `<script>`/`<style>` and inline event-handler
+  attributes throughout, and a strict nonce-based CSP would need threading
+  a per-request nonce through every template — out of scope for this
+  slice. The policy still meaningfully restricts a successful XSS (no
+  cross-origin script/object loading, no arbitrary `form-action`, no
+  framing).
+- `Strict-Transport-Security` — only when the request's own scheme is
+  `"https"` (same `--proxy-headers`-aware check as the `Secure` cookie
+  flag above); omitted over plain HTTP since browsers ignore it there
+  anyway and it would be confusing noise on this app's common LAN/Tailscale
+  HTTP deployment.
+
 ## Deploy integration
 
 Both installers' env examples (`deploy/*/curodav.env.example`) now include
@@ -156,12 +220,18 @@ configuration table.
 
 - No user management — one account, by design (this is a single-user app;
   see features/README.md's "single-user by design" line).
-- No per-path roles or sharing.
-- No HTTPS/`Secure` cookie flag handling — the deploy's own threat model is
-  a trusted network (Tailscale) or an authenticated reverse proxy; put TLS in
-  front if you want `Secure` cookies. The session is a front-door check, not
-  a session-revocation mechanism (revoke by changing `CC_AUTH_SECRET` /
-  wiping the persisted secret, which invalidates every existing cookie).
+- No per-path roles or sharing (Published Lists' public links are a
+  separate, deliberately unauthenticated feature — see
+  `features/published-lists.md` — not a role/permission system for this
+  app itself).
+- No HTTPS termination — the deploy's own threat model is a trusted
+  network (Tailscale) or an authenticated/TLS-terminating reverse proxy;
+  this app never speaks TLS itself. The `Secure` cookie flag and HSTS
+  header (above) activate automatically once something in front of it
+  does, they don't provide TLS on their own. The session is a front-door
+  check, not a session-revocation mechanism (revoke by changing
+  `CC_AUTH_SECRET` / wiping the persisted secret, which invalidates every
+  existing cookie).
 - Login rate limiting is a simple in-memory per-IP window (see "What it
   looks like" above), not account lockout, CAPTCHA, or anything persisted
   across restarts.

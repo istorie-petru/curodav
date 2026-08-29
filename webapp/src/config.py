@@ -41,6 +41,18 @@ class Settings:
     # deploy paths an operator is likely to expose beyond localhost, so
     # "fully open by default" is no longer an acceptable default there.
     deploy_mode: str = "local"
+    # 2026-08-29 -- true when CC_RADICALE_URL was actually present in the
+    # environment (the installer's --with-radicale writes all three
+    # CC_RADICALE_* vars together, see deploy/*/install.sh, so URL's
+    # presence is treated as "the trio is env-configured" rather than
+    # checking each var separately). Distinguishes "explicitly configured
+    # via env" from "sitting at the devuser/devpass dev default because
+    # nothing else was ever set" -- apply_persisted_radicale_overrides
+    # below only touches the latter, and /setup and Settings' Radicale
+    # form (routers/auth.py, routers/settings.py) only offer to edit it
+    # when this is False, since an env-configured install should keep
+    # being managed the way it always was (edit curodav.env, restart).
+    radicale_env_configured: bool = False
 
 
 def load_settings() -> Settings:
@@ -72,4 +84,52 @@ def load_settings() -> Settings:
         auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,
         auth_session_secret=os.environ.get("CC_AUTH_SECRET") or None,
         deploy_mode=os.environ.get("CC_DEPLOY_MODE", "local"),
+        radicale_env_configured=bool(os.environ.get("CC_RADICALE_URL")),
+    )
+
+
+# app_meta keys a Radicale connection entered through /setup or Settings
+# (routers/auth.py::setup_submit, routers/settings.py) is persisted under
+# -- same "runtime-entered secret lives in the DB, not disk config"
+# convention as auth.py's AUTH_USERNAME_KEY/AUTH_PASSWORD_HASH_KEY, except
+# this password IS stored retrievable (not hashed): the app has to send it
+# back to Radicale as an HTTP Basic Auth credential on every sync request,
+# unlike the app's own login password, which only ever needs to be
+# *verified*, never replayed anywhere.
+RADICALE_URL_KEY = "radicale_base_url"
+RADICALE_USERNAME_KEY = "radicale_username"
+RADICALE_PASSWORD_KEY = "radicale_password"
+
+
+def apply_persisted_radicale_overrides(settings: "Settings", conn) -> "Settings":
+    """Overrides `settings`' Radicale fields from app_meta, if a
+    connection was ever saved through /setup or Settings AND the
+    environment didn't already configure one explicitly (env always wins
+    -- an operator who put CC_RADICALE_* in curodav.env is managing it
+    there, this never second-guesses that). Called once, early in
+    main.py's lifespan, before the CalDavBridge is constructed -- the
+    bridge is only ever built once at process start (no live reload), so
+    a Radicale connection entered while the app is already running takes
+    effect on the next restart, same as an env-file edit always has.
+
+    Local import of `db` avoided at module level to keep config.py's own
+    import graph acyclic-by-convention (db.py doesn't import config.py,
+    but nothing stops it from growing a reason to later; this function is
+    the only place in this module that needs a live connection)."""
+    if settings.radicale_env_configured:
+        return settings
+    from dataclasses import replace
+
+    from . import db
+
+    url = db.get_app_meta(conn, RADICALE_URL_KEY)
+    username = db.get_app_meta(conn, RADICALE_USERNAME_KEY)
+    password = db.get_app_meta(conn, RADICALE_PASSWORD_KEY)
+    if not (url and username and password):
+        return settings
+    return replace(
+        settings,
+        radicale_base_url=url,
+        radicale_username=username,
+        radicale_password=password,
     )

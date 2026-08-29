@@ -90,7 +90,7 @@ def _settings(*, enabled=True, **overrides) -> Settings:
 
 
 def _request(
-    settings, *, cookies=None, path="/login", state_extra=None, client_host=None
+    settings, *, cookies=None, path="/login", state_extra=None, client_host=None, scheme="http"
 ) -> Request:
     headers = []
     if cookies:
@@ -103,7 +103,7 @@ def _request(
         "method": "GET",
         "path": path,
         "query_string": b"",
-        "scheme": "http",
+        "scheme": scheme,
         "server": ("testserver", 80),
         "root_path": "",
         "headers": headers,
@@ -165,6 +165,65 @@ class TestConfig:
         from src.config import load_settings
 
         assert load_settings().deploy_mode == "production"
+
+    def test_radicale_env_configured_false_by_default(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        monkeypatch.delenv("CC_RADICALE_URL", raising=False)
+        from src.config import load_settings
+
+        assert load_settings().radicale_env_configured is False
+
+    def test_radicale_env_configured_true_when_url_set(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        monkeypatch.setenv("CC_RADICALE_URL", "http://127.0.0.1:5232/me/")
+        from src.config import load_settings
+
+        assert load_settings().radicale_env_configured is True
+
+
+class TestApplyPersistedRadicaleOverrides:
+    def test_no_op_when_env_configured(self, conn):
+        from src.config import apply_persisted_radicale_overrides
+        from src import db
+
+        db.set_app_meta(conn, "radicale_base_url", "http://persisted/")
+        db.set_app_meta(conn, "radicale_username", "persisted-user")
+        db.set_app_meta(conn, "radicale_password", "persisted-pass")
+        settings = _settings(radicale_env_configured=True)
+        result = apply_persisted_radicale_overrides(settings, conn)
+        assert result is settings
+
+    def test_no_op_when_nothing_persisted(self, conn):
+        from src.config import apply_persisted_radicale_overrides
+
+        settings = _settings(radicale_env_configured=False)
+        result = apply_persisted_radicale_overrides(settings, conn)
+        assert result.radicale_base_url == settings.radicale_base_url
+        assert result.radicale_username == settings.radicale_username
+
+    def test_overrides_when_persisted_and_not_env_configured(self, conn):
+        from src.config import apply_persisted_radicale_overrides
+        from src import db
+
+        db.set_app_meta(conn, "radicale_base_url", "http://persisted/me/")
+        db.set_app_meta(conn, "radicale_username", "persisted-user")
+        db.set_app_meta(conn, "radicale_password", "persisted-pass")
+        settings = _settings(radicale_env_configured=False)
+        result = apply_persisted_radicale_overrides(settings, conn)
+        assert result.radicale_base_url == "http://persisted/me/"
+        assert result.radicale_username == "persisted-user"
+        assert result.radicale_password == "persisted-pass"
+
+    def test_partial_persisted_data_is_ignored(self, conn):
+        from src.config import apply_persisted_radicale_overrides
+        from src import db
+
+        db.set_app_meta(conn, "radicale_base_url", "http://persisted/me/")
+        # username/password never saved -- a partial/corrupt app_meta
+        # state must not half-apply.
+        settings = _settings(radicale_env_configured=False)
+        result = apply_persisted_radicale_overrides(settings, conn)
+        assert result.radicale_base_url == settings.radicale_base_url
 
 
 # --------------------------------------------------------------------- #
@@ -301,6 +360,14 @@ class TestVerifyCredentials:
         auth.set_persisted_credentials(conn, "bob", "hunter22")
         assert auth.verify_credentials(settings, "alice", "s3cret", conn)
         assert auth.verify_credentials(settings, "bob", "hunter22", conn)
+
+
+class TestIsSecureRequest:
+    def test_https_scheme(self):
+        assert auth.is_secure_request(_request(_settings(), scheme="https"))
+
+    def test_http_scheme(self):
+        assert not auth.is_secure_request(_request(_settings(), scheme="http"))
 
 
 class TestSessionToken:
@@ -662,6 +729,16 @@ class TestLoginSubmit:
         assert auth.SESSION_COOKIE in set_cookie
         assert "HttpOnly" in set_cookie
         assert "SameSite=lax" in set_cookie
+        # Plain HTTP request -- no Secure flag (see auth.is_secure_request's
+        # own docstring on why: it would just get the cookie dropped).
+        assert "Secure" not in set_cookie
+
+    def test_success_over_https_sets_secure_flag(self, conn):
+        settings = _settings()
+        resp = auth_router.login_submit(
+            _request(settings, scheme="https"), username="alice", password="s3cret", next="", conn=conn
+        )
+        assert "Secure" in resp.headers["set-cookie"]
 
     def test_success_honors_safe_next(self, conn):
         settings = _settings()
@@ -743,6 +820,10 @@ class TestLogout:
         # An expiry header (max-age=0 / expires in the past) means "clear".
         assert "max-age=0" in set_cookie.lower() or "expires=" in set_cookie.lower()
 
+    def test_clears_with_secure_flag_over_https(self):
+        resp = auth_router.logout(_request(_settings(), scheme="https"))
+        assert "Secure" in resp.headers["set-cookie"]
+
 
 # --------------------------------------------------------------------- #
 # routers/auth.py -- the forced first-run /setup flow (2026-08-29)
@@ -792,6 +873,9 @@ class TestSetupSubmit:
             username="alice",
             password="s3cret123",
             password_confirm="s3cret123",
+            radicale_url="",
+            radicale_username="",
+            radicale_password="",
             conn=conn,
         )
         assert resp.status_code == 303
@@ -808,9 +892,74 @@ class TestSetupSubmit:
         settings = _prod_no_account_settings()
         req = _request(settings)
         auth_router.setup_submit(
-            req, username="alice", password="s3cret123", password_confirm="s3cret123", conn=conn
+            req,
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="",
+            radicale_username="",
+            radicale_password="",
+            conn=conn,
         )
         assert req.app.state._cc_auth_configured is True
+
+    def test_secure_cookie_flag_over_https(self, conn):
+        settings = _prod_no_account_settings()
+        resp = auth_router.setup_submit(
+            _request(settings, scheme="https"),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="",
+            radicale_username="",
+            radicale_password="",
+            conn=conn,
+        )
+        assert "Secure" in resp.headers["set-cookie"]
+
+    def test_optional_radicale_fields_persisted_when_filled_in(self, conn):
+        settings = _prod_no_account_settings()
+        auth_router.setup_submit(
+            _request(settings),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="http://127.0.0.1:5232/alice/",
+            radicale_username="alice",
+            radicale_password="hunter2",
+            conn=conn,
+        )
+        assert db.get_app_meta(conn, "radicale_base_url") == "http://127.0.0.1:5232/alice/"
+        assert db.get_app_meta(conn, "radicale_username") == "alice"
+        assert db.get_app_meta(conn, "radicale_password") == "hunter2"
+
+    def test_radicale_fields_skipped_when_partially_filled(self, conn):
+        settings = _prod_no_account_settings()
+        auth_router.setup_submit(
+            _request(settings),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="http://127.0.0.1:5232/alice/",
+            radicale_username="",
+            radicale_password="",
+            conn=conn,
+        )
+        assert db.get_app_meta(conn, "radicale_base_url") is None
+
+    def test_radicale_fields_skipped_when_env_already_configured(self, conn):
+        settings = _prod_no_account_settings(radicale_env_configured=True)
+        auth_router.setup_submit(
+            _request(settings),
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="http://127.0.0.1:5232/alice/",
+            radicale_username="alice",
+            radicale_password="hunter2",
+            conn=conn,
+        )
+        assert db.get_app_meta(conn, "radicale_base_url") is None
 
     def test_rejects_blank_username(self, conn):
         resp = auth_router.setup_submit(
@@ -904,6 +1053,11 @@ class TestPurgeAllInvalidatesSession:
         # account) is dropped too, so a purged production install is
         # forced back through /setup like a genuinely fresh database.
         assert req.app.state._cc_auth_configured is False
+
+    def test_clears_with_secure_flag_over_https(self, conn):
+        req = _request(_settings(), scheme="https")
+        resp = settings_router.purge_all(req, conn=conn)
+        assert "Secure" in resp.headers["set-cookie"]
 
     def test_auto_generated_secret_re_mints_after_purge(self, tmp_path):
         settings = _settings(auth_session_secret=None, db_path=tmp_path / "cache.sqlite")

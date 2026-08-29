@@ -6,7 +6,7 @@
 <div class="published-lists-page">
     <header class="page-header">
         <h1>{{ icon('share-2') }} Published Lists</h1>
-        <p class="page-description">Share a live, read-only snapshot of your data with anyone via a unique link.</p>
+        <p class="page-description">Share a live, read-only snapshot of your data. <strong>Private</strong> lists sync to your own Radicale/CalDAV account; <strong>public</strong> lists also get a link anyone can open with no account at all; <strong>archived</strong> lists are paused (kept, not synced or shared) until you reactivate them.</p>
     </header>
 
     <div class="lists-toolbar">
@@ -23,7 +23,8 @@
                     <th>Name</th>
                     <th>Type</th>
                     <th>Filter</th>
-                    <th>Shareable Link</th>
+                    <th>Visibility</th>
+                    <th>Link</th>
                     <th class="actions-col">Actions</th>
                 </tr>
             </thead>
@@ -47,13 +48,35 @@
                             <span class="text-muted">No labels selected</span>
                         {% endif %}
                     </td>
-                    <td class="link-col" data-label="Shareable Link">
+                    <td data-label="Visibility">
+                        <form method="post" action="/published-lists/{{ l.id }}/visibility">
+                            <select name="visibility" class="visibility-select" onchange="this.form.submit()" aria-label="Visibility for {{ l.name }}">
+                                {% for v in visibilities %}
+                                <option value="{{ v }}" {% if l.visibility == v %}selected{% endif %}>{{ v | capitalize }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </td>
+                    <td class="link-col" data-label="Link">
+                        {% if l.public_url %}
                         <div class="link-wrapper">
-                            <code class="truncated-url" data-full-url="{{ l.subscribe_url }}">{{ l.subscribe_url | truncate(45, true, '…') }}</code>
-                            <button type="button" class="icon-btn copy-link-btn" data-url="{{ l.subscribe_url }}" aria-label="Copy link" title="Copy link">
+                            <code class="truncated-url" data-full-url="{{ l.public_url }}">{{ l.public_url | truncate(45, true, '…') }}</code>
+                            <button type="button" class="icon-btn copy-link-btn" data-url="{{ l.public_url }}" aria-label="Copy public link" title="Copy public link">
                                 {{ icon('link', 'icon-sm') }}
                             </button>
                         </div>
+                        <p class="settings-hint" style="margin: 4px 0 0;">Anyone with this link can view it, no account needed.</p>
+                        {% elif l.visibility == "archived" %}
+                        <span class="text-muted">Paused -- not synced or shared</span>
+                        {% else %}
+                        <div class="link-wrapper">
+                            <code class="truncated-url" data-full-url="{{ l.subscribe_url }}">{{ l.subscribe_url | truncate(45, true, '…') }}</code>
+                            <button type="button" class="icon-btn copy-link-btn" data-url="{{ l.subscribe_url }}" aria-label="Copy Radicale link" title="Copy Radicale link">
+                                {{ icon('link', 'icon-sm') }}
+                            </button>
+                        </div>
+                        <p class="settings-hint" style="margin: 4px 0 0;">Private -- needs your Radicale/CalDAV account.</p>
+                        {% endif %}
                     </td>
                     <td class="actions-col" data-label="Actions">
                         <form method="post" action="/published-lists/{{ l.id }}/delete" data-confirm-sheet='Unpublish "{{ l.name }}"? This removes the shared list -- anyone with the link will lose access.'>

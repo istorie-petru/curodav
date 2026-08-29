@@ -25,12 +25,21 @@ auth.py's module docstring, `setup_required`):
   - `GET /setup` -- the account-creation form. Only rendered when
     setup_required() is true (a production deploy with no account yet);
     otherwise redirects away, same as /login's disabled-install redirect.
+    Also offers an optional "connect to Radicale" section (URL/username/
+    password) when the environment didn't already configure one (see
+    config.py's radicale_env_configured) -- skippable, and editable again
+    later from Settings (routers/settings.py) since this page only ever
+    renders once per install.
   - `POST /setup` -- validates and persists the chosen username/password
     (hashed) via `auth.set_persisted_credentials`, logs the browser in
     immediately (no separate trip through /login), and redirects home.
     Re-checks setup_required() itself too -- the middleware already blocks
     a configured install from reaching here without a valid session, but
     the route refuses to ever re-run setup regardless of how it's called.
+    Radicale fields are optional and, if all blank, silently skipped;
+    persisted via config.RADICALE_*_KEY (config.py's own module docstring
+    covers why the password is stored retrievable, not hashed) when any
+    are filled in.
 """
 
 from __future__ import annotations
@@ -38,7 +47,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from .. import auth
+from .. import auth, config, db
 from ..deps import get_db, templates
 
 router = APIRouter(tags=["auth"])
@@ -108,6 +117,7 @@ def login_submit(
             max_age=auth.SESSION_MAX_AGE_SECONDS,
             httponly=True,
             samesite="lax",
+            secure=auth.is_secure_request(request),
             path="/",
         )
         return response
@@ -122,7 +132,9 @@ def login_submit(
 @router.post("/logout")
 def logout(request: Request):
     response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    response.delete_cookie(
+        auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
+    )
     return response
 
 
@@ -133,7 +145,27 @@ def setup_page(request: Request, conn=Depends(get_db)):
         return RedirectResponse(
             url="/login" if auth.auth_enabled(settings, conn) else "/", status_code=302
         )
-    return templates.TemplateResponse("setup.html", {"request": request, "error": None})
+    return templates.TemplateResponse(
+        "setup.html",
+        {
+            "request": request,
+            "error": None,
+            "radicale_env_configured": settings.radicale_env_configured,
+        },
+    )
+
+
+def _save_radicale_fields(conn, url: str, username: str, password: str) -> None:
+    """Persists a Radicale connection entered through /setup (or, later,
+    Settings) into app_meta -- see config.py's RADICALE_*_KEY docstring
+    for why the password is stored retrievable. Only writes anything when
+    all three fields are non-blank; a partially-filled form is treated as
+    "not filled in" rather than saving a broken connection."""
+    url, username, password = url.strip(), username.strip(), password.strip()
+    if url and username and password:
+        db.set_app_meta(conn, config.RADICALE_URL_KEY, url)
+        db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
+        db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, password)
 
 
 @router.post("/setup")
@@ -142,6 +174,9 @@ def setup_submit(
     username: str = Form(""),
     password: str = Form(""),
     password_confirm: str = Form(""),
+    radicale_url: str = Form(""),
+    radicale_username: str = Form(""),
+    radicale_password: str = Form(""),
     conn=Depends(get_db),
 ):
     settings = request.app.state.settings
@@ -161,9 +196,17 @@ def setup_submit(
         error = "Passwords do not match."
     if error:
         return templates.TemplateResponse(
-            "setup.html", {"request": request, "error": error}, status_code=400
+            "setup.html",
+            {
+                "request": request,
+                "error": error,
+                "radicale_env_configured": settings.radicale_env_configured,
+            },
+            status_code=400,
         )
     auth.set_persisted_credentials(conn, username, password)
+    if not settings.radicale_env_configured:
+        _save_radicale_fields(conn, radicale_url, radicale_username, radicale_password)
     # The middleware caches "is this install configured" on app.state once
     # true (see AuthMiddleware._configured) -- set it here too so the very
     # next request (the redirect this response issues) doesn't race a
@@ -181,6 +224,7 @@ def setup_submit(
         max_age=auth.SESSION_MAX_AGE_SECONDS,
         httponly=True,
         samesite="lax",
+        secure=auth.is_secure_request(request),
         path="/",
     )
     return response

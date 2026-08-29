@@ -40,6 +40,10 @@ login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
     requests carrying a session cookie (see its own docstring).
   - `login_rate_limited`/`record_failed_login`: an in-memory per-IP
     sliding-window lockout on `POST /login`.
+  - `is_secure_request`: whether the session cookie should carry the
+    `Secure` flag for this request (see its own docstring) -- both deploy
+    configs already pass uvicorn `--proxy-headers`, so this reflects the
+    real scheme even behind a TLS-terminating reverse proxy.
 """
 
 from __future__ import annotations
@@ -326,7 +330,14 @@ class AuthMiddleware:
             return await self.app(scope, receive, send)
         settings = self._get_settings(scope)
         path = scope["path"]
-        if path in PUBLIC_PATHS or path.startswith("/static/"):
+        if path in PUBLIC_PATHS or path.startswith("/static/") or path.startswith("/public/"):
+            # 2026-08-29: Published Lists' standalone public feed
+            # (routers/public_lists.py) -- deliberately exempt even from
+            # the forced-first-run-setup branch below, not just the
+            # normal login gate: a link already shared with someone
+            # outside the household must keep working while the operator
+            # is mid-setup, same as /static already does for the login
+            # page's own CSS.
             return await self.app(scope, receive, send)
 
         # Forced first-run setup (2026-08-29): a production deploy
@@ -467,6 +478,21 @@ def client_ip(request: Request) -> str:
     is fine for tests (reset_rate_limits clears it between them) and never
     happens for a real request, where an ASGI server always sets it."""
     return request.client.host if request.client else "unknown"
+
+
+def is_secure_request(request: Request) -> bool:
+    """Whether the session cookie should carry the `Secure` flag for this
+    request -- true when the request's own scheme is "https". Both deploy
+    configs (deploy/systemd/curodav.service, the Docker image's uvicorn
+    CMD) already pass `--proxy-headers`, which makes uvicorn trust a
+    reverse proxy's `X-Forwarded-Proto` header and set the ASGI scope's
+    scheme accordingly -- so this reflects the real, original scheme even
+    when the app itself only ever speaks plain HTTP to the proxy sitting
+    in front of it. A bare HTTP install (the common LAN/Tailscale case
+    with no reverse proxy) gets `Secure` omitted, exactly as before this
+    existed -- `Secure` on a cookie sent over plain HTTP would just get
+    the cookie silently dropped by the browser, locking the operator out."""
+    return request.url.scheme == "https"
 
 
 # --------------------------------------------------------------------- #

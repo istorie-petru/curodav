@@ -100,7 +100,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
-from .. import auth, data_health, db, offline_sync
+from .. import auth, config, data_health, db, offline_sync
 from ..deps import (
     CALENDAR_VIEWS_KEY,
     FOUR_WEEK_POSITION_KEY,
@@ -115,7 +115,7 @@ from ..deps import (
     templates,
 )
 from .dashboard import DISPLAY_NAME_KEY
-from .export import export_context
+from .export import _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 
 router = APIRouter(tags=["settings"])
@@ -806,10 +806,53 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         # gather; radicale_url is fetched here directly since
         # export_context() takes no `request`.
         "radicale_url": request.app.state.settings.radicale_base_url,
+        # 2026-08-29 -- lets this page offer an editable Radicale
+        # connection form (see the settings_data_maintenance.html "CalDAV
+        # / Radicale sync" card and the /settings/radicale route below)
+        # only when the environment didn't already configure one; an
+        # env-configured install keeps being managed via curodav.env.
+        # getattr-guarded: several test files build their own minimal
+        # SimpleNamespace stand-in for Settings (not the real dataclass)
+        # to exercise this route in isolation, predating these two
+        # fields -- defaulting rather than requiring every such fixture
+        # to grow them keeps this route working against either.
+        "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
+        "radicale_username": getattr(request.app.state.settings, "radicale_username", ""),
     }
     ctx.update(summary)
     ctx.update(export_context(conn))
     return templates.TemplateResponse("settings_data_maintenance.html", ctx)
+
+
+@router.post("/settings/radicale")
+def settings_radicale(
+    request: Request,
+    radicale_url: str = Form(""),
+    radicale_username: str = Form(""),
+    radicale_password: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Edits the Radicale connection saved through /setup (or here) --
+    the always-available counterpart to /setup's one-time "connect to
+    Radicale" step, since that page only ever renders once per install
+    (routers/auth.py::setup_page). A no-op when the environment already
+    configures Radicale (env always wins, config.py's
+    radicale_env_configured) or when all three fields are left blank.
+    Takes effect after a restart, same as an env-file edit always has --
+    the CalDavBridge is only ever built once at process start (main.py's
+    lifespan), so this can't hot-swap it."""
+    settings = request.app.state.settings
+    if not settings.radicale_env_configured:
+        url, username, password = radicale_url.strip(), radicale_username.strip(), radicale_password.strip()
+        if url and username and password:
+            db.set_app_meta(conn, config.RADICALE_URL_KEY, url)
+            db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
+            db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, password)
+            return _redirect_with_note(
+                "/settings/data-maintenance",
+                "Radicale connection saved. Restart the app for it to take effect.",
+            )
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.get("/settings/data-health")
@@ -993,7 +1036,9 @@ def purge_all(request: Request, conn=Depends(get_db)):
         state._cc_auth_secret = None
         state._cc_auth_configured = False
     response = RedirectResponse(url="/settings/data-maintenance", status_code=303)
-    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    response.delete_cookie(
+        auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
+    )
     return response
 
 

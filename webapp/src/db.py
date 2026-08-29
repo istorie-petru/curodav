@@ -1301,6 +1301,23 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _relax_legacy_not_null(conn, "events", ("href", "etag", "calendar_path"))
     _relax_legacy_not_null(conn, "tasks", ("href", "etag", "calendar_path", "list_path"))
     _relax_legacy_not_null(conn, "contacts", ("href", "etag", "addressbook_path"))
+    # 2026-08-29 (Published Lists visibility) -- a List is now `private`
+    # (materialized to Radicale only, today's original behavior), `public`
+    # (also served at a standalone, unauthenticated link -- see
+    # routers/public_lists.py -- independent of Radicale entirely), or
+    # `archived` (its Radicale collection torn down, DB row kept so
+    # re-activating doesn't need reconfiguring). Defaults to `private` for
+    # every pre-existing row -- the safe choice, since no public link
+    # could have existed before this feature (see the CREATE TABLE
+    # comment's original "no public/private toggle" note: everything
+    # published so far only ever required the shared Radicale account,
+    # which is what `private` still means). `public_token` is generated
+    # once, on first becoming public (auth.py-style `secrets.token_urlsafe`
+    # persisted, not derived from anything guessable like the collection
+    # slug), and stays stable across later public/private/archived
+    # toggles so a re-shared link keeps working.
+    _ensure_column(conn, "published_lists", "visibility", "TEXT NOT NULL DEFAULT 'private'")
+    _ensure_column(conn, "published_lists", "public_token", "TEXT")
     # 2026-08-18 -- one-time backfill of pre-existing rows into the sync
     # shadow store (see backfill_server_sync_writes). Runs last, after
     # every _ensure_column migration above, so the whitelist columns it
@@ -4417,8 +4434,12 @@ def upsert_published_list(conn: sqlite3.Connection, row: dict[str, Any]) -> None
         "id", "name", "entity_type", "label_filter_json",
         "radicale_collection_path", "sync_direction",
         "last_materialized_at", "created_at",
+        # 2026-08-29 -- see the _ensure_column migration's comment above
+        # for what these mean.
+        "visibility", "public_token",
     ]
     data.setdefault("sync_direction", "read_only")
+    data.setdefault("visibility", "private")
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "id")
@@ -4453,6 +4474,45 @@ def set_published_list_materialized_at(conn: sqlite3.Connection, list_id: str, w
     conn.execute(
         "UPDATE published_lists SET last_materialized_at = ? WHERE id = ?", (when, list_id)
     )
+    conn.commit()
+
+
+def get_published_list_by_token(conn: sqlite3.Connection, token: str) -> dict[str, Any] | None:
+    """The row a public feed request (routers/public_lists.py) looks up
+    by its `public_token`. Does NOT filter on `visibility` here -- the
+    caller must check `row["visibility"] == "public"` itself and 404
+    otherwise, so a list that was switched back to private/archived after
+    being shared correctly stops serving even though the token row still
+    exists (the token is never cleared, only gated by visibility -- see
+    the migration's comment)."""
+    if not token:
+        return None
+    row = conn.execute(
+        "SELECT * FROM published_lists WHERE public_token = ?", (token,)
+    ).fetchone()
+    return _published_list_row_to_dict(row) if row else None
+
+
+def set_published_list_visibility(
+    conn: sqlite3.Connection, list_id: str, visibility: str, public_token: str | None = None
+) -> None:
+    """Targeted update for a visibility transition (routers/
+    published_lists.py's visibility route) -- deliberately NOT routed
+    through upsert_published_list, which requires re-supplying every
+    column (name, label_filter, ...) on every call; a visibility toggle
+    only ever touches these two columns. `public_token` is only written
+    when the caller passes one (generated once, the first time a list
+    becomes public -- see published_lists.py); passing None here leaves
+    whatever token already exists untouched rather than clearing it."""
+    if public_token is not None:
+        conn.execute(
+            "UPDATE published_lists SET visibility = ?, public_token = ? WHERE id = ?",
+            (visibility, public_token, list_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE published_lists SET visibility = ? WHERE id = ?", (visibility, list_id)
+        )
     conn.commit()
 
 

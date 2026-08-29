@@ -4231,6 +4231,82 @@ in the same session:
   rate limiting), `deploy/README.md` + both `curodav.env.example` files
   updated for the new default posture.
 
+## Shipped — Published Lists visibility (public/private/archived) + Radicale
+setup UI + security headers/Secure cookie (2026-08-29, direct request)
+
+Direct follow-up request, same day: public-facing sharing for Published
+Lists (e.g. sharing a calendar with a friend/colleague), the ability to
+mark a List private or archived (paused) instead of always-shareable,
+first-run Radicale credential setup, and finishing the two remaining
+items from the production-readiness cluster above (security headers,
+`Secure` cookie). All landed together per direct request; see this file's
+own "one slice per session" note — this session was explicitly scoped
+larger by the user, not a default to repeat.
+
+- **Published Lists gained a `visibility` column**
+  (`private`/`public`/`archived`, default `private`, `db.py`'s
+  `_ensure_column` migration) + a `public_token`
+  (`secrets.token_urlsafe(32)`, `published_lists.new_public_token`,
+  generated once on first going public, stable across later toggles).
+  `db.get_published_list_by_token`/`set_published_list_visibility` are the
+  new CRUD surface; `routers/published_lists.py::VISIBILITIES` +
+  `POST /{id}/visibility` is the transition route. See
+  `features/published-lists.md` for the full model.
+- **`public` is a genuinely new capability, not a rename** — investigated
+  first: the page's own copy already claimed "share via a unique link,"
+  but every List actually still required the shared Radicale account too.
+  Fixed by adding a standalone feed the app serves directly
+  (`routers/public_lists.py`, `GET /public/lists/{token}.ics`/`.vcf`,
+  exempt from login in `AuthMiddleware`'s `/public/` prefix, checked
+  before the forced-setup branch too) — built live from
+  `evaluate_label_filter` on every request, the same wrapping
+  `export.py`'s `/export/*.ics` already uses, so it works whether or not
+  Radicale is configured at all. `archived` tears down the Radicale
+  collection (`published_lists.teardown_collection`) and is skipped
+  entirely by the periodic `materialize_all`; un-archiving best-effort
+  re-materializes immediately on top of the normal next-tick catch-up.
+- **Radicale is now fully optional for this feature** — `create_list`/
+  `set_visibility`/`delete_list` no longer hard-fail (503) when the
+  bridge is None/unreachable; the Radicale-side effect is best-effort
+  (`_try_materialize`/`_try_teardown`, log-and-continue), the DB write
+  always succeeds. Necessary for "public works even without Radicale" to
+  actually hold.
+- **First-run `/setup` gained an optional "connect to Radicale" step**
+  (URL/username/password, skippable) when the environment didn't already
+  configure one (`config.py::radicale_env_configured`, `CC_RADICALE_URL`
+  presence). Persisted in `app_meta` (`config.RADICALE_URL_KEY` et al.,
+  password stored retrievable — the app has to replay it to Radicale,
+  unlike the app's own hashed login password) and applied on the next
+  restart (`config.apply_persisted_radicale_overrides`, called in
+  `main.py`'s lifespan before the `CalDavBridge` is built — no live
+  reload, same as an env-file edit always required). Since `/setup` only
+  ever renders once, also added an always-available twin under Settings >
+  Data & Maintenance ("CalDAV / Radicale sync" card,
+  `routers/settings.py::settings_radicale`) so it isn't a one-shot-only
+  configuration opportunity.
+- **Security headers**: `src/security_headers.py::
+  SecurityHeadersMiddleware` — CSP (`default-src 'self'`, `'unsafe-inline'`
+  on script/style since this app's templates use inline scripts/handlers
+  throughout and a nonce-based refactor was out of scope), X-Frame-Options
+  DENY + `frame-ancestors 'none'`, X-Content-Type-Options nosniff,
+  Referrer-Policy strict-origin-when-cross-origin (tightened partly
+  because public-list tokens now live in URLs), and conditional HSTS
+  (only over an https-scoped request). Registered LAST in `main.py` so
+  it's the outermost middleware layer — confirmed live that headers land
+  on a 302 from AuthMiddleware and a 403 from CSRFMiddleware, not just
+  normal 200s.
+- **`Secure` cookie flag**: `auth.is_secure_request` (checks the
+  request's own scheme, accurate behind a reverse proxy since both
+  deploys already pass uvicorn `--proxy-headers`) wired into every place
+  the session cookie is set or cleared (`login_submit`, `setup_submit`,
+  `logout`, `purge_all`).
+- 137 new/updated tests (`test_published_lists_visibility.py`,
+  `test_security_headers.py`, `test_settings_radicale.py`, plus additions
+  to `test_auth.py`); full suite 1834 passed. Docs: `features/published-
+  lists.md` rewritten (was already stale re: routes before this slice,
+  fixed in passing), `features/auth.md` extended (Secure cookie, security
+  headers, Radicale-in-setup, `/public/*` exemption).
+
 1. **Bulk actions on tables** — every table/table-like surface in the app
    (Tasks first, since it's the precedent; then Habits, Contacts, Labels,
    Holidays, Time blocks, etc. wherever a table exists), not just Tasks'
@@ -4288,15 +4364,24 @@ in the same session:
     - Gzip compression + database indexes (performance).
     - Alembic migrations (schema upgrades — currently no migration
       framework; check `features/architecture.md` before starting).
-    - Security headers (CSP, HSTS).
+    - ~~Security headers (CSP, HSTS)~~ — **shipped 2026-08-29**, see the
+      entry below; `src/security_headers.py::SecurityHeadersMiddleware`
+      (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+      conditional HSTS), outermost in the middleware stack so it covers
+      denied responses too.
     - ~~CSRF protection~~ — **shipped 2026-08-29**, see the entry below;
       `src/auth.py::CSRFMiddleware`, Origin/Referer verification, no
       per-form tokens.
-    - HTTPS redirect / `Secure` cookie flag — explicitly out of scope
-      today (`features/auth.md` § Out of scope: threat model assumes a
-      trusted network or TLS-terminating reverse proxy); only relevant
-      once/if the app is exposed beyond LAN — see the DAVx5 item in
-      `open.md`, same "needs a domain/server" precondition.
+    - ~~`Secure` cookie flag~~ — **shipped 2026-08-29**, see the entry
+      below; `src/auth.py::is_secure_request`, set whenever the request's
+      own scheme is `"https"` (both deploys already pass uvicorn
+      `--proxy-headers`). HTTPS *termination* itself is still out of
+      scope (`features/auth.md` § Out of scope: threat model assumes a
+      trusted network or TLS-terminating reverse proxy) — the flag just
+      activates automatically once something in front of the app
+      provides TLS; only relevant once/if the app is exposed beyond LAN —
+      see the DAVx5 item in `open.md`, same "needs a domain/server"
+      precondition.
     - Session timeout — today's cookie is a flat 30-day expiry from
       login, not an idle/activity timeout; "session timeout" likely means
       adding the latter.

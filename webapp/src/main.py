@@ -17,7 +17,8 @@ from starlette.types import Scope
 from . import db, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
-from .config import load_settings
+from .config import apply_persisted_radicale_overrides, load_settings
+from .security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,6 +47,17 @@ class _VersionedStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
+
+    # 2026-08-29 -- a Radicale connection entered through /setup or
+    # Settings (routers/auth.py, routers/settings.py) lives in app_meta,
+    # not the environment; apply it here, before the settings are
+    # published to app.state and before the bridge below is built, so
+    # both see the effective (possibly overridden) connection. A no-op
+    # when CC_RADICALE_URL was set in the environment (env always wins,
+    # see apply_persisted_radicale_overrides's docstring) or when nothing
+    # was ever saved.
+    with db.connect(settings.db_path) as _conn:
+        settings = apply_persisted_radicale_overrides(settings, _conn)
     app.state.settings = settings
 
     # The bridge's constructor connects to Radicale (DAVClient -> principal,
@@ -134,6 +146,21 @@ def create_app() -> FastAPI:
     # auth.py's module docstring.
     app.add_middleware(AuthMiddleware)
 
+    # Security headers (2026-08-29, src/security_headers.py) -- added
+    # LAST (after CSRF and Auth above), so it ends up the OUTERMOST layer
+    # (Starlette runs the most-recently-added middleware first, wrapping
+    # everything registered before it -- see CSRFMiddleware's own comment
+    # on this same ordering rule). Being outermost is the whole point
+    # here: a middleware that short-circuits a request (Auth's 302/401,
+    # CSRF's 403) never calls further into the stack, so anything added
+    # BEFORE it would simply never run for a denied request. Being
+    # outermost means this one still wraps `send` before Auth/CSRF get a
+    # chance to respond, so these headers land on every response,
+    # including denials -- a denied response is still a response a
+    # browser renders/acts on, so it needs the same X-Frame-Options/CSP/
+    # nosniff protection as a normal page.
+    app.add_middleware(SecurityHeadersMiddleware)
+
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
     # Phase 1 (label-space rework, 2026-08-06): routers/calendars.py,
@@ -153,9 +180,15 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, public_lists, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
     app.include_router(auth.router)
+    # Published Lists' standalone public feed (2026-08-29) -- no login, no
+    # Radicale account, see routers/public_lists.py's module docstring and
+    # AuthMiddleware's "/public/" exemption in src/auth.py. Registered
+    # early alongside auth.router since both define the app's few
+    # genuinely public-without-a-session routes.
+    app.include_router(public_lists.router)
     app.include_router(dashboard.router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,

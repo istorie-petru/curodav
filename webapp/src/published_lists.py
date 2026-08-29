@@ -188,12 +188,25 @@ def materialize_all(conn: sqlite3.Connection, bridge: Any) -> dict[str, dict[str
     hiccup on that one collection) is isolated so it doesn't abort the
     rest -- same "per-collection failure isolation" principle this app's
     old multi-calendar full_refresh used to document before Phase 1
-    removed that code path."""
+    removed that code path.
+
+    2026-08-29: a List with `visibility == "archived"` is skipped
+    entirely -- not materialized, not touched. "Archived" means paused:
+    its Radicale collection was already torn down at the moment it was
+    archived (routers/published_lists.py's visibility route calls
+    teardown_collection there, once, rather than this function repeating
+    a delete every tick), and the row itself is left alone here so
+    switching back to private/public later just needs this function to
+    resume normally -- no special "re-create" step, since materialize()
+    already creates whatever the bridge needs on its next successful
+    push, the same way a brand-new List does today."""
     import logging
 
     logger = logging.getLogger(__name__)
     results: dict[str, dict[str, int]] = {}
     for row in db.list_published_lists(conn):
+        if row.get("visibility") == "archived":
+            continue
         try:
             results[row["id"]] = materialize(conn, bridge, row)
         except Exception:
@@ -209,3 +222,35 @@ def collection_url(base_url: str, entity_type: str, collection_path: str) -> str
     display without reaching into the bridge's private helpers."""
     base = base_url.rstrip("/")
     return f"{base}/{collection_path}/"
+
+
+_DELETE_COLLECTION = {
+    "task": lambda bridge, path: bridge.delete_task_list_collection(path),
+    "event": lambda bridge, path: bridge.delete_calendar_collection(path),
+    "contact": lambda bridge, path: bridge.delete_addressbook_collection(path),
+}
+
+
+def teardown_collection(bridge: Any, entity_type: str, collection_path: str) -> None:
+    """Removes a List's actual Radicale collection -- shared by
+    routers/published_lists.py's permanent delete route and its visibility
+    route (switching a List to `archived`, see materialize_all's
+    docstring above). `bridge` may be None (Radicale never configured/
+    unreachable, see main.py's lifespan) -- a no-op in that case, there is
+    nothing to tear down, and the caller doesn't need its own None
+    check."""
+    if bridge is None:
+        return
+    _DELETE_COLLECTION[entity_type](bridge, collection_path)
+
+
+def new_public_token() -> str:
+    """A random, unguessable token for a List's standalone public link
+    (routers/public_lists.py) -- independent of the collection's own
+    `published-{slug}` path (which IS guessable, by design, since it's
+    only ever reached through the shared Radicale account, not this
+    token). 32 bytes of entropy, the same `secrets.token_urlsafe` this
+    app already uses for the session-signing secret (src/auth.py)."""
+    import secrets
+
+    return secrets.token_urlsafe(32)
