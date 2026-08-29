@@ -2,6 +2,12 @@
 {% block title %}Week of {{ monday.isoformat() }} - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
+{# Planner (Week view) -- own title/icon matching its own tabbar identity
+   (base.html: icon('clock'), label "Planner"), not "Calendar"/'calendar' --
+   4-Week/Month/Day are the "Calendar" family, Week is its own destination. #}
+{% set page_title = "Planner" %}
+{% set page_icon = "clock" %}
+{% include "_page_header_narrow.html" %}
 {% import "_calendar_filters.html" as cf %}
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 {% set _lbl = active_label | default('') %}

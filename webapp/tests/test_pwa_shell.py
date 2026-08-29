@@ -366,8 +366,10 @@ class TestLocalWritePath:
         # sidebar-header/app-name rules), per the same v15 lesson.
         # v21 (2026-08-29): bumped again for the collapsed/expanded item
         # padding unification, same lesson.
+        # v22 (2026-08-29): bumped again for the new .page-header-narrow
+        # rules (sidebar redesign item 13e), same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v21"' in script
+        assert 'CACHE_NAME = "cc-shell-v22"' in script
 
 
 class TestOfflineToolbar:

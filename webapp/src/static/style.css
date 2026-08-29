@@ -4600,6 +4600,31 @@ body.command-palette-open{overflow:hidden;}
   pointer-events:none; z-index:0;
 }
 
+/* Standard Page Header, narrow variant (sidebar redesign item 13e,
+   2026-08-29, _page_header_narrow.html) -- the "Standard Page Header
+   (Narrow Variant)" from plans/sidebar-redesign.md: a thin, subtle
+   gradient strip with the page's icon + title, no greeting/avatar/photo
+   (unlike .page-banner above, these pages have no per-page uploaded
+   image). Sits above whatever toolbar/breadcrumb the page already has --
+   its own height is deliberately small (not a scaled-down .page-banner)
+   so it reads as a slim identity strip, not a second hero. */
+.page-header-narrow{
+  display:flex; align-items:center; gap:var(--space-2);
+  padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
+  border-radius:var(--radius-card); border:1px solid var(--border);
+  background:linear-gradient(120deg, var(--accent-subtle), transparent 70%),
+             var(--bg-elevated);
+}
+.page-header-narrow-icon{
+  display:flex; color:var(--accent);
+}
+.page-header-narrow-icon .icon{width:1.15em; height:1.15em;}
+.page-header-narrow-title{
+  margin:0; font-weight:700; letter-spacing:-0.3px;
+  font-size:var(--text-title3); line-height:1.2;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
 /* Banner editor modal (banner_editor.html, 2026-08-09). */
 .banner-editor-note{
   color:var(--fg-tertiary); font-size:var(--text-footnote);

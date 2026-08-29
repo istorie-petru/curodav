@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Contacts{% endblock %}
 {% block content %}
+{% set page_title = "Contacts" %}
+{% set page_icon = "address-book" %}
+{% include "_page_header_narrow.html" %}
 <!-- 2026-08-07: dropped the include of _settings_nav.html that used to
      sit here -- Contacts is a primary tabbar destination now (base.html),
      not a Settings sub-page, so the Settings segmented strip doesn't

@@ -6,6 +6,9 @@
 {% extends "base.html" %}
 {% block title %}Notes{% endblock %}
 {% block content %}
+{% set page_title = "Notes" %}
+{% set page_icon = "file-text" %}
+{% include "_page_header_narrow.html" %}
 <div class="toolbar top-app-bar">
     <h1 class="sr-only">Notes</h1>
     <form method="get" action="/notes" class="filter-bar">

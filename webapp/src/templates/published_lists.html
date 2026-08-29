@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Published Lists{% endblock %}
 {% block content %}
+{% set page_title = "Published Lists" %}
+{% set page_icon = "share-2" %}
+{% include "_page_header_narrow.html" %}
 {% include "_settings_breadcrumb.html" with context %}
 
 <div class="published-lists-page">

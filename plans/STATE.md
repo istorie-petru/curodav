@@ -5533,3 +5533,62 @@ off" per-visit thing.
   1856; four new, none removed).
 - Still open from item 13's breakdown: 13e (narrow-header variant), 13f
   (aesthetic fusion, still deliberately unscheduled).
+
+## Shipped -- Sidebar redesign slice 13e: narrow-header top-nav collapse
+variant (2026-08-29, direct request)
+
+The breadcrumb note under item 13 assumed this "mostly exists already."
+It didn't: only dashboard.html/label_detail.html had any banner/header
+treatment at all -- every other page (Tasks, Calendar, Contacts,
+Settings, ...) rendered a bare `<h1>` with no shared header component.
+Flagged this to the user before starting (the real shape of the change --
+a shared header partial applied across ~15-20 templates -- is much closer
+to 13f's blast radius than a small sub-slice); asked to proceed with the
+full rollout per plans/sidebar-redesign.md § "The Standard Header": every
+"standard" page gets a thin gradient-strip header with an icon + page
+title (no greeting/avatar), Home alone keeps the full expanded hero.
+
+- **New `_page_header_narrow.html`** + **`style.css`'s `.page-header-
+  narrow`/`-icon`/`-title`** -- a flat `--accent-subtle` gradient strip
+  (no per-page photo the way Home/label pages have), icon + `<h2>` title
+  (not `<h1>`: most target pages already have their own real or `sr-only`
+  `<h1>`, which stays the canonical heading -- this is a visual echo, not
+  a replacement). Purely additive: included right after `{% block
+  content %}` on each page, without touching that page's own toolbar/
+  breadcrumb/h1 markup at all -- keeps the diff (and the regression risk
+  against this suite's many exact-HTML-string assertions) small.
+- **Rolled out to 16 real top-level destinations**: `tasks_list.html`
+  ("Tasks"/check-square), `calendar_fourweek.html`/`calendar_month.html`/
+  `calendar_day.html` ("Calendar"/calendar -- the Month/Day/4-Week
+  family), `calendar_week.html` ("Planner"/clock -- Week's own distinct
+  tabbar identity, not "Calendar"), `contacts_list.html` (Contacts/
+  address-book), `search.html` (Search/command), `notes.html` (Notes/
+  file-text), `settings_index.html` (Settings/settings) and its six
+  sub-pages using `HUB_CATEGORIES`' own icon per page (General/user,
+  Appearance/sun, Data & Maintenance/database, Holidays/calendar, Sleep &
+  Leisure Time/moon, Labels/tag -- `labels_manage.html` reuses Labels'
+  hub icon even though it isn't itself a hub sub-page), and
+  `published_lists.html` (Published Lists/share-2, replacing its own
+  bespoke `<header class="page-header">` icon+h1 with the shared one).
+- **Deliberately excluded, documented in `_page_header_narrow.html`'s
+  own comment:** `dashboard.html` (keeps the full hero banner/greeting/
+  avatar unchanged, per the source doc's own split), `label_detail.html`/
+  Space pages (already have the full banner system including a real
+  per-page uploaded image -- shrinking that to the narrow treatment is a
+  separate, riskier follow-up given how much banner/edit-mode-toolbar
+  machinery already depends on today's markup; flagged as a real
+  follow-up, not attempted here), entity detail pages (task/event/
+  contact/habit detail -- record views, not navigational destinations),
+  and `offline.html` (a special-case SW fallback that already hides the
+  tabbar entirely via `hide_tabbar`, not part of normal chrome).
+- 16 new tests (`test_page_header_narrow.py`, new file): one per rolled-
+  out page confirming the narrow header's exact title/icon, plus two
+  confirming Home and a label page are *unaffected* (no
+  `.page-header-narrow` in their output). Full suite: **1872 passed**
+  (four file-glob chunks: 595 + 434 + 508 + 335 = 1872; sixteen new, none
+  removed).
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v21` -> `cc-shell-v22` (style.css
+  changed again) -- `test_pwa_shell.py`'s literal-string assertion
+  updated.
+- Item 13's breakdown is now down to 13f alone (aesthetic fusion, still
+  deliberately unscheduled -- see its own "TBD" note further up).

@@ -2,6 +2,9 @@
 {% block title %}4-Week View - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
+{% set page_title = "Calendar" %}
+{% set page_icon = "calendar" %}
+{% include "_page_header_narrow.html" %}
 {% import "_calendar_filters.html" as cf %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}

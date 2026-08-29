@@ -2,6 +2,9 @@
 {% from "_task_row.html" import task_row with context %}
 {% block title %}Tasks{% endblock %}
 {% block content %}
+{% set page_title = "Tasks" %}
+{% set page_icon = "check-square" %}
+{% include "_page_header_narrow.html" %}
 {% include "_tasks_toolbar.html" %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar

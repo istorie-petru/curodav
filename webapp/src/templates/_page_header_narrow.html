@@ -1,0 +1,33 @@
+{# Shared "Standard Page Header" (sidebar redesign item 13e, 2026-08-29,
+   plans/sidebar-redesign.md § "The Standard Header"): a thin, subtle
+   gradient strip with the page's icon + title, no greeting, no avatar --
+   the "narrow variant" of the same combined-hero-header concept Home's
+   own full banner (_page_banner.html, dashboard.html) is the "expanded
+   variant" of. Purely additive: included right after {% block content %}
+   opens on every real top-level destination page (Tasks, Calendar,
+   Contacts, Search, Notes, the Settings hub + its sub-pages, Published
+   Lists) -- it does not replace or restructure any of those pages' own
+   existing toolbar/breadcrumb/h1 markup (several of which is already a
+   visually-hidden `sr-only` h1 backing a `.toolbar.top-app-bar`, which
+   already serves this doc's "standard top navigation bar" role
+   structurally); it just adds the identity strip above it. Doesn't apply
+   to dashboard.html (keeps its own full hero) or label_detail.html/
+   space pages (already have the full banner system, including a real
+   per-page uploaded image -- shrinking THAT to this narrow treatment is
+   a separate, riskier follow-up given how much banner/edit-mode-toolbar
+   machinery is wired to it today; flagged in STATE.md, not done here),
+   or to entity detail pages (task/event/contact/habit detail -- record
+   views, not navigational destinations, so "the page title" doesn't
+   mean the same thing there).
+
+   Expects: page_title (str), page_icon (sprite icon name; falls back to
+   'layout' if omitted -- shouldn't happen in practice, every real call
+   site passes one, but a page missing it entirely shouldn't render a
+   blank icon slot). No banner-image support here (none of these pages
+   have a per-page uploaded banner the way Home/labels do) -- purely a
+   flat gradient tint, same for every page, per the source doc's own
+   "default calendar icon, no custom color" example. #}
+<div class="page-header-narrow">
+    <span class="page-header-narrow-icon">{{ icon(page_icon|default('layout')) }}</span>
+    <h2 class="page-header-narrow-title">{{ page_title }}</h2>
+</div>

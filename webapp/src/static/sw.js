@@ -94,7 +94,9 @@
 // v21 (2026-08-29): style.css changed again (unified collapsed/expanded
 // .tabbar/.tab-btn/.sidebar-header padding so rail icons land at the same
 // inset in both states) -- bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v21";
+// v22 (2026-08-29): style.css changed again (new .page-header-narrow rules,
+// sidebar redesign item 13e) -- bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v22";
 
 const SHELL_ASSETS = [
   "/offline",

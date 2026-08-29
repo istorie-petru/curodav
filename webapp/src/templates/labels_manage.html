@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Labels{% endblock %}
 {% block content %}
+{% set page_title = "Labels" %}
+{% set page_icon = "tag" %}
+{% include "_page_header_narrow.html" %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}

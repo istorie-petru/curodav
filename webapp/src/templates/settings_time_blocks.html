@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Sleep & Leisure Time - Settings{% endblock %}
 {% block content %}
+{% set page_title = "Sleep & Leisure Time" %}
+{% set page_icon = "moon" %}
+{% include "_page_header_narrow.html" %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}
