@@ -55,7 +55,20 @@
    purely for layout, not their normal task meaning). #}
 {% macro habit_row(item) %}
 <tr data-uid="{{ item.uid }}" data-kind="{{ item.kind }}">
-    <td></td>
+    <td>
+        <!-- 2026-08-29 (STATE.md backlog item 1, direct request: "bulk
+             actions on tables... then Habits..."). Habit rows join the
+             Tasks page's own selection Set/bulk-actions-bar (they already
+             share `#task-table`) via `.row-select`, same as a plain task
+             row -- static/tasks_table.js's bulk-delete handler reads
+             `data-kind` off this same checkbox to route a habit-entity uid
+             through `db.delete_habit` instead of `db.delete_task`. Bulk
+             status-set/label-add stay task-only, unchanged -- routers/
+             tasks.py's bulk_action already no-ops harmlessly on a uid
+             `db.get_task` can't find, so a habit row selected for one of
+             those simply does nothing rather than erroring. -->
+        <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" data-kind="{{ item.kind }}" aria-label="Select {{ item.title }}">
+    </td>
     <td>
         <a href="{{ item.detail_url }}" data-modal>{{ item.title }}</a>
     </td>

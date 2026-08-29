@@ -428,6 +428,25 @@ def delete_label(name: str, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
+    """2026-08-29 (STATE.md backlog item 1, direct request: "bulk actions
+    on tables"). JSON endpoint for `static/bulk_select.js`'s Labels
+    instance -- a plain loop over `db.clear_label`, same as a single row's
+    own Delete button (see delete_label above): removes each label from
+    every object that carries it, `label_config` rows kept harmlessly.
+    `uids` here are label names, not real uids -- `static/bulk_select.js`
+    doesn't care what the identifier actually is, it just round-trips
+    whatever each row's checkbox `data-uid` carries."""
+    payload = await request.json()
+    names = payload.get("uids") or []
+    if not names:
+        return JSONResponse({"error": "no labels selected"}, status_code=400)
+    for name in names:
+        db.clear_label(conn, name)
+    return JSONResponse({"ok": True, "count": len(names)})
+
+
 @router.post("/{name}/set")
 def set_label(
     name: str,

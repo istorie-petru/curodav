@@ -11,6 +11,17 @@
 
 <!-- Sleep Time -->
 <h2 style="margin:20px 0 8px">Sleep Time</h2>
+<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+     "bulk actions on tables"). Sleep and Leisure are two independent
+     `CCBulkSelect` instances (own bar/table ids each) -- see that
+     module's own comment for why one page can safely host more than one
+     instance. -->
+<div class="bulk-actions-bar" id="sleep-bulk-bar" style="display:none">
+    <span id="sleep-bulk-count" class="bulk-count"></span>
+    <div class="spacer"></div>
+    <button type="button" id="sleep-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    <button type="button" id="sleep-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels/Holidays tables. -->
@@ -18,6 +29,7 @@
         <table id="sleep-block-table">
             <thead>
                 <tr>
+                    <th style="width:26px"></th>
                     <th>Block</th>
                     <th>Hours</th>
                     <th>Days</th>
@@ -28,6 +40,9 @@
                 {% if sleep_blocks %}
                     {% for b in sleep_blocks %}
                     <tr data-uid="{{ b.uid }}">
+                        <td>
+                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or 'sleep time block' }}">
+                        </td>
                         <td>
                             <div class="label-cell">
                                 <span class="label-name">{{ b.label or '(untitled)' }}</span>
@@ -51,14 +66,14 @@
                     {% endfor %}
                 {% else %}
                     <tr id="empty-state-row">
-                        <td colspan="4" class="text-muted" style="font-size: var(--text-footnote);">No sleep time configured yet</td>
+                        <td colspan="5" class="text-muted" style="font-size: var(--text-footnote);">No sleep time configured yet</td>
                     </tr>
                 {% endif %}
                 <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
                      "+ Add X" convention as _tasks_body.html's
                      .task-add-row. -->
                 <tr class="task-add-row">
-                    <td colspan="4"><a href="/settings/time-blocks/new?kind=sleep" data-modal>{{ icon('plus', 'icon-sm') }} Add sleep time</a></td>
+                    <td colspan="5"><a href="/settings/time-blocks/new?kind=sleep" data-modal>{{ icon('plus', 'icon-sm') }} Add sleep time</a></td>
                 </tr>
             </tbody>
         </table>
@@ -66,10 +81,17 @@
 
 <!-- Leisure Time -->
 <h2 style="margin:24px 0 8px">Leisure Time</h2>
+<div class="bulk-actions-bar" id="leisure-bulk-bar" style="display:none">
+    <span id="leisure-bulk-count" class="bulk-count"></span>
+    <div class="spacer"></div>
+    <button type="button" id="leisure-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    <button type="button" id="leisure-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
 <div class="card table-scroll" id="leisure-block-table-wrapper">
         <table id="leisure-block-table">
             <thead>
                 <tr>
+                    <th style="width:26px"></th>
                     <th>Block</th>
                     <th>Hours</th>
                     <th>Days</th>
@@ -80,6 +102,9 @@
                 {% if leisure_blocks %}
                     {% for b in leisure_blocks %}
                     <tr data-uid="{{ b.uid }}">
+                        <td>
+                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or 'leisure time block' }}">
+                        </td>
                         <td>
                             <div class="label-cell">
                                 <span class="label-name">{{ b.label or '(untitled)' }}</span>
@@ -103,17 +128,42 @@
                     {% endfor %}
                 {% else %}
                     <tr id="empty-state-row">
-                        <td colspan="4" class="text-muted" style="font-size: var(--text-footnote);">No leisure time configured yet</td>
+                        <td colspan="5" class="text-muted" style="font-size: var(--text-footnote);">No leisure time configured yet</td>
                     </tr>
                 {% endif %}
                 <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
                      "+ Add X" convention as _tasks_body.html's
                      .task-add-row. -->
                 <tr class="task-add-row">
-                    <td colspan="4"><a href="/settings/time-blocks/new?kind=leisure" data-modal>{{ icon('plus', 'icon-sm') }} Add leisure time</a></td>
+                    <td colspan="5"><a href="/settings/time-blocks/new?kind=leisure" data-modal>{{ icon('plus', 'icon-sm') }} Add leisure time</a></td>
                 </tr>
             </tbody>
         </table>
 </div>
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('bulk_select.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    window.CCBulkSelect.init({
+        tableId: "sleep-block-table",
+        barId: "sleep-bulk-bar",
+        countId: "sleep-bulk-count",
+        clearId: "sleep-bulk-clear",
+        deleteButtonId: "sleep-bulk-delete",
+        deleteUrl: "/settings/time-blocks/bulk-delete",
+        itemLabel: "sleep time block",
+    });
+    window.CCBulkSelect.init({
+        tableId: "leisure-block-table",
+        barId: "leisure-bulk-bar",
+        countId: "leisure-bulk-count",
+        clearId: "leisure-bulk-clear",
+        deleteButtonId: "leisure-bulk-delete",
+        deleteUrl: "/settings/time-blocks/bulk-delete",
+        itemLabel: "leisure time block",
+    });
+});
+</script>
 {% endblock %}

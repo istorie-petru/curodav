@@ -98,7 +98,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import auth, config, data_health, db, offline_sync
 from ..deps import (
@@ -515,6 +515,22 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
+@router.post("/settings/holidays/bulk-delete")
+async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
+    """2026-08-29 (STATE.md backlog item 1, direct request: "bulk actions
+    on tables"). JSON endpoint for `static/bulk_select.js`'s Holidays
+    instance -- a plain loop over the same `db.delete_holiday` each row's
+    own single-delete button already calls, same "no all-or-nothing
+    rollback" shape as `routers/tasks.py::bulk_action`'s delete branch."""
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no holidays selected"}, status_code=400)
+    for uid in uids:
+        db.delete_holiday(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
+
+
 # --------------------------------------------------------------------- #
 # Sleep Time / Leisure Time (1.9 side work, direct feedback: "Add an
 # option in the settings to set-up Leisure Time and Sleep Time... similar
@@ -675,6 +691,23 @@ def update_time_block(
 def delete_time_block(uid: str, conn=Depends(get_db)):
     db.delete_time_block(conn, uid)
     return RedirectResponse(url="/settings/time-blocks", status_code=303)
+
+
+@router.post("/settings/time-blocks/bulk-delete")
+async def bulk_delete_time_blocks(request: Request, conn=Depends(get_db)):
+    """2026-08-29 (STATE.md backlog item 1) -- same shape as
+    bulk_delete_holidays above; one endpoint covers both the Sleep Time
+    and Leisure Time tables (settings_time_blocks.html's two independent
+    `CCBulkSelect` instances both point at this same URL) since a time
+    block's uid alone -- not its kind -- is all `db.delete_time_block`
+    needs."""
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no time blocks selected"}, status_code=400)
+    for uid in uids:
+        db.delete_time_block(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
 
 
 # --------------------------------------------------------------------- #

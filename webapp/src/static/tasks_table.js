@@ -221,25 +221,51 @@
     window.ccApi.dispatchChange({ type: "task", action });
   }
 
+  // 2026-08-29 (STATE.md backlog item 1): a selected row may be a plain
+  // task OR a Habits-group row (_habit_row.html's checkbox now carries
+  // `data-kind`, "task" for a habit-labeled task, "entity" for a
+  // standalone Habit -- see routers/tasks.py's _habit_group_items). Only
+  // "delete" needs to know the difference -- status/tag bulk actions stay
+  // task-uid-only (bulkPost's plain `Array.from(selected)`), harmlessly
+  // no-op-ing on any habit-entity uid mixed in (db.get_task returns None
+  // for it, same "skip unknown uid" behavior every bulk_action branch
+  // already has).
+  function selectedByKind() {
+    const taskUids = [];
+    const habitUids = [];
+    allCheckboxes().forEach((cb) => {
+      if (!selected.has(cb.dataset.uid)) return;
+      (cb.dataset.kind === "entity" ? habitUids : taskUids).push(cb.dataset.uid);
+    });
+    return { taskUids, habitUids };
+  }
+
   document.getElementById("bulk-delete")?.addEventListener("click", () => {
     const count = selected.size;
     if (!count) return;
     window.ccConfirmSheet({
       anchor: document.getElementById("bulk-delete"),
-      message: `Delete ${count} selected task${count === 1 ? "" : "s"}? This cannot be undone.`,
+      message: `Delete ${count} selected item${count === 1 ? "" : "s"}? This cannot be undone.`,
       onConfirm: async () => {
         try {
-          const uids = await bulkPost("delete");
-          uids.forEach((uid) => {
+          const { taskUids, habitUids } = selectedByKind();
+          const resp = await fetch("/tasks/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "delete", uids: taskUids, habit_uids: habitUids }),
+          });
+          if (!resp.ok) throw new Error("bulk delete failed");
+          const allUids = taskUids.concat(habitUids);
+          allUids.forEach((uid) => {
             const row = currentTable().querySelector(`tr[data-uid="${uid}"]`);
             if (row) row.remove();
           });
           selected.clear();
           updateBar();
-          window.ccToast({ title: "Deleted", message: `${uids.length} task${uids.length === 1 ? "" : "s"}` });
+          window.ccToast({ title: "Deleted", message: `${allUids.length} item${allUids.length === 1 ? "" : "s"}` });
           dispatchTaskChange("delete");
         } catch (err) {
-          window.ccToast({ message: "Could not delete the selected tasks.", variant: "error" });
+          window.ccToast({ message: "Could not delete the selected items.", variant: "error" });
         }
       },
     });

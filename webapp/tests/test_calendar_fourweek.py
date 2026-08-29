@@ -386,9 +386,11 @@ class TestFourWeekViewTemplate:
 
     def test_tabbar_has_calendar_and_week_only(self, conn):
         # base.html carries exactly two calendar-domain tabbar entries now:
-        # "Calendar" (data-tab="calendar", -> 4-Week) and "Week" (data-tab=
-        # "calendar_week", the planner). No separate "4-Week" tab, no "Day"
-        # tab -- both retired the same session they were added/considered.
+        # "Calendar" (data-tab="calendar", -> 4-Week) and "Planner"
+        # (data-tab="calendar_week" -- visible label renamed from "Week"
+        # 2026-08-29, STATE.md backlog item 10; the data-tab identifier and
+        # route are unchanged). No separate "4-Week" tab, no "Day" tab --
+        # both retired the same session they were added/considered.
         body = calendar_router.four_week_view(_bare_request(), conn=conn).body.decode()
         assert 'data-tab="calendar"' in body
         assert 'data-tab="calendar_week"' in body

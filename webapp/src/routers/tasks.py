@@ -671,7 +671,18 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
     payload = await request.json()
     action = payload.get("action")
     uids = payload.get("uids") or []
-    if not uids:
+    # 2026-08-29 (STATE.md backlog item 1, "bulk actions... then Habits"):
+    # a selection on the Tasks page may include Habits-group rows for the
+    # standalone Habit entity kind (_habit_row.html's checkbox, kind=
+    # "entity") alongside plain task uids -- only "delete" needs to know
+    # the difference (see static/tasks_table.js's selectedByKind), since
+    # a habit entity lives in `habits`, not `tasks`. Only meaningful for
+    # `action == "delete"`; every other branch below is unchanged and
+    # still only ever looks at `uids`.
+    habit_uids = payload.get("habit_uids") or []
+    if action != "delete" and not uids:
+        return JSONResponse({"error": "no tasks selected"}, status_code=400)
+    if action == "delete" and not uids and not habit_uids:
         return JSONResponse({"error": "no tasks selected"}, status_code=400)
 
     if action == "delete":
@@ -681,7 +692,9 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         for uid in uids:
             db.delete_task(conn, uid)
             db.delete_checklist_items_for_task(conn, uid)
-        return JSONResponse({"ok": True, "count": len(uids)})
+        for uid in habit_uids:
+            db.delete_habit(conn, uid)
+        return JSONResponse({"ok": True, "count": len(uids) + len(habit_uids)})
 
     if action == "status":
         status = payload.get("status")

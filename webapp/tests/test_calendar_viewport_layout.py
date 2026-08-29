@@ -109,7 +109,10 @@ class TestAgendaTabRemovedFromSegmentedNav:
     def test_month_view_nav_has_no_agenda_tab(self, conn):
         resp = calendar_router.month_view(_request("/calendar"), year=2026, month=8, conn=conn)
         body = resp.body.decode()
-        assert ">Month<" in body and ">Week<" in body and ">Day<" in body
+        # ">Week<" is base.html's sidebar tab for /calendar/week -- renamed
+        # to ">Planner<" 2026-08-29 (STATE.md backlog item 10); the route
+        # and everything else about that page are unchanged.
+        assert ">Month<" in body and ">Planner<" in body and ">Day<" in body
         assert ">Agenda<" not in body
         assert "/calendar/agenda" not in body
 

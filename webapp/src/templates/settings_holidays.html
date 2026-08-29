@@ -9,6 +9,16 @@
 
 <p class="settings-hint">Named holiday calendars any recurring Calendar event or Schedule block can respect (Schedule's own "which calendar do my classes respect" pick is still on the Schedule page's Settings panel).</p>
 
+<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+     "bulk actions on tables"). Same pattern as labels_manage.html's own
+     bar -- see that template's comment. -->
+<div class="bulk-actions-bar" id="holidays-bulk-bar" style="display:none">
+    <span id="holidays-bulk-count" class="bulk-count"></span>
+    <div class="spacer"></div>
+    <button type="button" id="holidays-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    <button type="button" id="holidays-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
+
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels table -- see that template's own
@@ -17,6 +27,7 @@
         <table id="holidays-table">
             <thead>
                 <tr>
+                    <th style="width:26px"></th>
                     <th>Holiday</th>
                     <th>Calendar</th>
                     <th>Date Range</th>
@@ -27,6 +38,9 @@
                 {% if holidays %}
                     {% for h in holidays %}
                     <tr data-uid="{{ h.uid }}">
+                        <td>
+                            <input type="checkbox" class="row-select" data-uid="{{ h.uid }}" aria-label="Select {{ h.label or '(untitled)' }}">
+                        </td>
                         <td>
                             <div class="label-cell">
                                 <span class="label-name">{{ h.label or '(untitled)' }}</span>
@@ -50,17 +64,33 @@
                     {% endfor %}
                 {% else %}
                     <tr id="empty-state-row">
-                        <td colspan="4" class="text-muted" style="font-size: var(--text-footnote);">No holidays configured yet</td>
+                        <td colspan="5" class="text-muted" style="font-size: var(--text-footnote);">No holidays configured yet</td>
                     </tr>
                 {% endif %}
                 <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
                      "+ Add X" convention as _tasks_body.html's
                      .task-add-row. -->
                 <tr class="task-add-row">
-                    <td colspan="4"><a href="/settings/holidays/new" data-modal>{{ icon('plus', 'icon-sm') }} Add holiday</a></td>
+                    <td colspan="5"><a href="/settings/holidays/new" data-modal>{{ icon('plus', 'icon-sm') }} Add holiday</a></td>
                 </tr>
             </tbody>
         </table>
 </div>
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('bulk_select.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    window.CCBulkSelect.init({
+        tableId: "holidays-table",
+        barId: "holidays-bulk-bar",
+        countId: "holidays-bulk-count",
+        clearId: "holidays-bulk-clear",
+        deleteButtonId: "holidays-bulk-delete",
+        deleteUrl: "/settings/holidays/bulk-delete",
+        itemLabel: "holiday",
+    });
+});
+</script>
 {% endblock %}

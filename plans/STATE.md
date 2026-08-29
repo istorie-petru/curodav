@@ -4303,10 +4303,13 @@ larger by the user, not a default to repeat.
   fixed in passing), `features/auth.md` extended (Secure cookie, security
   headers, Radicale-in-setup, `/public/*` exemption).
 
-1. **Bulk actions on tables** — every table/table-like surface in the app
-   (Tasks first, since it's the precedent; then Habits, Contacts, Labels,
-   Holidays, Time blocks, etc. wherever a table exists), not just Tasks'
-   existing bulk bar.
+1. **Bulk actions on tables** — **partially shipped 2026-08-29** (Habits,
+   Labels, Holidays, Sleep/Leisure Time blocks — see "Shipped — backlog
+   items 10, 1 (partial) bundled together" below). **Still open:
+   Contacts** — a card-list, not a `<table>`, needs its row markup split
+   (checkbox + narrower link) before it can host bulk-select the same way;
+   deliberately deferred to its own slice rather than rushed into this
+   one.
 2. **Undo history (Ctrl+Z), 15-30 actions deep** — a real undo stack across
    the app, not the current per-row "delete with undo" toast pattern
    (`_task_row.html` et al.) — this is a bigger, general mechanism sitting
@@ -4334,8 +4337,9 @@ larger by the user, not a default to repeat.
    - Date-picker dropdown: remove the Apply button entirely; Clear button
      loses its text label, becomes icon-only (near an arrow, but with
      visible separation, not crowded against it).
-10. **Rename "Week" to "Planner" in the sidebar** — label change only,
-    confirm it doesn't collide with a different Planner concept elsewhere.
+10. ~~**Rename "Week" to "Planner" in the sidebar**~~ — **shipped
+    2026-08-29**, see "Shipped — backlog items 10, 1 (partial) bundled
+    together" below.
 11. **Mobile responsiveness audit** — pass over the app's existing
     surfaces on small viewports; scope (which pages, phone vs. tablet) to
     be defined when this is picked up.
@@ -4556,3 +4560,84 @@ and 8").
   benefit. Verified by direct render (empty-labels and populated-labels
   paths) since no existing test exercises this template's markup. Full
   suite (both items combined): **1793 passed**.
+
+## Shipped — backlog items 10, 1 (partial) bundled together (2026-08-29,
+direct request)
+
+Direct follow-up request, same day ("do 10 and 1").
+
+- **Item 10, "Week" renamed to "Planner" in the sidebar** — label-only
+  change, `base.html`'s tabbar `<span>Week</span>` -> `<span>Planner</span>`.
+  Route (`/calendar/week`), `data-tab="calendar_week"` identifier, and
+  everything `calendar_week.html` itself renders are unchanged. Confirmed
+  no collision: grepped `src/` and `features/` for "Planner" beforehand --
+  the only prior mention was informal prose in this file and a `base.html`
+  comment already calling the Week page "the planner." Two tests asserted
+  the literal visible text and needed updating (`test_calendar_viewport_
+  layout.py`'s `>Week<` sanity check, a `>4-Week<`/`>Week<` subnav-scoped
+  negative assertion in `test_calendar_fourweek.py` that was already
+  scoped away from the sidebar and stayed true either way, but its comment
+  got a touch-up regardless for accuracy).
+- **Item 1, bulk actions on tables — Habits + Labels/Holidays/Time blocks
+  shipped, Contacts deliberately deferred.** `static/tasks_table.js`'s
+  existing bulk-actions-bar (Tasks) is untouched and stays the precedent
+  it already was; this slice extends bulk *selection* to two more kinds of
+  surface without rewriting it:
+  - **Habits-group rows** (`_habit_row.html`, both the habit-labeled-task
+    kind and the standalone Habit-entity kind) now carry a `.row-select`
+    checkbox and join the *same* `#task-table` selection Set/bulk bar the
+    Tasks page already has -- they're literally rows in the same
+    `<table>` since the standalone `/habits` list page was retired
+    2026-08-28. Only "Delete" needed to learn the difference between a
+    task uid and a habit-entity uid: the checkbox now also carries
+    `data-kind` ("task" or "entity"), `tasks_table.js`'s new
+    `selectedByKind()` partitions the selection before posting, and
+    `POST /tasks/bulk`'s delete branch gained a parallel `habit_uids` list
+    (looped through `db.delete_habit`, entirely separate from the
+    existing `uids` loop through `db.delete_task`) -- the pre-existing
+    `if not uids: 400` guard had to be split so an all-habits selection
+    (`uids=[]`, `habit_uids=[...]`) doesn't false-positive as "nothing
+    selected." Bulk status-set/label-add stay task-uid-only, unchanged --
+    a habit-entity uid mixed into one of those requests just no-ops
+    (`db.get_task` returns `None` for it), same "skip an unknown uid"
+    behavior every other branch already had, so nothing needed to reject
+    it explicitly.
+  - **Labels, Holidays, Sleep Time, Leisure Time** (all four plain
+    `<table>`-based settings surfaces from the item-7 slice just above)
+    each gained their own checkbox column, their own `.bulk-actions-bar`
+    (same shared markup/CSS Tasks' own bar uses), and their own bulk-
+    delete JSON endpoint (`POST /settings/labels/bulk-delete`,
+    `/settings/holidays/bulk-delete`, `/settings/time-blocks/bulk-delete`
+    -- Sleep and Leisure share one endpoint since a time block's uid alone
+    determines what `db.delete_time_block` needs). Rather than a second
+    hand-rolled selection implementation, all four are driven by a new
+    shared module, **`static/bulk_select.js`** -- factors out exactly the
+    reusable mechanics `tasks_table.js` already had (checkbox tracking,
+    shift-click range select, press-and-drag "paint," bar show/hide/
+    count) into `window.CCBulkSelect.init({...})`, deliberately leaving
+    out the things that are Tasks-specific (status/tag bulk actions,
+    async-CRUD region-swap reconciliation -- these four pages are still
+    plain full-reload-on-mutation surfaces, so a successful bulk delete
+    just calls `window.location.reload()`). Labels' bulk delete reuses its
+    existing "clear usage, not a real row delete" semantics and wording
+    (`confirmMessage` override, since `label_config` intentionally isn't
+    touched) rather than the module's generic "cannot be undone" phrasing.
+  - **Contacts deliberately NOT done this slice** — `_contacts_body.html`
+    is a card-list of `<a class="contact-row">` link-rows, not a
+    `<table>`; a checkbox can't cleanly nest inside an anchor (native
+    click-anywhere-to-navigate and a checkbox's own click target would
+    fight each other), so giving it bulk-select needs a real markup
+    change (splitting the row into a checkbox + a narrower link) that the
+    other four surfaces didn't need. Left for its own follow-up slice
+    rather than rushed into this one — still open, `open-priority.md`'s
+    "wherever a table exists" framing explicitly anticipated doing this
+    incrementally.
+  - 14 new tests (`test_bulk_actions_tables.py`) covering the `/tasks/bulk`
+    habit_uids plumbing (plain-tasks-only unchanged, habit-only, mixed,
+    the split guard, non-delete actions unaffected) and all three new
+    settings bulk-delete endpoints. No JS test harness in this suite, so
+    `bulk_select.js`/the habit-row `selectedByKind()` split are covered at
+    the Python/router layer (payload shape, guard behavior) rather than
+    simulated clicks -- consistent with how `tasks_table.js` itself has
+    no direct JS tests either.
+  - Full suite (items 10 + 1 combined): **1807 passed** (1793 + 14 new).
