@@ -5928,3 +5928,32 @@ changed, just `style.css`.
   only change, same v19 lesson) -- `test_pwa_shell.py`'s literal-string
   assertion updated. Full suite: **1921 passed** (three file-glob chunks:
   849 + 641 + 431 = 1921; none new, none removed).
+
+## Immediate follow-up (2026-08-30, same session) -- collapsed rail icon
+left-aligned to match expanded's inset (direct report: "the only
+inconsistency is the left and right padding/margin")
+
+The previous entry matched item *height* between the two states but left
+their horizontal alignment mismatched: collapsed `.tab-btn` kept
+`align-items:center` (its column layout's cross-axis), centering the icon
+in the full 64px box -- left edge landing ~30px from the rail's own left
+edge (8px tabbar padding + a centered 20px icon in the 56px content box).
+Expanded rows are left-aligned (`justify-content:flex-start`), landing
+their icon at a 12px inset (8px tabbar padding + 4px tab-btn padding) --
+same padding value in both states, just applied differently once one
+side centers and the other doesn't.
+
+- `html:not([data-sidebar-expanded]) .tab-btn{align-items:flex-start;}`
+  (same `@media (min-width:721px)` block as the icon-only/height rule) --
+  puts the collapsed icon at that identical 12px inset, so it no longer
+  jumps sideways when the rail toggles.
+- Collapsed active-pill was centered under the (formerly centered) icon
+  via `left:50%; transform:translateX(-50%)` -- would visibly detach from
+  the icon at its new fixed-left position. Switched to the same full-box
+  highlight technique expanded already uses (`top/left:0, width/
+  height:100%`), just narrower and `--radius-sm` instead of `--radius-md`
+  for the tighter 64px width, rather than hand-computing a new pill offset.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v27` -> `cc-shell-v28` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).

@@ -673,6 +673,34 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      html[data-sidebar-expanded] .tab-btn span rule further down still
      sets display:block). */
   html:not([data-sidebar-expanded]) .tab-btn span{display:none;}
+
+  /* 2026-08-30 immediate follow-up (direct report -- "the only
+     inconsistency is the left and right padding/margin"): with the label
+     gone, `.tab-btn`'s own `align-items:center` (the column layout's
+     cross-axis) was still horizontally *centering* the icon inside the
+     full 64px box -- padding-left:4px + centering the 20px icon in the
+     56px content box put its left edge ~22px into the button, i.e. ~30px
+     from the rail's own left edge (8px tabbar padding + 22px). Expanded
+     rows are left-aligned instead (`justify-content:flex-start`), landing
+     their icon's left edge at a 12px inset (8px tabbar padding + 4px
+     tab-btn padding) -- the same 4px padding both states already share,
+     just not applied the same way once one state centers and the other
+     doesn't. Switching collapsed to `align-items:flex-start` puts its
+     icon at that identical 12px inset, so the icon sits at the same x
+     position whether the rail is collapsed or expanded, instead of
+     jumping sideways as the sidebar toggles. */
+  html:not([data-sidebar-expanded]) .tab-btn{align-items:flex-start;}
+  /* The collapsed active-pill was centered under the (formerly centered)
+     icon via `left:50%; transform:translateX(-50%)` -- now that the icon
+     sits at a fixed left inset instead of the button's center, a
+     center-anchored pill would visibly detach from it. Reusing expanded's
+     own full-box highlight (`top/left:0, width/height:100%`) sidesteps
+     needing to hand-position a pill under the new icon offset at all --
+     same technique, just a narrower box, `--radius-sm` instead of
+     `--radius-md` to suit the tighter 64px width. */
+  html:not([data-sidebar-expanded]) .tab-btn.active::before{
+    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-sm);
+  }
 }
 
 /* Spaces in the sidebar (base.html, 2026-08-08) -- a second, shorter list
