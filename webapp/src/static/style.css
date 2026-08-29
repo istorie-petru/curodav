@@ -649,7 +649,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    user text (unlike "Home"/"Calendar"/...), so it needs its own
    overflow/ellipsis instead of assuming it always fits. */
 .tab-separator{width:40px; height:1px; background:var(--separator); margin:var(--space-2) 0;}
-.tab-btn-space span{max-width:100%; overflow:hidden; text-overflow:ellipsis;}
+.tab-btn-space span, .tab-btn-project span{max-width:100%; overflow:hidden; text-overflow:ellipsis;}
 
 /* 2026-08-29 sidebar redesign slice 13a (plans/STATE.md item 13a) --
    collapsible rail width, nested Spaces/Projects tree. Collapsed (the
@@ -671,8 +671,16 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    it'd override that reset regardless of which rule comes later in the
    file. */
 .sidebar-expand-toggle{margin-bottom:var(--space-2); padding-bottom:10px; border-bottom:1px solid var(--separator);}
-.sidebar-expand-toggle .icon{transition:transform var(--dur-fast) var(--ease-standard);}
-html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg);}
+.sidebar-expand-toggle[aria-pressed="true"]{color:var(--fg-primary);}
+
+/* "+ New" rail button (plans/sidebar-redesign.md's "Sidebar Controls").
+   Accent-colored (icon + text) so it reads as an action, not a nav
+   destination -- every other .tab-btn uses --fg-secondary/--fg-primary,
+   never the accent color, so this alone is enough to distinguish it
+   without a different size/shape that would break the "consistent icon
+   size" rule every other rail entry follows. */
+.sidebar-quick-add{color:var(--accent);}
+.sidebar-quick-add:hover{color:var(--accent-hover);}
 
 .sidebar-tree-item{width:100%; display:flex; flex-direction:column; align-items:center;}
 .sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:center;}
@@ -735,11 +743,13 @@ html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg
     display:flex;
   }
 
-  /* Group header text replaces the plain divider line in expanded mode
-     (plans/sidebar-redesign.md: "tiny, uppercase, gray text" section
-     headers) -- collapsed mode keeps just the thin .tab-separator rule,
-     unchanged. */
-  html[data-sidebar-expanded] .tab-separator{display:none;}
+  /* Group header text (plans/sidebar-redesign.md: "tiny, uppercase, gray
+     text" section headers) shows *alongside* the divider in expanded
+     mode, not instead of it -- an earlier pass hid .tab-separator here,
+     which meant the divider itself came and went between collapsed/
+     expanded (a direct "consistent separators between narrow and wide"
+     complaint). The divider is unconditional now (see its own rule
+     above); this block only ever adds the label on top of it. */
   html[data-sidebar-expanded] .sidebar-section-label{display:block;}
 }
 
@@ -2869,12 +2879,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      unpredictably as more get created, on the one layout with no spare
      width to give them. Reaching a Space on mobile still works the same
      way it always has -- Settings > Labels, or that label's own page. */
-  .tab-separator, .tab-btn-space{display:none;}
-  /* 2026-08-29 sidebar redesign slice 13a: the expand toggle + nested tree
-     wrapper divs are new (base.html), same desktop-only convenience as
-     Spaces themselves above -- hide them outright rather than leaving
-     empty flex containers in the bottom bar's layout. */
-  .sidebar-expand-toggle, .sidebar-tree-item{display:none;}
+  .tab-separator, .tab-btn-space, .tab-btn-project, .sidebar-section-label{display:none;}
+  /* 2026-08-29 sidebar redesign slice 13a + follow-ups: the expand toggle,
+     nested tree wrapper divs, and rail "+ New" button are new (base.html),
+     same desktop-only convenience as Spaces/Projects above -- hide them
+     outright rather than leaving empty flex containers in the bottom
+     bar's layout. The mobile "+ New" equivalent is each page's own
+     existing .fab (still shown here, see the .fab mobile block above). */
+  .sidebar-expand-toggle, .sidebar-tree-item, .sidebar-quick-add{display:none;}
   .tab-btn{
     width:auto; min-height:auto; flex:1;
     padding:8px 4px 6px;

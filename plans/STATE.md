@@ -5059,12 +5059,15 @@ tree (2026-08-29, direct request)
   toggle closed, and a plain label with no Space relationship is
   untouched. Full suite: **1844 passed** (1836 + 8 new), no existing test
   needed changes.
-- Still open from item 13's breakdown: 13b (per-entry icons -- the
-  `label_config.icon` field this slice's child rendering already reads
-  via `icon(child.icon or 'folder', ...)` needs no schema work, just
-  confirming the icon picker itself is reachable for project labels),
+- Still open from item 13's breakdown at the time: 13b (per-entry icons),
   13c (sidebar quick-add), 13d (edit-mode-as-toggle), 13e (narrow-header
   variant), 13f (aesthetic fusion, still deliberately unscheduled).
+  **Update, same day, later follow-up below:** 13b confirmed already
+  satisfied (project/child icons already read `label_config.icon`, no
+  work needed) and 13c (sidebar quick-add) shipped -- see the "chevron-
+  vs-panel icon, icon/font/separator consistency, a real Projects
+  section, the sidebar '+' button" entry further down. 13d/13e/13f remain
+  open.
 
 ## Follow-up (2026-08-29, same day) -- expand toggle relocated to a fixed
 spot at the top of the rail
@@ -5135,3 +5138,81 @@ the reference screenshot and `plans/sidebar-redesign.md`: two gaps.
   behavior (the row-layout change itself) isn't asserted by this suite's
   plain HTML-string checks, same as every other CSS-only change in this
   file's history. Full suite: **1846 passed** (1844 + 2 new).
+
+## Follow-up (2026-08-29, same day) -- chevron-vs-panel icon, icon/font/
+separator consistency, a real Projects section, the sidebar "+" button
+
+Direct request, pointed back at `plans/sidebar-redesign.md` after
+reviewing the rendered result: several pieces of the source doc's
+Sidebar section were still missing or inconsistent. All four addressed in
+one session (bundled together per direct request, same precedent as
+other same-day bundled entries in this file).
+
+- **Expand toggle: dedicated `icon-sidebar` glyph, not a rotated
+  chevron-right.** A chevron already means "expand this one tree item"
+  elsewhere on the same rail (`.sidebar-tree-toggle`) -- reusing it,
+  rotated, for "show/hide the whole sidebar" overloaded one glyph with
+  two meanings. The sprite already had an unused `icon-sidebar` symbol
+  (a panel-with-divider glyph); switched to that, dropped the now-
+  meaningless rotate-on-expand transform.
+- **Icon-size/font/separator consistency between collapsed and expanded.**
+  Two real inconsistencies found: (1) a child/project label's icon used
+  `icon-sm` (12px) while its parent Space's icon was the plain 20px
+  `.tab-btn .icon` size, for no reason tied to meaning, just nesting
+  depth -- dropped `icon-sm` there, both now inherit the same size, and
+  `.tab-btn-child`'s own `padding-left` indent is what signals depth
+  instead. (2) the `.tab-separator` divider was hidden outright in
+  expanded mode (replaced by the group-header label) -- so the divider
+  itself popped in and out between modes. Fixed by making the divider
+  unconditional and having the label render *alongside* it in expanded
+  mode, not instead of it. Font-size was already consistent (`.tab-btn`'s
+  12px was never mode-conditional to begin with) -- confirmed, not
+  changed.
+- **A real "Projects" section.** `deps.py::_sidebar_projects` (new global,
+  same pattern as `_sidebar_spaces`) lists every `is_project=1` label
+  with no `parent_name` -- i.e. not already nested under a Space
+  elsewhere in the rail (a project's `parent_name`, when set, only ever
+  points at a Space -- `label_edit_modal.html`'s own dropdown only offers
+  Space names -- so "has no parent_name" and "not shown elsewhere" are
+  the same condition). Renders as a flat `.tab-btn-project` list (no
+  further nesting -- projects have no sub-children in this app's data
+  model) under its own divider + "Projects" group-header label, same
+  treatment as Spaces. The source doc's third group, "Private", has no
+  equivalent in this app's data model (nothing here is a public/private
+  toggle on a label -- Published Lists' own visibility setting is a
+  different, unrelated concept) and was deliberately left unstubbed
+  rather than faked.
+- **Sidebar "+ New" button**, per the doc's "Sidebar Controls" bullet:
+  reuses the existing `data-modal` mechanism every other "+ New" button
+  in the app already uses. Context-aware on the one case the doc calls
+  out by name -- Contacts gets `/contacts/new`, every other page falls
+  back to the existing task/event quick-add (`/quick/add`, whose own tab
+  switcher already covers "default on tasks, with the possibility to
+  switch to events"). Hidden while `edit_mode` is on, matching
+  dashboard.html/label_detail.html's own page-local quick-add buttons
+  (editing the widget grid and quick-capturing are different modes of
+  using the page) -- missed on the first pass, caught by
+  `test_dashboard_usability_rework.py::test_dashboard_html_hides_quick_add_in_edit_mode`
+  failing, fixed by wrapping the button in `{% if not edit_mode %}`. A
+  real gap not closed here: a third "Contacts" tab *inside* the shared
+  quick-add modal itself (so this button wouldn't need to branch by page
+  at all) -- `quick_add.html` only renders Task/Event panels today.
+- 6 new tests (`test_sidebar_tree.py`): the toggle's icon reference is
+  `icon-sidebar` not `chevron-right`; a standalone project gets its own
+  section; a project nested under a Space isn't duplicated into it; no
+  Projects section with no standalone projects; the quick-add button
+  points at `/quick/add` by default and `/contacts/new` on the Contacts
+  page. 1 existing test fixed
+  (`test_phase9b_toolbar_filters.py::test_contacts_filters_trigger_sits_immediately_before_new_button`)
+  -- it located the toolbar's own "+ New" button by a bare
+  `body.index('href="/contacts/new"')`, which now also matches the
+  rail's button (rendered earlier in the document) on the one page where
+  both buttons share a target; fixed by searching from the filters
+  trigger's own position onward. Full suite: **1852 passed** (1846 + 6
+  new).
+- Full suite run split across two `pytest` invocations this session
+  (alphabetical file-list halves) -- a single run intermittently exceeded
+  this sandbox's per-command timeout window on an otherwise-unrelated
+  slow file (`test_offline_sync.py`, ~16s alone); not a regression from
+  this change, just infra variance worth noting for the next session if
+  it recurs.

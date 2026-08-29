@@ -105,8 +105,47 @@
              (flips html[data-sidebar-expanded], sidebar_tree.js persists
              it) -- only its position in the DOM changed, see plans/
              STATE.md's slice 13a entry for the collapsible-width design
-             decision itself. -->
-        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('chevron-right', 'sidebar-expand-icon') }}</button>
+             decision itself.
+
+             2026-08-29 further follow-up: the icon itself is now the
+             sprite's dedicated `icon-sidebar` symbol (a panel-with-divider
+             glyph) instead of a rotated chevron-right -- a chevron reads
+             as "next/expand a list item" (that's exactly what it still
+             means on each Space's own disclosure toggle below), not "show
+             or hide the whole sidebar." No rotate-on-expand transform
+             anymore either, for the same reason: rotating a panel icon
+             doesn't communicate anything, unlike a chevron flipping
+             direction. -->
+        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
+        <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md's
+             "Sidebar Controls: Add a + button... to instantly add new
+             Entries/Pages specific to the page or in general (contacts
+             should open the add new contact modal, while [elsewhere] it
+             can default on tasks[/events])". Reuses the existing
+             data-modal mechanism every other "+ New" button in this app
+             already uses (modal.js), just placed in the rail instead of a
+             page-local toolbar/FAB. Context-aware on exactly the one case
+             the doc calls out (Contacts); every other page falls back to
+             the existing task/event quick-add modal (`/quick/add`,
+             quick_add.html) -- that modal's own tab switcher already
+             covers "default on tasks, with the possibility to switch to
+             events." A third Contacts tab *inside* that same modal (so
+             this button wouldn't need to branch by page at all) is a
+             real follow-up, not done here -- quick_add.html only renders
+             Task/Event panels today.
+
+             Hidden while `edit_mode` is on (dashboard.html/label_detail.html's
+             own widget-grid edit mode -- the same reason those pages' own
+             page-local quick-add already hides then, see dashboard.html's
+             "Hidden in edit mode" comment): editing the widget grid and
+             quick-capturing a new task/event are different modes of using
+             the page, and this button lives on every page regardless of
+             which one a given page happens to be in right now, so it has
+             to check the same flag they do rather than assuming it's
+             always safe to show. -->
+        {% if not edit_mode %}
+        <a href="{{ '/contacts/new' if active_tab == 'contacts' else '/quick/add' }}" data-modal class="tab-btn sidebar-quick-add" title="{% if active_tab == 'contacts' %}New contact{% else %}New task or event{% endif %}">{{ icon('plus') }}<span>New</span></a>
+        {% endif %}
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
            were retired as standalone tabs (1.9 side work) -- their own
@@ -219,11 +258,39 @@
           <div class="sidebar-tree-children">
             {% for child in l.children %}
             {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else ('/settings/labels/' ~ child.name) %}
-            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'folder', 'icon-sm') }}<span>{{ child.name }}</span></a>
+            {# 2026-08-29 follow-up: no more `icon-sm` here -- it made a
+               child's icon (12px) visibly smaller than its parent Space's
+               (20px, the plain .tab-btn .icon size) for no reason tied to
+               meaning, just depth. Dropping the size override lets it
+               inherit the same 20px as every other rail icon; the
+               .tab-btn-child padding-left indent (style.css) is what
+               signals depth instead. #}
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'folder') }}<span>{{ child.name }}</span></a>
             {% endfor %}
           </div>
           {% endif %}
         </div>
+        {% endfor %}
+        {% endif %}
+        <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md
+             asks for "Spaces", "Projects", and "Private" as separate group
+             headers. "Private" has no equivalent in this app's data model
+             (nothing here is a private/public toggle on a label the way
+             the doc's source app apparently has -- Published Lists' own
+             public/private setting is a different, unrelated concept, see
+             that feature's own visibility work) and isn't stubbed out for
+             that reason. "Projects" is real: every is_project=1 label with
+             no parent_name (i.e. not already nested under a Space above,
+             see deps.py::_sidebar_projects) gets its own flat section
+             here -- flat, not a tree, since a project has no further
+             nested children in this app's data model today. -->
+        {% set projects = sidebar_projects(request) %}
+        {% if projects %}
+        <div class="tab-separator" role="separator" aria-label="Projects"></div>
+        <div class="sidebar-section-label" aria-hidden="true">Projects</div>
+        {% for p in projects %}
+        {% set project_href = ('/spaces/' ~ p.name) if p.generate_space else ('/settings/labels/' ~ p.name) %}
+        <a href="{{ project_href }}" class="tab-btn tab-btn-project {% if request.url.path == project_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or 'folder') }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>

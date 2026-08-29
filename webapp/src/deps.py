@@ -204,6 +204,37 @@ def _sidebar_spaces(request: Request) -> list[dict]:
 templates.env.globals["sidebar_spaces"] = _sidebar_spaces
 
 
+def _sidebar_projects(request: Request) -> list[dict]:
+    """Every *standalone* project (is_project=1 label with no parent_name)
+    for the nav rail's own "Projects" section (base.html, 2026-08-29
+    sidebar redesign follow-up -- plans/sidebar-redesign.md's source doc
+    explicitly asks for Spaces/Projects/Private as separate group headers,
+    which this app had no direct equivalent of: is_project=1 labels only
+    ever showed up in the Tasks table's own Project grouping, never in the
+    rail itself).
+
+    Deliberately excludes any project whose parent_name points at a Space
+    -- those already render nested under that Space via _sidebar_spaces'
+    own `children` (label_edit_modal.html's parent_name dropdown only ever
+    offers Space names as options, so "has a parent_name" and "nested
+    under a Space elsewhere in the rail" are the same condition here).
+    Showing a project in both places would be the exact kind of
+    duplication this app avoids elsewhere -- see _sidebar_spaces' own
+    docstring on the same principle.
+
+    Same broad try/except + short-lived connection pattern as
+    _sidebar_spaces above, for the same reasons (bare test Request objects
+    with no `.app`, graceful empty-section degradation on any DB error)."""
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return [p for p in db.list_project_labels(conn) if not p.get("parent_name")]
+    except Exception:
+        return []
+
+
+templates.env.globals["sidebar_projects"] = _sidebar_projects
+
+
 def _cached_app_meta(request: Request, key: str, default: str) -> str:
     """Reads one app_meta value, memoized on `request.state` for the rest
     of that single request -- week_start()/time_format() below (and the

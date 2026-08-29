@@ -331,7 +331,15 @@ class TestIconOnlyFiltersNextToAdd:
         body = resp.body.decode()
         assert ">Filters<" not in body
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/contacts/new"')
+        # 2026-08-29 sidebar redesign follow-up: the rail's own "+ New"
+        # button (base.html) now also points at /contacts/new when Contacts
+        # is the active page (context-aware quick add, plans/
+        # sidebar-redesign.md's "Sidebar Controls") -- it renders earlier in
+        # the document than the toolbar, so a plain body.index() would find
+        # that one instead of the toolbar's. Searching from filters_pos
+        # onward finds the toolbar-local button specifically, which is what
+        # this test is actually about (the toolbar's own row ordering).
+        new_button_pos = body.index('href="/contacts/new"', filters_pos)
         assert filters_pos < new_button_pos
         assert "toolbar-filters-body" not in body
 

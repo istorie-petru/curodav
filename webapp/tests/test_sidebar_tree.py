@@ -29,6 +29,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db
+from src.routers import contacts as contacts_router
 from src.routers import labels as labels_router
 from src.routers import spaces as spaces_router
 
@@ -154,3 +155,67 @@ class TestExpandToggle:
         resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         assert 'id="sidebar-expand-toggle"' in body
+
+    def test_expand_toggle_uses_the_dedicated_sidebar_icon_not_a_chevron(self, conn):
+        # 2026-08-29 follow-up: a chevron already means "expand this one
+        # tree item" elsewhere on the same rail (.sidebar-tree-toggle) --
+        # the whole-sidebar toggle uses the sprite's own `icon-sidebar`
+        # symbol instead, so the two controls don't share a glyph with two
+        # different meanings.
+        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
+        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        body = resp.body.decode()
+        toggle_start = body.index('id="sidebar-expand-toggle"')
+        toggle_markup = body[toggle_start : toggle_start + 200]
+        assert "#icon-sidebar" in toggle_markup
+        assert "#icon-chevron-right" not in toggle_markup
+
+
+class TestProjectsSection:
+    """Standalone projects (is_project=1, no parent_name) get their own
+    flat "Projects" rail section (deps.py::_sidebar_projects) -- a project
+    nested under a Space instead shows up there, not duplicated here."""
+
+    def _make_project(self, conn, name, **extra):
+        row = {"name": name, "is_project": 1, "created_at": _now()}
+        row.update(extra)
+        db.upsert_label_config(conn, row)
+
+    def test_standalone_project_gets_its_own_section(self, conn):
+        self._make_project(conn, "Website Relaunch")
+        resp = labels_router.label_detail(
+            "Website Relaunch", _request("/settings/labels/Website Relaunch", conn), conn=conn
+        )
+        body = resp.body.decode()
+        assert '<div class="sidebar-section-label" aria-hidden="true">Projects</div>' in body
+        assert 'href="/settings/labels/Website Relaunch" class="tab-btn tab-btn-project' in body
+
+    def test_project_nested_under_a_space_is_not_duplicated_in_projects_section(self, conn):
+        _make_space(conn, "Uni")
+        self._make_project(conn, "Thesis", parent_name="Uni")
+        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        body = resp.body.decode()
+        # Nested under Uni, as a child...
+        assert 'href="/settings/labels/Thesis" class="tab-btn tab-btn-child' in body
+        # ...not also flattened into a top-level Projects section.
+        assert "tab-btn-project" not in body
+        assert '>Projects</div>' not in body
+
+    def test_no_projects_section_with_no_standalone_projects(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
+        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        body = resp.body.decode()
+        assert "tab-btn-project" not in body
+
+
+class TestSidebarQuickAdd:
+    def test_default_page_points_quick_add_at_task_event_modal(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
+        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/quick/add" data-modal class="tab-btn sidebar-quick-add"' in body
+
+    def test_contacts_page_points_quick_add_at_new_contact_modal(self, conn):
+        resp = contacts_router.list_contacts(_request("/contacts", conn), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/contacts/new" data-modal class="tab-btn sidebar-quick-add"' in body
