@@ -33,6 +33,22 @@
       toggle.title = expanded ? "Collapse sidebar" : "Expand sidebar";
       toggle.setAttribute("aria-label", toggle.title);
     }
+    // Toggling data-sidebar-expanded changes `main`'s own width (its
+    // margin-left jumps 80px <-> 240px, see style.css) without the browser
+    // viewport itself resizing -- any page that lays itself out in JS off a
+    // measured container width (app.js's dashboard masonry `layout()`,
+    // 80px<->240px query above) only ever listens for a real `resize`
+    // event, so widget cards kept their old pixel left/top/width from
+    // before the toggle and visibly misaligned/overlapped (direct feedback:
+    // "the dashboard... just moves the content away"). Dispatching a
+    // synthetic `resize` reuses that existing listener/debounce instead of
+    // adding a second layout-recompute path. Fired twice: once immediately
+    // (covers browsers/reduced-motion where the width change is instant)
+    // and once after `.tabbar`'s own width transition finishes
+    // (--dur-normal, 160ms -- style.css) so a mid-transition measurement
+    // isn't used as the final width.
+    window.dispatchEvent(new Event("resize"));
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 180);
   }
 
   function initExpandToggle() {

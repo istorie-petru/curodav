@@ -4,12 +4,23 @@ deadline and scheduled work is explicit"). The two fields already existed
 independently (`due_at` and work allocations via `db.task_work_hours`), but
 the global Tasks table only ever showed "Due" -- work-allocation status was
 invisible on the primary task-management surface unless the detail modal
-was opened. This adds a "Scheduled" column, distinct from "Due".
+was opened. This originally added a "Scheduled" column, distinct from "Due".
 
-Covers: a task with no allocations renders a plain empty-state dash (not an
-error), a task with allocations shows the right completed/scheduled hours,
-and `db.task_work_hours_bulk` (the batched query added to avoid an N+1 --
-one query per row would otherwise happen on every page render) matches
+2026-08-29 (direct request, sidebar-redesign layout fix session): the
+"Scheduled" table *column* was removed from _task_row.html/_tasks_body.html
+-- a narrower `main` under the sidebar redesign's wider expanded rail was
+routinely forcing the whole table into horizontal scroll to fit all four
+columns (see style.css's `.task-title-cell` comment). `t.work_hours` itself
+(the router context value, `db.task_work_hours_bulk`) is untouched -- still
+attached to every row, still shown on the task detail modal's "Work
+sessions" card -- so TestGlobalTasksPage below still asserts on
+`task["work_hours"]`, just no longer on "Scheduled" appearing in the
+rendered HTML.
+
+Covers: a task with no allocations gets a zero-filled `work_hours` dict, a
+task with allocations computes the right completed/scheduled hours, and
+`db.task_work_hours_bulk` (the batched query added to avoid an N+1 -- one
+query per row would otherwise happen on every page render) matches
 `db.task_work_hours`'s per-task numbers exactly.
 
 (This originally also covered `GET /projects/{name}`'s Tasks view, which
@@ -88,8 +99,6 @@ class TestGlobalTasksPage:
         assert resp.status_code == 200
         task = _find_task(resp.context["groups"], "t1")
         assert task["work_hours"] == {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}
-        body = resp.body.decode()
-        assert "Scheduled" in body
 
     def test_allocation_hours_shown_in_table(self, conn):
         _task(conn, "t1", due_at="2026-09-01T00:00:00")
@@ -110,17 +119,17 @@ class TestGlobalTasksPage:
         assert task["work_hours"]["scheduled"] == pytest.approx(3.0)
         assert task["work_hours"]["completed"] == pytest.approx(2.0)
         assert task["work_hours"]["remaining"] == pytest.approx(1.0)
-        body = resp.body.decode()
-        assert "2.0/3.0h" in body
 
-    def test_due_and_scheduled_are_distinct_columns(self, conn):
+    def test_date_column_present_scheduled_column_removed(self, conn):
         # 2026-08-29 (STATE.md backlog item 9): the Due column header was
-        # renamed "Date" -- still a distinct column/concept from Scheduled,
-        # just a different label.
+        # renamed "Date". 2026-08-29 (sidebar-redesign layout fix session):
+        # the separate "Scheduled" column was dropped from the table
+        # entirely (see this file's own module docstring) -- Date stays,
+        # Scheduled no longer renders as a column at all.
         _task(conn, "t1", due_at="2026-09-01T00:00:00")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert ">Date<" in body
-        assert ">Scheduled<" in body
+        assert ">Scheduled<" not in body
 
 
 class TestTaskWorkHoursBulk:

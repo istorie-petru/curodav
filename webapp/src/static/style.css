@@ -1627,9 +1627,23 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    cell's own `data-inline-edit` element the moment edit mode starts) --
    so the column only grows to make room for typing when something is
    actually being typed, instead of permanently reserving that space on
-   every row whether it's needed or not. */
-.task-title-cell{min-width:140px;}
-.task-title-cell:has([data-editing]){min-width:280px;}
+   every row whether it's needed or not.
+
+   2026-08-29 (direct request, sidebar-redesign layout fix session) -- a
+   floor with no ceiling meant a genuinely long title (no wrap, per
+   `.task-table td{white-space:nowrap}` below) still grew the cell to its
+   full content width with nothing to stop it, and on a narrower `main`
+   (the sidebar redesign's wider expanded rail leaves less room -- see
+   html[data-sidebar-expanded] earlier in this file) that was routinely
+   enough to push the *whole table* past `.table-scroll`'s width, scrolling
+   Status/Date/Labels off-screen along with it -- "the tasks table is
+   broken," not a display of the full title. A max-width now caps the
+   title cell itself; `overflow-x:auto` lets its own content scroll
+   sideways in place (drag or shift-scroll to read the rest) instead of the
+   whole row/table doing it. Every other column keeps its natural content
+   width and stays fully visible regardless of how long any one title is. */
+.task-title-cell{min-width:140px; max-width:240px; overflow-x:auto; overflow-y:hidden;}
+.task-title-cell:has([data-editing]){min-width:280px; max-width:320px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points
@@ -2443,27 +2457,40 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-event.work-allocation .work-allocation-delete .icon-btn:hover{opacity:1;}
 .allday-task.context-event{opacity:.5;}
 
-/* align-items:stretch (not flex-start) on both axes by design -- row layout:
-   the unscheduled sidebar stretches to match the calendar card's fixed
-   viewport height (they share the same --calendar-chrome-h budget) instead
-   of hanging at its content height; column layout below 900px: the calendar
-   card stretches to the container's full width so it scales horizontally
-   rather than collapsing to its content width (flex-start was making it sit
-   as a narrow strip beside the full-width sidebar). */
-.project-calendar-layout{display:flex; gap:16px; align-items:stretch;}
-.project-calendar-unscheduled{width:260px; flex:none; max-height:calc(100vh - var(--calendar-chrome-h, 172px)); overflow-y:auto; transition:width var(--dur-fast) var(--ease-standard);}
+/* 2026-08-29 -- Unscheduled work panel: sidebar -> horizontal strip (direct
+   feedback: the Planner already fights for vertical space against the
+   sidebar redesign's wider expanded rail, which left the 7-day time grid too
+   narrow to read once a 260px-wide vertical panel and the expanded 240px nav
+   rail both ate into the same row -- see .tabbar's
+   html[data-sidebar-expanded] rule earlier in this file. Trading a fixed
+   horizontal column for a full-width strip above the grid gives the grid
+   its whole row back regardless of sidebar state; the strip itself scrolls
+   sideways (.unscheduled-task-list below) instead of growing tall, so it
+   still costs comparatively little vertical space even though the request
+   accepts *some* height cost as the tradeoff. Was previously row-layout
+   above 900px width / column below it (`@media (max-width:900px)`, removed
+   below this block) -- now always column, at every width, so the fix isn't
+   sidebar-state-dependent. */
+.project-calendar-layout{display:flex; flex-direction:column; gap:16px;}
+.project-calendar-unscheduled{width:100%; flex:none;}
 .project-calendar-grid{flex:1; min-width:0;}
-/* Collapsible "Unscheduled work" sidebar (1.9 side work,
+/* Collapsible "Unscheduled work" strip (1.9 side work,
    static/unscheduled_panel_toggle.js) -- header (title + toggle button)
-   always visible; collapsed shrinks the panel to a narrow rail holding just
-   the toggle, same idea as a collapsed nav rail elsewhere in the app. */
+   always visible; collapsed hides the item strip entirely, leaving just the
+   header bar (no more width-collapse now that the panel is full-width, not
+   a sidebar column). */
 .unscheduled-panel-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
 .unscheduled-panel-head h2{margin:0;}
-.project-calendar-unscheduled.collapsed{width:auto; overflow:visible;}
 .project-calendar-unscheduled.collapsed .unscheduled-panel-head h2,
 .project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
 .project-calendar-unscheduled.collapsed #unscheduled-panel-toggle svg{transform:rotate(180deg);}
-.unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
+/* Horizontal strip, not a vertical list -- scrolls sideways
+   (overflow-x:auto) instead of growing the panel tall. Each item gets a
+   fixed basis (flex:none) so a short title doesn't shrink the card below
+   readable width the way an auto-sized row item would; .unscheduled-task-
+   title's own ellipsis (below) still handles a title too long for that
+   fixed width. */
+.unscheduled-task-list{display:flex; flex-direction:row; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding-bottom:4px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial on the planning grids). ONE line (2026-08-14 design): a project
    pill (icon + name) then the task title on the left, the session-count
@@ -2475,6 +2502,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px;
   background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
   font-size:13px; touch-action:none; user-select:none; -webkit-user-select:none;
+  flex:0 0 220px; width:220px;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .unscheduled-task-item.item-dragging{opacity:.5;}
@@ -2517,11 +2545,6 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    is over it, the same visual vocabulary as a column's .drop-hover, so the
    inverse gesture reads as clearly as the forward one. */
 .project-calendar-unscheduled.unschedule-drop-hover{outline:2px dashed var(--accent); outline-offset:-2px; background:var(--accent-neutral-subtle);}
-
-@media (max-width:900px){
-  .project-calendar-layout{flex-direction:column;}
-  .project-calendar-unscheduled{width:100%; max-height:none;}
-}
 
 /* Calendar colors -- shared by month chips, week/day time-grid blocks,
    all-day chips, and the calendar-visibility multiselect. Fixed,

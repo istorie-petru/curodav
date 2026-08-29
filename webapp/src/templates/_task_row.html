@@ -116,26 +116,12 @@
             <input type="hidden" name="due_at" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
         </div>
     </td>
-    {# "Scheduled" -- work-allocation hours, deliberately NOT styled like
-       the Due date cell above (plain text, not an editable input; a
-       different label) since the two are separate concepts (1.5,
-       plans/open-priority.md § Task model, "the distinction between a task
-       deadline and scheduled work is explicit"): Due is a deadline the
-       work must finish by, Scheduled is how much time is actually
-       allocated on the calendar toward it. `t.work_hours` is set by the
-       router (db.task_work_hours_bulk, a batched query -- see
-       routers/tasks.py::list_tasks) rather than computed here, so a
-       caller that forgets to attach it
-       gets an empty cell instead of a per-row query -- `default` guards
-       that case defensively. #}
-    {% set _wh = t.work_hours | default({'scheduled': 0, 'completed': 0, 'remaining': 0}) %}
-    <td class="task-scheduled-cell">
-        {% if _wh.scheduled %}
-        <span title="{{ _wh.completed | round(1) }}h completed of {{ _wh.scheduled | round(1) }}h scheduled">{{ _wh.completed | round(1) }}/{{ _wh.scheduled | round(1) }}h</span>
-        {% else %}
-        <span class="text-muted">&mdash;</span>
-        {% endif %}
-    </td>
+    {# "Scheduled" (work-allocation hours) column removed 2026-08-29 --
+       narrowed table space under the sidebar redesign's wider expanded rail
+       was forcing whole-table horizontal scroll; see _tasks_body.html's own
+       header comment. `t.work_hours` is still attached to `t` (routers/
+       tasks.py's db.task_work_hours_bulk) and still shown on the task
+       detail modal's "Work sessions" card -- only this table cell is gone. #}
     <td>
         <div class="multiselect widget-list-multiselect task-labels-select" data-ms data-ms-mode="select" data-ms-label="labels" data-uid="{{ t.uid }}">
             <button type="button" class="multiselect-trigger cell-tags-trigger" aria-haspopup="true" aria-expanded="false">

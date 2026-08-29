@@ -5216,3 +5216,73 @@ other same-day bundled entries in this file).
   slow file (`test_offline_sync.py`, ~16s alone); not a regression from
   this change, just infra variance worth noting for the next session if
   it recurs.
+
+## Bug fix (2026-08-29, same day) -- three pages broken by the sidebar
+redesign's wider expanded rail (item 13's `html[data-sidebar-expanded]`),
+direct request
+
+Rolling the sidebar redesign out surfaced three real layout bugs, all
+downstream of the same cause -- `main` now has meaningfully less width
+available in expanded mode (margin-left 80px -> 240px, style.css) than any
+of these three pieces of UI had been built assuming, plus one JS gap that
+made it worse than the CSS alone would have. Bundled into one session per
+direct request, same precedent as other same-day bundled entries in this
+file.
+
+- **Dashboard widgets not reflowing on sidebar toggle.** The masonry layout
+  (`static/app.js`'s IIFE at `#dashboard-grid`) positions `.widget-card`s
+  with JS-computed absolute `left`/`top`/`width` pixel values, and only
+  recomputes them on a real `resize` event. Toggling
+  `html[data-sidebar-expanded]` (`static/sidebar_tree.js::setExpanded`)
+  changes `main`'s width without the browser viewport itself resizing, so
+  the listener never fired -- cards kept stale pixel positions from before
+  the toggle and visibly overlapped/misaligned ("just moves the content
+  away"). Fix: `setExpanded` now dispatches a synthetic `window` `resize`
+  event itself (twice -- once immediately, once after 180ms to clear
+  `.tabbar`'s own 160ms width transition) rather than adding a second
+  layout-recompute path; reuses `app.js`'s existing listener/debounce
+  as-is.
+- **Planner (calendar_week.html) time grid cramped, "cells broken
+  completely."** Root cause: the "Unscheduled work" panel
+  (`.project-calendar-unscheduled`) was a fixed `width:260px` sidebar
+  column next to the 7-day time grid (`.project-calendar-layout{display:
+  flex}`) -- on an already-narrower `main` (expanded rail), that fixed
+  260px plus the 16px gap left too little width for seven day columns to
+  render legibly. Direct feedback: the Planner "already fights for
+  vertical space," so the fix trades the other way -- the panel is now a
+  full-width horizontal strip *above* the grid (`.project-calendar-layout`
+  is unconditionally `flex-direction:column` now, no more >900px
+  row-layout / <=900px column-layout split) instead of a vertical sidebar,
+  giving the grid its full row width back regardless of sidebar state.
+  `.unscheduled-task-list` itself is now `flex-direction:row` with
+  `overflow-x:auto` (scrolls sideways, each `.unscheduled-task-item` a
+  fixed 220px) instead of a tall vertical list, so the height cost of
+  reclaiming that width stays comparatively small. The collapsible toggle
+  (`static/unscheduled_panel_toggle.js`) needed no changes -- it only
+  toggles a `.collapsed` class, unrelated to which axis the panel lays out
+  on.
+- **Tasks table forced into whole-table horizontal scroll.**
+  `.task-title-cell` had a `min-width` floor (140px, 280px while editing)
+  but no ceiling -- a long task title (`.task-table td{white-space:
+  nowrap}`) grew the cell to its full content width with nothing to stop
+  it, and on a narrower `main` that was routinely enough to push the
+  *whole table* past `.table-scroll`'s width, scrolling Status/Date/Labels
+  off-screen along with it. Two changes: (1) `.task-title-cell` now also
+  has a `max-width` (240px, 320px while editing) with `overflow-x:auto` --
+  the title itself scrolls sideways in place instead of the whole
+  row/table doing it, every other column stays fully visible regardless of
+  title length. (2) The "Scheduled" column (`_task_row.html`'s work-
+  allocation-hours cell, 1.5) was dropped from the table entirely (direct
+  request) -- one fewer narrow column competing for the same reduced
+  width; `t.work_hours` itself (`db.task_work_hours_bulk`) is untouched,
+  still attached to every row's context and still shown on the task detail
+  modal's "Work sessions" card, just no longer its own table column.
+  `test_task_scheduled_column.py` updated to match (module docstring plus
+  3 assertions: dropped `"Scheduled" in body`/`"2.0/3.0h" in body`,
+  `test_due_and_scheduled_are_distinct_columns` ->
+  `test_date_column_present_scheduled_column_removed` asserting
+  `">Scheduled<" not in body`).
+- No new tests added (all three are layout/CSS + one JS event-dispatch
+  fix, nothing with new server-side behavior to assert on beyond the
+  updated Scheduled-column test above). Full suite: **1852 passed**
+  (same count as before -- one test renamed, not added/removed).

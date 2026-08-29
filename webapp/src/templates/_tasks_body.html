@@ -25,6 +25,22 @@
    `#tasks-body` as a whole (not either table specifically), so a
    selection/checkbox-drag/double-click-edit still works across both --
    see that file's own header comment.
+
+   2026-08-29 (direct request, sidebar-redesign layout fix session) -- the
+   task table's own "Scheduled" column (work-allocation hours,
+   test_task_scheduled_column.py) dropped from this table entirely. With the
+   sidebar redesign's wider expanded rail (base.html/style.css
+   html[data-sidebar-expanded]) narrowing the space `main` has to work with,
+   a table wide enough for Title/Status/Date/Scheduled/Labels routinely
+   didn't fit, forcing `.table-scroll`'s whole-table horizontal scroll and
+   pushing Status/Labels off-screen instead of just the Title text (a plain
+   "the tasks table is broken" bug, not a design choice). Dropping the least
+   load-bearing column -- Scheduled is still fully visible per-task on the
+   detail modal's "Work sessions" card, never removed there -- was simpler
+   and more direct than trying to keep all four narrow-table columns and
+   fighting for space among them. `t.work_hours` itself (routers/tasks.py's
+   `db.task_work_hours_bulk` batch) is untouched -- still attached to every
+   row's context, just no longer rendered as its own column.
    Expects: groups, has_any, today_iso, q, active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
 {% from "_habit_row.html" import habit_row with context %}
@@ -40,7 +56,6 @@
             <th>Title</th>
             <th>Status</th>
             <th>Date</th>
-            <th>Scheduled</th>
             <th>Labels</th>
             <th style="width:40px"></th>
         </tr>
