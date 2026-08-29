@@ -5320,3 +5320,45 @@ still reachable on hover once visually truncated.
 
 No test covers exact title-wrapping markup either way, so nothing needed
 updating. Full suite: **1852 passed** (unchanged).
+
+## Bug fix (2026-08-29, same day, immediate follow-up) -- dashboard resize
+dispatch "doesn't always trigger" + service-worker cache bump
+
+Direct report: the same-day `sidebar_tree.js` fix (dispatch a synthetic
+`resize` event on sidebar toggle so the dashboard masonry re-layouts) was
+correct but not reliable. Root cause was the v15/v16 PWA-cache lesson
+already on record in `static/sw.js`'s own history, just hitting a script
+instead of `style.css` this time: `sw.js`'s fetch handler tries an exact
+versioned-URL (`?v=<mtime>`) match first, but for any `/static/` asset
+that had already been runtime-cached under an *older* `?v=` on a device
+with the PWA installed, the `ignoreSearch` fallback (v11) matches that
+stale cached copy before ever reaching the network -- the cache-busting
+query string only protects a browser that has no service worker at all,
+or one that's never cached that file before. A device that had already
+visited the app before today's `sidebar_tree.js` edit kept serving the
+pre-fix script indefinitely, which is exactly "doesn't always trigger"
+(new/uncached devices got the fix immediately; previously-visited ones
+didn't until something forced a fresh cache).
+
+- `CACHE_NAME` bumped `cc-shell-v18` -> `cc-shell-v19` -- activate's
+  cleanup deletes the *entire* previous `cc-shell-*` cache object (both
+  its precached and any runtime-cached entries), forcing every static
+  asset back through a real network fetch at least once regardless of
+  whether it was ever in `SHELL_ASSETS`.
+- `static/sidebar_tree.js` added to `SHELL_ASSETS` -- it's a `base.html`
+  script loaded on every single page (same category as `app.js`/
+  `modal.js`, already precached), not a page-specific one; being
+  precached going forward (rather than only ever runtime-cached) is more
+  correct on its own merits, independent of this particular bug.
+- `test_pwa_shell.py::TestServiceWorker::
+  test_shell_cache_name_was_bumped_for_the_reworked_sync_scripts` (the
+  literal `CACHE_NAME = "cc-shell-v18"` assertion) updated to `v19`.
+- Reinforces the standing lesson `sw.js`'s own v15 comment already
+  states: bump `CACHE_NAME` on *any* static asset edit expected to reach
+  a browser immediately, script or CSS, precached or runtime-cached --
+  not optional, not "only for shell scripts."
+- Full suite: **1852 passed** (one assertion's expected string changed,
+  no tests added/removed). One `test_caldav_bridge_live.py` test errored
+  when run as part of the first quarter-split chunk but passed cleanly in
+  isolation (5/5) -- a pre-existing live-network test flake under
+  contention, unrelated to this session's changes.

@@ -65,7 +65,29 @@
 // heatmap_scroll.js entirely (it's gone from disk, was never in
 // SHELL_ASSETS to begin with, so nothing to remove from this list). Bumped
 // because style.css changed again.
-const CACHE_NAME = "cc-shell-v18";
+// v19 (2026-08-29): direct report ("the resize event doesn't always
+// trigger, even though it should") after that same day's static/
+// sidebar_tree.js fix (dispatching a synthetic `resize` on sidebar
+// toggle so the dashboard masonry re-layouts). The fix itself was correct
+// -- this was the v15/v16 lesson again, just for a *script* this time
+// instead of style.css: the fetch handler below tries an exact
+// versioned-URL match first, but for any static asset that had ALREADY
+// been runtime-cached under an OLDER `?v=` (deps.py's static_url() bumps
+// the query string by mtime, but the SW never revisits an entry once
+// cached), the ignoreSearch fallback matches that stale cached entry
+// before ever reaching the network -- so a browser with an
+// already-installed PWA kept serving the pre-fix sidebar_tree.js
+// regardless of the new mtime, which is exactly "doesn't always trigger"
+// (only devices with no prior SW-cached copy, or a fresh install, saw the
+// fix immediately). Bumping CACHE_NAME deletes the entire previous
+// cc-shell-* cache on activate (both its precached AND runtime-cached
+// entries), so every static asset -- precached or not -- is forced back
+// through a real network fetch at least once. Also added static/
+// sidebar_tree.js to SHELL_ASSETS below: it's a base.html script loaded
+// on every single page (same category as app.js/modal.js, already
+// precached), not a page-specific one, so it belongs in the shell rather
+// than relying solely on runtime caching to ever pick it up.
+const CACHE_NAME = "cc-shell-v19";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -73,6 +95,7 @@ const SHELL_ASSETS = [
   "/static/style.css",
   "/static/toast.js",
   "/static/app.js",
+  "/static/sidebar_tree.js",
   "/static/modal.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",

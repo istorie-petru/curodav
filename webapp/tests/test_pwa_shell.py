@@ -355,9 +355,15 @@ class TestLocalWritePath:
         # (2026-08-29) is the heatmap scrollbar-visibility rules added for
         # the "no scrollbar" follow-up; v18 (2026-08-29) superseded that with
         # heatmap-wide cell-stretching instead (no scrollbar ever needed) and
-        # reverted the v17 CSS.
+        # reverted the v17 CSS; v19 (2026-08-29) is the same lesson applied to
+        # a *script* -- static/sidebar_tree.js's dashboard-resize-dispatch fix
+        # wasn't reaching browsers with an already-installed PWA (the
+        # ignoreSearch fallback also matches a stale runtime-cached script,
+        # not just precached ones), so it needed the same CACHE_NAME bump;
+        # sidebar_tree.js was also added to SHELL_ASSETS (it's a base.html
+        # script loaded on every page, same category as app.js/modal.js).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v18"' in script
+        assert 'CACHE_NAME = "cc-shell-v19"' in script
 
 
 class TestOfflineToolbar:
