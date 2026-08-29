@@ -33,6 +33,24 @@ TASK_AUTO_ARCHIVE_DAYS_KEY = "task_auto_archive_days"
 _MAX_HABIT_VALUE = 999999
 
 
+def _excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) -> set[str]:
+    """2026-08-29 (STATE.md backlog item 3): the same holiday_calendar/
+    exclude_saturday/exclude_sunday policy resolution as routers/habits.py's
+    _excluded_dates_for_habit (kept as its own small copy here rather than
+    a cross-router import -- same "small enough to just repeat" call this
+    file already makes for _MAX_HABIT_VALUE above) -- `row` may be a
+    recurring task or a standalone habit entity, both now carry the same
+    three columns. Cheap no-op (no DB read) when the row has no policy set
+    at all."""
+    if not (row.get("holiday_calendar") or row.get("exclude_saturday") or row.get("exclude_sunday")):
+        return set()
+    logged = [date.fromisoformat(d) for d in entries_by_date if d]
+    start = min(logged) if logged else today
+    start = max(start, today - timedelta(days=730))
+    holiday_calendars = db.list_holidays_by_calendar(conn)
+    return habit_heatmap.excluded_dates_in_range(row, holiday_calendars, start, today)
+
+
 def _auto_archive_if_configured(conn) -> None:
     raw = db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0"
     try:
@@ -158,44 +176,12 @@ def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
-def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
-    """The defining rule of a relation (2026-08-09): an event and a task
-    may only be linked when they carry at least one label in common --
-    "both have at least one label in common." Enforced by the picker (it
-    only offers already-shared candidates) and re-checked defensively by
-    the add-relation routes, since labels can change between render and
-    submit."""
-    return bool(set(a_tags or []) & set(b_tags or []))
-
-
-def _related_context(conn, task: dict) -> dict:
-    """Context keys every task view modal needs for its Relations card: the
-    events already linked to this task. `None` task -> empty list, so
-    templates never branch on the object existing.
-
-    1.2 side work (Universal command surface step 3): this used to also
-    precompute `linkable_events` -- every not-yet-linked event sharing a
-    label with this task, the old `<select>`'s entire option pool. The
-    picker overlay (static/command_palette.js) now asks `GET /api/search
-    ?for_task=<uid>` for exactly the page of candidates it needs instead,
-    so there's nothing left to precompute here."""
-    if task is None:
-        return {"related_events": []}
-    related = db.related_events_for_task(conn, task["uid"])
-    # Events fetched via db don't carry calendar_color (only the calendar
-    # views' _annotate_calendar_colors sets it) -- annotate so the card's
-    # identity dots follow each event's first-label color like everywhere
-    # else in the app.
-    related = calendar_router._annotate_calendar_colors(conn, related)
-    return {"related_events": related}
-
-
 def _work_allocation_context(conn, task: dict) -> dict:
     """Context keys every task view modal needs for its Work sessions card
     (1.4, plans/open-priority.md § Work allocations): the scheduled work
     blocks for this task plus the scheduled/completed/remaining hour totals
-    they add up to. `None` task -> empty, same "templates never branch on
-    the object existing" convention as _related_context above."""
+    they add up to. `None` task -> empty, so templates never have to branch
+    on the object existing."""
     if task is None:
         return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}}
     allocations = db.list_work_allocations_for_task(conn, task["uid"])
@@ -267,7 +253,8 @@ def _habit_group_items(conn) -> list[dict]:
             continue
         entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, t["uid"])}
         target = t.get("target_per_day") or 1
-        current_streak, _ = habit_heatmap.streaks(entries_by_date)
+        excluded = _excluded_dates_for_row(conn, t, entries_by_date, today)
+        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
         today_value = entries_by_date.get(today_iso, 0)
         items.append(
             {
@@ -295,7 +282,8 @@ def _habit_group_items(conn) -> list[dict]:
     for h in db.list_habits(conn):
         entries_by_date = db.habit_entries_by_date(conn, h["uid"])
         target = h.get("target_per_day") or 1
-        current_streak, _ = habit_heatmap.streaks(entries_by_date)
+        excluded = _excluded_dates_for_row(conn, h, entries_by_date, today)
+        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
         today_value = entries_by_date.get(today_iso, 0)
         items.append(
             {
@@ -559,6 +547,9 @@ def new_task_form(
             # only pre-checks the label chip (still removable, same as any
             # other prefill in this app) rather than silently forcing it.
             "prefill_tags": [project] if project else [],
+            # 2026-08-29 (STATE.md backlog item 3) -- feeds the same
+            # holiday-calendar dropdown _event_form_fields.html uses.
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -574,6 +565,9 @@ def create_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -599,6 +593,14 @@ def create_task(
     # handling -- would otherwise blow up the SQL insert below.
     if not isinstance(start_at, str):
         start_at = ""
+    # Same coercion for the three new holiday-policy fields (2026-08-29,
+    # STATE.md backlog item 3) -- see the comment just above.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
@@ -617,6 +619,11 @@ def create_task(
         "tags": _tags_list(tags),
         "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
         "target_per_day": target_per_day_value,
+        # 2026-08-29 (STATE.md backlog item 3) -- see the `tasks` CREATE
+        # TABLE comment; only meaningful once `recurrence` above is set.
+        "holiday_calendar": holiday_calendar or None,
+        "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+        "exclude_sunday": exclude_sunday in ("1", "true", "on"),
         "created_at": now,
         "updated_at": now,
     }
@@ -809,8 +816,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
-            # Relations card (2026-08-09) -- see _related_context above.
-            **_related_context(conn, task),
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **_work_allocation_context(conn, task),
             # Fallback only -- every task has a real start_at since
@@ -821,6 +826,8 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             # task_form.html only shows that field once this label is
             # actually applied.
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+            # 2026-08-29 (STATE.md backlog item 3) -- see new_task_form.
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -832,8 +839,6 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     ctx.update(
         {
             "task": task,
-            # Relations card (2026-08-09) -- see _related_context above.
-            **(_related_context(conn, task)),
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **(_work_allocation_context(conn, task)),
         }
@@ -844,7 +849,8 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     # unchanged either way and never has to branch on "is this recurring?".
     if task and task.get("recurrence"):
         completions = {c["due_date"]: "x" for c in db.list_task_completions(conn, uid)}
-        current_streak, longest_streak = _completion_streaks(completions)
+        excluded = _excluded_dates_for_row(conn, task, completions, date.today())
+        current_streak, longest_streak = _completion_streaks(completions, excluded_dates=excluded)
         ctx.update(
             {
                 "completions": completions,
@@ -884,6 +890,9 @@ def update_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -896,6 +905,15 @@ def update_task(
         target_per_day_value = 1.0
     if target_per_day_value < 1:
         target_per_day_value = 1.0
+    # Defensively coerced -- same reasoning as create_task's own comment;
+    # every pre-existing direct caller of update_task (this suite's tests)
+    # predates these three fields entirely.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     existing = db.get_task(conn, uid) or {}
     row = dict(existing)
     row.update(
@@ -910,6 +928,15 @@ def update_task(
             "tags": _tags_list(tags),
             "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
             "target_per_day": target_per_day_value,
+            # 2026-08-29 (STATE.md backlog item 3) -- always overwritten by
+            # whatever this form submits, same convention as recurrence/tags
+            # just above; habit_task_form.html has no such fields and so
+            # always submits the Form(...) defaults here, same as it
+            # already does for due_at/start_at/status (see that template's
+            # own comment).
+            "holiday_calendar": holiday_calendar or None,
+            "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+            "exclude_sunday": exclude_sunday in ("1", "true", "on"),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -968,33 +995,61 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
     return respond(x_requested_with, "/tasks")
 
 
-def _completion_streaks(completions: dict[str, str], today: date | None = None) -> tuple[int, int]:
+def _completion_streaks(
+    completions: dict[str, str], today: date | None = None, excluded_dates: set[str] | None = None
+) -> tuple[int, int]:
     """(current_streak, longest_streak) in days for a recurring task's
     completion history (dict of {due_date: ...}). Any present date counts
     as done. The current streak tolerates today not being checked off yet
     (you haven't lost the streak because it's 9am) but breaks the moment a
-    full calendar day is skipped -- same semantics as habits' _streaks."""
+    full calendar day is skipped -- same semantics as habits' _streaks.
+
+    `excluded_dates` (2026-08-29, STATE.md backlog item 3): same meaning
+    as habit_heatmap.streaks' own parameter -- a non-working day per this
+    task's holiday_calendar/exclude_saturday/exclude_sunday policy is
+    invisible to the walk below, neither done nor a break. This is a
+    hand-rolled twin of habit_heatmap.streaks (presence-only `completions`
+    keys instead of a {date: value} log) rather than a shared call --
+    reworking `completions` into the value-shaped dict streaks() expects
+    just to reuse it would be more churn than the ~20 lines duplicated
+    here, same call this function's own pre-existing docstring note
+    ("same semantics as habits' _streaks") already implied before this
+    change."""
+    excluded_dates = excluded_dates or set()
     today = today or date.today()
-    done_dates = sorted(d for d in completions if d)
+    done_dates = sorted(d for d in completions if d and d not in excluded_dates)
     if not done_dates:
         return 0, 0
     done_set = set(done_dates)
+
+    def _all_excluded_between(a: date, b: date) -> bool:
+        span = (b - a).days
+        return all((a + timedelta(days=i)).isoformat() in excluded_dates for i in range(1, span))
 
     longest = current_run = 0
     prev: date | None = None
     for d_str in done_dates:
         d = date.fromisoformat(d_str)
-        current_run = current_run + 1 if prev and (d - prev).days == 1 else 1
+        if prev is not None and ((d - prev).days == 1 or _all_excluded_between(prev, d)):
+            current_run += 1
+        else:
+            current_run = 1
         longest = max(longest, current_run)
         prev = d
 
     cursor = today
-    if cursor.isoformat() not in done_set:
+    if cursor.isoformat() not in done_set and cursor.isoformat() not in excluded_dates:
         cursor -= timedelta(days=1)
     current = 0
-    while cursor.isoformat() in done_set:
-        current += 1
-        cursor -= timedelta(days=1)
+    while True:
+        iso = cursor.isoformat()
+        if iso in done_set:
+            current += 1
+            cursor -= timedelta(days=1)
+        elif iso in excluded_dates:
+            cursor -= timedelta(days=1)
+        else:
+            break
     return current, longest
 
 
@@ -1135,81 +1190,20 @@ def delete_task(uid: str, x_requested_with: str | None = Header(default=None), c
 
 
 # --------------------------------------------------------------------- #
-# Relations -- 2026-08-09, event<->task associative links ("a relation can
-# link an event with existing/new tasks that both have at least one label
-# in common"; see the event_task_relations comment in db.py). The task
-# side of the feature: a task's Relations card links it to events -- either
-# an existing event (the picker only offers ones already sharing a label,
-# and _shares_label re-checks defensively) or a brand-new event created
-# inline that inherits this task's labels, which guarantees the rule. Both
-# routes redirect back to the task's own detail page so the card's
-# data-modal-keep-open forms re-render in place (modal.js).
+# Relations -- fully removed 2026-08-29 (STATE.md backlog item 4, direct
+# request). This used to be the task side of an event<->task associative
+# links feature ("a relation can link an event with existing/new tasks
+# that both have at least one label in common"): POST /{uid}/relations and
+# /{uid}/relations/remove, backed by the Relations card in task_form.html/
+# task_detail.html (_task_relations.html, now unreferenced). Not the same
+# thing as Work allocations right below, which is a distinct feature built
+# on the same event_task_relations table (is_work_allocation=1 rows) and
+# is untouched. db.py's underlying CRUD (add_event_task_relation/
+# remove_event_task_relation/related_events_for_task/related_tasks_for_
+# event) is left in place -- other things still read it (routers/export.py's
+# backup/restore, the offline-sync tests) -- there's just no UI path left
+# that calls it for an ordinary (non-work-allocation) relation anymore.
 # --------------------------------------------------------------------- #
-
-
-def _create_related_event(conn, task: dict, title: str) -> str | None:
-    """Create a new event related to `task` from the Relations card's
-    "＋ New event…" path. Inherits the task's labels (guaranteeing the
-    shared-label rule) and starts today at 09:00 -- the same default
-    routers/calendar.py's own new-event form prefills -- the user edits
-    time/labels later. Returns None (no event created) when the task has no
-    labels at all, since no shared-label link could ever hold."""
-    task_tags = task.get("tags") or []
-    if not task_tags:
-        return None
-    title = (title or "").strip()
-    if not title:
-        return None
-    now = datetime.now(timezone.utc).isoformat()
-    event = {
-        "uid": str(uuid.uuid4()),
-        "title": title,
-        "description": "",
-        "start_at": f"{date.today().isoformat()}T09:00",
-        "end_at": None,
-        "all_day": False,
-        "location": None,
-        "meeting_url": None,
-        "status": "active",
-        "tags": task_tags,
-        "recurrence": None,
-        "reminders": [],
-        "created_at": now,
-        "updated_at": now,
-    }
-    db.upsert_event(conn, event)
-    return event["uid"]
-
-
-@router.post("/{uid}/relations")
-def add_task_relation(
-    uid: str,
-    target_uid: str = Form(""),
-    new_title: str = Form(""),
-    conn=Depends(get_db),
-):
-    task = db.get_task(conn, uid)
-    if task is None:
-        return RedirectResponse(url="/tasks", status_code=303)
-    event_uid = None
-    if target_uid == "__new__":
-        event_uid = _create_related_event(conn, task, new_title)
-    elif target_uid:
-        event = db.get_event(conn, target_uid)
-        if event and _shares_label(task.get("tags") or [], event.get("tags") or []):
-            event_uid = event["uid"]
-    if event_uid:
-        db.add_event_task_relation(conn, event_uid, uid)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
-
-
-@router.post("/{uid}/relations/remove")
-def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_db)):
-    """Unlink an event from a task's Relations card. Graph link only -- the
-    event itself is left entirely alone (relations are associative, not
-    ownership; no cascade, matching delete_event/delete_task's cleanup)."""
-    db.remove_event_task_relation(conn, event_uid, uid)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 
 # --------------------------------------------------------------------- #

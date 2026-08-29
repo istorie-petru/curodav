@@ -1034,8 +1034,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
     border: 1px solid var(--separator);
 }
 
+/* 2026-08-29 fix (STATE.md backlog item 6): this used to set
+   font-size: var(--text-caption), a size smaller than the table's own
+   base text -- visibly mismatched against both the "Not used" fallback
+   (.text-muted, no size override, inherits the table's size) in the same
+   column and every other cell in #labels-table. Just inherit now, same
+   as .text-muted. */
 .usage-badge {
-    font-size: var(--text-caption); color: var(--fg-tertiary);
+    color: var(--fg-tertiary);
 }
 
 .action-buttons { display: inline-flex; flex-direction: row; gap: 4px; justify-content: flex-end; }

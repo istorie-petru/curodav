@@ -107,28 +107,33 @@ longest streaks on the detail page. Endpoints: `POST /tasks/{uid}/complete`,
 `/tasks/{uid}/completion/{date}/toggle`, `POST /tasks/{uid}/completions`
 (explicit value).
 
-## Relations (task ↔ event)
+## Relations (task ↔ event) — removed 2026-08-29
 
-Task ↔ event links via `event_task_relations` (shared-label rule),
-`_task_relations.html`; "+ New event…" inherits task labels. The card was the
-merged Checklist+Subtasks card (2026-08-08), then gained the Related events
-half (2026-08-09); the **1.2 task-model decision removed the subtasks half
-outright** — tasks are flat (`parent_uid` no longer written or read, no cascade
-delete, no iCal RELATED-TO round-trip), so the card now holds related events
-only.
+**Fully removed** (STATE.md backlog item 4, direct request), not just
+hidden behind the old Settings > Appearance toggle. What used to be here:
+task ↔ event links via `event_task_relations` (shared-label rule), a
+"Relations" card on task/event detail and edit modals (`_task_relations
+.html`/`_event_relations.html`, both now unreferenced by any template),
+`POST /tasks/{uid}/relations`(`/remove`) and `POST /events/{uid}/relations`
+(`/remove`), and a picker overlay mode (`static/command_palette.js`,
+`GET /api/search?for_task=<uid>`/`?for_event=<uid>`). The card was the
+merged Checklist+Subtasks card (2026-08-08), gained the Related events half
+(2026-08-09), then the 1.2 task-model decision removed the subtasks half
+(tasks are flat) — leaving related-events-only right up until this removal.
 
-The "Add a related event…" row is the shared picker overlay (1.2 side work,
-`static/command_palette.js`), not a `<select>` — see "Search & the command
-surface" below. It replaced the old inline dropdown that pre-rendered every
-candidate event on every page load; the overlay now asks
-`GET /api/search?for_task=<uid>` for exactly the page of shared-label,
-not-already-linked candidates it needs.
-
-**Hide/show the card (2026-08-14)** — Settings > Appearance's "Show the
-Relations card" toggle (`deps.py`'s `show_relations_card()` global, default
-on) hides or shows the card across all four of its homes (task detail/edit,
-event detail/edit), presentation-layer only — the underlying relations data
-and all their endpoints are untouched.
+**What's still there, deliberately:** `event_task_relations` itself and
+its `db.py` CRUD (`add_event_task_relation`/`remove_event_task_relation`/
+`related_events_for_task`/`related_tasks_for_event`) are untouched — other
+things still read the table (`routers/export.py`'s backup/restore, the
+offline-sync tests), so nothing was force-dropped. `static/command_palette
+.js`'s relation-picker-mode code and `routers/search.py`'s `for_task`/
+`for_event` params are left as unreachable dead code (no trigger element
+exists anymore to invoke them) rather than torn out, matching this
+codebase's existing convention for retired-but-still-on-disk code (e.g.
+the Month calendar view). **Work allocations are a separate feature and
+are completely untouched** — see below; a work allocation is an
+`event_task_relations` row with `is_work_allocation=1`, this removal only
+ever touched the `is_work_allocation=0` ("ordinary Relations") half.
 
 ## Work allocations (1.4)
 

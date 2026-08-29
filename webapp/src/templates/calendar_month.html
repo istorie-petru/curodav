@@ -6,20 +6,18 @@
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar?year=' ~ year ~ '&month=' ~ month %}
-{% set _enabled_views = calendar_views(request) %}
 <div class="toolbar top-app-bar toolbar-2row">
     <div class="toolbar-row">
         <h1 class="sr-only">{{ month_name }} {{ year }}</h1>
         <!-- 2026-08-28 "Calendar split into two pages": 4-Week and Week
              moved off this switcher onto their own tabbar destinations
-             (base.html) -- Month/Day is what's left to switch between. -->
+             (base.html) -- Month/Day is what's left to switch between.
+             2026-08-29: the "Calendar views" enable/disable setting that
+             used to gate these two links is removed (STATE.md backlog item
+             5) -- both are unconditionally shown now. -->
         <div class="segmented calendar-subnav">
-            {% if 'month' in _enabled_views %}
             <a class="seg-btn active" href="/calendar?year={{ year }}&month={{ month }}{{ _lq }}">Month</a>
-            {% endif %}
-            {% if 'day' in _enabled_views %}
             <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
-            {% endif %}
         </div>
         <div class="spacer"></div>
         <a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>

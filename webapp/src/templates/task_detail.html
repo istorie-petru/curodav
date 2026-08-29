@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_task_relations.html" import task_relations_section %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
@@ -110,12 +109,13 @@
     {% endif %}
 </div>
 
-     {% if show_relations_card(request) %}
-     <div class="detail-card detail-section-gap">
-    {{ task_relations_section(task, related_events) }}
-</div>
-     {% endif %}
-
+     <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the
+          Relations card (event<->task associative links, "Related
+          events") that used to render here is fully removed -- not just
+          hidden behind the old Settings > Appearance toggle. Work
+          allocations (event_task_relations rows with is_work_allocation=1)
+          are a distinct feature and are untouched -- see
+          _task_work_allocations.html. -->
      <div class="detail-card detail-section-gap">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>

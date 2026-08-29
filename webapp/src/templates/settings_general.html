@@ -124,24 +124,9 @@
             <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 12-hour</label>
         </div>
     </form>
-    <!-- Calendar views (2026-08-28, trimmed same day by "Calendar split into
-         two pages") -- which of the Month/Day switcher's two views appear.
-         4-Week and Week are their own standalone tabbar destinations now
-         (base.html), not part of this switcher. A multiselect dropdown with
-         checkboxes, autosubmits on change. Default is both views enabled. -->
-    <form class="settings-field-row" method="post" action="/settings/calendar-views" id="calendar-views-form">
-        <span class="settings-field-label">Calendar views
-            <span class="settings-field-hint">Which views appear in the Month/Day view switcher</span>
-        </span>
-        <span class="spacer"></span>
-        {% set ms_name = "views" %}
-        {% set ms_label = "Calendar views" %}
-        {% set ms_items = [{"uid": "month", "name": "Month"}, {"uid": "day", "name": "Day"}] %}
-        {% set ms_selected = current_calendar_views %}
-        {% set ms_mode = "filter" %}
-        {% set ms_form_id = "calendar-views-form" %}
-        {% set ms_autosubmit = true %}
-        {% include "_widget_list_multiselect.html" %}
-    </form>
+    <!-- Calendar views setting removed 2026-08-29 (STATE.md backlog item 5,
+         direct request) -- the Month/Day switcher's visibility toggle added
+         2026-08-28 is gone; both views are unconditionally available now,
+         same as before that setting existed. -->
 </div>
 {% endblock %}

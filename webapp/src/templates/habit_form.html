@@ -99,6 +99,37 @@
              (which label is *the* project), not a general labels picker,
              so it stays. -->
         {% for tag in (habit.tags if habit else []) %}<input type="hidden" name="tags_labels" value="{{ tag }}">{% endfor %}
+        <!-- 2026-08-29 (STATE.md backlog item 3, direct request): the 1.6
+             non-working-day policy (holiday calendar + exclude Saturday/
+             Sunday), already available for events/Schedule classes and
+             now recurring tasks, extended to standalone habits. Same
+             single-select dropdown + extra checkboxes widget
+             _event_form_fields.html uses -- unlike that one, this is never
+             `hidden` behind a "only if recurring" gate: a habit has no
+             RRULE at all, it's implicitly "every day," so the policy
+             always applies once set. Affects streak counting only
+             (habit_heatmap.streaks via routers/habits.py's
+             _excluded_dates_for_habit) -- an excluded day never breaks a
+             streak and is never itself required, but logging one is still
+             allowed and still shows on the heatmap. -->
+        {% set _playful = recurrence_terminology(request) == 'playful' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_name = 'holiday_calendar' %}
+        {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
+        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
+        {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+        {% set ms_selected = habit.holiday_calendar if habit and habit.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
+        {% set ms_allow_new = false %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = '' %}
+        {% set ms_hidden = false %}
+        {% set ms_extra_checkboxes = [
+            {'name': 'exclude_saturday', 'id': 'exclude_saturday', 'checked': habit.exclude_saturday if habit else false,
+             'label': 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday'},
+            {'name': 'exclude_sunday', 'id': 'exclude_sunday', 'checked': habit.exclude_sunday if habit else false,
+             'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
+        ] %}
+        {% include "_widget_list_multiselect.html" %}
     </div>
 </form>
 </div>

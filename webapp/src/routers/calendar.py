@@ -142,49 +142,6 @@ def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
-_TASK_STATUS_DOT_COLORS = {
-    "active": "blue",
-    "in_progress": "orange",
-    "waiting": "yellow",
-    "done": "green",
-    "archived": "gray",
-}
-
-
-def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
-    """The defining rule of a relation (2026-08-09): an event and a task
-    may only be linked when they carry at least one label in common --
-    "both have at least one label in common." Enforced by the picker (it
-    only offers already-shared candidates) and re-checked defensively by
-    the add-relation routes, since labels can change between render and
-    submit. Same helper as routers/tasks.py's, kept local like this
-    router's own _tags_list."""
-    return bool(set(a_tags or []) & set(b_tags or []))
-
-
-def _related_context(conn, event: dict | None) -> dict:
-    """Context keys every event view modal needs for its Relations card:
-    the tasks already linked to this event. `None` event -> empty list, so
-    templates never branch on the object existing.
-
-    1.2 side work (Universal command surface step 3): this used to also
-    precompute `linkable_tasks` -- every not-yet-linked task sharing a
-    label with this event, the old `<select>`'s entire option pool. The
-    picker overlay (static/command_palette.js) now asks `GET /api/search
-    ?for_event=<uid>` for exactly the page of candidates it needs instead,
-    so there's nothing left to precompute here."""
-    if event is None:
-        return {"related_tasks": []}
-    related = db.related_tasks_for_event(conn, event["uid"])
-    # The event card's relation rows use a status-colored identity dot, the
-    # same mapping task views render task status with (routers/tasks.py's
-    # STATUS_COLORS, duplicated here rather than imported -- the two
-    # routers share helpers in only one direction, and this is a tiny,
-    # table-driven lookup that never changes on its own).
-    for t in related:
-        t["status_color"] = _TASK_STATUS_DOT_COLORS.get(t["status"], "blue")
-    return {"related_tasks": related}
-
 
 def _apply_event_label_filter(events: list[dict], label: str | None) -> list[dict]:
     """Phase 9b toolbar rework -- Calendar's new event label filter,
@@ -1157,8 +1114,6 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "event": event,
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
-            # Relations card (2026-08-09) -- see _related_context above.
-            **_related_context(conn, event),
         },
     )
 
@@ -1176,8 +1131,6 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
-            # Relations card (2026-08-09) -- see _related_context above.
-            **_related_context(conn, event),
         },
     )
 
@@ -1308,80 +1261,14 @@ def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_w
 
 
 # --------------------------------------------------------------------- #
-# Relations -- 2026-08-09, event<->task associative links ("a relation can
-# link an event with existing/new tasks that both have at least one label
-# in common"; see the event_task_relations comment in db.py). The event
-# side of the feature: an event's Relations card links it to tasks -- either
-# an existing task (the picker only offers ones already sharing a label,
-# and _shares_label re-checks defensively) or a brand-new task created
-# inline that inherits this event's labels, which guarantees the rule. Both
-# routes redirect back to the event's own detail page so the card's
-# data-modal-keep-open forms re-render in place (modal.js).
+# Relations -- fully removed 2026-08-29 (STATE.md backlog item 4, direct
+# request). This used to be the event side of an event<->task associative
+# links feature: POST /events/{uid}/relations and /relations/remove,
+# backed by the Relations card in event_form.html/event_detail.html
+# (_event_relations.html, now unreferenced). See routers/tasks.py's own
+# "Relations -- fully removed" comment for the task side and the same
+# "db.py's CRUD stays, other things still read it" note.
 # --------------------------------------------------------------------- #
-
-
-def _create_related_task(conn, event: dict, title: str) -> str | None:
-    """Create a new task related to `event` from the Relations card's
-    "＋ New task…" path. Inherits the event's labels (guaranteeing the
-    shared-label rule), starts today (the same default create_task applies
-    when a task form leaves start_at blank), status active -- the user
-    edits due date/labels later (importance/urgency are computed, never
-    set). Returns None (no task created) when the event has no labels at
-    all, since no shared-label link could ever hold."""
-    event_tags = event.get("tags") or []
-    if not event_tags:
-        return None
-    title = (title or "").strip()
-    if not title:
-        return None
-    now = datetime.now(timezone.utc).isoformat()
-    task = {
-        "uid": str(uuid.uuid4()),
-        "title": title,
-        "description": "",
-        "start_at": date.today().isoformat(),
-        "due_at": None,
-        "status": "active",
-        "progress": 0.0,
-        "recurrence": None,
-        "tags": event_tags,
-        "target_per_day": 1.0,
-        "created_at": now,
-        "updated_at": now,
-    }
-    db.upsert_task(conn, task)
-    return task["uid"]
-
-
-@events_router.post("/events/{uid}/relations")
-def add_event_relation(
-    uid: str,
-    target_uid: str = Form(""),
-    new_title: str = Form(""),
-    conn=Depends(get_db),
-):
-    event = db.get_event(conn, uid)
-    if event is None:
-        return RedirectResponse(url="/calendar", status_code=303)
-    task_uid = None
-    if target_uid == "__new__":
-        task_uid = _create_related_task(conn, event, new_title)
-    elif target_uid:
-        task = db.get_task(conn, target_uid)
-        if task and _shares_label(event.get("tags") or [], task.get("tags") or []):
-            task_uid = task["uid"]
-    if task_uid:
-        db.add_event_task_relation(conn, uid, task_uid)
-    return RedirectResponse(url=f"/events/{uid}", status_code=303)
-
-
-@events_router.post("/events/{uid}/relations/remove")
-def remove_event_relation(uid: str, task_uid: str = Form(...), conn=Depends(get_db)):
-    """Unlink a task from an event's Relations card. Graph link only -- the
-    task itself is left entirely alone (relations are associative, not
-    ownership; no cascade, matching delete_event/delete_task's cleanup)."""
-    db.remove_event_task_relation(conn, uid, task_uid)
-    return RedirectResponse(url=f"/events/{uid}", status_code=303)
 
 
 @events_router.post("/events/{uid}/reschedule")

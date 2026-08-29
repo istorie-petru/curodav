@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_event_relations.html" import event_relations_section %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
 {% block content %}
 <!-- 2026-08-08 direct feedback ("add for events a way like for tasks to
@@ -83,16 +82,9 @@
     {% endif %}
 </div>
 
-<!-- Relations card (2026-08-09) -- same merged-card language task_detail
-     uses for its Relations section, the event side only (related tasks;
-     events have no subtasks). See _event_relations.html. Hidden by the
-     "Show the Relations card" Appearance setting (deps.py's
-     show_relations_card() global). -->
-{% if show_relations_card(request) %}
-<div class="detail-card detail-section-gap">
-    {{ event_relations_section(event, related_tasks) }}
-</div>
-{% endif %}
+<!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
+     card (related tasks) that used to render here is fully removed --
+     not just hidden behind the old Settings > Appearance toggle. -->
 
 <!-- 1.6 ("Manual recurrence exceptions") -- only rendered when this page
      was opened for a specific occurrence (?occurrence_date=..., appended

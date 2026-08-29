@@ -155,6 +155,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_uid TEXT,
     recurrence TEXT,
     exdates_json TEXT NOT NULL DEFAULT '[]',
+    -- 2026-08-29 (STATE.md backlog item 3): the same non-working-day
+    -- policy as `events` (see that CREATE TABLE's own comment) -- only
+    -- meaningful for a recurring task, read by habit_heatmap.
+    -- excluded_dates_in_range/streaks, not recurrence_expand.
+    holiday_calendar TEXT,
+    exclude_saturday INTEGER NOT NULL DEFAULT 0,
+    exclude_sunday INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT,
     -- 2026-08-08: only meaningful for a habit-labeled task (see
     -- task_habit_settings/task_completions.value above) -- how many
@@ -558,6 +565,12 @@ CREATE TABLE IF NOT EXISTS habits (
     icon TEXT,
     target_per_day REAL NOT NULL DEFAULT 1,
     archived_at TEXT,
+    -- 2026-08-29 (STATE.md backlog item 3): same non-working-day policy as
+    -- `tasks`/`events` above -- always applies (a habit is implicitly
+    -- daily, no RRULE to gate on).
+    holiday_calendar TEXT,
+    exclude_saturday INTEGER NOT NULL DEFAULT 0,
+    exclude_sunday INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
 );
@@ -1257,6 +1270,15 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # function.
     _ensure_column(conn, "tasks", "target_per_day", "REAL NOT NULL DEFAULT 1")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
+    # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
+    # non-working-day policy (see the `events` CREATE TABLE comment) to
+    # recurring tasks -- same three columns, same meaning, applied the same
+    # "either constraint excludes the day" way, just read by
+    # habit_heatmap.excluded_dates_in_range/streaks instead of
+    # recurrence_expand.expand_events.
+    _ensure_column(conn, "tasks", "holiday_calendar", "TEXT")
+    _ensure_column(conn, "tasks", "exclude_saturday", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "tasks", "exclude_sunday", "INTEGER NOT NULL DEFAULT 0")
     # 1.4 (Work allocations) -- see the event_task_relations CREATE TABLE
     # comment above for the model.
     _ensure_column(conn, "event_task_relations", "is_work_allocation", "INTEGER NOT NULL DEFAULT 0")
@@ -1288,6 +1310,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE tasks SET recurrence = NULL WHERE recurrence = 'None'")
     _ensure_column(conn, "habits", "archived_at", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived_at)")
+    # 2026-08-29 (STATE.md backlog item 3): same non-working-day policy as
+    # tasks/events above, extended to the standalone Habits feature. A
+    # habit has no RRULE (it's implicitly "every day"), so there's no
+    # "only meaningful once recurring" gate here the way there is for
+    # tasks/events -- the policy always applies once set.
+    _ensure_column(conn, "habits", "holiday_calendar", "TEXT")
+    _ensure_column(conn, "habits", "exclude_saturday", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "habits", "exclude_sunday", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "task_completions", "task_uid", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_task_completions_task ON task_completions(task_uid)")
     # 2026-08-07: fixes a real live bug (`sqlite3.IntegrityError: NOT NULL
@@ -1671,11 +1701,19 @@ def upsert_task(
     # placement to NULL -- there'd be no way to *un*-clobber it via the
     # round-trip pattern if it were in this list and a caller ever forgot
     # to carry it through.
+    # NOT NULL DEFAULT 0 columns -- same coercion upsert_event already does
+    # for its own holiday-policy columns, see that function's comment.
+    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
+    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     cols = [
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
+        # 2026-08-29 (STATE.md backlog item 3) -- only meaningful for a
+        # recurring task, same convention as events: missing key -> column
+        # default (NULL/0).
+        "holiday_calendar", "exclude_saturday", "exclude_sunday",
     ]
     # parent_uid is deliberately absent from this list (1.2, task-model
     # decision): subtasks are removed, tasks are flat. The column stays
@@ -4094,7 +4132,11 @@ def _apply_tags_and_project(
 
 _HABIT_COLS = (
     "uid", "name", "description", "color", "icon", "target_per_day",
-    "archived_at", "created_at", "updated_at",
+    "archived_at",
+    # 2026-08-29 (STATE.md backlog item 3) -- same non-working-day policy
+    # as tasks/events, see the `habits` CREATE TABLE comment.
+    "holiday_calendar", "exclude_saturday", "exclude_sunday",
+    "created_at", "updated_at",
 )
 
 
@@ -4114,6 +4156,10 @@ def upsert_habit(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data.setdefault("description", "")
     data.setdefault("color", "blue")
     data.setdefault("target_per_day", 1)
+    # NOT NULL DEFAULT 0 columns -- same coercion upsert_event/upsert_task
+    # already do for their own holiday-policy columns.
+    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
+    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
     project_uid = data.pop("project_uid", None)
     has_project_key = "project_uid" in row

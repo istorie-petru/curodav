@@ -8,8 +8,9 @@ uniformization 2026-08-17 per `SETTINGS_UI_GUIDE.md`). The hub page
   week start (Mon/Sun), 24h vs 12h time, "4-Week view: current week" position,
   profile picture (upload/remove, 5MB + allowlist, base64 in app_meta).
 - **Appearance** (`/settings/appearance`) — theme System/Light/Dark segmented
-  control; "Show icons next to labels" toggle; "Show the Relations card"
-  toggle.
+  control; "Show icons next to labels" toggle. ("Show the Relations card"
+  toggle removed 2026-08-29 along with the Relations feature itself — see
+  `features/tasks.md` § Relations.)
 - **Labels** — link to the `/labels` manage page.
 - **Holidays** (`/settings/holidays`, 2026-08-14, moved off Schedule's own
   Table view; 2026-08-17 reworked onto the Labels grouped-list + modal

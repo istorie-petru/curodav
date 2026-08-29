@@ -82,9 +82,32 @@ def _heatmap_weeks(entries_by_date: dict[str, float], target: float, weeks: int,
     return habit_heatmap.heatmap_weeks(entries_by_date, target, weeks, today)
 
 
-def _streaks(entries_by_date: dict[str, float], today: date | None = None) -> tuple[int, int]:
+def _streaks(
+    entries_by_date: dict[str, float], today: date | None = None, excluded_dates: set[str] | None = None
+) -> tuple[int, int]:
     """Thin wrapper -- see _heatmap_weeks above."""
-    return habit_heatmap.streaks(entries_by_date, today)
+    return habit_heatmap.streaks(entries_by_date, today, excluded_dates)
+
+
+def _excluded_dates_for_habit(
+    conn, habit: dict, entries_by_date: dict[str, float], today: date
+) -> set[str]:
+    """2026-08-29 (STATE.md backlog item 3): a habit's own holiday_calendar/
+    exclude_saturday/exclude_sunday policy (see db.py's `habits` CREATE
+    TABLE comment), resolved into the concrete set of ISO dates
+    habit_heatmap.streaks should treat as non-working. Scanned from the
+    earliest logged entry (or today, for a brand-new habit with none yet)
+    through today -- bounded to two years back so a habit with policy set
+    but no entries for a long time doesn't force an unbounded day-by-day
+    scan. Cheap no-op (empty set, no DB read) when the habit has no policy
+    at all, same short-circuit `excluded_dates_in_range` itself has."""
+    if not (habit.get("holiday_calendar") or habit.get("exclude_saturday") or habit.get("exclude_sunday")):
+        return set()
+    logged = [date.fromisoformat(d) for d in entries_by_date if d]
+    start = min(logged) if logged else today
+    start = max(start, today - timedelta(days=730))
+    holiday_calendars = db.list_holidays_by_calendar(conn)
+    return habit_heatmap.excluded_dates_in_range(habit, holiday_calendars, start, today)
 
 
 @router.get("")
@@ -108,7 +131,8 @@ def _habit_detail_context(conn, request: Request, uid: str) -> dict:
     ctx = {"request": request, "active_tab": "habits", "habit": habit, "today": date.today().isoformat()}
     if habit:
         entries = db.habit_entries_by_date(conn, uid)
-        current, longest = _streaks(entries)
+        excluded = _excluded_dates_for_habit(conn, habit, entries, date.today())
+        current, longest = _streaks(entries, excluded_dates=excluded)
         total_logged = len([v for v in entries.values() if v > 0])
         ctx.update(
             {
@@ -157,6 +181,9 @@ def new_habit_form(request: Request, conn=Depends(get_db)):
             "projects": [l for l in db.list_labels(conn) if not l.get("generate_space")],
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            # 2026-08-29 (STATE.md backlog item 3) -- feeds the same
+            # holiday-calendar dropdown _event_form_fields.html uses.
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -175,12 +202,26 @@ def create_habit(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     name = name.strip()
     if not name:
         return respond(x_requested_with, "/tasks")
+    # Defensively coerced -- same reasoning as routers/tasks.py's
+    # create_task's own start_at comment: every pre-existing direct caller
+    # of this function (this suite's tests) predates these three fields
+    # entirely, so their FastAPI Form(...) defaults would otherwise be the
+    # literal marker object here, not a real string.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     now = _now()
     tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     uid = str(uuid.uuid4())
@@ -195,6 +236,11 @@ def create_habit(
             "target_per_day": float(target_per_day) if target_per_day else 1.0,
             "tags": tag_list,
             "project_uid": project_uid or None,
+            # 2026-08-29 (STATE.md backlog item 3) -- see the `habits`
+            # CREATE TABLE comment.
+            "holiday_calendar": holiday_calendar or None,
+            "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+            "exclude_sunday": exclude_sunday in ("1", "true", "on"),
             "created_at": now,
             "updated_at": now,
         },
@@ -218,6 +264,7 @@ def edit_habit_form(uid: str, request: Request, conn=Depends(get_db)):
             "projects": [l for l in db.list_labels(conn) if not l.get("generate_space")],
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -233,6 +280,9 @@ def edit_habit(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     project_uid: str = Form(""),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -241,6 +291,13 @@ def edit_habit(
         if wants_json(x_requested_with):
             return JSONResponse({"error": "habit not found"}, status_code=404)
         return RedirectResponse(url="/habits", status_code=303)
+    # Defensively coerced -- see create_habit's own comment.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     tag_list = _tags_list(dashboard_router._combine_tags(tags, tags_labels))
     row = dict(existing)
     row.update(
@@ -252,6 +309,10 @@ def edit_habit(
             "target_per_day": float(target_per_day) if target_per_day else 1.0,
             "tags": tag_list,
             "project_uid": project_uid or None,
+            # 2026-08-29 (STATE.md backlog item 3) -- see create_habit.
+            "holiday_calendar": holiday_calendar or None,
+            "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+            "exclude_sunday": exclude_sunday in ("1", "true", "on"),
             "updated_at": _now(),
         }
     )

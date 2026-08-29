@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_task_relations.html" import task_relations_section %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
 {% block content %}
@@ -24,21 +23,12 @@
 <form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     {% include "_task_form_fields.html" %}
 </form>
-<!-- 2026-08-08 ("remove Recurrence, add a way to add subtasks in place of
-     it") -- a real sibling <form> (task_relations_section's own add-row),
-     not nested inside #task-form -- HTML doesn't allow nested forms, and
-     task_detail.html's identical section already lives outside its own
-     page's main form for the same reason. Edit-only: a relation needs a
-     real task uid to attach to, which a not-yet-saved new task doesn't
-     have. 2026-08-09: the section is the merged Relations card (subtasks
-     + related events). 1.2: the subtasks half is removed -- tasks are
-     flat -- so the card now holds related events only. -->
+<!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
+     card/picker that used to render here (task_relations_section) is
+     fully removed -- not just hidden behind the old Settings > Appearance
+     toggle. Work allocations (event_task_relations rows with
+     is_work_allocation=1) are a distinct feature and are untouched. -->
 {% if task %}
-{% if show_relations_card(request) %}
-<div class="relations-section">
-    {{ task_relations_section(task, related_events) }}
-</div>
-{% endif %}
 <div class="relations-section">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>

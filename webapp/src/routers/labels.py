@@ -265,6 +265,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "l": cfg,
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
+            "role": _label_role(cfg),
         },
     )
 
@@ -289,26 +290,25 @@ def update_label(
     color: str = Form("blue"),
     label_group: str = Form(""),
     description: str = Form(""),
-    generate_space: str = Form(""),
-    is_project: str = Form(""),
+    role: str = Form("none"),
     start_date: str = Form(""),
     end_date: str = Form(""),
     conn=Depends(get_db),
 ):
     """The label edit modal's single Save button -- handles the unified
-    label_form_modal.html form with checkboxes for Space/Project."""
+    label_form_modal.html form's Role radio group (2026-08-29: replaced the
+    old Space/Project checkbox pair, see label_form_modal.html's own
+    comment -- "none"/"space"/"project" is mutually exclusive by
+    construction now, a radio group can't submit two values at once, so
+    there's no "both somehow submitted" case left to resolve here."""
     new_name = (new_name or "").strip() or name
     label_group = (label_group or "").strip() or None
     start_date = start_date.strip() if isinstance(start_date, str) else ""
     end_date = end_date.strip() if isinstance(end_date, str) else ""
 
-    # Checkboxes: "on" when checked, missing when unchecked
-    generate_space = 1 if generate_space in ("1", "true", "on") else 0
-    is_project = 1 if is_project in ("1", "true", "on") else 0
-
-    # Mutual exclusivity: Space and Project can't both be on
-    if generate_space and is_project:
-        is_project = 0  # Space wins if both somehow submitted
+    role = role if role in ("none", "space", "project") else "none"
+    generate_space = 1 if role == "space" else 0
+    is_project = 1 if role == "project" else 0
 
     if is_project and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
@@ -376,6 +376,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
             "l": None,
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
+            "role": "none",
         },
     )
 
@@ -385,20 +386,21 @@ def create_label(
     new_name: str = Form(...),
     color: str = Form("blue"),
     label_group: str = Form(""),
-    generate_space: str = Form(""),
-    is_project: str = Form(""),
+    role: str = Form("none"),
     start_date: str = Form(""),
     end_date: str = Form(""),
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
-    organizational tools, not tied to any object."""
+    organizational tools, not tied to any object. `role` (2026-08-29: see
+    update_label's own comment) is the single Role radio value now, not two
+    separately-submitted checkboxes."""
     new_name = new_name.strip()
     if not new_name:
         raise HTTPException(400, "Label name is required")
 
     label_group = label_group.strip() or None
-    role = "project" if is_project in ("1", "true", "on") else ("space" if generate_space in ("1", "true", "on") else "none")
+    role = role if role in ("none", "space", "project") else "none"
 
     if role == "project" and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")

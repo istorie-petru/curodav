@@ -213,18 +213,15 @@ class TestDetailCardAndMetaGrid:
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
 
-    def test_task_relations_card_is_a_second_detail_card(self, conn):
+    def test_task_work_sessions_card_is_a_second_detail_card(self, conn):
+        # 2026-08-29 (STATE.md backlog item 4, direct request): the
+        # Relations card is fully removed -- this test used to assert
+        # meta + Relations + Work sessions (three detail cards); now it's
+        # just meta + Work sessions (1.4, plans/open-priority.md § Work
+        # allocations).
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        # meta + Relations + Work sessions (1.4, plans/open-priority.md §
-        # Work allocations) -- three detail cards now.
-        assert body.count('class="detail-card') == 3
-        # The relations picker trigger + its hidden submit form (1.2 side
-        # work: replaces the old inline <select> add-row) are still wired
-        # for in-place refresh (data-modal-keep-open) inside the modal.
-        assert "data-relations-picker" in body
-        assert 'class="relations-hidden-form"' in body
-        assert "data-modal-keep-open" in body
+        assert body.count('class="detail-card') == 2
 
 
 class TestFooterActions:

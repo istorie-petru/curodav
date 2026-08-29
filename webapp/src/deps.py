@@ -53,14 +53,6 @@ FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # on-screen label does. Same memoized app_meta pattern as every other
 # display preference here.
 RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
-# 2026-08-14 -- "Show the Relations card" (Settings > Appearance) -- whether
-# the Relations card renders on task/event detail and edit modals (the merged
-# Relations/subtasks card, _task_relations.html/_event_relations.html). Same
-# memoized app_meta pattern as the others; the default is ON ("1" -- an
-# install that's never touched this stores nothing, which reads as the
-# default and shows the card, matching the behavior that predates the
-# setting), "0" hides it.
-SHOW_RELATIONS_CARD_KEY = "show_relations_card"
 # 2026-08-28 -- "Habit streak terminology" (Settings > General) -- "standard"
 # (default) or "playful" wording for the Habits group's streak readout
 # (Tasks table, _habit_row.html). Same presentation-layer-only pattern as
@@ -68,13 +60,6 @@ SHOW_RELATIONS_CARD_KEY = "show_relations_card"
 # integer (habit_heatmap.streaks) never changes, only how it's phrased --
 # see habit_heatmap.streak_text for the actual wording.
 HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
-# 2026-08-28 -- "Calendar views" (Settings > General) -- which of the four
-# Calendar views (Month, 4-Week, Week, Day) appear in the view switcher.
-# Stored as a comma-separated list of view keys: "month,fourweek,week,day".
-# Default is all four views enabled. Read by the calendar templates to filter
-# the segmented control.
-CALENDAR_VIEWS_KEY = "calendar_views"
-
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 
@@ -344,38 +329,6 @@ def _recurrence_label(rrule) -> str:
 
 
 templates.env.globals["recurrence_label"] = _recurrence_label
-
-
-def _show_relations_card(request: Request) -> bool:
-    """Whether the Relations card renders on task/event detail and edit
-    modals (Settings > Appearance's "Show the Relations card", 2026-08-14).
-    Reads the app_meta flag via the same per-request-memoized helper as
-    week_start()/time_format(). On by default -- an install that has never
-    touched this stores nothing, which reads as the default "1" and shows
-    the card exactly as it always has; "0" hides it."""
-    return _cached_app_meta(request, SHOW_RELATIONS_CARD_KEY, "1") == "1"
-
-
-templates.env.globals["show_relations_card"] = _show_relations_card
-
-
-def _calendar_views(request: Request) -> list[str]:
-    """Which Calendar views are enabled (Settings > General's "Calendar views").
-    Returns a list of view keys: "month", "day" -- 2026-08-28 "Calendar split
-    into two pages" moved 4-Week and Week off this shared Month/Day switcher
-    onto their own standalone tabbar destinations (base.html), so this toggle
-    no longer governs them at all; an install with an old "month,fourweek,
-    week,day"-shaped stored value just has those two extra tokens filtered
-    out below, harmlessly. Default is both views enabled. Empty/invalid
-    values fall back to both."""
-    raw = _cached_app_meta(request, CALENDAR_VIEWS_KEY, "month,day")
-    views = [v.strip() for v in raw.split(",") if v.strip()]
-    valid = {"month", "day"}
-    filtered = [v for v in views if v in valid]
-    return filtered if filtered else ["month", "day"]
-
-
-templates.env.globals["calendar_views"] = _calendar_views
 
 
 def _label_icon(request: Request, label: str) -> str:

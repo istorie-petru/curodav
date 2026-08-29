@@ -106,6 +106,42 @@
             <label>Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task else '' }}">
         </div>
+        <!-- 2026-08-29 (STATE.md backlog item 3, direct request): the same
+             non-working-day policy _event_form_fields.html has had since
+             1.6 -- holiday calendar + exclude Saturday/Sunday -- extended
+             to recurring tasks. Same `.holiday-field`-classed single-select
+             widget, same "sibling of a `.recurrence-input` in the same
+             `.field-grid`" contract static/recurrence_picker.js's `sync()`
+             already scans for (see that file's own comment: "task_form.
+             html/habit_task_form.html's recurrence field has no such
+             siblings, so this is just an empty NodeList there" -- no
+             longer true here) -- starts `hidden` unless the task is
+             already recurring, no JS changes needed. Affects only the
+             completion-streak calc (habit_heatmap.streaks via
+             routers/tasks.py's _excluded_dates_for_task), never which days
+             a recurring task is actually due (this app's recurring tasks
+             don't materialize per-occurrence due dates the way events do
+             -- see recurrence_expand.expand_tasks's own "not hit by
+             anything built so far" docstring). -->
+        {% set _playful = recurrence_terminology(request) == 'playful' %}
+        {% set _recurring = task and task.recurrence not in (None, 'None', 'Nothing', '') %}
+        {% set ms_mode = 'single' %}
+        {% set ms_name = 'holiday_calendar' %}
+        {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
+        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
+        {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+        {% set ms_selected = task.holiday_calendar if task and task.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
+        {% set ms_allow_new = false %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = 'holiday-field' %}
+        {% set ms_hidden = not _recurring %}
+        {% set ms_extra_checkboxes = [
+            {'name': 'exclude_saturday', 'id': 'exclude_saturday', 'checked': task.exclude_saturday if task else false,
+             'label': 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday'},
+            {'name': 'exclude_sunday', 'id': 'exclude_sunday', 'checked': task.exclude_sunday if task else false,
+             'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
+        ] %}
+        {% include "_widget_list_multiselect.html" %}
         <!-- 2026-08-08 direct feedback: Daily target is only relevant for
              a task carrying the habit label (Tasks > Habits' check-in row
              shows a checkbox for target=1, a number-stepper for

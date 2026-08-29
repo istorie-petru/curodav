@@ -41,22 +41,37 @@
     </div>
 
     <!-- Advanced options (collapsible, de-emphasized) -->
-    <details class="advanced-section" id="advanced-section">
+    <details class="advanced-section" id="advanced-section" {% if role != 'none' %}open{% endif %}>
         <summary class="advanced-summary">
             {{ icon('chevron-down', 'icon-sm') }} Advanced options
         </summary>
         <div class="advanced-fields">
-            <div class="field field-toggle">
-                <input type="checkbox" name="generate_space" id="generate_space" {% if l and l.generate_space %}checked{% endif %}>
-                <label for="generate_space">Enable Space — aggregates child labels onto their own page</label>
-            </div>
-            <div class="field field-toggle">
-                <input type="checkbox" name="is_project" id="is_project" {% if l and l.is_project %}checked{% endif %}>
-                <label for="is_project">Enable Project — adds start/end date fields</label>
+            <!-- Role -- 2026-08-29 fix (STATE.md backlog item 6, direct
+                 feedback: "better visual picker for Space / Project / None
+                 (currently unclear which is selected)"). Space and Project
+                 used to be two independent checkboxes here, which could
+                 both render unchecked with no visible indication of which
+                 (if either) plain state was actually in effect. Replaced
+                 with the same mutually-exclusive segmented radio group
+                 already built for the retired label_edit_modal.html
+                 (static/label_role_picker.js, loaded globally in
+                 base.html) -- exactly one option is always visibly active,
+                 and an icon rides along with Space/Project so the choice
+                 reads at a glance even collapsed into this list. -->
+            <div class="field field-wide">
+                <label>Role</label>
+                <div class="segmented label-role-segmented" role="radiogroup" aria-label="Label role" data-original-role="{{ role }}">
+                    <label class="seg-btn"><input type="radio" name="role" value="none" class="seg-radio" {% if role == 'none' %}checked{% endif %}> Plain label</label>
+                    <label class="seg-btn"><input type="radio" name="role" value="space" class="seg-radio" {% if role == 'space' %}checked{% endif %}> {{ icon('layers', 'icon-sm') }} Space</label>
+                    <label class="seg-btn"><input type="radio" name="role" value="project" class="seg-radio" {% if role == 'project' %}checked{% endif %}> {{ icon('folder', 'icon-sm') }} Project</label>
+                </div>
+                <span class="settings-field-hint">Space aggregates child labels onto their own page. Project adds start/end date fields.</span>
             </div>
 
-            <!-- Project period fields -- shown only when is_project is checked -->
-            <div class="field field-wide label-project-fields" {% if not l or not l.is_project %}hidden{% endif %}>
+            <!-- Project period fields -- shown only when role is "project";
+                 label_role_picker.js toggles `hidden` client-side as the
+                 radios change, matching this server-rendered initial state. -->
+            <div class="field field-wide label-project-fields" {% if role != 'project' %}hidden{% endif %}>
                 <div class="field-grid">
                     <div class="field">
                         <label>Start date</label>

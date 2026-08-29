@@ -15,6 +15,9 @@ it safely."""
 from __future__ import annotations
 
 from datetime import date, timedelta
+from typing import Any
+
+from . import recurrence_expand
 
 # How many weeks a "full history" heatmap shows. Shared by both heatmap
 # call sites that want this view (routers/habits.py's standalone habit
@@ -158,7 +161,42 @@ def current_half_year(today: date | None = None) -> tuple[date, date]:
     return date(today.year, 7, 1), date(today.year, 12, 31)
 
 
-def streaks(entries_by_date: dict[str, float], today: date | None = None) -> tuple[int, int]:
+def excluded_dates_in_range(
+    row: dict[str, Any],
+    holiday_calendars: dict[str, list[dict[str, Any]]] | None,
+    start: date,
+    end: date,
+) -> set[str]:
+    """2026-08-29 (STATE.md backlog item 3, direct request): the 1.6
+    non-working-day policy (`holiday_calendar`/`exclude_saturday`/
+    `exclude_sunday` -- see db.py's `events` CREATE TABLE comment) extended
+    to recurring tasks and habits. Those two entities don't go through
+    recurrence_expand.expand_events (a habit has no RRULE at all; a
+    recurring task's completion history is a flat {date: value} log, not
+    RRULE-expanded occurrences) -- so rather than "is this occurrence
+    excluded," the question here is just "which calendar days in
+    [start, end] does this row's own policy mark as non-working," reusing
+    the exact same day-level check (`recurrence_expand.
+    is_excluded_by_policy`) `expand_events` applies per-occurrence. `row`
+    just needs to carry `holiday_calendar`/`exclude_saturday`/
+    `exclude_sunday` -- a task row, a habit row, and an event row all
+    shape-match for this purpose."""
+    if not row.get("holiday_calendar") and not row.get("exclude_saturday") and not row.get("exclude_sunday"):
+        return set()
+    result: set[str] = set()
+    d = start
+    while d <= end:
+        if recurrence_expand.is_excluded_by_policy(d, row, holiday_calendars):
+            result.add(d.isoformat())
+        d += timedelta(days=1)
+    return result
+
+
+def streaks(
+    entries_by_date: dict[str, float],
+    today: date | None = None,
+    excluded_dates: set[str] | None = None,
+) -> tuple[int, int]:
     """(current_streak, longest_streak) in days, counting any day with a
     logged value > 0 as "done" -- target_per_day only affects heatmap
     color, not whether a day counts at all (a habit tracker that required
@@ -166,28 +204,62 @@ def streaks(entries_by_date: dict[str, float], today: date | None = None) -> tup
     "read 8/10 pages" as a broken streak, which isn't the intent). Current
     streak tolerates today itself not being logged yet (you haven't lost
     your streak just because it's 9am and you haven't meditated yet) but
-    breaks the moment a full calendar day is skipped."""
+    breaks the moment a full calendar day is skipped.
+
+    `excluded_dates` (2026-08-29, STATE.md backlog item 3 -- see
+    `excluded_dates_in_range` above): an optional set of ISO date strings
+    the caller has already determined are non-working days for this
+    specific task/habit. Such a day is treated as neither done nor
+    skipped -- it's invisible to the streak walk, so a holiday or an
+    excluded weekend day sitting between two logged days doesn't break the
+    run, and a currently-excluded "today"/yesterday doesn't zero out the
+    current streak either. An excluded day is never itself counted as a
+    "done" day even if it happens to carry a logged value (backfilling a
+    holiday you didn't actually need to keep up the habit is allowed, it
+    just doesn't inflate the streak)."""
+    excluded_dates = excluded_dates or set()
     today = today or date.today()
-    done_dates = sorted(d for d, v in entries_by_date.items() if v and v > 0)
+    done_dates = sorted(d for d, v in entries_by_date.items() if v and v > 0 and d not in excluded_dates)
     if not done_dates:
         return 0, 0
     done_set = set(done_dates)
+
+    def _all_excluded_between(a: date, b: date) -> bool:
+        """Every day strictly between `a` and `b` (exclusive both ends) is
+        in `excluded_dates` -- the condition under which a gap doesn't
+        break a streak."""
+        span = (b - a).days
+        return all((a + timedelta(days=i)).isoformat() in excluded_dates for i in range(1, span))
 
     longest = current_run = 0
     prev: date | None = None
     for d_str in done_dates:
         d = date.fromisoformat(d_str)
-        current_run = current_run + 1 if prev and (d - prev).days == 1 else 1
+        if prev is not None and ((d - prev).days == 1 or _all_excluded_between(prev, d)):
+            current_run += 1
+        else:
+            current_run = 1
         longest = max(longest, current_run)
         prev = d
 
     cursor = today
-    if cursor.isoformat() not in done_set:
+    # The "haven't logged today yet" tolerance only applies to the real
+    # `today` itself, and only when today isn't already an excluded day --
+    # an excluded today is handled by the loop below the same as any other
+    # excluded day (skipped, never treated as "broken"), not by this
+    # one-off step-back.
+    if cursor.isoformat() not in done_set and cursor.isoformat() not in excluded_dates:
         cursor -= timedelta(days=1)
     current = 0
-    while cursor.isoformat() in done_set:
-        current += 1
-        cursor -= timedelta(days=1)
+    while True:
+        iso = cursor.isoformat()
+        if iso in done_set:
+            current += 1
+            cursor -= timedelta(days=1)
+        elif iso in excluded_dates:
+            cursor -= timedelta(days=1)
+        else:
+            break
     return current, longest
 
 

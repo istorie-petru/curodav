@@ -4315,23 +4315,15 @@ larger by the user, not a default to repeat.
    the app, not the current per-row "delete with undo" toast pattern
    (`_task_row.html` et al.) — this is a bigger, general mechanism sitting
    on top of/replacing that.
-3. **Recurrence affected by holiday calendars, for both tasks and habits**
-   — the named holiday calendars already exist for events/scheduling
-   (`open-priority.md`'s shipped Schedule & recurrence rework); extend the
-   same non-working-day policy to task and habit recurrence.
-4. **Fully disable Relations as a feature** — not the work-allocations
-   half of `event_task_relations` (keep that), the separate task↔event
-   Relations *card*/picker described in `features/tasks.md` § "Relations
-   (task ↔ event)". Already has a presentation-layer toggle
-   (`deps.py::show_relations_card()`, default on) — this asks to go
-   further: fully disable/remove the feature, not just hide the card.
-5. **Remove the "Configurable views" Calendar setting** — see `open.md` §
-   Configurable views; its Calendar half (Month/4-Week/Day toggles) is
-   still live and should come out. (The Tasks half was already superseded
-   2026-08-28 — see that section.)
-6. **Label modal window** — better visual picker for Space / Project /
-   None (currently unclear which is selected); fix a font-size mismatch
-   between `.usage-badge` and the table it sits in.
+3. ~~**Recurrence affected by holiday calendars, for both tasks and
+   habits**~~ — **shipped 2026-08-29**, see "Shipped — backlog items 3, 4,
+   5, 6 bundled together" below.
+4. ~~**Fully disable Relations as a feature**~~ — **shipped 2026-08-29**,
+   see the same entry below.
+5. ~~**Remove the "Configurable views" Calendar setting**~~ — **shipped
+   2026-08-29**, see the same entry below.
+6. ~~**Label modal window**~~ — **shipped 2026-08-29**, see the same entry
+   below.
 7. **Holidays and Time blocks settings tables not on latest CSS** —
    already queued above ("Settings tables (Labels, Holidays, Time blocks)
    restyled as exact replicas of the Tasks table view") — this is a
@@ -4400,3 +4392,112 @@ Dropped it from 53 (~1 year) to 32 (~7.5 months) -- a real size increase
 (roughly 1.6x wider per cell) while still showing well over half a year
 of history. No CSS/JS touched, pure Python constant, so no
 service-worker cache bump needed. Full suite 1728 passed.
+
+## Shipped — backlog items 3, 4, 5, 6 bundled together (2026-08-29, direct
+request)
+
+Direct request explicitly scoped larger than one slice ("do 3,4,5,6" from
+the "Next session queue" list two sections up) -- all four landed together
+per that request, same "session explicitly scoped larger, not a default to
+repeat" precedent as the auth/CSRF/rate-limiting session above.
+
+- **Item 3, recurrence + holiday calendars for tasks and habits** -- the
+  1.6 non-working-day policy (`holiday_calendar`/`exclude_saturday`/
+  `exclude_sunday`, previously events/Schedule-classes only) extended to
+  recurring tasks and standalone habits. Both `tasks` and `habits` gained
+  the same three columns (`db.py`'s `_ensure_column` migrations + fresh-
+  install `CREATE TABLE`s). `recurrence_expand._excluded_by_policy` was
+  promoted to a public `is_excluded_by_policy` (same day-level check,
+  still `expand_events`'s only internal caller) so a new
+  `habit_heatmap.excluded_dates_in_range(row, holiday_calendars, start,
+  end)` could reuse it instead of a second parallel implementation --
+  tasks/habits don't go through `expand_events` (a habit has no RRULE at
+  all; a recurring task's history is a flat completions log, not
+  RRULE-expanded occurrences), so this resolves "which calendar days does
+  this row's policy exclude" directly rather than per-occurrence.
+  `habit_heatmap.streaks()` gained an optional `excluded_dates: set[str]`
+  parameter -- an excluded day is invisible to the streak walk (neither
+  done nor a break), so a holiday or excluded weekend sitting between two
+  logged days no longer breaks a streak, and a currently-excluded
+  today/yesterday doesn't zero out the current streak either; empty/absent
+  `excluded_dates` reproduces the exact prior behavior (verified: every
+  pre-existing streak test passed unchanged). `routers/tasks.py::
+  _completion_streaks` (a hand-rolled twin over a presence-only dict
+  rather than `habit_heatmap.streaks`'s `{date: value}` shape) got the
+  same gap-tolerant logic. New `_excluded_dates_for_row` (tasks.py) /
+  `_excluded_dates_for_habit` (habits.py) resolve a row's own policy into
+  a concrete date set, scanned from its earliest entry (capped two years
+  back) through today -- cheap no-op when no policy is set. Task and habit
+  forms (`_task_form_fields.html`, `habit_form.html`) gained the same
+  holiday-calendar single-select + exclude-Saturday/Sunday checkboxes
+  `_event_form_fields.html` already had; the task version is `.holiday-
+  field`-classed and starts hidden unless the task is already recurring
+  (`static/recurrence_picker.js`'s existing `sync()` already scans for
+  `.holiday-field` siblings of any `.recurrence-input` in the same
+  `.field-grid` -- no JS changes needed). The habit version is never
+  hidden (a habit has no RRULE, it's implicitly daily). Habit-labeled
+  tasks (`habit_task_form.html`) deliberately don't get the field -- that
+  form is intentionally stripped-down (no Status/dates/Recurrence either),
+  consistent with its own 2026-08-29 "habits should not have ... a due or
+  a start date" precedent; the DB columns/streak logic still apply to them
+  (shared with ordinary recurring tasks), there's just no UI to set the
+  policy on one yet. See `features/tasks.md` § Recurring tasks/completions
+  note and `db.py`'s `tasks`/`habits` CREATE TABLE comments.
+- **Item 4, Relations feature fully removed** -- not just hidden behind
+  the existing Settings > Appearance toggle (which is also removed). The
+  task↔event associative-links feature (`event_task_relations` rows with
+  `is_work_allocation=0`): the Relations card on task/event detail and
+  edit modals (`_task_relations.html`/`_event_relations.html`, both now
+  unreferenced by any template), `POST /tasks/{uid}/relations`(`/remove`),
+  `POST /events/{uid}/relations`(`/remove`), `_related_context`/
+  `_shares_label`/`_create_related_event`/`_create_related_task` (tasks.py/
+  calendar.py), and the `SHOW_RELATIONS_CARD_KEY`/`show_relations_card()`
+  Jinja global (deps.py) + its Settings > Appearance radio + `POST
+  /settings/relations-card` are all gone. **Work allocations are
+  completely untouched** -- a work allocation is the same table's
+  `is_work_allocation=1` half, a distinct feature (1.4) this removal never
+  touched (`_task_work_allocations.html`, `task_work_hours`, the Week
+  Calendar drag-to-schedule surface all unchanged). `db.py`'s underlying
+  CRUD (`add_event_task_relation`/`remove_event_task_relation`/
+  `related_events_for_task`/`related_tasks_for_event`) is left in place,
+  not force-dropped -- `routers/export.py`'s backup/restore round-trip and
+  the offline-sync tests still read `event_task_relations` directly.
+  `static/command_palette.js`'s relation-picker-mode code and
+  `routers/search.py`'s `for_task`/`for_event` params are left as
+  unreachable dead code (no trigger element exists anymore to invoke
+  them), matching this codebase's own precedent for retired-but-on-disk
+  code (e.g. the Month calendar view, `plans/STATE.md`'s "Calendar split"
+  entries). Deleted `tests/test_event_task_relations.py` outright (342
+  lines, entirely about the removed routes); trimmed the three
+  Relations-card test classes out of `test_display_prefs_settings.py` and
+  rewrote `test_detail_modals_rework.py`'s task-detail card-count test
+  (three cards -> two). See `features/tasks.md` § Relations (removed) and
+  `features/settings.md`'s Appearance bullet.
+- **Item 5, "Configurable views" Calendar setting removed** -- the
+  Month/Day view-switcher enable/disable toggle (`deps.py`'s
+  `CALENDAR_VIEWS_KEY`/`_calendar_views()`, `routers/settings.py`'s
+  `set_calendar_views`, `settings_general.html`'s multiselect) is gone;
+  `calendar_month.html`'s Month/Day segmented control now shows both links
+  unconditionally, same as before the toggle existed. The Tasks half
+  (Table/Board/Timeline) was already superseded 2026-08-28 (Kanban/
+  Timeline retired) -- this was the last piece of `open.md`'s
+  "Configurable views" decision record. No tests referenced the removed
+  setting directly (none existed to update).
+- **Item 6, label modal Role picker + usage-badge font fix** -- the label
+  create/edit modal's Space/Project controls (`label_form_modal.html`,
+  the currently-active template -- `routers/labels.py`'s `edit_label_modal`
+  /`new_label_modal`) were two independent checkboxes that could both
+  render unchecked with no visible indication of the label's actual role.
+  Replaced with the mutually-exclusive segmented Role radio group (Plain
+  label/Space/Project, with icons) already built for the retired
+  `label_edit_modal.html` (`static/label_role_picker.js`, loaded globally
+  in `base.html` since 2026-08-15 but unused until now) -- exactly one
+  option always visibly active. `routers/labels.py`'s `update_label`/
+  `create_label` now take a single `role` form field instead of two
+  checkboxes (`_label_role` already existed to compute the reverse
+  mapping for context). Also fixed the Labels settings table's
+  `.usage-badge` ("Used in N items") rendering at a smaller font-size than
+  its own row's "Not used" fallback and every other cell in the table --
+  dropped the stray `font-size: var(--text-caption)` override, it now
+  just inherits like its sibling. Full suite (all four items combined):
+  **1793 passed**.

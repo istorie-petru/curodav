@@ -102,12 +102,10 @@ from fastapi.responses import RedirectResponse
 
 from .. import auth, config, data_health, db, offline_sync
 from ..deps import (
-    CALENDAR_VIEWS_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
-    SHOW_RELATIONS_CARD_KEY,
     TIME_FORMAT_KEY,
     WEEK_START_KEY,
     _four_week_position_from_value,
@@ -223,16 +221,6 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # "playful" wording for the Habits group's streak readout
             # (Tasks table). See deps.py's HABIT_STREAK_TERMINOLOGY_KEY.
             "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
-            # 2026-08-28 -- "Calendar views" (Settings > General) -- which of the
-            # Month/Day switcher's two views appear. 4-Week and Week moved to
-            # their own standalone tabbar destinations the same day ("Calendar
-            # split into two pages") and are no longer valid choices here; an
-            # install with an old "month,fourweek,week,day"-shaped stored
-            # value just has those two extra tokens filtered out. Default is
-            # both enabled. Stored as comma-separated list: "month,day".
-            "current_calendar_views": [
-                v for v in (db.get_app_meta(conn, CALENDAR_VIEWS_KEY) or "month,day").split(",") if v in ("month", "day")
-            ],
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -368,21 +356,6 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
-@router.post("/settings/calendar-views")
-def set_calendar_views(views: list[str] = Form([]), conn=Depends(get_db)):
-    """"Calendar views" -- which of the Month/Day switcher's two views appear.
-    2026-08-28 "Calendar split into two pages": 4-Week and Week are their own
-    standalone tabbar destinations now (base.html), not part of this
-    switcher, so they're no longer valid choices here. Only ever stores one
-    of the offered choices; an unrecognized value falls back to both views
-    rather than silently hiding both. Read by deps.py's _calendar_views
-    global used in the calendar templates."""
-    valid = {"month", "day"}
-    filtered = [v for v in views if v in valid]
-    db.set_app_meta(conn, CALENDAR_VIEWS_KEY, ",".join(filtered) if filtered else "month,day")
-    return RedirectResponse(url="/settings/general", status_code=303)
-
-
 @router.get("/settings/appearance")
 def settings_appearance(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
@@ -399,22 +372,8 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # forced on the General page for the exact same reason (see
             # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
-            "current_show_relations_card": db.get_app_meta(conn, SHOW_RELATIONS_CARD_KEY) != "0",
         },
     )
-
-
-@router.post("/settings/relations-card")
-def set_relations_card(show: str = Form("1"), conn=Depends(get_db)):
-    """"Show the Relations card" (Settings > Appearance, 2026-08-14) --
-    whether the Relations card renders on task/event detail and edit modals
-    (_task_relations.html/_event_relations.html). Read back via deps.py's
-    show_relations_card() Jinja global. Default on -- an install that's
-    never touched this stores nothing, which reads as "1" (shown), so the
-    card behaves exactly as it did before the setting existed; "0" hides
-    it."""
-    db.set_app_meta(conn, SHOW_RELATIONS_CARD_KEY, "1" if show == "1" else "0")
-    return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 @router.post("/settings/label-icons")

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_event_relations.html" import event_relations_section %}
 {% block title %}{% if event %}Edit event{% else %}New event{% endif %}{% endblock %}
 {% block content %}
 <!-- #modal-target: static/modal.js fetches this page and injects it into
@@ -40,19 +39,10 @@
     {% include "_event_form_fields.html" %}
 </form>
 </div>
-<!-- Relations card (2026-08-09) -- a real sibling <form> (the section's
-     own add row), not nested inside #event-form -- HTML doesn't allow
-     nested forms, and event_detail.html's identical section already lives
-     outside its own page's main form for the same reason. Edit-only: a
-     relation needs a real event uid to attach to, which a not-yet-saved
-     new event doesn't have. Mirrors task_form.html's task_relations_section. -->
-{% if event %}
-{% if show_relations_card(request) %}
-<div class="relations-section">
-    {{ event_relations_section(event, related_tasks) }}
-</div>
-{% endif %}
-{% endif %}
+<!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
+     card/picker that used to render here (event_relations_section) is
+     fully removed -- not just hidden behind the old Settings > Appearance
+     toggle. -->
 </div>
 {% if event %}
 <!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
