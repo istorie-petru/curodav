@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from fastapi.responses import Response
 from starlette.requests import Request
 
-from src import db
+from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
@@ -184,3 +184,87 @@ class TestPageBannerAvatar:
         _set_remote(conn, cached=True, scope="Work")
         body = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn).body.decode()
         assert 'class="page-banner-avatar-wrap"' in body
+
+
+class TestPageBannerDefaultFallback:
+    """2026-08-29 (direct request): Home/Project/Space pages with no
+    banner of their own now fall back to the single default set in
+    Settings > Appearance (deps.PAGE_HEADER_BANNER_SCOPE) instead of
+    showing no banner at all -- routers/dashboard.py's
+    _page_banner_context. A page's own banner (set via its own
+    "Add/Change banner" edit-mode button) still overrides the default
+    when present."""
+
+    def test_home_falls_back_to_the_default_banner(self, conn):
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
+        assert resp.context["has_own_banner"] is False
+        body = resp.body.decode()
+        assert "/banners/image?scope=__page_header__" in body
+
+    def test_home_own_banner_overrides_the_default(self, conn):
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        _set_remote(conn, cached=True, scope="", image_url="https://cdn.example.com/home-own.jpg")
+        resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/home-own.jpg"
+        assert resp.context["has_own_banner"] is True
+        body = resp.body.decode()
+        # scope="" -> the querystring param is simply absent, not empty --
+        # urlencode('') renders nothing after "scope=".
+        assert "/banners/image?scope=&amp;v=" in body
+
+    def test_home_no_default_no_own_banner_means_no_banner_at_all(self, conn):
+        resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
+        assert resp.context["banner"] is None
+        assert resp.context["has_own_banner"] is False
+        assert 'class="page-banner"' not in resp.body.decode()
+
+    def test_home_edit_mode_button_says_add_banner_while_only_default_shows(self, conn):
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        link_start = body.index("/banners/editor?scope=&")
+        link_end = body.index("</a>", link_start)
+        link = body[link_start:link_end]
+        assert "Add banner" in link
+        assert "Change banner" not in link
+
+    def test_home_edit_mode_button_says_change_banner_once_home_has_its_own(self, conn):
+        _set_remote(conn, cached=True, scope="")
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        link_start = body.index("/banners/editor?scope=&")
+        link_end = body.index("</a>", link_start)
+        link = body[link_start:link_end]
+        assert "Change banner" in link
+
+    def test_project_page_falls_back_to_the_default_banner(self, conn):
+        _make_label(conn, "CS101")
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
+        assert resp.context["has_own_banner"] is False
+
+    def test_project_page_own_banner_overrides_the_default(self, conn):
+        _make_label(conn, "CS101")
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        _set_remote(conn, cached=True, scope="CS101", image_url="https://cdn.example.com/cs101-own.jpg")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/cs101-own.jpg"
+        assert resp.context["has_own_banner"] is True
+
+    def test_space_page_falls_back_to_the_default_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        resp = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
+        assert resp.context["has_own_banner"] is False
+
+    def test_removing_a_page_own_banner_reverts_to_the_default(self, conn):
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        _set_remote(conn, cached=True, scope="", image_url="https://cdn.example.com/home-own.jpg")
+        banners_router.remove_banner(scope="", page_url="/", conn=conn)
+        resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
+        assert resp.context["has_own_banner"] is False

@@ -1,9 +1,21 @@
 {# Shared dashboard-page cover banner (2026-08-09, routers/banners.py).
    Home and every label/Space/Project page render this at the top of their
-   content. Variables supplied by dashboard_view / label_detail:
-     - banner: db.get_page_banner() dict, or None when the page has no
-       banner set. kind="upload" carries image_b64/image_type; kind="remote"
-       carries image_url (+ optional source_url/alt attribution).
+   content. Variables supplied by routers/dashboard.py's
+   _page_banner_context (dashboard_view / label_detail / space_detail all
+   call it the same way):
+     - banner: db.get_page_banner() dict, or None. 2026-08-29 direct
+       request: this page's own banner if it has one, else the single
+       default set in Settings > Appearance (deps.py's
+       PAGE_HEADER_BANNER_SCOPE) -- a page is never bannerless anymore
+       unless even the default is unset. kind="upload" carries
+       image_b64/image_type; kind="remote" carries image_url (+ optional
+       source_url/alt attribution).
+     - banner_image_scope: which banner is actually being rendered (this
+       page's own scope, or the default's sentinel scope) -- NOT the same
+       as banner_scope (this page's own identity, used by the edit-mode
+       Add/Change banner button below regardless of which image is
+       currently showing through). Needed to build the right
+       /banners/image URL for whichever banner `banner` actually is.
      - profile_photo/display_name (2026-08-29 addition, see below):
        db.get_profile_photo()'s dict (or None) and the Settings > General
        display name, for the avatar overlap.
@@ -49,7 +61,7 @@
        with the page instead. Decode stays at the browser default (async on
        modern engines) so a multi-MB upload never blocks first paint. #}
     {% if banner.version %}
-    <img src="/banners/image?scope={{ banner_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" fetchpriority="high">
+    <img src="/banners/image?scope={{ banner_image_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" fetchpriority="high">
     {% else %}
     {# referrerpolicy="no-referrer" keeps a hotlinked search image from
        leaking the page URL to the host serving it. #}

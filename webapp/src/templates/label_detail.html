@@ -34,8 +34,12 @@
     <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
          Opens the banner editor modal (routers/banners.py); "Add" vs
-         "Change" labels by whether a banner is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+         "Change" labels by whether THIS page has its own banner
+         (2026-08-29 direct request: `has_own_banner`, not `banner` -- a
+         page with no override of its own still renders `banner` truthy
+         now, via the Settings > Appearance default,
+         routers/dashboard.py's _page_banner_context). -->
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (item #1, dashboard usability rework,
          2026-08-07) -- Settings has no per-space subpage to host this
          (it's a single hub page, see routers/settings.py's module
@@ -47,15 +51,11 @@
         <input type="hidden" name="label_name" value="{{ label.uid }}">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
-    {% else %}
-    <!-- Quick capture, one merged "+" (2026-08-10) -- same single "+"
-         button as dashboard.html, opening the merged task/event quick-add
-         modal (quick_add.html) -- no pre-fill of this label onto the new
-         task/event (the quick-add doesn't accept a tags/label query param
-         yet, and this pass doesn't add new prefill plumbing for it).
-         Hidden in edit mode, same reasoning as dashboard.html. -->
-    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
     {% endif %}
+    <!-- 2026-08-29 (direct request): the quick capture "+" button that
+         used to live here outside edit mode is gone -- obsolete now that
+         the sidebar rail has its own global "+ New" (13c, base.html),
+         reachable from every page including this one. -->
 </div>
 </div>
 

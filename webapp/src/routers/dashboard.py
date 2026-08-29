@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, recurrence_expand
-from ..deps import EDIT_MODE_KEY, get_db, templates
+from ..deps import EDIT_MODE_KEY, PAGE_HEADER_BANNER_SCOPE, get_db, templates
 
 router = APIRouter(tags=["dashboard"])
 
@@ -1849,6 +1849,39 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
     }
 
 
+def _page_banner_context(conn, scope: str) -> dict:
+    """Every piece of context _page_banner.html needs to render one page's
+    banner -- Home ("" scope) and every Space/Project page
+    (routers/labels.py::label_detail, routers/spaces.py::space_detail)
+    all call this the same way. 2026-08-29 (direct request): a page with
+    no banner of its own now falls back to the single default set in
+    Settings > Appearance (deps.py's PAGE_HEADER_BANNER_SCOPE) instead of
+    showing no banner at all -- the same "one default image everywhere,
+    overridable per page" model the narrow header (Tasks/Calendar/...)
+    already uses, extended to the big banner too.
+
+    `has_own_banner` (not `banner`) is what the "Add banner"/"Change
+    banner" edit-mode button's label reads: it's about whether THIS page
+    has its own override, not whether a banner happens to be showing at
+    all (the default rendering through doesn't mean this page has "added"
+    one). `banner_image_scope` is which banner is actually being
+    rendered (this page's own scope, or the sentinel default scope) --
+    kept separate from `banner_scope` (this page's own identity, always
+    used by the edit button/upload/remove forms regardless of which image
+    is currently showing) so _page_banner.html's `/banners/image` URL
+    points at the right stored image rather than looking up this page's
+    own (unset) scope with the default banner's version hash."""
+    own_banner = db.get_page_banner(conn, scope)
+    if own_banner:
+        return {"banner": own_banner, "has_own_banner": True, "banner_scope": scope, "banner_image_scope": scope}
+    return {
+        "banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
+        "has_own_banner": False,
+        "banner_scope": scope,
+        "banner_image_scope": PAGE_HEADER_BANNER_SCOPE,
+    }
+
+
 @router.get("/")
 def dashboard_view(
     request: Request,
@@ -1874,11 +1907,6 @@ def dashboard_view(
             "request": request,
             "active_tab": "dashboard",
             "greeting": _greeting_for_hour(datetime.now().hour, display_name),
-            # Page banner (2026-08-09, routers/banners.py) -- Home's
-            # banner + the page key ("" = Home) the banner editor's hidden
-            # scope field and _page_banner.html's edit-mode button read.
-            "banner": db.get_page_banner(conn, ""),
-            "banner_scope": "",
             # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
             # redesign follow-up, direct request, plans/sidebar-redesign
             # .md § "The Standard Header") -- the large circular avatar
@@ -1892,6 +1920,7 @@ def dashboard_view(
             "display_name": display_name,
         }
     )
+    ctx.update(_page_banner_context(conn, ""))
     return templates.TemplateResponse("dashboard.html", ctx)
 
 

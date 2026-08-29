@@ -49,8 +49,6 @@ def space_detail(name: str, request: Request, conn=Depends(get_db)):
             "is_space": True,
             "children": db.list_child_labels(conn, name),
             "parent": db.effective_label_config(conn, label["parent_name"]) if label.get("parent_name") else None,
-            "banner": db.get_page_banner(conn, name),
-            "banner_scope": name,
             # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
             # redesign follow-up, direct request) -- see
             # routers/dashboard.py::dashboard_view's own comment; a Space
@@ -61,5 +59,10 @@ def space_detail(name: str, request: Request, conn=Depends(get_db)):
             "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
         }
     )
+    # Page banner (2026-08-09, routers/banners.py; 2026-08-29 direct
+    # request: falls back to the global Settings > Appearance default when
+    # this page has no banner of its own) -- see
+    # routers/dashboard.py::_page_banner_context's own comment.
+    ctx.update(dashboard_router._page_banner_context(conn, name))
 
     return templates.TemplateResponse("label_detail.html", ctx)

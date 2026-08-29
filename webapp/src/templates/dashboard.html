@@ -50,9 +50,12 @@
     <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode,
          since both are page-content edits. Opens the banner editor modal
-         (routers/banners.py); "Add" vs "Change" labels by whether a banner
-         is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+         (routers/banners.py); "Add" vs "Change" labels by whether THIS
+         page has its own banner (2026-08-29 direct request: `has_own_
+         banner`, not `banner` -- a page with no override of its own
+         still renders `banner` truthy now, via the Settings > Appearance
+         default, routers/dashboard.py's _page_banner_context). -->
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
          a label page's (label_detail.html): wipes Home's widgets back to
          the seeded default via /dashboard/reset. data-confirm-sheet is the
@@ -61,17 +64,11 @@
     <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset Home's widgets to the default layout? This deletes every widget you've added or customized here.">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
-    {% else %}
-    <!-- Quick capture, one merged "+" (2026-08-10) -- the single button
-         opens one modal (quick_add.html via static/modal.js's data-modal)
-         with a Task/Event tab switch inside it, replacing the old pair of
-         separate New task / New event buttons and modals (dashboard
-         usability rework, 2026-08-07). Hidden in edit mode: editing the
-         widget grid and quick-capturing a new task/event are different
-         modes of using this page, and edit mode's own actions (New
-         widget etc.) take that slot instead. -->
-    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
     {% endif %}
+    <!-- 2026-08-29 (direct request): the quick capture "+" button that
+         used to live here outside edit mode is gone -- obsolete now that
+         the sidebar rail has its own global "+ New" (13c, base.html),
+         reachable from every page including this one. -->
 </div>
 </div>
 

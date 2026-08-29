@@ -420,54 +420,58 @@ class TestQuickAddButtons:
         assert 'id="quick-add-form"' not in body
         assert 'name="title" placeholder="Quick-add a task and press Enter' not in body
 
-    def test_dashboard_html_has_single_merged_quick_add_button(self, conn):
+    def test_dashboard_html_has_no_page_level_quick_add_button(self, conn):
         # 2026-08-10: the two New task/New event buttons merged into one
-        # "+" that opens the shared quick_add.html modal (a Task/Event tab
-        # switch inside it) -- the old per-kind buttons are gone from the
-        # page, which still opens the modal (data-modal). The whole action
-        # bar (New/Edit mode) now lives inside .page-banner-actions and the
-        # old separate .toolbar row is gone (2026-08-10 header rework).
+        # "+" that opened the shared quick_add.html modal, living in
+        # .page-banner-actions. 2026-08-29 (direct request): that
+        # page-level button is gone outright now -- obsolete once the
+        # sidebar rail got its own global "+ New" (13c, base.html),
+        # reachable from every page. Checked via `data-fab`, the removed
+        # button's own distinguishing attribute -- the sidebar's own
+        # quick-add link (always present, unrelated) has no data-fab, so
+        # a bare `href="/quick/add"` substring check would false-positive
+        # on it regardless of whether this page's own button still exists.
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' in body
+        assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert body.count('data-modal') >= 2
         assert 'class="page-banner-actions"' in body
         assert 'class="toolbar"' not in body
 
-    def test_label_page_has_single_merged_quick_add_button(self, conn):
+    def test_label_page_has_no_page_level_quick_add_button(self, conn):
         _make_project(conn, "CS101")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' in body
+        assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
         assert 'class="page-banner-actions"' in body
         assert 'class="toolbar"' not in body
 
-    def test_dashboard_html_hides_quick_add_in_edit_mode(self, conn):
-        # 2026-08-07 (screenshot-driven toolbar rework): quick capture
-        # lives in the main toolbar's non-edit-mode branch and must not
-        # render at all while editing the widget grid. Edit mode instead
-        # swaps in New widget/Add-Change banner inside the same
-        # .page-banner-actions bar. 2026-08-29 (sidebar redesign item
-        # 13d): edit mode is a persistent Settings > Appearance toggle
-        # now (EDIT_MODE_KEY), not a per-page `?edit=1` query param.
+    def test_dashboard_html_edit_mode_actions_present(self, conn):
+        # 2026-08-07 (screenshot-driven toolbar rework): edit mode swaps
+        # in New widget/Add-Change banner inside .page-banner-actions.
+        # 2026-08-29 (sidebar redesign item 13d): edit mode is a
+        # persistent Settings > Appearance toggle now (EDIT_MODE_KEY), not
+        # a per-page `?edit=1` query param. 2026-08-29 (same day, direct
+        # request): the non-edit-mode branch that used to render here
+        # (the page-level quick-add button) is gone outright, not just
+        # hidden in edit mode -- there's nothing left to "hide".
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' not in body
+        assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Add banner' in body
         assert 'class="page-banner-actions"' in body
 
-    def test_label_page_hides_quick_add_in_edit_mode(self, conn):
+    def test_label_page_edit_mode_actions_present(self, conn):
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' not in body
+        assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Reset layout' in body
         assert 'class="page-banner-actions"' in body
@@ -492,7 +496,6 @@ class TestQuickAddButtons:
         # in prose while explaining the 2026-08-29 change itself.
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' in body
         assert 'href="?edit=1"' not in body
         assert '>Edit mode</a>' not in body
 

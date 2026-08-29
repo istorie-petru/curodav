@@ -5724,3 +5724,47 @@ sharing the same widget grid + banner system (`_page_banner.html`).
 - `sw.js`: `CACHE_NAME` bumped `cc-shell-v23` -> `cc-shell-v24` (style.css
   changed again) -- `test_pwa_shell.py`'s literal-string assertion
   updated.
+
+## Follow-up (2026-08-29, same day) -- Home/Space/Project default to the
+Page header banner; drop the obsolete page-level "+ New" button (direct
+request)
+
+Two small direct requests together: (1) a page with no banner of its own
+should show the Settings > Appearance default (deps.py's
+PAGE_HEADER_BANNER_SCOPE, already used by the narrow header) instead of
+no banner at all, while still allowing a per-page override via the
+existing edit-mode "Add/Change banner" button; (2) the page-level "+ New"
+quick-add button on dashboard.html/label_detail.html is redundant with
+the sidebar rail's own global one (13c) and should go.
+
+- **New `routers/dashboard.py::_page_banner_context(conn, scope)`**,
+  shared by `dashboard_view`/`labels.py::label_detail`/`spaces.py::
+  space_detail` (all three used to build `banner`/`banner_scope`
+  independently): this page's own banner if set, else the global
+  default. Returns two banner-scope values, not one --
+  `banner_scope` (this page's own identity; always used by the edit
+  button/upload/remove forms, unchanged) and the new
+  `banner_image_scope` (whichever banner is actually rendering -- needed
+  so `_page_banner.html`'s `/banners/image` URL points at the right
+  stored image, not this page's own empty scope with the default
+  banner's version hash) -- plus `has_own_banner`, which the "Add
+  banner"/"Change banner" edit-mode button label now reads instead of
+  `banner` (a page showing only the default hasn't "added" anything of
+  its own).
+- **`dashboard.html`/`label_detail.html`**: the "+ New" quick-add link
+  that used to render outside edit mode is gone outright (not
+  conditional on anything -- there's nothing left in that slot). Comments
+  explain why: obsolete now that the sidebar rail has its own global one.
+- 9 new tests (`test_banners.py::TestPageBannerDefaultFallback`): Home/a
+  Project page/a Space page each fall back to the default when they have
+  no banner of their own, a page's own banner overrides the default when
+  both are set, no banner at all when neither is set, the edit-mode
+  button's Add-vs-Change wording follows `has_own_banner` not the
+  rendered banner, and removing a page's own banner reverts it to the
+  default rather than to nothing. `test_dashboard_usability_rework.py`'s
+  quick-add-button tests rewritten around `data-fab` (the removed
+  button's own distinguishing attribute) instead of a bare `href="/quick/
+  add"` substring, which would have false-positived on the sidebar's own
+  always-present link either way. Full suite: **1899 passed** (four
+  file-glob chunks: 611 + 434 + 519 + 335 = 1899; nine new, none
+  removed). No style.css changes this round -- no `sw.js` bump needed.
