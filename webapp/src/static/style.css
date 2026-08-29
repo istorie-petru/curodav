@@ -1493,6 +1493,16 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   background:var(--bg-secondary); border-color:transparent; box-shadow:none;
 }
 .cell-tags{display:inline-flex; align-items:center; flex-wrap:wrap;}
+/* Direct follow-up: when the Labels column is too narrow for every pill on
+   one line, `.cell-tags`' own `flex-wrap:wrap` above already drops extras
+   onto a second/third line -- but with no vertical spacing, a wrapped pill
+   sat flush against the row above it (only `.cell-tag + .cell-tag`'s
+   existing `margin-left` gives horizontal breathing room, nothing does the
+   same vertically). Scoped to `.cell-tags` specifically (not a bare
+   `.cell-tag` rule) so this doesn't also add unwanted vertical space to
+   every other single-line `.cell-tag` use in the app (calendar dots,
+   contact/project tag rows, etc). */
+.cell-tags .cell-tag{margin-top:3px; margin-bottom:3px;}
 .cell-tags-trigger .filter-caret{display:inline-flex; opacity:.6; flex:none;}
 /* Title column (2026-08-29, STATE.md backlog item 9 follow-up: "the
    minimum title column size ... should be longer") -- with `.task-table
