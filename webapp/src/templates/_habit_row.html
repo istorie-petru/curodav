@@ -69,8 +69,20 @@
              those simply does nothing rather than erroring. -->
         <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" data-kind="{{ item.kind }}" aria-label="Select {{ item.title }}">
     </td>
-    <td>
-        <a href="{{ item.detail_url }}" data-modal>{{ item.title }}</a>
+    <td class="task-title-cell">
+        {# 2026-08-29 (STATE.md backlog item 9 follow-up: "support inline
+           editing for habits title too") -- same double-click-to-edit
+           contract the Tasks table's own Title cell uses (_task_row.html,
+           static/inline_edit.js); `data-kind` (already carried by this
+           row's own `.row-select` above) tells tasks_table.js's shared
+           `cc-inline-edit-commit` listener which endpoint owns this uid --
+           a habit-labeled task (kind="task") saves through routers/
+           tasks.py's update_field like any other task title, a standalone
+           Habit entity (kind="entity") through routers/habits.py's own
+           update_field instead (that uid isn't a row in `tasks` at all). #}
+        <a href="{{ item.detail_url }}" data-modal data-inline-edit-linked
+           data-inline-edit data-type="text" data-uid="{{ item.uid }}" data-field="title" data-kind="{{ item.kind }}"
+           title="Double-click to rename">{{ item.title }}</a>
     </td>
     <td>
         <div class="habit-checkin-row habit-checkin-row-inline" data-uid="{{ item.uid }}" data-target="{{ item.target|int }}">

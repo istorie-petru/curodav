@@ -350,6 +350,38 @@ def delete_habit(
     return respond(x_requested_with, "/tasks")
 
 
+_UPDATABLE_FIELDS = {"title"}
+
+
+@router.post("/{uid}/update-field")
+async def update_field(uid: str, request: Request, conn=Depends(get_db)):
+    """Single-field inline edit for a standalone Habit *entity*'s title
+    (2026-08-29, STATE.md backlog item 9 follow-up: "support inline editing
+    for habits title too"). Mirrors routers/tasks.py's own `update_field`
+    (its `title` case) -- same JSON-body/fetch-only contract, same "blank
+    title is rejected, not saved" rule -- but this uid lives in the
+    `habits` table, not `tasks`, so it needs its own endpoint rather than
+    reusing that one. A habit-*labeled task* row (_habit_group_items'
+    kind="task") is a real task and still goes through routers/tasks.py's
+    update_field instead -- static/tasks_table.js's cc-inline-edit-commit
+    listener picks between the two by the row's own `data-kind`."""
+    payload = await request.json()
+    field = payload.get("field")
+    value = payload.get("value")
+    if field not in _UPDATABLE_FIELDS:
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    existing = db.get_habit(conn, uid)
+    if existing is None:
+        return JSONResponse({"error": "habit not found"}, status_code=404)
+    if not isinstance(value, str) or not value.strip():
+        return JSONResponse({"error": "title cannot be blank"}, status_code=400)
+    row = dict(existing)
+    row["name"] = value.strip()
+    row["updated_at"] = _now()
+    db.upsert_habit(conn, row)
+    return JSONResponse({"ok": True})
+
+
 @router.get("/{uid}")
 def habit_detail(uid: str, request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse("habit_detail.html", _habit_detail_context(conn, request, uid))

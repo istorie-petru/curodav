@@ -24,28 +24,40 @@
 // back to whatever's on the server rather than silently drifting from it.
 //
 // async-CRUD (features/async-crud.md): all interaction here is delegated
-// at the document level against #task-table rather than bound to the rows
+// at the document level against #tasks-body rather than bound to the rows
 // present at load, because a mutation-triggered cc-entity-changed event
-// causes ccApi.refreshRegion() to swap #tasks-body (a new #task-table)
-// in place -- delegated listeners keep working across the swap, and the
-// bulk-selection state is reconciled to the fresh rows. The page's one
-// listener for task changes lives here too.
+// causes ccApi.refreshRegion() to swap the whole #tasks-body in place --
+// delegated listeners keep working across the swap, and the bulk-selection
+// state is reconciled to the fresh rows. The page's one listener for task
+// changes lives here too.
+//
+// Two separate `<table>`s live inside #tasks-body (2026-08-29, STATE.md
+// backlog item 9 follow-up: "habits should be a separate table at the end
+// of the normal tasks table, with its own header row") -- `#task-table`
+// (Project/Unassigned/Completed) and `#habits-table` (the Habits group,
+// _habit_row.html), each with its own <thead> since the two row shapes
+// don't share every column. Bulk-select and the delegated inline-edit
+// listeners below are scoped to `#tasks-body` as a whole, not either table
+// specifically, so a selection (and the shared bulk-actions-bar) can span
+// both -- exactly the "Habits rows join the same #task-table selection"
+// contract STATE.md backlog item 1 already established, just against a
+// wrapper that now contains two tables instead of one.
 //
 // A caveat shared by the Status/Labels dropdowns: static/app.js's generic
 // `.multiselect` handling portals an open panel out to #multiselect-portal,
 // so a checkbox/radio inside it is no longer a DOM descendant of its
 // `.task-status-select`/`.task-labels-select` wrapper while open -- this
 // file locates the *trigger* (which never moves) by the row's own `data-
-// uid` via `currentTable().querySelector(...)` instead of `closest()`
+// uid` via `currentBody().querySelector(...)` instead of `closest()`
 // from the changed input, same reasoning static/app.js's own `wrapperFor`
 // helper documents.
 
 (function () {
-  const initialTable = document.getElementById("task-table");
-  if (!initialTable) return;
+  const initialBody = document.getElementById("tasks-body");
+  if (!initialBody) return;
 
-  function currentTable() {
-    return document.getElementById("task-table");
+  function currentBody() {
+    return document.getElementById("tasks-body");
   }
 
   function regionUrl() {
@@ -54,9 +66,30 @@
     return "/tasks/regions?region=table" + (window.location.search || "");
   }
 
-  async function updateField(uid, field, value, el) {
+  async function updateField(uid, field, value) {
     try {
       const resp = await fetch(`/tasks/${uid}/update-field`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field, value }),
+      });
+      if (!resp.ok) throw new Error("update failed");
+      return true;
+    } catch (err) {
+      window.ccToast({ message: "Could not save that change. Reloading...", variant: "error", duration: 1400 });
+      setTimeout(() => window.location.reload(), 1200);
+      return false;
+    }
+  }
+
+  // Same contract as updateField above, but for a standalone Habit
+  // *entity* row (kind="entity", _habit_row.html) -- that uid lives in the
+  // `habits` table, not `tasks`, so it needs routers/habits.py's own
+  // update-field endpoint instead. A habit-labeled *task* row (kind="task")
+  // still goes through updateField/`/tasks/...` like any other task.
+  async function updateHabitField(uid, field, value) {
+    try {
+      const resp = await fetch(`/habits/${uid}/update-field`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ field, value }),
@@ -77,32 +110,32 @@
   document.addEventListener("change", (e) => {
     const target = e.target;
     if (!target || !target.matches) return;
-    if (target.matches("#task-table input.task-status-radio")) {
+    if (target.matches("#tasks-body input.task-status-radio")) {
       const uid = target.dataset.uid;
       const color = target.dataset.color || "gray";
-      const trigger = currentTable().querySelector('.task-status-select[data-uid="' + uid + '"] .pill-select-trigger');
+      const trigger = currentBody().querySelector('.task-status-select[data-uid="' + uid + '"] .pill-select-trigger');
       // Optimistic: repaint the pill color/text immediately, don't wait on
       // the network round-trip. (app.js's own `change` listener already
       // updates the trigger's `.ms-summary` text and closes the panel --
       // single-select mode -- this only owns the color class app.js
       // doesn't know about.)
       if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + color;
-      updateField(uid, target.dataset.field, target.value, target);
-    } else if (target.matches("#task-table input.task-label-checkbox")) {
+      updateField(uid, target.dataset.field, target.value);
+    } else if (target.matches("#tasks-body input.task-label-checkbox")) {
       const uid = target.dataset.uid;
       const panel = target.closest(".multiselect-panel");
       const checked = panel
         ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked")).map((cb) => cb.value)
         : [];
-      const trigger = currentTable().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
+      const trigger = currentBody().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
       if (trigger) {
         trigger.innerHTML = checked.length
           ? checked.map((name) => '<span class="cell-tag tag-blue">' + escapeHtml(name) + "</span>").join("")
           : '<span class="ms-summary text-muted">No labels</span>';
       }
       updateField(uid, "tags", checked);
-    } else if (target.matches("#task-table input.inline-date")) {
-      updateField(target.dataset.uid, target.dataset.field, target.value, target);
+    } else if (target.matches("#tasks-body input.inline-date")) {
+      updateField(target.dataset.uid, target.dataset.field, target.value);
     }
   });
 
@@ -110,14 +143,23 @@
   // `<form>` to post through -- it dispatches this generic commit event
   // instead (see that file's own comment on why), which this table is the
   // one page-level owner of persisting via the same update-field endpoint
-  // every other inline edit here uses.
+  // every other inline edit here uses. Works for both tables: a plain task
+  // row's title (`#task-table`) and, since STATE.md backlog item 9's
+  // follow-up ("support inline editing for habit title too"), a Habits-
+  // group row's title (`#habits-table`) -- `cell.dataset.kind` (carried by
+  // both row kinds' title cell, mirroring the row-select checkbox's own
+  // `data-kind`) is what decides which endpoint owns the uid.
   document.addEventListener("cc-inline-edit-commit", (e) => {
     const cell = e.target;
-    if (!cell || !cell.matches || !cell.matches("#task-table [data-inline-edit]")) return;
+    if (!cell || !cell.matches || !cell.matches("#tasks-body [data-inline-edit]")) return;
     const uid = cell.dataset.uid;
     const field = e.detail && e.detail.field;
     if (!uid || !field) return;
-    updateField(uid, field, e.detail.value, cell);
+    if (cell.dataset.kind === "entity") {
+      updateHabitField(uid, field, e.detail.value);
+    } else {
+      updateField(uid, field, e.detail.value);
+    }
   });
 
   // Small HTML-escape for the label pills' optimistic rebuild above --
@@ -156,7 +198,7 @@
   }
 
   function allCheckboxes() {
-    return Array.from(currentTable().querySelectorAll(".row-select"));
+    return Array.from(currentBody().querySelectorAll(".row-select"));
   }
 
   function setSelected(cb, on) {
@@ -203,7 +245,7 @@
   // region swap; the checkbox list is re-queried per interaction so
   // shift-click range selection indexes the live rows.
   document.addEventListener("click", (e) => {
-    const cb = e.target.closest && e.target.closest("#task-table .row-select");
+    const cb = e.target.closest && e.target.closest("#tasks-body .row-select");
     if (!cb) return;
     const checkboxes = allCheckboxes();
     const idx = checkboxes.indexOf(cb);
@@ -226,7 +268,7 @@
   let paintValue = true;
 
   document.addEventListener("pointerdown", (e) => {
-    const cb = e.target.closest && e.target.closest("#task-table .row-select");
+    const cb = e.target.closest && e.target.closest("#tasks-body .row-select");
     if (!cb) return;
     painting = true;
     paintValue = !cb.checked;
@@ -238,8 +280,8 @@
   document.addEventListener("pointermove", (e) => {
     if (!painting) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    const cb = el && el.closest && el.closest("#task-table .row-select");
-    if (cb && currentTable().contains(cb) && cb.checked !== paintValue) {
+    const cb = el && el.closest && el.closest("#tasks-body .row-select");
+    if (cb && currentBody().contains(cb) && cb.checked !== paintValue) {
       setSelected(cb, paintValue);
       updateBar();
     }
@@ -312,7 +354,7 @@
           if (!resp.ok) throw new Error("bulk delete failed");
           const allUids = taskUids.concat(habitUids);
           allUids.forEach((uid) => {
-            const row = currentTable().querySelector(`tr[data-uid="${uid}"]`);
+            const row = currentBody().querySelector(`tr[data-uid="${uid}"]`);
             if (row) row.remove();
           });
           selected.clear();

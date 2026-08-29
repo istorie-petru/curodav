@@ -4708,3 +4708,77 @@ pieces bundled together, per the backlog bullet:
   the click/dblclick disambiguation and optimistic DOM rebuilds are
   design/comment-documented rather than simulated-click-tested. Full suite:
   **1819 passed** (1807 + 12 new).
+
+## Follow-up (2026-08-29, same day) -- pill/border cleanup, Habits split
+into its own table, habit title inline edit, wider Title column
+
+Direct follow-up on the slice just above, five requests in one go:
+
+- **No border on the Status/Labels/Date "inline input boxes," pill look
+  for Status** -- the first pass's `.pill-select-trigger`/`.cell-tags-
+  trigger` rules were real, but a pre-existing, more specific selector
+  (`.widget-list-multiselect .multiselect-trigger`, a two-class descendant
+  selector meant to make this dropdown match a real `<select>`-replacement
+  form field -- full width, bordered, `--control-bg` background) was
+  quietly winning the cascade over both one-class rules regardless of
+  source order, so Status/Labels kept rendering as boxed fields instead of
+  a colored pill / borderless tag list. Fixed by re-scoping both overrides
+  under their row-specific wrapper class (`.task-status-select .
+  multiselect-trigger.pill-select-trigger`, `.task-labels-select .
+  multiselect-trigger.cell-tags-trigger`) so they out-specify the generic
+  rule outright. `.dtp--compact .dtp-trigger` (the Date cell's picker
+  trigger, also used by the Work-sessions card) got the same "no border,
+  no background, subtle hover" treatment for the same reason -- it only
+  ever inherited the base `.dtp-trigger`'s 1.5px field border, never
+  reset it.
+- **Labels cell wasn't showing every selected label** -- same root cause
+  as above: the stomped-on `width:100%`/fixed field padding was squeezing
+  the cell's pill row. No template/JS change needed once the CSS
+  specificity bug was fixed -- `.cell-tags{flex-wrap:wrap}` already
+  handled multiple pills correctly, it just never got to render at its
+  intended size. Toggling a checkbox already re-posted the full tag set
+  and rebuilt the trigger's pills optimistically (tasks_table.js) from the
+  first pass -- confirmed still correct, wasn't itself the bug.
+- **Habits: separate table at the end, with its own header row** --
+  `_tasks_body.html` used to render the Habits group as just another
+  `<tbody>` inside the same `#task-table` as Project/Unassigned/Completed,
+  reusing that table's Title/Status/Date/Scheduled/Labels header even
+  though `_habit_row.html` repurposes Status/Date/Scheduled for check-in/
+  cadence/streak. Split into a second `<table id="habits-table">` right
+  after the first, with its own header (Title/Check-in/Cadence/Streak/
+  Labels) naming what its columns actually are. static/tasks_table.js's
+  bulk-select and delegated inline-edit listeners were re-scoped from
+  `#task-table` to the shared `#tasks-body` wrapper (which contains both
+  tables) so a selection/checkbox-drag/double-click-edit still spans both
+  tables -- the same "Habits joins the same selection" contract STATE.md
+  backlog item 1 already established, just against two tables instead of
+  one now.
+- **Habit title inline editing** -- `_habit_row.html`'s title cell gained
+  the same `data-inline-edit-linked`/`data-inline-edit` contract
+  `_task_row.html`'s already has, plus `data-kind` (mirroring the row's
+  own `.row-select` checkbox) so tasks_table.js's `cc-inline-edit-commit`
+  listener knows which endpoint owns the uid: a habit-labeled *task*
+  (kind="task") still saves through routers/tasks.py's `update_field`;
+  a standalone Habit *entity* (kind="entity") needed a new endpoint,
+  `POST /habits/{uid}/update-field` (routers/habits.py, `_UPDATABLE_
+  FIELDS = {"title"}`, same blank-rejected/trimmed rule as the task
+  version), since that uid lives in `habits`, not `tasks`.
+- **Wider Title column/input** -- `.task-table td{white-space:nowrap}`
+  meant the Title column shrank to whatever the shortest visible title
+  happened to be, leaving barely any room to type once double-click
+  opened the inline editor. Both row templates' title `<td>` now carry
+  `.task-title-cell` (`min-width:280px` -- a floor, not a fixed width, so
+  a longer title still grows the column same as before). inline_edit.js's
+  text-mode input gets its own modifier class (`.inline-edit-input--text`)
+  overriding the base rule's number-sized `width:44px`/centered text with
+  `width:100%`/left-aligned, so the input actually fills the wider cell
+  instead of staying pinned to its old fixed width.
+- 10 new tests (`test_tasks_table_habits_split.py`): the two-table split
+  (habits-table exists with its own header, always present even with zero
+  habits, a habit row never leaks into task-table), both row kinds' title
+  cell carrying the right `data-kind`, and the new habit `update_field`
+  endpoint (rename, trim, blank-rejected, unknown-field-rejected, 404).
+  Full suite: **1829 passed** (1819 + 10 new). The border/pill/width CSS
+  fixes have no Python-side assertions (style-only) -- verified by reading
+  the resulting cascade by hand (computing which selector wins) rather
+  than a visual/browser check, since this suite has none.

@@ -70,7 +70,10 @@
 
     const input = document.createElement("input");
     input.type = isText ? "text" : "number";
-    input.className = "inline-edit-input";
+    // `--text` modifier (style.css) widens/left-aligns the input instead
+    // of the number variant's narrow, centered fixed width -- a title
+    // needs room to actually type in, not just show a couple of digits.
+    input.className = "inline-edit-input" + (isText ? " inline-edit-input--text" : "");
     if (!isText) {
       if (cell.dataset.min !== undefined) input.min = cell.dataset.min;
       if (cell.dataset.max !== undefined) input.max = cell.dataset.max;

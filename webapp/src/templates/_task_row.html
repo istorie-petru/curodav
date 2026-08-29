@@ -71,7 +71,7 @@
         <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}">
     </td>
     {% endif %}
-    <td>
+    <td class="task-title-cell">
         <a href="/tasks/{{ t.uid }}" data-modal data-inline-edit-linked
            data-inline-edit data-type="text" data-uid="{{ t.uid }}" data-field="title"
            title="Double-click to rename">{{ t.title }}</a>

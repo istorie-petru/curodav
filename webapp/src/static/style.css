@@ -1431,10 +1431,27 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    browser's own unstylable open-<select> chrome. `.pill-select-trigger`
    below is that dropdown's trigger button, still colored per status via
    the same `.pill-<color>` classes `.pill-select`/`.pill-static` already
-   used (JS repaints this class on pick, see tasks_table.js). */
-.pill-select-trigger{
-  display:inline-flex; align-items:center; gap:4px; border:none; border-radius:var(--radius-sm);
+   used (JS repaints this class on pick, see tasks_table.js).
+
+   Both this and `.cell-tags-trigger` right below carry `.widget-list-
+   multiselect` on their wrapper (so app.js's generic summary-sync/single-
+   select-closes-on-pick handling applies for free, see _task_row.html's
+   own comment) -- but that means `.widget-list-multiselect .multiselect-
+   trigger` (a field-boxed, full-width, bordered look meant for a real
+   <select>-replacement form field) also matches these two buttons, and
+   its two-class descendant selector out-specifies a plain one-class
+   `.pill-select-trigger`/`.cell-tags-trigger` rule regardless of source
+   order. Scoping these overrides by the row-specific wrapper class
+   (`.task-status-select`/`.task-labels-select`) instead is what actually
+   wins the cascade -- direct feedback after the first pass still showed a
+   bordered field box instead of a borderless pill/tag-pills-as-button. */
+.task-status-select .multiselect-trigger.pill-select-trigger{
+  width:auto; background:none; border:none; border-radius:var(--radius-sm);
   padding:3px 8px; font-size:var(--text-caption); font-weight:600; font-family:inherit; cursor:pointer;
+}
+.task-status-select .multiselect-trigger.pill-select-trigger:hover,
+.task-status-select .multiselect-trigger.pill-select-trigger:focus-visible{
+  background:none; border-color:transparent; box-shadow:none; filter:brightness(0.96);
 }
 .pill-select-trigger .filter-caret{display:inline-flex; opacity:.7;}
 /* Labels column (2026-08-29, same backlog item) -- was plain read-only
@@ -1442,13 +1459,30 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    all; now a `.multiselect` checkbox dropdown (multi-select, "select"
    mode) whose trigger shows the same pills instead of a plain text
    summary. Transparent/borderless so it reads as "the pills themselves
-   are the button" rather than a boxed form control. */
-.cell-tags-trigger{
-  display:inline-flex; align-items:center; gap:6px; border:none; background:none; padding:2px;
+   are the button" rather than a boxed form control -- see the long
+   comment above `.task-status-select` just above for why this needs the
+   `.task-labels-select`-scoped selector rather than a plain one-class
+   `.cell-tags-trigger` rule to actually win. */
+.task-labels-select .multiselect-trigger.cell-tags-trigger{
+  width:auto; justify-content:flex-start; background:none; border:none; padding:2px;
   font-family:inherit; cursor:pointer; max-width:100%;
+}
+.task-labels-select .multiselect-trigger.cell-tags-trigger:hover,
+.task-labels-select .multiselect-trigger.cell-tags-trigger:focus-visible{
+  background:var(--bg-secondary); border-color:transparent; box-shadow:none;
 }
 .cell-tags{display:inline-flex; align-items:center; flex-wrap:wrap;}
 .cell-tags-trigger .filter-caret{display:inline-flex; opacity:.6; flex:none;}
+/* Title column (2026-08-29, STATE.md backlog item 9 follow-up: "the
+   minimum title column size ... should be longer") -- with `.task-table
+   td{white-space:nowrap}` above, the Title column otherwise shrinks to
+   whatever the shortest visible title happens to be, so a short title
+   left barely any room for the double-click-to-edit `<input>` (or a
+   longer title typed into it) before it started scrolling out of view.
+   `.task-title-cell` (both `_task_row.html` and `_habit_row.html`) sets a
+   floor width instead of a fixed one, so the column still grows for a
+   longer title, it just never starts narrower than this. */
+.task-title-cell{min-width:280px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points
@@ -1578,6 +1612,13 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .inline-edit-input::-webkit-inner-spin-button{
   -webkit-appearance:none; margin:0;
 }
+/* Text mode (2026-08-29, STATE.md backlog item 9 -- the Title column's
+   double-click-to-edit input, static/inline_edit.js's `data-type="text"`
+   path): the base rule's `width:44px` / `text-align:center` are sized for
+   a 1-3 digit habit count, not a title -- this widens to fill the (now
+   wider, `.task-title-cell`) column and left-aligns like any other text
+   field instead of centering a few characters. */
+.inline-edit-input.inline-edit-input--text{width:100% !important; text-align:left;}
 .pill-select{
   border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
   font-weight:600; background-position:right 6px center; background-size:9px;
@@ -4407,9 +4448,19 @@ body.command-palette-open{overflow:hidden;}
 .dtp-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard); color:var(--fg-tertiary);}
 .dtp.is-open > .dtp-trigger .filter-caret{transform:rotate(180deg);}
 /* Compact inline variant (the Work-sessions card's per-session trigger
-   sitting mid-row) -- shrinks to its content instead of filling the row. */
+   sitting mid-row, and the Tasks table's Date cell -- _task_row.html)
+   -- shrinks to its content instead of filling the row, and drops the
+   full field's border/background entirely (2026-08-29, STATE.md backlog
+   item 9 follow-up, "Date as well should not have a border") -- a boxed
+   field border read as out of place sitting inline in a table cell/row
+   next to plain text, the same reasoning the Status/Labels pill triggers
+   just above went borderless for. */
 .dtp--compact{display:inline-flex;}
-.dtp--compact .dtp-trigger{width:auto; padding:6px 10px; font-size:var(--text-caption); border-radius:var(--radius-sm);}
+.dtp--compact .dtp-trigger{
+  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-caption); border-radius:var(--radius-sm);
+}
+.dtp--compact .dtp-trigger:hover{background:var(--bg-secondary); border-color:transparent;}
+.dtp--compact .dtp-trigger:focus-visible{border-color:transparent; box-shadow:0 0 0 2px var(--accent-neutral-subtle);}
 .dtp-panel{
   display:none; position:fixed; z-index:150;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
