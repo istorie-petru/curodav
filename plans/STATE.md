@@ -5957,3 +5957,30 @@ side centers and the other doesn't.
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Immediate follow-up (2026-08-30, same session) -- collapsed rail
+narrowed, icon nudged right (direct report: "quite a bit of space left on
+the right side... add a bit more space on the left and cut some of the
+[rail's width]")
+
+Asked which change matched the intent (narrow the rail, nudge the icon,
+or both) -- **both**, confirmed by direct choice.
+
+- `.tabbar` width `80px` -> `64px`, `.tab-btn` width `64px` -> `48px`,
+  `main`'s unconditional `margin-left` `80px` -> `64px` to match (all
+  three are the same "content starts here" measurement; expanded's own
+  `240px` overrides for `.tabbar`/`main` and the mobile bottom-bar's own
+  width/margin overrides are untouched). Collapsed's 12px icon inset
+  (matched to expanded's own, previous entry) was flush against a mostly-
+  empty 64px-wide box -- a collapsed rail's only content is one icon, not
+  a left-aligned text row like expanded, so most of that width just sat
+  unused to the icon's right.
+- `html:not([data-sidebar-expanded]) .tab-btn{padding-left:8px;}` (up
+  from the inherited 4px) nudges the icon a bit further from the new
+  edge. Collapsed and expanded are deliberately no longer pixel-identical
+  insets after this -- trading the previous entry's exact-match goal for
+  less dead space in a box that's mostly empty either way.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v28` -> `cc-shell-v29` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).

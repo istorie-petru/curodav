@@ -118,7 +118,10 @@
 // rail's icon left-aligned to match expanded's inset instead of centered,
 // active-pill switched to a full-box highlight to match) -- bumped per
 // the same v19 lesson.
-const CACHE_NAME = "cc-shell-v28";
+// v29 (2026-08-30): static/style.css-only change, same session (collapsed
+// rail narrowed 80px -> 64px, its icon nudged further from the left edge
+// to cut the dead space to its right) -- bumped per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v29";
 
 const SHELL_ASSETS = [
   "/offline",
