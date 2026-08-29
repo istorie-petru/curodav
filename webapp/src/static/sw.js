@@ -121,7 +121,10 @@
 // v29 (2026-08-30): static/style.css-only change, same session (collapsed
 // rail narrowed 80px -> 64px, its icon nudged further from the left edge
 // to cut the dead space to its right) -- bumped per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v29";
+// v30 (2026-08-30): static/style.css-only change, same session (collapsed
+// rail narrowed again, 64px -> 56px, trimming more of the remaining
+// right-side dead space) -- bumped per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v30";
 
 const SHELL_ASSETS = [
   "/offline",

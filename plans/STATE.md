@@ -5984,3 +5984,17 @@ or both) -- **both**, confirmed by direct choice.
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Immediate follow-up (2026-08-30, same session) -- collapsed rail
+narrowed again (direct report: "still need to cut a bit from the right")
+
+Same trim as the previous entry, one more notch: `.tabbar` `64px` ->
+`56px`, `.tab-btn` `48px` -> `40px`, `main`'s margin-left `64px` -> `56px`
+(same three-property group as before; expanded's `240px` overrides and
+the mobile bottom bar untouched). Left padding stays `8px` (unchanged) --
+narrowing the box trims the trailing gap on the icon's right without
+moving the icon itself.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v29` -> `cc-shell-v30` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).
