@@ -4328,15 +4328,8 @@ larger by the user, not a default to repeat.
    items 7, 8 bundled together" below.
 8. ~~**Cleaner modal for creating/editing a published list**~~ — **shipped
    2026-08-29**, see the same entry below.
-9. **Tasks table view, several changes bundled together:**
-   - Labels and Status columns become always-clickable checkbox dropdown
-     menus (not click-to-open-then-pick).
-   - Title column: double-click to edit inline (same inline-edit
-     convention as this session's habit work, `inline_edit.js`).
-   - Rename the "Due" column to "Date".
-   - Date-picker dropdown: remove the Apply button entirely; Clear button
-     loses its text label, becomes icon-only (near an arrow, but with
-     visible separation, not crowded against it).
+9. ~~**Tasks table view, several changes bundled together**~~ — **shipped
+   2026-08-29**, see "Shipped — Tasks table view rework" below.
 10. ~~**Rename "Week" to "Planner" in the sidebar**~~ — **shipped
     2026-08-29**, see "Shipped — backlog items 10, 1 (partial) bundled
     together" below.
@@ -4641,3 +4634,77 @@ Direct follow-up request, same day ("do 10 and 1").
     simulated clicks -- consistent with how `tasks_table.js` itself has
     no direct JS tests either.
   - Full suite (items 10 + 1 combined): **1807 passed** (1793 + 14 new).
+
+## Shipped — Tasks table view rework (2026-08-29, direct request), backlog
+item 9
+
+Direct follow-up request, same day ("Implementeaza Tasks tabel view"). Four
+pieces bundled together, per the backlog bullet:
+
+- **Status column** -- was a native `<select class="pill-select">` (open-
+  then-pick, browser's own unstylable dropdown chrome). Now a
+  `.multiselect` checkbox/radio dropdown (`_task_row.html`), hand-rolled
+  rather than through `_filter_dropdown.html` (a GET-navigate page filter)
+  or `_widget_list_multiselect.html` (expects a wrapping `<form>` a Save
+  button submits) -- neither fits a per-row table cell with no form and no
+  navigation -- but carrying the same `.multiselect`/`.widget-list-
+  multiselect`/`data-ms-mode="single"` markup those partials use so static/
+  app.js's existing generic open/close + "single-select closes on pick"
+  handling applies for free. `static/tasks_table.js` listens for the radio
+  `change` directly (same one-fetch-no-reload contract the old `<select>`
+  had) and repaints the trigger's pill color optimistically.
+- **Labels column** -- was plain read-only `.cell-tag` pills; there was no
+  way to edit a task's labels from the table before this, only from the
+  detail modal. Same dropdown shape, checkboxes over every known label name
+  (`tag_names`, already computed for the bulk-actions Labels picker); every
+  toggle re-posts the row's whole new tag set to `POST /tasks/{uid}/
+  update-field` (new `field="tags"` case -- a replace, not an add/remove
+  delta, simpler than diffing and the panel already has the full checked
+  set at hand). Same 1.5 single-project-per-task guard as the create/edit
+  forms surfaces as a plain 400 here too (`db.MultipleProjectLabelsError`).
+  `tasks_table.js` rebuilds the trigger's own pill list optimistically,
+  same "no region refresh" convention status/due_at already use.
+- **Title column** -- double-click to edit inline (`static/inline_edit.js`,
+  the same click-to-edit contract the Habits group's check-in count already
+  uses), while a plain single click still opens the task detail modal
+  (`data-modal`, unchanged). inline_edit.js gained a `data-type="text"`
+  mode (was number-only) and a `cc-inline-edit-commit` CustomEvent fallback
+  for cells with no wrapping `<form>` to `requestSubmit()` through (the
+  Title cell's `<td>` has none) -- `tasks_table.js` listens for that event
+  and persists via the same `update-field` endpoint. The real problem here
+  was telling a double-click on a `data-modal` link apart from a plain
+  single click *before* modal.js's own click listener (document, bubble
+  phase) opens the modal on the first click of the pair: `inline_edit.js`
+  now has a capture-phase `click` listener (capture always runs before any
+  bubble listener regardless of script load order) that calls
+  `preventDefault()` -- which trips modal.js's existing `if (e.
+  defaultPrevented) return` guard -- and opens the modal itself via
+  `window.CCModal.open()` after a short delay, cancelled if a second click
+  (the start of a double-click) arrives first. Same technique modal.js's
+  own comment already documents for calendar.js's click-vs-drag
+  disambiguation on the same kind of element.
+- **"Due" column renamed "Date"** -- label-only change, `_tasks_body.html`.
+- **Date-picker "date" mode** (`static/datetime_picker.js`, `_task_row.
+  html`'s due-date cell and every other `mode="date"` caller app-wide --
+  Holiday From/To, project Start/End, habit entry date -- one shared
+  component, one behavior) -- Apply is gone entirely (a day click already
+  auto-commits, so it was already dead/unreachable markup); Clear moved
+  from an otherwise-now-empty footer up into the calendar header, icon-
+  only, next to the month prev/next arrows (`.dtp-clear-nav`, a left
+  border + margin for "visible separation, not crowded against" the arrow
+  beside it). Fixed a latent bug in passing: the old footer Clear
+  unconditionally wrote `endInput.value = ""`, but date mode's hidden
+  markup (`_datetime_picker.html`) never renders a second/end input at all
+  -- would have thrown if actually clicked; the extracted `clearSelection()`
+  now guards it. Range/time mode's footer (Apply, and Clear unless
+  `submit` is set) is unchanged -- neither auto-commits on one pick.
+- 12 new tests (`test_tasks_table_labels_status_title.py`): update-field's
+  new `tags` case (replace, empty-clears, non-list rejected, blank/non-
+  string entries dropped, second-project-label rejected), title's new
+  blank-rejected/trimmed behavior, and the rendered markup for all four
+  cells (Date header, no more native status `<select>`, editable Labels
+  checkboxes, double-click-editable Title link). No JS test harness in
+  this suite (consistent with `tasks_table.js`/`bulk_select.js` above), so
+  the click/dblclick disambiguation and optimistic DOM rebuilds are
+  design/comment-documented rather than simulated-click-tested. Full suite:
+  **1819 passed** (1807 + 12 new).

@@ -45,6 +45,21 @@
 // the Tasks table's inline due-date cell (tasks_table.js) keeps saving the
 // single-field update without any picker-specific wiring.
 //
+// "date" mode's footer (2026-08-29, STATE.md backlog item 9, "remove the
+// Apply button entirely; Clear button loses its text label, becomes
+// icon-only") -- picking a day in this mode already auto-commits
+// (applySelection() runs straight from the day's own click/Enter handler,
+// see renderCalendar/the panel keydown handler below), so Apply's footer
+// button was already unreachable in normal use, just dead markup sitting
+// there. Date mode now renders no footer at all; Clear moves up into the
+// calendar header instead, next to the month prev/next arrows, as an
+// icon-only button (`.dtp-clear-nav`, styled with a left border + margin
+// in style.css for "visible separation, not crowded against" the next-
+// month arrow it sits beside). Range/time mode's footer (Apply text +
+// Clear text, or just Apply when `submit` is set) is unchanged -- neither
+// of those modes auto-commits on a single pick, so Apply still earns its
+// keep there.
+//
 // Mouse: click a day; click an hour to start a range, click again to end it
 // (an earlier second click swaps so start is always first), or press and
 // drag across hours. Keyboard: Tab to the trigger, Enter opens; in the
@@ -257,7 +272,10 @@
       } else {
         renderHours(panel);
       }
-      renderFooter();
+      // Date mode's "Clear" lives in the calendar header now (renderCalendar
+      // appends it there) and has no Apply at all -- see this file's header
+      // comment. Range/time keep the full footer.
+      if (mode !== "date") renderFooter();
 
       if (mode !== "time") {
         // Focus the selected (or today's) day so arrow-key navigation works
@@ -303,6 +321,24 @@
 
       prev.addEventListener("click", () => shiftMonth(-1));
       next.addEventListener("click", () => shiftMonth(1));
+
+      // Date mode only (2026-08-29, STATE.md backlog item 9): Apply is
+      // gone entirely (a day click already auto-commits, see below), so
+      // Clear is the only footer action left -- moved up here, icon-only,
+      // next to the month-nav arrows instead of sitting alone in an
+      // otherwise-empty footer. `.dtp-clear-nav` (style.css) adds a
+      // left border + margin for "visible separation, not crowded
+      // against" the Next-month arrow it sits beside.
+      if (mode === "date" && !submit) {
+        const clearNav = document.createElement("button");
+        clearNav.type = "button";
+        clearNav.className = "icon-btn dtp-clear-nav";
+        clearNav.setAttribute("aria-label", "Clear date");
+        clearNav.title = "Clear";
+        clearNav.innerHTML = ICON.x;
+        clearNav.addEventListener("click", clearSelection);
+        head.appendChild(clearNav);
+      }
 
       const weekdays = document.createElement("div");
       weekdays.className = "mini-cal-weekdays";
@@ -455,6 +491,24 @@
       });
     }
 
+    // Shared by the footer's Clear button (range/time) and the calendar
+    // header's icon-only Clear (date, see renderCalendar) -- resets
+    // everything and commits the empty value, same as before this was
+    // split across two call sites. `endInput` may not exist at all in date
+    // mode (_datetime_picker.html only renders the one hidden input then),
+    // so this guards it rather than assuming it's always there the way the
+    // pre-split code did.
+    function clearSelection() {
+      state.date = null;
+      state.startHour = null;
+      state.endHour = null;
+      startInput.value = "";
+      if (endInput) endInput.value = "";
+      updateTrigger();
+      commitChange();
+      close();
+    }
+
     function renderFooter() {
       const footer = document.createElement("div");
       footer.className = "dtp-panel-footer";
@@ -464,16 +518,7 @@
         clear.type = "button";
         clear.className = "btn outlined btn-sm";
         clear.innerHTML = ICON.x + "Clear";
-        clear.addEventListener("click", () => {
-          state.date = null;
-          state.startHour = null;
-          state.endHour = null;
-          startInput.value = "";
-          endInput.value = "";
-          updateTrigger();
-          commitChange();
-          close();
-        });
+        clear.addEventListener("click", clearSelection);
         footer.appendChild(clear);
       }
 

@@ -9,7 +9,9 @@
    `importance_colors`/`urgency_labels`/`urgency_colors` straight from
    whichever page's context provides them (both tasks.py's `_task_context`
    and projects.py's project_detail route supply the same keys), same as
-   when this was an inline macro.
+   when this was an inline macro. The project detail page itself is gone
+   (2026-08-15) but the `with context` import stays -- this is now the
+   Tasks Table view's only caller (_tasks_body.html).
 
    Importance/Urgency (side work, post-1.1) don't render as columns here
    at all anymore -- first made read-only, then dropped from this view
@@ -25,7 +27,43 @@
    only the global Tasks page's bulk-actions bar (static/tasks_table.js)
    uses it; the project detail page has no scoped bulk-action surface yet,
    so it renders one column narrower rather than a dead checkbox nothing
-   reads. #}
+   reads.
+
+   2026-08-29 (STATE.md backlog item 9, "Tasks table view, several changes
+   bundled together") -- three cells reworked in the same slice:
+     - Status: was a native `<select class="pill-select">` (had to be
+       clicked open, then clicked again to pick, with the browser's own
+       unstylable open-dropdown chrome). Now the same "checkbox dropdown"
+       trigger+panel shape as the app's other dropdowns
+       (_filter_dropdown.html / _widget_list_multiselect.html), rendered
+       by hand rather than through one of those two partials -- neither
+       fits (_filter_dropdown.html is a GET-navigate page filter,
+       _widget_list_multiselect.html expects a wrapping `<form>` a Save
+       button submits) -- but the `.multiselect`/`.widget-list-
+       multiselect` classes and `data-ms`/`data-ms-mode="single"` markup
+       are copied verbatim so static/app.js's existing generic open/close
+       + "single-select closes on pick" handling (app.js's `change`
+       listener, `ms.dataset.msMode === "single"`) applies for free -- one
+       set of dropdown behavior/CSS in the whole app, not a second
+       almost-identical copy. static/tasks_table.js listens for the radio
+       `change` directly (same "one fetch, no page reload" contract the
+       old `<select>` had) instead of app.js owning the save.
+     - Labels: was plain read-only `.cell-tag` pills -- there was no way
+       to edit a task's labels from the table at all before this, only
+       from the task detail modal. Same dropdown shape as Status, but
+       checkboxes (multi-select) over every known label name
+       (`tag_names`, already computed by routers/tasks.py's
+       `_tasks_list_context` for the bulk-actions Labels picker); every
+       toggle re-posts the row's whole new tag set to `POST /tasks/{uid}/
+       update-field` (field="tags") -- a replace, not an add/remove delta,
+       simpler than diffing and the panel already has the full checked set
+       at hand.
+     - Title: double-click to edit inline (static/inline_edit.js, the
+       same click-to-edit contract the Habits group's check-in count
+       already uses) while a plain single click still opens the task
+       detail modal (`data-modal`, unchanged) -- see inline_edit.js's own
+       header comment for how the two are told apart on the same element
+       without one accidentally triggering the other. #}
 {% macro task_row(t, show_select=true) %}
 <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
     {% if show_select %}
@@ -34,14 +72,27 @@
     </td>
     {% endif %}
     <td>
-        <a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+        <a href="/tasks/{{ t.uid }}" data-modal data-inline-edit-linked
+           data-inline-edit data-type="text" data-uid="{{ t.uid }}" data-field="title"
+           title="Double-click to rename">{{ t.title }}</a>
     </td>
     <td>
-        <select class="pill-select pill-{{ status_colors[t.status] }}" data-uid="{{ t.uid }}" data-field="status">
-            {% for s in statuses %}
-            <option value="{{ s }}" data-color="{{ status_colors[s] }}" {% if t.status == s %}selected{% endif %}>{{ status_labels[s] }}</option>
-            {% endfor %}
-        </select>
+        <div class="multiselect widget-list-multiselect task-status-select" data-ms data-ms-mode="single" data-ms-label="status" data-uid="{{ t.uid }}">
+            <button type="button" class="multiselect-trigger pill-select-trigger pill-{{ status_colors[t.status] }}" aria-haspopup="true" aria-expanded="false">
+                <span class="ms-summary">{{ status_labels[t.status] }}</span>
+                <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+            </button>
+            <div class="multiselect-panel ms-panel">
+                {% for s in statuses %}
+                <label class="multiselect-option">
+                    <input type="radio" name="task-status-{{ t.uid }}" value="{{ s }}"
+                           class="task-status-radio" data-uid="{{ t.uid }}" data-field="status" data-color="{{ status_colors[s] }}"
+                           {% if t.status == s %}checked{% endif %}>
+                    <span>{{ status_labels[s] }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
     </td>
     <td>
         {# Due date -- 2026-08-17: was a native <input type="date"> whose
@@ -75,7 +126,28 @@
         <span class="text-muted">&mdash;</span>
         {% endif %}
     </td>
-    <td>{% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}</td>
+    <td>
+        <div class="multiselect widget-list-multiselect task-labels-select" data-ms data-ms-mode="select" data-ms-label="labels" data-uid="{{ t.uid }}">
+            <button type="button" class="multiselect-trigger cell-tags-trigger" aria-haspopup="true" aria-expanded="false">
+                <span class="cell-tags">
+                {% if t.tags %}
+                    {% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}
+                {% else %}
+                    <span class="ms-summary text-muted">No labels</span>
+                {% endif %}
+                </span>
+                <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+            </button>
+            <div class="multiselect-panel ms-panel">
+                {% for name in (tag_names | default([])) %}
+                <label class="multiselect-option">
+                    <input type="checkbox" class="task-label-checkbox" data-uid="{{ t.uid }}" value="{{ name }}" {% if name in t.tags %}checked{% endif %}>
+                    <span>{{ name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </td>
     <td style="text-align:right">
         <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}" data-cc-change="task">
             <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>

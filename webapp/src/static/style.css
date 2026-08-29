@@ -1419,14 +1419,41 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 .status-card-meta .text-muted{color:var(--fg-tertiary);}
 
-/* Task table view (tasks_list.html/tasks_table.js) -- status/importance/
-   urgency
-   render as a native <select> disguised as a colored pill: the base
+/* Task table view (tasks_list.html/tasks_table.js) -- Importance/Urgency
+   (read-only, .pill-static) are colored pills straight off; the base
    `select` rule above already gives every dropdown appearance:none + the
-   chevron; this only adds the tighter pill padding/font and removes the
-   border, and its background/text color are set per-row by JS via the
-   pill-<color> class (data-color attributes on each <option>, read in
-   tasks_table.js) rather than a fixed value here. */
+   chevron.
+
+   Status (2026-08-29, STATE.md backlog item 9) used to be this same
+   native <select> disguised as a colored pill; it's now a real
+   `.multiselect` checkbox/radio dropdown (_task_row.html) so it looks and
+   opens the same way every other dropdown in the app does instead of the
+   browser's own unstylable open-<select> chrome. `.pill-select-trigger`
+   below is that dropdown's trigger button, still colored per status via
+   the same `.pill-<color>` classes `.pill-select`/`.pill-static` already
+   used (JS repaints this class on pick, see tasks_table.js). */
+.pill-select-trigger{
+  display:inline-flex; align-items:center; gap:4px; border:none; border-radius:var(--radius-sm);
+  padding:3px 8px; font-size:var(--text-caption); font-weight:600; font-family:inherit; cursor:pointer;
+}
+.pill-select-trigger .filter-caret{display:inline-flex; opacity:.7;}
+/* Labels column (2026-08-29, same backlog item) -- was plain read-only
+   `.cell-tag` pills with no way to edit a task's labels from the table at
+   all; now a `.multiselect` checkbox dropdown (multi-select, "select"
+   mode) whose trigger shows the same pills instead of a plain text
+   summary. Transparent/borderless so it reads as "the pills themselves
+   are the button" rather than a boxed form control. */
+.cell-tags-trigger{
+  display:inline-flex; align-items:center; gap:6px; border:none; background:none; padding:2px;
+  font-family:inherit; cursor:pointer; max-width:100%;
+}
+.cell-tags{display:inline-flex; align-items:center; flex-wrap:wrap;}
+.cell-tags-trigger .filter-caret{display:inline-flex; opacity:.6; flex:none;}
+/* Generic caret-flip for every checkbox-dropdown trigger in the app, not
+   just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
+   are two more `.multiselect-trigger`s that need the same "chevron points
+   up while its panel is open" affordance. */
+.multiselect.is-open > .multiselect-trigger .filter-caret{transform:rotate(180deg);}
 .task-table td{white-space:nowrap;}
 /* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
 tr.is-selected{background:var(--accent-neutral-subtle);}
@@ -4399,6 +4426,17 @@ body.command-palette-open{overflow:hidden;}
 .dtp-panel--date .dtp-cal-grid{flex:1; grid-template-rows:repeat(6,1fr);}
 .dtp-panel-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
 .dtp-month-nav{width:24px; height:24px;}
+/* Date mode's Clear (2026-08-29, STATE.md backlog item 9: "remove the
+   Apply button entirely; Clear button loses its text label, becomes
+   icon-only") -- sits in the calendar header next to the Next-month arrow
+   instead of alone in an otherwise-empty footer (see datetime_picker.js's
+   renderCalendar). margin-left (not just relying on the header's own
+   space-between, which the title's flex:1 already absorbs) is what gives
+   it "visible separation, not crowded against" the arrow beside it; the
+   left border repeats that separation as a visible divider, the same
+   "boolean row set apart from the picks above it" idea `.multiselect-
+   option-divider` uses elsewhere in this file. */
+.dtp-clear-nav{width:auto; min-width:24px; height:24px; margin-left:var(--space-2); padding:0 0 0 var(--space-2); border-left:1px solid var(--border); border-radius:0;}
 .dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
 .dtp-day{
   display:flex; align-items:center; justify-content:center;

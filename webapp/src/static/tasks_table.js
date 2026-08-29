@@ -1,8 +1,12 @@
 // Inline editing for the Tasks table view (templates/tasks_list.html) --
-// status renders as a native <select> element styled to look like a
-// colored pill (pill-select, see style.css), due date as the shared themed
-// date picker (datetime_picker.js, date mode) whose Apply/Clear fires a
-// `change` on the same hidden input contract this file listens for.
+// status is a `.multiselect` radio-checkbox dropdown styled to look like a
+// colored pill trigger (pill-select-trigger, see style.css; 2026-08-29,
+// STATE.md backlog item 9 -- was a native <select> before that), labels is
+// a `.multiselect` checkbox dropdown over the row's own tag pills (new the
+// same slice -- previously read-only), due date is the shared themed date
+// picker (datetime_picker.js, date mode) whose Clear/day-pick fires a
+// `change` on the same hidden input contract this file listens for, and
+// title is a double-click-to-edit cell (static/inline_edit.js).
 // (Importance/Urgency used to be inline-editable
 // pill-selects too -- side work, post-1.1, removed them: both are purely
 // computed now, rendered as read-only .pill-static spans instead, see
@@ -10,7 +14,8 @@
 // PATCH-ish call to POST /tasks/{uid}/update-field (routers/tasks.py)
 // instead of a full form submit, so editing a row never re-navigates the
 // page or loses scroll position -- only the edited cell's own pill color
-// updates in place; everything else on the page is left alone.
+// (or, for Labels, its own pill list) updates in place; everything else on
+// the page is left alone.
 //
 // Deliberately does NOT reload the page on success (unlike modal.js's
 // create/edit forms) -- a full reload after every dropdown change would
@@ -25,6 +30,15 @@
 // in place -- delegated listeners keep working across the swap, and the
 // bulk-selection state is reconciled to the fresh rows. The page's one
 // listener for task changes lives here too.
+//
+// A caveat shared by the Status/Labels dropdowns: static/app.js's generic
+// `.multiselect` handling portals an open panel out to #multiselect-portal,
+// so a checkbox/radio inside it is no longer a DOM descendant of its
+// `.task-status-select`/`.task-labels-select` wrapper while open -- this
+// file locates the *trigger* (which never moves) by the row's own `data-
+// uid` via `currentTable().querySelector(...)` instead of `closest()`
+// from the changed input, same reasoning static/app.js's own `wrapperFor`
+// helper documents.
 
 (function () {
   const initialTable = document.getElementById("task-table");
@@ -56,25 +70,66 @@
     }
   }
 
-  // Inline status-pill / due-date changes -- delegated so they survive a
-  // region swap. These stay optimistic with NO region refresh (the design's
-  // explicit choice): a swap after every dropdown change would lose the
-  // table's scroll/focus for no benefit.
+  // Inline status-pill / labels / due-date / title changes -- delegated so
+  // they survive a region swap. These stay optimistic with NO region
+  // refresh (the design's explicit choice): a swap after every dropdown
+  // change would lose the table's scroll/focus for no benefit.
   document.addEventListener("change", (e) => {
     const target = e.target;
     if (!target || !target.matches) return;
-    if (target.matches("#task-table select.pill-select")) {
+    if (target.matches("#task-table input.task-status-radio")) {
       const uid = target.dataset.uid;
-      const opt = target.options[target.selectedIndex];
-      const color = opt.dataset.color || "gray";
-      // Optimistic: repaint the pill color immediately, don't wait on the
-      // network round-trip.
-      target.className = "pill-select pill-" + color;
-      updateField(uid, target.dataset.field, opt.value, target);
+      const color = target.dataset.color || "gray";
+      const trigger = currentTable().querySelector('.task-status-select[data-uid="' + uid + '"] .pill-select-trigger');
+      // Optimistic: repaint the pill color/text immediately, don't wait on
+      // the network round-trip. (app.js's own `change` listener already
+      // updates the trigger's `.ms-summary` text and closes the panel --
+      // single-select mode -- this only owns the color class app.js
+      // doesn't know about.)
+      if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + color;
+      updateField(uid, target.dataset.field, target.value, target);
+    } else if (target.matches("#task-table input.task-label-checkbox")) {
+      const uid = target.dataset.uid;
+      const panel = target.closest(".multiselect-panel");
+      const checked = panel
+        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked")).map((cb) => cb.value)
+        : [];
+      const trigger = currentTable().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
+      if (trigger) {
+        trigger.innerHTML = checked.length
+          ? checked.map((name) => '<span class="cell-tag tag-blue">' + escapeHtml(name) + "</span>").join("")
+          : '<span class="ms-summary text-muted">No labels</span>';
+      }
+      updateField(uid, "tags", checked);
     } else if (target.matches("#task-table input.inline-date")) {
       updateField(target.dataset.uid, target.dataset.field, target.value, target);
     }
   });
+
+  // Title double-click-to-edit (static/inline_edit.js) has no wrapping
+  // `<form>` to post through -- it dispatches this generic commit event
+  // instead (see that file's own comment on why), which this table is the
+  // one page-level owner of persisting via the same update-field endpoint
+  // every other inline edit here uses.
+  document.addEventListener("cc-inline-edit-commit", (e) => {
+    const cell = e.target;
+    if (!cell || !cell.matches || !cell.matches("#task-table [data-inline-edit]")) return;
+    const uid = cell.dataset.uid;
+    const field = e.detail && e.detail.field;
+    if (!uid || !field) return;
+    updateField(uid, field, e.detail.value, cell);
+  });
+
+  // Small HTML-escape for the label pills' optimistic rebuild above --
+  // tag names come from the row's own known `tag_names` list (server-
+  // rendered checkbox values), not free-typed user input, but this is
+  // cheap insurance against a label name containing HTML-significant
+  // characters rendering as markup instead of text.
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
 
   // ------------------------------------------------------------------ //
   // Bulk select + bulk actions, 2026-08-01 -- see

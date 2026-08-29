@@ -960,7 +960,7 @@ def update_task(
     return respond(x_requested_with, "/tasks")
 
 
-_UPDATABLE_FIELDS = {"status", "due_at", "title"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title", "tags"}
 
 
 @router.post("/{uid}/update-field")
@@ -970,7 +970,15 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     just a `field=status` call). Deliberately a JSON body, not a Form --
     this is only ever called from tasks_table.js/tasks_kanban.js via
     fetch(), never from a plain HTML form/no-JS fallback, unlike every
-    other route in this router."""
+    other route in this router.
+
+    `tags` (2026-08-29, STATE.md backlog item 9, "Labels ... become
+    always-clickable checkbox dropdown menus") -- the Table view's Labels
+    cell is now an editable checkbox dropdown (static/tasks_table.js), same
+    "no separate Save step" convention as status/due_at above: every
+    checkbox toggle re-posts the row's *complete* new tag list (a replace,
+    not an add/remove delta -- simpler than diffing, and the client already
+    has the full checked set at hand from the panel's own checkboxes)."""
     payload = await request.json()
     field = payload.get("field")
     value = payload.get("value")
@@ -985,10 +993,23 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     elif field == "status":
         row["status"] = value
         row["progress"] = _progress_for_status(value)
+    elif field == "tags":
+        if not isinstance(value, list):
+            return JSONResponse({"error": "tags value must be a list"}, status_code=400)
+        row["tags"] = sorted({t.strip() for t in value if isinstance(t, str) and t.strip()})
     else:  # title
-        row["title"] = value
+        if not isinstance(value, str) or not value.strip():
+            return JSONResponse({"error": "title cannot be blank"}, status_code=400)
+        row["title"] = value.strip()
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    db.upsert_task(conn, row)
+    # 1.5 (single-project-per-task): the tags path can put a second project
+    # label on a task same as the create/edit forms/bulk "Add label" can --
+    # surfaced the same way, a plain 400 rather than a silent 500/partial
+    # write (db.upsert_task raises before writing anything).
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True})
 
 

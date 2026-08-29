@@ -114,9 +114,12 @@ class TestGlobalTasksPage:
         assert "2.0/3.0h" in body
 
     def test_due_and_scheduled_are_distinct_columns(self, conn):
+        # 2026-08-29 (STATE.md backlog item 9): the Due column header was
+        # renamed "Date" -- still a distinct column/concept from Scheduled,
+        # just a different label.
         _task(conn, "t1", due_at="2026-09-01T00:00:00")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert ">Due<" in body
+        assert ">Date<" in body
         assert ">Scheduled<" in body
 
 
