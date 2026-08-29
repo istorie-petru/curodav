@@ -5998,3 +5998,28 @@ moving the icon itself.
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Immediate follow-up (2026-08-30, same session) -- collapsed rail
+narrowed once more, closer to a 1:1 highlight (direct report: "a bit
+more... maybe 36px" for the highlight's aspect ratio)
+
+Same trim, one more notch: `.tabbar` `56px` -> `52px`, `.tab-btn` `40px`
+-> `36px`, `main`'s margin-left `56px` -> `52px` (same group as the two
+prior entries; expanded's `240px` overrides and the mobile bottom bar
+untouched). `.tab-btn`'s content width (36px) now matches its collapsed
+`min-height` (36px, set two entries back) -- the full-box active
+highlight (`width/height:100%`) reads close to square instead of
+noticeably wide, since its actual rendered box is content + padding
+(~48x46, padding is 8px4/6px4 -- not literally 36x36, but as close as
+this padding allows without also touching padding, which wasn't asked).
+- **Known loose end, not fixed here:** `.tab-separator`'s own fixed
+  `width:40px` is now wider than the collapsed rail's available centered
+  content (52px rail - 16px `.tabbar` padding = 36px), so it's clipped
+  ~2px per side by `.tabbar`'s `overflow-x:hidden`. Pre-existing
+  imprecision (the separator was never re-tuned to track the rail's
+  narrowing across any of these follow-ups), just newly visible enough to
+  note -- small enough it may not be worth its own slice.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v30` -> `cc-shell-v31` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).

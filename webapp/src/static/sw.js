@@ -124,7 +124,11 @@
 // v30 (2026-08-30): static/style.css-only change, same session (collapsed
 // rail narrowed again, 64px -> 56px, trimming more of the remaining
 // right-side dead space) -- bumped per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v30";
+// v31 (2026-08-30): static/style.css-only change, same session (collapsed
+// rail narrowed once more, 56px -> 52px, so the active-highlight box
+// reads closer to 1:1 against its 36px min-height) -- bumped per the
+// same v19 lesson.
+const CACHE_NAME = "cc-shell-v31";
 
 const SHELL_ASSETS = [
   "/offline",

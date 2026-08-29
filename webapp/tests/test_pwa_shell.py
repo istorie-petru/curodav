@@ -387,8 +387,10 @@ class TestLocalWritePath:
         # same lesson.
         # v30 (2026-08-30): bumped again, same session (collapsed rail
         # narrowed again, 64px -> 56px), same lesson.
+        # v31 (2026-08-30): bumped again, same session (collapsed rail
+        # narrowed once more, 56px -> 52px), same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v30"' in script
+        assert 'CACHE_NAME = "cc-shell-v31"' in script
 
 
 class TestOfflineToolbar:
