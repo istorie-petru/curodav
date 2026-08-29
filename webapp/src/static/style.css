@@ -651,6 +651,70 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .tab-separator{width:40px; height:1px; background:var(--separator); margin:var(--space-2) 0;}
 .tab-btn-space span{max-width:100%; overflow:hidden; text-overflow:ellipsis;}
 
+/* 2026-08-29 sidebar redesign slice 13a (plans/STATE.md item 13a) --
+   collapsible rail width, nested Spaces/Projects tree. Collapsed (the
+   default -- no html[data-sidebar-expanded] attribute) renders pixel-
+   identical to the rail before this slice: chevrons and children stay in
+   the DOM (server-rendered, so a no-JS client still gets the full
+   hierarchy) but are display:none until expanded. Every rule that
+   changes appearance is scoped under html[data-sidebar-expanded] or a
+   .sidebar-tree-* class for exactly that reason -- nothing here touches
+   the five fixed destinations or any other page.
+
+   Guarded to desktop only (min-width:721px): the existing <=720px
+   breakpoint further down turns .tabbar into a bottom bar and already
+   hides .tab-separator/.tab-btn-space entirely (Spaces are a desktop-rail
+   convenience, see that block's own comment). Without this guard,
+   html[data-sidebar-expanded] main{margin-left:240px} would still win on
+   mobile despite that -- an attribute-selector rule has higher
+   specificity than the mobile block's plain `main{margin-left:0}`, so
+   it'd override that reset regardless of which rule comes later in the
+   file. */
+.sidebar-expand-toggle{margin-top:var(--space-2);}
+.sidebar-expand-toggle .icon{transition:transform var(--dur-fast) var(--ease-standard);}
+html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg);}
+
+.sidebar-tree-item{width:100%; display:flex; flex-direction:column; align-items:center;}
+.sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:center;}
+.sidebar-tree-toggle{
+  display:none; flex:none; width:20px; height:20px; padding:0; margin-left:-4px;
+  background:none; border:none; cursor:pointer; color:var(--fg-secondary);
+  align-items:center; justify-content:center; border-radius:var(--radius-sm);
+}
+.sidebar-tree-toggle:hover{color:var(--fg-primary);}
+.sidebar-tree-toggle .icon{width:14px; height:14px; transition:transform var(--dur-fast) var(--ease-standard);}
+.sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
+.sidebar-tree-children{display:none; width:100%; flex-direction:column;}
+
+@media (min-width:721px){
+  html[data-sidebar-expanded] .tabbar{width:240px; transition:width var(--dur-normal) var(--ease-standard);}
+  html[data-sidebar-expanded] main{margin-left:240px;}
+
+  html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
+  html[data-sidebar-expanded] .sidebar-tree-row{justify-content:flex-start; gap:4px;}
+  html[data-sidebar-expanded] .tab-btn-space,
+  html[data-sidebar-expanded] .tab-btn-child{
+    flex-direction:row; width:100%; justify-content:flex-start; gap:10px;
+    padding:6px 8px; min-height:36px;
+  }
+  html[data-sidebar-expanded] .tab-btn-space span,
+  html[data-sidebar-expanded] .tab-btn-child span{margin-top:0; max-width:none;}
+  html[data-sidebar-expanded] .tab-btn-space.active::before,
+  html[data-sidebar-expanded] .tab-btn-child.active::before{
+    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-md);
+  }
+  html[data-sidebar-expanded] .sidebar-tree-toggle{display:flex;}
+  /* Indent children under their Space; only the space whose own chevron is
+     open reveals its .sidebar-tree-children (a sibling of .sidebar-tree-row,
+     not of the toggle itself -- :has() on the row is how this app's own
+     recent CSS already reaches a state that lives on a different element,
+     see style.css's .task-title-cell:has([data-editing]) precedent). */
+  html[data-sidebar-expanded] .tab-btn-child{padding-left:34px;}
+  html[data-sidebar-expanded] .sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded="true"]) + .sidebar-tree-children{
+    display:flex;
+  }
+}
+
 /* Main content area: offset by rail width on desktop */
 main{
   flex:1; width:100%;
@@ -2778,6 +2842,11 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      width to give them. Reaching a Space on mobile still works the same
      way it always has -- Settings > Labels, or that label's own page. */
   .tab-separator, .tab-btn-space{display:none;}
+  /* 2026-08-29 sidebar redesign slice 13a: the expand toggle + nested tree
+     wrapper divs are new (base.html), same desktop-only convenience as
+     Spaces themselves above -- hide them outright rather than leaving
+     empty flex containers in the bottom bar's layout. */
+  .sidebar-expand-toggle, .sidebar-tree-item{display:none;}
   .tab-btn{
     width:auto; min-height:auto; flex:1;
     padding:8px 4px 6px;

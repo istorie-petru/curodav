@@ -4939,3 +4939,129 @@ scrollbar... And why does the group label row is not full width."
   `display:flex`-vs-`table-cell` box generation aren't observable from
   this suite's router-response-body checks). Full suite still: **1836
   passed** (unchanged from the pass above).
+
+## Next session queue -- Sidebar redesign (Notion/Ramp-style), item 13, added
+2026-08-29 (direct request)
+
+User supplied an external UI/UX blueprint (`plans/sidebar-redesign.md`, an
+AI-generated Notion/Ramp + Pineart fusion brief, saved verbatim for
+reference) and asked for it to be tracked as roadmap work. The source doc
+bundles a sidebar rework, a global-header rework, and a full visual-design
+overhaul into one narrative -- those are different sizes of change and
+ship separately, so it's broken into sub-slices here per this file's own
+one-slice-per-session discipline. Not all sub-slices are equally sized;
+pick one per session, smallest/cleanest first.
+
+Groundwork already in place before any of this starts: the rail already
+exists as a vertical nav (`.tabbar`, `base.html`), already lists Spaces
+below the five fixed destinations (`deps.py::_sidebar_spaces`, i.e.
+`generate_space=1` labels), a command palette (Ctrl-K) and quick-add modal
+already exist, and the dashboard hero banner (`_page_banner.html`) already
+collapses to a thin strip on non-dashboard pages. None of that is new
+work -- the blueprint mostly asks for extending/polishing it, not
+building it from scratch.
+
+13. **Sidebar redesign**, sub-sliced:
+    a. **Collapsible nested sidebar tree** -- Spaces gain their existing
+       child labels (`label_config.parent_name`, `db.list_child_labels`
+       -- this relationship and the "a Space's children are its
+       Projects" convention already exist, see `label_detail.html`'s
+       Projects section) nested underneath them, toggled by a chevron.
+       **Design decision (2026-08-29):** the current rail is a fixed
+       80px icon dock (`.tab-btn` is icon-over-label, no horizontal room
+       for indented text rows) -- structurally incompatible with a
+       Notion-style wide tree. Asked the user how to reconcile this;
+       chose **collapsible width** (icon-only 80px by default, toggles
+       to ~240px text-row mode, persisted via localStorage same pattern
+       as the theme toggle) over permanently widening the rail or a
+       hover-flyout. Tree/indentation only renders content in expanded
+       mode; collapsed mode is visually unchanged from today.
+    b. **Per-entry icons** -- reuse each label's existing `icon` field
+       (already used for Spaces' own rail entry, `icon(l.icon or
+       'layers')`); confirm child/project labels already carry one
+       (they do -- same `label_config.icon` column) before assuming new
+       schema.
+    c. **Sidebar "+" quick add** -- move/duplicate the quick-add entry
+       point into the rail itself, context-aware (Contacts page defaults
+       to the new-contact modal, everywhere else defaults to the
+       existing task/event quick-add and its tab switcher).
+    d. **Edit mode as a persistent Settings toggle** -- replace the
+       page-level Edit mode button with a Settings > Appearance toggle
+       that persists until turned off, instead of a per-page control.
+    e. **Narrow-header top-nav collapse variant** -- non-dashboard
+       pages' header collapses to a thin gradient strip + page title,
+       dropping the greeting; dashboard keeps the full hero banner +
+       avatar + greeting unchanged (this mostly exists already --
+       confirm scope against `_page_banner.html` before starting, this
+       may already be it).
+    f. **Aesthetic fusion (palette/radius/shadows/typography, "no more
+       cards" flattening)** -- **deliberately TBD, not scheduled.** This
+       is an app-wide visual rewrite (4,879-line `style.css`, ~90
+       templates) and the one piece of the source doc most likely to
+       cascade into unrelated test breakage (much of this suite's 1,836
+       tests are plain HTML-string assertions against rendered markup,
+       and "no more cards" implies restructuring div boundaries, not
+       just swapping CSS values). Left out of the build order until
+       scoped on its own, separately from a-e above.
+
+## Shipped -- Sidebar redesign slice 13a: collapsible nested Spaces/Projects
+tree (2026-08-29, direct request)
+
+- **`deps.py::_sidebar_spaces`** now attaches each space's `children` --
+  `db.list_child_labels(conn, space["name"])`, inside the same connection/
+  try-except the spaces list itself already used, so the enriched rail
+  degrades exactly the same way (empty, not broken) under the same
+  failure conditions as before.
+- **`base.html`**: each Space is now a `.sidebar-tree-item` wrapping its
+  existing `.tab-btn.tab-btn-space` link (byte-identical markup/classes,
+  just wrapped -- `TestSpacePageNavHighlighting`'s exact-string assertions
+  needed no changes) plus, only when it has children, a `.sidebar-tree-
+  toggle` chevron button and a `.sidebar-tree-children` list of
+  `.tab-btn.tab-btn-child` links. A child's href mirrors label_detail.html's
+  existing "Projects" section precedent: `/spaces/{name}` if the child is
+  itself a Space, `/settings/labels/{name}` otherwise (no separate project-
+  page route exists, per 1.4's retired standalone `/projects`). A new
+  `#sidebar-expand-toggle` button (rendered only when there's a Spaces
+  section at all) flips `html[data-sidebar-expanded]`.
+- **Design decision:** the rail is a fixed 80px icon dock (`.tab-btn` is
+  icon-over-label, no room for indented text rows) -- asked the user how
+  to reconcile that with a Notion-style tree; chose **collapsible width**
+  (80px icon-only by default, toggles to 240px text-row mode, state
+  persisted) over permanently widening the rail or a hover flyout. Collapsed
+  mode renders pixel-identical to the pre-slice rail -- chevrons/children
+  are server-rendered into the DOM either way (a no-JS client still gets
+  the full hierarchy) but stay `display:none` until expanded; every visual
+  rule is scoped under `html[data-sidebar-expanded]`.
+- **`style.css`**: the expanded-mode rules are guarded to `@media
+  (min-width:721px)` -- without that guard, the attribute-selector rule's
+  higher specificity would beat the existing `<=720px` block's plain
+  `main{margin-left:0}` reset regardless of source order, since Spaces
+  (and now the tree) are a desktop-rail-only convenience already hidden
+  outright on mobile. Child indentation under an open parent uses `:has()`
+  on the row (`.sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded=
+  "true"]) + .sidebar-tree-children`) -- same technique this file's own
+  recent `.task-title-cell:has([data-editing])` entry already established
+  for "reach a state that lives on a different element."
+- **`static/sidebar_tree.js`** (new file, included next to `app.js`):
+  wires the expand toggle and per-space chevrons to localStorage
+  (`commandCenterWeb.sidebarExpanded`, `commandCenterWeb.sidebarTreeOpen.
+  <space>`), `DOMContentLoaded` + `pagereveal`-bound like this app's other
+  small per-feature scripts. The rail-wide expanded/collapsed state itself
+  is applied by a new block in `base.html`'s existing pre-paint `<head>`
+  script (same reasoning as the theme toggle already there: applying it
+  after `DOMContentLoaded` would paint 80px first and jump to 240px on
+  every load for anyone who'd chosen expanded).
+- 8 new tests (`test_sidebar_tree.py`): no-children space renders no
+  toggle/children markup, a plain child label links to its settings page,
+  a child that's itself a Space links to `/spaces/...` instead, visiting a
+  child's own page marks both that link and its parent's toggle
+  `aria-expanded="true"` by default, an unrelated page elsewhere leaves the
+  toggle closed, and a plain label with no Space relationship is
+  untouched. Full suite: **1844 passed** (1836 + 8 new), no existing test
+  needed changes.
+- Still open from item 13's breakdown: 13b (per-entry icons -- the
+  `label_config.icon` field this slice's child rendering already reads
+  via `icon(child.icon or 'folder', ...)` needs no schema work, just
+  confirming the icon picker itself is reachable for project labels),
+  13c (sidebar quick-add), 13d (edit-mode-as-toggle), 13e (narrow-header
+  variant), 13f (aesthetic fusion, still deliberately unscheduled).

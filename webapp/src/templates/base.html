@@ -26,6 +26,17 @@
         var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
       })();
+      // Sidebar expanded/collapsed state (2026-08-29, sidebar redesign
+      // slice 13a) -- same "apply before first paint" reasoning as the
+      // theme block above: doing this in sidebar_tree.js at the bottom of
+      // <body> would paint the 80px collapsed rail first and then jump to
+      // 240px once the script ran, on every load for anyone who'd chosen
+      // expanded. Collapsed (no attribute) is the default for an install
+      // that's never touched the toggle -- unlike theme there's no OS-level
+      // signal to fall back to, so "unset" just means "collapsed."
+      if (localStorage.getItem("commandCenterWeb.sidebarExpanded") === "1") {
+        document.documentElement.setAttribute("data-sidebar-expanded", "1");
+      }
       // Cross-document View Transitions support check (2026-08-11). The
       // CSS `main`-fade fallback (style.css's page-transitions block) must
       // only run in browsers that *don't* animate cross-document
@@ -155,8 +166,56 @@
         {% set spaces = sidebar_spaces(request) %}
         {% if spaces %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
+        <!-- 2026-08-29 sidebar redesign slice 13a (plans/STATE.md item 13a)
+             -- collapsible width toggle. The rail is a fixed 80px icon dock
+             (.tab-btn is icon-over-label, no room for indented text rows),
+             so a Notion-style nested tree can only render in a wider,
+             expanded mode -- see that STATE.md entry's design-decision note
+             for why collapsible width was chosen over permanently widening
+             the rail or a hover flyout. This button flips
+             html[data-sidebar-expanded] on/off; sidebar_tree.js persists
+             the choice and restores it before first paint (same pattern as
+             base.html's theme script). Only rendered when there's a Spaces
+             section at all, since expanded vs. collapsed only changes
+             anything below this point. -->
+        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('chevron-right', 'sidebar-expand-icon') }}</button>
         {% for l in spaces %}
-        <a href="/spaces/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/spaces/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+        {% set has_children = l.children|length > 0 %}
+        {# A child's own href mirrors label_detail.html's Projects section:
+           a child that's itself a Space goes to its generated page, a plain
+           child label goes to its settings edit page (there's no separate
+           "project page" route -- 1.4's standalone /projects was retired,
+           see plans/STATE.md's 2026-08-15 removal note). namespace() is
+           needed (not a plain {% set %}) because child_active is written
+           from inside a nested {% for %} and read after it -- a bare
+           {% set %} inside that loop wouldn't leak back out to this scope. #}
+        {% set ns = namespace(child_active=false) %}
+        {% if has_children %}
+          {% for child in l.children %}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else ('/settings/labels/' ~ child.name) %}
+            {% if request.url.path == child_href %}{% set ns.child_active = true %}{% endif %}
+          {% endfor %}
+        {% endif %}
+        <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ l.name }}">
+          <div class="sidebar-tree-row">
+            <a href="/spaces/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/spaces/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+            {% if has_children %}
+            {# aria-expanded defaults to true when one of this space's own
+               children is the active page -- so a direct link/reload lands
+               with its parent already open, before sidebar_tree.js's stored
+               per-space preference (if any) overrides it on load. #}
+            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ l.name }} projects">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
+            {% endif %}
+          </div>
+          {% if has_children %}
+          <div class="sidebar-tree-children">
+            {% for child in l.children %}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else ('/settings/labels/' ~ child.name) %}
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'folder', 'icon-sm') }}<span>{{ child.name }}</span></a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>
@@ -275,6 +334,7 @@
 
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
+<script src="{{ static_url('sidebar_tree.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.

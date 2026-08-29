@@ -180,10 +180,23 @@ def _sidebar_spaces(request: Request) -> list[dict]:
     care about the sidebar. Any other failure (a mid-migration database, a
     locked file) degrades the same way: an empty rail section, not a
     broken page load -- the sidebar is a shortcut, not something any page
-    depends on to render at all."""
+    depends on to render at all.
+
+    2026-08-29 (sidebar redesign slice 13a, plans/STATE.md): each space
+    dict now also carries `children` -- `db.list_child_labels(conn,
+    l["name"])`, the same parent_name relationship label_detail.html's own
+    Space page already uses for its "Projects" section (a label pointing
+    `parent_name` at a Space is, by that existing convention, one of its
+    projects). Fetched inside the same connection/try-except as the
+    spaces themselves rather than a second global, so the nested rail
+    tree degrades exactly the same way (empty, not broken) under the same
+    failure conditions."""
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
-            return db.list_space_labels(conn)
+            spaces = db.list_space_labels(conn)
+            for space in spaces:
+                space["children"] = db.list_child_labels(conn, space["name"])
+            return spaces
     except Exception:
         return []
 
