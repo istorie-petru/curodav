@@ -520,17 +520,16 @@ def _label_scope(conn, name: str) -> dict:
 
 
 @router.get("/{name}")
-def label_detail(name: str, request: Request, edit: bool = False, conn=Depends(get_db)):
+def label_detail(name: str, request: Request, conn=Depends(get_db)):
     label = db.effective_label_config(conn, name)
     is_space = label.get("generate_space")
 
     if is_space:
         from fastapi.responses import RedirectResponse
-        url = f"/spaces/{name}" + ("?edit=1" if edit else "")
-        return RedirectResponse(url=url, status_code=301)
+        return RedirectResponse(url=f"/spaces/{name}", status_code=301)
 
     dashboard_router._ensure_default_label_widgets(conn, name)
-    ctx = dashboard_router.widget_page_context(conn, project_uid=name, edit=edit)
+    ctx = dashboard_router.widget_page_context(conn, project_uid=name)
     scope = _label_scope(conn, name)
     ctx.update(scope)
     ctx.update(

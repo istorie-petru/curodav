@@ -47,7 +47,6 @@
         <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
         <div class="spacer"></div>
         <form method="post" action="/dashboard/widgets/{{ wc.widget.uid }}/delete" class="form-inline" data-confirm-sheet="Dissolve this stack? (its widgets stay, just ungrouped)">
-            <input type="hidden" name="edit" value="1">
             <button type="submit" class="icon-btn" title="Dissolve stack (keeps the widgets inside)">{{ icon('x', 'icon-sm') }}</button>
         </form>
     </div>

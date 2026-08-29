@@ -36,14 +36,13 @@
     <h1 class="page-banner-title-plain">{{ greeting }}</h1>
     {% endif %}
     <!-- Move/reorder/delete controls on each widget below are hidden
-         unless this is on -- plain ?edit=1 query param (not JS/
-         localStorage) so it works with no JS, same pattern as every
-         other stateful toggle already server-rendered in this app
-         (sort direction, filter selects). Doesn't persist across visits
-         by design -- same "you turn it on, do your rearranging, turn it
-         back off" session-scoped flow as most dashboard edit modes. -->
+         unless this is on. 2026-08-29 (sidebar redesign item 13d): edit
+         mode is now a persistent, app-wide Settings > Appearance toggle
+         (routers/dashboard.py's EDIT_MODE_KEY) instead of a per-page
+         `?edit=1` query param with its own "Edit mode"/"Done" buttons
+         here -- there's no page-level control left to turn it on/off,
+         only Settings. -->
     {% if edit_mode %}
-    <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
     <!-- New widget (Phase 3 rework, 2026-08-03) -- opens the widget
          customization modal (dashboard_customize.html) to add a new widget.
          Only visible in edit mode -- adding/removing widgets is an explicit
@@ -53,14 +52,13 @@
          since both are page-content edits. Opens the banner editor modal
          (routers/banners.py); "Add" vs "Change" labels by whether a banner
          is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
          a label page's (label_detail.html): wipes Home's widgets back to
          the seeded default via /dashboard/reset. data-confirm-sheet is the
          same confirmation mechanism every other destructive action in this
          app already uses, not a second confirmation UI. -->
     <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset Home's widgets to the default layout? This deletes every widget you've added or customized here.">
-        <input type="hidden" name="edit" value="1">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
     {% else %}
@@ -71,9 +69,8 @@
          usability rework, 2026-08-07). Hidden in edit mode: editing the
          widget grid and quick-capturing a new task/event are different
          modes of using this page, and edit mode's own actions (New
-         widget/the Done button) take that slot instead. -->
+         widget etc.) take that slot instead. -->
     <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
-    <a href="?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
     {% endif %}
 </div>
 </div>

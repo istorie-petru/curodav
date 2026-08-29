@@ -102,6 +102,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import auth, config, data_health, db, offline_sync
 from ..deps import (
+    EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
     RECURRENCE_TERMINOLOGY_KEY,
@@ -372,6 +373,11 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # forced on the General page for the exact same reason (see
             # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
+            # Sidebar redesign item 13d (2026-08-29): edit mode is now a
+            # persistent, app-wide toggle here instead of each dashboard/
+            # label page's own "Edit mode"/"Done" buttons -- see
+            # EDIT_MODE_KEY's own comment in routers/dashboard.py.
+            "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
         },
     )
 
@@ -386,6 +392,19 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
     which reads as "" (off), so labels stay plain text until explicitly
     turned on."""
     db.set_app_meta(conn, SHOW_LABEL_ICONS_KEY, "1" if show == "1" else "")
+    return RedirectResponse(url="/settings/appearance", status_code=303)
+
+
+@router.post("/settings/edit-mode")
+def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
+    """"Edit mode" (Settings > Appearance, 2026-08-29, sidebar redesign
+    item 13d) -- shows the widget grid's editing controls (move/resize/
+    reorder/delete a widget, New widget, Reset layout, Add/Change banner)
+    on every dashboard/label/Space page until turned off here, replacing
+    the old per-page "Edit mode"/"Done" buttons and their `?edit=1` query
+    param (routers/dashboard.py's widget_page_context reads this flag
+    directly now). Same on/off pattern as set_label_icons above."""
+    db.set_app_meta(conn, EDIT_MODE_KEY, "1" if enabled == "1" else "")
     return RedirectResponse(url="/settings/appearance", status_code=303)
 
 

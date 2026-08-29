@@ -12,7 +12,6 @@
      rationale. -->
 <form method="post" id="widget-edit-form" action="/dashboard/widgets/{{ widget.uid }}/edit" class="widget-select-form widget-filters-autosave" data-preview-url="/dashboard/widgets/preview" data-modal-keep-open>
     {% set ms_form_id = 'widget-edit-form' %}
-    <input type="hidden" name="edit" value="1">
     <!-- Title first, no "(optional)" suffix, Source/View/Range marked
          .field-required instead -- same 2026-08-07 follow-up treatment
          as _widget_builder_fields.html; see that file's own comments for

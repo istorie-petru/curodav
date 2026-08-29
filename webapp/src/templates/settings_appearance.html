@@ -56,5 +56,25 @@
          Relations card" toggle is removed along with the feature it
          gated -- the Relations card no longer exists at all, so there's
          nothing left to show/hide. -->
+    <!-- Edit mode (2026-08-29, sidebar redesign item 13d) -- replaces the
+         old per-page "Edit mode"/"Done" buttons on dashboard.html/
+         label_detail.html: a single persistent toggle here turns the
+         widget grid's editing controls (move/resize/reorder/delete,
+         New widget, Reset layout, Add/Change banner) on across every
+         dashboard/label/Space page, staying on until turned off here --
+         not a per-page, per-visit thing any more. Same autosubmit
+         segmented on/off pattern as "Show icons next to labels" above.
+         Read back via routers/dashboard.py's EDIT_MODE_KEY, straight off
+         widget_page_context (routers/settings.py's set_edit_mode). -->
+    <form class="settings-field-row" method="post" action="/settings/edit-mode">
+        <span class="settings-field-label">Edit mode
+            <span class="settings-field-hint">Show widget editing controls (move, resize, reorder, delete, add) on every dashboard page until turned off</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Edit mode">
+            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_edit_mode %}checked{% endif %} onchange="this.form.requestSubmit()"> On</label>
+            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_edit_mode %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
+        </div>
+    </form>
 </div>
 {% endblock %}

@@ -31,14 +31,14 @@ def _label_scope(conn, name: str) -> dict:
 
 
 @router.get("/{name}")
-def space_detail(name: str, request: Request, edit: bool = False, conn=Depends(get_db)):
+def space_detail(name: str, request: Request, conn=Depends(get_db)):
     label = db.effective_label_config(conn, name)
     if not label.get("generate_space"):
         from fastapi import HTTPException
         raise HTTPException(404, "Not a space")
 
     dashboard_router._ensure_default_label_widgets(conn, name)
-    ctx = dashboard_router.widget_page_context(conn, project_uid=name, edit=edit)
+    ctx = dashboard_router.widget_page_context(conn, project_uid=name)
     scope = _label_scope(conn, name)
     ctx.update(scope)
     ctx.update(

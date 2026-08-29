@@ -33,7 +33,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db
+from src import db, deps
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
@@ -300,7 +300,7 @@ class TestResetToDefault:
         )
         assert len(db.list_dashboard_widgets(conn)) == original_count + 1
 
-        resp = dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        resp = dashboard_router.reset_dashboard(label_name="", conn=conn)
         assert resp.headers["location"] == "/"
         widgets = db.list_dashboard_widgets(conn)
         assert [w["title"] for w in widgets] == [None] * len(widgets)  # back to plain defaults, no "Custom"
@@ -309,7 +309,7 @@ class TestResetToDefault:
     def test_home_reset_route_directly(self, conn):
         # Full route call, no pre-existing widgets -- confirms it seeds a
         # fresh default layout even from empty (not just after a delete).
-        resp = dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        resp = dashboard_router.reset_dashboard(label_name="", conn=conn)
         assert resp.status_code == 303
         assert _canonical_default_type_order(db.list_dashboard_widgets(conn)) == _DEFAULT_LAYOUT_TYPE_ORDER
 
@@ -322,7 +322,7 @@ class TestResetToDefault:
             db.delete_dashboard_widget(conn, w["uid"])
         assert db.list_dashboard_widgets(conn, label_name="CS101") == []
 
-        resp = dashboard_router.reset_dashboard(label_name="CS101", edit=False, conn=conn)
+        resp = dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
         assert resp.headers["location"] == "/settings/labels/CS101"
         types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
         assert types == original_types
@@ -336,7 +336,7 @@ class TestResetToDefault:
         home_count = len(db.list_dashboard_widgets(conn))
         math_count = len(db.list_dashboard_widgets(conn, label_name="MATH201"))
 
-        dashboard_router.reset_dashboard(label_name="CS101", edit=False, conn=conn)
+        dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
 
         assert len(db.list_dashboard_widgets(conn)) == home_count
         assert len(db.list_dashboard_widgets(conn, label_name="MATH201")) == math_count
@@ -345,7 +345,7 @@ class TestResetToDefault:
         # "revert to default should show the default right away" -- after
         # reset, _ensure_default_widgets must not re-seed a *second* time
         # on the next normal page load (still a one-time-per-scope seed).
-        dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        dashboard_router.reset_dashboard(label_name="", conn=conn)
         count_after_reset = len(db.list_dashboard_widgets(conn))
         dashboard_router._ensure_default_widgets(conn)  # simulates the next page load
         assert len(db.list_dashboard_widgets(conn)) == count_after_reset
@@ -450,9 +450,12 @@ class TestQuickAddButtons:
         # 2026-08-07 (screenshot-driven toolbar rework): quick capture
         # lives in the main toolbar's non-edit-mode branch and must not
         # render at all while editing the widget grid. Edit mode instead
-        # swaps in Done/New widget/Add-Change banner inside the same
-        # .page-banner-actions bar.
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+        # swaps in New widget/Add-Change banner inside the same
+        # .page-banner-actions bar. 2026-08-29 (sidebar redesign item
+        # 13d): edit mode is a persistent Settings > Appearance toggle
+        # now (EDIT_MODE_KEY), not a per-page `?edit=1` query param.
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
         assert 'href="/quick/add"' not in body
         assert 'New widget' in body
@@ -461,7 +464,8 @@ class TestQuickAddButtons:
 
     def test_label_page_hides_quick_add_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert 'href="/quick/add"' not in body
         assert 'New widget' in body
@@ -479,10 +483,18 @@ class TestQuickAddButtons:
         body = resp.body.decode()
         assert 'dashboard-quick-add' not in body
 
-    def test_dashboard_html_quick_add_comes_before_edit_mode_button(self, conn):
+    def test_dashboard_html_no_longer_has_a_page_level_edit_mode_button(self, conn):
+        # 2026-08-29 (sidebar redesign item 13d): the old page-level "Edit
+        # mode" link (`<a href="?edit=1" ...>Edit mode</a>`) is gone --
+        # edit mode is only reachable from Settings > Appearance now.
+        # Checked by exact markup, not a bare substring: several code
+        # comments on this page legitimately mention "Edit mode"/`?edit=1`
+        # in prose while explaining the 2026-08-29 change itself.
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert body.index('href="/quick/add"') < body.index('Edit mode')
+        assert 'href="/quick/add"' in body
+        assert 'href="?edit=1"' not in body
+        assert '>Edit mode</a>' not in body
 
 
 class TestQuickAddModal:
@@ -531,7 +543,8 @@ class TestQuickAddModal:
 class TestLabelPageResetButton:
     def test_reset_button_present_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert '/dashboard/reset' in body
         assert 'data-confirm-sheet' in body
@@ -541,16 +554,17 @@ class TestLabelPageResetButton:
         # actions before mode/utility actions", same principle already
         # applied to the non-edit-mode row's New task/New event ordering.
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert body.index('New widget') < body.index('Reset layout')
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), edit=False, conn=conn)
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
-        # present outside edit mode -- only the Edit mode/Customize links.
+        # present outside edit mode -- only the New/Customize links.
         assert '<form method="post" action="/dashboard/reset"' not in body
 
 
@@ -559,7 +573,8 @@ class TestHomeResetButton:
     # control a label page already has (TestLabelPageResetButton above) --
     # /dashboard/reset with no label_name resets Home's scope.
     def test_reset_button_present_in_edit_mode(self, conn):
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
         assert 'action="/dashboard/reset"' in body
         assert 'data-confirm-sheet' in body
@@ -567,7 +582,8 @@ class TestHomeResetButton:
     def test_new_widget_comes_before_reset_layout_in_edit_mode_toolbar(self, conn):
         # Same "creation actions before mode/utility actions" ordering the
         # label page's toolbar already follows.
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
         assert body.index('New widget') < body.index('Reset layout')
 

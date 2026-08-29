@@ -5456,3 +5456,80 @@ toggle at 8px collapsed vs. 14px expanded.
   changed again) -- `test_pwa_shell.py`'s literal-string assertion updated.
 - Full suite: **1852 passed** (three file-glob chunks: 819 + 525 + 508 =
   1852, no tests added/removed).
+
+## Shipped -- Sidebar redesign slice 13d: Edit mode as a persistent
+Settings toggle (2026-08-29, direct request)
+
+Replaces the per-page "Edit mode"/"Done" buttons (dashboard.html/
+label_detail.html) and their `?edit=1` query param with a single
+persistent Settings > Appearance toggle -- once turned on it stays on
+across every dashboard/label/Space page and every visit, until turned
+off from Settings, instead of a "turn it on, rearrange, turn it back
+off" per-visit thing.
+
+- **`deps.py`**: new `EDIT_MODE_KEY = "edit_mode_enabled"` app_meta key,
+  same place/pattern as `SHOW_LABEL_ICONS_KEY` etc. (no per-request-
+  memoized Jinja global registered for it, unlike those -- nothing
+  outside the three widget-grid pages needs it; see the "not fixed here"
+  note below).
+- **`routers/dashboard.py::widget_page_context`** no longer takes an
+  `edit` argument -- its `edit_mode` context key is read straight off
+  `db.get_app_meta(conn, EDIT_MODE_KEY)`. `_return_url` no longer takes
+  an `edit` argument either (dropped the `?edit=1` suffix it used to
+  append) -- every redirect just lands on the plain page URL, since
+  edit-mode rendering no longer depends on the URL at all. Every mutating
+  route that used to thread an `edit: bool = Form(False)` through to
+  `_return_url` (reset_dashboard/add_widget/edit_widget/unstack_widget/
+  delete_widget/move_widget) had that parameter removed outright, along
+  with the hidden `<input type="hidden" name="edit" value="1">` fields
+  in the forms that fed it (_widget_workspace.html/_widget_inner.html/
+  _widget_add_form.html/_widget_edit_form.html/_widget_builder_fields
+  .html).
+- **`routers/spaces.py::space_detail`/`routers/labels.py::label_detail`**
+  lost their own `edit: bool = False` query param the same way --
+  label_detail's is_space redirect to `/spaces/{name}` no longer
+  forwards a `?edit=1` either, since there's nothing left to forward.
+- **`routers/settings.py`**: new `POST /settings/edit-mode`
+  (`set_edit_mode`), same on/off `app_meta` pattern as
+  `set_label_icons`; `settings_appearance` gained `current_edit_mode` in
+  its context. **`settings_appearance.html`**: new "Edit mode" row, same
+  autosubmit segmented On/Off control as "Show icons next to labels".
+- **`dashboard.html`/`label_detail.html`**: the "Done"/"Edit mode" links
+  are gone outright -- New widget/Reset layout/Add-Change banner still
+  render `{% if edit_mode %}`, just with no page-level way left to flip
+  that flag (Settings only). The banner-editor link's `page_url` no
+  longer needs a `?edit=1` suffix to "return into edit mode" -- the
+  global setting means it's already there regardless of the URL.
+- **Known, accepted gap, not fixed here:** `base.html`'s sidebar quick-
+  add button (13c) still hides via the plain `edit_mode` *context key*
+  dashboard.html/label_detail.html populate, not the real app-wide
+  setting -- so on every other page (Tasks, Settings, Contacts, ...)
+  where that key is never set, the button won't hide even while Edit
+  mode is on globally. Tried wiring it to a `_cached_app_meta`-backed
+  Jinja global instead (deps.py, same pattern as `show_label_icons`) to
+  close this gap for real, but every test that renders base.html via a
+  bare `Request({...})` (no real ASGI `app`) then silently reads the
+  global as "off" regardless of what's set on the test's own `conn` --
+  same known limitation `_cached_app_meta`'s own docstring already
+  documents for `show_label_icons` -- which broke several page-content
+  assertions that depend on the rail button actually hiding. Reverted;
+  the inconsistency predates this slice (edit mode used to be genuinely
+  page-scoped, so it never applied elsewhere by definition) and closing
+  it is a real but separate follow-up, not part of 13d's literal ask.
+- 4 new tests (`test_display_prefs_settings.py::TestSettingsAppearanceEditMode`:
+  toggle defaults off/renders on when set, the POST route stores/clears
+  `EDIT_MODE_KEY`). Existing edit-mode tests across
+  `test_dashboard_router.py`/`test_dashboard_usability_rework.py`/
+  `test_modal_uniformization.py` updated from passing `edit=True`/
+  `?edit=1` into the route calls to seeding `db.set_app_meta(conn,
+  deps.EDIT_MODE_KEY, "1")` first -- same behavior, new mechanism.
+  `test_dashboard_html_quick_add_comes_before_edit_mode_button` (asserted
+  an "Edit mode" link existed at all) replaced with
+  `test_dashboard_html_no_longer_has_a_page_level_edit_mode_button`,
+  checked against exact removed markup (`href="?edit=1"`, `>Edit
+  mode</a>`) rather than a bare substring, since this page's own comments
+  now legitimately mention "Edit mode"/`?edit=1` in prose. Full suite:
+  **1856 passed** (five file-glob chunks: 436 + 495 + 374 + 329 + 222 =
+  1856; four new, none removed).
+- Still open from item 13's breakdown: 13e (narrow-header variant), 13f
+  (aesthetic fusion, still deliberately unscheduled).

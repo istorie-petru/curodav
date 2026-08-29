@@ -171,14 +171,21 @@
              Task/Event panels today.
 
              Hidden while `edit_mode` is on (dashboard.html/label_detail.html's
-             own widget-grid edit mode -- the same reason those pages' own
-             page-local quick-add already hides then, see dashboard.html's
-             "Hidden in edit mode" comment): editing the widget grid and
-             quick-capturing a new task/event are different modes of using
-             the page, and this button lives on every page regardless of
-             which one a given page happens to be in right now, so it has
-             to check the same flag they do rather than assuming it's
-             always safe to show. -->
+             own widget-grid edit mode, now a persistent Settings >
+             Appearance toggle rather than a per-page one -- see
+             deps.py's EDIT_MODE_KEY -- but still only threaded into the
+             render context by widget_page_context on those two pages'
+             own routes, same as before 2026-08-29): editing the widget
+             grid and quick-capturing a new task/event are different
+             modes of using the page, and this button lives on every
+             page regardless of which one a given page happens to be in
+             right now, so it has to check the same flag they do rather
+             than assuming it's always safe to show. Every other page
+             (Tasks, Settings, Contacts, ...) never sets this context
+             key, so it's a known, accepted gap (same precedent as every
+             other _cached_app_meta-backed preference in this app) that
+             this button won't hide there even while Edit mode is on --
+             not fixed here, out of scope for 13d specifically. -->
         {% if not edit_mode %}
         <a href="{{ '/contacts/new' if active_tab == 'contacts' else '/quick/add' }}" data-modal class="tab-btn sidebar-quick-add" title="{% if active_tab == 'contacts' %}New contact{% else %}New task or event{% endif %}">{{ icon('plus') }}<span>New</span></a>
         {% endif %}

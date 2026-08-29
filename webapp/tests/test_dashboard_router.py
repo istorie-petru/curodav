@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from src import db
+from src import db, deps
 from src.routers import dashboard as dashboard_router
 
 
@@ -483,16 +483,18 @@ class TestWidgetWidthAutomatic:
     def test_builder_fields_partial_has_no_width_field(self, conn):
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         body = resp.body.decode()
         assert 'name="width"' not in body
 
     def test_edit_mode_renders_no_width_resize_handle(self, conn):
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         body = resp.body.decode()
         assert "widget-resize-handle" not in body
 
@@ -721,8 +723,9 @@ class TestDashboardRoute:
         # above wouldn't have caught a syntax error in that branch.
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         assert resp.status_code == 200
         assert b"Add widget" in resp.body
 
@@ -734,8 +737,9 @@ class TestDashboardRoute:
         # capping instead.
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         body = resp.body.decode()
         assert "widget-resize-handle-vertical" not in body
         assert "data-height-key" not in body
@@ -768,14 +772,14 @@ class TestSpaceWidgets:
     def test_add_widget_redirects_back_to_the_space_page(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", edit=False, conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
         )
         assert resp.headers["location"] == "/settings/labels/space1"
 
     def test_add_widget_with_no_space_uid_redirects_home(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="", edit=False, conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
         )
         assert resp.headers["location"] == "/"
 
@@ -791,7 +795,7 @@ class TestSpaceWidgets:
         w = self._add(conn, "Original", space_uid="space1")
         resp = dashboard_router.edit_widget(
             w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", edit=False, conn=conn,
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
         )
         updated = db.get_dashboard_widget(conn, w["uid"])
         assert updated["title"] == "Renamed"
@@ -800,7 +804,7 @@ class TestSpaceWidgets:
 
     def test_delete_widget_redirects_to_its_own_space(self, conn):
         w = self._add(conn, "A", space_uid="space1")
-        resp = dashboard_router.delete_widget(w["uid"], edit=False, conn=conn)
+        resp = dashboard_router.delete_widget(w["uid"], conn=conn)
         assert resp.headers["location"] == "/settings/labels/space1"
         assert db.get_dashboard_widget(conn, w["uid"]) is None
 
@@ -811,7 +815,7 @@ class TestSpaceWidgets:
         db.upsert_label_config(conn, {"name": "space1", "generate_space": 1, "created_at": "2026-01-01"})
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", edit=False, conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
         )
         assert resp.headers["location"] == "/spaces/space1"
 

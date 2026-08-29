@@ -575,6 +575,35 @@ class TestSettingsAppearanceLabelIcons:
         assert db.get_app_meta(conn, deps.SHOW_LABEL_ICONS_KEY) == ""
 
 
+class TestSettingsAppearanceEditMode:
+    """2026-08-29 (sidebar redesign item 13d) -- "Edit mode" replaces the
+    old per-page `?edit=1` toggle with a single persistent Settings >
+    Appearance setting, same on/off app_meta pattern as the "Show icons
+    next to labels" toggle above (TestSettingsAppearanceLabelIcons)."""
+
+    def test_renders_toggle_defaulting_to_off(self, conn):
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/edit-mode"' in body
+        assert resp.context["current_edit_mode"] is False
+
+    def test_renders_toggle_on_when_set(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        assert resp.context["current_edit_mode"] is True
+
+    def test_set_edit_mode_route_stores_1(self, conn):
+        resp = settings_router.set_edit_mode(enabled="1", conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/appearance"
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == "1"
+
+    def test_set_edit_mode_route_clears_on_off(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        settings_router.set_edit_mode(enabled="", conn=conn)
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == ""
+
+
 class TestFmtDtFilter:
     """2026-08-26 Data & Maintenance redesign -- backup timestamps on that
     page render through the new fmt_dt filter ("Aug 25, 2026, 8:57 PM")

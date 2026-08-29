@@ -178,7 +178,8 @@ def banner_image(scope: str = "", conn=Depends(get_db)):
 def remove_banner(scope: str = Form(""), page_url: str = Form(""), conn=Depends(get_db)):
     """Clear this page's banner entirely (the editor's "Remove banner"
     button). Scope + page_url ride along as hidden fields so the redirect
-    lands back on the exact page the editor was opened from, including its
-    ?edit=1 state."""
+    lands back on the exact page the editor was opened from. (2026-08-29:
+    page_url no longer carries a `?edit=1` -- edit mode is a persistent
+    Settings > Appearance toggle now, not part of the page's own URL.)"""
     db.clear_page_banner(conn, scope)
     return RedirectResponse(url=_safe_page_url(page_url, scope), status_code=303)

@@ -26,13 +26,11 @@
     {% if edit_mode %}
     {% if in_stack %}
     <form method="post" action="/dashboard/widgets/{{ widget.uid }}/unstack" class="form-inline" data-confirm-sheet="Unstack this widget?">
-        <input type="hidden" name="edit" value="1">
         <button type="submit" class="icon-btn" title="Move out of this stack">{{ icon('corner-down-right', 'icon-sm') }}</button>
     </form>
     {% endif %}
     <a href="/dashboard/widgets/{{ widget.uid }}/edit?space_uid={{ space_uid or '' }}&amp;project_uid={{ project_uid or '' }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit</a>
     <form method="post" action="/dashboard/widgets/{{ widget.uid }}/delete" class="form-inline" data-confirm-sheet="Remove this widget?">
-        <input type="hidden" name="edit" value="1">
         <button type="submit" class="icon-btn" title="Remove widget">{{ icon('x', 'icon-sm') }}</button>
     </form>
     {% endif %}

@@ -60,6 +60,17 @@ RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
 # integer (habit_heatmap.streaks) never changes, only how it's phrased --
 # see habit_heatmap.streak_text for the actual wording.
 HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
+# 2026-08-29 (sidebar redesign item 13d) -- "Edit mode" (Settings >
+# Appearance): whether the widget grid's edit controls (move/resize/
+# reorder/delete a widget, New widget, Reset layout, Add/Change banner)
+# show on every dashboard/label/Space page. Used to be a per-page
+# `?edit=1` query param with its own "Edit mode"/"Done" toggle buttons on
+# dashboard.html/label_detail.html; replaced by this single persistent,
+# app-wide setting (routers/settings.py's set_edit_mode), read straight
+# off app_meta by routers/dashboard.py::widget_page_context -- no
+# per-request-memoized global registered here, unlike the other keys
+# above: nothing outside the three widget-grid pages needs it.
+EDIT_MODE_KEY = "edit_mode_enabled"
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 

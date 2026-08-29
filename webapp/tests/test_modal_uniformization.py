@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db
+from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import habits as habits_router
@@ -147,8 +147,11 @@ class TestQuickAddFooter:
 class TestNewWidgetTriggerWideSizing:
     def test_new_widget_trigger_carries_wide_attribute(self, conn):
         # "New widget" only renders in edit mode (dashboard.html's own
-        # {% if edit_mode %} gate).
-        body = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn).body.decode()
+        # {% if edit_mode %} gate) -- a persistent Settings > Appearance
+        # toggle now (2026-08-29, sidebar redesign item 13d), not a
+        # per-page `?edit=1` query param.
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        body = dashboard_router.dashboard_view(_request(), conn=conn).body.decode()
         # the New widget link must open the same wide dialog
         # _widget_edit_modal.html's own trigger already opens.
         assert "/dashboard/customize" in body
