@@ -102,7 +102,12 @@
 // v24 (2026-08-29): style.css changed again (Dashboard Header (Expanded)
 // avatar overlap -- .page-banner-avatar-wrap/.avatar-hero) -- bumped per
 // the same v15 lesson.
-const CACHE_NAME = "cc-shell-v24";
+// v25 (2026-08-29): static/avatar_cropper.js generalized to also handle
+// banner uploads (crop/move/aspect-ratio for all image uploads, direct
+// request) and static/app.js's now-dead CCBannerUpload removed -- both are
+// SHELL_ASSETS scripts, bumped per the v19 lesson (script changes need
+// this too, not just style.css).
+const CACHE_NAME = "cc-shell-v25";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -5768,3 +5768,54 @@ the sidebar rail's own global one (13c) and should go.
   always-present link either way. Full suite: **1899 passed** (four
   file-glob chunks: 611 + 434 + 519 + 335 = 1899; nine new, none
   removed). No style.css changes this round -- no `sw.js` bump needed.
+
+## Follow-up (2026-08-29, same day) -- interactive crop editor for banner
+uploads (direct request: "add the ability to crop, move, aspect ratio
+modal window after all image uploads")
+
+Contact photos and the profile picture (Settings > General) already had
+this -- `static/avatar_cropper.js` (2026-08-08), a full-screen hand-rolled
+canvas editor (drag-to-move crop box, resize handles, Free/Square/4:3/16:9
+ratio presets, 90-degree rotation) wired to `.avatar-upload-input`. The
+one upload surface still missing it: banners (Home/label banners and the
+global Page header banner, all three sharing `banner_editor.html`/
+`.banner-upload-input`), which only had `app.js`'s `CCBannerUpload.onFile`
+-- a silent background resize with a fixed center-crop, no user control
+over framing.
+
+- **`avatar_cropper.js` generalized**, not forked into a second file --
+  the editor itself (drag/resize/rotate/canvas output) is identical
+  between an avatar and a banner, only the *defaults* differ. Added a
+  `kind` (`avatar`|`banner`) derived from which selector matched the
+  input (`.avatar-upload-input` vs. the newly-wired `.banner-upload-
+  input`), each with its own `KIND_CONFIG`: output size cap (640px vs.
+  2400px long edge, matching the old CCBannerUpload's own cap), default
+  starting ratio preset (`free` vs. a new `banner` preset, `5:1`, matching
+  `banner_editor.html`'s own "preferred aspect ratio" guidance text), and
+  whether Apply always submits the form (avatar stays gated behind
+  `data-autosubmit`, banner always submits -- matching
+  `CCBannerUpload.onFile`'s own prior unconditional-submit behavior). The
+  ratio-preset toolbar itself stays one shared list (Free/Square/4:3/
+  16:9/Banner) regardless of kind -- branching the toolbar's markup per
+  kind wasn't worth it when an extra preset is harmless either direction.
+- **`banner_editor.html`**: dropped the old `onchange="window.
+  CCBannerUpload ? CCBannerUpload.onFile(this) : this.form.requestSubmit()"`
+  inline handler -- wiring is now pure JS via `avatar_cropper.js`'s own
+  `init()`, exactly like `.avatar-upload-input` always worked (including
+  inside a `data-modal` dialog: `modal.js`'s `wireContent()` already
+  called `CCAvatarCropper.init(body)` on every injected fragment, so no
+  `modal.js` changes were needed at all).
+- **`app.js`'s `CCBannerUpload` removed entirely** -- dead code once
+  nothing calls it; the comment explains the removal and points at its
+  replacement rather than leaving a silent gap.
+- 2 new tests (`test_banners.py::TestBannerUploadUsesCropEditor`): the
+  upload input carries the cropper's class, the old inline onchange is
+  gone (checked against the exact removed attribute string, not a bare
+  `CCBannerUpload` substring -- this template's own comment now
+  legitimately mentions it in prose while explaining the change). Full
+  suite: **1901 passed** (four file-glob chunks: 613 + 434 + 519 + 335 =
+  1901; two new, none removed).
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v24` -> `cc-shell-v25` -- both
+  changed files (`avatar_cropper.js`, `app.js`) are `SHELL_ASSETS`
+  scripts, per the standing v19 lesson that a script change needs this
+  bump the same as a `style.css` change does.

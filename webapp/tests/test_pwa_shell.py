@@ -373,8 +373,11 @@ class TestLocalWritePath:
         # toolbar-2row into the header), same lesson.
         # v24 (2026-08-29): bumped again for the Dashboard Header
         # (Expanded) avatar overlap rules, same lesson.
+        # v25 (2026-08-29): bumped for two SHELL_ASSETS *scripts* changing
+        # (avatar_cropper.js generalized to banners, app.js's CCBannerUpload
+        # removed) -- the v19 lesson, not just style.css.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v24"' in script
+        assert 'CACHE_NAME = "cc-shell-v25"' in script
 
 
 class TestOfflineToolbar:

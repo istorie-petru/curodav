@@ -15,12 +15,22 @@
      banner, the upload form, and the remove form.
 
      The upload form's hidden file input sits inside its label, so a
-     click on the button opens the picker, and the file's onchange
-     auto-submits the form on selection -- routed through static/app.js's
-     CCBannerUpload.onFile (2026-08-10), which resizes the picked image
-     in the browser first so the stored/served banner is a ~2400px
-     WebP/JPEG rather than the camera's multi-MB original; browsers
-     without that script still submit the original unchanged.
+     click on the button opens the picker. 2026-08-29 (direct request,
+     "add the ability to crop, move, aspect ratio... after all image
+     uploads"): file selection now opens the same interactive crop editor
+     contact photos/the profile picture already had (static/
+     avatar_cropper.js, generalized that day to also wire
+     `.banner-upload-input` -- see that file's own header comment), not
+     the old silent-resize-then-submit CCBannerUpload.onFile it replaces.
+     The editor's own Apply always submits this form on completion
+     (banner_editor.html's own upload always did, even before the editor
+     existed) -- the wiring is pure JS (avatar_cropper.js's init() finds
+     `.banner-upload-input` elements itself, same as it always has for
+     `.avatar-upload-input`), no inline onchange needed here any more. A
+     device with JS disabled (or the script failing to load) still
+     submits the original file unchanged -- the crop editor is the only
+     way to pre-process client-side, same honest degradation contact
+     photos already had.
 
      Variables: scope (page key, "" = Home), page_url (where to return),
      banner (current banner dict or None). -->
@@ -63,17 +73,18 @@
 
             <!-- Upload -- minimalist: a single ghost button.
                  The file input is hidden inside its label (click the
-                 button = open the picker), and onchange auto-submits on
-                 selection, so the form POSTs the moment a file is chosen
-                 with no extra "Upload" step. -->
+                 button = open the picker); picking a file opens the crop
+                 editor (avatar_cropper.js, see this template's own header
+                 comment), whose own Apply button is what actually submits
+                 this form -- no extra "Upload" step beyond that. -->
             <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form" data-cc-change="banner" data-cc-action="upload">
                 <input type="hidden" name="scope" value="{{ scope }}">
                 <input type="hidden" name="page_url" value="{{ page_url }}">
                 <label class="btn ghost banner-upload-btn">
                     {{ icon('upload', 'icon-sm') }} Upload image
-                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload" onchange="window.CCBannerUpload ? CCBannerUpload.onFile(this) : this.form.requestSubmit()">
+                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">
                 </label>
-                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; auto-compressed to max 2400px &middot; 8MB cap</span>
+                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; crop to the 5:1 banner shape after picking &middot; 8MB cap</span>
             </form>
         </div>
     </div>

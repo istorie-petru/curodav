@@ -1,68 +1,130 @@
-// Visual crop/resize/rotate tool for contact photo uploads
-// (templates/contact_form.html's `.avatar-upload-input`), 2026-08-08 direct
-// feedback ("uploading an image should allow for cropping and resizing it
-// in a visual manner"). Intercepts the file input's own change event,
-// shows a full-screen editor (free-form draggable/resizable crop box,
-// Free/Square/4:3/16:9 aspect presets, 90-degree rotation), and on Apply
-// replaces the input's file with the cropped/rotated/resized JPEG via
-// DataTransfer -- the form still posts a plain `name="photo"` file exactly
-// as before, no backend change needed. If that form carries
-// `data-autosubmit` (settings_general.html's profile-picture row, which
-// has no Save button of its own), Apply submits the form immediately.
+// Visual crop/move/aspect-ratio tool for every image upload in this app
+// (contact photos, the profile-picture row, and -- 2026-08-29, direct
+// request "add the ability to crop, move, aspect ratio modal window after
+// all image uploads" -- Home/label and the global Page header banner too).
+// Originally contact-photo-only (2026-08-08 direct feedback: "uploading an
+// image should allow for cropping and resizing it in a visual manner");
+// generalized rather than forked into a second near-identical file, since
+// the whole editor (drag-to-move, resize handles, ratio presets, rotation,
+// canvas-based crop-and-scale-down output) is identical between an avatar
+// and a banner -- only the *defaults* (starting ratio preset, output size
+// cap, output filename) differ, and those are driven off which CSS class
+// wired the input, not a second copy of this file.
+//
+// Intercepts the file input's own change event, shows a full-screen editor
+// (free-form draggable/resizable crop box, Free/Square/4:3/16:9/Banner
+// (5:1) aspect presets, 90-degree rotation), and on Apply replaces the
+// input's file with the cropped/rotated/resized JPEG via DataTransfer --
+// the form still posts a plain file input exactly as before (`name="photo"`
+// for avatars, `name="banner_file"` for banners), no backend change needed
+// either way (routers/settings.py's/contacts.py's/banners.py's upload
+// routes never resized/cropped server-side to begin with -- they just
+// store whatever bytes arrive). If that form carries `data-autosubmit`
+// (settings_general.html's profile-picture row, which has no Save button
+// of its own) OR the input is a banner upload (banner_editor.html's own
+// upload form isn't marked data-autosubmit, but always auto-submitted on
+// file selection even before this editor existed -- see the removed
+// CCBannerUpload.onFile in app.js this replaces), Apply submits the form
+// immediately.
 //
 // A self-contained overlay (own backdrop, own DOM, built at runtime), not
 // a reuse of #modal-overlay/#modal-dialog (base.html) -- contact_form.html
-// is itself already rendered *inside* that modal system when opened from
-// Contacts, so this needs to layer on top of an already-open modal rather
-// than replace it.
+// (and banner_editor.html) are themselves already rendered *inside* that
+// modal system when opened from Contacts/a page's edit-mode toolbar, so
+// this needs to layer on top of an already-open modal rather than replace
+// it.
 //
 // Exposed as window.CCAvatarCropper.init(root), same re-init-after-inject
 // convention as CCScheduleTable/CCScheduleGrid -- see modal.js's
-// wireContent() comment. Cancelling or closing the editor clears the file
-// input back to empty (no half-applied state).
+// wireContent() comment (which already calls this for every injected
+// modal, so banner_editor.html needed no wiring changes of its own beyond
+// swapping which CSS class its file input carries). Cancelling or closing
+// the editor clears the file input back to empty (no half-applied state).
 (function () {
-  const RATIOS = { free: null, square: 1, "4:3": 4 / 3, "16:9": 16 / 9 };
-  const MAX_OUTPUT = 640; // px, either dimension -- plenty for an avatar circle
+  const RATIOS = { free: null, square: 1, "4:3": 4 / 3, "16:9": 16 / 9, banner: 5 };
+  const RATIO_LABELS = { free: "Free", square: "Square", "4:3": "4:3", "16:9": "16:9", banner: "Banner (5:1)" };
   const STAGE_MAX = 480; // px, the editor's on-screen canvas box
 
+  // Per-`kind` defaults -- everything that varies between "cropping an
+  // avatar" and "cropping a banner." `kind` is derived from which
+  // selector matched the input (see KINDS below), never guessed from the
+  // image itself, so behavior is deterministic per upload surface.
+  const KIND_CONFIG = {
+    avatar: {
+      maxOutput: 640, // px, either dimension -- plenty for an avatar circle
+      defaultRatio: "free", // unchanged from this file's original, avatar-only behavior
+      outputName: "avatar.jpg",
+      alwaysSubmit: false, // gated behind the form's own data-autosubmit, as before
+    },
+    banner: {
+      maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap
+      defaultRatio: "banner", // 5:1, matching banner_editor.html's own guidance text
+      outputName: "banner.jpg",
+      alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
+    },
+  };
+  // Selector -> kind, checked in order -- .avatar-upload-input keeps its
+  // original meaning (contact photo, profile picture); .banner-upload-input
+  // is the 2026-08-29 addition (banner_editor.html, both Home/label
+  // banners and the global Page header banner -- all three share this one
+  // template/route/CSS class already, see routers/banners.py's own
+  // "one scope value, same route" design).
+  const KINDS = [
+    { selector: ".avatar-upload-input", kind: "avatar" },
+    { selector: ".banner-upload-input", kind: "banner" },
+  ];
+
   function init(root) {
-    (root || document).querySelectorAll(".avatar-upload-input").forEach((input) => {
-      if (input.dataset.ccCropperWired) return;
-      input.dataset.ccCropperWired = "1";
-      input.addEventListener("change", () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        openEditor(file, input);
+    KINDS.forEach(({ selector, kind }) => {
+      (root || document).querySelectorAll(selector).forEach((input) => {
+        if (input.dataset.ccCropperWired) return;
+        input.dataset.ccCropperWired = "1";
+        input.addEventListener("change", () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          openEditor(file, input, kind);
+        });
       });
     });
   }
 
-  function openEditor(file, input) {
+  function openEditor(file, input, kind) {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
-      img.onload = () => buildEditor(img, file.type, input);
+      img.onload = () => buildEditor(img, file.type, input, kind);
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
   }
 
-  function buildEditor(img, mimeType, input) {
+  function buildEditor(img, mimeType, input, kind) {
+    const config = KIND_CONFIG[kind] || KIND_CONFIG.avatar;
     const state = {
       rotation: 0, // 0 | 90 | 180 | 270
-      ratio: null, // null = free, else a number (w/h)
+      ratio: RATIOS[config.defaultRatio], // null = free, else a number (w/h)
       // Box is in *display* (on-screen canvas) pixel space, top-left origin.
       box: { x: 0, y: 0, w: 0, h: 0 },
       naturalCanvas: document.createElement("canvas"), // full-res, current rotation
       scale: 1, // display px per natural px
     };
 
+    // Ratio presets rendered in a fixed order regardless of kind (Free/
+    // Square/4:3/16:9/Banner) -- same reasoning as offering Square/4:3/
+    // 16:9 on an avatar crop already did before banners existed: extra
+    // presets are harmless, and a single shared list is simpler than
+    // branching the toolbar's own markup per kind. Only which one starts
+    // `.active` (config.defaultRatio) actually varies.
+    const ratioButtons = Object.keys(RATIOS)
+      .map((key) => `<button type="button" class="seg-btn${key === config.defaultRatio ? " active" : ""}" data-ratio="${key}">${RATIO_LABELS[key]}</button>`)
+      .join("");
+
     const overlay = document.createElement("div");
     overlay.className = "cropper-overlay";
     overlay.innerHTML = `
       <div class="cropper-panel">
         <div class="cropper-header">
-          <h2>Adjust photo</h2>
+          <h2>Adjust image</h2>
           <button type="button" class="icon-btn" data-cropper-close aria-label="Close">${useIcon("x")}</button>
         </div>
         <div class="cropper-stage">
@@ -79,12 +141,7 @@
           </div>
         </div>
         <div class="cropper-toolbar">
-          <div class="segmented cropper-ratio-group">
-            <button type="button" class="seg-btn active" data-ratio="free">Free</button>
-            <button type="button" class="seg-btn" data-ratio="square">Square</button>
-            <button type="button" class="seg-btn" data-ratio="4:3">4:3</button>
-            <button type="button" class="seg-btn" data-ratio="16:9">16:9</button>
-          </div>
+          <div class="segmented cropper-ratio-group">${ratioButtons}</div>
           <div class="cropper-rotate-group">
             <button type="button" class="icon-btn" data-rotate="-90" title="Rotate left" aria-label="Rotate left">&#8634;</button>
             <button type="button" class="icon-btn" data-rotate="90" title="Rotate right" aria-label="Rotate right">&#8635;</button>
@@ -295,7 +352,7 @@
       const sw = b.w / state.scale;
       const sh = b.h / state.scale;
 
-      const outScale = Math.min(1, MAX_OUTPUT / sw, MAX_OUTPUT / sh);
+      const outScale = Math.min(1, config.maxOutput / sw, config.maxOutput / sh);
       const out = document.createElement("canvas");
       out.width = Math.max(1, Math.round(sw * outScale));
       out.height = Math.max(1, Math.round(sh * outScale));
@@ -305,14 +362,14 @@
       out.toBlob(
         (blob) => {
           if (!blob) return;
-          const croppedFile = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+          const croppedFile = new File([blob], config.outputName, { type: "image/jpeg" });
           const dt = new DataTransfer();
           dt.items.add(croppedFile);
           input.files = dt.files;
           updatePreview(input, out.toDataURL("image/jpeg", 0.9));
           closeEditor(false);
           const form = input.form;
-          if (form && form.hasAttribute("data-autosubmit")) form.requestSubmit();
+          if (form && (config.alwaysSubmit || form.hasAttribute("data-autosubmit"))) form.requestSubmit();
         },
         "image/jpeg",
         0.88

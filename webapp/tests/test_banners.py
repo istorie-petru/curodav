@@ -131,6 +131,27 @@ class TestBannerPartialRendering:
         assert "cdn.example.com" not in body
 
 
+class TestBannerUploadUsesCropEditor:
+    """2026-08-29 (direct request: "add the ability to crop, move, aspect
+    ratio modal window after all image uploads") -- the banner upload
+    input now wires into the same interactive crop editor
+    (static/avatar_cropper.js) contact photos/the profile picture already
+    had, instead of the old silent-resize CCBannerUpload.onFile (removed
+    from app.js entirely)."""
+
+    def test_upload_input_carries_the_cropper_class(self, conn):
+        body = banners_router.banner_editor(_request("/banners/editor"), conn=conn).body.decode()
+        assert 'class="banner-upload-input"' in body
+
+    def test_upload_input_no_longer_has_the_old_inline_onchange(self, conn):
+        # Checked against the exact removed attribute, not a bare
+        # substring -- this template's own comment legitimately mentions
+        # CCBannerUpload.onFile in prose while explaining the removal.
+        body = banners_router.banner_editor(_request("/banners/editor"), conn=conn).body.decode()
+        assert 'onchange="window.CCBannerUpload' not in body
+        assert '<input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">' in body
+
+
 class TestPageBannerAvatar:
     """2026-08-29 (sidebar redesign follow-up, direct request,
     plans/sidebar-redesign.md § "The Standard Header") -- "Dashboard

@@ -1021,54 +1021,16 @@ document.addEventListener("submit", (event) => {
 // There is no more .widget-resize-handle-vertical element and no more
 // /dashboard/widgets/{uid}/resize-height endpoint to POST to.
 
-// Banner upload auto-compression (2026-08-10, banner_editor.html) -- the
-// upload tab's file input calls this on change instead of submitting the
-// original file. A phone camera hands back a 4-8MB image that then gets
-// stored base64 in app_meta and served on every page load; this resizes it
-// in the browser before the form ever posts, so what reaches the server
-// (and later the network on every visit) is a ~2400px WebP/JPEG at a
-// fraction of the bytes. No-JS / unsupported browsers skip the resize and
-// submit the original -- the 8MB server cap is still the real guard, this
-// is a best-effort size reduction. Animated GIFs are deliberately left
-// alone (re-encoding them would flatten the animation into a static frame).
-window.CCBannerUpload = {
-  onFile(input) {
-    const form = input.form;
-    const file = input.files && input.files[0];
-    const bail = () => form && form.requestSubmit();
-    if (!file || !file.type.startsWith("image/") || file.type === "image/gif" || !window.DataTransfer) return bail();
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onerror = () => { URL.revokeObjectURL(url); bail(); };
-    img.onload = () => {
-      // Max long edge, matching the editor's own "about 2400x480px" guidance
-      // (2x for retina). Never upscales; small images stay untouched.
-      const MAX = 2400;
-      const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-      const ctx = canvas.getContext("2d");
-      // White underneath transparent pixels (PNG) so the JPEG fallback
-      // doesn't turn transparency black; WebP keeps alpha when supported.
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      const webp = canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
-      const outType = webp ? "image/webp" : "image/jpeg";
-      canvas.toBlob((blob) => {
-        if (blob && blob.size < file.size) {
-          const dt = new DataTransfer();
-          dt.items.add(new File([blob], webp ? "banner.webp" : "banner.jpg", { type: outType }));
-          input.files = dt.files;
-        }
-        form && form.requestSubmit();
-      }, outType, 0.82);
-    };
-    img.src = url;
-  },
-};
+// Banner upload auto-compression (2026-08-10, banner_editor.html) -- REMOVED
+// 2026-08-29 (direct request: "add the ability to crop, move, aspect ratio
+// modal window after all image uploads"). Replaced by an interactive crop
+// editor instead of this silent background resize -- static/
+// avatar_cropper.js, generalized that day to also wire
+// `.banner-upload-input` (see that file's own header comment and
+// banner_editor.html's), which already did the equivalent client-side
+// downscale-before-upload step for contact photos/the profile picture, now
+// covering banners too with a UI to actually choose the crop region
+// instead of a fixed center-crop.
 
 // Action menu (three-dot dropdown for status cards) -- lightweight,
 // accessible dropdown that closes on outside click/Escape/scroll and
