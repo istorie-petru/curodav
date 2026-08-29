@@ -686,23 +686,44 @@ html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg
 .sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
 .sidebar-tree-children{display:none; width:100%; flex-direction:column;}
 
+.sidebar-section-label{
+  display:none; width:100%; padding:10px 12px 4px;
+  font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--fg-tertiary); text-align:left;
+}
+
 @media (min-width:721px){
-  html[data-sidebar-expanded] .tabbar{width:240px; transition:width var(--dur-normal) var(--ease-standard);}
+  html[data-sidebar-expanded] .tabbar{width:240px; transition:width var(--dur-normal) var(--ease-standard); align-items:stretch; padding:var(--space-4) var(--space-2);}
   html[data-sidebar-expanded] main{margin-left:240px;}
+
+  /* 2026-08-29 follow-up (direct request against a reference screenshot):
+     originally this row layout only applied to .tab-btn-space/.tab-btn-child
+     (Spaces/Projects) -- the five fixed destinations (Home/Calendar/.../
+     Settings) kept their collapsed-mode icon-over-label stacking even in
+     expanded mode. Widened to plain .tab-btn so every rail entry becomes a
+     left-aligned icon+text row in expanded mode, matching the screenshot;
+     .sidebar-tree-space/.tab-btn-child no longer need their own separate
+     copy of this rule (both carry the base .tab-btn class already), so
+     that duplication is gone too. Excludes .sidebar-expand-toggle and
+     .fab-* if either ever gains .tab-btn -- neither does today, so no
+     extra guard needed. */
+  html[data-sidebar-expanded] .tab-btn{
+    flex-direction:row; width:100%; justify-content:flex-start; gap:10px;
+    padding:6px 10px; min-height:36px;
+  }
+  html[data-sidebar-expanded] .tab-btn span{margin-top:0; max-width:none; overflow:visible; text-overflow:clip; white-space:normal;}
+  html[data-sidebar-expanded] .tab-btn.active::before{
+    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-md);
+  }
+  /* The toggle itself has no text label (icon only) -- keep it centered
+     in the wider rail instead of picking up the generic left-align above.
+     Two classes on the selector (matches its own markup, `class="tab-btn
+     sidebar-expand-toggle"`) beats the single-class generic rule's
+     specificity regardless of source order. */
+  html[data-sidebar-expanded] .tab-btn.sidebar-expand-toggle{justify-content:center;}
 
   html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
   html[data-sidebar-expanded] .sidebar-tree-row{justify-content:flex-start; gap:4px;}
-  html[data-sidebar-expanded] .tab-btn-space,
-  html[data-sidebar-expanded] .tab-btn-child{
-    flex-direction:row; width:100%; justify-content:flex-start; gap:10px;
-    padding:6px 8px; min-height:36px;
-  }
-  html[data-sidebar-expanded] .tab-btn-space span,
-  html[data-sidebar-expanded] .tab-btn-child span{margin-top:0; max-width:none;}
-  html[data-sidebar-expanded] .tab-btn-space.active::before,
-  html[data-sidebar-expanded] .tab-btn-child.active::before{
-    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-md);
-  }
   html[data-sidebar-expanded] .sidebar-tree-toggle{display:flex;}
   /* Indent children under their Space; only the space whose own chevron is
      open reveals its .sidebar-tree-children (a sibling of .sidebar-tree-row,
@@ -713,6 +734,13 @@ html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg
   html[data-sidebar-expanded] .sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded="true"]) + .sidebar-tree-children{
     display:flex;
   }
+
+  /* Group header text replaces the plain divider line in expanded mode
+     (plans/sidebar-redesign.md: "tiny, uppercase, gray text" section
+     headers) -- collapsed mode keeps just the thin .tab-separator rule,
+     unchanged. */
+  html[data-sidebar-expanded] .tab-separator{display:none;}
+  html[data-sidebar-expanded] .sidebar-section-label{display:block;}
 }
 
 /* Main content area: offset by rail width on desktop */

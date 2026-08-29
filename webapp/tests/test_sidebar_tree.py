@@ -79,6 +79,23 @@ class TestNestedTreeRendering:
         assert "sidebar-tree-toggle" not in body
         assert "sidebar-tree-children" not in body
 
+    def test_spaces_section_gets_a_group_header_label(self, conn):
+        # 2026-08-29 follow-up: plans/sidebar-redesign.md asked for "tiny,
+        # uppercase, gray text" group headers -- expanded mode shows this
+        # instead of the plain divider line (style.css hides/shows each via
+        # html[data-sidebar-expanded], not tested here since this suite
+        # only sees rendered markup, not applied CSS).
+        _make_space(conn, "Uni")
+        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        body = resp.body.decode()
+        assert '<div class="sidebar-section-label" aria-hidden="true">Spaces</div>' in body
+
+    def test_no_group_header_label_with_no_spaces(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
+        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        body = resp.body.decode()
+        assert "sidebar-section-label" not in body
+
     def test_space_with_plain_child_label_nests_it_with_settings_link(self, conn):
         _make_space(conn, "Uni")
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})

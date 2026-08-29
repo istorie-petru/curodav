@@ -178,6 +178,15 @@
         {% set spaces = sidebar_spaces(request) %}
         {% if spaces %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
+        <!-- 2026-08-29 follow-up: a visible group-header label ("tiny,
+             uppercase, gray text" per plans/sidebar-redesign.md's own
+             wording) for expanded mode, replacing the plain divider line
+             there -- collapsed mode (no room for text) keeps just the
+             divider above, unchanged. aria-hidden since `.tab-separator`
+             already carries the equivalent aria-label for assistive tech;
+             this is a purely visual label for sighted expanded-mode
+             users. -->
+        <div class="sidebar-section-label" aria-hidden="true">Spaces</div>
         {% for l in spaces %}
         {% set has_children = l.children|length > 0 %}
         {# A child's own href mirrors label_detail.html's Projects section:

@@ -5092,3 +5092,46 @@ direct choice; the fixed tabs' collapsed/expanded appearance is unchanged.
   to match the new always-rendered behavior; no other test needed
   changes. Full suite still: **1844 passed** (unchanged count, one test
   renamed/flipped in place).
+
+## Follow-up (2026-08-29, same day) -- expanded mode: labels on the right
+for every rail entry, not just Spaces/Projects; visible "Spaces" group
+header
+
+Direct request after reviewing the actual rendered result against both
+the reference screenshot and `plans/sidebar-redesign.md`: two gaps.
+
+- **Fixed tabs (Home/Calendar/Planner/Tasks/Contacts) still stacked
+  icon-over-label in expanded mode** -- slice 13a's own design-decision
+  note had deliberately scoped the row layout to `.tab-btn-space`/
+  `.tab-btn-child` only, leaving the five fixed destinations unchanged in
+  both modes (the earlier question to the user offered widening their
+  expanded-mode layout too and was declined at the time). Seeing the
+  actual rail next to the screenshot changed that call -- now widened.
+  `style.css`: the `html[data-sidebar-expanded]` row-layout rule (flex-row,
+  left-aligned icon+text, full-width active highlight) moved from
+  `.tab-btn-space, .tab-btn-child` onto plain `.tab-btn` -- since both of
+  those already carry the base `.tab-btn` class, this is a
+  generalization, not an addition, and removes what had become duplicate
+  rules. Excluded `.sidebar-expand-toggle` explicitly (it has no text
+  label, stays centered via a same-specificity two-class override) --
+  everything else, including the fixed tabs, now gets the row treatment.
+  `.tabbar` itself gained `align-items:stretch` + reduced horizontal
+  padding in expanded mode so rows can span the new width edge-to-edge.
+- **No visible "Spaces" group-header text** -- the source doc explicitly
+  asked for "tiny, uppercase, gray text" section headers; what existed
+  was only a plain 1px divider line (`.tab-separator`) with an
+  `aria-label` (screen-reader only, invisible on screen). `base.html`
+  gained a `.sidebar-section-label` div ("Spaces") alongside the existing
+  divider; `style.css` hides the divider and shows the label in expanded
+  mode, and does the reverse in collapsed mode (divider only, no room for
+  text) -- collapsed mode's own appearance is otherwise untouched.
+- Still not done from the source doc's sidebar section: indentation
+  itself (already shipped, 13a) and collapsible groups (already shipped,
+  13a's per-space chevron) are in place; a "Private" section and
+  per-entry custom icons beyond what Spaces/Projects already read
+  (13b) are not.
+- 2 new tests (`test_sidebar_tree.py`): the group-header label renders
+  when there's a Spaces section, is absent when there isn't. CSS-only
+  behavior (the row-layout change itself) isn't asserted by this suite's
+  plain HTML-string checks, same as every other CSS-only change in this
+  file's history. Full suite: **1846 passed** (1844 + 2 new).
