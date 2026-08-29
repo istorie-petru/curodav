@@ -1542,9 +1542,24 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .task-row-completed{opacity:.55;}
 .task-row-completed td:nth-child(2) a{text-decoration:line-through;}
 .task-section-divider td{
-  padding:8px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
-  color:var(--fg-tertiary); border-bottom:1px solid var(--separator); white-space:nowrap;
+  padding:6px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--fg-tertiary); border-bottom:1px solid var(--separator);
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
 }
+.task-section-divider-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+/* Direct follow-up (2026-08-29): the group's own "+ Add task"/"+ Add
+   habit" used to be a separate trailing `.task-add-row` <tr> (see that
+   class's own comment just below) -- now it's a plain `.icon-btn` sitting
+   at the end of this same divider row instead (_tasks_body.html), so a
+   group with zero rows yet doesn't need its own dedicated add-affordance
+   row. Un-uppercases/un-letter-spaces itself back to normal since it's a
+   real icon, not more of the label's own typography, and keeps a stable
+   size regardless of how long the label text next to it runs (`flex:none`
+   here plus `overflow:hidden` on the label above is what lets a long
+   project name truncate instead of pushing this button off the edge of
+   the row). */
+.task-section-divider .icon-btn{flex:none; color:var(--fg-tertiary);}
+.task-section-divider .icon-btn:hover{color:var(--fg-primary);}
 /* 2026-08-28 "major rework" session (item 3): the "+" add-row at the end
    of every Tasks-table group (except Completed) -- _tasks_body.html.
    "Colored like a normal row" per the session brief: same row height/
@@ -1554,7 +1569,10 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    now reuse this exact class for their own "+ Add X" rows (previously a
    bare icon-only button, .add-row/.add-row-btn, now removed) -- kept as
    its own class rather than folded into .task-section-divider specifically
-   so this reuse wouldn't drag Tasks-specific styling along with it. */
+   so this reuse wouldn't drag Tasks-specific styling along with it.
+   Tasks/Habits themselves no longer use this class (2026-08-29 same-day
+   follow-up, moved to an icon button on the divider row instead, see
+   above) -- Labels/Holidays/Time blocks still do. */
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
 .task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-caption);}
 .task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}

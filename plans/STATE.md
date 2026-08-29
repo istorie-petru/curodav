@@ -4867,3 +4867,40 @@ actually shows in the table row before you click it) still wasn't.
   which stylesheet rule won, which isn't something this suite's plain
   HTML-string assertions can observe). Full suite still: **1831 passed**
   (unchanged from the pass above).
+
+## Follow-up (2026-08-29, same day) -- wrapped label pills need vertical
+spacing; grouped tables' "+ Add" moved onto the group header row
+
+Two more small direct requests, same session:
+
+- **Vertical spacing for wrapped label pills** -- "for `<span class=
+  \"cell-tag tag-blue\">` ... add some top/bottom margins because when
+  there is not enough space horizontally, the label pills overflow, and
+  if there are more than two, they sit one below the other." `.cell-tags
+  .cell-tag{margin-top:3px; margin-bottom:3px;}` -- scoped to `.cell-tags`
+  (the Labels column's own pill row) specifically rather than a bare
+  `.cell-tag` rule, so this doesn't add unwanted vertical space to every
+  other single-line `.cell-tag` use in the app (calendar dots, contact/
+  project tag rows).
+- **Grouped tables: "+ Add" moved from its own trailing row onto the
+  group's own header/divider row** -- direct request: "instead of a
+  separate row for add task, have a ... simple + button at the end of the
+  [group name] row." Applies to the two tables that actually group rows
+  (Tasks' Project/Unassigned groups, and the Habits table's own one
+  group) -- Completed never had an add-row to begin with, unaffected;
+  Labels/Holidays/Time blocks aren't grouped, so their own `.task-add-row`
+  reuse (backlog item 7) is untouched. `.task-section-divider td` is now a
+  flex row (label on the left via a new `.task-section-divider-label`
+  span, `overflow:hidden`/`text-overflow:ellipsis` so a long project name
+  truncates instead of pushing the button off; a plain `.icon-btn` "+" on
+  the right, `flex:none` so it keeps a stable size) instead of one plain
+  block of uppercase text -- the trailing `.task-add-row` `<tr>` this
+  replaced is gone from `_tasks_body.html` entirely (both the
+  Project/Unassigned loop and the Habits table's own single group).
+  `.task-add-row`'s own CSS is untouched (still live for the three
+  settings tables that reuse it).
+- 5 new tests (`test_tasks_table_habits_split.py`): no `task-add-row`
+  left in either table, each of Unassigned/Project/Habits' divider rows
+  carrying the right `href`/`title` on their own add link, and Completed's
+  divider row carrying no add button at all. Full suite: **1836 passed**
+  (1831 + 5 new).

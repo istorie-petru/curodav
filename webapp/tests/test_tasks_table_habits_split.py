@@ -95,6 +95,52 @@ class TestHabitsOwnTable:
         assert "t1" in task_table
 
 
+class TestGroupAddButtonOnDividerRow:
+    """2026-08-29 direct follow-up: "instead of a separate row for add
+    task, have a + button ... on the group label name row" -- the
+    `.task-add-row` trailing <tr> is gone for Tasks/Unassigned/Habits
+    groups; the add-task/add-habit link now sits on the same
+    `.task-section-divider` row as the group name."""
+
+    def test_no_task_add_row_left_in_either_table(self, conn):
+        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_task(conn, "t1")
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        assert "task-add-row" not in body
+
+    def test_unassigned_group_add_link_is_on_the_divider_row(self, conn):
+        _seed_task(conn, "t1")
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Unassigned" in line]
+        assert divider, "expected an Unassigned divider row"
+        assert 'href="/tasks/new"' in divider[0]
+        assert 'title="Add task"' in divider[0]
+
+    def test_project_group_add_link_is_on_the_divider_row(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
+        _seed_task(conn, "t1", tags=["Garden"])
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Garden" in line]
+        assert divider, "expected a Garden project divider row"
+        assert "/tasks/new?project=Garden" in divider[0]
+
+    def test_habits_group_add_link_is_on_the_divider_row(self, conn):
+        _seed_task(conn, "t1")
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Habits" in line]
+        assert divider, "expected a Habits divider row"
+        assert 'href="/tasks/new?habit=1"' in divider[0]
+        assert 'title="Add habit"' in divider[0]
+
+    def test_completed_group_divider_has_no_add_link(self, conn):
+        _seed_task(conn, "t1")
+        db.upsert_task(conn, dict(db.get_task(conn, "t1"), status="done"))
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Completed" in line]
+        assert divider, "expected a Completed divider row"
+        assert "icon-btn" not in divider[0]
+
+
 class TestHabitRowTitleInlineEdit:
     def test_habit_entity_title_is_double_click_editable(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})

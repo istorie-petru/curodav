@@ -47,24 +47,30 @@
     </thead>
     {% for grp in _other_groups %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</td></tr>
+        {# 2026-08-29 direct follow-up ("instead of a separate row for add
+           task, have a + button on the group label name row") -- every
+           group but Completed (adding an already-completed task makes no
+           sense) used to get its own trailing `.task-add-row` <tr>; now
+           it's a plain icon button sitting at the end of the group's own
+           divider row instead, via a small flex layout on that row's one
+           (colspan'd) cell -- see `.task-section-divider td` in style.css.
+           Reuses the exact same task-creation modal/endpoint as before, no
+           behavior change, just moved: a Project group still pre-checks
+           that project's label (task_form.html's existing ?project=
+           prefill), Unassigned still opens the plain form. #}
+        <tr class="task-section-divider">
+            <td colspan="9">
+                <span class="task-section-divider-label">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</span>
+                {% if grp.kind == 'project' %}
+                <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
+                {% elif grp.kind == 'unassigned' %}
+                <a href="/tasks/new" data-modal class="icon-btn" title="Add task">{{ icon('plus', 'icon-sm') }}</a>
+                {% endif %}
+            </td>
+        </tr>
     </tbody>
     <tbody>
         {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-        {# "+" add-row -- every group but Completed (adding an already-
-           completed task makes no sense) gets one, styled as a normal
-           table row (same "colored like a normal row" affordance named
-           in the session brief's item 3/item 8 cross-reference). Each
-           reuses the existing task-creation modal/endpoint rather than a
-           new inline form: a Project group pre-checks that project's
-           label (task_form.html's existing ?project= prefill, same as
-           the old project detail page's "+ New task" used), Unassigned
-           opens the plain form. #}
-        {% if grp.kind == 'project' %}
-        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal>{{ icon('plus', 'icon-sm') }} Add task to {{ grp.name }}</a></td></tr>
-        {% elif grp.kind == 'unassigned' %}
-        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new" data-modal>{{ icon('plus', 'icon-sm') }} Add task</a></td></tr>
-        {% endif %}
     </tbody>
     {% endfor %}
 </table>
@@ -85,11 +91,15 @@
         </tr>
     </thead>
     <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</td></tr>
+        <tr class="task-section-divider">
+            <td colspan="9">
+                <span class="task-section-divider-label">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</span>
+                <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
+            </td>
+        </tr>
     </tbody>
     <tbody>
         {% for item in _habits_group.habit_items %}{{ habit_row(item) }}{% endfor %}
-        <tr class="task-add-row"><td colspan="9"><a href="/tasks/new?habit=1" data-modal>{{ icon('plus', 'icon-sm') }} Add habit</a></td></tr>
     </tbody>
 </table>
 </div>
