@@ -4430,13 +4430,16 @@ body.command-palette-open{overflow:hidden;}
    Apply button entirely; Clear button loses its text label, becomes
    icon-only") -- sits in the calendar header next to the Next-month arrow
    instead of alone in an otherwise-empty footer (see datetime_picker.js's
-   renderCalendar). margin-left (not just relying on the header's own
-   space-between, which the title's flex:1 already absorbs) is what gives
-   it "visible separation, not crowded against" the arrow beside it; the
-   left border repeats that separation as a visible divider, the same
-   "boolean row set apart from the picks above it" idea `.multiselect-
-   option-divider` uses elsewhere in this file. */
-.dtp-clear-nav{width:auto; min-width:24px; height:24px; margin-left:var(--space-2); padding:0 0 0 var(--space-2); border-left:1px solid var(--border);}
+   renderCalendar). Same exact box as `.dtp-month-nav` (24x24, no padding)
+   so its round `:hover` background stays a perfect circle like every
+   other icon-btn in this header -- an earlier pass added a left border +
+   padding-left here for "visible separation," but padding eating into a
+   fixed-width/height box turns the hover circle into an off-center blob,
+   and a divider line reads as busier than this small a control needs.
+   margin-left alone (space-between/the title's own flex:1 don't reach
+   this far right) is enough separation from the Next-month arrow without
+   either problem. */
+.dtp-clear-nav{width:24px; height:24px; margin-left:var(--space-2);}
 .dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
 .dtp-day{
   display:flex; align-items:center; justify-content:center;
