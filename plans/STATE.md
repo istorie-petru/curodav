@@ -5065,3 +5065,30 @@ tree (2026-08-29, direct request)
   confirming the icon picker itself is reachable for project labels),
   13c (sidebar quick-add), 13d (edit-mode-as-toggle), 13e (narrow-header
   variant), 13f (aesthetic fusion, still deliberately unscheduled).
+
+## Follow-up (2026-08-29, same day) -- expand toggle relocated to a fixed
+spot at the top of the rail
+
+Direct request against a reference screenshot (Ramp's own sidebar): that
+app's collapse/expand control sits as a fixed icon at the very top of the
+sidebar, always present, not inline above a conditional section. Asked
+the user how far to take the visual match (just relocate the toggle, or
+also restyle the five fixed tabs' expanded-mode layout into full icon+text
+rows like the screenshot) -- **scoped to just relocating the toggle**, per
+direct choice; the fixed tabs' collapsed/expanded appearance is unchanged.
+
+- `base.html`: `#sidebar-expand-toggle` moved from inline above the Spaces
+  list (`{% if spaces %}`-gated, so absent for any account with zero
+  Spaces) to the very first child of `<nav class="tabbar">`, before the
+  Home link -- now unconditional, rendered on every page regardless of
+  whether the account has any Spaces at all. Same id/button/behavior,
+  only its position in the DOM changed -- `sidebar_tree.js` needed no
+  changes (it already looks the button up by id).
+- `style.css`: `.sidebar-expand-toggle` now separates itself from Home
+  below it with a bottom border + margin (was a top margin, when it sat
+  after the Spaces separator instead).
+- 1 test updated (`test_expand_toggle_absent_with_no_spaces` ->
+  `test_expand_toggle_present_even_with_no_spaces`, `test_sidebar_tree.py`)
+  to match the new always-rendered behavior; no other test needed
+  changes. Full suite still: **1844 passed** (unchanged count, one test
+  renamed/flipped in place).

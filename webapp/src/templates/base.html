@@ -95,6 +95,18 @@
          removal entry. -->
     {% if not hide_tabbar %}
     <nav class="tabbar" role="navigation" aria-label="Main">
+        <!-- 2026-08-29 sidebar redesign, direct follow-up to slice 13a: the
+             expand/collapse toggle moved here, to a fixed spot at the very
+             top of the rail, always rendered (not conditional on having a
+             Spaces section) -- matches the reference screenshot's own
+             always-present top-of-sidebar toggle rather than living inline
+             above the Spaces list where it only existed for accounts that
+             had at least one Space. Same button/behavior as before
+             (flips html[data-sidebar-expanded], sidebar_tree.js persists
+             it) -- only its position in the DOM changed, see plans/
+             STATE.md's slice 13a entry for the collapsible-width design
+             decision itself. -->
+        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('chevron-right', 'sidebar-expand-icon') }}</button>
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
            were retired as standalone tabs (1.9 side work) -- their own
@@ -166,19 +178,6 @@
         {% set spaces = sidebar_spaces(request) %}
         {% if spaces %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
-        <!-- 2026-08-29 sidebar redesign slice 13a (plans/STATE.md item 13a)
-             -- collapsible width toggle. The rail is a fixed 80px icon dock
-             (.tab-btn is icon-over-label, no room for indented text rows),
-             so a Notion-style nested tree can only render in a wider,
-             expanded mode -- see that STATE.md entry's design-decision note
-             for why collapsible width was chosen over permanently widening
-             the rail or a hover flyout. This button flips
-             html[data-sidebar-expanded] on/off; sidebar_tree.js persists
-             the choice and restores it before first paint (same pattern as
-             base.html's theme script). Only rendered when there's a Spaces
-             section at all, since expanded vs. collapsed only changes
-             anything below this point. -->
-        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('chevron-right', 'sidebar-expand-icon') }}</button>
         {% for l in spaces %}
         {% set has_children = l.children|length > 0 %}
         {# A child's own href mirrors label_detail.html's Projects section:

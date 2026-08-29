@@ -7,9 +7,11 @@ db.list_child_labels) render nested under it in base.html, with a chevron
 toggle only when it actually has children; a child that's itself a Space
 links to its generated page, a plain child label links to its settings
 edit page; visiting a child's own page marks both that child link and its
-parent's toggle active/open by default; the rail-wide expand toggle is
-present whenever there's a Spaces section at all, absent otherwise; and
-none of this leaks into pages/labels that aren't part of any tree.
+parent's toggle active/open by default; the rail-wide expand toggle
+(2026-08-29 follow-up: relocated to a fixed spot at the top of the rail,
+always rendered) is present on every page regardless of whether the
+account has any Spaces at all; and none of this leaks into pages/labels
+that aren't part of any tree.
 
 Uses the same request-with-fake-app helper as
 test_nav_and_deactivation.py::TestSpacePageNavHighlighting, for the same
@@ -126,8 +128,12 @@ class TestExpandToggle:
         body = resp.body.decode()
         assert 'id="sidebar-expand-toggle"' in body
 
-    def test_expand_toggle_absent_with_no_spaces(self, conn):
+    def test_expand_toggle_present_even_with_no_spaces(self, conn):
+        # 2026-08-29 follow-up: the toggle moved to a fixed spot at the top
+        # of the rail (always rendered), no longer living inline above the
+        # Spaces list where it only existed for accounts with >=1 Space --
+        # see base.html's relocation comment.
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
         resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
-        assert 'id="sidebar-expand-toggle"' not in body
+        assert 'id="sidebar-expand-toggle"' in body

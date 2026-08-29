@@ -670,7 +670,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    specificity than the mobile block's plain `main{margin-left:0}`, so
    it'd override that reset regardless of which rule comes later in the
    file. */
-.sidebar-expand-toggle{margin-top:var(--space-2);}
+.sidebar-expand-toggle{margin-bottom:var(--space-2); padding-bottom:10px; border-bottom:1px solid var(--separator);}
 .sidebar-expand-toggle .icon{transition:transform var(--dur-fast) var(--ease-standard);}
 html[data-sidebar-expanded] .sidebar-expand-toggle .icon{transform:rotate(180deg);}
 
