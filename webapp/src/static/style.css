@@ -1449,9 +1449,30 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   width:auto; background:none; border:none; border-radius:var(--radius-sm);
   padding:3px 8px; font-size:var(--text-caption); font-weight:600; font-family:inherit; cursor:pointer;
 }
+/* Direct follow-up ("status pills but they don't display as pills in the
+   inline table"): the `background:none` above -- needed to beat `.widget-
+   list-multiselect .multiselect-trigger`'s own `background:var(--control-
+   bg)` -- was ALSO beating the shared `.pill-<color>` rules' `background-
+   color` (a plain one-class selector, specificity 1, can never win against
+   this 3-class one, regardless of which comes first in the file: whichever
+   rule is more specific always wins the *entire* `background`/
+   `background-color` property outright, not just "whichever one runs
+   last"). Re-declaring each color at this same trigger's own 4-class
+   specificity (this class list + the color class) is what actually lets
+   the color through -- it's more specific than both the stomping rule and
+   this file's own `background:none` reset just above. */
+.task-status-select .multiselect-trigger.pill-select-trigger.pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
+.task-status-select .multiselect-trigger.pill-select-trigger.pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.task-status-select .multiselect-trigger.pill-select-trigger.pill-yellow{background-color:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
+.task-status-select .multiselect-trigger.pill-select-trigger.pill-green{background-color:var(--tag-green-bg); color:var(--tag-green-fg);}
+.task-status-select .multiselect-trigger.pill-select-trigger.pill-blue{background-color:var(--tag-blue-bg); color:var(--tag-blue-fg);}
 .task-status-select .multiselect-trigger.pill-select-trigger:hover,
 .task-status-select .multiselect-trigger.pill-select-trigger:focus-visible{
-  background:none; border-color:transparent; box-shadow:none; filter:brightness(0.96);
+  /* No `background` here at all now (see comment above) -- the color
+     rules own that property; hover/focus only add a subtle darken/outline
+     on top, so the pill stays visibly colored while interacting with it
+     instead of flashing back to transparent. */
+  border-color:transparent; box-shadow:none; filter:brightness(0.96);
 }
 .pill-select-trigger .filter-caret{display:inline-flex; opacity:.7;}
 /* Labels column (2026-08-29, same backlog item) -- was plain read-only

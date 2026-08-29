@@ -4829,3 +4829,41 @@ doesn't work. Also the status options still aren't pills."
   `change` listener's `target.matches(...)` call sites are no longer
   ancestor-scoped for Status/Labels specifically. Full suite: **1831
   passed** (1829 + 2 new, net of the one stale assertion dropped).
+
+## Bug fix (2026-08-29, immediate follow-up) -- Status trigger still
+wasn't showing as a colored pill in the closed/inline state
+
+Direct report right after the fix above: "ok. the status are pills, but
+they don't display as pills in the inline table" -- the *options* inside
+the open panel were now correctly colored, but the trigger itself (what
+actually shows in the table row before you click it) still wasn't.
+
+- **Root cause** -- the previous pass's `.task-status-select .multiselect-
+  trigger.pill-select-trigger{background:none; ...}` rule (3-class
+  selector, specificity 3) was added specifically to beat `.widget-list-
+  multiselect .multiselect-trigger`'s own `background:var(--control-bg)`
+  (2-class, specificity 2) -- and it did. But `background:none` also
+  clobbered the *color* itself: `.pill-<color>{background-color:...}` is
+  a plain one-class rule (specificity 1), which can never win the same
+  `background`/`background-color` property against a 3-class rule
+  regardless of which one is written first or last in the file --
+  specificity alone decides the whole property, not "last one wins
+  cosmetically." So every status pill's trigger rendered with no
+  background at all once the border-fix pass landed, even though the
+  color class was present in the markup the whole time.
+- **Fix** -- added one rule per status color at this trigger's own 4-class
+  specificity (`.task-status-select .multiselect-trigger.pill-select-
+  trigger.pill-<color>{background-color:...; color:...}`, mirroring the
+  5 real `STATUS_COLORS` values: gray/orange/yellow/green/blue) -- high
+  enough to beat both the stomping field rule and this file's own
+  `background:none` reset. Also dropped `background:none` from the
+  trigger's `:hover`/`:focus-visible` rule (same clobbering risk against
+  the color, and pointless anyway -- hovering a colored pill should stay
+  colored, just get the existing subtle `filter:brightness(0.96)` darken).
+- No new test: this is a pure CSS cascade fix with no template/JS change
+  (the `pill-<color>` class was always present in the rendered markup --
+  the earlier `test_status_options_render_as_colored_pills` test already
+  covers that presence and still passes; what was missing was purely
+  which stylesheet rule won, which isn't something this suite's plain
+  HTML-string assertions can observe). Full suite still: **1831 passed**
+  (unchanged from the pass above).
