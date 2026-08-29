@@ -1055,11 +1055,9 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 }
 #empty-state-row:hover { background: none !important; }
 
-.add-row { background: var(--bg-secondary); }
-.add-row:hover { background: var(--bg-tertiary); }
-.add-row-btn { color: var(--fg-tertiary); }
-.add-row-btn:hover { color: var(--fg-primary); background: var(--accent-neutral-subtle); }
-.add-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* .add-row/.add-row-btn (icon-only "+" add row) removed 2026-08-29 --
+   Labels/Holidays/Time blocks all switched to the full-row ".task-add-row"
+   convention (see that rule's own comment), no callers left. */
 
 /* Advanced section in label form modal -- collapsible, de-emphasized */
 .advanced-section {
@@ -1460,10 +1458,11 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    "Colored like a normal row" per the session brief: same row height/
    hover affordance as a real task row (not a muted/disabled look), just
    its one cell spans every column and reads as an action rather than
-   data. Settings tables (Labels/Holidays/Time blocks) are meant to grow
-   the identical row shape later (queue item 8) -- kept as its own class
-   rather than folded into .task-section-divider so that reuse doesn't
-   drag Tasks-specific styling along with it. */
+   data. 2026-08-29 (STATE.md backlog item 7): Labels/Holidays/Time blocks
+   now reuse this exact class for their own "+ Add X" rows (previously a
+   bare icon-only button, .add-row/.add-row-btn, now removed) -- kept as
+   its own class rather than folded into .task-section-divider specifically
+   so this reuse wouldn't drag Tasks-specific styling along with it. */
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
 .task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-caption);}
 .task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}

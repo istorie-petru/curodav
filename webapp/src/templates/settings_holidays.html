@@ -9,8 +9,11 @@
 
 <p class="settings-hint">Named holiday calendars any recurring Calendar event or Schedule block can respect (Schedule's own "which calendar do my classes respect" pick is still on the Schedule page's Settings panel).</p>
 
-<div class="card">
-    <div class="table-scroll" id="holidays-table-wrapper">
+<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
+     matches _tasks_body.html's exact "card table-scroll" single-div
+     convention now, same as the Labels table -- see that template's own
+     comment. -->
+<div class="card table-scroll" id="holidays-table-wrapper">
         <table id="holidays-table">
             <thead>
                 <tr>
@@ -47,21 +50,17 @@
                     {% endfor %}
                 {% else %}
                     <tr id="empty-state-row">
-                        <td colspan="3" class="text-muted" style="font-size: var(--text-footnote);">No holidays configured yet</td>
-                        <td></td>
+                        <td colspan="4" class="text-muted" style="font-size: var(--text-footnote);">No holidays configured yet</td>
                     </tr>
                 {% endif %}
-                <tr class="add-row">
-                    <td colspan="3">
-                        <a href="/settings/holidays/new" class="icon-btn add-row-btn" data-modal title="Add holiday">
-                            {{ icon('plus', 'icon-sm') }}
-                        </a>
-                    </td>
-                    <td></td>
+                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
+                     "+ Add X" convention as _tasks_body.html's
+                     .task-add-row. -->
+                <tr class="task-add-row">
+                    <td colspan="4"><a href="/settings/holidays/new" data-modal>{{ icon('plus', 'icon-sm') }} Add holiday</a></td>
                 </tr>
             </tbody>
         </table>
-    </div>
 </div>
 </div>
 {% endblock %}

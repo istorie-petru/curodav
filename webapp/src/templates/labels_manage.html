@@ -9,8 +9,11 @@
 
 <p class="settings-hint">Organize your data. Create labels and apply them to tasks, events, or contacts.</p>
 
-<div class="card">
-    <div class="table-scroll" id="labels-table-wrapper">
+<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
+     matches _tasks_body.html's exact "card table-scroll" single-div
+     convention now, instead of a card wrapping a separate table-scroll
+     div -- same row markup/spacing this table had been drifting from. -->
+<div class="card table-scroll" id="labels-table-wrapper">
         <table id="labels-table">
             <thead>
                 <tr>
@@ -56,21 +59,19 @@
                     {% endfor %}
                 {% else %}
                     <tr id="empty-state-row">
-                        <td colspan="3" class="text-muted" style="font-size: var(--text-footnote);">No labels yet</td>
-                        <td></td>
+                        <td colspan="4" class="text-muted" style="font-size: var(--text-footnote);">No labels yet</td>
                     </tr>
                 {% endif %}
-                <tr class="add-label-row">
-                    <td colspan="3">
-                        <a href="/settings/labels/new" class="icon-btn add-label-btn" data-modal data-modal-size="wide" title="Add label">
-                            {{ icon('plus', 'icon-sm') }}
-                        </a>
-                    </td>
-                    <td></td>
+                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
+                     "+ Add X" convention as _tasks_body.html's
+                     .task-add-row (colored/hoverable like a normal row,
+                     not a bare icon button) -- was an icon-only button in
+                     its own cell before. -->
+                <tr class="task-add-row">
+                    <td colspan="4"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
                 </tr>
             </tbody>
         </table>
-    </div>
 </div>
 </div>
 {% endblock %}

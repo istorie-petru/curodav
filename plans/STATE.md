@@ -3710,13 +3710,9 @@ docs-only and everything else is independent of it):
    fixes section above) as a real page again — reconcile with the
    2026-08-15 "retire /projects" decision record in `plans/open.md`
    before building.
-3. **Settings tables (Labels, Holidays, Time blocks) restyled as exact
-   replicas of the Tasks table view** — same row markup/spacing/column
-   conventions (see the `tbody td` padding-leak fix above, which was a
-   warning sign that these tables have been drifting from the Tasks
-   table's own styling), including the same per-group "+" add-row the
-   2026-08-28 major rework session added to the Tasks table (see that
-   session's entry above).
+3. ~~**Settings tables (Labels, Holidays, Time blocks) restyled as exact
+   replicas of the Tasks table view**~~ — **shipped 2026-08-29**, see
+   "Shipped — backlog items 7, 8 bundled together" further down this file.
 
 ## Bug fix (2026-08-28 follow-up) — editing a habit force-reloaded the page
 
@@ -4324,13 +4320,11 @@ larger by the user, not a default to repeat.
    2026-08-29**, see the same entry below.
 6. ~~**Label modal window**~~ — **shipped 2026-08-29**, see the same entry
    below.
-7. **Holidays and Time blocks settings tables not on latest CSS** —
-   already queued above ("Settings tables (Labels, Holidays, Time blocks)
-   restyled as exact replicas of the Tasks table view") — this is a
-   direct re-confirmation that item is still open.
-8. **Cleaner modal for creating/editing a published list** — bring it in
-   line with the rest of the app's modal styling (post-modal-
-   uniformization pass, `features/design-system.md` § Modal windows).
+7. ~~**Holidays and Time blocks settings tables not on latest CSS**~~ —
+   **shipped 2026-08-29** (Labels included too), see "Shipped — backlog
+   items 7, 8 bundled together" below.
+8. ~~**Cleaner modal for creating/editing a published list**~~ — **shipped
+   2026-08-29**, see the same entry below.
 9. **Tasks table view, several changes bundled together:**
    - Labels and Status columns become always-clickable checkbox dropdown
      menus (not click-to-open-then-pick).
@@ -4501,3 +4495,64 @@ repeat" precedent as the auth/CSRF/rate-limiting session above.
   dropped the stray `font-size: var(--text-caption)` override, it now
   just inherits like its sibling. Full suite (all four items combined):
   **1793 passed**.
+
+## Shipped — backlog items 7, 8 bundled together (2026-08-29, direct request)
+
+Direct follow-up request, same day, explicitly naming both items ("do 7
+and 8").
+
+- **Item 7, Labels/Holidays/Time blocks settings tables restyled to match
+  the Tasks table view** — two concrete pieces of drift, both traced back
+  to `_tasks_body.html`'s own precedent: (1) each settings table's wrapper
+  was `<div class="card"><div class="table-scroll" id="...">` (two nested
+  divs), where the Tasks table uses one `<div class="card table-scroll">`
+  — collapsed to match, id preserved on the merged div so
+  `labels_manage.js`'s `getElementById("labels-table-wrapper")` lookup is
+  unaffected. (2) each table's "+" add-row was a bare icon-only button in
+  its own cell (`.add-row`/`.add-row-btn`, or `.add-label-row`/
+  `.add-label-btn` for Labels) instead of the full-row "+ Add X" text link
+  `_tasks_body.html`'s `.task-add-row` already established ("colored like
+  a normal row" — same row height/hover as real data, not a
+  muted/disabled look) — the `.task-add-row` CSS class was written with
+  this exact reuse in mind back when it shipped (2026-08-28), see its own
+  comment. All four tables (Labels, Holidays, Sleep Time, Leisure Time)
+  now render `<tr class="task-add-row"><td colspan="4"><a href="..."
+  data-modal>{{ icon('plus') }} Add X</a></td></tr>`, one `<td>` instead
+  of a data cell plus an empty trailing cell. Removed the now-dead
+  `.add-row`/`.add-row-btn` CSS (no callers left) and updated
+  `.task-add-row`'s own comment to record the reuse. Scope note: item 7's
+  text named "Holidays and Time blocks" specifically, but Labels shared
+  the identical drift (confirmed by inspection) and was named in the
+  original fuller queue description this item re-confirmed — fixed
+  together rather than leaving Labels as the odd one out. No tests
+  asserted the old markup (`colspan="3"`, `.add-row`, nested wrapper
+  divs), so nothing needed updating on that front.
+- **Item 8, published-list create modal uniformized** —
+  `published_list_create_modal.html` predated the 2026-08-15 modal
+  uniformization pass (`features/design-system.md` § Modal windows) and
+  was never swept up in it. Three fixes: (1) form fields wrapped in
+  `.card > .field-grid` — were bare `.field`/`.field-wide` divs directly
+  in `.modal-body` with no grid container, so `.field-wide`'s 2-column
+  span rule (which only means anything inside a `.field-grid` parent) was
+  silently inert and fields stacked in one column instead of the standard
+  2-up layout. (2) hand-rolled `.modal-footer` div with inline
+  `style="border-top: none; padding-top: 0; ..."` overrides replaced with
+  `{% include "_modal_footer.html" %}` (`footer_back_url='/published-lists'`,
+  `footer_primary_form`/`_label`/`_icon`, `footer_primary_id='publish-btn'`
+  so `static/published_lists.js`'s existing form-validation JS — which
+  looks up the button by that id to disable it until a name and at least
+  one label are picked — needed no changes). (3) dropped
+  `.modal-stable-height` — that class is for a modal whose content
+  changes shape post-open without a full re-navigation (the event/task/
+  contact view↔edit cross-fade, `quick_add.html`'s tab switch); this
+  modal's empty-state-vs-form branch is decided once at render time and
+  never swapped client-side afterward, so it was the only non-cross-fade
+  template still carrying the class. Entity Type / Visibility stayed
+  plain `<select>`s and the labels picker stayed the checkbox grid
+  (`#label-checkboxes`) — out of scope: design-system.md's Modal windows
+  section covers footer/title/body-layout/sizing, not dropdown/picker
+  componentry, and swapping either would have touched
+  `static/published_lists.js`'s validation selectors for no uniformization
+  benefit. Verified by direct render (empty-labels and populated-labels
+  paths) since no existing test exercises this template's markup. Full
+  suite (both items combined): **1793 passed**.

@@ -1,4 +1,30 @@
-<div id="modal-target" class="modal-stable-height">
+<!-- 2026-08-29 (STATE.md backlog item 8, direct request): brought in line
+     with the rest of the app's modal styling (features/design-system.md §
+     Modal windows) -- this modal predated the 2026-08-15 uniformization
+     pass and was never swept up in it. Three fixes:
+       1. Body wrapped in `.card > .field-grid` (was bare `.field`/
+          `.field-wide` divs directly in `.modal-body` with no grid
+          container at all -- `.field-wide`'s 2-column span only means
+          anything inside a `.field-grid` parent, so fields were silently
+          stacking in a single column instead of the standard 2-up layout
+          every other form modal uses).
+       2. Footer is `{% include "_modal_footer.html" %}` now, not a
+          hand-rolled `.modal-footer` div with inline `style="border-top:
+          none; padding-top: 0; ..."` overrides -- see that partial's own
+          docstring for the shared contract. `footer_primary_id` keeps the
+          "publish-btn" id static/published_lists.js's form-validation
+          JS already looks up by id (disables the button until a name and
+          at least one label are picked); no `disabled` attribute needed
+          in the markup since that same JS runs an initial checkValidity()
+          on load regardless.
+       3. `.modal-stable-height` removed -- that class is for a modal
+          whose own content changes shape post-open without a full
+          re-navigation (the event/task/contact view<->edit cross-fade,
+          quick_add.html's tab switch); this modal's empty-state-vs-form
+          branch is decided once at render time, never swapped client-side
+          afterward, so it was the only non-cross-fade template still
+          carrying the class. -->
+<div id="modal-target">
     <div class="modal-header">
         <h1>Create a published list</h1>
     </div>
@@ -11,49 +37,56 @@
             <a href="/settings/labels" class="btn tonal">{{ icon('external-link', 'icon-sm') }} Go to Labels</a>
         </div>
         {% else %}
+        <div class="card">
         <form method="post" action="/published-lists/create" id="create-list-form">
-            <div class="field">
-                <label for="name">Name</label>
-                <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" required autocomplete="off">
-            </div>
-
-            <div class="field">
-                <label for="entity_type">Type</label>
-                <select id="entity_type" name="entity_type" required>
-                    {% for et in entity_types %}
-                    <option value="{{ et }}">{{ entity_labels[et] }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="field field-wide">
-                <label>Filter by labels</label>
-                <p class="settings-hint" style="margin: 0 0 8px;">Items matching any selected label will be included in this list.</p>
-                <div class="field-toggle-group" id="label-checkboxes">
-                    {% for name in all_labels %}
-                    <label class="field-toggle">
-                        <input type="checkbox" name="labels" value="{{ name }}">
-                        {{ name }}
-                    </label>
-                    {% endfor %}
+            <div class="field-grid">
+                <div class="field field-wide">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" required autocomplete="off">
                 </div>
-            </div>
 
-            <div class="field field-wide">
-                <label for="visibility">Visibility</label>
-                <select id="visibility" name="visibility">
-                    <option value="private" selected>Private -- only your synced devices (Radicale account)</option>
-                    <option value="public">Public -- also get a link anyone can open, no account needed</option>
-                </select>
-                <p class="settings-hint" style="margin: 4px 0 0;">You can change this any time from the list below, or archive a list to pause it without deleting it.</p>
-            </div>
+                <div class="field">
+                    <label for="entity_type">Type</label>
+                    <select id="entity_type" name="entity_type" required>
+                        {% for et in entity_types %}
+                        <option value="{{ et }}">{{ entity_labels[et] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-            <div class="modal-footer" style="border-top: none; padding-top: 0; margin-top: var(--space-4);">
-                <div class="spacer"></div>
-                <button type="button" class="btn ghost" data-modal-cancel>Cancel</button>
-                <button type="submit" class="btn primary" id="publish-btn" disabled>{{ icon('share-2', 'icon-sm') }} Publish List</button>
+                <div class="field">
+                    <label for="visibility">Visibility</label>
+                    <select id="visibility" name="visibility">
+                        <option value="private" selected>Private -- only your synced devices (Radicale account)</option>
+                        <option value="public">Public -- also get a link anyone can open, no account needed</option>
+                    </select>
+                </div>
+
+                <div class="field field-wide">
+                    <label>Filter by labels</label>
+                    <p class="settings-hint" style="margin: 0 0 8px;">Items matching any selected label will be included in this list.</p>
+                    <div class="field-toggle-group" id="label-checkboxes">
+                        {% for name in all_labels %}
+                        <label class="field-toggle">
+                            <input type="checkbox" name="labels" value="{{ name }}">
+                            {{ name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <p class="settings-hint field-wide" style="margin: 0;">You can change visibility any time from the list below, or archive a list to pause it without deleting it.</p>
             </div>
         </form>
+        </div>
         {% endif %}
     </div>
+{% if all_labels %}
+{% set footer_back_url = '/published-lists' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'create-list-form' %}
+{% set footer_primary_label = 'Publish List' %}
+{% set footer_primary_icon = 'share-2' %}
+{% set footer_primary_id = 'publish-btn' %}
+{% include "_modal_footer.html" %}
+{% endif %}
 </div>
