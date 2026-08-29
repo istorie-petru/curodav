@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Holidays - Settings{% endblock %}
 {% block content %}
-{% set page_title = "Holidays" %}
-{% set page_icon = "calendar" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Holidays", "calendar") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 {% include "_settings_breadcrumb.html" with context %}

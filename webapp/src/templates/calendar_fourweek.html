@@ -2,9 +2,7 @@
 {% block title %}4-Week View - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
-{% set page_title = "Calendar" %}
-{% set page_icon = "calendar" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% import "_calendar_filters.html" as cf %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
@@ -12,17 +10,20 @@
 <!-- 2026-08-28 "Calendar split into two pages" -- 4-Week is a standalone
      tabbar destination now (base.html), not one of four tabs inside a
      shared Month/4-Week/Week/Day subnav -- no more cross-links to the
-     other calendar views here. -->
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <h1 class="sr-only">4-Week View</h1>
-        <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
-        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
-        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
-    </div>
-</div>
+     other calendar views here. 2026-08-29 follow-up (sidebar redesign
+     item 13e, direct request): the separate `.toolbar.top-app-bar.
+     toolbar-2row` row is gone -- "+ New event" was redundant with the
+     sidebar's own global quick-add, dropped rather than relocated;
+     prev/next week nav and the label filter now render inside the
+     narrow header's actions slot instead. -->
+<!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
+     own comment. -->
+<h1 class="sr-only">4-Week View</h1>
+{% call page_header_narrow("Calendar", "calendar") %}
+<a class="icon-btn" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+<a class="icon-btn" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{% endcall %}
 
 <!-- 2026-08-11: the same Month-viewport shell as calendar_month.html
      (fits the viewport, week rows flex to share the height, day cells drop

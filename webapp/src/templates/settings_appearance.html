@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Appearance - Settings{% endblock %}
 {% block content %}
-{% set page_title = "Appearance" %}
-{% set page_icon = "sun" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Appearance", "sun") }}
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Appearance</h1>
 
@@ -79,5 +78,20 @@
             <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_edit_mode %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
         </div>
     </form>
+    <!-- Page header banner (2026-08-29, sidebar redesign item 13e
+         follow-up, direct request) -- one image, reused as the background
+         on every standard page's narrow header (_page_header_narrow.html,
+         deps.py's page_header_banner()/PAGE_HEADER_BANNER_SCOPE). Opens
+         the exact same banner editor modal Home/label pages use (upload +
+         remove in one dialog), just pointed at this one fixed scope --
+         no new upload/remove routes needed. Same "Add" vs "Change"
+         label-by-presence convention as label_detail.html's own button. -->
+    <div class="settings-field-row">
+        <span class="settings-field-label">Page header banner
+            <span class="settings-field-hint">Background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if current_page_header_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    </div>
 </div>
 {% endblock %}

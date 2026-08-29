@@ -2,9 +2,7 @@
 {% block title %}{{ day }} - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
-{% set page_title = "Calendar" %}
-{% set page_icon = "calendar" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% import "_calendar_filters.html" as cf %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
@@ -12,18 +10,26 @@
 <!-- 2026-08-28 follow-up ("day view should also be disabled"): Day has no
      tabbar or subnav entry of its own anymore -- it's reached only by
      direct link (4-Week's day-number/"+N more" links), so this is a plain
-     "back to Calendar" instead of a Month|Day switcher. -->
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <a class="icon-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}" title="Back to Calendar" aria-label="Back to Calendar">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <h1 class="sr-only">{{ day }}</h1>
-        <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar/day/{{ prev_day }}{{ _lq }}" title="Previous day" aria-label="Previous day">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar/day/{{ next_day }}{{ _lq }}" title="Next day" aria-label="Next day">{{ icon('chevron-right', 'icon-sm') }}</a>
-        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
-        <a class="btn primary" href="/events/new?date={{ day }}" data-modal data-fab title="New event on this day">{{ icon('plus') }} New</a>
-    </div>
-</div>
+     "back to Calendar" instead of a Month|Day switcher. 2026-08-29
+     follow-up (sidebar redesign item 13e, direct request): the separate
+     `.toolbar.top-app-bar.toolbar-2row` row is gone -- "+ New event" was
+     redundant with the sidebar's own global quick-add, dropped rather
+     than relocated; "Back to Calendar", prev/next day nav, and the label
+     filter now render inside the narrow header's actions slot instead
+     (all moved to the right side, after the spacer -- the header's own
+     fixed icon+title/spacer/actions layout has no separate "far left"
+     slot the way the old toolbar row did). -->
+<!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
+     own comment: the narrow header's title is a fixed <h2>"Calendar", and
+     this page's old toolbar row was the only h1 carrying the specific
+     day, so it's restored standalone here. -->
+<h1 class="sr-only">{{ day }}</h1>
+{% call page_header_narrow("Calendar", "calendar") %}
+<a class="icon-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}" title="Back to Calendar" aria-label="Back to Calendar">{{ icon('chevron-left', 'icon-sm') }}</a>
+<a class="icon-btn" href="/calendar/day/{{ prev_day }}{{ _lq }}" title="Previous day" aria-label="Previous day">{{ icon('chevron-left', 'icon-sm') }}</a>
+<a class="icon-btn" href="/calendar/day/{{ next_day }}{{ _lq }}" title="Next day" aria-label="Next day">{{ icon('chevron-right', 'icon-sm') }}</a>
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{% endcall %}
 <!-- 2026-08-08: Day is now the same single-pane, fit-the-page scrollable
      layout as Week (direct feedback: make the day view's scrollable
      calendar-viewport behave like the calendar week view, and remove the

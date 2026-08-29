@@ -2,33 +2,37 @@
 {% block title %}{{ month_name }} {{ year }} - Calendar{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
-{% set page_title = "Calendar" %}
-{% set page_icon = "calendar" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% import "_calendar_filters.html" as cf %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar?year=' ~ year ~ '&month=' ~ month %}
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <h1 class="sr-only">{{ month_name }} {{ year }}</h1>
-        <!-- 2026-08-28 "Calendar split into two pages": 4-Week and Week
-             moved off this switcher onto their own tabbar destinations
-             (base.html) -- Month/Day is what's left to switch between.
-             2026-08-29: the "Calendar views" enable/disable setting that
-             used to gate these two links is removed (STATE.md backlog item
-             5) -- both are unconditionally shown now. -->
-        <div class="segmented calendar-subnav">
-            <a class="seg-btn active" href="/calendar?year={{ year }}&month={{ month }}{{ _lq }}">Month</a>
-            <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
-        </div>
-        <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar?year={{ next_year }}&month={{ next_month }}{{ _lq }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
-        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
-        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
-    </div>
+<!-- 2026-08-29 follow-up (sidebar redesign item 13e, direct request): the
+     separate `.toolbar.top-app-bar.toolbar-2row` row is gone -- "+ New
+     event" was redundant with the sidebar's own global quick-add, so
+     it's dropped rather than relocated. Everything else that was real
+     navigation (the Month|Day subnav, prev/next month, the label filter)
+     now renders inside the narrow header's actions slot instead. -->
+<!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
+     own comment: the narrow header's title is a fixed <h2>"Calendar", and
+     this page's old toolbar row was the only h1 carrying the specific
+     month/year, so it's restored standalone here. -->
+<h1 class="sr-only">{{ month_name }} {{ year }}</h1>
+{% call page_header_narrow("Calendar", "calendar") %}
+<!-- 2026-08-28 "Calendar split into two pages": 4-Week and Week moved off
+     this switcher onto their own tabbar destinations (base.html) --
+     Month/Day is what's left to switch between. 2026-08-29: the
+     "Calendar views" enable/disable setting that used to gate these two
+     links is removed (STATE.md backlog item 5) -- both are
+     unconditionally shown now. -->
+<div class="segmented calendar-subnav">
+    <a class="seg-btn active" href="/calendar?year={{ year }}&month={{ month }}{{ _lq }}">Month</a>
+    <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
 </div>
+<a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
+<a class="icon-btn" href="/calendar?year={{ next_year }}&month={{ next_month }}{{ _lq }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{% endcall %}
 
 <!-- 2026-08-08: fits the viewport instead of pushing the page taller and
      letting the whole page scroll -- see style.css's own comment on

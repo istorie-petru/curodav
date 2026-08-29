@@ -5592,3 +5592,90 @@ title (no greeting/avatar), Home alone keeps the full expanded hero.
   updated.
 - Item 13's breakdown is now down to 13f alone (aesthetic fusion, still
   deliberately unscheduled -- see its own "TBD" note further up).
+
+## Follow-up (2026-08-29, same day) -- fold Tasks/Contacts/Calendar's
+toolbar into the narrow header, plus a global page-header banner (direct
+request)
+
+Direct feedback after seeing 13e live: didn't want to see the old
+`.toolbar.top-app-bar.toolbar-2row` row on any page anymore -- its "+
+New"/inline-search controls were now redundant with the sidebar's own
+global quick-add (13c) and Search destination. Flagged the real scope
+before starting (Calendar's toolbar also carries real navigation --
+prev/next, the Month|Day subnav -- with no sidebar equivalent, not just
+duplicated controls); asked whether that should move into the narrow
+header too. Confirmed yes, plus a second ask: the narrow header should
+support a custom banner image, set once in Settings > Appearance and
+reused everywhere (not a separate image per page).
+
+- **`_page_header_narrow.html` rebuilt as a `{% call %}` macro**
+  (`page_header_narrow(title, icon_name)`), not a plain include -- grew
+  two things the title-only version didn't need: an actions slot
+  (`{{ caller() }}`, right-aligned after a spacer) for page-specific
+  controls, and the optional banner. Every one of 13e's 16 call sites
+  updated from `{% set page_title = ... %}{% include ... %}` to
+  `{% from ... import page_header_narrow with context %}` +
+  `{{ page_header_narrow(...) }}` (or `{% call %}` where there's now an
+  actions slot to fill).
+- **Tasks (`_tasks_toolbar.html`)/Contacts (`contacts_list.html`)/
+  Calendar (`calendar_month/week/day/fourweek.html`)**: the toolbar row
+  is gone outright. Redundant controls dropped, not relocated: "+ New
+  task"/"+ New event"/"+ New contact" (sidebar's own quick-add already
+  covers this, context-aware to `/contacts/new` on the Contacts page per
+  13c), Tasks'/Contacts' inline search boxes (`name="q"`, kept as a
+  hidden field so a bookmarked `?q=...` URL still works, just with no
+  visible control left). Real, non-duplicated controls relocated into
+  the header's actions slot instead: Tasks' Date filter dropdown,
+  Contacts' Label filter dropdown, Calendar's prev/next nav + label
+  filter + Month|Day subnav (Month only) + Day's "Back to Calendar" link.
+  Each of these 6 pages lost its only `<h1>` when its toolbar (which
+  carried a `sr-only` one) was removed -- caught before it shipped as a
+  real accessibility regression, not just a markup change: restored a
+  standalone `sr-only` h1 with the same page-specific text (page/month/
+  week/day identity) alongside the header's own generic `<h2>` title.
+- **Global page-header banner** (deps.py's `PAGE_HEADER_BANNER_SCOPE =
+  "__page_header__"`) -- reuses the *entire* existing per-page banner
+  system (`db.get_page_banner`/`set_page_banner`, `routers/banners.py`'s
+  editor/upload/remove routes) completely unchanged, just as one more
+  `page_key` value alongside `""` (Home) and each label name: no new
+  routes, no new storage. `deps.py`'s `page_header_banner(request)` Jinja
+  global (same per-request-memoized-connection pattern as the other
+  app_meta globals, graceful-None on a bare test `Request`) is called
+  inside the macro so every page gets it for free. Settings > Appearance
+  gained a "Page header banner" row (`current_page_header_banner` in
+  context -- NOT `page_header_banner`, which is deps.py's own global;
+  same shadowing trap `current_show_label_icons`/`current_edit_mode`
+  already document) opening the same banner editor modal Home/labels use,
+  pointed at the new scope. Renders as a readability-scrim + white-text
+  treatment over the image when set (`.has-banner`), the unchanged flat
+  `--accent-subtle` gradient otherwise.
+- Two real bugs caught by the test suite before they shipped, both from
+  the same root cause (Jinja parses `{%`/`%}`/`<h1>` literally even
+  inside an HTML `<!-- -->` comment, unlike a real `{# #}` Jinja
+  comment): a `TemplateSyntaxError` from writing `` `{% call %}` `` in an
+  HTML comment (_tasks_toolbar.html), and a regex-based "exactly one h1"
+  test finding 3 matches because two of them were the literal text
+  `<h1>` inside my own explanatory comments. Fixed by not writing bracket
+  syntax in HTML comments and by asserting against exact markup
+  (`'href="?edit=1"'`-style quoted strings) instead of bare substrings
+  wherever a docstring/comment could plausibly contain the same words in
+  prose -- several new tests in `test_phase9b_toolbar_filters.py` and
+  `test_page_header_narrow.py` needed this same care (e.g. "Change
+  banner" also appears in this same page's pre-existing Edit-mode row
+  comment).
+- 11 new tests in `test_page_header_narrow.py` (`TestNarrowHeaderActionsSlot`:
+  each folded page's toolbar row is gone and its real controls survived
+  relocated, every folded page still has exactly one real `<h1>`;
+  `TestPageHeaderBanner`: no banner by default, banner renders + is
+  shared across different pages, Settings shows Add vs Change banner by
+  presence, the banner editor accepts the new scope) plus 3 rewritten in
+  `test_phase9b_toolbar_filters.py` (the old "Filters sits immediately
+  before New button" checks, meaningless now that New is gone, replaced
+  with "Filters lives in the narrow header, not a toolbar"); the three
+  `TestCalendarSingleToolbar` tests there now guard the same "exactly
+  one, never duplicated" invariant against `.page-header-narrow` instead
+  of the retired `.toolbar`. Full suite: **1883 passed** (four file-glob
+  chunks: 595 + 434 + 519 + 335 = 1883; eleven new, none removed).
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v22` -> `cc-shell-v23` (style.css
+  changed again) -- `test_pwa_shell.py`'s literal-string assertion
+  updated.

@@ -1,33 +1,60 @@
 {# Shared "Standard Page Header" (sidebar redesign item 13e, 2026-08-29,
    plans/sidebar-redesign.md § "The Standard Header"): a thin, subtle
-   gradient strip with the page's icon + title, no greeting, no avatar --
-   the "narrow variant" of the same combined-hero-header concept Home's
-   own full banner (_page_banner.html, dashboard.html) is the "expanded
-   variant" of. Purely additive: included right after {% block content %}
-   opens on every real top-level destination page (Tasks, Calendar,
-   Contacts, Search, Notes, the Settings hub + its sub-pages, Published
-   Lists) -- it does not replace or restructure any of those pages' own
-   existing toolbar/breadcrumb/h1 markup (several of which is already a
-   visually-hidden `sr-only` h1 backing a `.toolbar.top-app-bar`, which
-   already serves this doc's "standard top navigation bar" role
-   structurally); it just adds the identity strip above it. Doesn't apply
-   to dashboard.html (keeps its own full hero) or label_detail.html/
-   space pages (already have the full banner system, including a real
-   per-page uploaded image -- shrinking THAT to this narrow treatment is
-   a separate, riskier follow-up given how much banner/edit-mode-toolbar
-   machinery is wired to it today; flagged in STATE.md, not done here),
-   or to entity detail pages (task/event/contact/habit detail -- record
-   views, not navigational destinations, so "the page title" doesn't
-   mean the same thing there).
+   gradient strip with the page's icon + title, no greeting/avatar -- the
+   "narrow variant" of the same combined-hero-header concept Home's own
+   full banner (_page_banner.html, dashboard.html) is the "expanded
+   variant" of. Doesn't apply to dashboard.html (keeps its own full hero)
+   or label_detail.html/space pages (already have the full banner system,
+   including a real per-page uploaded image -- shrinking THAT to this
+   narrow treatment is a separate, riskier follow-up given how much
+   banner/edit-mode-toolbar machinery is wired to it today; flagged in
+   STATE.md, not done here), or to entity detail pages (task/event/
+   contact/habit detail -- record views, not navigational destinations).
 
-   Expects: page_title (str), page_icon (sprite icon name; falls back to
-   'layout' if omitted -- shouldn't happen in practice, every real call
-   site passes one, but a page missing it entirely shouldn't render a
-   blank icon slot). No banner-image support here (none of these pages
-   have a per-page uploaded banner the way Home/labels do) -- purely a
-   flat gradient tint, same for every page, per the source doc's own
-   "default calendar icon, no custom color" example. #}
-<div class="page-header-narrow">
-    <span class="page-header-narrow-icon">{{ icon(page_icon|default('layout')) }}</span>
-    <h2 class="page-header-narrow-title">{{ page_title }}</h2>
+   2026-08-29 follow-up (direct request): rebuilt as a `{% call %}` macro
+   instead of a plain include, and grew two things the plain-title version
+   didn't need --
+     1. A page-specific *actions* slot (right-aligned, after a spacer):
+        the old per-page `.toolbar.top-app-bar.toolbar-2row` rows on
+        Tasks/Contacts/Calendar are gone outright (their own "+ New"/
+        inline-search controls were redundant with the sidebar's own
+        quick-add and Search destination, direct feedback) -- whatever
+        real, non-duplicated controls those toolbars had (date-range/
+        label filters, prev/next nav, the Month|Day subnav) now render
+        here instead, passed in via `{% call %}`'s block content. A page
+        with nothing extra to show just calls the macro with no block
+        (see the Notes/Settings-family call sites) and gets a plain
+        icon+title strip, same as before this rework.
+     2. An optional background banner image -- one single image set once
+        in Settings > Appearance (deps.py's page_header_banner()/
+        PAGE_HEADER_BANNER_SCOPE) and reused on every standard page's
+        header, not a per-page image the way Home/labels have. Renders a
+        readability scrim + white text over it, same convention as
+        _page_banner.html's own overlay title, when set; the flat
+        `--accent-subtle` gradient (no change from before) otherwise.
+
+   Usage: `{% from "_page_header_narrow.html" import page_header_narrow
+   with context %}` (needs `with context` so the macro's own
+   `page_header_banner(request)` call and the `caller()` block it wraps
+   both see the page's real render context), then either
+   `{{ page_header_narrow("Tasks", "check-square") }}` (no actions) or
+   `{% call page_header_narrow("Calendar", "calendar") %}...page-specific
+   controls...{% endcall %}`. #}
+{% macro page_header_narrow(title, icon_name) %}
+{% set _banner = page_header_banner(request) %}
+<div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
+    {% if _banner %}
+    {% if _banner.version %}
+    <img class="page-header-narrow-bg" src="/banners/image?scope=__page_header__&amp;v={{ _banner.version }}" alt="">
+    {% else %}
+    <img class="page-header-narrow-bg" src="{{ _banner.image_url }}" alt="" referrerpolicy="no-referrer">
+    {% endif %}
+    {% endif %}
+    <span class="page-header-narrow-icon">{{ icon(icon_name|default('layout')) }}</span>
+    <h2 class="page-header-narrow-title">{{ title }}</h2>
+    <div class="spacer"></div>
+    {% if caller %}
+    <div class="page-header-narrow-actions">{{ caller() }}</div>
+    {% endif %}
 </div>
+{% endmacro %}

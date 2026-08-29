@@ -96,7 +96,10 @@
 // inset in both states) -- bumped per the same v15 lesson.
 // v22 (2026-08-29): style.css changed again (new .page-header-narrow rules,
 // sidebar redesign item 13e) -- bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v22";
+// v23 (2026-08-29): style.css changed again (narrow-header banner/actions-
+// slot rules, folding Tasks/Contacts/Calendar's old toolbar-2row into the
+// header) -- bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v23";
 
 const SHELL_ASSETS = [
   "/offline",

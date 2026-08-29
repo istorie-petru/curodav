@@ -105,6 +105,7 @@ from ..deps import (
     EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
+    PAGE_HEADER_BANNER_SCOPE,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
     TIME_FORMAT_KEY,
@@ -378,6 +379,19 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # label page's own "Edit mode"/"Done" buttons -- see
             # EDIT_MODE_KEY's own comment in routers/dashboard.py.
             "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+            # 2026-08-29 (sidebar redesign item 13e follow-up) -- the
+            # Standard Page Header's own optional banner (deps.py's
+            # PAGE_HEADER_BANNER_SCOPE); "Add"/"Change" label + the Remove
+            # control inside the editor both key off whether this is set,
+            # same convention as dashboard.html/label_detail.html's own
+            # Add/Change banner button. Named current_page_header_banner,
+            # NOT page_header_banner -- that name is taken by deps.py's own
+            # Jinja global (page_header_banner(request), called inside
+            # _page_header_narrow.html's own macro on every page, including
+            # this one), same "current_X" convention as current_show_label_
+            # icons/current_edit_mode above for the exact same shadowing
+            # reason.
+            "current_page_header_banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         },
     )
 

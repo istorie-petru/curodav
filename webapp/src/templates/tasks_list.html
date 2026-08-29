@@ -2,10 +2,20 @@
 {% from "_task_row.html" import task_row with context %}
 {% block title %}Tasks{% endblock %}
 {% block content %}
-{% set page_title = "Tasks" %}
-{% set page_icon = "check-square" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+<!-- Real page heading, kept sr-only -- the narrow header's own title
+     (_page_header_narrow.html) is deliberately an h2 element, not h1 (see
+     that partial's own comment), since most pages using it already have
+     their own real/sr-only h1 elsewhere. This page's old toolbar row
+     WAS that h1 (removed below, 2026-08-29 sidebar redesign item 13e
+     follow-up) -- restored standalone here so the page still has exactly
+     one real heading for assistive tech. is_inbox is never actually set
+     anywhere in routers/tasks.py (dead branch, predates this change) --
+     simplified to the one text it ever rendered. -->
+<h1 class="sr-only">Tasks</h1>
+{% call page_header_narrow("Tasks", "check-square") %}
 {% include "_tasks_toolbar.html" %}
+{% endcall %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
      pass) -- the "+ New" button in the toolbar above opens the same create

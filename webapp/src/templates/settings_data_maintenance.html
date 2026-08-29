@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Data & Maintenance - Settings{% endblock %}
 {% block content %}
-{% set page_title = "Data & Maintenance" %}
-{% set page_icon = "database" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Data & Maintenance", "database") }}
 {% include "_settings_breadcrumb.html" with context %}
 <h1>Data & Maintenance</h1>
 <p class="settings-hint">Backups, database integrity, sync conflicts, export & import, and data lifecycle -- everything about your data's safety, in priority order.</p>

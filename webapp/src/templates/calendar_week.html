@@ -5,9 +5,7 @@
 {# Planner (Week view) -- own title/icon matching its own tabbar identity
    (base.html: icon('clock'), label "Planner"), not "Calendar"/'calendar' --
    4-Week/Month/Day are the "Calendar" family, Week is its own destination. #}
-{% set page_title = "Planner" %}
-{% set page_icon = "clock" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% import "_calendar_filters.html" as cf %}
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 {% set _lbl = active_label | default('') %}
@@ -16,17 +14,22 @@
 <!-- 2026-08-28 "Calendar split into two pages" -- Week is a standalone
      tabbar destination now (base.html), not one of four tabs inside a
      shared Month/4-Week/Week/Day subnav -- no more cross-links to the
-     other calendar views here. -->
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <h1 class="sr-only">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }}</h1>
-        <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
-        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
-        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
-    </div>
-</div>
+     other calendar views here. 2026-08-29 follow-up (sidebar redesign
+     item 13e, direct request): the separate `.toolbar.top-app-bar.
+     toolbar-2row` row is gone -- "+ New event" was redundant with the
+     sidebar's own global quick-add, dropped rather than relocated;
+     prev/next week nav and the label filter now render inside the
+     narrow header's actions slot instead. -->
+<!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
+     own comment: the narrow header's title is a fixed <h2>"Planner", and
+     this page's old toolbar row was the only h1 carrying the specific
+     week's date range, so it's restored standalone here. -->
+<h1 class="sr-only">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }}</h1>
+{% call page_header_narrow("Planner", "clock") %}
+<a class="icon-btn" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+<a class="icon-btn" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{% endcall %}
 <!-- 1.9 side work: Week merged with the former "Timetable" sub-view (see
      _calendar_week_grid.html's own top comment -- the whole grid lives in
      that partial because it doubles as the week view's async-CRUD region,

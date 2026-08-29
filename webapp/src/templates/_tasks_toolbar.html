@@ -4,32 +4,36 @@
      redirect, routers/timeline.py's whole-file retirement), along with
      every filter but Date (Status/Importance/Urgency/label dropdowns and
      the Group by toggle -- grouping is fixed/always-on now, see
-     routers/tasks.py's _build_task_groups). What's left is one light row:
+     routers/tasks.py's _build_task_groups). What's left was one light row:
      a page title, search, the one remaining Date dropdown, and "+ New".
 
+     2026-08-29 follow-up (sidebar redesign item 13e, direct request): the
+     separate `.toolbar.top-app-bar.toolbar-2row` row is gone outright --
+     the inline search box and "+ New" button were redundant with the
+     sidebar's own global quick-add/Search destinations, so both are
+     dropped rather than relocated. This partial is now just the Date
+     filter dropdown, rendered inside tasks_list.html's narrow-header
+     call block (_page_header_narrow.html's actions slot) instead of its
+     own toolbar row. `q` (the old search box's value) has no
+     visible control left, but a bookmarked/deep-linked `?q=...` URL still
+     works -- carried through as a hidden field so choosing a Date filter
+     doesn't silently drop it.
+
      Context this partial expects: q, active_date_filter, date_filters,
-     date_filter_labels, is_inbox. -->
+     date_filter_labels. -->
 {% set _df = active_date_filter | default('all') %}
 {% set _q = q | default('') %}
 
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <h1 class="sr-only">{% if is_inbox %}Inbox{% else %}Tasks{% endif %}</h1>
-        <div class="spacer"></div>
-        <form method="get" action="/tasks" class="filter-bar" id="tasks-filters-form">
-            <input type="search" name="q" placeholder="Search tasks..." value="{{ _q }}">
-        </form>
-        {% set _df_items = [] %}
-        {% for _v in date_filters %}{% set _ = _df_items.append({'value': _v, 'name': date_filter_labels[_v]}) %}{% endfor %}
+<form method="get" action="/tasks" class="filter-bar" id="tasks-filters-form">
+    {% if _q %}<input type="hidden" name="q" value="{{ _q }}">{% endif %}
+</form>
+{% set _df_items = [] %}
+{% for _v in date_filters %}{% set _ = _df_items.append({'value': _v, 'name': date_filter_labels[_v]}) %}{% endfor %}
 
-        {% set fd_name = 'date_filter' %}
-        {% set fd_label = 'Date' %}
-        {% set fd_items = _df_items %}
-        {% set fd_selected = _df %}
-        {% set fd_mode = 'single' %}
-        {% set fd_form_id = 'tasks-filters-form' %}
-        {% include '_filter_dropdown.html' %}
-
-        <a class="btn primary" href="/tasks/new" data-modal data-fab title="New task">{{ icon('plus') }} New</a>
-    </div>
-</div>
+{% set fd_name = 'date_filter' %}
+{% set fd_label = 'Date' %}
+{% set fd_items = _df_items %}
+{% set fd_selected = _df %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = 'tasks-filters-form' %}
+{% include '_filter_dropdown.html' %}

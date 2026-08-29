@@ -4603,17 +4603,43 @@ body.command-palette-open{overflow:hidden;}
 /* Standard Page Header, narrow variant (sidebar redesign item 13e,
    2026-08-29, _page_header_narrow.html) -- the "Standard Page Header
    (Narrow Variant)" from plans/sidebar-redesign.md: a thin, subtle
-   gradient strip with the page's icon + title, no greeting/avatar/photo
-   (unlike .page-banner above, these pages have no per-page uploaded
-   image). Sits above whatever toolbar/breadcrumb the page already has --
-   its own height is deliberately small (not a scaled-down .page-banner)
-   so it reads as a slim identity strip, not a second hero. */
+   gradient strip with the page's icon + title, no greeting/avatar. Its
+   own height is deliberately small (not a scaled-down .page-banner) so
+   it reads as a slim identity strip, not a second hero.
+   2026-08-29 follow-up (direct request): the old per-page
+   .toolbar.top-app-bar.toolbar-2row rows on Tasks/Contacts/Calendar are
+   gone -- whatever real controls they had (filters, prev/next nav, the
+   Month|Day subnav) now render inside .page-header-narrow-actions
+   instead, and the strip gained an optional background banner image
+   (Settings > Appearance, one image reused everywhere -- unlike
+   .page-banner above, which is a different image per Home/label page). */
 .page-header-narrow{
+  position:relative; overflow:hidden;
   display:flex; align-items:center; gap:var(--space-2);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
   border-radius:var(--radius-card); border:1px solid var(--border);
   background:linear-gradient(120deg, var(--accent-subtle), transparent 70%),
              var(--bg-elevated);
+}
+.page-header-narrow-bg{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; z-index:0;
+}
+/* Readability scrim, same reasoning as .page-banner::after -- a hotlinked
+   or uploaded image can't be assumed high-contrast under white overlay
+   text. Unlike .page-banner (bottom-heavy scrim, title pinned at the
+   bottom of a much taller box), this strip is short enough that a flat
+   tint across the whole thing reads better than a directional gradient. */
+.page-header-narrow.has-banner::after{
+  content:""; position:absolute; inset:0; z-index:0;
+  background:rgba(0,0,0,.45);
+}
+.page-header-narrow.has-banner .page-header-narrow-icon,
+.page-header-narrow.has-banner .page-header-narrow-title{
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+.page-header-narrow-icon, .page-header-narrow-title, .page-header-narrow-actions{
+  position:relative; z-index:1;
 }
 .page-header-narrow-icon{
   display:flex; color:var(--accent);
@@ -4623,6 +4649,26 @@ body.command-palette-open{overflow:hidden;}
   margin:0; font-weight:700; letter-spacing:-0.3px;
   font-size:var(--text-title3); line-height:1.2;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.page-header-narrow-actions{
+  display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+}
+/* Buttons/dropdown triggers pinned over a photo need to read against
+   whatever image is behind them, not the page background -- same
+   frosted-chip treatment .page-banner-actions .btn.ghost gets. Bannerless
+   (the default, flat-gradient) case skips this: normal control styling
+   already reads fine against --bg-elevated. */
+.page-header-narrow.has-banner .page-header-narrow-actions .btn.ghost,
+.page-header-narrow.has-banner .page-header-narrow-actions .icon-btn,
+.page-header-narrow.has-banner .page-header-narrow-actions .multiselect-trigger{
+  background:rgba(0,0,0,.4); color:#fff;
+  border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+}
+.page-header-narrow.has-banner .page-header-narrow-actions .btn.ghost:hover,
+.page-header-narrow.has-banner .page-header-narrow-actions .icon-btn:hover,
+.page-header-narrow.has-banner .page-header-narrow-actions .multiselect-trigger:hover{
+  background:rgba(0,0,0,.55); color:#fff;
 }
 
 /* Banner editor modal (banner_editor.html, 2026-08-09). */

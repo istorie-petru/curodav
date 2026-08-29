@@ -71,6 +71,19 @@ HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 # per-request-memoized global registered here, unlike the other keys
 # above: nothing outside the three widget-grid pages needs it.
 EDIT_MODE_KEY = "edit_mode_enabled"
+# 2026-08-29 (sidebar redesign item 13e follow-up, direct request) -- the
+# Standard Page Header's own optional banner image, set once in Settings >
+# Appearance and reused as the background on every standard page's narrow
+# header (Tasks/Calendar/Planner/Contacts/Search/Notes/Settings/Labels/
+# Published Lists -- see _page_header_narrow.html). Not a per-page banner
+# like Home/label pages have (db.get_page_banner/set_page_banner's own
+# `page_key` is just a free-form string, "" for Home / the label name for
+# a label page) -- this is one more `page_key`, a fixed sentinel picked to
+# never collide with a real label name. Reuses the *entire* existing
+# banner editor/upload/remove machinery (routers/banners.py) unchanged --
+# `/banners/editor?scope=__page_header__&page_url=/settings/appearance`
+# is a real, working banner scope with no new routes needed.
+PAGE_HEADER_BANNER_SCOPE = "__page_header__"
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 
@@ -331,6 +344,32 @@ def _show_label_icons(request: Request) -> bool:
 
 
 templates.env.globals["show_label_icons"] = _show_label_icons
+
+
+def _page_header_banner(request: Request) -> dict | None:
+    """The Standard Page Header's own optional banner image (Settings >
+    Appearance, 2026-08-29 sidebar redesign item 13e follow-up) -- see
+    PAGE_HEADER_BANNER_SCOPE's own comment above. Same per-request-
+    memoized-connection, broad-try/except-on-a-bare-test-Request pattern
+    as _cached_app_meta below, but returns a banner dict (or None)
+    straight from db.get_page_banner instead of a plain string, so it
+    isn't built on top of that helper. Called by _page_header_narrow.html
+    (imported `with context`, so `request` is in scope at the call site)
+    -- every standard page gets this for free without its own route
+    needing to fetch and thread it through its context dict."""
+    cache_attr = "_cc_page_header_banner_cache"
+    if hasattr(request.state, cache_attr):
+        return getattr(request.state, cache_attr)
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            banner = db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
+    except Exception:
+        banner = None
+    setattr(request.state, cache_attr, banner)
+    return banner
+
+
+templates.env.globals["page_header_banner"] = _page_header_banner
 
 
 def _recurrence_terminology(request: Request) -> str:

@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}General - Settings{% endblock %}
 {% block content %}
-{% set page_title = "General" %}
-{% set page_icon = "user" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("General", "user") }}
 {% include "_settings_breadcrumb.html" with context %}
 <h1>General</h1>
 

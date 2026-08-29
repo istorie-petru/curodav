@@ -368,8 +368,11 @@ class TestLocalWritePath:
         # padding unification, same lesson.
         # v22 (2026-08-29): bumped again for the new .page-header-narrow
         # rules (sidebar redesign item 13e), same lesson.
+        # v23 (2026-08-29): bumped again for the narrow-header banner/
+        # actions-slot rules (folding Tasks/Contacts/Calendar's old
+        # toolbar-2row into the header), same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v22"' in script
+        assert 'CACHE_NAME = "cc-shell-v23"' in script
 
 
 class TestOfflineToolbar:

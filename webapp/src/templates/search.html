@@ -9,9 +9,8 @@
 {% extends "base.html" %}
 {% block title %}Search{% endblock %}
 {% block content %}
-{% set page_title = "Search" %}
-{% set page_icon = "command" %}
-{% include "_page_header_narrow.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Search", "command") }}
 <div class="toolbar top-app-bar">
     <h1>Search</h1>
 </div>

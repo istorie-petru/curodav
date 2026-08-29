@@ -128,6 +128,18 @@ def _toolbar_div_count(body: str) -> int:
     return len(_TOOLBAR_DIV_RE.findall(body))
 
 
+def _narrow_header_count(body: str) -> int:
+    """Counts top-level `.page-header-narrow` divs -- the replacement for
+    Calendar's old `.toolbar.top-app-bar.toolbar-2row` row (2026-08-29,
+    sidebar redesign item 13e follow-up, direct request): the toolbar is
+    gone outright, its real controls (prev/next nav, the Month|Day
+    subnav, the label filter) folded into this one header strip instead.
+    Same "exactly one, never duplicated" invariant the old
+    _toolbar_div_count coverage guarded, just pointed at the new
+    structure."""
+    return body.count('class="page-header-narrow"') + body.count('class="page-header-narrow has-banner"')
+
+
 # 2026-08-28 "major rework" session (items 3+4): TestBoardTimelineFilters
 # Respected and TestTaskLabelFilter are both deleted -- Kanban/Timeline are
 # retired to plain redirects (routers/tasks.py::board_view_redirect,
@@ -171,18 +183,25 @@ class TestEventLabelFilter:
 
 
 class TestCalendarSingleToolbar:
+    # 2026-08-29 (sidebar redesign item 13e follow-up, direct request):
+    # Calendar's `.toolbar.top-app-bar.toolbar-2row` row is gone outright
+    # -- these now guard the same "exactly one, never duplicated"
+    # invariant against its replacement, .page-header-narrow.
     def test_month_view_renders_exactly_one_toolbar(self, conn):
         resp = calendar_router.month_view(_request("/calendar"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_week_view_renders_exactly_one_toolbar(self, conn):
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_day_view_renders_exactly_one_toolbar(self, conn):
         today_iso = date.today().isoformat()
         resp = calendar_router.day_view(today_iso, _request(f"/calendar/day/{today_iso}"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_agenda_view_redirects_to_day_which_has_exactly_one_toolbar(self, conn):
         # 2026-08-08: Agenda merged into Day and was then removed again
@@ -273,20 +292,17 @@ class TestActiveFilterShownInDropdown:
 
 class TestIconOnlyFiltersNextToAdd:
     """2026-08-08: the icon-only "Filters" button is gone too -- Tasks and
-    Calendar now carry the four "fancy dropdown" filter triggers inline in
-    row 1 (templates/_filter_dropdown.html's .filter-dropdown-trigger), each
-    a compact descriptor+chevron button sitting next to the primary "New"
-    button. Covers Tasks/Calendar/Contacts/Schedule -- 2026-08-08 Contacts'
-    tag filter and Schedule's label filter both moved off their old
-    mechanisms (Contacts' checkbox-hack Filters button, Schedule's
-    nothing-at-all) onto the same dropdown, so they're part of this
-    trigger-position check too.
+    Calendar carry their filter triggers inline (templates/
+    _filter_dropdown.html's .filter-dropdown-trigger), each a compact
+    descriptor+chevron button.
 
-    Critically, this also checks the New button is NOT pushed out of
-    row 1 -- both the dropdown triggers (compact, fixed-size) and the New
-    button are direct children of .toolbar-row; the old collapsible
-    .toolbar-filters-body (which lived outside .toolbar-row entirely) no
-    longer exists, so nothing can affect row 1's wrapping anymore."""
+    2026-08-29 follow-up (sidebar redesign item 13e, direct request):
+    Tasks/Calendar/Contacts' own `.toolbar.top-app-bar.toolbar-2row` row
+    -- and the per-page "+ New" button that used to live in it -- is gone
+    outright, redundant with the sidebar's own global quick-add. What
+    used to be "does Filters sit right before New in row 1" is now
+    "does the filter trigger render inside the narrow header, with no
+    toolbar-2row/toolbar-filters-body left at all"."""
 
     def test_tasks_filters_trigger_has_no_text_label(self, conn):
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
@@ -294,29 +310,28 @@ class TestIconOnlyFiltersNextToAdd:
         assert ">Filters<" not in body
         assert "filter-dropdown-trigger" in body
 
-    def test_tasks_dropdowns_and_new_button_both_stay_in_row_1(self, conn):
+    def test_tasks_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
         body = resp.body.decode()
-        # All four filter dropdowns plus the New button sit inside row 1 --
-        # there is no .toolbar-filters-body (or hidden checkbox) anymore to
-        # push anything onto another line.
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/tasks/new"')
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
         assert "toolbar-filters-body" not in body
         assert "tasks-filters-toggle" not in body
 
-    def test_calendar_filters_trigger_sits_immediately_before_new_button(self, conn):
+    def test_calendar_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         today = date.today()
         _seed_event(conn, "a", start_at=f"{today.isoformat()}T09:00:00", tags=["Work"])
         resp = calendar_router.month_view(_request("/calendar"), conn=conn)
         body = resp.body.decode()
         assert ">Filters<" not in body
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/events/new"')
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
 
-    def test_contacts_filters_trigger_sits_immediately_before_new_button(self, conn):
+    def test_contacts_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         db.upsert_contact(
             conn,
             {
@@ -330,17 +345,10 @@ class TestIconOnlyFiltersNextToAdd:
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         body = resp.body.decode()
         assert ">Filters<" not in body
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        # 2026-08-29 sidebar redesign follow-up: the rail's own "+ New"
-        # button (base.html) now also points at /contacts/new when Contacts
-        # is the active page (context-aware quick add, plans/
-        # sidebar-redesign.md's "Sidebar Controls") -- it renders earlier in
-        # the document than the toolbar, so a plain body.index() would find
-        # that one instead of the toolbar's. Searching from filters_pos
-        # onward finds the toolbar-local button specifically, which is what
-        # this test is actually about (the toolbar's own row ordering).
-        new_button_pos = body.index('href="/contacts/new"', filters_pos)
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
         assert "toolbar-filters-body" not in body
 
 
