@@ -5452,5 +5452,7 @@ toggle at 8px collapsed vs. 14px expanded.
   default for a fixed-width item) -- a separate, pre-existing inconsistency
   noticed while auditing this, but out of scope for "the items'" padding;
   flagged here as a real follow-up if it's reported.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v20` -> `cc-shell-v21` (style.css
+  changed again) -- `test_pwa_shell.py`'s literal-string assertion updated.
 - Full suite: **1852 passed** (three file-glob chunks: 819 + 525 + 508 =
   1852, no tests added/removed).

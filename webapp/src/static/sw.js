@@ -91,7 +91,10 @@
 // for the expanded-sidebar wordmark) -- bumped per the standing v15 lesson
 // (any style.css edit needs a bump to actually reach an already-installed
 // PWA), independent of this being CSS rather than a script.
-const CACHE_NAME = "cc-shell-v20";
+// v21 (2026-08-29): style.css changed again (unified collapsed/expanded
+// .tabbar/.tab-btn/.sidebar-header padding so rail icons land at the same
+// inset in both states) -- bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v21";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -364,8 +364,10 @@ class TestLocalWritePath:
         # script loaded on every page, same category as app.js/modal.js).
         # v20 (2026-08-29): bumped again for a style.css-only change (the
         # sidebar-header/app-name rules), per the same v15 lesson.
+        # v21 (2026-08-29): bumped again for the collapsed/expanded item
+        # padding unification, same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v20"' in script
+        assert 'CACHE_NAME = "cc-shell-v21"' in script
 
 
 class TestOfflineToolbar:
