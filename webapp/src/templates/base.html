@@ -115,8 +115,29 @@
              or hide the whole sidebar." No rotate-on-expand transform
              anymore either, for the same reason: rotating a panel icon
              doesn't communicate anything, unlike a chevron flipping
-             direction. -->
-        <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
+             direction.
+
+             2026-08-29 further follow-up (direct request): expanded mode
+             left the rest of the toggle's row empty -- the button itself
+             stayed icon-only and centered (justify-content:center override
+             in style.css, kept as-is here) so widening it to a normal
+             left-aligned .tab-btn row would just re-center a lone icon in
+             a wider box, not fill the space. Wrapping it with a sibling
+             "Command Center" label in a `.sidebar-header` row instead:
+             `.sidebar-app-name` is display:none/collapsed by default
+             (same hide-until-expanded pattern the Spaces group header
+             uses further down) and only shown
+             under html[data-sidebar-expanded], so collapsed mode's 80px
+             rail is unchanged. The divider/spacing that used to live on
+             `.sidebar-expand-toggle` itself moved to `.sidebar-header` so
+             it still spans the full row now that the row has two
+             children. Plain text, not a link -- "Command Center" isn't a
+             destination, just the wordmark next to the toggle that
+             already controls the whole sidebar. -->
+        <div class="sidebar-header">
+          <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
+          <span class="sidebar-app-name">Command Center</span>
+        </div>
         <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md's
              "Sidebar Controls: Add a + button... to instantly add new
              Entries/Pages specific to the page or in general (contacts

@@ -5362,3 +5362,30 @@ didn't until something forced a fresh cache).
   when run as part of the first quarter-split chunk but passed cleanly in
   isolation (5/5) -- a pre-existing live-network test flake under
   contention, unrelated to this session's changes.
+
+## Follow-up (2026-08-29, same day) -- expanded sidebar's toggle row had
+dead space next to the icon
+
+Direct report: in expanded mode, `#sidebar-expand-toggle` stayed icon-only
+and centered (`justify-content:center`, deliberate per that button's own
+comment -- a lone icon shouldn't pick up the generic left-align every other
+`.tab-btn` gets), which left the rest of its 240px-wide row visibly empty.
+
+- `base.html`: wrapped the toggle button in a new `.sidebar-header` div
+  alongside a `<span class="sidebar-app-name">Command Center</span>` --
+  plain text, not a link, since it isn't a nav destination.
+- `style.css`: `.sidebar-app-name` is `display:none` by default (same
+  hide-until-expanded pattern as `.sidebar-section-label`), shown under
+  `html[data-sidebar-expanded]`. The divider/spacing that used to live on
+  `.sidebar-expand-toggle` itself (`border-bottom`, `margin-bottom`,
+  `padding-bottom`) moved to `.sidebar-header` so it still spans the full
+  row now that the row has two children; `.sidebar-header` switches from
+  column (collapsed, matches old centered-icon layout) to row (expanded)
+  under the same media query the rest of the expanded-mode rules live in.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v19` -> `cc-shell-v20` per the
+  standing v15 lesson (any `style.css` edit needs a bump to reach an
+  already-installed PWA) -- `test_pwa_shell.py`'s literal-string assertion
+  updated to match.
+- Full suite: **1852 passed** (ran in four file-glob chunks to stay under
+  the sandbox's per-command time budget: 479 + 605 + 438 + 330 = 1852, no
+  tests added/removed).

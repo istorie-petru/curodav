@@ -87,7 +87,11 @@
 // on every single page (same category as app.js/modal.js, already
 // precached), not a page-specific one, so it belongs in the shell rather
 // than relying solely on runtime caching to ever pick it up.
-const CACHE_NAME = "cc-shell-v19";
+// v20 (2026-08-29): style.css changed again (sidebar-header/app-name rules
+// for the expanded-sidebar wordmark) -- bumped per the standing v15 lesson
+// (any style.css edit needs a bump to actually reach an already-installed
+// PWA), independent of this being CSS rather than a script.
+const CACHE_NAME = "cc-shell-v20";
 
 const SHELL_ASSETS = [
   "/offline",

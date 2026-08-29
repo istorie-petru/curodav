@@ -670,8 +670,22 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    specificity than the mobile block's plain `main{margin-left:0}`, so
    it'd override that reset regardless of which rule comes later in the
    file. */
-.sidebar-expand-toggle{margin-bottom:var(--space-2); padding-bottom:10px; border-bottom:1px solid var(--separator);}
+/* 2026-08-29 follow-up: the toggle is wrapped in `.sidebar-header` (base.html)
+   alongside a `.sidebar-app-name` label so expanded mode has somewhere to put
+   the app name instead of leaving that row's extra width empty. The
+   divider/spacing moved from `.sidebar-expand-toggle` itself to this wrapper
+   so it still spans the full row now that the row has two children; collapsed
+   mode (width:100% of an 80px rail, column layout) renders the same as
+   before since `.sidebar-app-name` stays display:none until expanded. */
+.sidebar-header{
+  width:100%; display:flex; flex-direction:column; align-items:center;
+  margin-bottom:var(--space-2); padding-bottom:10px; border-bottom:1px solid var(--separator);
+}
 .sidebar-expand-toggle[aria-pressed="true"]{color:var(--fg-primary);}
+.sidebar-app-name{
+  display:none; font-size:13px; font-weight:600; color:var(--fg-primary);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 
 /* "+ New" rail button (plans/sidebar-redesign.md's "Sidebar Controls").
    Accent-colored (icon + text) so it reads as an action, not a nav
@@ -729,6 +743,8 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      sidebar-expand-toggle"`) beats the single-class generic rule's
      specificity regardless of source order. */
   html[data-sidebar-expanded] .tab-btn.sidebar-expand-toggle{justify-content:center;}
+  html[data-sidebar-expanded] .sidebar-header{flex-direction:row; align-items:center; gap:10px; padding:0 0 10px;}
+  html[data-sidebar-expanded] .sidebar-app-name{display:block;}
 
   html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
   html[data-sidebar-expanded] .sidebar-tree-row{justify-content:flex-start; gap:4px;}
