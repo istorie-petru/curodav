@@ -128,7 +128,12 @@
 // rail narrowed once more, 56px -> 52px, so the active-highlight box
 // reads closer to 1:1 against its 36px min-height) -- bumped per the
 // same v19 lesson.
-const CACHE_NAME = "cc-shell-v31";
+// v32 (2026-08-30): static/style.css-only change, same session (expanded
+// mode's own left/right padding mismatch: sidebar-section-label's 12px
+// padding stacked on top of .tabbar's own, and .tab-separator's fixed
+// 40px width fell back to flush-left instead of a matching inset under
+// expanded's align-items:stretch) -- bumped per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v32";
 
 const SHELL_ASSETS = [
   "/offline",

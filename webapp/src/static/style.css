@@ -808,8 +808,17 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
 .sidebar-tree-children{display:none; width:100%; flex-direction:column;}
 
+/* 2026-08-30 follow-up (direct report -- expanded mode's left/right
+   padding didn't match): this label sits directly inside `.tabbar`, which
+   already has its own 8px horizontal padding -- this rule's old `12px`
+   left/right stacked on top of that (20px total), while every `.tab-btn`
+   row's icon only sits at a 12px total inset (8px tabbar padding + 4px
+   the button's own padding, see the html[data-sidebar-expanded] .tab-btn
+   comment further down). `4px` here lands "Spaces"/"Projects" text at
+   that same 12px inset instead of 8px further right than the icons above
+   and below it. */
 .sidebar-section-label{
-  display:none; width:100%; padding:10px 12px 4px;
+  display:none; width:100%; padding:10px 4px 4px;
   font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
   color:var(--fg-tertiary); text-align:left;
 }
@@ -905,6 +914,18 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      complaint). The divider is unconditional now (see its own rule
      above); this block only ever adds the label on top of it. */
   html[data-sidebar-expanded] .sidebar-section-label{display:block;}
+
+  /* 2026-08-30 follow-up (direct report -- expanded mode's left/right
+     padding didn't match): `.tab-separator`'s own rule is a fixed 40px --
+     fine in collapsed mode, where `.tabbar`'s `align-items:center`
+     centers it in the rail regardless of its width, but expanded sets
+     `align-items:stretch` (above), and a flex item with an explicit width
+     doesn't stretch -- it falls back to flex-start, i.e. flush against
+     the content box's left edge with no inset at all, while every icon/
+     label row around it sits at a 12px inset. Spanning the full row
+     width removes the mismatch outright instead of guessing a matching
+     inset for a divider line. */
+  html[data-sidebar-expanded] .tab-separator{width:100%;}
 }
 
 /* Main content area: offset by rail width on desktop */

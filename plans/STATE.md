@@ -6023,3 +6023,28 @@ this padding allows without also touching padding, which wasn't asked).
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Immediate follow-up (2026-08-30, same session) -- expanded mode's own
+left/right padding mismatch (direct report: "the narrow sidebar is
+perfect... the expanded one is not")
+
+Asked what specifically looked off; answer: left/right padding mismatch,
+same category of bug as the narrow rail's had. Found two direct children
+of `.tabbar` whose own padding stacked on top of, or ignored, the rail's
+established 12px icon inset (8px `.tabbar` padding + 4px `.tab-btn`
+padding, see the 2026-08-29 item-alignment entry):
+- `.sidebar-section-label` ("Spaces"/"Projects" headers) had its own
+  `padding:10px 12px 4px` -- 12px stacked on `.tabbar`'s 8px gave a 20px
+  inset, 8px further right than the icon rows above/below it. Changed to
+  `10px 4px 4px`, landing it at the same 12px inset.
+- `.tab-separator`'s fixed `width:40px` (fine collapsed, where
+  `align-items:center` centers it regardless of width) fell back to
+  flush-left with *no* inset under expanded's `align-items:stretch` --
+  a flex item with an explicit width doesn't stretch, so it defaults to
+  flex-start instead. `html[data-sidebar-expanded] .tab-separator{width:
+  100%;}` spans the divider the full row width instead, sidestepping the
+  mismatch rather than guessing a matching inset for a line.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v31` -> `cc-shell-v32` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).
