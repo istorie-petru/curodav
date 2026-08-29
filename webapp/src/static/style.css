@@ -2683,7 +2683,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .month-day-cell{
   grid-row:1 / -1; display:flex; flex-direction:column; min-height:90px;
   padding:3px 4px 4px; cursor:pointer; position:relative; z-index:1;
-  border-right:1px solid var(--separator);
+  border-right:1px solid var(--separator); min-width:0;
 }
 .month-day-cell:last-child{border-right:none;}
 .month-day-cell.not-in-month{opacity:.4;}
@@ -2706,10 +2706,38 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .month-task-item{
   display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
+  min-width:0; max-width:100%;
 }
 .month-task-item > *{overflow:hidden; text-overflow:ellipsis;}
 .month-task-item .color-dot{margin:0;}
 .month-item-time{flex:none; color:var(--fg-tertiary); font-variant-numeric:tabular-nums; font-weight:500;}
+/* 2026-08-29 (direct request, "the calendar page still has problems"
+   follow-up) -- the event/task title in a month-view row used to be a bare
+   text node after the dot/time spans (_calendar_month_grid.html), not
+   wrapped in its own element. `.month-task-item > *{overflow:hidden;
+   text-overflow:ellipsis}` above only ever applies to element children --
+   a raw text node has no box of its own to clip, so a long, unbreakable
+   title (an unbroken run with no spaces -- e.g. a synced calendar's raw
+   UID leaking into the title field -- can't line-wrap either, per
+   `white-space:nowrap`) just kept flowing past the day cell's own edge
+   instead of truncating, spilling into the neighboring cell or clipping
+   hard at the calendar card's own boundary with no "..." at all. Title is
+   now wrapped in `<span class="month-item-title">` so it's a real flex
+   child the ellipsis rule above actually reaches; `flex:1 1 auto` (not the
+   dot/time's `flex:none`) is what should shrink first, and `min-width:0`
+   overrides a flex item's default content-based auto-minimum (the same
+   "flex item won't shrink below its own min-content width" rule
+   `main{min-width:0}`'s own comment already documents for the Timeline
+   Gantt canvas) so overflow:hidden can actually engage instead of the
+   title pushing `.month-task-item` (and the day cell/grid column behind
+   it) wider than its 1fr track to fit. `.month-day-cell` gets the same
+   `min-width:0` as a second line of defense at the grid-item level, since
+   an unbreakable string could in principle still force a *grid* track
+   wider than 1fr the same way it forces a flex item wider, independent of
+   anything happening inside `.month-task-item`. Both anchors also gained a
+   `title="..."` attribute (native tooltip) so the full text is still
+   reachable on hover once it's visually truncated. */
+.month-item-title{flex:1 1 auto; min-width:0;}
 .month-task-item:hover{text-decoration:underline;}
 .month-more-link{font-size:11px; font-weight:600; color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
 .month-more-link:hover{text-decoration:underline;}

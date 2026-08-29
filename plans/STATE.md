@@ -5286,3 +5286,37 @@ file.
   fix, nothing with new server-side behavior to assert on beyond the
   updated Scheduled-column test above). Full suite: **1852 passed**
   (same count as before -- one test renamed, not added/removed).
+
+## Bug fix (2026-08-29, same day, immediate follow-up) -- Month/4-Week view
+event titles overflowing the day cell instead of truncating
+
+Direct follow-up ("the calendar page still has problems") with a
+screenshot: Month/4-Week view day cells showed a long, space-less title
+(e.g. a synced calendar's raw UID leaking into the title field) running
+straight off the edge of the day cell -- into the neighboring cell, or
+clipped hard with no "..." at the calendar card's own right edge -- instead
+of truncating in place. Different root cause from the three layout bugs
+above (this one isn't sidebar-width-dependent, just more visible on a
+narrower `main`): `.month-task-item`'s event/task title
+(`_calendar_month_grid.html` and `calendar_fourweek.html`, which
+duplicates the same markup rather than including the shared partial -- see
+that file's own header comment) was a bare Jinja-rendered text node
+sitting after the dot/time `<span>`s, not wrapped in an element of its
+own. `.month-task-item > *{overflow:hidden; text-overflow:ellipsis}`
+(style.css) only ever matches element children -- a text node has no box
+of its own to clip, so an unbreakable string (can't line-wrap either,
+`white-space:nowrap`) just kept flowing past the flex container.
+
+Fix, applied identically in both templates: title now wrapped in `<span
+class="month-item-title">`, given `flex:1 1 auto; min-width:0` (style.css)
+-- the `min-width:0` overrides a flex item's default content-based
+automatic minimum, the same rule `main{min-width:0}`'s own comment already
+documents for the Timeline Gantt canvas, without it `overflow:hidden`
+can't actually engage. `.month-day-cell` also gained `min-width:0` as a
+second line of defense at the grid-item level (an unbreakable string can
+force a *grid* track wider than its 1fr the same way it forces a flex item
+wider). Both anchors gained a `title="..."` attribute so the full text is
+still reachable on hover once visually truncated.
+
+No test covers exact title-wrapping markup either way, so nothing needed
+updating. Full suite: **1852 passed** (unchanged).

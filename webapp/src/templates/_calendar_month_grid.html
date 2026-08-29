@@ -30,13 +30,13 @@
                 {% if item.kind == "all_day" %}
                     <a class="month-all-day month-event-item cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ item.event.title }}</a>
                 {% elif item.kind == "event" %}
-                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
+                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
                         <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
                         {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
-                        {{ item.event.title }}
+                        <span class="month-item-title">{{ item.event.title }}</span>
                     </a>
                 {% else %}
-                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ item.task.title }}</a>
+                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
