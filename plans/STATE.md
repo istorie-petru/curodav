@@ -5418,3 +5418,39 @@ left to sit.
   growing the button's own opening tag.
 - Full suite: **1852 passed** (three file-glob chunks: 819 + 525 + 508 =
   1852, no tests added/removed).
+
+## Follow-up (2026-08-29, same day) -- unify collapsed/expanded item
+padding so icons don't shift when toggling
+
+Direct report: collapsed and expanded rail items had different effective
+padding, so icons visibly sat at different horizontal insets (and the new
+header row sat further right than the nav list below it) depending on
+toggle state.
+
+Root cause -- three independent numbers that happened to differ:
+`.tabbar`'s own horizontal padding (0 collapsed vs. 8px expanded),
+`.tab-btn`'s own left padding (4px base vs. 10px expanded override), and
+`.sidebar-header`'s left padding (0 collapsed vs. 6px expanded). Combined,
+icons landed at a 12px inset collapsed vs. 18px expanded, and the header
+toggle at 8px collapsed vs. 14px expanded.
+
+- `.tabbar`: base rule now always carries `var(--space-4) var(--space-2)`
+  padding (was `var(--space-4) 0`, with expanded separately setting the
+  8px horizontal via its own override, now removed as redundant).
+  Collapsed renders pixel-identical despite the change -- 80px rail minus
+  16px padding = 64px content box, exactly `.tab-btn`'s fixed width, so
+  the previous align-items:center auto-margin (which also net out to 8px
+  each side) is replaced by real padding with the same result.
+- `.tab-btn`: expanded no longer overrides `padding` at all (was `6px
+  10px`) -- inherits the base rule's `6px 4px 4px`, so every rail item's
+  icon sits at the same x position regardless of collapse state.
+- `.sidebar-header`: expanded left/right padding `6px` -> `4px`, matching
+  `.tab-btn`'s own padding so the toggle icon lands at the same 12px inset
+  as the nav icons below it.
+- Not touched: `.tab-separator`'s positioning (centered collapsed via
+  align-items:center, flush-left expanded via align-items:stretch's
+  default for a fixed-width item) -- a separate, pre-existing inconsistency
+  noticed while auditing this, but out of scope for "the items'" padding;
+  flagged here as a real follow-up if it's reported.
+- Full suite: **1852 passed** (three file-glob chunks: 819 + 525 + 508 =
+  1852, no tests added/removed).
