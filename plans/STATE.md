@@ -5679,3 +5679,48 @@ reused everywhere (not a separate image per page).
 - `sw.js`: `CACHE_NAME` bumped `cc-shell-v22` -> `cc-shell-v23` (style.css
   changed again) -- `test_pwa_shell.py`'s literal-string assertion
   updated.
+
+## Follow-up (2026-08-29, same day) -- Dashboard Header (Expanded) avatar
+overlap on Home + Space/Project pages (direct request)
+
+Direct request to finish the "Dashboard Header (Expanded)" side of
+plans/sidebar-redesign.md § "The Standard Header": "a large, circular
+avatar overlapping the bottom left of the banner." Never actually built --
+Home's banner had the greeting text but no avatar at all. Confirmed scope
+before starting: reuse the existing Settings > General profile-photo
+feature (not a new avatar system), applied to both Home and Space/Project
+pages (`label_detail.html`) since all three are "dashboard type" pages
+sharing the same widget grid + banner system (`_page_banner.html`).
+
+- **`_page_banner.html`** renders `.page-banner-avatar-wrap` (deps.py's
+  existing `avatar()` global, `'avatar-hero'` size class) right after the
+  cover image, inside the same `{% if banner %}` branch -- no avatar on a
+  bannerless page, same "don't rework the actual default state for this"
+  reasoning as everywhere else this session touched `.page-banner-wrap`.
+  Uses the exact `{photo_b64, photo_type, full_name}` dict shape
+  `settings_general.html`'s own avatar row already builds -- no new
+  storage, no new upload path.
+- **`routers/dashboard.py::dashboard_view`**/**`routers/labels.py::
+  label_detail`**/**`routers/spaces.py::space_detail`** each gained
+  `profile_photo` (`db.get_profile_photo(conn)`) and `display_name`
+  (`dashboard_router.DISPLAY_NAME_KEY`, already computed on dashboard_view
+  for the greeting, newly read on the other two) in their context.
+- **`style.css`**: `.page-banner-avatar-wrap` positions the same way
+  `.page-banner-title` already does (absolute, left-anchored inside
+  `.page-banner-wrap`), pulled down `translateY(50%)` so `.avatar-hero`
+  (72px) straddles the banner's bottom edge -- the classic cover-photo
+  overlap. `.page-banner-title`'s own `left` shifted right to clear the
+  avatar's width (both always render together, so no "avatar absent"
+  case to also handle there). `.page-banner-wrap:has(.page-banner)`
+  gained enough `margin-bottom` to clear the avatar's protruding bottom
+  half, which its own default margin didn't cover.
+- 7 new tests (`test_banners.py::TestPageBannerAvatar`): no avatar wrap
+  without a banner (Home + a Project page), avatar renders with a banner
+  on Home/a Project page/a Space page, the initials fallback ("U" with no
+  display name, the display name's own first letter once set), and an
+  uploaded photo renders as a data URI. Full suite: **1890 passed** (four
+  file-glob chunks: 602 + 434 + 519 + 335 = 1890; seven new, none
+  removed).
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v23` -> `cc-shell-v24` (style.css
+  changed again) -- `test_pwa_shell.py`'s literal-string assertion
+  updated.

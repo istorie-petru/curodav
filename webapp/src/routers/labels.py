@@ -552,6 +552,14 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
             # button read.
             "banner": db.get_page_banner(conn, name),
             "banner_scope": name,
+            # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
+            # redesign follow-up, direct request) -- see
+            # routers/dashboard.py::dashboard_view's own comment; a
+            # Project page (this route) is a "dashboard type" page too
+            # (same widget grid, same banner system), so it gets the same
+            # user avatar overlapping the banner's bottom-left.
+            "profile_photo": db.get_profile_photo(conn),
+            "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
         }
     )
 

@@ -20,7 +20,9 @@ from starlette.requests import Request
 
 from src import db
 from src.routers import banners as banners_router
+from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
+from src.routers import spaces as spaces_router
 
 
 @pytest.fixture()
@@ -127,3 +129,58 @@ class TestBannerPartialRendering:
         body = banners_router.banner_editor(_request("/banners/editor"), conn=conn).body.decode()
         assert "/banners/image?scope=" in body
         assert "cdn.example.com" not in body
+
+
+class TestPageBannerAvatar:
+    """2026-08-29 (sidebar redesign follow-up, direct request,
+    plans/sidebar-redesign.md § "The Standard Header") -- "Dashboard
+    Header (Expanded)... large, circular avatar overlapping the bottom
+    left of the banner." _page_banner.html renders it (avatar-hero,
+    inside .page-banner-avatar-wrap) whenever a banner is set, reusing
+    the same profile-photo feature Settings > General's own avatar row
+    already has -- no new storage. Covers Home, a Project page
+    (labels_router.label_detail), and a Space page (spaces_router.
+    space_detail) -- all three are "dashboard type" pages sharing
+    _page_banner.html."""
+
+    def test_no_avatar_wrap_without_a_banner(self, conn):
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert "page-banner-avatar-wrap" not in body
+
+    def test_home_shows_avatar_initial_fallback_with_a_banner(self, conn):
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert 'class="page-banner-avatar-wrap"' in body
+        # No display name/photo set -- falls back to the "U" initial, same
+        # convention as settings_general.html's own avatar row.
+        assert '<span class="avatar-circle avatar-hero">U</span>' in body
+
+    def test_home_avatar_uses_display_name_initial(self, conn):
+        db.set_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY, "Petru")
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert '<span class="avatar-circle avatar-hero">P</span>' in body
+
+    def test_home_avatar_renders_uploaded_photo(self, conn):
+        db.set_profile_photo(conn, base64.b64encode(b"photo-bytes").decode("ascii"), "png")
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert 'class="avatar-circle avatar-hero"' in body
+        assert "data:image/png;base64," in body
+
+    def test_project_page_shows_avatar_with_a_banner(self, conn):
+        _make_label(conn, "CS101")
+        _set_remote(conn, cached=True, scope="CS101")
+        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        assert 'class="page-banner-avatar-wrap"' in body
+
+    def test_project_page_has_no_avatar_wrap_without_a_banner(self, conn):
+        _make_label(conn, "CS101")
+        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        assert "page-banner-avatar-wrap" not in body
+
+    def test_space_page_shows_avatar_with_a_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
+        _set_remote(conn, cached=True, scope="Work")
+        body = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn).body.decode()
+        assert 'class="page-banner-avatar-wrap"' in body

@@ -1879,6 +1879,17 @@ def dashboard_view(
             # scope field and _page_banner.html's edit-mode button read.
             "banner": db.get_page_banner(conn, ""),
             "banner_scope": "",
+            # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
+            # redesign follow-up, direct request, plans/sidebar-redesign
+            # .md § "The Standard Header") -- the large circular avatar
+            # overlapping the banner's bottom-left, _page_banner.html's
+            # own addition. Reuses the exact same profile-photo feature
+            # Settings > General's own avatar row already has (deps.py's
+            # avatar() global, same {photo_b64, photo_type, full_name}
+            # dict shape) -- no new storage. display_name is already
+            # computed above for the greeting; profile_photo is new here.
+            "profile_photo": db.get_profile_photo(conn),
+            "display_name": display_name,
         }
     )
     return templates.TemplateResponse("dashboard.html", ctx)

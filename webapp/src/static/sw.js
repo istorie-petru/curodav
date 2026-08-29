@@ -99,7 +99,10 @@
 // v23 (2026-08-29): style.css changed again (narrow-header banner/actions-
 // slot rules, folding Tasks/Contacts/Calendar's old toolbar-2row into the
 // header) -- bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v23";
+// v24 (2026-08-29): style.css changed again (Dashboard Header (Expanded)
+// avatar overlap -- .page-banner-avatar-wrap/.avatar-hero) -- bumped per
+// the same v15 lesson.
+const CACHE_NAME = "cc-shell-v24";
 
 const SHELL_ASSETS = [
   "/offline",

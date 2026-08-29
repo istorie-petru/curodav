@@ -4,13 +4,29 @@
      - banner: db.get_page_banner() dict, or None when the page has no
        banner set. kind="upload" carries image_b64/image_type; kind="remote"
        carries image_url (+ optional source_url/alt attribution).
-   This partial renders ONLY the cover image itself (nothing when the page
-   has no banner). The page's own action bar -- quick-add "New" / Edit mode
-   / Done / New widget / Add-Change banner -- lives alongside it in the
-   same .page-banner-wrap (dashboard.html / label_detail.html, 2026-08-10);
-   with a banner the buttons float bottom-right over this image, without
-   one they're a plain top bar. The overlay title (greeting / label name)
-   is also rendered by the pages, since it's page-specific. #}
+     - profile_photo/display_name (2026-08-29 addition, see below):
+       db.get_profile_photo()'s dict (or None) and the Settings > General
+       display name, for the avatar overlap.
+   This partial renders the cover image (nothing when the page has no
+   banner) plus, since 2026-08-29 (sidebar redesign follow-up, direct
+   request, plans/sidebar-redesign.md § "The Standard Header" -- "Dashboard
+   Header (Expanded)... Large, circular avatar overlapping the bottom left
+   of the banner"), that avatar itself when a banner is set. Home and every
+   Space/Project page (dashboard.html/label_detail.html both include this
+   partial) count as "dashboard type" pages for this -- it's the same
+   user-wide avatar everywhere, not a per-page thing, reusing the exact
+   {photo_b64, photo_type, full_name} shape deps.py's avatar() global
+   already expects (same one Settings > General's own avatar row builds).
+   Bannerless pages are unchanged -- no avatar without a banner to overlap,
+   same reasoning `.page-banner-wrap:has(.page-banner)` styling elsewhere
+   already uses; the "no banner yet" case is this app's actual default, so
+   it isn't worth reworking that plain-top-bar layout for this. The page's
+   own action bar -- quick-add "New" / New widget / Add-Change banner /
+   Reset layout -- lives alongside it in the same .page-banner-wrap
+   (dashboard.html / label_detail.html, 2026-08-10); with a banner the
+   buttons float bottom-right over this image, without one they're a plain
+   top bar. The overlay title (greeting / label name) is also rendered by
+   the pages, since it's page-specific. #}
 {% if banner %}
 <div class="page-banner">
     {# Any banner with a `version` (uploaded, or a legacy searched banner
@@ -44,5 +60,8 @@
        the img visible for no-JS visitors (the noscript style is inert when
        scripting is enabled). #}
     <noscript><style>.page-banner img{opacity:1;}</style></noscript>
+</div>
+<div class="page-banner-avatar-wrap">
+    {{ avatar({'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
 </div>
 {% endif %}

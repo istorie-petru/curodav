@@ -4549,7 +4549,11 @@ body.command-palette-open{overflow:hidden;}
    positioned title can pin to the banner box above it. */
 .page-banner-wrap{position:relative;}
 .page-banner-title{
-  position:absolute; left:var(--space-4); bottom:var(--space-3); margin:0;
+  /* left offset clears .page-banner-avatar-wrap below (avatar-hero's 72px
+     + a gap) -- the title only ever renders alongside the avatar (both
+     are inside the same {% if banner %} branch), so there's no
+     "avatar-less" case here to also account for. */
+  position:absolute; left:calc(var(--space-4) + 88px); bottom:var(--space-3); margin:0;
   z-index:1; color:#fff; font-weight:700; letter-spacing:-0.3px;
   font-size:clamp(1.15rem, 2.5vw, 1.6rem); line-height:1.15;
   text-shadow:0 1px 4px rgba(0,0,0,.55), 0 1px 12px rgba(0,0,0,.3);
@@ -4599,6 +4603,34 @@ body.command-palette-open{overflow:hidden;}
   background:linear-gradient(to top, rgba(0,0,0,.6), transparent);
   pointer-events:none; z-index:0;
 }
+/* Dashboard Header (Expanded) avatar (2026-08-29, sidebar redesign
+   follow-up, direct request, plans/sidebar-redesign.md § "The Standard
+   Header") -- "a large, circular avatar overlapping the bottom left of
+   the banner." Positioned the same way .page-banner-title already is
+   (absolute within .page-banner-wrap, left-anchored), but pulled down by
+   half its own height (translateY(50%)) so it straddles the banner's
+   bottom edge -- top half over the photo, bottom half over the page
+   background below it, the classic cover-photo overlap. z-index:2 (above
+   both .page-banner-title/-actions' z-index:1) since it's meant to sit
+   visually in front of everything else in the header. */
+.page-banner-avatar-wrap{
+  position:absolute; left:var(--space-4); bottom:0; z-index:2;
+  transform:translateY(50%);
+}
+.avatar-hero{
+  width:72px; height:72px; font-size:26px;
+  border:3px solid var(--bg-elevated);
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+}
+/* The avatar's bottom half (36px, half of avatar-hero's 72px) protrudes
+   below .page-banner's own edge -- .page-banner's normal margin-bottom
+   (var(--space-3), well under 36px) isn't enough clearance on its own,
+   so whatever follows the wrap (widget grid, or the edit-mode action
+   row on a bannerless-to-banner toggle) would sit underneath it.
+   Overrides .page-banner-wrap's own margin (none by default) with enough
+   room specifically when there's an avatar to clear -- bannerless pages
+   are untouched. */
+.page-banner-wrap:has(.page-banner){margin-bottom:36px;}
 
 /* Standard Page Header, narrow variant (sidebar redesign item 13e,
    2026-08-29, _page_header_narrow.html) -- the "Standard Page Header
