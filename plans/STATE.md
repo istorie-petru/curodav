@@ -4904,3 +4904,38 @@ Two more small direct requests, same session:
   carrying the right `href`/`title` on their own add link, and Completed's
   divider row carrying no add button at all. Full suite: **1836 passed**
   (1831 + 5 new).
+
+## Bug fix (2026-08-29, immediate follow-up) -- unwanted horizontal
+scrollbar; group divider row not full width
+
+Direct report, two questions in one: "why does the tasks table now need a
+scrollbar... And why does the group label row is not full width."
+
+- **Divider row not full width** -- the pass above put `display:flex`
+  directly on `.task-section-divider td` (the one `colspan="9"` cell) to
+  lay the label and the new "+" button out side by side. Setting
+  `display:flex` on a table cell changes its *computed* display from
+  `table-cell` to `flex` outright, which pulls it out of the table's own
+  column/colspan layout algorithm entirely -- instead of stretching to
+  fill every column the colspan spans (what a `table-cell` always does
+  regardless of its own content), it shrank down to only as wide as its
+  flex content actually needed. Fixed by moving the flex layout onto a
+  plain `<div class="task-section-divider-row">` *inside* the `<td>`
+  instead of on the cell itself -- the `<td>` stays a real table-cell
+  (stretches full-width as before), the div inside it lays out exactly
+  the same label/button row.
+- **New scrollbar** -- the previous "wider Title column" fix
+  (`.task-title-cell{min-width:280px}`, unconditional on every row) added
+  enough width to push the whole table past `.table-scroll`'s available
+  space on an ordinary viewport. Split into a small always-on floor
+  (140px, just enough that a short title doesn't look cramped) and the
+  wider 280px only `.task-title-cell:has([data-editing])` -- i.e. only
+  while *that row's* title is actually being edited (inline_edit.js sets
+  `data-editing="1"` on the cell's own editable element the moment edit
+  mode starts), so the column only grows to make room for typing when
+  something is actually being typed, not permanently on every row.
+- No new tests: both are pure CSS layout fixes (no markup/behavior change
+  a plain HTML-string assertion would catch -- table column width and
+  `display:flex`-vs-`table-cell` box generation aren't observable from
+  this suite's router-response-body checks). Full suite still: **1836
+  passed** (unchanged from the pass above).

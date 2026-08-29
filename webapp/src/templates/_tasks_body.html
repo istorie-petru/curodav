@@ -60,12 +60,14 @@
            prefill), Unassigned still opens the plain form. #}
         <tr class="task-section-divider">
             <td colspan="9">
-                <span class="task-section-divider-label">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</span>
-                {% if grp.kind == 'project' %}
-                <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
-                {% elif grp.kind == 'unassigned' %}
-                <a href="/tasks/new" data-modal class="icon-btn" title="Add task">{{ icon('plus', 'icon-sm') }}</a>
-                {% endif %}
+                <div class="task-section-divider-row">
+                    <span class="task-section-divider-label">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</span>
+                    {% if grp.kind == 'project' %}
+                    <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
+                    {% elif grp.kind == 'unassigned' %}
+                    <a href="/tasks/new" data-modal class="icon-btn" title="Add task">{{ icon('plus', 'icon-sm') }}</a>
+                    {% endif %}
+                </div>
             </td>
         </tr>
     </tbody>
@@ -93,8 +95,10 @@
     <tbody>
         <tr class="task-section-divider">
             <td colspan="9">
-                <span class="task-section-divider-label">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</span>
-                <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
+                <div class="task-section-divider-row">
+                    <span class="task-section-divider-label">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</span>
+                    <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
+                </div>
             </td>
         </tr>
     </tbody>

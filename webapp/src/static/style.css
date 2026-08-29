@@ -1512,8 +1512,22 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    longer title typed into it) before it started scrolling out of view.
    `.task-title-cell` (both `_task_row.html` and `_habit_row.html`) sets a
    floor width instead of a fixed one, so the column still grows for a
-   longer title, it just never starts narrower than this. */
-.task-title-cell{min-width:280px;}
+   longer title, it just never starts narrower than this.
+
+   Direct follow-up ("why does the tasks table now need a scrollbar") --
+   280px unconditionally was too aggressive: added to every column's own
+   width, it was enough to push the whole table past `.table-scroll`'s
+   available width on an ordinary viewport, forcing a horizontal scrollbar
+   that wasn't there before. Split into a small always-on floor (just
+   enough that a two/three-word title doesn't look cramped) and the wider
+   280px only `:has([data-editing])` -- i.e. only while *this row's* title
+   is actually being edited (inline_edit.js sets `data-editing="1"` on the
+   cell's own `data-inline-edit` element the moment edit mode starts) --
+   so the column only grows to make room for typing when something is
+   actually being typed, instead of permanently reserving that space on
+   every row whether it's needed or not. */
+.task-title-cell{min-width:140px;}
+.task-title-cell:has([data-editing]){min-width:280px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points
@@ -1544,8 +1558,20 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .task-section-divider td{
   padding:6px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator);
-  display:flex; align-items:center; justify-content:space-between; gap:8px;
 }
+/* Bug fix (direct report: "the group label row is not full width") -- the
+   flex layout used to live directly on the `<td>` above. Setting
+   `display:flex` on a table cell changes its *computed* display from
+   `table-cell` to `flex` outright -- it stops participating in the
+   table's own column/colspan layout at all, so instead of stretching to
+   fill every column this `colspan="9"` cell spans, it shrank to only as
+   wide as its own flex content (the label text + button) needed. Moving
+   the flex layout onto a plain `<div class="task-section-divider-row">`
+   *inside* the (still `display:table-cell`) `<td>` keeps the cell itself
+   fully participating in the table layout -- it stretches full-width as
+   colspan'd cells always do -- while the div inside it lays out the
+   label/button in a row exactly as before. */
+.task-section-divider-row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
 .task-section-divider-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 /* Direct follow-up (2026-08-29): the group's own "+ Add task"/"+ Add
    habit" used to be a separate trailing `.task-add-row` <tr> (see that
