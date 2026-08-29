@@ -634,7 +634,17 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:2px; flex:none;
   width:36px; min-height:48px;
-  background:none; border:none; padding:6px 4px 4px; cursor:pointer;
+  background:none; border:none; cursor:pointer;
+  /* 2026-08-30 follow-up (direct report -- icons visibly jumped left/up
+     when toggling collapsed<->expanded): left padding is now 8px
+     unconditionally instead of collapsed-only (see the
+     html:not([data-sidebar-expanded]) override this replaced, further
+     down) -- expanded's icon used to sit at a 12px inset (8px tabbar
+     padding + 4px) while collapsed's sat at 16px (8px + 8px), so the
+     icon's x position visibly shifted by 4px on every toggle. Baking the
+     same 8px into the base rule gives both states the identical 16px
+     inset instead of only matching within each state. */
+  padding:6px 4px 4px 8px;
   font-size:12px; font-weight:500; line-height:1.1;
   color:var(--fg-secondary); text-decoration:none; white-space:nowrap;
   border-radius:0; position:relative;
@@ -678,47 +688,33 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      sets display:block). */
   html:not([data-sidebar-expanded]) .tab-btn span{display:none;}
 
-  /* 2026-08-30 immediate follow-up (direct report -- "the only
-     inconsistency is the left and right padding/margin"): with the label
-     gone, `.tab-btn`'s own `align-items:center` (the column layout's
-     cross-axis) was still horizontally *centering* the icon inside the
-     full 64px box -- padding-left:4px + centering the 20px icon in the
-     56px content box put its left edge ~22px into the button, i.e. ~30px
-     from the rail's own left edge (8px tabbar padding + 22px). Expanded
-     rows are left-aligned instead (`justify-content:flex-start`), landing
-     their icon's left edge at a 12px inset (8px tabbar padding + 4px
-     tab-btn padding) -- the same 4px padding both states already share,
-     just not applied the same way once one state centers and the other
-     doesn't. Switching collapsed to `align-items:flex-start` puts its
-     icon at that identical 12px inset, so the icon sits at the same x
-     position whether the rail is collapsed or expanded, instead of
-     jumping sideways as the sidebar toggles. */
-  html:not([data-sidebar-expanded]) .tab-btn{align-items:flex-start;}
+  /* 2026-08-30 (superseded by the same-day follow-up above): this used to
+     switch collapsed from centering the icon to `align-items:flex-start`,
+     matching expanded's left-align -- kept as the "why column layout
+     needs an explicit horizontal alignment at all" reference, but the
+     padding-left value it was matching against is now baked into the
+     base `.tab-btn` rule instead of only applying here, so both states
+     share one inset instead of only matching within each state.
+     `:not(.sidebar-expand-toggle)` excludes the header's icon-only toggle
+     button -- it isn't a left-aligned list row like every other rail
+     entry, it's a small centered square button (see `#sidebar-expand-
+     toggle` further down, now sized/padded identically in both states),
+     so it keeps the base rule's `align-items:center` in every state
+     instead of picking up this list-row treatment. */
+  html:not([data-sidebar-expanded]) .tab-btn:not(.sidebar-expand-toggle){align-items:flex-start;}
   /* The collapsed active-pill was centered under the (formerly centered)
      icon via `left:50%; transform:translateX(-50%)` -- now that the icon
      sits at a fixed left inset instead of the button's center, a
      center-anchored pill would visibly detach from it. Reusing expanded's
      own full-box highlight (`top/left:0, width/height:100%`) sidesteps
      needing to hand-position a pill under the new icon offset at all --
-     same technique, just a narrower box, `--radius-sm` instead of
-     `--radius-md` to suit the tighter 64px width. */
+     same technique, just a narrower box. Radius is `--radius-sm` in both
+     states now (2026-08-30 follow-up, direct report: "the corners of the
+     selected is different between the two" -- expanded used to override
+     this to `--radius-md` instead, see that rule further down). */
   html:not([data-sidebar-expanded]) .tab-btn.active::before{
     top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-sm);
   }
-
-  /* 2026-08-30 immediate follow-up (direct report -- "quite a bit of
-     space left on the right side... add a bit more space on the left and
-     cut some of the [rail's width]"): matching expanded's exact 12px
-     inset (above) left the icon flush against a wide, now-empty 64px box
-     -- most of the box's width sat unused to the icon's right, since a
-     narrow rail's only content is a single icon, not a left-aligned text
-     row like expanded has. Two changes together: the rail itself
-     shrank (80px -> 64px, `.tabbar`/`.tab-btn`/`main` above), and this
-     button's own left padding grew 4px -> 8px, nudging the icon a bit
-     further from the edge than expanded's icon -- collapsed and expanded
-     are deliberately no longer pixel-identical insets after this, trading
-     that for less dead space in a box that's mostly empty either way. */
-  html:not([data-sidebar-expanded]) .tab-btn{padding-left:8px;}
 }
 
 /* Spaces in the sidebar (base.html, 2026-08-08) -- a second, shorter list
@@ -756,36 +752,42 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    file. */
 /* 2026-08-29 follow-up: the toggle is wrapped in `.sidebar-header` (base.html)
    alongside a `.sidebar-app-name` label so expanded mode has somewhere to put
-   the app name instead of leaving that row's extra width empty. The
-   divider/spacing moved from `.sidebar-expand-toggle` itself to this wrapper
-   so it still spans the full row now that the row has two children; collapsed
-   mode (width:100% of an 80px rail, column layout) renders the same as
-   before since `.sidebar-app-name` stays display:none until expanded. */
+   the app name instead of leaving that row's extra width empty.
+
+   2026-08-30 follow-up (direct report -- icons visibly jumped up when
+   toggling collapsed<->expanded): the header used to be column-direction
+   with no fixed toggle size in collapsed mode, but row-direction with a
+   fixed 32x32 toggle in expanded mode (see the removed
+   html[data-sidebar-expanded] .sidebar-header/#sidebar-expand-toggle
+   rules this replaced) -- collapsed's toggle rendered as a full
+   `.tab-btn` (~46px tall), expanded's as a compact 32px square, so the
+   whole header block was ~12px taller in collapsed. That extra height
+   pushed every nav icon below it down by 12px in collapsed relative to
+   expanded, reading as icons jumping *up* on expand. Layout/padding/the
+   toggle's own size are unconditional now -- identical header height in
+   both states, nothing below it shifts when the rail toggles. */
 .sidebar-header{
-  width:100%; display:flex; flex-direction:column; align-items:center;
-  margin-bottom:var(--space-2); padding-bottom:10px; border-bottom:1px solid var(--separator);
+  width:100%; display:flex; flex-direction:row; align-items:center; gap:8px;
+  margin-bottom:var(--space-2); padding:2px 4px 10px; border-bottom:1px solid var(--separator);
+  box-sizing:border-box;
 }
 .sidebar-expand-toggle[aria-pressed="true"]{color:var(--fg-primary);}
+/* Fixed-size regardless of collapse state (see `.sidebar-header`'s own
+   comment above) -- a small square icon button, not a stretching
+   `.tab-btn` row. The id selector beats the generic `.tab-btn`
+   width/min-height/padding rule on specificity, so this shrinks instead
+   of stretching to fill the row -- no new class needed on the button
+   itself (base.html's comment explains why: keeps the dedicated-icon
+   test's fixed-size markup window intact). */
+#sidebar-expand-toggle{
+  width:32px; min-width:32px; min-height:32px; height:32px; flex:none; padding:0;
+  border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);
+}
+#sidebar-expand-toggle:hover{background:var(--bg-hover, var(--separator));}
 .sidebar-app-name{
   display:none; font-size:13px; font-weight:600; color:var(--fg-primary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-
-/* 2026-08-29 immediate follow-up (direct report): the app name never had
-   room to show. `html[data-sidebar-expanded] .tab-btn` below (the rule
-   every rail row shares) sets width:100% -- `.sidebar-header`'s toggle
-   button carries that same `.tab-btn` class, so it filled the entire row
-   by itself, leaving `.sidebar-app-name` with nothing next to it. The
-   header row needs its own compact treatment, not the wide nav-row one
-   every other entry gets: the toggle shrinks to a small fixed icon button
-   (targeted by its existing `#sidebar-expand-toggle` id, not a new class --
-   see base.html's comment on why) instead of stretching, and the header
-   row gets its own tighter horizontal padding so it reads as a compact
-   title bar sitting above the nav list, not one more nav row. Scoped to
-   the same html[data-sidebar-expanded] media query as the sizing rule
-   below (not left unscoped here) -- collapsed mode's icon button stays
-   pixel-identical to before, per this whole block's own "nothing here
-   touches collapsed mode" rule. */
 
 /* "+ New" rail button (plans/sidebar-redesign.md's "Sidebar Controls").
    Accent-colored (icon + text) so it reads as an action, not a nav
@@ -812,13 +814,17 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    padding didn't match): this label sits directly inside `.tabbar`, which
    already has its own 8px horizontal padding -- this rule's old `12px`
    left/right stacked on top of that (20px total), while every `.tab-btn`
-   row's icon only sits at a 12px total inset (8px tabbar padding + 4px
-   the button's own padding, see the html[data-sidebar-expanded] .tab-btn
-   comment further down). `4px` here lands "Spaces"/"Projects" text at
+   row's icon sits at a 12px total inset (8px tabbar padding + 4px the
+   button's own padding). `4px` here landed "Spaces"/"Projects" text at
    that same 12px inset instead of 8px further right than the icons above
-   and below it. */
+   and below it.
+   2026-08-30 same-day follow-up: bumped `4px` -> `8px` since the base
+   `.tab-btn` rule's own left padding is now 8px in both states (see that
+   rule's own comment, direct report about icons jumping between
+   collapsed/expanded) -- the shared inset moved from 12px to 16px, and
+   this label's padding moves with it to stay matched. */
 .sidebar-section-label{
-  display:none; width:100%; padding:10px 4px 4px;
+  display:none; width:100%; padding:10px 8px 4px;
   font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
   color:var(--fg-tertiary); text-align:left;
 }
@@ -859,38 +865,21 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
     min-height:36px;
   }
   html[data-sidebar-expanded] .tab-btn span{margin-top:0; max-width:none; overflow:visible; text-overflow:clip; white-space:normal;}
+  /* Radius matches collapsed's own full-box highlight now (`--radius-sm`
+     -- was `--radius-md` here, direct report: "the corners of the
+     selected is different between the two"). */
   html[data-sidebar-expanded] .tab-btn.active::before{
-    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-md);
+    top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-sm);
   }
   /* The toggle itself has no text label (icon only) -- keep it centered
      in the wider rail instead of picking up the generic left-align above.
      Two classes on the selector (matches its own markup, `class="tab-btn
      sidebar-expand-toggle"`) beats the single-class generic rule's
-     specificity regardless of source order. */
+     specificity regardless of source order. Collapsed mode doesn't need
+     this override -- the toggle is excluded from collapsed's own
+     left-align rule above instead, so it's already centered there via
+     the base rule's own `justify-content:center`. */
   html[data-sidebar-expanded] .tab-btn.sidebar-expand-toggle{justify-content:center;}
-  /* Header row is compact and left-aligned, distinct from the wide,
-     padded nav-item rows below it: fixed-height title bar (a small square
-     icon button + text), not another full-width `.tab-btn`. The id
-     selector (`#sidebar-expand-toggle`, already unique) beats the generic
-     `.tab-btn` width:100%/min-height:36px/padding rule above on
-     specificity, so the button shrinks instead of stretching to fill the
-     row -- no new class needed on the button itself (base.html's comment
-     explains why: keeps the dedicated-icon test's fixed-size markup
-     window intact). */
-  /* Left/right padding matches `.tab-btn`'s own (4px) rather than the 6px
-     used here before, so the toggle icon lands at the exact same 12px
-     inset (8px tabbar padding + 4px) as every nav icon below it -- the
-     header row no longer sits 2px further right than the list it sits
-     above. */
-  html[data-sidebar-expanded] .sidebar-header{
-    flex-direction:row; align-items:center; gap:8px; width:100%;
-    padding:2px 4px 10px; box-sizing:border-box;
-  }
-  html[data-sidebar-expanded] #sidebar-expand-toggle{
-    width:32px; min-width:32px; min-height:32px; height:32px; flex:none; padding:0;
-    border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);
-  }
-  html[data-sidebar-expanded] #sidebar-expand-toggle:hover{background:var(--bg-hover, var(--separator));}
   html[data-sidebar-expanded] .sidebar-app-name{display:block; flex:1; min-width:0;}
 
   html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
@@ -922,9 +911,10 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      `align-items:stretch` (above), and a flex item with an explicit width
      doesn't stretch -- it falls back to flex-start, i.e. flush against
      the content box's left edge with no inset at all, while every icon/
-     label row around it sits at a 12px inset. Spanning the full row
-     width removes the mismatch outright instead of guessing a matching
-     inset for a divider line. */
+     label row around it sits at a shared inset (16px as of the same-day
+     follow-up bumping `.tab-btn`'s own padding, see that rule's comment).
+     Spanning the full row width removes the mismatch outright instead of
+     guessing a matching inset for a divider line. */
   html[data-sidebar-expanded] .tab-separator{width:100%;}
 }
 

@@ -6048,3 +6048,47 @@ padding, see the 2026-08-29 item-alignment entry):
   only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
   passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
   removed).
+
+## Immediate follow-up (2026-08-30, same session) -- icons jumped on
+toggle, active-highlight corners mismatched (direct report: "the icons
+move (from the narrow to wide sidebar) in the left and up corner by a
+few pixels. also the corners of the selected is different between the
+two")
+
+Two independent root causes, both from state-dependent sizing that had
+drifted apart across this session's earlier slices:
+
+- **Horizontal jump:** `.tab-btn`'s own left padding was 8px collapsed-
+  only (this session's "nudge icon right" slice) but still 4px in
+  expanded (unchanged) -- giving a 16px inset collapsed vs. 12px
+  expanded, a 4px jump on every toggle. Baked `8px` into the base
+  `.tab-btn` rule unconditionally instead (both states now 16px) and
+  removed the now-redundant collapsed-only override.
+  `.sidebar-section-label`'s own padding (4px, matched to the old 12px
+  inset two entries back) and the `.tab-separator` comment both bumped
+  to track the new 16px baseline.
+- **Vertical jump:** the header row (toggle + "Command Center" label)
+  was column-direction with an unsized (~46px-tall, full `.tab-btn`)
+  toggle in collapsed, but row-direction with a fixed 32x32 toggle in
+  expanded -- collapsed's header rendered ~12px taller, pushing every
+  nav icon below it down by that much relative to expanded. Made the
+  header's layout/padding and the toggle's 32x32 sizing unconditional
+  (previously both were `html[data-sidebar-expanded]`-only) -- identical
+  header height (and toggle position, verified by hand: both states land
+  the toggle's icon at the same inset) in both states now, so nothing
+  below it shifts on toggle.
+- Excluded the toggle from collapsed's own icon-left-align rule
+  (`html:not([data-sidebar-expanded]) .tab-btn:not(.sidebar-expand-
+  toggle)`) -- it's a small centered square button, not a left-aligned
+  list row like every other rail entry, and needs the base rule's
+  `align-items:center` in every state to stay centered within its fixed
+  32px box instead of picking up the list-row treatment meant for icons
+  with hidden text next to them.
+- **Corner mismatch:** collapsed's active-highlight used `--radius-sm`
+  (from the "1:1 highlight" slice earlier this session), expanded still
+  used `--radius-md` (unchanged since the original full-box-highlight
+  slice). Expanded's own rule switched to `--radius-sm` to match.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v32` -> `cc-shell-v33` (style.css-
+  only, same session) -- `test_pwa_shell.py` updated. Full suite: **1921
+  passed** (three file-glob chunks: 849 + 641 + 431 = 1921; none new, none
+  removed).

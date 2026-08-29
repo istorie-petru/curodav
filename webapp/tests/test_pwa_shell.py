@@ -391,8 +391,11 @@ class TestLocalWritePath:
         # narrowed once more, 56px -> 52px), same lesson.
         # v32 (2026-08-30): bumped again, same session (expanded mode's own
         # left/right padding mismatch fixed), same lesson.
+        # v33 (2026-08-30): bumped again, same session (icon jump between
+        # collapsed/expanded fixed, active-highlight radius unified),
+        # same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v32"' in script
+        assert 'CACHE_NAME = "cc-shell-v33"' in script
 
 
 class TestOfflineToolbar:

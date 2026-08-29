@@ -133,7 +133,13 @@
 // padding stacked on top of .tabbar's own, and .tab-separator's fixed
 // 40px width fell back to flush-left instead of a matching inset under
 // expanded's align-items:stretch) -- bumped per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v32";
+// v33 (2026-08-30): static/style.css-only change, same session (icons
+// visibly jumped left/up when toggling collapsed<->expanded, and the
+// active-highlight corners had different radii between the two -- .tab-
+// btn's left padding and the header/toggle's sizing are unconditional
+// now, and both states' highlight uses the same --radius-sm) -- bumped
+// per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v33";
 
 const SHELL_ASSETS = [
   "/offline",
