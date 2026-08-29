@@ -51,15 +51,26 @@
   // image itself, so behavior is deterministic per upload surface.
   const KIND_CONFIG = {
     avatar: {
-      maxOutput: 640, // px, either dimension -- plenty for an avatar circle
+      // 2026-08-29 (direct request: "convert for smaller sizes... or
+      // compress them a bit") -- was 640px, sized for nothing in
+      // particular ("plenty for an avatar circle"). The largest this app
+      // ever displays an avatar is .avatar-hero (72px, style.css,
+      // _page_banner.html's dashboard-header overlap) -- 240px covers
+      // that at over 3x pixel density (crisp on any real device pixel
+      // ratio) with real headroom to spare, at a fraction of the bytes a
+      // 640px output cost both to store (every contact/the profile photo
+      // lives in the database as base64) and to transfer on first load
+      // of each now-separately-cached image (see contact_photo_image/
+      // profile_photo_image in routers/contacts.py/settings.py).
+      maxOutput: 240,
       defaultRatio: "free", // unchanged from this file's original, avatar-only behavior
-      outputName: "avatar.jpg",
+      outputName: "avatar",
       alwaysSubmit: false, // gated behind the form's own data-autosubmit, as before
     },
     banner: {
-      maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap
+      maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap -- a banner's own on-screen size (up to the full page width) has no fixed cap the way an avatar circle does, so this stays generous
       defaultRatio: "banner", // 5:1, matching banner_editor.html's own guidance text
-      outputName: "banner.jpg",
+      outputName: "banner",
       alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
     },
   };
@@ -357,21 +368,48 @@
       out.width = Math.max(1, Math.round(sw * outScale));
       out.height = Math.max(1, Math.round(sh * outScale));
       const octx = out.getContext("2d");
+      // White underneath transparent pixels (a cropped PNG/WEBP source
+      // with alpha) so a JPEG-fallback encode doesn't turn transparency
+      // black -- JPEG has no alpha channel, and an un-filled canvas
+      // defaults to transparent, which browsers encode as black. Applied
+      // unconditionally (not just on the JPEG-fallback branch below) so
+      // the output looks identical regardless of which format a given
+      // browser ends up encoding to -- an avatar/banner is always shown
+      // over a white/card background in this app anyway, so there's
+      // nothing lost by not preserving alpha even when WebP could.
+      octx.fillStyle = "#ffffff";
+      octx.fillRect(0, 0, out.width, out.height);
       octx.drawImage(state.naturalCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+
+      // WebP output when the browser actually supports *encoding* it (not
+      // just decoding -- toDataURL silently falls back to PNG on a browser
+      // that can't encode WebP, which the data: URL prefix check below
+      // catches), same feature-detect app.js's own now-removed
+      // CCBannerUpload used to do for banners specifically -- generalized
+      // here to every upload kind (2026-08-29, direct request: "convert...
+      // to webp or compress them a bit"). WebP at this quality is
+      // meaningfully smaller than an equivalent-quality JPEG for typical
+      // photo content, and every server-side upload route already accepts
+      // it (routers/contacts.py's/settings.py's/banners.py's own
+      // content-type allowlists all include image/webp already, from
+      // before this change).
+      const supportsWebp = out.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+      const outType = supportsWebp ? "image/webp" : "image/jpeg";
+      const outExt = supportsWebp ? "webp" : "jpg";
 
       out.toBlob(
         (blob) => {
           if (!blob) return;
-          const croppedFile = new File([blob], config.outputName, { type: "image/jpeg" });
+          const croppedFile = new File([blob], `${config.outputName}.${outExt}`, { type: outType });
           const dt = new DataTransfer();
           dt.items.add(croppedFile);
           input.files = dt.files;
-          updatePreview(input, out.toDataURL("image/jpeg", 0.9));
+          updatePreview(input, out.toDataURL(outType, 0.9));
           closeEditor(false);
           const form = input.form;
           if (form && (config.alwaysSubmit || form.hasAttribute("data-autosubmit"))) form.requestSubmit();
         },
-        "image/jpeg",
+        outType,
         0.88
       );
     });

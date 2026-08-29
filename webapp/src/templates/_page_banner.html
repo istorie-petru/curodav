@@ -74,6 +74,12 @@
     <noscript><style>.page-banner img{opacity:1;}</style></noscript>
 </div>
 <div class="page-banner-avatar-wrap">
-    {{ avatar({'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
+    {# 2026-08-29 (direct request: "better cache these images") -- photo_url
+       (routers/settings.py's profile_photo_image) over inlining photo_b64 --
+       see deps.py's avatar() own comment. This is the one avatar spot that
+       used to matter most for this: it renders on every dashboard/label/
+       Space page, so the old inline data: URI repeated the full photo's
+       bytes in every one of those pages' HTML. #}
+    {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
 </div>
 {% endif %}

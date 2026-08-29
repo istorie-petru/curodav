@@ -5819,3 +5819,73 @@ over framing.
   changed files (`avatar_cropper.js`, `app.js`) are `SHELL_ASSETS`
   scripts, per the standing v19 lesson that a script change needs this
   bump the same as a `style.css` change does.
+
+## Follow-up (2026-08-29, same day) -- serve avatar/contact/profile photos
+via cacheable routes; shrink avatar output; WebP output (direct request:
+"better cache these images because they are changed very infrequent...
+or convert them for smaller sizes... or compress them a bit")
+
+Banners already got this treatment 2026-08-10 (routers/banners.py's
+banner_image: a real, `?v=`-versioned, immutable-cacheable request instead
+of an inline `data:` URI). Every OTHER avatar spot in this app -- contact
+list rows, contact detail, the profile-picture row, and (worst case) the
+dashboard-header avatar overlap rendered on every Home/Space/Project page
+-- was still embedding the full base64 photo inline in the page's HTML on
+every single render, the exact "2MB blob made the page slow" problem
+banners already had. Addressed all three asks together: real caching,
+smaller output, and compression.
+
+- **Content-hash `version`** (same md5-first-12-hex-chars convention a
+  banner's own `version` already used): `db.py`'s `contacts.photo_version`
+  column (new, `_ensure_column`) and `PROFILE_PHOTO_VERSION_KEY`
+  (app_meta). Computed at write time (`upsert_contact`/
+  `set_profile_photo`); a row/install with a photo saved before this
+  migration gets it lazily backfilled on next read
+  (`_backfill_contact_photo_version`, `get_profile_photo`'s own inline
+  backfill) -- same one-time-cheap-write pattern `get_page_banner` already
+  used for its own version field.
+- **Two new routes**, exact mirrors of `banner_image`: `routers/
+  contacts.py::contact_photo_image` (`GET /contacts/{uid}/photo`) and
+  `routers/settings.py::profile_photo_image` (`GET /settings/profile-
+  photo/image`) -- decode, validate the stored `photo_type` against a
+  known-safe set, serve with `Cache-Control: public, max-age=31536000,
+  immutable` + `Content-Encoding: identity`.
+- **`deps.py`'s `avatar()` global** now prefers a `photo_url` key over
+  inlining `photo_b64` as a `data:` URI -- callers attach it, not derived
+  inside `avatar()` itself (it has no way to know a contact's uid or
+  whether a profile photo's version has been backfilled). `routers/
+  contacts.py` gained `_attach_photo_url`, called from `list_contacts`/
+  `contact_detail`/`edit_contact_form`; `settings_general.html`/
+  `_page_banner.html`'s own synthetic profile-photo dicts each gained a
+  `photo_url` key built from `profile_photo.version`. Falls back to the
+  old inline `data:` URI only when no `photo_url` is given (e.g. a
+  brand-new, not-yet-saved contact has no uid to build a real URL from).
+- **`avatar_cropper.js`**: avatar output cap shrunk `640px -> 240px` --
+  this app never displays an avatar larger than `.avatar-hero`'s 72px
+  (the dashboard-header overlap), so 240px is already >3x pixel density
+  headroom, not the arbitrary "plenty" the original cap was. Every output
+  (avatar and banner both) now encodes to WebP when the browser can
+  actually encode it (feature-detected via `canvas.toDataURL`, same
+  technique the now-removed `CCBannerUpload` used to use for banners
+  specifically -- generalized here to every upload kind), JPEG otherwise;
+  every server upload route already accepted `image/webp` before this
+  change. Also fixed a real pre-existing bug caught while touching this:
+  a transparent PNG/WEBP source cropped straight to JPEG (no alpha
+  channel) rendered transparent pixels as black -- now filled white
+  before drawing, unconditionally, regardless of which format the browser
+  ends up encoding to.
+- 20 new tests (`test_image_caching.py`, new file): version computed on
+  write and lazily backfilled for both contacts and the profile photo
+  (including that the backfill is actually persisted, not just computed
+  for one read), both new routes serve bytes with the immutable header
+  and 404 correctly (no photo, unknown contact), `avatar()` prefers
+  `photo_url` over inline `photo_b64` and still falls back to initials/
+  inline base64 correctly, and each contacts router route actually
+  attaches `photo_url` (or doesn't, for a photo-less contact). One
+  existing test updated (`test_banners.py`'s own avatar-renders-photo
+  check, which asserted the old inline `data:` URI). Full suite: **1921
+  passed** (four file-glob chunks: 613 + 513 + 485 + 310 = 1921; twenty
+  new, none removed).
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v25` -> `cc-shell-v26`
+  (`avatar_cropper.js` changed again) -- `test_pwa_shell.py`'s literal-
+  string assertion updated.

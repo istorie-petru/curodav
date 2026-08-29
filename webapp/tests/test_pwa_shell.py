@@ -376,8 +376,10 @@ class TestLocalWritePath:
         # v25 (2026-08-29): bumped for two SHELL_ASSETS *scripts* changing
         # (avatar_cropper.js generalized to banners, app.js's CCBannerUpload
         # removed) -- the v19 lesson, not just style.css.
+        # v26 (2026-08-29): bumped again for avatar_cropper.js changing once
+        # more (smaller avatar output cap, WebP output), same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v25"' in script
+        assert 'CACHE_NAME = "cc-shell-v26"' in script
 
 
 class TestOfflineToolbar:

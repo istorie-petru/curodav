@@ -98,7 +98,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import auth, config, data_health, db, offline_sync
 from ..deps import (
@@ -294,6 +294,39 @@ def remove_profile_photo(conn=Depends(get_db)):
     same non-cacheable convention as every other destructive action here."""
     db.clear_profile_photo(conn)
     return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.get("/settings/profile-photo/image")
+def profile_photo_image(conn=Depends(get_db)):
+    """Serves the profile picture's decoded bytes for `<img src>` (2026-08-29,
+    direct request: "better cache these images"). Exact mirror of routers/
+    banners.py's banner_image -- same problem (a profile photo used to be
+    embedded as an inline `data:` URI, deps.py's avatar() global, riding
+    along in the HTML of every page that shows it: contact list rows aside,
+    this one specifically rendered on every dashboard/label/Space page via
+    the header avatar overlap), same fix (a real, separately cacheable
+    request), same immutable Cache-Control safety argument (the URL's own
+    `?v=` -- db.get_profile_photo's `version` -- changes whenever the photo
+    does, so a stale cached response can never be served under a freshly-
+    rendered page's URL)."""
+    photo = db.get_profile_photo(conn)
+    if not photo:
+        raise HTTPException(404)
+    try:
+        data = base64.b64decode(photo["photo_b64"], validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(404)
+    image_type = str(photo.get("photo_type") or "").lower()
+    if image_type not in ("jpeg", "png", "gif", "webp"):
+        image_type = "jpeg"
+    return Response(
+        content=data,
+        media_type=f"image/{image_type}",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Encoding": "identity",
+        },
+    )
 
 
 @router.post("/settings/week-start")

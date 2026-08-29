@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
 from ..deps import get_db, respond, templates
@@ -56,6 +56,19 @@ async def _read_photo(photo: UploadFile | None) -> tuple[str, str] | None:
     if len(data) > _MAX_PHOTO_BYTES:
         raise HTTPException(400, "Photo is too large (max 5MB).")
     return base64.b64encode(data).decode("ascii"), vcard_type
+
+
+def _attach_photo_url(contact: dict) -> dict:
+    """Every place this router hands a contact dict to a template that
+    might render its avatar (deps.py's avatar() global) attaches
+    `photo_url` here first (2026-08-29, direct request: "better cache
+    these images") -- a real, `?v=`-versioned URL (contact_photo_image
+    below) that avatar() prefers over embedding the photo inline as a
+    `data:` URI. A contact with no photo is untouched (photo_url stays
+    unset, avatar() falls through to the initials fallback)."""
+    if contact.get("photo_b64"):
+        contact["photo_url"] = f"/contacts/{contact['uid']}/photo?v={contact.get('photo_version') or ''}"
+    return contact
 
 
 def _tags_list(tags: str) -> list[str]:
@@ -142,7 +155,7 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
 
 
 def _contacts_list_context(conn, request: Request, q: str | None, tag: str | None) -> dict:
-    contacts = db.list_contacts(conn, q=q)
+    contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q)]
     # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
     # this is now the *only* grouping/filtering mechanism for contacts,
     # `category` is gone) -- `?tag=` matches contacts.tags
@@ -304,6 +317,8 @@ async def create_contact(
 @router.get("/{uid}")
 def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
+    if contact:
+        _attach_photo_url(contact)
     return templates.TemplateResponse(
         "contact_detail.html",
         {
@@ -314,9 +329,42 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
     )
 
 
+@router.get("/{uid}/photo")
+def contact_photo_image(uid: str, conn=Depends(get_db)):
+    """Serves a contact's decoded photo bytes for `<img src>` (2026-08-29,
+    direct request: "better cache these images"). Exact mirror of
+    routers/banners.py's banner_image / routers/settings.py's
+    profile_photo_image -- same problem (a contact's photo used to be
+    embedded as an inline `data:` URI, deps.py's avatar() global, riding
+    along in the HTML of every contact list row that has one, not just
+    the one contact being viewed), same fix (a real, separately cacheable
+    request), same immutable Cache-Control safety argument (the URL's own
+    `?v=` -- contacts.photo_version -- changes whenever the photo does)."""
+    contact = db.get_contact(conn, uid)
+    if not contact or not contact.get("photo_b64"):
+        raise HTTPException(404)
+    try:
+        data = base64.b64decode(contact["photo_b64"], validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(404)
+    image_type = str(contact.get("photo_type") or "").lower()
+    if image_type not in ("jpeg", "png", "gif", "webp"):
+        image_type = "jpeg"
+    return Response(
+        content=data,
+        media_type=f"image/{image_type}",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Encoding": "identity",
+        },
+    )
+
+
 @router.get("/{uid}/edit")
 def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
+    if contact:
+        _attach_photo_url(contact)
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "contact_form.html",

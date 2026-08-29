@@ -142,19 +142,41 @@ templates.env.globals["icon"] = _icon
 
 
 def _avatar(contact: dict | None, cls: str = "") -> Markup:
-    """Renders a contact's avatar -- their uploaded photo (data URI, from
-    contacts.photo_b64/photo_type -- see vcard_rows.py) if they have one,
-    otherwise the same initials-in-a-circle fallback every avatar spot
-    used before photos existed. One global (registered the same way as
-    `icon()` above, for the same reason) instead of duplicating this
-    if/else across contacts_list.html, contact_detail.html, and
-    contact_form.html's photo preview -- all three now render the exact
-    same markup for "this contact's avatar," which is the actual
-    UI-consistency fix, not just three separately-hand-matched copies of
-    similar-looking HTML."""
+    """Renders a contact's (or the app user's own profile) avatar -- their
+    uploaded photo if they have one, otherwise the same initials-in-a-
+    circle fallback every avatar spot used before photos existed. One
+    global (registered the same way as `icon()` above, for the same
+    reason) instead of duplicating this if/else across contacts_list.html,
+    contact_detail.html, contact_form.html's photo preview,
+    settings_general.html's profile-picture row, and _page_banner.html's
+    dashboard-header avatar -- all five now render the exact same markup
+    for "this photo," which is the actual UI-consistency fix, not just
+    five separately-hand-matched copies of similar-looking HTML.
+
+    2026-08-29 (direct request: "better cache these images... convert...
+    to webp or compress them") -- prefers a real, separately cacheable
+    `photo_url` (routers/contacts.py's contact_photo_image / routers/
+    settings.py's profile_photo_image, each `?v=`-versioned so an
+    immutable Cache-Control is safe) over embedding the photo inline as a
+    `data:` URI, which every caller here used to do unconditionally: that
+    put the full base64 blob in the HTML of every page showing it (a
+    contact list row, or -- worse -- the profile photo, rendered on every
+    dashboard/label/Space page via the header avatar overlap), the exact
+    "2MB inline blob made the page slow" problem routers/banners.py's own
+    banner_image already existed to solve for banners. `photo_url` is set
+    by each call site's own router (contacts.py/settings.py), not derived
+    here -- this function has no way to know a contact's uid or whether a
+    profile photo's version has been backfilled yet. Falls back to the
+    inline `data:` URI when no `photo_url` is given (a brand-new, not-yet-
+    saved contact has no uid to build a real URL from) or when `photo_b64`
+    is present without one (defensive -- keeps working for any caller that
+    hasn't been updated to attach `photo_url` yet)."""
     contact = contact or {}
     classes = f"avatar-circle {cls}".strip()
+    photo_url = contact.get("photo_url")
     photo_b64 = contact.get("photo_b64")
+    if photo_url:
+        return Markup(f'<img class="{classes}" src="{escape(photo_url)}" alt="">')
     if photo_b64:
         # `photo_type` is normally one of this app's own known-safe values
         # (routers/contacts.py's upload allowlist), but a contact synced in

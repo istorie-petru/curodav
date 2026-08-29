@@ -27,7 +27,13 @@
         <div class="profile-photo-controls">
             <form method="post" action="/settings/profile-photo" enctype="multipart/form-data" data-autosubmit>
                 <div class="avatar-upload" title="Change photo">
-                    {{ avatar({'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
+                    {# 2026-08-29 (direct request: "better cache these images") --
+                       photo_url (a real, ?v=-versioned request, see
+                       routers/settings.py's profile_photo_image) is what
+                       avatar() actually renders when present, instead of
+                       inlining photo_b64 as a data: URI -- see deps.py's
+                       avatar() own comment. #}
+                    {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
                     <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
                     <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change profile picture">
                 </div>

@@ -183,11 +183,16 @@ class TestPageBannerAvatar:
         assert '<span class="avatar-circle avatar-hero">P</span>' in body
 
     def test_home_avatar_renders_uploaded_photo(self, conn):
+        # 2026-08-29 (direct request: "better cache these images") -- the
+        # avatar now renders via a real, cacheable /settings/profile-photo
+        # /image?v=... URL (routers/settings.py's profile_photo_image),
+        # not an inline data: URI -- see deps.py's avatar() own comment.
         db.set_profile_photo(conn, base64.b64encode(b"photo-bytes").decode("ascii"), "png")
         _set_remote(conn, cached=True, scope="")
         body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
         assert 'class="avatar-circle avatar-hero"' in body
-        assert "data:image/png;base64," in body
+        assert "data:image/png;base64," not in body
+        assert '/settings/profile-photo/image?v=' in body
 
     def test_project_page_shows_avatar_with_a_banner(self, conn):
         _make_label(conn, "CS101")

@@ -107,7 +107,11 @@
 // request) and static/app.js's now-dead CCBannerUpload removed -- both are
 // SHELL_ASSETS scripts, bumped per the v19 lesson (script changes need
 // this too, not just style.css).
-const CACHE_NAME = "cc-shell-v25";
+// v26 (2026-08-29): static/avatar_cropper.js changed again (smaller avatar
+// output cap, WebP-with-JPEG-fallback output for every upload kind, direct
+// request "convert for smaller sizes... or compress them a bit") -- bumped
+// per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v26";
 
 const SHELL_ASSETS = [
   "/offline",

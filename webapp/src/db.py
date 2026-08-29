@@ -1127,6 +1127,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # (never queried by, just read/written per-row), so no landmine here.
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
+    # 2026-08-29 (direct request: "better cache these images") -- a
+    # content-hash version, same convention as PROFILE_PHOTO_VERSION_KEY/
+    # a banner's own `version` field. upsert_contact computes it whenever
+    # photo_b64 is written; a contact whose photo was saved before this
+    # column existed gets it lazily backfilled the same way
+    # get_page_banner/get_profile_photo do -- see _contact_photo_version.
+    _ensure_column(conn, "contacts", "photo_version", "TEXT")
     # Contacts field parity with Nextcloud Contacts (open.md), slice 1 of 6
     # (Title -> Phone/Email -> Website -> Birthday -> Address -> Social
     # network, per the build order recorded there). Title is the vCard
@@ -2926,10 +2933,19 @@ def upsert_contact(
     # write the base row, then attach the related rows" shape as phones/
     # emails/websites/addresses above.
     social_profiles = data.pop("social_profiles", None)
+    # 2026-08-29 (direct request: "better cache these images") -- see
+    # contacts.photo_version's own _ensure_column comment above. Computed
+    # here, the one real write path every router/test uses to save a
+    # contact (including a plain "edit the name" save, which passes the
+    # existing photo_b64 straight through -- see routers/contacts.py's
+    # update_contact -- so this recomputes the same hash from the same
+    # bytes and writes back the identical value, a no-op in effect, not
+    # a bug).
+    data["photo_version"] = hashlib.md5(data["photo_b64"].encode("ascii")).hexdigest()[:12] if data.get("photo_b64") else None
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "birthday", "notes",
-        "photo_b64", "photo_type", "created_at", "updated_at",
+        "photo_b64", "photo_type", "photo_version", "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
@@ -2995,12 +3011,28 @@ def delete_contact(
     conn.commit()
 
 
+def _backfill_contact_photo_version(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
+    """A contact whose photo was saved before contacts.photo_version
+    existed (_ensure_column above) has photo_b64 but a NULL version --
+    computed and persisted here, once, the same lazy-backfill-on-read
+    pattern get_page_banner/get_profile_photo use for their own version
+    field. Every other read already gets a fresh version for free
+    (upsert_contact computes it on every write), so this only ever fires
+    for a genuinely pre-migration row."""
+    if d.get("photo_b64") and not d.get("photo_version"):
+        version = hashlib.md5(d["photo_b64"].encode("ascii")).hexdigest()[:12]
+        conn.execute("UPDATE contacts SET photo_version = ? WHERE uid = ?", (version, d["uid"]))
+        conn.commit()
+        d["photo_version"] = version
+    return d
+
+
 def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM contacts WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return None
     d = _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS))
-    return _attach_contact_phones_emails(conn, d)
+    return _backfill_contact_photo_version(conn, _attach_contact_phones_emails(conn, d))
 
 
 def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
@@ -3047,7 +3079,7 @@ def list_contacts(
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
     return [
-        _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+        _backfill_contact_photo_version(conn, _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))))
         for r in rows
     ]
 
@@ -4617,26 +4649,47 @@ def set_app_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 PROFILE_PHOTO_B64_KEY = "profile_photo_b64"
 PROFILE_PHOTO_TYPE_KEY = "profile_photo_type"
+# 2026-08-29 (direct request: "better cache these images... convert for
+# smaller sizes") -- a content-hash version, same md5-first-12-hex-chars
+# convention as a banner's own `version` field (get_page_banner below).
+# Lets deps.py's avatar() global build a real, immutable-cacheable
+# `/settings/profile-photo/image?v=<hash>` URL instead of embedding the
+# full base64 blob inline in every page's HTML (which is what every
+# avatar spot in this app did until this change -- see routers/
+# banners.py's own docstring for the exact "2MB inline blob made the page
+# load at 100ms+" problem this mirrors). Computed at write time
+# (set_profile_photo below); pre-existing installs with a photo saved
+# before this key existed get it lazily backfilled on next read
+# (get_profile_photo below), same one-time-cheap-write pattern
+# get_page_banner already uses for a banner's own version.
+PROFILE_PHOTO_VERSION_KEY = "profile_photo_version"
 _PAGE_BANNER_PREFIX = "page_banner_"
 
 
 def get_profile_photo(conn: sqlite3.Connection) -> dict[str, str] | None:
-    """The app user's own profile picture -- {photo_b64, photo_type}
-    (same shape as a contact's photo_b64/photo_type columns), or None when
-    none is set. Unlike a contact's photo there's no vCard anywhere --
-    this is app-level identity (Settings > General)."""
+    """The app user's own profile picture -- {photo_b64, photo_type,
+    version} (same shape as a contact's photo_b64/photo_type/photo_version
+    columns), or None when none is set. Unlike a contact's photo there's
+    no vCard anywhere -- this is app-level identity (Settings >
+    General)."""
     b64 = get_app_meta(conn, PROFILE_PHOTO_B64_KEY)
     if not b64:
         return None
+    version = get_app_meta(conn, PROFILE_PHOTO_VERSION_KEY)
+    if not version:
+        version = hashlib.md5(b64.encode("ascii")).hexdigest()[:12]
+        set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, version)
     return {
         "photo_b64": b64,
         "photo_type": get_app_meta(conn, PROFILE_PHOTO_TYPE_KEY) or "jpeg",
+        "version": version,
     }
 
 
 def set_profile_photo(conn: sqlite3.Connection, photo_b64: str, photo_type: str) -> None:
     set_app_meta(conn, PROFILE_PHOTO_B64_KEY, photo_b64)
     set_app_meta(conn, PROFILE_PHOTO_TYPE_KEY, photo_type)
+    set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, hashlib.md5(photo_b64.encode("ascii")).hexdigest()[:12])
 
 
 def clear_profile_photo(conn: sqlite3.Connection) -> None:
@@ -4645,6 +4698,7 @@ def clear_profile_photo(conn: sqlite3.Connection) -> None:
     unset in this app uses), so a cleared photo reads as None."""
     set_app_meta(conn, PROFILE_PHOTO_B64_KEY, "")
     set_app_meta(conn, PROFILE_PHOTO_TYPE_KEY, "")
+    set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, "")
 
 
 def _page_banner_key(page_key: str) -> str:
