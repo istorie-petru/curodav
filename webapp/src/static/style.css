@@ -644,10 +644,35 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .tab-btn.active{color:var(--fg-primary); font-weight:600;}
 .tab-btn.active::before{
   content:''; position:absolute;
-  top:2px; left:50%; transform:translateX(-50%);
+  top:4px; left:50%; transform:translateX(-50%);
   width:52px; height:28px; border-radius:14px;
   background:var(--accent-neutral-subtle-strong); z-index:-1;
   transition:background var(--dur-fast) var(--ease-standard);
+}
+
+/* 2026-08-30 follow-up (direct report -- collapsed rail's per-item spacing
+   didn't match the expanded rail's): collapsed used a 48px-tall box sized
+   to fit an icon + text label stacked vertically; expanded's own rows are
+   36px (icon + text side by side, see the html[data-sidebar-expanded]
+   .tab-btn rule further down). With text removed here (see just below),
+   there's no reason for collapsed items to stay taller than expanded
+   ones -- shrinking to the same 36px min-height, on the same 6px 4px 4px
+   padding both states already share, makes every rail item the same
+   total height regardless of collapse state, instead of collapsed rows
+   reading "airier" than expanded ones for no content-driven reason.
+   Desktop-only (min-width:721px): the <=720px bottom bar keeps its own
+   icon-over-label treatment and 48px+ touch target unchanged, see that
+   block's own rules further down. */
+@media (min-width:721px){
+  html:not([data-sidebar-expanded]) .tab-btn{min-height:36px;}
+  /* Direct request (2026-08-30): "if you think it's better, don't have
+     text on the narrow sidebar" -- every rail entry (fixed destinations,
+     Spaces, Projects, "+ New") is a plain .tab-btn, so hiding the label
+     here once covers all of them instead of repeating this per
+     tab-btn-* variant. Expanded mode is untouched (its own
+     html[data-sidebar-expanded] .tab-btn span rule further down still
+     sets display:block). */
+  html:not([data-sidebar-expanded]) .tab-btn span{display:none;}
 }
 
 /* Spaces in the sidebar (base.html, 2026-08-08) -- a second, shorter list

@@ -111,7 +111,10 @@
 // output cap, WebP-with-JPEG-fallback output for every upload kind, direct
 // request "convert for smaller sizes... or compress them a bit") -- bumped
 // per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v26";
+// v27 (2026-08-30): static/style.css-only change (collapsed rail's
+// per-item height shrunk to match the expanded rail's, and collapsed rail
+// items go icon-only, no text label) -- bumped per the same v19 lesson.
+const CACHE_NAME = "cc-shell-v27";
 
 const SHELL_ASSETS = [
   "/offline",

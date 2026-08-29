@@ -5889,3 +5889,42 @@ smaller output, and compression.
 - `sw.js`: `CACHE_NAME` bumped `cc-shell-v25` -> `cc-shell-v26`
   (`avatar_cropper.js` changed again) -- `test_pwa_shell.py`'s literal-
   string assertion updated.
+
+## Follow-up (2026-08-30, same day) -- collapsed rail: icon-only, item
+height matched to the expanded rail's (direct report: "the sidebar narrow
+still doesn't align with the expanded version... use [the expanded
+version] as a base... if you think it's better, don't have text on the
+narrow sidebar")
+
+Small, CSS-only spacing fix, not the app-wide visual rewrite item 13f is
+still deliberately deferred on -- no templates touched, no DOM structure
+changed, just `style.css`.
+
+- Root cause: collapsed `.tab-btn` was a 48px-tall box sized to fit an
+  icon + text label stacked vertically; expanded's own row is 36px (icon +
+  text side by side, `html[data-sidebar-expanded] .tab-btn`). The two
+  states already shared the same padding/icon size (2026-08-29's item-
+  alignment follow-up), so the remaining mismatch was purely this height
+  difference -- collapsed rows read "airier" than expanded ones for no
+  content-driven reason.
+- New `@media (min-width:721px){ html:not([data-sidebar-expanded]) ... }`
+  block: `.tab-btn span{display:none}` (every rail entry -- fixed
+  destinations, Spaces, Projects, "+ New" -- is a plain `.tab-btn`, so one
+  rule covers all of them) and `.tab-btn{min-height:36px}`, matching
+  expanded's own row height now that there's no text to fit. Desktop-only
+  (`min-width:721px`) -- the <=720px bottom bar keeps its existing icon-
+  over-label treatment untouched, it already has its own separate ruleset
+  further down.
+- `.tab-btn.active::before`'s collapsed-mode pill (the one the mobile
+  block and `html[data-sidebar-expanded]` each separately override) moved
+  `top:2px` -> `4px` to stay vertically centered in the new, shorter 36px
+  box.
+- Label text still renders in the DOM either way (`display:none` only,
+  not removed) -- every test in this suite that asserts on tabbar HTML
+  string content (`test_sidebar_tree.py`, `test_nav_and_deactivation.py`,
+  etc.) needed no changes, since they check rendered markup, not computed
+  CSS.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v26` -> `cc-shell-v27` (style.css-
+  only change, same v19 lesson) -- `test_pwa_shell.py`'s literal-string
+  assertion updated. Full suite: **1921 passed** (three file-glob chunks:
+  849 + 641 + 431 = 1921; none new, none removed).

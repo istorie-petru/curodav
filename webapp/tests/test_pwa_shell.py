@@ -378,8 +378,10 @@ class TestLocalWritePath:
         # removed) -- the v19 lesson, not just style.css.
         # v26 (2026-08-29): bumped again for avatar_cropper.js changing once
         # more (smaller avatar output cap, WebP output), same lesson.
+        # v27 (2026-08-30): bumped for a style.css-only change (collapsed
+        # rail's per-item height + icon-only labels), same lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v26"' in script
+        assert 'CACHE_NAME = "cc-shell-v27"' in script
 
 
 class TestOfflineToolbar:
