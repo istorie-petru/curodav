@@ -1279,13 +1279,19 @@ table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
    per-cell override (see `.task-title-cell`'s own comment) -- the title
    cell's own `overflow-x:auto` still lets long/being-edited text scroll
    in place, it just doesn't visibly widen the column anymore. */
-/* Scoped to `.task-table-grouped` specifically, not the whole `.task-table`
-   class -- `#habits-table` is a single self-contained table (no sibling
-   tables sharing its colgroup to stay aligned with), and its 5 flexible
-   columns (Title/Check-in/Cadence/Streak/Labels) genuinely benefit from
-   auto layout's content-based sizing; forcing fixed layout there would
-   just split them evenly regardless of how little a Check-in/Cadence
-   cell actually needs, squeezing Title/Labels for no reason. */
+/* Scoped to `.task-table-grouped` rather than the bare `.task-table`
+   class, so a plain `.task-table` elsewhere in the app (none currently,
+   but the class itself isn't Tasks-page-specific) doesn't inherit fixed
+   layout it never asked for. `#habits-table` originally stayed off this
+   list -- its Check-in/Cadence/Streak columns had no widths of their own
+   yet, and forcing fixed layout onto unconstrained columns just splits
+   them evenly regardless of actual need. 2026-08-30 ("column size... big
+   right space") gave every one of its columns a real width (Title now
+   the one flexible column, same shape as the grouped tables below), so
+   it opted into `.task-table-grouped` too -- no cross-table alignment
+   need like the grouped tables have, but the same "explicit widths need
+   fixed layout to actually be honored" reasoning applies once a table
+   has explicit widths at all. */
 .task-table-grouped{table-layout:fixed;}
 thead th{
   text-align:left; font-weight:600; color:var(--fg-secondary); font-size:13px;
@@ -1833,15 +1839,22 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* 2026-08-30: `.task-table{table-layout:fixed}` (added for cross-card
    column alignment, see that rule's own comment) makes the `<colgroup>`
    authoritative for column width -- a `<td>`'s own min-width/max-width
-   below no longer changes the *column's* rendered width, only these two
-   rules' `overflow-x:auto` still does anything, letting long/being-
-   edited title text scroll sideways inside the cell's now-fixed 240px
-   column instead of widening it. Left in place rather than deleted: the
-   :has([data-editing]) rule is inert for sizing now but still harmless,
-   and reverting to auto layout would resurrect the alignment bug this
-   was written to fix. */
-.task-title-cell{min-width:140px; max-width:240px; overflow-x:auto; overflow-y:hidden;}
-.task-title-cell:has([data-editing]){min-width:280px; max-width:320px;}
+   below no longer changes the *column's* rendered width, only its own
+   content box within that column.
+
+   2026-08-30 further follow-up ("I don't like the column size... a big
+   right space") -- Title is `_tasks_body.html`'s flexible column now
+   (its `<col>` is unconstrained, absorbing whatever width Status/Date/
+   Labels don't use), specifically so a wide card's extra room reads as
+   "more space for the title" instead of a dead gap after Labels. This
+   rule's old `max-width:240px` fought that directly -- it capped the
+   cell's own content box well inside its now-much-wider column, so the
+   same empty-gap complaint just reappeared one column to the left. Only
+   a floor remains (a short title still shouldn't look cramped);
+   `overflow-x:auto` stays as a safety valve for the rare single "word"
+   longer than even a fully-expanded column, not a normal-case limit. */
+.task-title-cell{min-width:140px; overflow-x:auto; overflow-y:hidden;}
+.task-title-cell:has([data-editing]){min-width:280px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points

@@ -8,6 +8,25 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Tasks table, column widths (direct feedback: "I don't like
+  the columns size... there is a big right space"), complete (2026-08-30).
+  Under `table-layout:fixed` (previous entries), whichever column's `<col>`
+  is left unconstrained absorbs 100% of a card's leftover width -- Labels
+  had that role, so on a wide viewport with only one short pill it read as
+  a large dead gap before the trailing `+`/delete cell. First fix (make
+  Title the flexible column instead) just relocated the same problem one
+  column left. Settled on: Title AND Labels both left unconstrained --
+  under `table-layout:fixed` two unconstrained columns split the leftover
+  width evenly between them by spec, no extra CSS -- so the same total
+  slack reads as modest breathing room in two places instead of one stark
+  block next to short content. Status narrowed 130px -> 110px. Applied
+  identically to `#habits-table` (Check-in/Cadence/Streak keep real caps --
+  genuinely short, bounded content; Title/Labels flex the same way).
+  `.task-title-cell`'s old `max-width:240px` removed (it was capping the
+  cell's own content box inside a now-wider flexible column, reproducing
+  the same gap one level in) -- only a `min-width` floor remains, plus
+  `overflow-x:auto` as a safety valve. No test changes needed (no test
+  asserted exact px widths); full suite still 1934 passed.
 - **Fixed:** Tasks table, every group's header unified to the Habits
   table's own shape (direct feedback: "I like how the habits table
   looks... make the same style for all"), complete (2026-08-30). Direct
