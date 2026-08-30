@@ -3994,8 +3994,33 @@ body.command-palette-open{overflow:hidden;}
 /* Manual width picker's drag-to-resize handle (.widget-resize-handle) and
    its .widget-card.is-resizing state removed 2026-08-07 along with the
    feature itself -- see static/app.js's "Manual width picker /
-   drag-to-resize-width removed" comment. A widget's width is now always
-   automatic (its type's own default, or a stack's own stored width). */
+   drag-to-resize-width removed" comment. Width was automatic-only for a
+   while after that (the type's own default, or a stack's own stored
+   width) -- see WIDGET_WIDTHS' own comment in routers/dashboard.py for
+   the two 2026-08-30 reversals: a manual Width field first, then this
+   handle right back on top of it (direct request: "i don't really like
+   the settings width settings and much rather would mouse resize them"
+   -- kept the field too, for keyboard/touch use with no drag gesture).
+   A thin strip on the card's right edge, not a corner square -- only
+   width is adjustable (height stays automatic, that removal still
+   stands), so the resize affordance/cursor is horizontal-only. Sized
+   generously (12px) for an easy pointer target despite reading as a
+   near-invisible hairline at rest; `:hover`/`.is-resizing` reveal an
+   accent-colored bar the same "quiet until touched" way
+   `.timeline-gutter-sep` already does elsewhere in this app. */
+.widget-resize-handle{
+  position:absolute; top:0; right:-6px; width:12px; height:100%;
+  cursor:ew-resize; touch-action:none; z-index:6;
+}
+.widget-resize-handle::after{
+  content:""; position:absolute; top:0; bottom:0; left:50%; width:2px;
+  transform:translateX(-50%); border-radius:var(--radius-pill);
+  background:transparent; transition:background var(--dur-fast) var(--ease-standard);
+}
+.widget-resize-handle:hover::after, .widget-card.is-resizing .widget-resize-handle::after{
+  background:var(--accent-neutral);
+}
+.widget-card.is-resizing{transition:none; z-index:20;}
 /* Widget content height (2026-08-07 -- manual height editor/drag-resize
    removed per direct feedback: a widget's height should just be "how
    much content it is", no scrollbar, unless it goes over a max height).

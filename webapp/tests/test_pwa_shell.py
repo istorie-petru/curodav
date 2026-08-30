@@ -417,8 +417,15 @@ class TestLocalWritePath:
         # -- manual per-widget width override reinstated, grid widened
         # 6->12 virtual columns so 25%/75% land exactly; app.js's maxCols
         # and style.css's data-span selectors both changed).
+        # v39 (2026-08-30): bumped again, same session -- three more
+        # direct-report fixes: widget_card_region's edit_mode no longer
+        # hardcoded False (a widget's own card can now refresh live after
+        # a Filters/Width save instead of needing a hard reload),
+        # dashboard_widget_preview.js's autosave calls refreshRegion,
+        # app.js gained a medium-breakpoint quarter->half promotion and a
+        # full drag-to-resize handle (both precached files changed).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v38"' in script
+        assert 'CACHE_NAME = "cc-shell-v39"' in script
 
 
 class TestOfflineToolbar:

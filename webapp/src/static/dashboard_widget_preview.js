@@ -216,6 +216,24 @@ window.CCWidgetPreview = {
         }
       }
 
+      // uid + region refresh (2026-08-30 bug fix, direct report -- "saving
+      // a widget... not seeing the change only after a hard refresh, but
+      // the cache is not refreshing"). Root cause traced: this whole
+      // autosave function only ever updated the "Saving…"/"Saved" status
+      // text -- it never told the *actual* widget card sitting on the
+      // page (behind the open Filters modal) that anything changed, so
+      // every field here (Width included) silently went stale until a
+      // full reload re-rendered the whole grid from scratch. Not a
+      // service-worker/HTTP cache problem at all (this app's pages are
+      // network-first, static/sw.js's own fetch handler) -- just a
+      // missing refresh call, same async-CRUD `refreshRegion` mechanism
+      // static/async_crud.js already uses for task changes, applied here
+      // to the widget's own card instead. `form.action` is
+      // "/dashboard/widgets/<uid>/edit"; the card's real container id is
+      // "widget-<uid>" (see _widget_card.html/_widget_workspace.html).
+      const uidMatch = String(form.action || "").match(/\/dashboard\/widgets\/([^/]+)\/edit/);
+      const widgetUid = uidMatch ? uidMatch[1] : null;
+
       let autosaveDebounce = null;
       let autosaveSeq = 0;
       let dirty = false;
@@ -231,6 +249,16 @@ window.CCWidgetPreview = {
           if (seq !== autosaveSeq) return; // a newer edit already superseded this request
           if (!resp.ok) throw new Error("save failed");
           setStatus("Saved", false);
+          // Refresh the real card behind the modal so a Width/Style/Title/
+          // Labels change is visible the moment the modal closes, not just
+          // after a reload. Best-effort: a failed refresh here shouldn't
+          // turn an already-successful save into an error state (the save
+          // itself already succeeded -- only the live preview of it
+          // didn't refresh), so this is deliberately not awaited into the
+          // try/catch's error branch above.
+          if (widgetUid && window.ccApi) {
+            window.ccApi.refreshRegion("/dashboard/widgets/" + widgetUid, "widget-" + widgetUid).catch(() => {});
+          }
         } catch (err) {
           savePromise = null;
           if (seq !== autosaveSeq) return;

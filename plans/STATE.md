@@ -6453,6 +6453,84 @@ no per-widget height concept came back.
   and its 2 siblings, added 14 in `TestWidgetWidthManualOverride`, +1
   elsewhere) — no failures at any point).
 
+## Follow-up (2026-08-30, same day) -- stale-card bug fix, responsive
+quarter->half promotion, drag-to-resize reinstated on top of the Width
+field
+
+Direct follow-up after using the reinstated Width field: "this model is
+functional. though i hope you understand that the way saving a widget
+and not seeing the change only after a hard refresh, but the cache is
+not refreshing, it's not friendly for new users... also the width
+settings doesn't work for smaller devices. For half width (55% and
+under a normal desktop view), the 25% should round up to 50%. Also i
+don't really like the settings width settings and much rather would
+mouse resize them." Three independent fixes:
+
+- **Traced and fixed -- widget edits not visible until a hard reload.**
+  Not a service-worker/cache bug (this app's pages are network-first,
+  confirmed by reading `sw.js`'s own fetch handler) -- a missing refresh
+  call. `dashboard_widget_preview.js`'s Filters-panel autosave only ever
+  updated its own "Saving…"/"Saved" status text; it never told the real
+  widget card sitting on the page (behind the open modal) that anything
+  had changed. Fixed by calling `window.ccApi.refreshRegion(...)` on the
+  widget's own card after a successful autosave -- the same async-CRUD
+  mechanism `async_crud.js` already uses for task changes, just never
+  wired up for a widget's own edit before. That refresh would have
+  silently dropped the card's edit-mode chrome (drag handle, Edit/
+  Delete) once wired up, though -- `widget_card_region` (`GET
+  /dashboard/widgets/{uid}`) hardcoded `edit_mode=False` (harmless while
+  its only caller was the task-change listener, which always skips
+  itself in edit mode) -- fixed to read the real current `EDIT_MODE_KEY`
+  state, same as `widget_page_context` already does. 2 new tests
+  (`TestWidgetCardRegionEditMode`).
+- **Shipped -- responsive quarter->half promotion.** Direct feedback: a
+  manually-set 25% width is unreadable on a narrower desktop window (not
+  yet the 720px mobile full-width collapse). `static/app.js` gained a
+  `MEDIUM_BREAKPOINT` (1000px) and an `effectiveSpan()` helper -- below
+  it (and still above `MOBILE_BREAKPOINT`), a span-3 ("quarter") card is
+  promoted to span-6 ("half") for layout purposes only, same "CSS/JS-
+  only, no data mutation" precedent the mobile collapse itself already
+  set (the widget's own stored `config["width"]` is untouched -- the
+  promotion is recomputed fresh every `layout()` run, same as the mobile
+  collapse). `packColumns`'s span lookup was parameterized (`spanOf`
+  callback) so the dry-run column-count estimate and the real placement
+  pass both apply the same promotion consistently, instead of the dry
+  run silently using stale unpromoted spans. Verified with a standalone
+  Node simulation (not committed) before editing app.js, same "no
+  browser in this sandbox" precaution the earlier best-fit-placement fix
+  used.
+- **Shipped -- drag-to-resize handle reinstated, direct follow-up right
+  after the Width field's own reinstatement:** "i don't really like the
+  settings width settings and much rather would mouse resize them." A
+  `.widget-resize-handle` strip on each card's right edge (edit mode
+  only, `static/style.css`) -- drag left/right for a live width preview,
+  release to snap to whichever of the four Width choices the released
+  pixel width landed closest to, then `POST /dashboard/widgets/{uid}/
+  resize` (new, narrower single-field endpoint -- `routers/
+  dashboard.py::resize_widget`, only ever touches `config["width"]`,
+  same key the Filters field also writes, works for a stack's own card
+  too). The Filters panel's Width field is **kept**, not replaced by
+  this -- it's still the only way to set width without a mouse (keyboard
+  or touch). After a successful resize, the same `refreshRegion` call
+  the autosave fix above introduced re-renders the card with its new
+  `data-span` baked in; that DOM swap is itself a childList mutation on
+  `#dashboard-grid`, which the masonry layout's own `MutationObserver`
+  already watches, so a fresh `layout()` runs automatically right after
+  with no separate "re-layout now" call needed. 8 new tests
+  (`TestWidgetResizeEndpoint`); `TestWidgetWidthAutomatic`'s two now-
+  contradicted tests (`test_no_resize_endpoint_left_on_the_module`,
+  `test_edit_mode_renders_no_width_resize_handle`) removed, its
+  docstring rewritten to record both 2026-08-30 reversals in order.
+- `features/dashboard.md` updated: the masonry/Width paragraph now
+  covers the resize handle, the medium-breakpoint promotion, and the
+  live-refresh fix.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v38` -> `cc-shell-v39`
+  (`app.js` + `dashboard_widget_preview.js` both changed, both in the
+  precache list; `async_crud.js` also changed but isn't precached --
+  see `sw.js`'s own SHELL_ASSETS comment -- so it didn't factor into the
+  bump) -- `test_pwa_shell.py` updated. Full suite **1890 passed** (five
+  chunks: 642 + 489 + 323 + 431 + 5 = 1890 -- no failures at any point).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

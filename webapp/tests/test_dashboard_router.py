@@ -418,16 +418,20 @@ class TestWidgetWidthAutomatic:
     <select> in the widget builder form, a drag handle on each card, its
     own /resize endpoint) was fully removed per direct feedback: "auto-fit
     by content" -- each widget type gets a natural width from its own
-    default_width, no per-instance override. That drag-resize-handle/
-    endpoint removal stands (see the two tests still here for it) -- but
-    the "no per-instance override at all" half of it was reversed
-    2026-08-30 (direct request, see TestWidgetWidthManualOverride below)
-    after the automatic masonry layout kept producing an arrangement the
-    user didn't want even after a same-day best-fit packing pass. These
-    two classes intentionally sit next to each other: this one now only
-    covers what's still true (no drag handle, and a widget with no
-    override still renders at its type's own default), the one below
-    covers the reinstated override itself."""
+    default_width, no per-instance override. Both halves of that removal
+    were reversed 2026-08-30, same day, back to back: the Width field
+    first (TestWidgetWidthManualOverride below, after the automatic
+    masonry layout kept producing an arrangement the user didn't want
+    even with a same-day best-fit packing pass), then the drag handle and
+    /resize endpoint right on top of it (TestWidgetResizeEndpoint further
+    below, direct follow-up: "i don't really like the settings width
+    settings and much rather would mouse resize them" -- the Width field
+    stayed too, as the no-mouse/keyboard path). All that's left of the
+    original 2026-08-07 removal for *width* specifically is history at
+    this point; this class now only covers what's still genuinely
+    automatic -- a widget with no override renders at its type's own
+    default. (Height's own removal is the one part of 2026-08-07 that
+    never got reversed -- no per-widget height concept came back.)"""
 
     def _add(self, conn, view="agenda", range_="today", **extra):
         dashboard_router.add_widget(
@@ -435,9 +439,6 @@ class TestWidgetWidthAutomatic:
             task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn, **extra,
         )
         return db.list_dashboard_widgets(conn)[-1]
-
-    def test_no_resize_endpoint_left_on_the_module(self):
-        assert not hasattr(dashboard_router, "resize_widget")
 
     def test_created_widget_always_renders_at_its_types_default_width(self, conn):
         # calendar_tasks/agenda_view resolves to agenda, whose
@@ -457,15 +458,6 @@ class TestWidgetWidthAutomatic:
         self._add(conn)
         ctx = dashboard_router.widget_page_context(conn)
         assert "widget_widths" not in ctx
-
-    def test_edit_mode_renders_no_width_resize_handle(self, conn):
-        from starlette.requests import Request
-
-        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, conn=conn)
-        body = resp.body.decode()
-        assert "widget-resize-handle" not in body
 
 
 class TestWidgetWidthManualOverride:
@@ -586,6 +578,130 @@ class TestWidgetWidthManualOverride:
         wc_width = dashboard_router._widget_width(stack, None)
         assert wc_width["key"] == "two_thirds"
         assert wc_width["span"] == 8
+
+
+class TestWidgetCardRegionEditMode:
+    """2026-08-30 bug fix, direct report ("saving a widget... not seeing
+    the change only after a hard refresh"). Root cause: widget_card_region
+    (GET /dashboard/widgets/{uid}, the async-CRUD single-widget region
+    fragment) hardcoded edit_mode=False, and dashboard_widget_preview.js's
+    Filters autosave never called it at all -- so an edited widget's own
+    card behind the modal never updated live. Two independent fixes,
+    tested here from the Python side (the JS side -- autosave calling
+    refreshRegion -- has no test coverage in this suite, same "no browser
+    in this test environment" ceiling every other JS-behavior change in
+    this session accepted)."""
+
+    def _add(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_region_reflects_current_edit_mode_on(self, conn):
+        w = self._add(conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": f"/dashboard/widgets/{w['uid']}", "headers": []})
+        resp = dashboard_router.widget_card_region(req, w["uid"], conn=conn)
+        body = resp.body.decode()
+        # Edit-mode-only chrome (the Filters/Edit link, the drag handle,
+        # the delete form) should all be present -- confirms this isn't
+        # silently rendering as if edit mode were off.
+        assert "widget-drag-handle" in body
+        assert "widget-resize-handle" in body
+
+    def test_region_reflects_current_edit_mode_off(self, conn):
+        w = self._add(conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": f"/dashboard/widgets/{w['uid']}", "headers": []})
+        resp = dashboard_router.widget_card_region(req, w["uid"], conn=conn)
+        body = resp.body.decode()
+        assert "widget-drag-handle" not in body
+        assert "widget-resize-handle" not in body
+
+
+class TestWidgetResizeEndpoint:
+    """2026-08-30, direct request right after the Width field shipped: "i
+    don't really like the settings width settings and much rather would
+    mouse resize them." A narrower, single-field sibling of edit_widget --
+    only ever touches config["width"], same key the Filters panel's Width
+    field also writes (routers/dashboard.py's resize_widget)."""
+
+    def _add(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_resize_sets_width(self, conn):
+        w = self._add(conn)
+        resp = dashboard_router.resize_widget(w["uid"], width="three_quarters", conn=conn)
+        assert resp.status_code == 200
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert updated["config"]["width"] == "three_quarters"
+
+    def test_resize_rejects_an_invalid_width(self, conn):
+        w = self._add(conn)
+        resp = dashboard_router.resize_widget(w["uid"], width="not-a-real-width", conn=conn)
+        assert resp.status_code == 400
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in updated["config"]
+
+    def test_resize_rejects_a_valid_widget_widths_key_outside_the_choices(self, conn):
+        # "third"/"two_thirds" are real WIDGET_WIDTHS keys (still valid as
+        # a type's own default_width) but not offered by the drag gesture
+        # (which only ever snaps to one of the four WIDGET_WIDTH_CHOICES
+        # spans) -- same restriction the Filters field's own submission
+        # gets via _config_from_form.
+        w = self._add(conn)
+        resp = dashboard_router.resize_widget(w["uid"], width="third", conn=conn)
+        assert resp.status_code == 400
+
+    def test_resize_unknown_widget_404s(self, conn):
+        resp = dashboard_router.resize_widget("does-not-exist", width="half", conn=conn)
+        assert resp.status_code == 404
+
+    def test_resize_preserves_other_config(self, conn):
+        w = self._add(conn)
+        row = dict(db.get_dashboard_widget(conn, w["uid"]))
+        row["config"] = {**row["config"], "tags": ["Uni"]}
+        db.upsert_dashboard_widget(conn, row)
+        dashboard_router.resize_widget(w["uid"], width="quarter", conn=conn)
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert updated["config"]["tags"] == ["Uni"]
+        assert updated["config"]["width"] == "quarter"
+
+    def test_resize_works_on_a_stack(self, conn):
+        db.upsert_dashboard_widget(conn, {
+            "uid": "stack-1", "type": "stack", "title": None, "config": {"width": "half"},
+            "position": 1, "created_at": _now(),
+        })
+        resp = dashboard_router.resize_widget("stack-1", width="full", conn=conn)
+        assert resp.status_code == 200
+        stack = db.get_dashboard_widget(conn, "stack-1")
+        assert stack["config"]["width"] == "full"
+        wc_width = dashboard_router._widget_width(stack, None)
+        assert wc_width["key"] == "full"
+        assert wc_width["span"] == 12
+
+    def test_resize_handle_rendered_in_edit_mode_only(self, conn):
+        w = self._add(conn)
+        from starlette.requests import Request
+
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        resp = dashboard_router.dashboard_view(req, conn=conn)
+        assert 'class="widget-resize-handle"' in resp.body.decode()
+
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
+        resp = dashboard_router.dashboard_view(req, conn=conn)
+        assert 'class="widget-resize-handle"' not in resp.body.decode()
 
 
 class TestWidgetStacking:

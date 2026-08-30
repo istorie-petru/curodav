@@ -15,13 +15,20 @@
      widget_sources/widget_views/widget_ranges,
      projects, task_lists, calendars, tag_names. There is no per-widget
      height selection anymore (2026-08-07 removal of the manual
-     height-editor/drag-resize feature) -- .widget-content just sizes to
-     its own content, capped by a single flat CSS max-height (see
-     static/style.css) as a backstop, not a per-widget knob. Likewise
-     there is no per-widget width selection any more (same day, same
-     reasoning) -- each `wc.width`/`wc.width.span` below always comes from
-     the widget's own type default (or a stack's own stored config, see
-     _widget_width in routers/dashboard.py), never a manual override. -->
+     height-editor/drag-resize feature, still true) -- .widget-content
+     just sizes to its own content, capped by a single flat CSS
+     max-height (see static/style.css) as a backstop, not a per-widget
+     knob.
+
+     Width IS a per-widget knob again, reinstated 2026-08-30 (direct
+     request) -- `wc.width`/`wc.width.span` below comes from the widget's
+     own type default UNLESS its own config["width"] overrides it (a
+     stack instead always reads its own stored config["width"], see
+     _widget_width in routers/dashboard.py). Two ways to set it, both
+     writing the same config key: the Filters panel's Width field
+     (_widget_edit_form.html), and the `.widget-resize-handle` drag
+     corner rendered below (edit mode only, static/app.js's resize-drag
+     handler, POSTs to /dashboard/widgets/{uid}/resize on release). -->
 {% if edit_mode %}
 <!-- Add widget -- now opens the customization modal via the toolbar's
      "New widget" button instead of an inline form, keeping a single
@@ -50,6 +57,7 @@
             <button type="submit" class="icon-btn" title="Dissolve stack (keeps the widgets inside)">{{ icon('x', 'icon-sm') }}</button>
         </form>
     </div>
+    <div class="widget-resize-handle" title="Drag to resize" aria-hidden="true"></div>
     {% endif %}
     {% for child in wc.children %}
     <div class="widget-stack-item" data-uid="{{ child.widget.uid }}">
@@ -60,6 +68,7 @@
 {% else %}
 <div class="card widget-card{% if wc.bare %} widget-card--bare{% endif %}" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
     {{ widget_inner(wc, false) }}
+    {% if edit_mode %}<div class="widget-resize-handle" title="Drag to resize" aria-hidden="true"></div>{% endif %}
 </div>
 {% endif %}
 {% endfor %}

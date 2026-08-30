@@ -1972,7 +1972,23 @@ def widget_card_region(request: Request, uid: str, conn=Depends(get_db)):
     source of truth). A stack (or stack child) returns the same card
     markup, but a stack child has no #widget-<uid> container on the page,
     so refreshRegion() no-ops for those -- documented scope cut, see
-    _widget_card.html's own comment."""
+    _widget_card.html's own comment.
+
+    `edit_mode` (2026-08-30 bug fix, direct report -- "saving a widget...
+    not seeing the change only after a hard refresh") used to be
+    hardcoded False here, which was harmless for the one caller that
+    existed at the time (a *task* change refreshing a task-using widget,
+    always skipped in edit mode -- see async_crud.js's cc-entity-changed
+    listener, which never calls this route while editing at all). It
+    stopped being harmless once a widget's OWN Filters/Width edit needed
+    to refresh its own card live (dashboard_widget_preview.js's
+    autosave() below) -- that only ever happens *while* in edit mode (the
+    Filters form only opens there), and a hardcoded False would silently
+    render the refreshed card without its drag handle/Edit/Delete chrome,
+    which is exactly what the old task-change listener's own comment
+    warned against doing. Reads the real, current edit_mode the same way
+    widget_page_context already does, rather than assuming a caller-
+    specific constant."""
     widget = db.get_dashboard_widget(conn, uid)
     if widget is None:
         raise HTTPException(status_code=404, detail=f"widget not found: {uid}")
@@ -1980,7 +1996,7 @@ def widget_card_region(request: Request, uid: str, conn=Depends(get_db)):
     label_name = widget.get("label_name") or ""
     ctx = {
         "request": request,
-        "edit_mode": False,
+        "edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
         "space_uid": label_name,
         "project_uid": label_name,
         "label_name": label_name,
@@ -2542,4 +2558,41 @@ def reorder_widget(uid: str, after_uid: str = Form(""), conn=Depends(get_db)):
 
     moved["position"] = new_position
     db.upsert_dashboard_widget(conn, moved)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/dashboard/widgets/{uid}/resize")
+def resize_widget(uid: str, width: str = Form(...), conn=Depends(get_db)):
+    """Drag-to-resize width handle, reinstated 2026-08-30 -- direct
+    request right after the Filters panel's own Width field shipped: "i
+    don't really like the settings width settings and much rather would
+    mouse resize them." Coexists with that field rather than replacing
+    it (kept for keyboard/no-mouse use, and it's the only way to set
+    width on a touch device with no drag-resize gesture wired up) -- both
+    ultimately write the exact same `config["width"]` key
+    (WIDGET_WIDTHS/_widget_width), so neither path is more authoritative
+    than the other, whichever was used most recently just wins, same as
+    any other field with two ways to set it.
+
+    JSON-free-but-still-POST, same convention `reorder_widget` above
+    uses -- static/app.js's resize-drag handler posts here on
+    pointerup, after snapping the live-dragged pixel width to whichever
+    of `WIDGET_WIDTH_CHOICES` it landed closest to. Deliberately a
+    narrower, single-field endpoint rather than routing through
+    `edit_widget`'s full form -- a drag gesture has no access to a
+    widget's other Source/View/Range/Style/etc. fields to resubmit
+    alongside it, and resizing shouldn't require them. Works for a
+    stack's own top-level card too (`_widget_width`'s `spec is None`
+    branch reads the exact same `config["width"]` key for a stack) --
+    this endpoint doesn't care whether `uid` is a plain widget or a
+    stack, it only ever touches `config["width"]`, nothing type-
+    specific."""
+    widget = db.get_dashboard_widget(conn, uid)
+    if widget is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if width not in WIDGET_WIDTH_CHOICES:
+        return JSONResponse({"error": "invalid width"}, status_code=400)
+    row = dict(widget)
+    row["config"] = {**(widget.get("config") or {}), "width": width}
+    db.upsert_dashboard_widget(conn, row)
     return JSONResponse({"ok": True})

@@ -571,7 +571,27 @@ document.addEventListener("submit", (event) => {
   if (!grid) return;
 
   const MOBILE_BREAKPOINT = 720; // matches every other collapsing layout in this app
+  // 2026-08-30, direct report ("the width settings doesn't work for
+  // smaller devices... the 25% should round up to 50%") -- a manually-set
+  // "quarter" (span 3 of 12, 25%) card is fine on a full-width desktop
+  // window but becomes too narrow to read on a narrower one (a snapped/
+  // half-monitor browser window, not yet the MOBILE_BREAKPOINT full-width
+  // collapse). Below MEDIUM_BREAKPOINT (and still above MOBILE_BREAKPOINT
+  // -- that already forces every span to full-width regardless, this
+  // promotion is a no-op there), any span-3 card is promoted to span-6
+  // (half) for layout purposes only -- the widget's own stored
+  // config["width"] is untouched, same "CSS/JS-only, no data mutation"
+  // precedent MOBILE_BREAKPOINT's own full-width collapse already sets.
+  const MEDIUM_BREAKPOINT = 1000;
   const GAP = 16; // var(--space-4) -- see style.css's design tokens
+
+  function effectiveSpan(card, maxCols) {
+    const raw = Math.max(1, parseInt(card.dataset.span, 10) || maxCols);
+    if (raw === 3 && window.innerWidth > MOBILE_BREAKPOINT && window.innerWidth <= MEDIUM_BREAKPOINT) {
+      return Math.min(maxCols, 6);
+    }
+    return Math.min(maxCols, raw);
+  }
 
   function cardIsVisible(card) {
     // data-delete-undo (app.js's generic delete handler, used on every
@@ -588,12 +608,12 @@ document.addEventListener("submit", (event) => {
   // twice: once just to find out how many of the `cols` virtual columns
   // this particular set of cards actually ends up touching, and again for
   // real once that number is known (see effectiveCols below).
-  function packColumns(cards, cols) {
+  function packColumns(cards, cols, spanOf) {
     const colHeights = new Array(cols).fill(0);
     const placements = [];
     let maxTouched = 0;
     cards.forEach((card) => {
-      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      const span = spanOf(card, cols);
       let bestStart = 0;
       let bestTop = Infinity;
       for (let start = 0; start <= cols - span; start++) {
@@ -640,7 +660,7 @@ document.addEventListener("submit", (event) => {
     // computed against the space genuinely in use, not an assumed max. A
     // dashboard with enough widgets to fill every column anyway sees no
     // change at all (effectiveCols === maxCols).
-    const dryRun = packColumns(cards, maxCols);
+    const dryRun = packColumns(cards, maxCols, effectiveSpan);
     const cols = Math.max(1, dryRun.maxTouched);
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
 
@@ -652,7 +672,7 @@ document.addEventListener("submit", (event) => {
     // know every remaining card's height *before* choosing which one to
     // place next, not just the next one in DOM order).
     const remaining = cards.map((card) => {
-      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      const span = effectiveSpan(card, cols);
       const width = span * colWidth + (span - 1) * GAP;
       card.style.width = `${width}px`;
       return { card, span };
@@ -935,6 +955,141 @@ document.addEventListener("submit", (event) => {
   // dragCard being non-null), so this can't double-fire persistOrder
   // alongside a normal pointerup.
   grid.addEventListener("lostpointercapture", endDrag);
+})();
+
+// Drag-to-resize width (2026-08-30, reinstated -- direct request: "i
+// don't really like the settings width settings and much rather would
+// mouse resize them"). Coexists with the Filters panel's own Width
+// field (_widget_edit_form.html) rather than replacing it -- both write
+// the same config["width"], and the field stays the only way to set
+// width without a mouse. Deliberately a separate, simpler script from
+// the drag-to-reorder one above: this only ever changes one card's own
+// width in place, no hit-testing against other cards, no DOM reordering
+// -- pointer-down on a card's `.widget-resize-handle` (edit mode only,
+// its own right-edge strip, see static/style.css), drag left/right for
+// a live preview of the new width, release to snap to whichever of the
+// four Width choices (quarter/half/three_quarters/full, 3/6/9/12 of the
+// 12-column grid) the released width landed closest to and persist it
+// via POST /dashboard/widgets/{uid}/resize -- a narrower, single-field
+// endpoint (routers/dashboard.py's resize_widget) rather than
+// resubmitting the whole edit form, which a drag gesture has no access
+// to the other fields of anyway.
+(function () {
+  const grid = document.getElementById("dashboard-grid");
+  if (!grid || !grid.classList.contains("is-editing")) return;
+
+  const GAP = 16; // matches the masonry layout script's own GAP
+  const SPAN_TO_KEY = { 3: "quarter", 6: "half", 9: "three_quarters", 12: "full" };
+  const SPANS = [3, 6, 9, 12];
+
+  let dragCard = null;
+  let dragPointerId = null;
+  let startX = 0;
+  let startWidth = 0;
+  let dragging = false;
+
+  // Recovers the masonry layout script's own `colWidth` from whatever
+  // it already set on some other placed card, rather than duplicating
+  // its dry-run/effective-cols math here -- any already-laid-out card's
+  // pixel width already equals `span * colWidth + (span-1) * GAP`, so
+  // colWidth is solvable from just one of them. Falls back to the
+  // dragged card itself if it's the only one on the page.
+  function colWidthPx(excludeCard) {
+    const other = Array.from(grid.querySelectorAll(".widget-card")).find((c) => c !== excludeCard) || excludeCard;
+    const span = Math.max(1, parseInt(other.dataset.span, 10) || 1);
+    return (other.getBoundingClientRect().width - (span - 1) * GAP) / span;
+  }
+
+  function nearestSpan(widthPx, colWidth) {
+    if (!colWidth) return SPANS[0];
+    let best = SPANS[0];
+    let bestDiff = Infinity;
+    SPANS.forEach((span) => {
+      const target = span * colWidth + (span - 1) * GAP;
+      const diff = Math.abs(widthPx - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = span;
+      }
+    });
+    return best;
+  }
+
+  function persistResize(card, key) {
+    fetch(`/dashboard/widgets/${card.dataset.uid}/resize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `width=${encodeURIComponent(key)}`,
+    })
+      .then((resp) => {
+        if (!resp.ok) throw new Error("resize failed");
+        // The card's own data-span is now stale until the next full
+        // layout() run re-reads it from the server -- refreshRegion
+        // (static/async_crud.js) re-renders this one card with the new
+        // span baked in, then its own DOM swap (a childList mutation on
+        // #dashboard-grid) is exactly what the masonry layout script's
+        // MutationObserver already watches for, so a fresh layout() runs
+        // automatically right after -- no separate "re-layout now" call
+        // needed here.
+        return window.ccApi && window.ccApi.refreshRegion(`/dashboard/widgets/${card.dataset.uid}`, card.id);
+      })
+      .catch(() => {
+        window.ccToast({ message: "Could not resize that widget. Reloading...", variant: "error", duration: 1400 });
+        setTimeout(() => window.location.reload(), 1200);
+      });
+  }
+
+  grid.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest && e.target.closest(".widget-resize-handle");
+    if (!handle) return;
+    if (e.button !== undefined && e.button !== 0) return;
+    dragCard = handle.closest(".widget-card");
+    if (!dragCard) return;
+    dragPointerId = e.pointerId;
+    startX = e.clientX;
+    startWidth = dragCard.getBoundingClientRect().width;
+    dragging = false;
+    handle.setPointerCapture(e.pointerId);
+    // stopPropagation is defensive, not load-bearing today -- the
+    // reorder handler above binds directly to `.widget-drag-handle`
+    // elements (not delegated on `grid`), a different element entirely
+    // from this resize handle, so the two can't currently double-fire
+    // off one pointerdown. Kept anyway so that stays true even if the
+    // reorder handler is ever refactored to delegate on `grid` the same
+    // way this one does.
+    e.stopPropagation();
+  });
+
+  grid.addEventListener("pointermove", (e) => {
+    if (!dragCard || e.pointerId !== dragPointerId) return;
+    const dx = e.clientX - startX;
+    if (!dragging) {
+      if (Math.abs(dx) < 4) return;
+      dragging = true;
+      dragCard.classList.add("is-resizing");
+    }
+    const liveWidth = Math.max(80, startWidth + dx);
+    dragCard.style.width = `${liveWidth}px`;
+  });
+
+  function endResize(e) {
+    if (!dragCard || e.pointerId !== dragPointerId) return;
+    const card = dragCard;
+    const wasDragging = dragging;
+    card.classList.remove("is-resizing");
+    dragCard = null;
+    dragging = false;
+    dragPointerId = null;
+    if (!wasDragging) return;
+    const colWidth = colWidthPx(card);
+    const finalWidth = card.getBoundingClientRect().width;
+    const span = nearestSpan(finalWidth, colWidth);
+    persistResize(card, SPAN_TO_KEY[span]);
+  }
+
+  grid.addEventListener("pointerup", endResize);
+  grid.addEventListener("pointercancel", endResize);
+  grid.addEventListener("lostpointercapture", endResize);
 })();
 
 // Reordering *within* a stack (2026-08-02) -- deliberately a separate,
