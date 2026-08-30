@@ -94,6 +94,26 @@
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
             </div>
         </div>
+        <!-- Width (2026-08-30, reinstated -- see _widget_builder_fields.
+             html's own header comment) -- every widget type, pre-selected
+             from this widget's own config.width (blank/unrecognized ->
+             Auto). This form is only ever rendered for a single member
+             widget (a stack's own top-level card has no Edit/Filters link
+             of its own, see _widget_workspace.html's stack header -- just
+             drag + dissolve), so a stack's own shared config["width"]
+             (seeded once at creation, per _widget_width's own comment) is
+             untouched by this field either way. -->
+        <div class="field widget-width-field">
+            <label>Width</label>
+            <div class="field-toggle-group">
+                {% set _w = widget.config.width or '' %}
+                <label class="field-toggle"><input type="radio" name="width" value="" {% if _w not in ('quarter', 'half', 'three_quarters', 'full') %}checked{% endif %}> Auto</label>
+                <label class="field-toggle"><input type="radio" name="width" value="quarter" {% if _w == 'quarter' %}checked{% endif %}> 25%</label>
+                <label class="field-toggle"><input type="radio" name="width" value="half" {% if _w == 'half' %}checked{% endif %}> 50%</label>
+                <label class="field-toggle"><input type="radio" name="width" value="three_quarters" {% if _w == 'three_quarters' %}checked{% endif %}> 75%</label>
+                <label class="field-toggle"><input type="radio" name="width" value="full" {% if _w == 'full' %}checked{% endif %}> 100%</label>
+            </div>
+        </div>
         <!-- Show -- Agenda-only (2026-08-15 widget consolidation), see
              _widget_builder_fields.html's own comment for the rationale.
              Pre-checked from this widget's own config.show (defaulting to

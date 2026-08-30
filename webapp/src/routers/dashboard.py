@@ -804,31 +804,62 @@ def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) ->
 # Filters panel or dragged from the card's own resize handle), removed
 # 2026-08-07 alongside the manual height picker/drag-resize, per the same
 # direct feedback: automatic, content-driven sizing, no manual override.
-# `_widget_width` below now always returns a widget's *type's* own
-# `default_width` -- see WIDGET_TYPES -- which is the real "what does
-# this content naturally need" signal (e.g. At a Glance is just three
-# numbers, so it's a third; Weekly Overview is a 7-day-wide grid, so it's
-# the full row). `span` is out of 6 (dashboard.html's grid-template-
-# columns), chosen as the smallest common denominator for thirds AND
-# halves without fractional spans; "two_thirds" is kept as a valid preset
-# even though no WIDGET_TYPES entry currently defaults to it, since a
-# stack's own config["width"] can still be any of these four keys.
+# `_widget_width` used to always return a widget's *type's* own
+# `default_width` -- see WIDGET_TYPES -- the real "what does this content
+# naturally need" signal (e.g. At a Glance is just three numbers, so it's
+# a third; Weekly Overview is a 7-day-wide grid, so it's the full row).
+#
+# Manual per-instance width REINSTATED 2026-08-30 -- direct request after
+# the automatic masonry layout (static/app.js) still produced an
+# arrangement the user didn't want, even after a same-day best-fit
+# packing pass: "can't we have a width setting in edit mode (100%,75%,
+# 50%,25%), or maybe actually fix the automatic one." Given this
+# environment has no browser to visually verify a layout-algorithm change
+# against, and the automatic approach had already been iterated on twice
+# in the same session without landing on something the user was happy
+# with, manual control is the more reliable fix. This reverses the
+# 2026-08-07 decision above for WIDTH specifically -- height's own
+# removal (`.widget-content`'s single flat max-height) is untouched, no
+# per-widget height concept came back.
+#
+# Grid widened from 6 to 12 virtual columns (static/app.js's `maxCols` --
+# the grid is absolutely-positioned by JS, not a real CSS grid, so there's
+# no grid-template-columns to also update) at the same time --
+# 6 has no integer quarter/three-quarter, so a literal 25%/75% option
+# needs a column count divisible by 4. Every existing span was simply
+# doubled (third 2->4, half 3->6, two_thirds 4->8, full 6->12) --
+# identical real-world widths, `span/cols` unchanged (2/6 == 4/12 etc.)
+# -- with two new keys added at the now-exact quarter/three-quarters
+# marks. `.widget-card[data-span="…"]` CSS (static/style.css, the At a
+# Glance narrow-width font scaling) and every comment elsewhere in this
+# file/style.css that said "out of 6"/"6 virtual columns" were updated to
+# match. `_widget_width` below now checks a widget instance's own
+# `config["width"]` first (if it's one of the four percentages the Width
+# field offers, WIDGET_WIDTH_CHOICES) before falling back to its type's
+# `default_width`, same as before this reversal.
 WIDGET_WIDTHS: dict[str, dict] = {
-    "third": {"label": "1/3 width", "span": 2},
-    "half": {"label": "1/2 width", "span": 3},
-    "two_thirds": {"label": "2/3 width", "span": 4},
-    "full": {"label": "Full width", "span": 6},
+    "quarter": {"label": "1/4 width", "span": 3},
+    "third": {"label": "1/3 width", "span": 4},
+    "half": {"label": "1/2 width", "span": 6},
+    "two_thirds": {"label": "2/3 width", "span": 8},
+    "three_quarters": {"label": "3/4 width", "span": 9},
+    "full": {"label": "Full width", "span": 12},
 }
+
+# The four percentages actually offered by the Width field (2026-08-30) --
+# "third"/"two_thirds" stay reachable only as a WIDGET_TYPES default
+# (At a Glance, Contact List, etc.), not as something a user picks by
+# hand; the field literally asked for was "100%,75%,50%,25%", not six
+# choices, so the picker only exposes the four that map onto it.
+WIDGET_WIDTH_CHOICES: tuple[str, ...] = ("quarter", "half", "three_quarters", "full")
 
 
 def _widget_width(widget: dict, spec: dict | None) -> dict:
-    """A widget's width is now always just its type's own `default_width`
-    -- no per-instance override (removed 2026-08-07, same day and same
-    reasoning as the manual height picker/drag-resize's removal above:
-    "auto-fit by content", no manual third/half/two-thirds/full picker).
-    The width dropdown on the widget builder form, the drag-to-resize
-    handle, and edit_widget's width carry-through are all gone; creating
-    or editing a widget can no longer set config["width"] at all.
+    """A widget's width: its own `config["width"]` if it's one of
+    `WIDGET_WIDTH_CHOICES` (2026-08-30, reinstated manual override -- see
+    this section's own header comment for why), else its type's
+    `default_width` -- unchanged from the 2026-08-07 automatic-only
+    behavior for any widget that never sets one.
 
     A stack (type="stack") has no WIDGET_TYPES entry -- it's not "content"
     of its own, just a container of 1+ other widgets grouped by a drag-
@@ -836,18 +867,19 @@ def _widget_width(widget: dict, spec: dict | None) -> dict:
     fall back on. It keeps reading its own stored config["width"] instead,
     seeded once at creation time from whichever widget triggered the
     stack (stack_widget below) or from _DEFAULT_STACK_CONFIG for the
-    seed-time Space/Project stack, and never written to again -- this is
-    what lets every member of a stack share one width so they visually
-    align in a single card (only the stack's own top-level card carries
-    `data-span`; see _widget_workspace.html).
-
-    Existing dashboards may still have a stale config["width"] sitting in
-    a *non-stack* widget's config from before this change -- harmless,
-    simply never read any more, same convention as other deprecated
-    config fields elsewhere in this codebase (e.g. the old per-widget
-    `height`)."""
-    if spec is None:
-        key = (widget.get("config") or {}).get("width")
+    seed-time Space/Project stack, and never edited after that (no Edit/
+    Filters form renders for a stack's own top-level card, only for the
+    member widgets inside it -- see _widget_workspace.html's stack
+    header) -- this is what lets every member of a stack share one width
+    so they visually align in a single card (only the stack's own
+    top-level card carries `data-span`; see _widget_workspace.html).
+    Falls back to "half" if that stored value isn't a real key (e.g.
+    never set)."""
+    config = widget.get("config") or {}
+    if spec is not None and config.get("width") in WIDGET_WIDTH_CHOICES:
+        key = config["width"]
+    elif spec is None:
+        key = config.get("width")
         if key not in WIDGET_WIDTHS:
             key = "half"
     else:
@@ -878,8 +910,9 @@ WIDGET_TYPES: dict[str, dict] = {
         # Corrected from "full" to "third" (2026-08-07, automatic-width
         # pass) -- it's just three number+label stat blocks, not content
         # that needs a full row; static/style.css already has a
-        # `.widget-card[data-span="2"|"3"]` font-scaling rule for this
-        # widget written for exactly this narrower width, which was
+        # `.widget-card[data-span="3"|"4"|"6"]` font-scaling rule for this
+        # widget written for exactly this narrower width (span numbers
+        # doubled 2026-08-30, see WIDGET_WIDTHS' own comment), which was
         # otherwise unreachable dead CSS as long as this default was "full".
         "default_width": "third",
     },
@@ -1992,6 +2025,7 @@ def _config_from_form(
     style: str = "",
     show: list[str] | None = None,
     scope: str = "",
+    width: str = "",
 ) -> dict:
     config: dict = {}
     tag_list = _tags_list(tags)
@@ -2035,6 +2069,16 @@ def _config_from_form(
         config["scope"] = scope
     if show is not None:
         config["show"] = show
+    # `width` (2026-08-30, reinstated manual per-instance override -- see
+    # WIDGET_WIDTHS/_widget_width's own comment) -- only ever one of
+    # WIDGET_WIDTH_CHOICES from a real submission of the Width field
+    # (blank/"Auto" -> omitted entirely, same "don't store a no-op key"
+    # convention `style`/`scope` above already follow); a stale/forged
+    # value that isn't a real key is silently dropped here too, same
+    # "not our job to validate here" reasoning _widget_width's own
+    # fallback already covers on the read side.
+    if width in WIDGET_WIDTH_CHOICES:
+        config["width"] = width
     return config
 
 
@@ -2057,6 +2101,7 @@ def preview_widget(
     limit: str = Form(""),
     style: str = Form(""),
     scope: str = Form(""),
+    width: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -2078,8 +2123,12 @@ def preview_widget(
     auto-scope the same way the real save does. `tags_labels` (2026-08-07)
     is the Labels chip multiselect's checkboxes -- see _combine_tags.
     `style`/`show_*` (2026-08-15 widget consolidation) are Spaces &
-    Projects' Style radio and Agenda's Show checkboxes -- see
-    _config_from_form."""
+    Projects' Style radio and Agenda's Show checkboxes; `width` (2026-08-30,
+    reinstated) is the Width radio -- see _config_from_form. The preview
+    card itself ignores width visually either way (`.widget-preview-card`
+    is reset to `position:static; width:auto`, static/style.css), but it's
+    threaded through anyway so the previewed widget's data/behavior stays
+    consistent with what a real save would produce."""
     if source not in WIDGET_SOURCES:
         return templates.TemplateResponse(
             "_dashboard_widget_preview.html",
@@ -2091,7 +2140,7 @@ def preview_widget(
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",
-        scope=scope if wtype == "spaces_projects" else "", show=show,
+        scope=scope if wtype == "spaces_projects" else "", show=show, width=width,
     )
     page_label = space_uid or project_uid
     if page_label:
@@ -2117,6 +2166,7 @@ def add_widget(
     limit: str = Form(""),
     style: str = Form(""),
     scope: str = Form(""),
+    width: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -2137,7 +2187,8 @@ def add_widget(
     excluded for the page's scope (e.g. Spaces & Projects on a project
     page) are rejected as a no-op the same way an unknown source is, so a
     stale/excluded combo never silently creates a widget that can't mean
-    anything on the page."""
+    anything on the page. `width` (2026-08-30, reinstated manual
+    override) -- see WIDGET_WIDTHS/_widget_width's own comment."""
     page_label = space_uid or project_uid or None
     if source not in WIDGET_SOURCES:
         return RedirectResponse(url=_return_url(page_label, conn=conn), status_code=303)
@@ -2148,7 +2199,7 @@ def add_widget(
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",
-        scope=scope if wtype == "spaces_projects" else "", show=show,
+        scope=scope if wtype == "spaces_projects" else "", show=show, width=width,
     )
     if page_label:
         config["label_name"] = page_label
@@ -2182,6 +2233,7 @@ def edit_widget(
     limit: str = Form(""),
     style: str = Form(""),
     scope: str = Form(""),
+    width: str = Form(""),
     show_overdue: bool = Form(False),
     show_tasks: bool = Form(False),
     show_events: bool = Form(False),
@@ -2222,13 +2274,13 @@ def edit_widget(
     new_config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",
-        scope=scope if wtype == "spaces_projects" else "", show=show,
+        scope=scope if wtype == "spaces_projects" else "", show=show, width=width,
     )
-    # Width isn't a field on this form (2026-08-07 removal of the manual
-    # width picker/drag-resize) -- there's no per-widget-instance width
-    # left to carry over at all any more; a widget's width is always just
-    # its type's own default_width (_widget_width), recomputed fresh at
-    # render time regardless of what's in config.
+    # Width (2026-08-30, reinstated -- see WIDGET_WIDTHS/_widget_width's
+    # own comment) is a real field on this form now, handled the same way
+    # every other _config_from_form kwarg above already is -- no special
+    # casing needed here (a blank/"Auto" submission is simply omitted from
+    # new_config by _config_from_form itself, same as an unset Style).
     # Re-scope to whichever page this widget already belongs to
     # (2026-08-02) -- a label page's `label_name` filter isn't a field on
     # this form either, same reasoning as width: editing Title/Source/

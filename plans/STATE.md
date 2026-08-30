@@ -6381,6 +6381,78 @@ changed, in the precache list) -- `test_pwa_shell.py` updated. Full suite
 **1876 passed** (five chunks: 628 + 489 + 323 + 431 + 5 = 1876, unchanged
 -- no Python-visible surface changed).
 
+## Follow-up (2026-08-30, same day) -- manual per-widget Width reinstated;
+grid widened 6 -> 12 virtual columns
+
+Direct report with two more screenshots, right after the best-fit
+placement fix above: "now it's even worse. can't we have a width setting
+in edit mode (100%,75%,50%,25%), or maybe actually fix the automatic
+one." The best-fit change had technically filled the specific gap from
+the prior report, but at the cost of pulling Contact List out of its
+"natural" reading-order position to do it, which read as more confusing,
+not less -- two algorithmic attempts at the automatic layout in the same
+session, neither landing on something the user was happy with, and this
+environment has no browser to ever check one against before shipping it.
+Decision: stop iterating blindly on the automatic algorithm and give
+direct manual control back instead -- the user offered it as the first
+of their two options, and it sidesteps the whole "can't verify visually"
+problem, since the user sets it and sees the result themselves.
+
+This is a deliberate, explicit **reversal of the 2026-08-07 decision**
+("Manual width/height override removed -- direct feedback: auto-fit by
+content") for width specifically -- height's own removal is untouched,
+no per-widget height concept came back.
+
+- **Grid widened 6 -> 12 virtual columns** (`static/app.js`'s `maxCols`).
+  6 columns has no integer quarter/three-quarter (the field literally
+  asked for is 100/75/50/25%), and the smallest column count divisible
+  by 4 that also keeps thirds/halves/two-thirds landing on whole columns
+  is 12. Every existing `WIDGET_WIDTHS` span was doubled (third 2->4,
+  half 3->6, two_thirds 4->8, full 6->12) -- identical real-world
+  proportions, `span/cols` unchanged (e.g. 2/6 == 4/12) -- and two new
+  keys added at the now-exact marks: `quarter` (span 3, 25%) and
+  `three_quarters` (span 9, 75%). `.widget-card[data-span="…"]` CSS (the
+  At a Glance narrow-width font-scaling rule, `static/style.css`) updated
+  to the doubled span numbers, and extended to also cover the new
+  `quarter` span (it needs the scaling at least as much as third/half
+  do).
+- **`_widget_width` now checks a widget instance's own `config["width"]`
+  first** (routers/dashboard.py) -- if it's one of
+  `WIDGET_WIDTH_CHOICES` (`quarter`/`half`/`three_quarters`/`full` --
+  deliberately just the four the field asked for, not all six
+  `WIDGET_WIDTHS` keys; `third`/`two_thirds` stay reachable only as a
+  type's own `default_width`, not something picked by hand) -- before
+  falling back to the type's `default_width`, same as before this
+  reversal for any widget that never sets one. A stack's own width
+  (`spec is None`) is unaffected by the `WIDGET_WIDTH_CHOICES` gate --
+  still reads its raw `config["width"]`, any of the six keys, same as
+  always.
+- **New "Width" field** (Filters panel, both the Add-widget form and the
+  per-widget edit form -- `_widget_builder_fields.html`/
+  `_widget_edit_form.html`) -- a segmented Auto/25%/50%/75%/100% radio
+  group, unconditional (every widget type gets it, unlike Show/Style/
+  Scope which are gated to one type each). `width` threaded as a real
+  `Form(...)` param through `preview_widget`/`add_widget`/`edit_widget`
+  and `_config_from_form` (blank/"Auto" -> omitted from stored config
+  entirely, same "don't store a no-op key" convention `style`/`scope`
+  already followed; a value outside `WIDGET_WIDTH_CHOICES` is silently
+  dropped rather than erroring, same as those two).
+- 14 new tests replacing/extending `TestWidgetWidthAutomatic` (now split:
+  that class keeps only what's still true -- no drag-resize handle, no
+  override renders the type default unchanged -- a new
+  `TestWidgetWidthManualOverride` covers the reinstated field, the
+  12-column spans, and that a stack's own width is unaffected by the
+  four-choice gate).
+- `features/dashboard.md` updated: masonry section now describes 12
+  columns, best-fit placement, and the reinstated Width field with a
+  pointer to the relevant `routers/dashboard.py` names.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v37` -> `cc-shell-v38` (app.js +
+  style.css both changed) -- `test_pwa_shell.py` updated. Full suite
+  **1883 passed** (five chunks: 635 + 489 + 323 + 431 + 5 = 1883; +14 net
+  over the 1876 baseline (removed `test_add_widget_form_has_no_width_param`
+  and its 2 siblings, added 14 in `TestWidgetWidthManualOverride`, +1
+  elsewhere) — no failures at any point).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

@@ -11,11 +11,21 @@
      task_lists, calendars, tag_names, tag_name_items (tag_names reshaped
      into {uid, name} pairs -- uid == name, a label's own name IS its
      identity -- for the Labels chip multiselect below, which reuses
-     _widget_list_multiselect.html's {uid, name} contract). There is no
-     Width field any more
-     (2026-08-07 removal of the manual width picker/drag-resize) -- a
-     widget's width is always just its type's own default_width, picked
-     automatically, no per-instance override.
+     _widget_list_multiselect.html's {uid, name} contract).
+
+     Width field (2026-08-30, reinstated -- direct request after the
+     automatic masonry layout still produced an unwanted arrangement even
+     after a best-fit packing pass: "can't we have a width setting in
+     edit mode (100%,75%,50%,25%), or maybe actually fix the automatic
+     one" -- given a purely automatic layout can't be verified visually
+     from this environment at all, manual control is the more reliable
+     fix. This reverses the 2026-08-07 "no manual override, auto-fit by
+     content" decision for width specifically (not height -- that
+     removal stands). Auto (blank value, the default) leaves the type's
+     own default_width in charge, same as before this field existed;
+     picking one of the four percentages sets config["width"], read by
+     _widget_width ahead of the type default. See WIDGET_WIDTHS/
+     _widget_width in routers/dashboard.py.
 
      2026-08-07 (modal-input-design Phase A) -- Source/View/Range/Limit/
      Labels reworked from raw select/number/text-with-datalist into real
@@ -112,6 +122,20 @@
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
             <input type="number" name="limit" class="widget-preview-field stepper-input" min="1" placeholder="10">
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
+        </div>
+    </div>
+    <!-- Width (2026-08-30, reinstated -- see this file's own header
+         comment) -- every widget type gets this, unlike Show/Style/Scope
+         below which are gated to one type each. Auto (blank, checked by
+         default) leaves the type's own default_width in charge. -->
+    <div class="field widget-width-field">
+        <label>Width</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="radio" name="width" value="" checked> Auto</label>
+            <label class="field-toggle"><input type="radio" name="width" value="quarter"> 25%</label>
+            <label class="field-toggle"><input type="radio" name="width" value="half"> 50%</label>
+            <label class="field-toggle"><input type="radio" name="width" value="three_quarters"> 75%</label>
+            <label class="field-toggle"><input type="radio" name="width" value="full"> 100%</label>
         </div>
     </div>
     <!-- Show -- Agenda-only (2026-08-15 widget consolidation), gated by

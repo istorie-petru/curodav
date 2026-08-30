@@ -412,8 +412,13 @@ class TestLocalWritePath:
         # best-fit-among-remaining, so a short widget's dead-space gap can
         # be backfilled by a later, narrower widget instead of forcing
         # everything after it down to the tallest neighbor's height).
+        # v38 (2026-08-30): bumped again, same session (direct request --
+        # "can't we have a width setting in edit mode (100%,75%,50%,25%)"
+        # -- manual per-widget width override reinstated, grid widened
+        # 6->12 virtual columns so 25%/75% land exactly; app.js's maxCols
+        # and style.css's data-span selectors both changed).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v37"' in script
+        assert 'CACHE_NAME = "cc-shell-v38"' in script
 
 
 class TestOfflineToolbar:

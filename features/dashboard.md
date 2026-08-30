@@ -82,8 +82,19 @@ members).
   and per-widget filters.
 - **Filters** use the shared label vocabulary; a task's "project" is always
   inherited from its list — no per-task project field.
-- Grid is masonry over 6 virtual columns (app.js); width is each type's
-  `default_width` (manual width/height pickers were removed).
+- Grid is masonry over 12 virtual columns (app.js; widened from 6,
+  2026-08-30 — see below); placement is best-fit among not-yet-placed
+  cards, not strict DOM order (2026-08-30 direct report, "the way
+  widgets are aranged is not ok" — a short widget's dead-space gap can
+  now be backfilled by a later, narrower widget). Width is each type's
+  `default_width` unless a widget instance's own **Width** field
+  (Filters panel — Auto/25%/50%/75%/100%) overrides it, reinstated
+  2026-08-30 (direct request, after the automatic layout still didn't
+  land on something the user wanted even with the best-fit fix above —
+  reverses the 2026-08-07 "no manual override" decision for width only;
+  height stays automatic, no manual height picker came back). See
+  `routers/dashboard.py`'s `WIDGET_WIDTHS`/`WIDGET_WIDTH_CHOICES`/
+  `_widget_width`.
 
 ## Seeding & scope
 

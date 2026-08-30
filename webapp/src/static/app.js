@@ -538,16 +538,22 @@ document.addEventListener("submit", (event) => {
 })();
 
 // Dashboard masonry layout (dashboard.html's #dashboard-grid, both edit
-// and view mode -- 2026-08-02) -- a plain `display:grid` 6-column grid
+// and view mode -- 2026-08-02) -- a plain `display:grid` column grid
 // sizes every *row* to its tallest occupant, so a short widget next to a
 // tall one always left dead space under itself instead of letting
 // whatever comes next start right where it actually ends. This computes
-// real positions instead: each card still claims a `data-span` out of 6
-// virtual columns (third=2/half=3/two_thirds=4/full=6, unchanged from
-// before), but its top is wherever those columns are *actually* free,
-// tracked per-column as cards are placed in DOM order -- the standard
-// "skyline" packing masonry libraries use, just handwritten here since
-// the dependency isn't worth it for one grid on one page.
+// real positions instead: each card still claims a `data-span` out of
+// `maxCols` virtual columns (12 as of 2026-08-30, up from 6 -- see
+// routers/dashboard.py's WIDGET_WIDTHS own comment for why: a manual
+// Width override was reinstated that needs an exact 25%/75% option,
+// which 6 columns can't express; every span was doubled at the same
+// time, so real-world widths are unchanged -- quarter=3/half=6/
+// three_quarters=9/full=12, third=4/two_thirds=8), but its top is
+// wherever those columns are *actually* free, tracked per-column as
+// cards are placed -- the standard "skyline" packing masonry libraries
+// use, just handwritten here since the dependency isn't worth it for one
+// grid on one page. (2026-08-30, same day: placement itself is best-fit,
+// not strict DOM order -- see the loop below its own comment.)
 //
 // Runs unconditionally (not gated behind edit mode -- unlike every other
 // dashboard grid script below) because the gaps this fixes are exactly
@@ -616,21 +622,24 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const containerWidth = grid.clientWidth;
-    const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 6;
+    // 12, not 6 (2026-08-30 -- see this section's own header comment):
+    // widened so the reinstated manual Width override has an exact
+    // 25%/75% option, not just halves/thirds.
+    const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 12;
     // 2026-08-08 direct feedback ("weird permanent empty space on the
     // right, widgets crowded") -- a dashboard with only a couple of
-    // widgets (e.g. two half/third-width cards, 5 of 6 virtual columns
-    // claimed) always reserved the full 6-column width regardless, so the
-    // one never-touched column sat there as dead space on the right
-    // forever, and every card's own pixel width was computed against a
-    // colWidth one column narrower than the space actually available.
-    // Fix: a cheap dry run (packColumns, pure index math, no DOM) using
-    // the full 6 columns first, just to find out how many columns this
-    // actual set of cards ends up touching -- then the real pass below
-    // uses THAT as its column count, so colWidth (and therefore every
-    // card's width) is computed against the space genuinely in use, not
-    // an assumed max. A dashboard with enough widgets to fill all 6
-    // columns anyway sees no change at all (effectiveCols === maxCols).
+    // widgets (e.g. two half/third-width cards, some columns never
+    // claimed) always reserved the full column width regardless, so the
+    // untouched columns sat there as dead space on the right forever,
+    // and every card's own pixel width was computed against a colWidth
+    // narrower than the space actually available. Fix: a cheap dry run
+    // (packColumns, pure index math, no DOM) using the full column count
+    // first, just to find out how many columns this actual set of cards
+    // ends up touching -- then the real pass below uses THAT as its
+    // column count, so colWidth (and therefore every card's width) is
+    // computed against the space genuinely in use, not an assumed max. A
+    // dashboard with enough widgets to fill every column anyway sees no
+    // change at all (effectiveCols === maxCols).
     const dryRun = packColumns(cards, maxCols);
     const cols = Math.max(1, dryRun.maxTouched);
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;

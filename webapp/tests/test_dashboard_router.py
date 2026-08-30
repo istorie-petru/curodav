@@ -418,10 +418,16 @@ class TestWidgetWidthAutomatic:
     <select> in the widget builder form, a drag handle on each card, its
     own /resize endpoint) was fully removed per direct feedback: "auto-fit
     by content" -- each widget type gets a natural width from its own
-    default_width, no per-instance override. These are regression guards
-    against any of that quietly coming back, not tests of behavior that
-    still exists (see TestWidgetStacking above for the width-sharing
-    behavior that *does* still exist, for stacks)."""
+    default_width, no per-instance override. That drag-resize-handle/
+    endpoint removal stands (see the two tests still here for it) -- but
+    the "no per-instance override at all" half of it was reversed
+    2026-08-30 (direct request, see TestWidgetWidthManualOverride below)
+    after the automatic masonry layout kept producing an arrangement the
+    user didn't want even after a same-day best-fit packing pass. These
+    two classes intentionally sit next to each other: this one now only
+    covers what's still true (no drag handle, and a widget with no
+    override still renders at its type's own default), the one below
+    covers the reinstated override itself."""
 
     def _add(self, conn, view="agenda", range_="today", **extra):
         dashboard_router.add_widget(
@@ -433,61 +439,24 @@ class TestWidgetWidthAutomatic:
     def test_no_resize_endpoint_left_on_the_module(self):
         assert not hasattr(dashboard_router, "resize_widget")
 
-    def test_add_widget_form_has_no_width_param(self):
-        import inspect
-
-        params = inspect.signature(dashboard_router.add_widget).parameters
-        assert "width" not in params
-
-    def test_edit_widget_form_has_no_width_param(self):
-        import inspect
-
-        params = inspect.signature(dashboard_router.edit_widget).parameters
-        assert "width" not in params
-
     def test_created_widget_always_renders_at_its_types_default_width(self, conn):
         # calendar_tasks/agenda_view resolves to agenda, whose
         # default_width is "half" -- confirm that's what actually renders
-        # regardless of anything a stale/forged client might have sent.
+        # when nothing overrides it (the common case -- no width= in the
+        # form submission below, same as _add's default call shape).
         w = self._add(conn)
         assert w["type"] == "agenda"
         wc = dashboard_router._widget_context(conn, w)
         assert wc["width"]["key"] == "half"
 
-    def test_editing_a_widget_does_not_accept_a_width_override(self, conn):
-        w = self._add(conn)
-        dashboard_router.edit_widget(
-            w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
-        )
-        updated = db.get_dashboard_widget(conn, w["uid"])
-        assert "width" not in updated["config"]
-
-    def test_widget_types_default_width_is_the_only_source_of_truth(self, conn):
-        # Even if a stale config["width"] is sitting in a widget's config
-        # (e.g. from before this removal), it's never read any more --
-        # the type's own default_width always wins.
-        w = self._add(conn)
-        row = dict(db.get_dashboard_widget(conn, w["uid"]))
-        row["config"] = dict(row.get("config") or {})
-        row["config"]["width"] = "full"  # simulate a stale override
-        db.upsert_dashboard_widget(conn, row)
-        wc = dashboard_router._widget_context(conn, row)
-        assert wc["width"]["key"] == "half"  # today_agenda's own default, not "full"
-
     def test_widget_page_context_has_no_widget_widths(self, conn):
+        # The reinstated Width field (2026-08-30) hardcodes its own five
+        # radio options directly in the templates rather than looping over
+        # a context variable -- no "widget_widths" key was added to page
+        # context for it, so this still holds.
         self._add(conn)
         ctx = dashboard_router.widget_page_context(conn)
         assert "widget_widths" not in ctx
-
-    def test_builder_fields_partial_has_no_width_field(self, conn):
-        from starlette.requests import Request
-
-        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, conn=conn)
-        body = resp.body.decode()
-        assert 'name="width"' not in body
 
     def test_edit_mode_renders_no_width_resize_handle(self, conn):
         from starlette.requests import Request
@@ -497,6 +466,126 @@ class TestWidgetWidthAutomatic:
         resp = dashboard_router.dashboard_view(req, conn=conn)
         body = resp.body.decode()
         assert "widget-resize-handle" not in body
+
+
+class TestWidgetWidthManualOverride:
+    """2026-08-30, direct request after the automatic masonry layout
+    (static/app.js) kept producing an arrangement the user didn't want,
+    even after a same-day best-fit packing pass: "can't we have a width
+    setting in edit mode (100%,75%,50%,25%), or maybe actually fix the
+    automatic one." Reverses the 2026-08-07 "no manual override" decision
+    above for width specifically -- see WIDGET_WIDTHS/_widget_width's own
+    comment in routers/dashboard.py. Grid also widened 6->12 virtual
+    columns the same day so 25%/75% land on exact column counts."""
+
+    def _add(self, conn, view="agenda", range_="today", **extra):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view=view, range=range_, title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn, **extra,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_add_widget_form_has_a_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.add_widget).parameters
+        assert "width" in params
+
+    def test_edit_widget_form_has_a_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.edit_widget).parameters
+        assert "width" in params
+
+    def test_add_widget_stores_a_real_width_choice(self, conn):
+        w = self._add(conn, width="three_quarters")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert stored["config"]["width"] == "three_quarters"
+
+    def test_add_widget_ignores_blank_width_auto(self, conn):
+        w = self._add(conn, width="")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in stored["config"]
+
+    def test_add_widget_rejects_a_width_not_in_the_four_offered_choices(self, conn):
+        # "third"/"two_thirds" are real WIDGET_WIDTHS keys (still used as
+        # type defaults) but not offered by the Width field itself --
+        # WIDGET_WIDTH_CHOICES is the four literally asked for
+        # (100%/75%/50%/25%), so a stale/forged submission of either
+        # doesn't get stored as if it were a legitimate manual choice.
+        w = self._add(conn, width="third")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in stored["config"]
+
+    def test_manual_width_wins_over_the_types_default(self, conn):
+        w = self._add(conn, width="quarter")
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["width"]["key"] == "quarter"
+        assert wc["width"]["span"] == 3
+
+    def test_editing_a_widget_can_set_a_width_override(self, conn):
+        w = self._add(conn)
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="",
+            width="full", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert updated["config"]["width"] == "full"
+        wc = dashboard_router._widget_context(conn, updated)
+        assert wc["width"]["key"] == "full"
+        assert wc["width"]["span"] == 12
+
+    def test_editing_a_widget_back_to_auto_clears_the_override(self, conn):
+        w = self._add(conn, width="full")
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="",
+            width="", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in updated["config"]
+        wc = dashboard_router._widget_context(conn, updated)
+        assert wc["width"]["key"] == "half"  # agenda's own default_width, back in charge
+
+    def test_builder_fields_partial_has_a_width_field(self, conn):
+        # The Add-widget form only renders inside the Customize modal
+        # (GET /dashboard/customize), not inline on the dashboard itself
+        # (2026-08-08 -- "New widget" opens the modal instead), so this
+        # has to hit that route rather than dashboard_view.
+        from starlette.requests import Request
+
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        req = Request({"type": "http", "method": "GET", "path": "/dashboard/customize", "headers": []})
+        resp = dashboard_router.dashboard_customize(req, conn=conn)
+        body = resp.body.decode()
+        assert 'name="width"' in body
+        assert 'value="quarter"' in body
+        assert 'value="three_quarters"' in body
+
+    def test_widget_widths_span_out_of_twelve(self):
+        # 2026-08-30: grid widened 6 -> 12 columns so 25%/75% land exactly
+        # (6 has no integer quarter). Every pre-existing span doubled;
+        # real-world proportions unchanged (2/6 == 4/12, 3/6 == 6/12, ...).
+        assert dashboard_router.WIDGET_WIDTHS["quarter"]["span"] == 3
+        assert dashboard_router.WIDGET_WIDTHS["third"]["span"] == 4
+        assert dashboard_router.WIDGET_WIDTHS["half"]["span"] == 6
+        assert dashboard_router.WIDGET_WIDTHS["two_thirds"]["span"] == 8
+        assert dashboard_router.WIDGET_WIDTHS["three_quarters"]["span"] == 9
+        assert dashboard_router.WIDGET_WIDTHS["full"]["span"] == 12
+
+    def test_width_choices_are_exactly_the_four_percentages_asked_for(self):
+        assert set(dashboard_router.WIDGET_WIDTH_CHOICES) == {"quarter", "half", "three_quarters", "full"}
+
+    def test_stack_own_width_unaffected_by_the_choices_restriction(self, conn):
+        # A stack (spec=None) still reads its own raw config["width"]
+        # directly, any WIDGET_WIDTHS key -- WIDGET_WIDTH_CHOICES only
+        # gates what a *type-having* widget's manual override can be, per
+        # _widget_width's own branch order.
+        stack = {"type": "stack", "config": {"width": "two_thirds"}}
+        wc_width = dashboard_router._widget_width(stack, None)
+        assert wc_width["key"] == "two_thirds"
+        assert wc_width["span"] == 8
 
 
 class TestWidgetStacking:

@@ -3912,23 +3912,29 @@ body.command-palette-open{overflow:hidden;}
    mobile breakpoint every widget goes full-width regardless of its
    chosen span -- three columns of a 6-col grid squeezed onto a phone
    screen would be unreadable, same reasoning every other multi-column
-   layout in this app collapses at this width. */
+   layout in this app collapses at this width.
+   (2026-08-30: grid widened to 12 virtual columns, every span doubled,
+   two new quarter/three_quarters keys added -- see routers/dashboard.py's
+   WIDGET_WIDTHS own comment. The reasoning above is otherwise unchanged,
+   just at double the column count.) */
 /* Masonry (2026-08-02, static/app.js's layoutDashboardGrid) -- was a
    plain `display:grid` 6-column grid, which sizes every *row* to its
    tallest occupant, so a short widget next to a tall one left a dead
    gap under itself rather than letting the next widget start right
    where it actually ends ("they should sit directly under, not a
    simple table grid"). JS now computes each card's left/top/width from
-   its own measured height and `data-span` (still third=2/half=3/
-   two_thirds=4/full=6 out of 6 virtual columns, unchanged), so the
-   container has to be a plain positioned box for that absolute
-   placement to anchor to, not a grid -- the grid-column CSS property
-   has no effect on an absolutely positioned child anyway. `min-height`
-   is a floor, not a fixed size -- JS always sets the real height once
-   layout runs; this just avoids a 0-height flash before that first run.
-   The 720px breakpoint (single virtual column, previously CSS-only) is
-   now decided by the same layout function reading window width, so
-   there's no longer a separate mobile ruleset to keep in sync with it. */
+   its own measured height and `data-span` (now out of 12 virtual
+   columns, 2026-08-30 -- see the comment above), so the container has to
+   be a plain positioned box for that absolute placement to anchor to,
+   not a grid -- the grid-column CSS property has no effect on an
+   absolutely positioned child anyway. `min-height` is a floor, not a
+   fixed size -- JS always sets the real height once layout runs; this
+   just avoids a 0-height flash before that first run. The 720px
+   breakpoint (single virtual column, previously CSS-only) is now decided
+   by the same layout function reading window width, so there's no
+   longer a separate mobile ruleset to keep in sync with it. Placement
+   itself is best-fit, not strict DOM order, as of the same 2026-08-30
+   session -- see app.js's own comment on that loop. */
 .dashboard-grid{position:relative; min-height:200px;}
 .widget-card{margin-bottom:0; position:absolute; box-sizing:border-box;
   transition:left var(--dur-normal) var(--ease-standard), top var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);}
@@ -4147,16 +4153,23 @@ body.command-palette-open{overflow:hidden;}
 /* 2026-08-07: at third/half width there isn't room for all three stats at
    full size -- the number and its caption were clipping/wrapping badly,
    only two of the three blocks fitting legibly. `.widget-card[data-span]`
-   (routers/dashboard.py's WIDGET_WIDTHS -- 2=third, 3=half, 4=two_thirds,
-   6=full) already tells every widget how wide it is, so this scales the
-   number and caption down specifically at the two narrow widths rather
-   than shrinking a widget that has room to spare at two_thirds/full. */
-.widget-card[data-span="2"] .at-a-glance-number,
-.widget-card[data-span="3"] .at-a-glance-number{font-size:20px;}
-.widget-card[data-span="2"] .at-a-glance-row,
-.widget-card[data-span="3"] .at-a-glance-row{gap:var(--space-2);}
-.widget-card[data-span="2"] .at-a-glance-stat .widget-section-label,
-.widget-card[data-span="3"] .at-a-glance-stat .widget-section-label{font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+   (routers/dashboard.py's WIDGET_WIDTHS) already tells every widget how
+   wide it is, so this scales the number and caption down specifically at
+   the narrow widths rather than shrinking a widget that has room to
+   spare at two_thirds/full. 2026-08-30: grid widened 6->12 virtual
+   columns (WIDGET_WIDTHS' own comment) -- span values doubled (third
+   2->4, half 3->6) and a new, even narrower "quarter" (span 3) manual
+   override joined third/half here, since it needs the scaling at least
+   as much as they do. */
+.widget-card[data-span="3"] .at-a-glance-number,
+.widget-card[data-span="4"] .at-a-glance-number,
+.widget-card[data-span="6"] .at-a-glance-number{font-size:20px;}
+.widget-card[data-span="3"] .at-a-glance-row,
+.widget-card[data-span="4"] .at-a-glance-row,
+.widget-card[data-span="6"] .at-a-glance-row{gap:var(--space-2);}
+.widget-card[data-span="3"] .at-a-glance-stat .widget-section-label,
+.widget-card[data-span="4"] .at-a-glance-stat .widget-section-label,
+.widget-card[data-span="6"] .at-a-glance-stat .widget-section-label{font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 /* Habit Check-in widget (_widget_habit_checkin.html) */
 .habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
