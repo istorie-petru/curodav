@@ -508,6 +508,14 @@ class TestDataMaintenanceScriptGate:
             assert marker in self.EXPORT
         for marker in ("data-dm-dropzone", "data-dm-file", 'name="merge"', 'action="/export/import/auto"'):
             assert marker in self.IMPORT
-        for marker in ("data-purge-gate", "data-purge-phrase", "data-purge-btn disabled",
+        # 2026-08-30 (modal-footer-consistency fix): the Permanently Delete
+        # button moved out of inline body markup into the shared
+        # _modal_footer.html include -- data-purge-btn/disabled are no
+        # longer adjacent literal HTML attributes, they're the two Jinja
+        # vars that make the partial render them (see _modal_footer.html's
+        # own footer_primary_extra_attr/footer_primary_disabled docs).
+        for marker in ("data-purge-gate", "data-purge-phrase",
+                       "footer_primary_extra_attr = 'data-purge-btn'",
+                       "footer_primary_disabled = true",
                        'action="/settings/purge-all"', "_modal_footer.html"):
             assert marker in self.PURGE

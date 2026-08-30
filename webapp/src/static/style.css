@@ -2043,6 +2043,21 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); display:flex; flex-direction:column; gap:var(--space-1);
 }
 .kanban-card.dragging{opacity:.4;}
+/* Banner strip (2026-08-30, db.banner_for_task's label > project > space
+   priority) -- bleeds to the card's own top/side edges (negative margin
+   matching .kanban-card's own padding exactly) so it reads as the card's
+   header rather than an inset thumbnail; only the top corners round to
+   match the card's own radius since the strip never reaches the bottom
+   edge. Always the first flex child -- .kanban-card's own `gap` already
+   spaces every child after it, nothing extra needed below. A card with no
+   resolved banner (the common case for a plain unlabeled task) renders
+   exactly as before -- this is additive, not a layout change other cards
+   have to account for. */
+.kanban-card-banner{
+  margin:calc(var(--space-2) * -1) calc(var(--space-3) * -1) 0;
+  height:56px; object-fit:cover; display:block;
+  border-radius:var(--radius-control) var(--radius-control) 0 0;
+}
 .kanban-card-title{color:var(--fg-primary); font-size:var(--text-callout); font-weight:600; text-decoration:none;}
 .kanban-card-title:hover{text-decoration:underline;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
@@ -3218,11 +3233,27 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .modal{
    width:700px; min-width:500px; max-width:100%; background:var(--surface-container-high); border-radius:28px;
    box-shadow:var(--elevation-3); transform:translateY(10px) scale(.97);
-   transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);
+   transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard), min-height var(--dur-normal) var(--ease-standard);
    border:none;
-   max-height:88vh; min-height:600px; display:flex; flex-direction:column; overflow:hidden;
+   max-height:88vh; min-height:300px; display:flex; flex-direction:column; overflow:hidden;
 }
 .modal-overlay.is-open .modal{transform:translateY(0) scale(1);}
+/* Height tiers (direct feedback, 2026-08-30: a blanket 600px floor left a
+    huge dead gap in the footer of every short-content modal -- Export,
+    Import, Purge, label Merge, Note -- whose real content is a fraction of
+    that). 300px is the new default floor (small enough that a two/three-
+    field modal doesn't show empty space, still enough that the dialog
+    doesn't feel like a sliver). `.modal-height-md`/`.modal-height-lg` are
+    opt-in steps up for templates whose typical content genuinely runs
+    longer (a multi-field form, a Role picker with a conditional date
+    block) -- set as a class on the fragment's own #modal-target, same
+    "template states its own shape" pattern `.modal-stable-height` already
+    uses just below. Never write a one-off inline min-height on a specific
+    modal -- pick the nearest of these three steps instead. This is a
+    floor, not a cap: content that's naturally taller keeps growing the
+    dialog up to max-height:88vh regardless of which tier is set. */
+.modal.is-height-md{min-height:450px;}
+.modal.is-height-lg{min-height:600px;}
 /* Size variant (static/modal.js's data-modal-size="wide") -- most modals
     are a field-grid form and 560px is plenty; a few (Schedule's Blocks
     table -- day/time/course/type/owner/room/credits/week columns -- and
@@ -3282,6 +3313,18 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      full-page version's markup. */
  .modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
  .modal-body .card:hover{box-shadow:none;}
+ /* task_detail.html's resolved banner strip (2026-08-30, db.banner_for_
+    task) -- bleeds to .modal-body's own left/right/top edges (negative
+    margin matching its padding exactly) so it reads as a hero image sitting
+    flush under the header's divider line, not an inset thumbnail; no
+    border-radius since it doesn't reach the dialog's own rounded corners
+    (the header sits above it and already owns those). Always the first
+    element in .modal-body -- a task with no resolved banner (the common
+    case) renders the body exactly as before this existed. */
+ .detail-modal-banner{
+   width:calc(100% + var(--space-5) * 2); height:120px; object-fit:cover; display:block;
+   margin:calc(var(--space-4) * -1) calc(var(--space-5) * -1) var(--space-4);
+ }
 
 /* Modal footer -- MD3 bottom sheet action bar: a flex row of
     buttons at the bottom of the dialog, separated from the body
@@ -4920,6 +4963,17 @@ body.command-palette-open{overflow:hidden;}
 .banner-upload-btn{cursor:pointer;}
 .banner-upload-input{display:none;}
 .banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
+
+/* label_form_modal.html's Banner field (2026-08-30) -- a compact entry
+   point into the same /banners/editor dialog banner-current/-editor above
+   already render full-size; this sits inline inside an ordinary form
+   field row instead, so a small thumbnail (not the editor's full 3:1
+   hero width) reads as "one field among others," not its own section. */
+.label-banner-preview{display:flex; align-items:center; gap:var(--space-3);}
+.label-banner-preview img{
+  width:96px; aspect-ratio:3 / 1; object-fit:cover; flex:none;
+  border-radius:var(--radius-sm); border:1px solid var(--border);
+}
 
 /* Generic plain-form field hint (contact_form.html's Birthday field,
    Contacts field parity slice 4 of 6) -- same footnote-size/tertiary-color

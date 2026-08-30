@@ -8,6 +8,57 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed/Shipped:** UI critique pass -- Tasks table, modal windows, banners,
+  complete (2026-08-30) -- five pieces, all direct feedback in one session:
+  (1) **Modal min-height tiers**: `.modal`'s blanket `min-height:600px`
+  (`static/style.css`) left a dead gap in the footer of every short-content
+  modal (Export, Import, Purge, label Merge, Note...) -- replaced with a
+  300px default floor plus opt-in `.modal-height-md`/`.modal-height-lg`
+  steps (450/600), set per-template on `#modal-target` and mirrored onto
+  the dialog by `static/modal.js`'s new `applyHeightTier` (same pattern
+  `stabilizeHeight`/`.modal-stable-height` already used). (2) **Tasks
+  table**: `_tasks_body.html` no longer renders an empty "Completed (0)"
+  divider row with nothing under it (Project/Unassigned still render empty
+  -- their `+` is the only way to add an unlabeled/first task, Completed's
+  never had one); Status/Date columns got explicit widths so table
+  auto-layout stops dumping the leftover space as a blank gutter before
+  Labels. (3) **Modal footer consistency**: `export_modal.html`/
+  `import_modal.html`/`purge_modal.html` used to render their primary
+  action as a full-width body button with the shared footer carrying only
+  Cancel -- moved into `_modal_footer.html`'s primary slot like every
+  other modal; the partial gained `footer_primary_variant` ("danger" for
+  Purge -- the one sanctioned non-primary case, see its own docstring),
+  `footer_primary_disabled`, and `footer_primary_extra_attr` (keeps
+  `data-purge-btn` for `data_maintenance.js`'s existing arm/disarm lookup,
+  switched from `form.querySelector` to `document.querySelector` since the
+  button's no longer a DOM descendant of the form). (4) **Tasks table
+  grouping redesign ("Option B" of three mockups)**: Project/Unassigned/
+  Completed are now each their own bounded `.card` + `<table>` (own
+  `<thead>`, own divider row) instead of three `<tbody>`s sharing one big
+  table -- `id="task-table"` moved from the table onto the wrapping
+  `<div>` so existing region-slicing tests/scripts still isolate the same
+  region. (5) **Banners on labels + tasks**: `db.banner_for_task` resolves
+  a task's banner by priority -- its own plain label(s) first, then its
+  Project label, then that project's parent Space (`label_config.
+  parent_name`) -- reusing `get_page_banner`/`/banners/editor` entirely,
+  no new storage. `label_form_modal.html` gained a Banner field (Add/
+  Change, scoped to that label) so any label can carry one, not just a
+  Space/Project with its own dashboard page. Rendered as a hero strip in
+  `task_detail.html`'s modal body (inside `.modal-body`, not a sibling --
+  `modal.js`'s `injectModalContent` only copies the three named `.modal-
+  header`/`-body`/`-footer` sections into the dialog's persistent slots,
+  so anything outside them would silently vanish when opened as an actual
+  modal) and as a `.kanban-card-banner` strip on `project_detail.html`'s
+  Kanban cards (`routers/projects.py` resolves it once per card). 40 new/
+  changed tests across `test_banners.py` (6 resolution-priority + 3 label-
+  settings-entry-point + 4 render tests, net new), `test_data_health.py`
+  (updated one assertion for the purge footer's new shape); full suite
+  1934 passed. Still open, deliberately deferred: Event banners (this
+  session's own AskUserQuestion narrowed scope to tasks/Kanban/task-modal
+  only -- events use the same label system so `db.banner_for_task`'s
+  approach generalizes, just not wired to `event_detail.html` yet), and
+  Options A/C of the three grouping mockups (collapsible sections /
+  colored-accent-stripe) if Option B turns out not to be the final call.
 - **Shipped:** Settings > General "Login & security" -- old/new/confirm
   password forms, complete (2026-08-30) --
   `routers/settings.py::change_login_password`/`change_radicale_password`,

@@ -824,6 +824,12 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     ctx.update(
         {
             "task": task,
+            # 2026-08-30 (direct request): the resolved label/project/Space
+            # banner (db.banner_for_task), if any -- rendered as a hero
+            # strip above the modal header, same "identity" role the app's
+            # dashboard-page banners already play, just scoped to one task
+            # instead of a whole page.
+            "banner": db.banner_for_task(conn, task) if task else None,
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **(_work_allocation_context(conn, task)),
         }

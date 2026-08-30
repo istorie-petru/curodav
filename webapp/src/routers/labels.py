@@ -266,6 +266,16 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": _label_role(cfg),
+            # 2026-08-30 (direct request): a label's banner used to be
+            # reachable only through a dashboard page's own edit-mode "Add/
+            # Change banner" button (routers/banners.py, generate_space/
+            # is_project pages only, since only those render _page_banner.
+            # html) -- this is the same banner (db.get_page_banner keyed by
+            # label name), just also surfaced here so ANY label can get one,
+            # not only a Space/Project that happens to have a dashboard
+            # page. See db.banner_for_task's priority chain (tasks/kanban
+            # banner strip) for the other consumer of this same data.
+            "banner": db.get_page_banner(conn, name),
         },
     )
 

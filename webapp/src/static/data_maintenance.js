@@ -123,7 +123,13 @@
 
   function previewFile(input) {
     var form = input.closest("form");
-    var submitBtn = form && form.querySelector("[data-dm-submit]");
+    // 2026-08-30 (modal-footer-consistency fix): the Import button moved
+    // from inside this <form> into the shared modal footer (a sibling,
+    // linked back to the form only via its `form="import-form"`
+    // attribute) -- form.querySelector can't see it there since that only
+    // searches DOM descendants, so this looks it up by the stable id
+    // import_modal.html's footer_primary_id now gives it instead.
+    var submitBtn = document.getElementById("import-submit-btn");
     var file = input.files && input.files[0];
     if (!file) {
       setStatus(form, "", false);
@@ -202,7 +208,14 @@
     var phrase = e.target;
     if (!phrase.matches || !phrase.matches("[data-purge-phrase]")) return;
     var form = phrase.closest("form");
-    var btn = form && form.querySelector("[data-purge-btn]");
+    if (!form) return;
+    // 2026-08-30 (modal-footer-consistency fix): same reasoning as
+    // previewFile() above -- the Permanently Delete button now lives in
+    // the shared modal footer, a sibling of this <form>, not a
+    // descendant of it, so form.querySelector can't find it any more.
+    // Only one purge dialog is ever open at a time, so a plain
+    // document-wide lookup is enough.
+    var btn = document.querySelector("[data-purge-btn]");
     if (!btn) return;
     var armed = phrase.value === "DELETE ALL";
     btn.disabled = !armed;

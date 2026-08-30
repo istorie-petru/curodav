@@ -55,7 +55,33 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
                                after render (quick_add.html's tab switch
                                re-points the Save button's `form` attribute
                                via getElementById -- 2026-08-15 modal
-                               uniformization) #}
+                               uniformization)
+     footer_primary_variant -- "primary" (default) or "danger" -- the one
+                               sanctioned exception: a modal whose entire
+                               purpose IS the destructive action (Reset
+                               database) has no separate Edit/Delete split
+                               to demote the delete into footer_delete_url's
+                               usual text-link, so its one primary button
+                               needs .btn danger's red fill instead of
+                               .btn primary's blue (UI_CONSISTENCY_GUIDE.md
+                               #2's "don't reach for danger to mean
+                               important" cuts the other way here -- this
+                               genuinely is a delete, not a Save wearing red
+                               for emphasis)
+     footer_primary_disabled -- render the button server-disabled (the
+                               purge dialog's typed-confirmation gate --
+                               static/data_maintenance.js arms it once the
+                               phrase matches)
+     footer_primary_extra_attr -- one raw attribute string spliced onto the
+                               button verbatim (e.g. "data-purge-btn"),
+                               for a script that already keys off a
+                               feature-specific data-attribute rather than
+                               an id -- prefer footer_primary_id for new
+                               code, this exists so an existing script
+                               didn't need to change when its button moved
+                               from the body into this shared footer
+                               (2026-08-30, export/import/purge modal-
+                               footer-consistency fix) #}
 <div class="modal-footer">
 {% if footer_back_url %}
 {% if footer_back_mode == 'modal' %}
@@ -78,9 +104,9 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
 {% endif %}
 {% if footer_primary_label %}
 {% if footer_primary_href %}
-<a class="btn primary"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
+<a class="btn {{ footer_primary_variant|default('primary') }}"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
 {% else %}
-<button type="submit"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} form="{{ footer_primary_form }}" class="btn primary">{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
+<button type="submit"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} form="{{ footer_primary_form }}" class="btn {{ footer_primary_variant|default('primary') }}"{% if footer_primary_extra_attr %} {{ footer_primary_extra_attr }}{% endif %}{% if footer_primary_disabled %} disabled{% endif %}>{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
 {% endif %}
 {% endif %}
 </div>

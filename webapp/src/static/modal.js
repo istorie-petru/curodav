@@ -228,6 +228,7 @@
      if (!fragment) return;
      wireContent();
      stabilizeHeight(fragment);
+     applyHeightTier(fragment);
      animateContentSwap();
    }
 
@@ -401,6 +402,19 @@
       fragment.classList.contains("modal-stable-height");
     dialog.classList.toggle("is-stable-height", !!stable);
   }
+
+  // 2026-08-30 (direct feedback): min-height tiers -- see style.css's
+  // .modal-height-md/.modal-height-lg comment. Same "fragment states its
+  // own shape, JS mirrors the marker onto the persistent .modal dialog"
+  // pattern stabilizeHeight above already uses (#modal-target is swapped
+  // out on every navigation; the dialog element wrapping it isn't).
+  function applyHeightTier(fragment) {
+    if (!dialog) return;
+    const isMd = fragment && fragment.classList && fragment.classList.contains("modal-height-md");
+    const isLg = fragment && fragment.classList && fragment.classList.contains("modal-height-lg");
+    dialog.classList.toggle("is-height-md", !!isMd && !isLg);
+    dialog.classList.toggle("is-height-lg", !!isLg);
+  }
   function animateContentSwap() {
     if (!dialog) return;
     dialog.classList.remove("is-swapped");
@@ -452,6 +466,7 @@
      if (footer) footer.style.display = footer.innerHTML.trim() ? "" : "none";
      wireContent();
      stabilizeHeight(fragment);
+     applyHeightTier(fragment);
      if (wasOpen) animateContentSwap();
      const firstInput = body.querySelector("input, select, textarea");
      if (firstInput) firstInput.focus();

@@ -22,7 +22,9 @@ from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
+from src.routers import projects as projects_router
 from src.routers import spaces as spaces_router
+from src.routers import tasks as tasks_router
 
 
 @pytest.fixture()
@@ -294,3 +296,133 @@ class TestPageBannerDefaultFallback:
         resp = dashboard_router.dashboard_view(_request("/"), conn=conn)
         assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
         assert resp.context["has_own_banner"] is False
+
+
+class TestBannerForTask:
+    """db.banner_for_task -- 2026-08-30 (direct request, tasks/kanban banner
+    strip + task detail modal header): resolves which of a task's own
+    label(s)/Project/Space banner wins, by priority. No new storage --
+    every case below just sets the ordinary per-label banner
+    (db.set_page_banner, the same one a label's own generated page shows)
+    and checks banner_for_task picks the right one back up."""
+
+    def test_no_banner_anywhere_resolves_to_none(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        assert db.banner_for_task(conn, task) is None
+
+    def test_a_plain_labels_own_banner_wins(self, conn):
+        _make_label(conn, "Client call")
+        _set_remote(conn, cached=True, scope="Client call", image_url="https://cdn.example.com/label.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Client call"], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/label.jpg"
+
+    def test_falls_back_to_the_project_labels_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        _set_remote(conn, cached=True, scope="Garden", image_url="https://cdn.example.com/project.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/project.jpg"
+
+    def test_falls_back_to_the_projects_parent_space_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "parent_name": "Home", "created_at": _now()})
+        _set_remote(conn, cached=True, scope="Home", image_url="https://cdn.example.com/space.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/space.jpg"
+
+    def test_a_plain_label_banner_beats_the_project_and_space_banners(self, conn):
+        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "parent_name": "Home", "created_at": _now()})
+        _make_label(conn, "Urgent")
+        _set_remote(conn, cached=True, scope="Home", image_url="https://cdn.example.com/space.jpg")
+        _set_remote(conn, cached=True, scope="Garden", image_url="https://cdn.example.com/project.jpg")
+        _set_remote(conn, cached=True, scope="Urgent", image_url="https://cdn.example.com/label.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden", "Urgent"], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/label.jpg"
+
+    def test_project_with_no_parent_space_and_no_own_banner_resolves_to_none(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        assert db.banner_for_task(conn, task) is None
+
+
+class TestLabelSettingsBannerEntryPoint:
+    """label_form_modal.html's Banner field (2026-08-30 direct request) --
+    a label's banner used to be reachable only via a dashboard page's own
+    edit-mode button; this is the same /banners/editor dialog, scoped to
+    the label, opened from Settings > Labels instead."""
+
+    def test_edit_modal_offers_add_banner_when_unset(self, conn):
+        _make_label(conn, "Client call")
+        resp = labels_router.edit_label_modal("Client call", _request("/settings/labels/Client call/edit"), conn=conn)
+        assert resp.context["banner"] is None
+        body = resp.body.decode()
+        assert "/banners/editor?scope=Client" in body
+        assert "Add banner" in body
+        assert "Change banner" not in body
+
+    def test_edit_modal_shows_preview_and_change_link_when_set(self, conn):
+        _make_label(conn, "Client call")
+        _set_remote(conn, cached=True, scope="Client call", image_url="https://cdn.example.com/pic.jpg")
+        resp = labels_router.edit_label_modal("Client call", _request("/settings/labels/Client call/edit"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/pic.jpg"
+        body = resp.body.decode()
+        assert "Change banner" in body
+        assert "Add banner" not in body
+
+    def test_new_label_modal_has_no_banner_field_yet(self, conn):
+        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
+        body = resp.body.decode()
+        assert "/banners/editor" not in body
+
+
+class TestBannerRendersOnTaskDetailAndKanban:
+    """The two consumers of db.banner_for_task besides a label's own
+    generated page (2026-08-30 direct request): task_detail.html's modal
+    header and project_detail.html's Kanban cards."""
+
+    def test_task_detail_shows_no_banner_by_default(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [], "created_at": _now()})
+        resp = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn)
+        assert resp.context["banner"] is None
+        assert "detail-modal-banner" not in resp.body.decode()
+
+    def test_task_detail_shows_the_resolved_label_banner(self, conn):
+        # cached=False (the default) -- a hotlink-only legacy remote banner
+        # with no local bytes, so the template's own image_url fallback
+        # branch is what's under test here (the version/served-bytes
+        # branch is covered by test_serves_uploaded_bytes et al above).
+        _make_label(conn, "Client call")
+        _set_remote(conn, scope="Client call", image_url="https://cdn.example.com/label.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Client call"], "created_at": _now()})
+        resp = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/label.jpg"
+        body = resp.body.decode()
+        assert 'class="detail-modal-banner"' in body
+        assert 'src="https://cdn.example.com/label.jpg"' in body
+
+    def test_kanban_card_carries_the_resolved_project_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        _set_remote(conn, scope="Garden", image_url="https://cdn.example.com/project.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
+        resp = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn)
+        card = [t for t in resp.context["columns"]["active"] if t["uid"] == "t1"][0]
+        assert card["banner"]["image_url"] == "https://cdn.example.com/project.jpg"
+        body = resp.body.decode()
+        assert 'class="kanban-card-banner"' in body
+        assert 'src="https://cdn.example.com/project.jpg"' in body
+
+    def test_kanban_card_has_no_banner_markup_when_none_resolves(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
+        resp = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn)
+        assert "kanban-card-banner" not in resp.body.decode()

@@ -45,6 +45,27 @@
 </div>
 
 <div class="modal-body">
+{# 2026-08-30 (direct request) -- db.banner_for_task's resolved label/
+   project/Space banner, if any, as a hero strip at the top of the body.
+   Deliberately inside .modal-body (not a sibling of .modal-header/
+   .modal-body) -- static/modal.js's injectModalContent only copies the
+   innerHTML of the three named .modal-header/-body/-footer sections into
+   the dialog's persistent slots when opened via data-modal, so anything
+   sitting outside all three would silently vanish in the actual modal
+   (not the no-JS full-page fallback, where it'd still show -- exactly
+   the kind of "works standalone, broken as a modal" gap this app's
+   progressive-enhancement pattern is meant to avoid). version gates
+   served-bytes vs. a legacy hotlink-only remote banner's own image_url,
+   same branch _page_banner.html/banner_editor.html both use. Purely
+   additive -- a task with no resolvable banner (the common case) renders
+   this body exactly as before. #}
+{% if banner %}
+{% if banner.version %}
+<img class="detail-modal-banner" src="/banners/image?scope={{ banner.scope|urlencode }}&amp;v={{ banner.version }}" alt="">
+{% else %}
+<img class="detail-modal-banner" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+{% endif %}
+{% endif %}
 <div class="detail-card" style="--detail-accent: var(--cal-accent-{{ status_colors[task.status] }});">
     <div class="detail-meta-grid">
         <div class="detail-meta-item">

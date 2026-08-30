@@ -13,7 +13,7 @@
 <h1>Import data</h1>
 </div>
 <div class="modal-body">
-<form method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
+<form id="import-form" method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
     <label class="dm-dropzone" data-dm-dropzone>
         <input type="file" name="file" accept=".ics,.vcf,.csv,.json,text/calendar,text/vcard,text/csv,application/json" class="sr-only" required data-dm-file>
         <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
@@ -26,11 +26,23 @@
         Merge with existing data
     </label>
     <p class="dm-merge-hint">Untick to only add items that don't exist yet -- nothing you already have gets overwritten.</p>
-    <button type="submit" class="btn primary" data-dm-submit>{{ icon('upload', 'icon-sm') }} Import</button>
 </form>
 </div>
+{# 2026-08-30 (direct feedback, modal-footer-consistency fix): Import used
+   to be its own full-width button inside the body, footer below it
+   carrying only Cancel -- moved into the shared footer like every other
+   modal's primary action. data_maintenance.js's previewFile() used to
+   find this button via form.querySelector("[data-dm-submit]"), which only
+   works for a button that's a DOM descendant of the <form> -- now that
+   it's a sibling linked by the `form` attribute instead, that lookup
+   moved to document.getElementById("import-submit-btn"), see that file's
+   own comment. #}
 {% set footer_back_url = '/settings/data-maintenance' %}
 {% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'import-form' %}
+{% set footer_primary_label = 'Import' %}
+{% set footer_primary_icon = 'upload' %}
+{% set footer_primary_id = 'import-submit-btn' %}
 {% include "_modal_footer.html" %}
 </div>
 {% endblock %}

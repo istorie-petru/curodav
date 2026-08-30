@@ -15,15 +15,32 @@
 </div>
 <div class="modal-body">
 <p class="settings-hint">This deletes <strong>everything</strong> in this app &mdash; every task, event, contact, label, habit, and published list. This cannot be undone, and there is no backup unless you made one yourself (Backup card &rarr; Download full backup).</p>
-<form class="dm-danger-form" method="post" action="/settings/purge-all" data-purge-gate>
+<form id="purge-form" class="dm-danger-form" method="post" action="/settings/purge-all" data-purge-gate>
     <label class="dm-danger-typein">Type <strong>DELETE ALL</strong> to unlock
         <input type="text" class="dm-danger-phrase" data-purge-phrase placeholder="DELETE ALL" aria-label='Type "DELETE ALL" to enable the delete button' autocomplete="off" spellcheck="false">
     </label>
-    <button type="submit" class="btn danger dm-danger-submit" data-purge-btn disabled>{{ icon('shield', 'icon-sm') }} Permanently Delete Everything</button>
 </form>
 </div>
+{# 2026-08-30 (direct feedback, modal-footer-consistency fix): the button
+   moved from the body into the shared footer like every other modal's
+   primary action -- footer_primary_variant="danger" is the one sanctioned
+   exception to that slot always being .btn primary (see _modal_footer.
+   html's own docstring): this whole dialog IS the destructive action,
+   there's no separate Edit/Delete split to demote the delete into the
+   footer's usual text-link. footer_primary_extra_attr keeps the literal
+   data-purge-btn attribute on the button -- data_maintenance.js's arm/
+   disarm handler switched from form.querySelector (only searches DOM
+   descendants, and the button is now a footer sibling of the form, not
+   inside it) to a plain document.querySelector, see that file's own
+   comment. #}
 {% set footer_back_url = '/settings/data-maintenance' %}
 {% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'purge-form' %}
+{% set footer_primary_label = 'Permanently Delete Everything' %}
+{% set footer_primary_icon = 'shield' %}
+{% set footer_primary_variant = 'danger' %}
+{% set footer_primary_disabled = true %}
+{% set footer_primary_extra_attr = 'data-purge-btn' %}
 {% include "_modal_footer.html" %}
 </div>
 {% endblock %}

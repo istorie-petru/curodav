@@ -4718,6 +4718,58 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
     return banner
 
 
+def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] | None:
+    """2026-08-30 (direct request, tasks/kanban banner strip + task detail
+    modal header): the banner a task should show, if any, resolved by
+    priority -- its own directly-set plain label(s) first, then its
+    Project label, then that project's parent Space (`label_config.
+    parent_name`, the "Group" field label_edit_modal.html exposes). No new
+    storage: a label's banner already exists (get_page_banner/
+    routers/banners.py, keyed by label name) as the image a label's own
+    generated dashboard page shows -- this just resolves which one of a
+    task's several labels wins, the same banner data either way.
+
+    `task` needs `uid` (to look up its Project label) and `tags`
+    (routers/tasks.py's task dicts, and db.list_tasks rows, both already
+    carry both). Every tag but the project's own is tried in list order
+    before falling through to the project/Space tiers -- a task with
+    both a Project label and a more specific plain label (e.g. "Client
+    call") should show the specific one, not the broader project's,
+    which is why the project tag itself is skipped in this first pass
+    rather than tried alongside its siblings.
+
+    The returned dict carries one extra key beyond get_page_banner's own
+    shape: `scope` -- the label name the banner actually came from. A
+    template needs this to build the /banners/image?scope=... URL (an
+    uploaded banner's bytes are served per-scope, and the winning scope
+    here is whichever label/project/Space matched, not the task itself,
+    which has no scope of its own). Safe to inject: this dict is a fresh
+    json.loads() from get_page_banner, never written back through
+    set_page_banner, so the extra key can't leak into storage."""
+    tags = task.get("tags") or []
+    project = project_label_for(conn, "task", task["uid"]) if task.get("uid") else None
+    for tag in tags:
+        if tag == project:
+            continue
+        banner = get_page_banner(conn, tag)
+        if banner:
+            banner["scope"] = tag
+            return banner
+    if project:
+        banner = get_page_banner(conn, project)
+        if banner:
+            banner["scope"] = project
+            return banner
+        cfg = get_label_config(conn, project)
+        space = (cfg or {}).get("parent_name")
+        if space:
+            banner = get_page_banner(conn, space)
+            if banner:
+                banner["scope"] = space
+                return banner
+    return None
+
+
 def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, Any]) -> None:
     set_app_meta(conn, _page_banner_key(page_key), json.dumps(banner))
 

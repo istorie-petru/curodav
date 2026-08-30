@@ -89,6 +89,15 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
     board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
     columns: dict[str, list] = {s: [] for s in board_statuses}
     for t in tasks:
+        # 2026-08-30 (direct request): resolved once per card here rather
+        # than in the template -- db.banner_for_task's label > project >
+        # Space priority chain needs a real DB lookup (project_label_for +
+        # get_page_banner, possibly twice more for the Space fallback),
+        # not something a template should be doing per row. Every card on
+        # this board already carries this project's own label, so most
+        # cards resolve to the same banner unless one has a more specific
+        # plain label of its own -- exactly the "normal label wins" rule.
+        t["banner"] = db.banner_for_task(conn, t)
         columns.setdefault(t["status"], []).append(t)
 
     # Upcoming events card: every future event carrying this label, same

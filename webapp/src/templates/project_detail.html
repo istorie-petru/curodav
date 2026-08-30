@@ -103,6 +103,19 @@
         <div class="kanban-cards" data-status="{{ status }}">
             {% for t in columns[status] %}
             <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
+                {# 2026-08-30 (direct request) -- db.banner_for_task's
+                   resolved label/project/Space banner, if any. version
+                   gates the served-bytes path the same way _page_banner.
+                   html/banner_editor.html both do; a legacy hotlink-only
+                   remote banner (no local bytes) falls back to its own
+                   image_url instead. #}
+                {% if t.banner %}
+                {% if t.banner.version %}
+                <img class="kanban-card-banner" src="/banners/image?scope={{ t.banner.scope|urlencode }}&amp;v={{ t.banner.version }}" alt="">
+                {% else %}
+                <img class="kanban-card-banner" src="{{ t.banner.image_url }}" alt="" referrerpolicy="no-referrer">
+                {% endif %}
+                {% endif %}
                 <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
                 <div class="kanban-card-meta">
                     {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}

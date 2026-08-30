@@ -7,7 +7,7 @@
      server-side split; static/label_role_picker.js handles the
      client-side show/hide of Project date fields and the switch-away
      confirm when a real Space/Project is being turned off. -->
-<div id="modal-target">
+<div id="modal-target" class="modal-height-lg">
 <div class="modal-header">
 <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
 </div>
@@ -84,6 +84,37 @@
                     </div>
                 </div>
             </div>
+
+            {% if l %}
+            {# 2026-08-30 (direct request): a label's banner used to be
+               reachable only through a dashboard page's own edit-mode "Add/
+               Change banner" button (Home/Space/Project pages, since only
+               those render _page_banner.html) -- surfaced here too so any
+               label can carry one, not only a Space/Project that happens to
+               have a dashboard page. Same storage, same /banners/editor
+               dialog (routers/banners.py) -- this is just another entry
+               point into it, scoped to this label's own name, with
+               page_url pointed back at this same edit modal so its Done
+               link returns here instead of a dashboard page. Gated on `l`
+               (edit mode only) -- a brand-new label being created has no
+               saved name yet to key a banner off of. #}
+            <div class="field field-wide">
+                <label>Banner</label>
+                {% if banner %}
+                <div class="label-banner-preview">
+                    {% if banner.version %}
+                    <img src="/banners/image?scope={{ l.name|urlencode }}&amp;v={{ banner.version }}" alt="">
+                    {% else %}
+                    <img src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+                    {% endif %}
+                    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn ghost btn-sm">{{ icon('image', 'icon-sm') }} Change banner</a>
+                </div>
+                {% else %}
+                <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn ghost btn-sm">{{ icon('image', 'icon-sm') }} Add banner</a>
+                {% endif %}
+                <span class="settings-field-hint">Shown on this label's own dashboard page, and -- for a task carrying this label, its project, or its space -- on that task's Kanban card and detail view (label banners win, then the project's, then the space's).</span>
+            </div>
+            {% endif %}
         </div>
     </details>
 </form>
