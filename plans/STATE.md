@@ -6162,6 +6162,79 @@ birthday-sync shape directly rather than going through contact save).
 Full suite **1870 passed** (five chunks: 622 + 489 + 323 + 431 + 5 = 1870;
 +1 over the 1869 baseline, the one new test, nothing else changed).
 
+## Follow-up (2026-08-30, same day) -- live screenshot review: bare tile
+widgets, plus two non-bugs traced and reported back
+
+Direct follow-up after the crash fix above, with a screenshot of the real
+dashboard: "quick links and spaces & projects... i like more the quick
+links grid but i would like to not have them inside a div card", "no data
+is showing in some widgets", "the size problem for the widgets". Three
+separate threads, one shipped, two traced to their root cause and reported
+rather than guessed at:
+
+- **Shipped -- bare tile-grid widgets.** Quick Links and Spaces & Projects'
+  own "cards" style both already rendered the exact same `.filled-cards-
+  grid`/`.filled-card` tiles (confirmed by reading both templates -- not a
+  coincidence, they're genuinely redundant with each other, which is why
+  they read as near-duplicates on the actual dashboard). New
+  `_is_bare_tile_widget` (`routers/dashboard.py`) flags a widget INSTANCE
+  as `bare` when its type is `quick_links`, or `spaces_projects` with
+  `config["style"] == "cards"` (list style keeps its card chrome
+  unchanged) -- threaded through `_widget_context`'s existing return dict
+  (the one choke point both the full-grid template and the async-CRUD
+  single-widget fragment already share, so no duplicated logic). Templates
+  (`_widget_workspace.html`, `_widget_card.html`) add a
+  `widget-card--bare` class when set; `static/style.css`'s new rule strips
+  background/border/shadow/padding (the class/id/data-* attributes stay,
+  so the masonry layout JS and async-refresh matching are untouched) --
+  same technique `.widget-preview-content .widget-preview-card` already
+  used to shed chrome in a different context. 6 new tests
+  (`test_dashboard_router.py::TestBareTileWidgets`). Does NOT retire
+  Quick Links as a separate widget type or auto-remove either duplicate
+  instance from the live dashboard -- that's a bigger structural merge
+  (migrating existing widget rows, WIDGET_TYPES/selection-table surgery)
+  deliberately not attempted in the same pass as three other fixes; still
+  open if wanted as its own slice. The actual duplicate widget instances
+  visible in the screenshot (two Weekly Schedule, two Spaces & Projects)
+  live in the user's own `dashboard_widgets` table on their machine, not
+  in this repo -- nothing to fix in code, they're removed the normal way
+  (Edit mode -> each card's own remove button).
+- **Traced, not a code bug -- Next Deadline showing "Nothing on the
+  horizon" next to an At a Glance stack showing 1 due today / 2 due this
+  week.** Read `_render_next_deadline` end to end: its task pool comes
+  from the exact same `_filtered_tasks(conn, config)` At a Glance itself
+  calls, with the exact same truthiness check `derived_state._due_date`
+  already requires to count a task toward "today"/"this week" in the
+  first place -- there is no code path where one would see tasks and the
+  other wouldn't, for the same `config`. Next Deadline/Organize Today are
+  NOT part of the default-seeded widget set (`_seed_agenda_stack_layout`
+  only seeds Agenda + the At a Glance stack) -- they were added by hand,
+  each carrying its own independent Filters (tags/label scope, set from
+  that widget's own Edit -> Filters panel). Likeliest explanation: that
+  specific widget instance has a Project/Labels filter the due tasks
+  don't carry. Nothing changed in code for this one -- worth checking
+  Next Deadline's own Filters panel and clearing any scope that shouldn't
+  be there.
+- **Traced, not a JS bug -- the dead gap right of the Next Deadline /
+  What Needs Organizing row.** `next_deadline`'s `default_width` is
+  `"third"` (2 of 6 virtual columns), `organize_today`'s is `"half"` (3 of
+  6) -- 2+3=5, one column short of a full row, and `static/app.js`'s
+  skyline packer (already fixed 2026-08-08 to size the *whole grid* down
+  to however many columns the full widget set actually touches) has no
+  mechanism to stretch one row's last card to fill a gap smaller than any
+  remaining widget's own span -- that's inherent to a discrete-width
+  packer, not a regression. This is the same problem the still-open
+  "Pinterest-style auto layout, not fixed sizes" design-queue item (see
+  the "Next session queue -- design check-ups" entry above) already
+  named and deliberately deferred as its own bigger slice ("needs its own
+  investigation into the current grid mechanism") -- not attempted here
+  for the same reason, on top of not wanting to guess at a real masonry
+  behavior change inside a session already carrying three other fixes.
+  sw.js: `CACHE_NAME` bumped `cc-shell-v34` -> `cc-shell-v35` (style.css
+  change) -- `test_pwa_shell.py` updated. Full suite **1876 passed** (five
+  chunks: 628 + 489 + 323 + 431 + 5 = 1876; +6 over the 1870 baseline, the
+  six new TestBareTileWidgets tests, nothing else changed).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

@@ -58,7 +58,7 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="card widget-card" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
+<div class="card widget-card{% if wc.bare %} widget-card--bare{% endif %}" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
     {{ widget_inner(wc, false) }}
 </div>
 {% endif %}

@@ -398,8 +398,11 @@ class TestLocalWritePath:
         # item 1 of the design check-up queue: .widget-card chrome, header/
         # section-label typography, widget-content table row style), same
         # style.css-only lesson.
+        # v35 (2026-08-30): bumped again, same session (live bug report --
+        # Weekly Schedule crash fix, .widget-card--bare for Quick Links/
+        # Spaces & Projects cards style) -- style.css changed again.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v34"' in script
+        assert 'CACHE_NAME = "cc-shell-v35"' in script
 
 
 class TestOfflineToolbar:

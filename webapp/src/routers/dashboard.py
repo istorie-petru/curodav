@@ -1676,15 +1676,40 @@ def _migrate_widget_consolidation(conn) -> None:
     db.set_app_meta(conn, _WIDGET_CONSOLIDATION_KEY, "1")
 
 
+# "Bare" tile-grid widgets (2026-08-30, direct feedback: "i like the quick
+# links grid but i'd like to not have them inside a div card") -- Quick
+# Links and Spaces & Projects' own "cards" style both render the exact same
+# `.filled-cards-grid`/`.filled-card` tiles (see both templates' own
+# comments -- deliberately the same shared markup, not a coincidence: this
+# is why the two widgets read as near-duplicates of each other in the first
+# place, see plans/STATE.md's own note on this). Both already carry their
+# own visual weight (saturated filled tiles, MD3 "elevation-1" shadow per
+# tile) -- wrapping that grid a second time in the .card chrome (border +
+# shadow + padded box) was redundant framing, not information. `bare` opts
+# a widget INSTANCE's card wrapper out of that chrome (border/shadow/
+# background/padding -- see .widget-card--bare, static/style.css) while
+# keeping the same `.widget-card` class/id/data-* attributes the masonry
+# layout (static/app.js) and the async-CRUD single-widget refresh
+# (_widget_card.html's `#widget-<uid>` match) both still key off of --
+# structural role unchanged, only the visual box around it is gone.
+def _is_bare_tile_widget(widget: dict) -> bool:
+    if widget["type"] == "quick_links":
+        return True
+    if widget["type"] == "spaces_projects":
+        return (widget.get("config") or {}).get("style") == "cards"
+    return False
+
+
 def _widget_context(conn, widget: dict, nav: dict | None = None) -> dict:
     spec = WIDGET_TYPES.get(widget["type"])
     width = _widget_width(widget, spec)
     source, view, range_ = _selection_from_widget(widget)
     selection = {"source": source, "view": view, "range": range_}
+    bare = _is_bare_tile_widget(widget)
     if spec is None:
-        return {"widget": widget, "spec": None, "data": None, "width": width, "selection": selection, "is_stack": False}
+        return {"widget": widget, "spec": None, "data": None, "width": width, "selection": selection, "is_stack": False, "bare": bare}
     data = spec["render"](conn, widget["config"], nav)
-    return {"widget": widget, "spec": spec, "data": data, "width": width, "selection": selection, "is_stack": False}
+    return {"widget": widget, "spec": spec, "data": data, "width": width, "selection": selection, "is_stack": False, "bare": bare}
 
 
 def _build_widget_contexts(conn, widgets: list[dict], nav: dict | None = None) -> list[dict]:

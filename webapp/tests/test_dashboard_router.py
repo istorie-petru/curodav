@@ -1045,6 +1045,64 @@ class TestSpacesProjectsScope:
         assert w["config"]["style"] == "cards"
 
 
+class TestBareTileWidgets:
+    """2026-08-30, direct feedback ("i like the quick links grid but i'd
+    like to not have them inside a div card") -- Quick Links and Spaces &
+    Projects' own "cards" style both render the same .filled-cards-grid
+    tiles, so both opt their widget instance out of the .card wrapper's
+    chrome (border/shadow/background/padding -- see .widget-card--bare,
+    static/style.css) via _widget_context's own "bare" key. Spaces &
+    Projects' "list" style keeps its normal card chrome -- only the tile
+    grid was the redundant-double-frame complaint."""
+
+    def _widget(self, conn, wtype, config=None):
+        w = {
+            "uid": f"w-{wtype}-{(config or {}).get('style', 'x')}", "type": wtype, "title": None,
+            "config": config or {}, "position": 1, "created_at": _now(),
+        }
+        db.upsert_dashboard_widget(conn, w)
+        return w
+
+    def test_quick_links_is_bare(self, conn):
+        w = self._widget(conn, "quick_links")
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is True
+
+    def test_spaces_projects_cards_style_is_bare(self, conn):
+        w = self._widget(conn, "spaces_projects", {"style": "cards"})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is True
+
+    def test_spaces_projects_list_style_keeps_card_chrome(self, conn):
+        w = self._widget(conn, "spaces_projects", {"style": "list"})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_spaces_projects_default_style_keeps_card_chrome(self, conn):
+        # style absent -- _render_spaces_projects defaults to "list", the
+        # bare check has to agree with that same default rather than
+        # reading config.get("style") == "cards" in isolation and getting
+        # it right only when the key happens to be present.
+        w = self._widget(conn, "spaces_projects", {})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_other_widget_types_are_not_bare(self, conn):
+        w = self._widget(conn, "streak")
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_bare_class_rendered_on_dashboard(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
+        self._widget(conn, "quick_links")
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        resp = dashboard_router.dashboard_view(req, conn=conn)
+        body = resp.body.decode()
+        assert "widget-card--bare" in body
+
+
 class TestOrganizeTodayWidget:
     """2026-08-15, widget consolidation expanded scope: "what needs
     organizing today" -- decisions to make, not things already scheduled."""

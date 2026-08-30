@@ -3949,6 +3949,27 @@ body.command-palette-open{overflow:hidden;}
    specificity without needing !important. */
 .widget-card{border:1px solid var(--separator); box-shadow:var(--shadow-card);}
 .widget-card:hover{box-shadow:var(--shadow-card); transform:none;}
+/* "Bare" tile-grid widgets (2026-08-30, direct feedback -- see routers/
+   dashboard.py::_is_bare_tile_widget's own comment for which widgets this
+   applies to: Quick Links, and Spaces & Projects when its own `style`
+   config is "cards"). Both already render `.filled-cards-grid`/
+   `.filled-card` tiles -- saturated fills with their own elevation-1
+   shadow -- so the .card wrapper's border/shadow/background/padding was a
+   second, redundant frame around an already-framed grid. `.widget-card--
+   bare` strips exactly that (background/border/shadow/padding), same
+   technique `.widget-preview-content .widget-preview-card` already uses
+   to shed the same chrome in a different context (border:none etc.) --
+   the class stays on the element (masonry layout/async-refresh both key
+   off `.widget-card` + its id, untouched), only the visual box is gone.
+   `.widget-header` loses its own hairline divider too (nothing to divide
+   from once there's no card padding framing it) and `.filled-cards-grid`'s
+   horizontal margin is zeroed so the tiles line up flush with the title
+   above them instead of sitting inset from a padding that no longer
+   exists. */
+.widget-card--bare{background:transparent; border:none; box-shadow:none; padding:0;}
+.widget-card--bare:hover{box-shadow:none;}
+.widget-card--bare .widget-header{border-bottom:none; padding-bottom:0;}
+.widget-card--bare .filled-cards-grid{margin-left:0; margin-right:0;}
 /* Widget drag-to-reorder (static/app.js), edit-mode only */
 .widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
 .widget-drag-handle:active{cursor:grabbing;}
