@@ -1869,58 +1869,17 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    open work rather than interleaving by date/priority. */
 .task-row-completed{opacity:.55;}
 .task-row-completed td:nth-child(2) a{text-decoration:line-through;}
-/* Shared column-header bar above the group card list (2026-08-30 direct
-   feedback, "make it a bit more minimalist... drop repeated column
-   headers") -- a header-only table with no body rows, so its `<th>`
-   widths line up with the identical widths each group's own table below
-   uses. Flattened relative to the plain `.card` it's built on (no
-   shadow, no hover-lift, tighter vertical padding) -- it's a label row,
-   not a bounded content card like the groups below it, and stacking two
-   card treatments back to back would be more chrome, not less. */
-.task-group-header-card{
-  box-shadow:none; padding:var(--space-2) var(--space-4); margin-bottom:var(--space-2);
-}
-.task-group-header-card:hover{box-shadow:none; transform:none;}
-.task-group-header-card thead th{padding-top:0; padding-bottom:0; border-bottom:none;}
-/* #habits-table's own header, trailing cell (2026-08-30, "remove the
-   grouping for habits, it's redundant") -- the "+ Add habit" action that
-   used to sit on its own divider row now lives here instead, right-
-   aligned like the row-level delete icon this same column holds in every
-   body row below it. */
-.task-table-habits-add-th{text-align:right; padding-top:6px; padding-bottom:6px;}
-.task-table-habits-add-th .icon-btn{color:var(--fg-tertiary);}
-.task-table-habits-add-th .icon-btn:hover{color:var(--fg-primary);}
-.task-section-divider td{
-  padding:6px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
-  color:var(--fg-tertiary); border-bottom:1px solid var(--separator);
-}
-/* Bug fix (direct report: "the group label row is not full width") -- the
-   flex layout used to live directly on the `<td>` above. Setting
-   `display:flex` on a table cell changes its *computed* display from
-   `table-cell` to `flex` outright -- it stops participating in the
-   table's own column/colspan layout at all, so instead of stretching to
-   fill every column this `colspan="9"` cell spans, it shrank to only as
-   wide as its own flex content (the label text + button) needed. Moving
-   the flex layout onto a plain `<div class="task-section-divider-row">`
-   *inside* the (still `display:table-cell`) `<td>` keeps the cell itself
-   fully participating in the table layout -- it stretches full-width as
-   colspan'd cells always do -- while the div inside it lays out the
-   label/button in a row exactly as before. */
-.task-section-divider-row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-.task-section-divider-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-/* Direct follow-up (2026-08-29): the group's own "+ Add task"/"+ Add
-   habit" used to be a separate trailing `.task-add-row` <tr> (see that
-   class's own comment just below) -- now it's a plain `.icon-btn` sitting
-   at the end of this same divider row instead (_tasks_body.html), so a
-   group with zero rows yet doesn't need its own dedicated add-affordance
-   row. Un-uppercases/un-letter-spaces itself back to normal since it's a
-   real icon, not more of the label's own typography, and keeps a stable
-   size regardless of how long the label text next to it runs (`flex:none`
-   here plus `overflow:hidden` on the label above is what lets a long
-   project name truncate instead of pushing this button off the edge of
-   the row). */
-.task-section-divider .icon-btn{flex:none; color:var(--fg-tertiary);}
-.task-section-divider .icon-btn:hover{color:var(--fg-primary);}
+/* Every group table's trailing header cell (2026-08-30, "I like how the
+   habits table looks... make the same style for all") -- the "+ Add"
+   action (task/habit) lives here now, right-aligned like the row-level
+   delete icon this same column holds in every body row below it. Used to
+   be `.task-section-divider`'s own row/label/button classes (a separate
+   divider `<tr>` per card, dropped first for Habits, then for every
+   other group the same day for consistency) -- those are gone along with
+   the row they styled. */
+.task-table-add-th{text-align:right; padding-top:6px; padding-bottom:6px;}
+.task-table-add-th .icon-btn{color:var(--fg-tertiary);}
+.task-table-add-th .icon-btn:hover{color:var(--fg-primary);}
 /* 2026-08-28 "major rework" session (item 3): the "+" add-row at the end
    of every Tasks-table group (except Completed) -- _tasks_body.html.
    "Colored like a normal row" per the session brief: same row height/

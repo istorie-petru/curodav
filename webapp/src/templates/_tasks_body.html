@@ -65,55 +65,25 @@
    being a `<table>` rather than a container.
 
    2026-08-30 direct follow-up ("make it a bit more minimalist... drop
-   repeated column headers"): each group's own `<table>` used to carry
-   its own full `<thead>` -- correct per-table semantics, but with
-   several groups on the page it meant "TITLE / STATUS / DATE / LABELS"
-   printed once per card, which read as noisy repetition rather than
-   real information. One shared header now sits above the whole list
-   instead (`.task-group-header-card`, a header-only table with no rows
-   of its own) -- still a real `<thead>`/`<th>` for a screen reader
-   landing on the page, just not restated inside every card. Its `<th>`
-   widths are copied verbatim from each group table's own `<colgroup>`
-   (below) so the columns still line up card to card -- each group table
-   no longer has its own `<th>` width declarations to anchor its columns
-   now that the `<thead>` moved out, so a `<colgroup>` (not just this
-   header table's) is what actually keeps every card's Status/Date/
-   Labels aligned to this header and to each other, regardless of how
-   wide any one row's own content happens to be. If either `<colgroup>`
-   changes, change both.
-
-   2026-08-30 further direct follow-up ("the columns don't align... date
-   seems too long") -- `table-layout:fixed` (style.css) makes this
-   `<colgroup>` authoritative rather than a hint, which is what actually
-   guarantees every group's separate `<table>` renders identical column
-   widths regardless of that table's own row content (a `<colgroup>`
-   alone isn't enough under the default `table-layout:auto` -- see that
-   rule's own comment). Title now gets an explicit width too (240px,
-   its old auto-layout max-width) rather than being left to "whatever's
-   left" -- under fixed layout an unspecified column still resolves
-   deterministically, but giving Title a real width and only leaving
-   Labels unspecified means Labels (genuinely variable -- zero to several
-   pills) is the one column that actually should flex, not Title. Date
-   narrowed 150px -> 110px alongside the compact date format itself
-   (static/datetime_picker.js's `fmtDate` -- "4 Sep" instead of "Fri, 4
-   Sept 2026" for `.dtp--compact`) -- both changes target the same
-   complaint, a width that no longer needs the extra room. #}
+   repeated column headers"), then reversed by a later same-day direct
+   follow-up ("I like how the habits table looks... make the same style
+   for all"): briefly, every group shared one plain "TITLE/STATUS/DATE/
+   LABELS" header bar above the whole list, with each group's own name/
+   count/`+` still living on a separate divider row per card (like the
+   Habits table itself had before its own divider row was dropped, see
+   below). Once Habits collapsed its name+count+`+` directly into its own
+   header row, keeping the other groups on the older two-row shape read
+   as inconsistent -- so every group's `<thead>` now folds its own name
+   (in place of the generic "Title") and its own `+` (in the trailing
+   cell) into one header row, exactly like Habits. No more shared header
+   bar, no more `.task-section-divider` row -- each card is fully self-
+   contained again, just with a richer first `<th>` than a plain "Title"
+   ever was. `<colgroup>` + `table-layout:fixed` (style.css) are
+   unaffected by any of this -- still what keeps every card's Status/
+   Date/Labels columns pixel-aligned to each other regardless of any one
+   row's own content; if the widths below change, the Habits table's own
+   (see `#habits-table`) should generally match. #}
 {% set _task_colgroup %}<colgroup><col style="width:26px"><col style="width:240px"><col style="width:130px"><col style="width:110px"><col><col style="width:40px"></colgroup>{% endset %}
-<div class="card table-scroll task-group-header-card">
-<table class="task-table task-table-grouped">
-    {{ _task_colgroup }}
-    <thead>
-        <tr>
-            <th style="width:26px"></th>
-            <th style="width:240px">Title</th>
-            <th style="width:130px">Status</th>
-            <th style="width:110px">Date</th>
-            <th>Labels</th>
-            <th style="width:40px"></th>
-        </tr>
-    </thead>
-</table>
-</div>
 <div id="task-table" class="task-group-list">
 {% for grp in _other_groups %}
 {# 2026-08-30 (direct feedback: "how the table works, especially with
@@ -131,31 +101,22 @@
 <div class="card table-scroll task-group-card">
 <table class="task-table task-table-grouped">
     {{ _task_colgroup }}
-    <tbody>
-        {# 2026-08-29 direct follow-up ("instead of a separate row for add
-           task, have a + button on the group label name row") -- every
-           group but Completed (adding an already-completed task makes no
-           sense) used to get its own trailing `.task-add-row` <tr>; now
-           it's a plain icon button sitting at the end of the group's own
-           divider row instead, via a small flex layout on that row's one
-           (colspan'd) cell -- see `.task-section-divider td` in style.css.
-           Reuses the exact same task-creation modal/endpoint as before, no
-           behavior change, just moved: a Project group still pre-checks
-           that project's label (task_form.html's existing ?project=
-           prefill), Unassigned still opens the plain form. #}
-        <tr class="task-section-divider">
-            <td colspan="6">
-                <div class="task-section-divider-row">
-                    <span class="task-section-divider-label">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</span>
-                    {% if grp.kind == 'project' %}
-                    <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
-                    {% elif grp.kind == 'unassigned' %}
-                    <a href="/tasks/new" data-modal class="icon-btn" title="Add task">{{ icon('plus', 'icon-sm') }}</a>
-                    {% endif %}
-                </div>
-            </td>
+    <thead>
+        <tr>
+            <th style="width:26px"></th>
+            <th style="width:240px">{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</th>
+            <th style="width:130px">Status</th>
+            <th style="width:110px">Date</th>
+            <th>Labels</th>
+            <th style="width:40px" class="task-table-add-th">
+                {% if grp.kind == 'project' %}
+                <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
+                {% elif grp.kind == 'unassigned' %}
+                <a href="/tasks/new" data-modal class="icon-btn" title="Add task">{{ icon('plus', 'icon-sm') }}</a>
+                {% endif %}
+            </th>
         </tr>
-    </tbody>
+    </thead>
     <tbody>
         {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
     </tbody>
@@ -170,25 +131,19 @@
 <table class="task-table" id="habits-table">
     <thead>
         <tr>
-            {# 2026-08-30 direct follow-up ("remove the grouping for
-               habits, it's redundant") -- unlike Project/Unassigned/
-               Completed, there's only ever one Habits group, and this
-               table's own Check-in/Cadence/Streak columns already make
-               it unmistakably the Habits section -- the "HABITS (1)"
-               divider row that used to sit as the table's first body row
-               was restating something the table itself already says.
-               Dropped the row entirely; the "+ Add habit" action it
-               carried (the only way to add a habit from this page) moved
-               into this header's own trailing cell instead, the same
-               slot the checkbox/delete columns' own empty `<th>`s
-               already leave unused. #}
+            {# 2026-08-30 ("remove the grouping for habits, it's
+               redundant") -- Title renamed to this group's own name +
+               count, same as every other group's `<th>` above, so the
+               generic "Title" this table used to print (redundant with
+               its own Check-in/Cadence/Streak columns already saying
+               "this is Habits") now carries real information instead. #}
             <th style="width:26px"></th>
-            <th>Title</th>
+            <th style="width:240px">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
             <th>Check-in</th>
             <th>Cadence</th>
             <th>Streak</th>
             <th>Labels</th>
-            <th style="width:40px" class="task-table-habits-add-th">
+            <th style="width:40px" class="task-table-add-th">
                 <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
             </th>
         </tr>

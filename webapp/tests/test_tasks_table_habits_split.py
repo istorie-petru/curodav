@@ -95,63 +95,55 @@ class TestHabitsOwnTable:
         assert "t1" in task_table
 
 
-class TestGroupAddButtonOnDividerRow:
+class TestGroupNameAndAddButtonInTableHeader:
     """2026-08-29 direct follow-up: "instead of a separate row for add
-    task, have a + button ... on the group label name row" -- the
-    `.task-add-row` trailing <tr> is gone for Tasks/Unassigned groups; the
-    add-task link now sits on the same `.task-section-divider` row as the
-    group name. 2026-08-30 further follow-up ("remove the grouping for
-    habits, it's redundant") -- Habits never had more than one group to
-    begin with, so its own divider row (and the `.task-section-divider`
-    pattern generally) no longer applies there; its add-habit link moved
-    into the habits table's own header instead, see
-    test_habits_group_add_link_is_in_the_table_header below."""
+    task, have a + button ... on the group label name row" put each
+    group's name/count/`+` on its own `.task-section-divider` <tr>.
+    2026-08-30, same day: Habits (only ever one group) dropped that row
+    entirely, folding its name+count+`+` into its own table's <thead>
+    instead -- then a further same-day direct follow-up ("I like how the
+    habits table looks... make the same style for all") applied that same
+    shape to Project/Unassigned/Completed too. Every group's `<thead>` now
+    carries its own name+count in place of a generic "Title" label, and
+    its own `+` (task/habit groups only) in the trailing header cell --
+    there is no more `.task-section-divider` row anywhere on this page."""
 
     def test_no_task_add_row_left_in_either_table(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert "task-add-row" not in body
+        assert "task-section-divider" not in body
 
-    def test_unassigned_group_add_link_is_on_the_divider_row(self, conn):
+    def test_unassigned_group_name_and_add_link_are_in_its_header(self, conn):
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Unassigned" in line]
-        assert divider, "expected an Unassigned divider row"
-        assert 'href="/tasks/new"' in divider[0]
-        assert 'title="Add task"' in divider[0]
+        header = body.split(">Unassigned (1)<", 1)[1].split("</thead>")[0]
+        assert 'href="/tasks/new"' in header
+        assert 'title="Add task"' in header
 
-    def test_project_group_add_link_is_on_the_divider_row(self, conn):
+    def test_project_group_name_and_add_link_are_in_its_header(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "t1", tags=["Garden"])
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Garden" in line]
-        assert divider, "expected a Garden project divider row"
-        assert "/tasks/new?project=Garden" in divider[0]
+        header = body.split(">Garden (1)<", 1)[1].split("</thead>")[0]
+        assert "/tasks/new?project=Garden" in header
 
-    def test_habits_group_add_link_is_in_the_table_header(self, conn):
-        # 2026-08-30 direct follow-up ("remove the grouping for habits,
-        # it's redundant") -- unlike Project/Unassigned/Completed, there's
-        # only ever one Habits group, so its own divider row (repeating
-        # "Habits (N)" above a table whose Check-in/Cadence/Streak columns
-        # already say as much) is gone; the add-habit link moved into the
-        # habits table's own header row instead.
+    def test_habits_group_name_and_add_link_are_in_its_header(self, conn):
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         habits_table = body.split('id="habits-table"', 1)[1]
+        assert ">Habits (0)<" in habits_table.split("</thead>")[0]
         header = habits_table.split("</thead>")[0]
         assert 'href="/tasks/new?habit=1"' in header
         assert 'title="Add habit"' in header
-        assert "task-section-divider" not in habits_table
-        assert "Habits (" not in habits_table
 
-    def test_completed_group_divider_has_no_add_link(self, conn):
+    def test_completed_group_header_has_no_add_link(self, conn):
         _seed_task(conn, "t1")
         db.upsert_task(conn, dict(db.get_task(conn, "t1"), status="done"))
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Completed" in line]
-        assert divider, "expected a Completed divider row"
-        assert "icon-btn" not in divider[0]
+        header = body.split(">Completed (1)<", 1)[1].split("</thead>")[0]
+        assert "icon-btn" not in header
 
 
 class TestHabitRowTitleInlineEdit:

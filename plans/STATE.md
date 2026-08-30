@@ -8,6 +8,25 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Tasks table, every group's header unified to the Habits
+  table's own shape (direct feedback: "I like how the habits table
+  looks... make the same style for all"), complete (2026-08-30). Direct
+  follow-on to the entry below (which had just given Habits its own
+  header-row `<th>` in place of a separate divider row): applied that
+  same shape to Project/Unassigned/Completed. The one shared "TITLE/
+  STATUS/DATE/LABELS" bar that used to sit above the whole list is gone;
+  each group's own `<table>` has its own full `<thead>` again, but now
+  its first `<th>` carries the group's own name + count (e.g. "Project
+  Test (1)") in place of a generic "Title", and its trailing `<th>`
+  carries the "+ Add task"/"+ Add habit" link (Completed gets neither,
+  same as before). No more `.task-section-divider` row/label/button
+  classes anywhere -- their CSS (and the now-unused `.task-group-header-
+  card` shared-bar styling from the previous entry) removed; `.task-add-
+  row` (still used by Labels/Holidays/Time blocks) is untouched. `<colgroup>`
+  + `table-layout:fixed` (previous entry) still do the actual cross-card
+  column alignment work, unaffected by this. `TestGroupAddButtonOnDividerRow`
+  renamed `TestGroupNameAndAddButtonInTableHeader`, its five tests rewritten
+  against the new per-group `<thead>` shape; full suite still 1934 passed.
 - **Fixed:** Tasks table, Habits group's own divider row removed (direct
   feedback: "redundant"), complete (2026-08-30). Unlike Project/
   Unassigned/Completed -- legitimately several distinct groups that need
