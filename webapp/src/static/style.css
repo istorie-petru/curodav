@@ -1882,6 +1882,14 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 }
 .task-group-header-card:hover{box-shadow:none; transform:none;}
 .task-group-header-card thead th{padding-top:0; padding-bottom:0; border-bottom:none;}
+/* #habits-table's own header, trailing cell (2026-08-30, "remove the
+   grouping for habits, it's redundant") -- the "+ Add habit" action that
+   used to sit on its own divider row now lives here instead, right-
+   aligned like the row-level delete icon this same column holds in every
+   body row below it. */
+.task-table-habits-add-th{text-align:right; padding-top:6px; padding-bottom:6px;}
+.task-table-habits-add-th .icon-btn{color:var(--fg-tertiary);}
+.task-table-habits-add-th .icon-btn:hover{color:var(--fg-primary);}
 .task-section-divider td{
   padding:6px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator);

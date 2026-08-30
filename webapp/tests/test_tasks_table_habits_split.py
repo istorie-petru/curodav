@@ -98,9 +98,14 @@ class TestHabitsOwnTable:
 class TestGroupAddButtonOnDividerRow:
     """2026-08-29 direct follow-up: "instead of a separate row for add
     task, have a + button ... on the group label name row" -- the
-    `.task-add-row` trailing <tr> is gone for Tasks/Unassigned/Habits
-    groups; the add-task/add-habit link now sits on the same
-    `.task-section-divider` row as the group name."""
+    `.task-add-row` trailing <tr> is gone for Tasks/Unassigned groups; the
+    add-task link now sits on the same `.task-section-divider` row as the
+    group name. 2026-08-30 further follow-up ("remove the grouping for
+    habits, it's redundant") -- Habits never had more than one group to
+    begin with, so its own divider row (and the `.task-section-divider`
+    pattern generally) no longer applies there; its add-habit link moved
+    into the habits table's own header instead, see
+    test_habits_group_add_link_is_in_the_table_header below."""
 
     def test_no_task_add_row_left_in_either_table(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
@@ -124,13 +129,21 @@ class TestGroupAddButtonOnDividerRow:
         assert divider, "expected a Garden project divider row"
         assert "/tasks/new?project=Garden" in divider[0]
 
-    def test_habits_group_add_link_is_on_the_divider_row(self, conn):
+    def test_habits_group_add_link_is_in_the_table_header(self, conn):
+        # 2026-08-30 direct follow-up ("remove the grouping for habits,
+        # it's redundant") -- unlike Project/Unassigned/Completed, there's
+        # only ever one Habits group, so its own divider row (repeating
+        # "Habits (N)" above a table whose Check-in/Cadence/Streak columns
+        # already say as much) is gone; the add-habit link moved into the
+        # habits table's own header row instead.
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        divider = [line for line in body.split("<tr") if "task-section-divider" in line and "Habits" in line]
-        assert divider, "expected a Habits divider row"
-        assert 'href="/tasks/new?habit=1"' in divider[0]
-        assert 'title="Add habit"' in divider[0]
+        habits_table = body.split('id="habits-table"', 1)[1]
+        header = habits_table.split("</thead>")[0]
+        assert 'href="/tasks/new?habit=1"' in header
+        assert 'title="Add habit"' in header
+        assert "task-section-divider" not in habits_table
+        assert "Habits (" not in habits_table
 
     def test_completed_group_divider_has_no_add_link(self, conn):
         _seed_task(conn, "t1")

@@ -8,6 +8,19 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Tasks table, Habits group's own divider row removed (direct
+  feedback: "redundant"), complete (2026-08-30). Unlike Project/
+  Unassigned/Completed -- legitimately several distinct groups that need
+  their own name label -- there's only ever one Habits group, and
+  `#habits-table`'s own Check-in/Cadence/Streak columns already make it
+  unmistakable, so its "HABITS (N)" divider row was restating what the
+  table already says. Removed the row entirely; the "+ Add habit" link it
+  carried (the only way to add a habit from this page) moved into the
+  table's own header, its trailing `<th>` (right-aligned, same slot the
+  checkbox/delete columns' empty `<th>`s already leave unused) rather than
+  a second row. `test_habits_group_add_link_is_on_the_divider_row`
+  rewritten as `test_habits_group_add_link_is_in_the_table_header`; full
+  suite still 1934 passed.
 - **Fixed:** Tasks table direct follow-up -- minimalist pass + column
   alignment + shorter dates, complete (2026-08-30), on top of the Option B
   grouping redesign below. Three pieces: (1) dropped the repeated Title/

@@ -170,25 +170,29 @@
 <table class="task-table" id="habits-table">
     <thead>
         <tr>
+            {# 2026-08-30 direct follow-up ("remove the grouping for
+               habits, it's redundant") -- unlike Project/Unassigned/
+               Completed, there's only ever one Habits group, and this
+               table's own Check-in/Cadence/Streak columns already make
+               it unmistakably the Habits section -- the "HABITS (1)"
+               divider row that used to sit as the table's first body row
+               was restating something the table itself already says.
+               Dropped the row entirely; the "+ Add habit" action it
+               carried (the only way to add a habit from this page) moved
+               into this header's own trailing cell instead, the same
+               slot the checkbox/delete columns' own empty `<th>`s
+               already leave unused. #}
             <th style="width:26px"></th>
             <th>Title</th>
             <th>Check-in</th>
             <th>Cadence</th>
             <th>Streak</th>
             <th>Labels</th>
-            <th style="width:40px"></th>
+            <th style="width:40px" class="task-table-habits-add-th">
+                <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
+            </th>
         </tr>
     </thead>
-    <tbody>
-        <tr class="task-section-divider">
-            <td colspan="7">
-                <div class="task-section-divider-row">
-                    <span class="task-section-divider-label">{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</span>
-                    <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
-                </div>
-            </td>
-        </tr>
-    </tbody>
     <tbody>
         {% for item in _habits_group.habit_items %}{{ habit_row(item) }}{% endfor %}
     </tbody>
