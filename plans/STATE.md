@@ -8,6 +8,24 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** systemd install's Radicale htpasswd ownership bug, complete
+  (2026-08-30) — `deploy/systemd/install.sh --with-radicale` created
+  `$CONF_DIR/radicale/users` (the Radicale server's own auth file) via shell
+  redirection while running as root, then only `chmod 0600` it — leaving it
+  `root:root`. Both `curodav.service` and `curodav-radicale.service` run as
+  `User=curodav Group=curodav` (unprivileged), so Radicale itself could never
+  read its own configured user; auth against a fresh `--with-radicale`
+  install would have failed. Found while researching an in-app "change the
+  Radicale owner password" feature (not yet built — that also needs a
+  writable bind-mount added to the Docker compose file before it's feasible
+  there; systemd was the blocker addressed here). Fix: `chown
+  "$SERVICE_USER":"$SERVICE_USER"` the file, applied unconditionally (not
+  just on first creation) so re-running `install.sh` heals existing broken
+  installs too, not just fresh ones. No Python code touched (pure deploy
+  script), verified with `bash -n` and `tests/test_auth.py` (107 passed,
+  unaffected) rather than the full suite. Still open, deliberately deferred:
+  the in-app password-change forms themselves (app login password, and the
+  Radicale owner password once Docker's compose mount is also fixed).
 - **Shipped:** `1.3`, complete (2026-08-13) — project-enabled label stack:
   `label_config.is_project` + `start_date`/`end_date`/`archived_at`, the
   computed Open/Pending/Pending Archiving/Archived lifecycle
