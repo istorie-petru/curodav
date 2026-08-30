@@ -443,8 +443,15 @@ class TestLocalWritePath:
         # re-fetched, regardless of the `?v=` query changing. Network is
         # now tried before the ignoreSearch fallback; that fallback only
         # fires if the network fetch itself fails (genuinely offline).
+        # v42 (2026-08-30): bumped again, same session, direct follow-up --
+        # "the mouse resize still doesn't work. remove it." The drag-to-
+        # resize handle (app.js/style.css/_widget_workspace.html/
+        # _widget_card.html/routers/dashboard.py's resize_widget) is gone
+        # outright, not fixed a third time -- the Filters panel's own
+        # Width field is confirmed working ("the dashboard customise is
+        # fine") and is the only way to set width now.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v41"' in script
+        assert 'CACHE_NAME = "cc-shell-v42"' in script
 
 
 class TestOfflineToolbar:

@@ -6583,6 +6583,50 @@ first chunk through `test_offline_sync.py` all green (no failures observed
 before cutoff), second chunk `test_offline_sync.py` onward -- **813
 passed**. No failures anywhere.
 
+## Immediate follow-up (2026-08-30, same day) -- drag-to-resize removed
+outright, not fixed a third time
+
+Direct report after the previous fix attempt: "the mouse resize still
+doesn't work. remove it. but the dashboard customise is fine. no more
+work needed." Rather than iterate blind a third time on a mouse-drag
+interaction this environment has no browser to ever verify, removed the
+whole feature: `.widget-resize-handle` markup (`_widget_workspace.html`'s
+stack and plain wrappers, `_widget_card.html`), its CSS
+(`.widget-resize-handle`/`.widget-card.is-resizing`, `static/style.css`),
+its drag IIFE (`static/app.js`), and the `POST /dashboard/widgets/{uid}/
+resize` endpoint (`routers/dashboard.py::resize_widget`) -- all gone, not
+left disabled or commented out, matching this codebase's own convention
+for a fully-superseded feature (2026-08-07's original removal of the same
+feature did the same). The Filters panel's own Width field (Auto/25%/
+50%/75%/100%) is unaffected and is now the only way to set a widget's
+width -- separately confirmed working in the same report ("the dashboard
+customise is fine"). The responsive quarter->half promotion
+(`MEDIUM_BREAKPOINT`) and the live-refresh-after-save fix from earlier
+today are both unrelated to the resize handle and were left untouched.
+
+Worth noting for context, not further action (direct instruction was "no
+more work needed"): a separate commit landed in this same session
+(`1fbb303`, "fix(sw): stop serving stale static assets over the
+network") fixing a deeper service-worker bug where an already-cached old
+version of a static file (app.js included) was served forever regardless
+of the `?v=` cache-busting query, network never retried -- which may
+well be *why* the drag-resize fixes never visibly took effect even after
+being shipped. Not reopening the resize feature over this, per the
+direct "remove it" instruction, but it's the more complete explanation
+for why edits weren't showing up during this stretch of the session.
+
+Tests: `TestWidgetResizeEndpoint` (8 tests) and the two
+`widget-resize-handle` assertions in `TestWidgetCardRegionEditMode`
+removed; `TestWidgetWidthAutomatic` gets its two "no resize handle/
+endpoint" tests back (`test_no_resize_endpoint_left_on_the_module`,
+`test_edit_mode_renders_no_width_resize_handle`), same assertions as the
+original 2026-08-07 removal, docstring rewritten to record the full
+reinstate-then-remove arc in one place. `features/dashboard.md` updated
+to match. `sw.js`: `CACHE_NAME` bumped `cc-shell-v41` -> `cc-shell-v42`
+(`app.js`/`style.css` both changed) -- `test_pwa_shell.py` updated. Full
+suite **1885 passed** (five chunks: 637 + 489 + 323 + 431 + 5 = 1885, no
+failures at any point).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

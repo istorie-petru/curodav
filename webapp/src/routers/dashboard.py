@@ -2560,39 +2560,12 @@ def reorder_widget(uid: str, after_uid: str = Form(""), conn=Depends(get_db)):
     db.upsert_dashboard_widget(conn, moved)
     return JSONResponse({"ok": True})
 
-
-@router.post("/dashboard/widgets/{uid}/resize")
-def resize_widget(uid: str, width: str = Form(...), conn=Depends(get_db)):
-    """Drag-to-resize width handle, reinstated 2026-08-30 -- direct
-    request right after the Filters panel's own Width field shipped: "i
-    don't really like the settings width settings and much rather would
-    mouse resize them." Coexists with that field rather than replacing
-    it (kept for keyboard/no-mouse use, and it's the only way to set
-    width on a touch device with no drag-resize gesture wired up) -- both
-    ultimately write the exact same `config["width"]` key
-    (WIDGET_WIDTHS/_widget_width), so neither path is more authoritative
-    than the other, whichever was used most recently just wins, same as
-    any other field with two ways to set it.
-
-    JSON-free-but-still-POST, same convention `reorder_widget` above
-    uses -- static/app.js's resize-drag handler posts here on
-    pointerup, after snapping the live-dragged pixel width to whichever
-    of `WIDGET_WIDTH_CHOICES` it landed closest to. Deliberately a
-    narrower, single-field endpoint rather than routing through
-    `edit_widget`'s full form -- a drag gesture has no access to a
-    widget's other Source/View/Range/Style/etc. fields to resubmit
-    alongside it, and resizing shouldn't require them. Works for a
-    stack's own top-level card too (`_widget_width`'s `spec is None`
-    branch reads the exact same `config["width"]` key for a stack) --
-    this endpoint doesn't care whether `uid` is a plain widget or a
-    stack, it only ever touches `config["width"]`, nothing type-
-    specific."""
-    widget = db.get_dashboard_widget(conn, uid)
-    if widget is None:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if width not in WIDGET_WIDTH_CHOICES:
-        return JSONResponse({"error": "invalid width"}, status_code=400)
-    row = dict(widget)
-    row["config"] = {**(widget.get("config") or {}), "width": width}
-    db.upsert_dashboard_widget(conn, row)
-    return JSONResponse({"ok": True})
+# /dashboard/widgets/{uid}/resize (a drag-to-resize-width endpoint) briefly
+# existed here, 2026-08-30 -- reinstated the same day as the Filters
+# panel's own Width field, direct request ("i don't really like the
+# settings width settings and much rather would mouse resize them"), then
+# removed again just as quickly, direct follow-up that it still didn't
+# drag correctly even after a first attempted fix ("remove it... the
+# dashboard customise is fine"). WIDGET_WIDTHS/_widget_width and the
+# Filters panel's Width field are unaffected -- that's still the only way
+# to set a widget's width.

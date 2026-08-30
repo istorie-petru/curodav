@@ -24,11 +24,13 @@
      request) -- `wc.width`/`wc.width.span` below comes from the widget's
      own type default UNLESS its own config["width"] overrides it (a
      stack instead always reads its own stored config["width"], see
-     _widget_width in routers/dashboard.py). Two ways to set it, both
-     writing the same config key: the Filters panel's Width field
-     (_widget_edit_form.html), and the `.widget-resize-handle` drag
-     corner rendered below (edit mode only, static/app.js's resize-drag
-     handler, POSTs to /dashboard/widgets/{uid}/resize on release). -->
+     _widget_width in routers/dashboard.py), set via the Filters panel's
+     Width field (_widget_edit_form.html). A `.widget-resize-handle`
+     mouse-drag corner briefly existed alongside that field, same day --
+     removed again just as quickly, direct follow-up report that it
+     didn't actually work ("still doesn't work... remove it"; the Width
+     field itself was separately confirmed fine, "the dashboard customise
+     is fine"). The field is the only way to set width now. -->
 {% if edit_mode %}
 <!-- Add widget -- now opens the customization modal via the toolbar's
      "New widget" button instead of an inline form, keeping a single
@@ -57,7 +59,6 @@
             <button type="submit" class="icon-btn" title="Dissolve stack (keeps the widgets inside)">{{ icon('x', 'icon-sm') }}</button>
         </form>
     </div>
-    <div class="widget-resize-handle" title="Drag to resize" aria-hidden="true"></div>
     {% endif %}
     {% for child in wc.children %}
     <div class="widget-stack-item" data-uid="{{ child.widget.uid }}">
@@ -68,7 +69,6 @@
 {% else %}
 <div class="card widget-card{% if wc.bare %} widget-card--bare{% endif %}" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
     {{ widget_inner(wc, false) }}
-    {% if edit_mode %}<div class="widget-resize-handle" title="Drag to resize" aria-hidden="true"></div>{% endif %}
 </div>
 {% endif %}
 {% endfor %}

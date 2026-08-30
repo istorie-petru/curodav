@@ -94,26 +94,23 @@ members).
   reverses the 2026-08-07 "no manual override" decision for width only;
   height stays automatic, no manual height picker came back). See
   `routers/dashboard.py`'s `WIDGET_WIDTHS`/`WIDGET_WIDTH_CHOICES`/
-  `_widget_width`. A `.widget-resize-handle` drag corner (edit mode
-  only) reinstated the same day, direct follow-up ("i don't really
-  like the settings width settings and much rather would mouse resize
-  them") -- drag left/right, release to snap to the nearest of the four
-  Width choices, `POST /dashboard/widgets/{uid}/resize` (a narrower,
-  single-field sibling of `edit_widget`). Coexists with the Filters
-  field rather than replacing it -- the field is the only way to set
-  width without a mouse (keyboard/touch). Below `MEDIUM_BREAKPOINT`
-  (1000px, app.js -- a narrower desktop window, not yet the 720px
-  mobile collapse) a manually-set "quarter" (25%) card is promoted to
-  "half" (50%) for layout purposes only, since 25% of a narrow window
-  reads as unreadably thin -- the stored `config["width"]` itself is
-  untouched, same as the mobile collapse's own "CSS/JS-only" precedent.
-  A widget's own card now also refreshes live after a Filters/Width
-  save instead of needing a hard reload (`widget_card_region`'s
-  `edit_mode` used to be hardcoded `False`, silently dropping the edit
-  chrome on any refresh attempted while editing -- fixed to read the
-  real current edit_mode; `dashboard_widget_preview.js`'s autosave now
-  actually calls `refreshRegion` after a successful save, which it
-  never did before).
+  `_widget_width`. A `.widget-resize-handle` drag corner briefly existed
+  alongside the field (edit mode only, `POST /dashboard/widgets/{uid}/
+  resize`), same day -- removed again just as quickly, direct follow-up
+  that it still didn't drag correctly ("remove it... the dashboard
+  customise is fine"). The Filters field is the only way to set width
+  now. Below `MEDIUM_BREAKPOINT` (1000px, app.js -- a narrower desktop
+  window, not yet the 720px mobile collapse) a manually-set "quarter"
+  (25%) card is promoted to "half" (50%) for layout purposes only, since
+  25% of a narrow window reads as unreadably thin -- the stored
+  `config["width"]` itself is untouched, same as the mobile collapse's
+  own "CSS/JS-only" precedent. A widget's own card now also refreshes
+  live after a Filters/Width save instead of needing a hard reload
+  (`widget_card_region`'s `edit_mode` used to be hardcoded `False`,
+  silently dropping the edit chrome on any refresh attempted while
+  editing -- fixed to read the real current edit_mode;
+  `dashboard_widget_preview.js`'s autosave now actually calls
+  `refreshRegion` after a successful save, which it never did before).
 
 ## Seeding & scope
 

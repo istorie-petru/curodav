@@ -12,5 +12,4 @@
 {% from "_widget_inner.html" import widget_inner with context %}
 <div class="card widget-card{% if wc.bare %} widget-card--bare{% endif %}" id="widget-{{ wc.widget.uid }}" data-uid="{{ wc.widget.uid }}" data-span="{{ wc.width.span }}"{% if wc.spec and 'tasks' in wc.spec.uses %} data-widget-uses="tasks"{% endif %}>
     {{ widget_inner(wc, false) }}
-    {% if edit_mode %}<div class="widget-resize-handle" title="Drag to resize" aria-hidden="true"></div>{% endif %}
 </div>
