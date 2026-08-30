@@ -139,7 +139,7 @@
 // btn's left padding and the header/toggle's sizing are unconditional
 // now, and both states' highlight uses the same --radius-sm) -- bumped
 // per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v40";
+const CACHE_NAME = "cc-shell-v41";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -257,24 +257,39 @@ self.addEventListener("fetch", (event) => {
     // visible no matter how well-populated the local mirror was. The
     // versioned-exact match is tried first (a runtime-cached copy is the
     // freshest thing the SW knows); the ignoreSearch match against the
-    // un-versioned precache entry is the fallback. The one accepted
-    // staleness: between a file changing and the SW itself updating, an
-    // offline device may get the old precached copy -- the cache-busting
-    // query still governs the online path, where the fresh file loads and
-    // is runtime-cached under its new versioned URL.
+    // un-versioned precache entry is the fallback.
+    //
+    // v41 (2026-08-30): root-cause fix for the actual bug behind every one
+    // of the v15-v33 "I edited a file, the browser still shows the old
+    // version" reports -- this wasn't just a "forgot to bump CACHE_NAME"
+    // problem, the fallback ORDER was wrong. The old code tried the exact
+    // versioned match, and on a miss went straight to the ignoreSearch
+    // precache/runtime-cache match -- BEFORE ever trying the network. Once
+    // any old version of a file had been cached (either precached
+    // unversioned at install, or runtime-cached under a previous `?v=`),
+    // ignoreSearch always matched it by path, so a new `?v=` request was
+    // served that stale entry directly and NEVER reached the network --
+    // even while fully online. That's exactly the reported symptom: a hard
+    // refresh works (it bypasses the SW entirely), but a normal navigation
+    // to another page re-requests the asset through the SW and gets the
+    // stale ignoreSearch hit again. Fixed by trying the network *before*
+    // the ignoreSearch fallback: an exact cache hit is still served
+    // instantly (fast path for a version already fetched), but any miss
+    // now goes to the network first and only falls back to the stale
+    // ignoreSearch precache entry if that fetch itself fails (genuinely
+    // offline) -- which is what the ignoreSearch fallback was actually
+    // meant for (see the offline_shell.js/offline_write.js note below).
     event.respondWith(
       caches.match(request).then(
         (cached) =>
           cached ||
-          caches.match(request, { ignoreSearch: true }).then(
-            (precached) =>
-              precached ||
-              fetch(request).then((response) => {
-                const copy = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                return response;
-              })
-          )
+          fetch(request)
+            .then((response) => {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+              return response;
+            })
+            .catch(() => caches.match(request, { ignoreSearch: true }))
       )
     );
   }

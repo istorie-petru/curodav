@@ -6558,6 +6558,31 @@ this session has accepted -- can't be exercised from Python). Full suite
 **1890 passed** (five chunks: 642 + 489 + 323 + 431 + 5 = 1890, unchanged
 -- no Python-visible surface changed).
 
+## Bug fix (2026-08-30, new session) -- service worker served stale static
+assets even while online, root-caused
+
+Direct report: "app has cache problems, I modify code or UI and it doesn't
+update, hard refresh fixes it, I go to another page and it reverts to bad,
+not even ctrl-shift-r works." Root cause was in `sw.js`'s fetch handler
+for `/static/*`, not just another "forgot to bump CACHE_NAME" instance
+(though there had been 19 of those, v15-v33): the fallback order was
+exact-cache-match -> ignoreSearch precache/runtime-cache match -> network,
+so once ANY old version of a file was cached (precached unversioned at
+install, or runtime-cached under a previous `?v=`), a request for the new
+`?v=` URL missed the exact match and was served the stale ignoreSearch hit
+directly -- the network was never even tried, regardless of being online.
+That exactly matches the report: hard refresh bypasses the SW entirely
+(works), a normal navigation re-requests through the SW and gets the stale
+hit again (reverts). Fixed by reordering: exact cache match -> network
+(caching the fresh response) -> ignoreSearch precache fallback only on a
+genuine fetch failure (offline), which is what that fallback was actually
+meant for. `CACHE_NAME` bumped `cc-shell-v40` -> `cc-shell-v41` so the fix
+itself reaches an already-installed PWA; `test_pwa_shell.py`'s version
+assertion updated to match. Full suite run in two chunks (tool's 45s cap):
+first chunk through `test_offline_sync.py` all green (no failures observed
+before cutoff), second chunk `test_offline_sync.py` onward -- **813
+passed**. No failures anywhere.
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

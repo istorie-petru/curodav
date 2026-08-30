@@ -433,8 +433,18 @@ class TestLocalWritePath:
         # .widget-card.is-resizing/.widget-resize-handle both got
         # user-select:none as a second CSS-only layer for the drag's
         # whole duration, not just its first pixel.
+        # v41 (2026-08-30): root-cause fix for the fetch handler's static-
+        # asset fallback ORDER, not a precache-list change -- direct report
+        # ("edits don't show up, hard refresh fixes it, navigating away and
+        # back reverts to stale"). The old order tried the exact versioned
+        # match, then went straight to the ignoreSearch precache/runtime-
+        # cache match on a miss, BEFORE ever trying the network -- so any
+        # already-cached old version of a file was served forever, never
+        # re-fetched, regardless of the `?v=` query changing. Network is
+        # now tried before the ignoreSearch fallback; that fallback only
+        # fires if the network fetch itself fails (genuinely offline).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v40"' in script
+        assert 'CACHE_NAME = "cc-shell-v41"' in script
 
 
 class TestOfflineToolbar:
