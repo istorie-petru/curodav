@@ -1264,35 +1264,20 @@ label.seg-btn[hidden]{display:none;}
   background-attachment:local, local, scroll, scroll;
 }
 table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
-/* 2026-08-30 (direct feedback, "the columns don't align" -- Option B's
-   per-group tables): default `table-layout:auto` sizes each column from
-   that specific table's own row content, so a `<colgroup>` shared across
-   several *separate* tables (_tasks_body.html's per-group `.task-table`s)
-   is only ever a hint under auto layout, not a guarantee -- one card with
-   short titles/dates and another with long ones could legitimately end up
-   with different actual column widths despite the identical colgroup,
-   which is exactly the misalignment reported. `table-layout:fixed` makes
-   the colgroup (or first row) authoritative and content-blind: every
-   `.task-table` with the same colgroup renders pixel-identical columns
-   regardless of what's actually in any given row. Trade-off: a fixed
-   column's width no longer responds to a `:has([data-editing])`-style
-   per-cell override (see `.task-title-cell`'s own comment) -- the title
-   cell's own `overflow-x:auto` still lets long/being-edited text scroll
-   in place, it just doesn't visibly widen the column anymore. */
-/* Scoped to `.task-table-grouped` rather than the bare `.task-table`
-   class, so a plain `.task-table` elsewhere in the app (none currently,
-   but the class itself isn't Tasks-page-specific) doesn't inherit fixed
-   layout it never asked for. `#habits-table` originally stayed off this
-   list -- its Check-in/Cadence/Streak columns had no widths of their own
-   yet, and forcing fixed layout onto unconstrained columns just splits
-   them evenly regardless of actual need. 2026-08-30 ("column size... big
-   right space") gave every one of its columns a real width (Title now
-   the one flexible column, same shape as the grouped tables below), so
-   it opted into `.task-table-grouped` too -- no cross-table alignment
-   need like the grouped tables have, but the same "explicit widths need
-   fixed layout to actually be honored" reasoning applies once a table
-   has explicit widths at all. */
-.task-table-grouped{table-layout:fixed;}
+/* 2026-08-30: the Tasks table's per-group `.task-table`s (_tasks_body.
+   html) went through several same-day rounds of `<colgroup>` +
+   `table-layout:fixed` to force pixel-identical Status/Date/Labels
+   columns across every separate card -- each round fixed one width
+   complaint by relocating the leftover space, which just produced the
+   next complaint. Reverted to plain `table-layout:auto` (this file's own
+   default, nothing to declare) per direct feedback ("just remove the
+   width for all of them beside the title column"): only the title
+   column has an explicit width now (`.task-title-cell`'s own min-width,
+   further down), everything else sizes to its own row content like any
+   ordinary table. Cross-card pixel alignment is no longer guaranteed --
+   a card with different row content can legitimately size its own
+   Status/Date/Labels a few px differently from its neighbor -- accepted
+   trade-off, not an oversight. */
 thead th{
   text-align:left; font-weight:600; color:var(--fg-secondary); font-size:13px;
   text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
@@ -1836,25 +1821,21 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    sideways in place (drag or shift-scroll to read the rest) instead of the
    whole row/table doing it. Every other column keeps its natural content
    width and stays fully visible regardless of how long any one title is. */
-/* 2026-08-30: `.task-table{table-layout:fixed}` (added for cross-card
-   column alignment, see that rule's own comment) makes the `<colgroup>`
-   authoritative for column width -- a `<td>`'s own min-width/max-width
-   below no longer changes the *column's* rendered width, only its own
-   content box within that column.
-
-   2026-08-30 further follow-up ("I don't like the column size... a big
-   right space") -- Title is `_tasks_body.html`'s flexible column now
-   (its `<col>` is unconstrained, absorbing whatever width Status/Date/
-   Labels don't use), specifically so a wide card's extra room reads as
-   "more space for the title" instead of a dead gap after Labels. This
-   rule's old `max-width:240px` fought that directly -- it capped the
-   cell's own content box well inside its now-much-wider column, so the
-   same empty-gap complaint just reappeared one column to the left. Only
-   a floor remains (a short title still shouldn't look cramped);
-   `overflow-x:auto` stays as a safety valve for the rare single "word"
-   longer than even a fully-expanded column, not a normal-case limit. */
-.task-title-cell{min-width:140px; overflow-x:auto; overflow-y:hidden;}
-.task-title-cell:has([data-editing]){min-width:280px;}
+/* 2026-08-30: after a few same-day rounds of `table-layout:fixed` +
+   explicit widths on every column (each one relocating the previous
+   width complaint rather than fixing it), reverted to plain
+   `table-layout:auto` per direct feedback ("just remove the width for
+   all of them beside the title column") -- see `table{width:100%...}`'s
+   own comment above. This is the one column that keeps an explicit
+   width: a floor (short titles shouldn't look cramped) and a ceiling
+   (the original reason this rule exists at all -- an unbounded title on
+   a narrow `main` could push the whole table past `.table-scroll`'s
+   width, scrolling Status/Date/Labels off-screen with it, see this
+   rule's own earlier history above). `overflow-x:auto` lets long/being-
+   edited text scroll sideways inside that ceiling instead of breaking
+   the layout. */
+.task-title-cell{min-width:140px; max-width:320px; overflow-x:auto; overflow-y:hidden;}
+.task-title-cell:has([data-editing]){min-width:280px; max-width:360px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points

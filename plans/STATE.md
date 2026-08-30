@@ -8,6 +8,27 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Tasks table, column widths reverted to plain auto-layout
+  (direct feedback: "just remove the width for all of them beside the
+  title column"), complete (2026-08-30). Closes out the same-day column-
+  width back-and-forth below: `<colgroup>` + `table-layout:fixed` (added
+  to force pixel-identical Status/Date/Labels across every separate
+  group card) went through two rebalancing attempts, each one relocating
+  the "big gap" complaint to a different column rather than resolving
+  it. Removed entirely -- every `<th>`/`<col>` except the title column's
+  now has no explicit width at all; plain `table-layout:auto` (this
+  file's own default) sizes Status/Date/Labels/checkbox/delete to each
+  table's own row content, same as before any of this session's width
+  engineering started. `.task-title-cell` keeps its own floor+ceiling
+  (min/max-width, restored after the previous entry had dropped the
+  ceiling) -- the one column that still needs a bound, for the original,
+  unrelated reason it was added (STATE.md's earlier "sidebar redesign
+  layout fix" entry: an unbounded title could still push the whole table
+  past `.table-scroll`'s width on a narrow `main`). Applied identically
+  to `#habits-table`. Traded away on purpose: cards no longer guarantee
+  pixel-identical Status/Date/Labels widths against each other -- a card
+  with different row content can size those a few px differently from
+  its neighbor. No test changes needed; full suite still 1934 passed.
 - **Fixed:** Tasks table, column widths (direct feedback: "I don't like
   the columns size... there is a big right space"), complete (2026-08-30).
   Under `table-layout:fixed` (previous entries), whichever column's `<col>`

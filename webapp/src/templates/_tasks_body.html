@@ -78,30 +78,23 @@
    cell) into one header row, exactly like Habits. No more shared header
    bar, no more `.task-section-divider` row -- each card is fully self-
    contained again, just with a richer first `<th>` than a plain "Title"
-   ever was. `<colgroup>` + `table-layout:fixed` (style.css) are
-   unaffected by any of this -- still what keeps every card's Status/
-   Date/Labels columns pixel-aligned to each other regardless of any one
-   row's own content; if the widths below change, the Habits table's own
-   (see `#habits-table`) should generally match.
+   ever was.
 
-   2026-08-30 further direct follow-up ("I don't like the column size...
-   there is a big right space") -- Labels used to be the one column left
-   unconstrained (`<col>` with no width), so under `table-layout:fixed` it
-   absorbed 100% of whatever the card's own width left over after the
-   other five fixed columns -- on a wide viewport with only one short
-   pill in it, that reads as a large dead gap between the pill and the
-   trailing `+`/delete column, not "the Labels column." First attempt
-   (Title alone unconstrained instead) just relocated the same problem
-   one column left -- any *single* flexible column looks like a gap once
-   its content is much shorter than the leftover width. Title and Labels
-   are BOTH unconstrained now -- under `table-layout:fixed`, two
-   unconstrained columns split the remainder evenly between them (no
-   extra CSS needed, that's the spec's own default) -- so the same total
-   leftover space reads as "both the title and the labels have some
-   breathing room" instead of one lone empty block next to short content.
-   Status narrowed 130px -> 110px alongside this (a status pill + caret
-   never needs more). #}
-{% set _task_colgroup %}<colgroup><col style="width:26px"><col><col style="width:110px"><col style="width:110px"><col><col style="width:40px"></colgroup>{% endset %}
+   2026-08-30, several further same-day direct follow-ups on column
+   widths, ending in "just remove the width for all of them beside the
+   title column": the intervening attempts (`<colgroup>` +
+   `table-layout:fixed` forcing pixel-identical Status/Date/Labels widths
+   across every separate card, then rebalancing which column absorbed
+   the leftover space) kept solving one width complaint by relocating it
+   -- more engineering, not less. Settled on the plain, low-tech answer:
+   only the title column gets an explicit width (`.task-title-cell`,
+   style.css); Status/Date/Labels/checkbox/delete have none, so ordinary
+   `table-layout:auto` sizes each one to its own content, same as any
+   plain HTML table. Traded away on purpose: a card with very different
+   row content can size Status/Date/Labels a few px differently from its
+   neighbor (no more cross-card pixel alignment guarantee) -- accepted,
+   since chasing that guarantee is what produced the last several rounds
+   of "now something else looks wrong." #}
 <div id="task-table" class="task-group-list">
 {% for grp in _other_groups %}
 {# 2026-08-30 (direct feedback: "how the table works, especially with
@@ -117,16 +110,15 @@
    lose. #}
 {% if grp.tasks or grp.kind != 'completed' %}
 <div class="card table-scroll task-group-card">
-<table class="task-table task-table-grouped">
-    {{ _task_colgroup }}
+<table class="task-table">
     <thead>
         <tr>
-            <th style="width:26px"></th>
+            <th></th>
             <th>{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</th>
-            <th style="width:110px">Status</th>
-            <th style="width:110px">Date</th>
+            <th>Status</th>
+            <th>Date</th>
             <th>Labels</th>
-            <th style="width:40px" class="task-table-add-th">
+            <th class="task-table-add-th">
                 {% if grp.kind == 'project' %}
                 <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}</a>
                 {% elif grp.kind == 'unassigned' %}
@@ -146,7 +138,7 @@
 
 {% if _habits_group %}
 <div class="card table-scroll task-table-habits">
-<table class="task-table task-table-grouped" id="habits-table">
+<table class="task-table" id="habits-table">
     <thead>
         <tr>
             {# 2026-08-30 ("remove the grouping for habits, it's
@@ -156,21 +148,19 @@
                its own Check-in/Cadence/Streak columns already saying
                "this is Habits") now carries real information instead.
 
-               2026-08-30 further follow-up ("column size... big right
-               space") -- same fix as the grouped tables above: Check-in/
-               Cadence/Streak (genuinely short, bounded content -- a
-               number, "Daily", a streak count) keep real caps; Title and
-               Labels are both left unconstrained, splitting whatever's
-               actually left over evenly between them rather than dumping
-               it all into one column that then looks like a gap next to
-               short content. #}
-            <th style="width:26px"></th>
+               2026-08-30 further follow-up ("just remove the width for
+               all of them beside the title column") -- only the first
+               `<th>` (this group's own name) keeps a width (`.task-
+               title-cell`); Check-in/Cadence/Streak/Labels have none,
+               same plain `table-layout:auto` content-sizing as the
+               grouped tables above. #}
+            <th></th>
             <th>{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
-            <th style="width:90px">Check-in</th>
-            <th style="width:100px">Cadence</th>
-            <th style="width:130px">Streak</th>
+            <th>Check-in</th>
+            <th>Cadence</th>
+            <th>Streak</th>
             <th>Labels</th>
-            <th style="width:40px" class="task-table-add-th">
+            <th class="task-table-add-th">
                 <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
             </th>
         </tr>
