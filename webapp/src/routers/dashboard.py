@@ -700,8 +700,23 @@ def _render_weekly_schedule(conn, config: dict, nav: dict | None = None) -> dict
     weekday then time) renders below the grid -- the grid's blocks
     necessarily truncate a longer title, and pairing it with a plain
     readable list is what makes a handful of narrow colored blocks not
-    read as "a lot of dead space with three thin bars in it"."""
-    events = [e for e in _filtered_events(conn, config) if e.get("recurrence") and e.get("start_at")]
+    read as "a lot of dead space with three thin bars in it".
+
+    Excludes `all_day` events (2026-08-30 bug fix) -- an all-day event has
+    no time-of-day to place on this grid, and its `start_at` isn't even
+    guaranteed to carry one: contact-birthday sync (db.sync_contact_
+    birthday_event) writes a bare "1900-MM-DD" (no "THH:MM"), which
+    crashed `_minutes_of_day`'s fixed-offset slice on any dashboard with a
+    Weekly Schedule widget whose label matched a birthday'd contact --
+    reachable by just adding a birthday, not an edge case. Same exclusion
+    grid_layout.py's `layout_day` already applies before its own
+    time-of-day math, for the same reason -- all-day events get their own
+    separate strip there, and have no place in a purely time-slotted grid
+    like this one either."""
+    events = [
+        e for e in _filtered_events(conn, config)
+        if e.get("recurrence") and e.get("start_at") and not e.get("all_day")
+    ]
     long_lived = [e for e in events if _is_long_lived_recurrence(e)]
 
     items = []

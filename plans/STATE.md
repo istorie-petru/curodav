@@ -6136,6 +6136,32 @@ Full suite **1869 passed** (four file-glob chunks: 608 + 433 + 498 + 330 =
 files' worth of updates that stayed, i.e. no coverage silently lost, only
 coverage of the removed feature itself).
 
+## Bug fix (2026-08-30, live crash report) — Weekly Schedule widget crashed
+the whole dashboard on any contact with a birthday
+
+Direct report: `GET /` returning 500, pasted server traceback —
+`ValueError: invalid literal for int() with base 10: ''` in
+`routers/dashboard.py::_minutes_of_day` (`int(iso_dt[11:13])`, a
+fixed-offset slice assuming every timestamp carries a `"THH:MM"` portion).
+Root cause: `db.sync_contact_birthday_event` (runs on every contact
+save) writes a synthetic all-day, `FREQ=YEARLY` recurring event for a
+birthday with `start_at="1900-MM-DD"` — a bare date, no time. The Weekly
+Schedule widget's own event filter (`_render_weekly_schedule`,
+`e.get("recurrence") and e.get("start_at")`) had no `all_day` exclusion,
+unlike `grid_layout.py::layout_day`'s equivalent filter (which already
+carves all-day events into their own separate strip before any
+time-of-day math) — so any dashboard with a Weekly Schedule widget whose
+label matched a birthday'd contact's tags crashed on every load, not on
+some rare hand-constructed input. Fixed by adding `not e.get("all_day")`
+to the same filter line, matching `layout_day`'s precedent (an all-day
+event has no time slot to place on this grid regardless of the crash —
+this is the correct filter, not just a guard). 1 new regression test
+(`test_dashboard_router.py::TestWeeklyScheduleWidget::
+test_all_day_recurring_event_is_excluded_not_crashed`, seeds the exact
+birthday-sync shape directly rather than going through contact save).
+Full suite **1870 passed** (five chunks: 622 + 489 + 323 + 431 + 5 = 1870;
++1 over the 1869 baseline, the one new test, nothing else changed).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

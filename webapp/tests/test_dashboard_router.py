@@ -1204,3 +1204,25 @@ class TestWeeklyScheduleWidget:
         assert "weekly_schedule" in dashboard_router.WIDGET_TYPES
         assert ("weekly_schedule_view", None) in dashboard_router._SELECTION_TO_TYPE
         assert ("weekly_schedule", None) in dashboard_router._TYPE_TO_SELECTION
+
+    def test_all_day_recurring_event_is_excluded_not_crashed(self, conn):
+        # 2026-08-30 bug fix: db.sync_contact_birthday_event writes an
+        # all_day=True, FREQ=YEARLY event with a bare "1900-MM-DD"
+        # start_at (no "THH:MM" time portion) for every contact with a
+        # birthday -- automatic, not something a user has to construct by
+        # hand. Before the fix, this crashed _minutes_of_day's fixed-
+        # offset slice (ValueError: invalid literal for int() with base
+        # 10: '') for any dashboard with a Weekly Schedule widget whose
+        # label matched a birthday'd contact, taking down GET / entirely.
+        # An all-day event has no time-of-day to place on this grid
+        # anyway (same exclusion grid_layout.layout_day already applies),
+        # so it should just be skipped, not crash the widget.
+        db.upsert_event(conn, {
+            "uid": "birthday-1", "title": "Jordan's Birthday",
+            "description": "", "status": "active", "all_day": 1,
+            "start_at": "1900-06-15", "end_at": None, "recurrence": "FREQ=YEARLY",
+            "tags": [], "created_at": _now(),
+        })
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+        assert data["agenda_rows"] == []
