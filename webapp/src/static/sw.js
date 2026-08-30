@@ -146,7 +146,14 @@
 // but page-specific (project_detail.html only), not added to
 // SHELL_ASSETS -- same "not shell-critical" category as tasks_table.js/
 // tasks_board.js above.
-const CACHE_NAME = "cc-shell-v43";
+// v44 (2026-08-30, immediate follow-up): live bug report -- the Projects
+// page's upcoming-events card overlapped the Kanban board below it. Root
+// cause: it was built with `.widget-card`, which is `position:absolute`
+// (the Dashboard's own JS-positioned masonry grid sets its geometry) --
+// with no such JS on this plain page it had no top/left/width at all.
+// New `.widget-card-static` repeats only the flattened visual treatment,
+// not the positioning; style.css changed, bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v44";
 
 const SHELL_ASSETS = [
   "/offline",

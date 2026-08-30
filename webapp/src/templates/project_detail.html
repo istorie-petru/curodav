@@ -25,8 +25,12 @@
      macros the Dashboard's Agenda widget renders through (_widget_items.html)
      so this reads like the rest of the app's "simple link list" surfaces,
      without pulling in the whole widget/customize machinery for a card
-     that isn't configurable here. -->
-<div class="card widget-card">
+     that isn't configurable here. `.widget-card-static`, not `.widget-
+     card` -- the latter is `position:absolute` for the Dashboard's
+     JS-positioned masonry grid, which doesn't apply on this plain page
+     (bug fix: without a static variant this card had no geometry and
+     overlapped the Kanban board below it). -->
+<div class="card widget-card-static">
     <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Upcoming events</h2></div>
     <div class="widget-content">
     {% if events %}

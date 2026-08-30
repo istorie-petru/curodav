@@ -451,7 +451,7 @@ class TestLocalWritePath:
         # Width field is confirmed working ("the dashboard customise is
         # fine") and is the only way to set width now.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v43"' in script
+        assert 'CACHE_NAME = "cc-shell-v44"' in script
 
 
 class TestOfflineToolbar:

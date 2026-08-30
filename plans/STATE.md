@@ -6755,6 +6755,16 @@ bundle unless they turn out to share the same CSS the first one touches.
    pre-existing tests' href/redirect assumptions in
    `test_dashboard_router.py`/`test_sidebar_tree.py`).
 
+   **Bug fix (2026-08-30, immediate follow-up)** -- live report: the
+   upcoming-events card overlapped the Kanban board below it. Root cause:
+   the card used `.widget-card`, which is `position:absolute` (the
+   Dashboard's own JS-positioned masonry grid sets its geometry) -- with
+   no such JS on this plain page it had no top/left/width at all. New
+   `static/style.css` class `.widget-card-static` repeats only that
+   design pass's flattened visual treatment (hairline border +
+   `--shadow-card`), not the positioning; `sw.js` CACHE_NAME bumped v43 ->
+   v44 (style.css changed).
+
    **Still open (not this slice):** an Agenda *view* (a full events
    list/tab -- this slice only ships the capped upcoming-events card) and
    drag-and-drop on the Kanban board (today's is click-only, a `.pill-

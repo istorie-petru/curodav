@@ -3985,6 +3985,18 @@ body.command-palette-open{overflow:hidden;}
 .widget-card--bare:hover{box-shadow:none;}
 .widget-card--bare .widget-header{border-bottom:none; padding-bottom:0;}
 .widget-card--bare .filled-cards-grid{margin-left:0; margin-right:0;}
+/* Standalone widget-styled card, outside the masonry grid (2026-08-30,
+   project_detail.html's upcoming-events card) -- `.widget-card` itself
+   can't be reused here: it's `position:absolute` (this file's own
+   `.dashboard-grid`/app.js JS-positioned masonry layout, which sets its
+   top/left/width), so on a plain page with no such JS ever assigning
+   geometry it collapsed to (0,0) and overlapped the content below it
+   (visual bug, live report). This repeats only the flattened visual
+   treatment from the 2026-08-30 design pass above (hairline border +
+   `--shadow-card`, static on hover) on top of plain `.card`'s own normal-
+   flow box, not `.widget-card`'s positioning. */
+.widget-card-static{border:1px solid var(--separator); box-shadow:var(--shadow-card);}
+.widget-card-static:hover{box-shadow:var(--shadow-card); transform:none;}
 /* Widget drag-to-reorder (static/app.js), edit-mode only */
 .widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
 .widget-drag-handle:active{cursor:grabbing;}
