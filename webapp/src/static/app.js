@@ -634,45 +634,82 @@ document.addEventListener("submit", (event) => {
     const dryRun = packColumns(cards, maxCols);
     const cols = Math.max(1, dryRun.maxTouched);
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
+
+    // Width only ever depends on a card's own span (not on which column it
+    // lands in), so every card's width can be set -- and its real height
+    // measured -- up front, in one batched write-then-read pass (cheaper
+    // than the old interleaved write/measure/write/measure per card, and
+    // it's what the best-fit placement loop below needs anyway: it has to
+    // know every remaining card's height *before* choosing which one to
+    // place next, not just the next one in DOM order).
+    const remaining = cards.map((card) => {
+      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      const width = span * colWidth + (span - 1) * GAP;
+      card.style.width = `${width}px`;
+      return { card, span };
+    });
+    remaining.forEach((entry) => {
+      // offsetHeight forces the width write above to actually apply before
+      // measuring -- same reason the old per-card version read it right
+      // after setting width.
+      entry.height = entry.card.offsetHeight;
+    });
+
+    // Best-fit placement (2026-08-30, direct report: "the way widgets are
+    // aranged is not ok" -- a short widget (e.g. a bare Spaces & Projects
+    // cards instance with just a couple tiles) landing next to a much
+    // taller one left the short column dead for the rest of the page,
+    // because strict DOM-order placement could only ever offer that gap to
+    // *whichever widget happened to come next*, even when that widget was
+    // too wide to fit in it -- every valid starting position for a 3-wide
+    // widget touching a 2-wide gap next to a tall 4-wide neighbor is
+    // already tall, so it was forced to the very bottom regardless, and
+    // nothing narrower ever got a chance at the gap it *could* have filled).
+    // Rather than committing to cards in strict DOM order, every remaining
+    // card is re-considered on each iteration and whichever one achieves
+    // the single lowest `top` anywhere on the grid is placed next -- a
+    // standard best-fit bin-packing, not a rewrite of the packing model
+    // itself (still the same span/column math, still the same "shortest
+    // valid column range" search per card). Ties (the overwhelmingly
+    // common case -- no shorter alternative actually available to backfill
+    // with) resolve to whichever card comes first in `remaining`, i.e. DOM
+    // order -- `<` not `<=` below only ever replaces the current best on a
+    // strictly better fit, so a normal row with no gap-filling opportunity
+    // places identically to before, card by card, in order. Only ever
+    // reorders visually when doing so measurably reduces height; never
+    // touches the DOM itself (drag-to-reorder above reads real DOM order,
+    // untouched by this purely visual left/top).
     const colHeights = new Array(cols).fill(0);
     let maxBottom = 0;
-
-    cards.forEach((card) => {
-      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
-      // Skyline packing: among every valid starting column for this
-      // card's width, pick whichever leaves the least wasted space --
-      // the one where the tallest column it would span is shortest.
+    while (remaining.length) {
+      let bestIdx = -1;
       let bestStart = 0;
       let bestTop = Infinity;
-      for (let start = 0; start <= cols - span; start++) {
-        const top = Math.max(...colHeights.slice(start, start + span));
-        if (top < bestTop) {
-          bestTop = top;
-          bestStart = start;
+      for (let idx = 0; idx < remaining.length; idx++) {
+        const span = remaining[idx].span;
+        for (let start = 0; start <= cols - span; start++) {
+          const top = Math.max(...colHeights.slice(start, start + span));
+          if (top < bestTop) {
+            bestTop = top;
+            bestStart = start;
+            bestIdx = idx;
+          }
         }
       }
+      const { card, span, height } = remaining[bestIdx];
+      remaining.splice(bestIdx, 1);
       const left = bestStart * (colWidth + GAP);
-      const width = span * colWidth + (span - 1) * GAP;
       card.style.left = `${left}px`;
       card.style.top = `${bestTop}px`;
-      card.style.width = `${width}px`;
-      // Reading offsetHeight here forces the browser to actually apply
-      // the width change above before measuring -- necessary since a
-      // narrower/wider card reflows its own text and can change height,
-      // and the next card's placement depends on that real height, not
-      // whatever height it had at its old width.
-      const bottom = bestTop + card.offsetHeight;
+      const bottom = bestTop + height;
       maxBottom = Math.max(maxBottom, bottom);
       // GAP is added here, not to `bottom` itself -- `bottom` (the real
       // edge of this card) is what maxBottom/grid.style.height below
       // needs, but the *next* card stacked under this one in the same
       // column has to start GAP further down than that, or they touch
-      // with zero space between them (this was missing entirely at
-      // first: horizontal neighbors got GAP from the `left` formula
-      // below, but two cards landing in the same column stacked
-      // vertically had nothing enforcing space between them at all).
+      // with zero space between them.
       for (let i = bestStart; i < bestStart + span; i++) colHeights[i] = bottom + GAP;
-    });
+    }
 
     grid.style.height = `${maxBottom}px`;
   }

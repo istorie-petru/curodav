@@ -6327,6 +6327,60 @@ organizing and streak widgets - not really that useful".
   coincidental, not a rounding trick, verified by chunk-by-chunk pass
   counts matching with zero failures throughout).
 
+## Follow-up (2026-08-30, same day) -- dashboard masonry: best-fit
+placement instead of strict-DOM-order first-fit
+
+Direct report with a screenshot, after the bare-widget change above made
+Spaces & Projects (cards style) much shorter than before: "the way
+widgets are aranged is not ok. not fine." A short widget (Spaces &
+Projects, 2 tiles) sat next to a much taller one (the At a Glance/Agenda
+stack); everything below them started only once BOTH columns cleared,
+leaving a large dead gap under the short one for the rest of the page.
+
+Root cause, confirmed by hand-tracing `static/app.js`'s `layout()`: the
+existing skyline packer places cards strictly in DOM order, one at a
+time, each into whichever column start is currently shortest -- correct
+as far as it goes, but the *next* card in DOM order (Mini Calendar, span
+3/half) was too wide to fit inside the 2-column gap the short widget
+left next to the tall 4-column stack (every valid 3-wide starting
+position touches at least one of the stack's still-tall columns), so it
+was forced to the very bottom regardless -- while a *later* card in DOM
+order (Contact List, span 2/third) could have fit the gap exactly, it
+was never even considered until its own turn came, by which point the
+gap was long past.
+
+Fixed by switching the placement loop from "commit to the next card in
+DOM order" to a standard best-fit: on each iteration, every still-
+unplaced card is re-evaluated, and whichever one achieves the single
+lowest `top` anywhere on the grid is placed next (same underlying span/
+column math, same "shortest valid column range" search per card -- only
+the *order cards commit in* changed, not the packing model itself).
+Verified with a standalone Node simulation (`/tmp/sim.js`, not committed)
+before touching the real file, since this sandbox has no browser to
+render the actual page: reproduced the exact screenshot shape (short
+widget + tall stack + a mix of medium/narrow widgets) and confirmed (a)
+the narrower later widget gets pulled forward to fill the gap, and (b) an
+ordinary case with no gap-filling opportunity places every card in the
+same order as before, byte-for-byte -- the `<` (not `<=`) comparison
+only ever replaces the current best on a *strictly* better fit, so ties
+resolve to DOM order same as always. Width/height are now measured for
+every card up front in one batched write-then-read pass (width only ever
+depends on a card's own span, never on which column it lands in, so this
+was already knowable without waiting for placement) rather than the old
+interleaved per-card write/measure/write/measure, which the best-fit
+loop needs anyway since it has to compare *every* remaining card's real
+height each iteration, not just the next one in order. Purely a visual
+(left/top) change -- doesn't touch the DOM itself, so drag-to-reorder/
+stacking (both read real DOM order + pointer position, untouched by this)
+are unaffected; confirmed via `node --check` (syntax only, no DOM in this
+sandbox) since there's no Python-side test coverage for this file (no
+browser in this test environment, same ceiling this app's other CSS/JS-
+shape checks already accept -- nothing changed there, no new test to add).
+`sw.js`: `CACHE_NAME` bumped `cc-shell-v36` -> `cc-shell-v37` (app.js
+changed, in the precache list) -- `test_pwa_shell.py` updated. Full suite
+**1876 passed** (five chunks: 628 + 489 + 323 + 431 + 5 = 1876, unchanged
+-- no Python-visible surface changed).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

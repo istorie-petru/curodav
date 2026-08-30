@@ -406,8 +406,14 @@ class TestLocalWritePath:
         # streak removed outright) -- .widget-card--bare's own comment in
         # style.css updated to match, comment-only but same file-changed
         # convention as every other entry above.
+        # v37 (2026-08-30): bumped again, same session (direct report --
+        # "the way widgets are aranged is not ok" -- app.js's dashboard
+        # masonry switched from strict-DOM-order first-fit placement to
+        # best-fit-among-remaining, so a short widget's dead-space gap can
+        # be backfilled by a later, narrower widget instead of forcing
+        # everything after it down to the tallest neighbor's height).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v36"' in script
+        assert 'CACHE_NAME = "cc-shell-v37"' in script
 
 
 class TestOfflineToolbar:
