@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_widget_items.html" import widget_empty, widget_link_row %}
+{% block title %}{{ project.name }}{% endblock %}
+<!-- Project page (rebuilt 2026-08-30, replacing the 2026-08-15 redirect
+     stub -- see routers/projects.py's module docstring). Direct request:
+     "not a traditional dashboard" -- so unlike label_detail.html/
+     dashboard.html this page has no customizable widget grid, no banner,
+     no Edit mode. Just this project's own tasks (Kanban, by status) with
+     an upcoming-events card above it. -->
+{% block content %}
+<div class="toolbar top-app-bar">
+    <a href="/settings/labels" class="icon-btn" title="Back to Labels">{{ icon('chevron-left') }}</a>
+    <span class="cell-tag cal-{{ project.color }}">{% if project.icon %}{{ icon(project.icon, 'icon-sm') }} {% endif %}{{ project.name }}</span>
+    <span class="tag-usage-count" title="Lifecycle status">{{ project_status }}</span>
+    <div class="spacer"></div>
+    <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab title="New task">{{ icon('plus') }} New task</a>
+</div>
+{% if project.start_date or project.end_date %}
+<p class="settings-hint">{{ project.start_date or '?' }} &ndash; {{ project.end_date or '?' }}</p>
+{% endif %}
+
+<!-- Upcoming events card -- every future event tagged with this project's
+     label, see routers/projects.py::project_detail's own comment on why
+     this isn't recurrence-expanded. Uses the same context-free widget row
+     macros the Dashboard's Agenda widget renders through (_widget_items.html)
+     so this reads like the rest of the app's "simple link list" surfaces,
+     without pulling in the whole widget/customize machinery for a card
+     that isn't configurable here. -->
+<div class="card widget-card">
+    <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Upcoming events</h2></div>
+    <div class="widget-content">
+    {% if events %}
+    <table>
+        {% for e in events %}
+        {{ widget_link_row('/events/' ~ e.uid, e.title, leading=(e.start_at[:10] ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+        {% endfor %}
+    </table>
+    {% else %}
+    {{ widget_empty('No upcoming events tagged with this project.') }}
+    {% endif %}
+    </div>
+</div>
+
+<!-- Kanban board -- every non-archived task carrying this project's label,
+     grouped by status. Reuses the (retired) global Tasks Kanban's own
+     `.kanban-*` CSS/layout verbatim (templates/tasks_board.html itself
+     was deleted in the 2026-08-28 rework, but the CSS was left in place
+     unused). Status changes are click-based, not drag-and-drop, by direct
+     choice when scoping this page (a plain `.pill-select` per card, same
+     "native <select> styled as a pill" pattern _task_row.html's own
+     comment documents as this app's pre-multiselect status control) --
+     see static/tasks_kanban.js, which POSTs through the same
+     /tasks/{uid}/update-field endpoint (`field=status`) the Table view's
+     status pill and the old drag-based board both used, then moves the
+     card to its new column client-side rather than reloading. Importance/
+     Urgency chips the old board template rendered are gone -- that
+     feature was removed outright (2026-08-30, see routers/tasks.py's own
+     comment); Due date and labels remain. -->
+<div class="kanban-board" id="kanban-board" data-status-colors="{{ status_colors | tojson | e }}">
+    {% for status in board_statuses %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="kanban-column-head">
+            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
+            <span class="kanban-count">{{ columns[status]|length }}</span>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for t in columns[status] %}
+            <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
+                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                <div class="kanban-card-meta">
+                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
+                    {% for tag in t.tags %}{% if tag != project.name %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endif %}{% endfor %}
+                </div>
+                <select class="pill-select pill-{{ status_colors[t.status] }} kanban-status-select" data-uid="{{ t.uid }}" title="Change status">
+                    {% for s in board_statuses %}
+                    <option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% else %}
+            <div class="kanban-empty">No tasks</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ static_url('tasks_kanban.js') }}"></script>{% endblock %}

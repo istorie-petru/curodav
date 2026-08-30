@@ -10,9 +10,12 @@ Work allocations and the project's own Tasks/Week Calendar views were 1.4's
 job. Both, plus the original `/projects` listing page itself, were later
 retired as redundant, presentation-only pages (2026-08-15 -- see
 routers/projects.py's module docstring and plans/open.md's "Retire the
-standalone /projects page" decision record); the three now-redirect-only
-routes are covered by TestProjectPageRedirects below. promote/set_dates/
-demote/archive are untouched by that removal and still covered fully here.
+standalone /projects page" decision record). `GET /projects/{name}` itself
+was rebuilt 2026-08-30 as a real Kanban + upcoming-events page -- see
+test_project_detail.py for that route's own tests. `GET /projects` and
+`GET /projects/{name}/calendar` are still redirect-only, covered by
+TestProjectPageRedirects below. promote/set_dates/demote/archive are
+untouched by any of this and still covered fully here.
 """
 
 from __future__ import annotations
@@ -236,25 +239,22 @@ class TestPromoteDemoteArchive:
 
 
 class TestProjectPageRedirects:
-    """The /projects listing page and its two child views are gone
-    (2026-08-15, presentation-only -- see routers/projects.py's module
-    docstring and plans/open.md's "Retire the standalone /projects page"
-    decision record). These three routes now just redirect; the actual
-    promote/set_dates/demote/archive behavior above is unchanged."""
+    """The /projects listing page and the Week Calendar child view are
+    gone (2026-08-15, presentation-only -- see routers/projects.py's
+    module docstring and plans/open.md's "Retire the standalone /projects
+    page" decision record). `GET /projects/{name}` itself was rebuilt
+    2026-08-30 -- see test_project_detail.py, not here. These two routes
+    still just redirect; the actual promote/set_dates/demote/archive
+    behavior above is unchanged."""
 
     # 2026-08-28 "major rework" session update: the Tasks table's grouping
     # is unconditional now (no more `?group_by=project` to opt into) and its
     # label filter is gone entirely (item 3, "filtering reduced to date
-    # only") -- all three redirects below just land on the plain Table
-    # view now, where a project already surfaces as its own group.
+    # only") -- the listing redirect below lands on the plain Table view
+    # now, where a project already surfaces as its own group.
 
     def test_list_projects_redirects_to_tasks_table(self, conn):
         resp = projects_router.list_projects_redirect()
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
-
-    def test_project_detail_redirects_to_tasks_table(self, conn):
-        resp = projects_router.project_detail_redirect("Trip")
         assert resp.status_code == 302
         assert resp.headers["location"] == "/tasks"
 

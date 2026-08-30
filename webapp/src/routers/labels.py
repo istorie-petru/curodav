@@ -528,6 +528,15 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/spaces/{name}", status_code=301)
 
+    # 2026-08-30: a project (is_project=1) gets its own dedicated page now
+    # (routers/projects.py::project_detail, a Kanban board + upcoming
+    # events, not this route's customizable widget-grid dashboard) -- same
+    # redirect-to-its-real-page shape as the is_space guard above, for any
+    # link/bookmark still pointing at a project's old generic label URL.
+    if label.get("is_project"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"/projects/{name}", status_code=301)
+
     dashboard_router._ensure_default_label_widgets(conn, name)
     ctx = dashboard_router.widget_page_context(conn, project_uid=name)
     scope = _label_scope(conn, name)

@@ -31,6 +31,7 @@ from starlette.requests import Request
 from src import db
 from src.routers import contacts as contacts_router
 from src.routers import labels as labels_router
+from src.routers import projects as projects_router
 from src.routers import spaces as spaces_router
 
 
@@ -182,21 +183,27 @@ class TestProjectsSection:
         db.upsert_label_config(conn, row)
 
     def test_standalone_project_gets_its_own_section(self, conn):
+        # 2026-08-30: a standalone project's own page moved to
+        # /projects/{name} (routers/projects.py::project_detail, a Kanban
+        # board) -- label_detail now redirects a project there instead of
+        # rendering, so this exercises the real page directly, same as
+        # visiting it would.
         self._make_project(conn, "Website Relaunch")
-        resp = labels_router.label_detail(
-            "Website Relaunch", _request("/settings/labels/Website Relaunch", conn), conn=conn
+        resp = projects_router.project_detail(
+            "Website Relaunch", _request("/projects/Website Relaunch", conn), conn=conn
         )
         body = resp.body.decode()
         assert '<div class="sidebar-section-label" aria-hidden="true">Projects</div>' in body
-        assert 'href="/settings/labels/Website Relaunch" class="tab-btn tab-btn-project' in body
+        assert 'href="/projects/Website Relaunch" class="tab-btn tab-btn-project' in body
 
     def test_project_nested_under_a_space_is_not_duplicated_in_projects_section(self, conn):
         _make_space(conn, "Uni")
         self._make_project(conn, "Thesis", parent_name="Uni")
         resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
         body = resp.body.decode()
-        # Nested under Uni, as a child...
-        assert 'href="/settings/labels/Thesis" class="tab-btn tab-btn-child' in body
+        # Nested under Uni, as a child, now linking to its own Kanban page
+        # (2026-08-30) rather than the generic label settings page...
+        assert 'href="/projects/Thesis" class="tab-btn tab-btn-child' in body
         # ...not also flattened into a top-level Projects section.
         assert "tab-btn-project" not in body
         assert '>Projects</div>' not in body

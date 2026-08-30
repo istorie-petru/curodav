@@ -16,10 +16,10 @@
      open project alongside every Space, same set Quick Links used to
      render on its own. Each card's href/icon/meta come precomputed from
      the render function now (a Space points at /spaces/<name> with an
-     "N projects" caption, a project points at /tasks with a plain
-     "Project" caption) rather than this template hardcoding the Space
-     path and project-count caption inline -- one shape covers both kinds
-     of card. This "cards" style also renders bare, no .widget-card
+     "N projects" caption, a project points at /projects/<name> with a
+     plain "Project" caption) rather than this template hardcoding the
+     Space path and project-count caption inline -- one shape covers both
+     kinds of card. This "cards" style also renders bare, no .widget-card
      chrome -- see routers/dashboard.py::_is_bare_tile_widget /
      .widget-card--bare (static/style.css). -->
 {% from "_widget_items.html" import widget_empty, filled_card %}
@@ -37,12 +37,13 @@
 {% if data.previews %}
 <div class="project-preview-list">
     {% for pv in data.previews %}
-    {# 2026-08-28 "major rework" session: was `/tasks?label={name}` --
-       the Tasks table's label filter is gone (item 3), so this now
-       lands on the plain Table view, where the project already
-       surfaces as its own group (routers/tasks.py's _build_task_groups)
-       rather than the whole page pre-scoped to it. #}
-    <a class="project-preview-row" href="/tasks">
+    {# This "list" style renders every non-Space label, not just
+       is_project=1 ones (see routers/dashboard.py::_render_spaces_projects's
+       own `labels` sourcing) -- an actual project's row links to its own
+       Kanban page (2026-08-30, routers/projects.py::project_detail); a
+       plain label's row falls back to its generic label page, same
+       destination Settings > Labels' own rows use. #}
+    <a class="project-preview-row" href="{{ ('/projects/' ~ pv.project.name) if pv.project.is_project else ('/settings/labels/' ~ pv.project.name) }}">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
         {% if pv.progress is not none %}
         <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>

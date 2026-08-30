@@ -481,34 +481,65 @@ wins outright; falls back to the pre-1.3 "first non-Space label,
 alphabetical" heuristic only when nothing attached is explicitly
 project-enabled (data written before 1.3).
 
-**Viewing pages — retired (2026-08-15 side work).** `/projects` (the square
-card listing), `/projects/{name}` (the Tasks view), and
-`/projects/{name}/calendar` (the Week Calendar view) are all **gone** —
-direct feedback that they were redundant with capability that already
-existed elsewhere: the Tasks view duplicated `/tasks?group_by=project`
-(1.5); the Week Calendar view duplicated the merged `/calendar/week` grid
-(2026-08-14 side work) filtered to one project, which already shows every
-work allocation regardless of project. **Presentation-only** — every
-lifecycle field/endpoint above (`promote`/`set_dates`/`demote`/`archive`,
-`db.project_status`, `db.find_overlapping_project`, `project_label_for`'s
-supersession) is completely unchanged, still reached from Settings > Labels.
-All three old paths now just redirect (`routers/projects.py::
-list_projects_redirect`/`project_detail_redirect`/`project_calendar_redirect`
-— `GET /projects` → `/tasks?group_by=project`, `GET /projects/{name}[/
-calendar]` → `/tasks?label={name}`), so any bookmark still lands somewhere
-real, same precedent as `/today`/`/week`/`/calendar/timetable`'s own
-retirements (`features/today.md`, `features/week.md`). `base.html`'s
-"Projects" tabbar entry is gone; the Dashboard's `quick_links` widget tiles
-and `_widget_project_preview.html`'s per-project rows both now link to
-`/tasks?label={name}` instead of the old detail page. `_project_card` (the
-card-data helper the deleted pages used) was removed along with them —
-project progress as a Dashboard-visible number still exists via the
-`project_preview` widget's own independent tasks-done/total computation
-(`routers/dashboard.py::_render_project_preview`), unaffected by this.
+**Viewing pages — history.** 1.4's Tasks view and Week Calendar view (both
+at `/projects/{name}[/calendar]`) were retired 2026-08-15 as redundant with
+`/tasks?group_by=project` and the merged `/calendar/week` grid. `GET
+/projects/{name}` then just redirected to the Tasks table until
+2026-08-30 -- over that window a project's *de facto* own page was actually
+`/settings/labels/{name}` (`routers/labels.py::label_detail`), the same
+customizable widget-grid dashboard every plain label/Space gets, since a
+project has no separate entity to hang a real page off of. `GET /projects`
+(the square-card listing) and `GET /projects/{name}/calendar` (Week
+Calendar) are still redirects to `/tasks` -- unaffected by anything below.
 
-**Still open, deferred:** hour-based project progress (every remaining
-progress readout — `project_preview`'s widget — is still completed/total
-*task count*; `db.task_work_hours` exists per-task since 1.4 slice 1 but
-nothing aggregates it to project level). Hiding a completed task's future
-allocations from the active calendar. Both pre-date this retirement and
-are unaffected by it.
+**Project page — rebuilt (2026-08-30, direct request, "not a traditional
+dashboard").** `GET /projects/{name}` (`routers/projects.py::
+project_detail`) is real again, but not a revival of the 1.4 page: no
+widget grid, no banner, no Edit mode. Two parts, top to bottom:
+- **Upcoming events card** -- every future event carrying the project's
+  label (direct `object_labels` membership, not transitive), soonest
+  first, capped at 8. Same `list_events(start=now) + tag filter + sort`
+  recipe the Dashboard's Agenda widget uses for its own "All upcoming"
+  section -- deliberately not recurrence-expanded (a quick glance, not a
+  schedule to page through), rendered through the same context-free
+  `widget_link_row`/`widget_empty` macros (`_widget_items.html`) every
+  widget list uses, without pulling in the widget/customize system itself.
+- **Kanban board** -- every non-archived, non-habit task carrying the
+  project's label (`db.list_tasks_sharing_labels`), columns = task status
+  (Active/In Progress/Waiting/Done -- Archived excluded, same "doesn't pile
+  up forever" convention the old global Kanban used). Reuses that global
+  Kanban's own surviving `.kanban-*` CSS/layout verbatim
+  (`templates/tasks_board.html` was deleted in the 2026-08-28 rework, but
+  the CSS was left on disk unused) -- status changes are click-based, not
+  drag-and-drop, by direct choice when scoping this page: each card has a
+  plain `.pill-select` (`static/tasks_kanban.js`), POSTing through `POST
+  /tasks/{uid}/update-field` (`field=status`), the same endpoint the Table
+  view's inline status pill (and the old drag-based board) used, then
+  moving the card to its new column client-side.
+
+A label that isn't (or is no longer) a project redirects to
+`/settings/labels/{name}` instead of 404ing or rendering an empty board --
+covers a demoted project or a stale link, same "a bookmark still lands
+somewhere real" precedent `/projects`'s and `/projects/{name}/calendar`'s
+own redirects use. `label_detail` now redirects the other way for a real
+project (`is_project=1` -> `/projects/{name}`, 301, same shape as its
+existing `generate_space` -> `/spaces/{name}` guard), and every place that
+links to a project -- the sidebar rail's flat Projects section and nested
+Space-children tree (`base.html`), the Dashboard's Spaces & Projects widget
+(`_widget_spaces_projects.html`, both "list" and "cards" styles) -- points
+at `/projects/{name}` again instead of `/tasks`/`/settings/labels/{name}`.
+
+Every lifecycle field/endpoint above (`promote`/`set_dates`/`demote`/
+`archive`, `db.project_status`, `db.find_overlapping_project`,
+`project_label_for`'s supersession) is unchanged by any of this, still
+reached from Settings > Labels.
+
+**Still open, deferred:** an Agenda *view* (a full events list/tab, vs. this
+page's capped upcoming-events card) and drag-and-drop on the Kanban board
+(today's board is click-only -- dragging a card between columns) are
+tracked in `plans/STATE.md`'s backlog, not part of this slice. Hour-based
+project progress (every progress readout elsewhere -- e.g. the Spaces &
+Projects widget's "list" style -- is still completed/total *task count*;
+`db.task_work_hours` exists per-task since 1.4 slice 1 but nothing
+aggregates it to project level) and hiding a completed task's future
+allocations from the active calendar are unrelated pre-existing gaps.

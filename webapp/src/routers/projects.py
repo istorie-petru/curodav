@@ -4,36 +4,42 @@ label with `is_project=1` plus a bounded start/end period and a computed
 lifecycle (db.project_status). This router owns the promote/demote/dates/
 archive actions that manage a label's Project behavior.
 
-Scope note (2026-08-15, "Retire the standalone /projects page" -- see
-plans/open.md's decision record): 1.3 shipped a dedicated `/projects`
-listing page and 1.4 added its two child views (`project_detail`'s Tasks
-view, `project_calendar`'s Week Calendar view). All three page routes are
-now GONE, per direct feedback that they were redundant with capability that
-already exists elsewhere -- the Tasks view duplicated `/tasks?group_by=
-project` (1.5), and the Week Calendar view duplicated the merged
-`/calendar/week` grid (2026-08-14 side work), which already shows every
-work allocation regardless of project. `GET /projects` and `GET
-/projects/{name}` now just redirect (any bookmark still lands somewhere
-real -- same precedent as `/today`/`/week`/`/calendar/timetable`'s own
-retirements). This was **presentation-only**: `promote`/`set_dates`/
-`demote`/`archive` below are completely unchanged, still the only way a
-label gains/loses Project behavior, still reached from Settings > Labels
-(routers/labels.py). `_project_card`'s project-scoped calendar
-(create/move/delete allocation) is gone too -- it was that removed page's
-own drag-and-drop backend, not used anywhere else (the global `/calendar/
-week` grid has its own independent, cross-project allocation endpoints in
-routers/calendar.py)."""
+History: 1.3 shipped a dedicated `/projects` listing page and 1.4 added its
+two child views (`project_detail`'s Tasks view, `project_calendar`'s Week
+Calendar view). 2026-08-15 retired all three to plain redirects, on the
+grounds that the Tasks view duplicated `/tasks?group_by=project` and the
+Week Calendar view duplicated the merged `/calendar/week` grid -- see
+plans/open.md's "Retire the standalone /projects page" decision record for
+that reasoning, which was correct for those two specific views.
+
+Rebuild (2026-08-30, direct request, STATE.md backlog item 9 "Projects page
+-- view-like, not dashboard-like"): `GET /projects/{name}` is a real page
+again below (`project_detail`), but not a revival of the old Tasks-view
+page -- a project's *default* landing spot until now was actually
+`/settings/labels/{name}` (a project is just a label, so it fell through to
+the same customizable widget-grid dashboard every plain label/Space gets),
+which is the "traditional dashboard" feedback was aimed at. This page is
+task-focused instead: a Kanban board (columns = task status) of every task
+carrying the project's label, with an upcoming-events card above it (real
+calendar events tagged with the same label, not a widget). `GET /projects`
+(the listing) and `GET /projects/{name}/calendar` (the Week Calendar view)
+are unaffected -- still redirects, per the reasoning above; an Agenda-style
+full events view is tracked separately in STATE.md, not part of this slice.
+`promote`/`set_dates`/`demote`/`archive` below are untouched throughout,
+still the only way a label gains/loses Project behavior, still reached
+from Settings > Labels (routers/labels.py)."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 from .. import db
-from ..deps import get_db
+from ..deps import get_db, templates
+from . import tasks as tasks_router
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -56,20 +62,64 @@ def list_projects_redirect():
 
 
 @router.get("/{name}")
-def project_detail_redirect(name: str):
-    """The project detail page (Tasks view + Week Calendar view) is gone
-    (see this module's docstring) -- redirect to the global Tasks table,
-    the closest existing equivalent.
+def project_detail(name: str, request: Request, conn=Depends(get_db)):
+    """The real project page (rebuilt 2026-08-30, see this module's
+    docstring) -- a Kanban board of every task carrying this project's
+    label, with an upcoming-events card above it.
 
-    2026-08-28 "major rework" session update: this used to redirect to
-    `/tasks?label={name}`, pre-filtered to just this project -- the Table
-    view's label filter is gone entirely now (item 3, "filtering reduced
-    to date only"), so there's no query param left to carry the same
-    precision. Landing on the plain Table view still surfaces this
-    project's tasks, just as one of its own groups rather than the whole
-    page scoped to it -- the smaller, safer change per this session's own
-    scoping instructions, not a redesign of the redirect's purpose."""
-    return RedirectResponse(url="/tasks", status_code=302)
+    A label that isn't (or is no longer) a project redirects to its plain
+    label page rather than 404ing or rendering an empty board -- same "a
+    stale bookmark/link still lands somewhere real" precedent this
+    module's other redirects (and routers/spaces.py's own generate_space
+    guard) already establish. Reachable this way if a project gets
+    demoted (routers/projects.py::demote) while something still links to
+    its old /projects/{name} URL."""
+    label = db.effective_label_config(conn, name)
+    if not label.get("is_project"):
+        return RedirectResponse(url=f"/settings/labels/{name}", status_code=303)
+
+    # Board pool: every task carrying this label, minus archived -- same
+    # "archived tasks don't pile up in a Done-adjacent column forever"
+    # convention the old tasks_board.html Kanban used (routers/tasks.py's
+    # retired board_view). list_tasks_sharing_labels already excludes
+    # habit-tracked tasks (a habit is never a Kanban card, on the global
+    # board or here).
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
+    columns: dict[str, list] = {s: [] for s in board_statuses}
+    for t in tasks:
+        columns.setdefault(t["status"], []).append(t)
+
+    # Upcoming events card: every future event carrying this label, same
+    # "list_events(start=now) + tag membership + sort + cap" recipe
+    # routers/dashboard.py's Agenda widget uses for its own "All upcoming"
+    # events section (_render_agenda) -- deliberately not expanded through
+    # recurrence_expand like the Calendar grids are: a project's upcoming
+    # list is a short glance, not a schedule to page through, and this
+    # keeps it consistent with the one other "upcoming events" surface
+    # this app already has.
+    now_iso = _now()
+    events = [
+        e for e in db.list_events(conn, start=now_iso)
+        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"] >= now_iso
+    ]
+    events.sort(key=lambda e: e["start_at"])
+    events = events[:8]
+
+    return templates.TemplateResponse(
+        "project_detail.html",
+        {
+            "request": request,
+            "active_tab": "label",
+            "project": label,
+            "project_status": db.project_status(conn, label),
+            "events": events,
+            "columns": columns,
+            "board_statuses": board_statuses,
+            "status_labels": tasks_router.STATUS_LABELS,
+            "status_colors": tasks_router.STATUS_COLORS,
+        },
+    )
 
 
 @router.get("/{name}/calendar")

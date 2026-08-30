@@ -6723,13 +6723,43 @@ bundle unless they turn out to share the same CSS the first one touches.
    buttons (call/email/message) were suggested. Check what `_task_row.html`-
    equivalent macro contacts uses today before deciding whether this is a
    markup change or purely CSS.
-9. **Projects page — view-like, not dashboard-like; add Kanban + Agenda.**
-   Direct feedback: the project detail page (1.4 slice 2/3: Tasks view +
-   Week Calendar view, tab-switched) currently reads too much like a small
-   dashboard; wants a genuine view-style page instead, with a **Kanban
-   view** (by status, presumably) and an **Agenda view** for upcoming
-   events, added as more tabs alongside the existing Tasks/Week Calendar
-   switcher. Largest item in this queue — likely two slices (Kanban view,
-   Agenda view) rather than one, plus whatever the "not dashboard-like"
-   framing implies for the page's current progress-card header once
-   scoped.
+9. **Shipped — Projects page rebuild: Kanban + upcoming-events card,
+   complete (2026-08-30).** Direct feedback, refined via clarifying
+   questions before starting: (a) Kanban replaces the page outright rather
+   than sitting alongside Tasks/Week Calendar tabs -- there were no such
+   tabs to sit alongside, since project_detail.html/project_calendar.html
+   were deleted in the 2026-08-15 retirement and `GET /projects/{name}`
+   had been a plain redirect ever since (a project's real page over that
+   window was `/settings/labels/{name}`'s customizable widget-grid
+   dashboard, the actual "traditional dashboard" the feedback was aimed
+   at); (b) Kanban columns = task status (Active/In Progress/
+   Waiting/Done, Archived excluded); (c) the events card shows real
+   calendar events tagged with the project's label, not work allocations.
+   `routers/projects.py::project_detail` renders `project_detail.html`:
+   an upcoming-events card (`widget_link_row`/`widget_empty` macros,
+   `_widget_items.html`, no widget/customize machinery) above a Kanban
+   board reusing the retired global board's own surviving `.kanban-*` CSS
+   verbatim, with per-card status changes as a plain `.pill-select`
+   (`static/tasks_kanban.js`, new) rather than drag-and-drop (see below) --
+   `update-field` POST, `field=status`. A label that isn't a project
+   redirects to
+   `/settings/labels/{name}`. `label_detail` gained the mirror-image
+   redirect (`is_project=1` -> `/projects/{name}`, 301, same shape as its
+   existing `generate_space` guard) so a project's page is reachable
+   only one way; every existing link to a project -- the sidebar rail's
+   flat Projects section + nested Space-children tree (`base.html`), the
+   Dashboard's Spaces & Projects widget (`_widget_spaces_projects.html`,
+   both styles) -- now points at `/projects/{name}` instead of `/tasks`/
+   `/settings/labels/{name}`. See `features/tasks.md` § Projects, 20 new
+   tests (`test_project_detail.py`), full suite 1896 passed (fixed 3
+   pre-existing tests' href/redirect assumptions in
+   `test_dashboard_router.py`/`test_sidebar_tree.py`).
+
+   **Still open (not this slice):** an Agenda *view* (a full events
+   list/tab -- this slice only ships the capped upcoming-events card) and
+   drag-and-drop on the Kanban board (today's is click-only, a `.pill-
+   select` per card -- the old global board's pointer-based drag code
+   still exists at `static/tasks_board.js`, unused by this page; wiring an
+   equivalent in was scoped out during this session's clarifying
+   questions, direct choice in favor of shipping the simpler version
+   first).

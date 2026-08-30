@@ -1208,7 +1208,7 @@ class TestSpacesProjectsCardsIncludesProjects:
         by_name = {c["name"]: c for c in data["cards"]}
         assert by_name["NoIcon"]["icon"] == "folder"
         assert by_name["Iconed"]["icon"] == "rocket"
-        assert by_name["NoIcon"]["href"] == "/tasks"
+        assert by_name["NoIcon"]["href"] == "/projects/NoIcon"
 
     def test_scope_everything_also_includes_projects(self, conn):
         # scope=="everything" opts a Space/Project page's own widget

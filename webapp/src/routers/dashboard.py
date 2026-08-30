@@ -486,10 +486,19 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         cards = []
         for lbl in labels:
             children = db.list_child_labels(conn, lbl["name"])
+            # `labels` here can be a Space's own children (label_name set),
+            # which -- per this function's docstring -- pools BOTH
+            # sub-Spaces and promoted projects; a project among them needs
+            # its own page (routers/projects.py), not the /spaces/ URL a
+            # sub-Space gets. When unscoped, `labels` is list_space_labels
+            # (Spaces only), so this is a no-op fallthrough there.
+            href = f"/spaces/{lbl['name']}" if lbl.get("generate_space") else (
+                f"/projects/{lbl['name']}" if lbl.get("is_project") else f"/settings/labels/{lbl['name']}"
+            )
             cards.append({
                 "uid": lbl["name"],
                 "name": lbl["name"],
-                "href": f"/spaces/{lbl['name']}",
+                "href": href,
                 "icon": lbl.get("icon") or "layers",
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
@@ -509,11 +518,12 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 cards.append({
                     "uid": lbl["name"],
                     "name": lbl["name"],
-                    # 2026-08-15: /projects/{name} is gone -- points at the
-                    # Tasks table instead, same destination Quick Links'
-                    # own project tiles already used (see that widget's
-                    # own retired comment history in this file's git log).
-                    "href": "/tasks",
+                    # 2026-08-30: /projects/{name} is real again (a Kanban
+                    # board, routers/projects.py::project_detail) -- was
+                    # "/tasks" while the page was a redirect stub
+                    # (2026-08-15 through 2026-08-30, see that history in
+                    # this file's git log).
+                    "href": f"/projects/{lbl['name']}",
                     "icon": lbl.get("icon") or "folder",
                     "color": lbl.get("color") or "blue",
                     "description": "",

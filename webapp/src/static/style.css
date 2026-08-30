@@ -2040,13 +2040,21 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .kanban-cards.drop-hover{background:var(--accent-neutral-subtle);}
 .kanban-card{
   background:var(--bg-elevated); border:none; border-radius:var(--radius-control);
-  padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); cursor:grab; display:flex; flex-direction:column; gap:var(--space-1);
+  padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); display:flex; flex-direction:column; gap:var(--space-1);
 }
 .kanban-card.dragging{opacity:.4;}
 .kanban-card-title{color:var(--fg-primary); font-size:var(--text-callout); font-weight:600; text-decoration:none;}
 .kanban-card-title:hover{text-decoration:underline;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
 .kanban-empty{color:var(--fg-tertiary); font-size:var(--text-caption); text-align:center; padding:14px 0;}
+/* Project page Kanban board's per-card status control (templates/
+   project_detail.html, static/tasks_kanban.js) -- a plain .pill-select
+   (native <select>, no drag-and-drop -- see that JS file's own comment on
+   why this page is click-based). align-self:flex-start keeps it sized to
+   its own content instead of stretching to the card's full width, the
+   default cross-axis behavior a column flex child gets with no explicit
+   align-items on the parent. */
+.kanban-status-select{align-self:flex-start; margin-top:2px;}
 
 /* Narrow windows / mobile: from a full-width desktop screen down to
    1100px the columns just resize to fill the board (flex:1 1 0 +

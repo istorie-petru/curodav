@@ -139,7 +139,14 @@
 // btn's left padding and the header/toggle's sizing are unconditional
 // now, and both states' highlight uses the same --radius-sm) -- bumped
 // per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v42";
+// v43 (2026-08-30): style.css changed again (new `.kanban-status-select`
+// rule + dropped `.kanban-card`'s `cursor:grab`, for the rebuilt Projects
+// page's click-based Kanban board, plans/STATE.md backlog item 9) --
+// bumped per the same v15 lesson. static/tasks_kanban.js itself is new
+// but page-specific (project_detail.html only), not added to
+// SHELL_ASSETS -- same "not shell-critical" category as tasks_table.js/
+// tasks_board.js above.
+const CACHE_NAME = "cc-shell-v43";
 
 const SHELL_ASSETS = [
   "/offline",

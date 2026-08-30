@@ -272,17 +272,22 @@
         {% for l in spaces %}
         {% set has_children = l.children|length > 0 %}
         {# A child's own href mirrors label_detail.html's Projects section:
-           a child that's itself a Space goes to its generated page, a plain
-           child label goes to its settings edit page (there's no separate
-           "project page" route -- 1.4's standalone /projects was retired,
-           see plans/STATE.md's 2026-08-15 removal note). namespace() is
-           needed (not a plain {% set %}) because child_active is written
-           from inside a nested {% for %} and read after it -- a bare
-           {% set %} inside that loop wouldn't leak back out to this scope. #}
+           a child that's itself a Space goes to its generated page, a
+           promoted-project child goes to its own Kanban page
+           (routers/projects.py::project_detail, real again as of
+           2026-08-30), a plain child label goes to its settings edit
+           page. namespace() is needed (not a plain {% set %}) because
+           child_active is written from inside a nested {% for %} and read
+           after it -- a bare {% set %} inside that loop wouldn't leak
+           back out to this scope. #}
         {% set ns = namespace(child_active=false) %}
         {% if has_children %}
           {% for child in l.children %}
-            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else ('/settings/labels/' ~ child.name) %}
+            {# 2026-08-30: a nested child that's itself a promoted project
+               gets its own Kanban page now (routers/projects.py::
+               project_detail) -- was /settings/labels/{name} while that
+               page was a redirect stub, see that route's own comment. #}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
             {% if request.url.path == child_href %}{% set ns.child_active = true %}{% endif %}
           {% endfor %}
         {% endif %}
@@ -300,7 +305,11 @@
           {% if has_children %}
           <div class="sidebar-tree-children">
             {% for child in l.children %}
-            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else ('/settings/labels/' ~ child.name) %}
+            {# 2026-08-30: a nested child that's itself a promoted project
+               gets its own Kanban page now (routers/projects.py::
+               project_detail) -- was /settings/labels/{name} while that
+               page was a redirect stub, see that route's own comment. #}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
             {# 2026-08-29 follow-up: no more `icon-sm` here -- it made a
                child's icon (12px) visibly smaller than its parent Space's
                (20px, the plain .tab-btn .icon size) for no reason tied to
@@ -332,7 +341,11 @@
         <div class="tab-separator" role="separator" aria-label="Projects"></div>
         <div class="sidebar-section-label" aria-hidden="true">Projects</div>
         {% for p in projects %}
-        {% set project_href = ('/spaces/' ~ p.name) if p.generate_space else ('/settings/labels/' ~ p.name) %}
+        {# 2026-08-30: a project's own page moved to /projects/{name} (a
+           Kanban board, routers/projects.py::project_detail) -- was
+           /settings/labels/{name} (the generic widget-grid dashboard
+           every plain label gets), see that route's own comment. #}
+        {% set project_href = ('/spaces/' ~ p.name) if p.generate_space else ('/projects/' ~ p.name) %}
         <a href="{{ project_href }}" class="tab-btn tab-btn-project {% if request.url.path == project_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or 'folder') }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
