@@ -495,7 +495,17 @@ Calendar) are still redirects to `/tasks` -- unaffected by anything below.
 **Project page — rebuilt (2026-08-30, direct request, "not a traditional
 dashboard").** `GET /projects/{name}` (`routers/projects.py::
 project_detail`) is real again, but not a revival of the 1.4 page: no
-widget grid, no banner, no Edit mode. Two parts, top to bottom:
+widget grid (no add/edit/move/resize/stack a widget, no "New widget"/
+"Reset layout" -- direct feedback's actual target). It keeps the same
+shared page-header banner + avatar overlap every other "dashboard type"
+page gets (`_page_banner.html`, direct follow-up request: "the banner
+header, the profile picture" -- that's page chrome, not the widget-grid
+machinery the first framing had lumped it in with by mistake), including
+the edit-mode-gated Add/Change banner button; `page_url` for that button
+is `/projects/{name}` directly, not `dashboard_router._return_url` (which
+predates this page and would resolve a project label to
+`/settings/labels/{name}`). Two content parts below the header, top to
+bottom:
 - **Upcoming events card** -- every future event carrying the project's
   label (direct `object_labels` membership, not transitive), soonest
   first, capped at 8. Same `list_events(start=now) + tag filter + sort`

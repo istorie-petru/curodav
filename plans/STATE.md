@@ -6765,6 +6765,28 @@ bundle unless they turn out to share the same CSS the first one touches.
    `--shadow-card`), not the positioning; `sw.js` CACHE_NAME bumped v43 ->
    v44 (style.css changed).
 
+   **Follow-up (2026-08-30, same session)** -- direct request ("the
+   banner header, the profile picture... please implement"): the first
+   pass had deliberately left off the shared page-header banner + avatar
+   overlap (`_page_banner.html`, the same "dashboard type" page-chrome
+   Home/`label_detail.html`/`space_detail.html` all get), reading the
+   "not a traditional dashboard" feedback as ruling it out along with the
+   widget grid -- wrong distinction; the banner/avatar is page chrome, the
+   widget grid is the actual "dashboard" the feedback meant. Added:
+   `project_detail`'s context now includes `_page_banner_context(conn,
+   name)` + `profile_photo`/`display_name`/`edit_mode` (`EDIT_MODE_KEY`),
+   `project_detail.html` includes `_page_banner.html` with the title/
+   edit-mode "Add/Change banner" button (label_detail.html's own pattern,
+   minus the widget-grid-only actions -- no "New widget"/"Reset layout",
+   nothing here for those to act on). `page_url` is `/projects/{name}`
+   directly, not `dashboard_router._return_url` (that helper predates this
+   page and resolves a project label to `/settings/labels/{name}`, which
+   would bounce the banner editor's save to the wrong URL). Page opted
+   into `main-full-width` (label_detail.html's own fix for the same
+   "boxed column too narrow" issue, here because the Kanban board's own
+   columns need more than 1120px to sit side by side). 5 new tests, full
+   suite 1901 passed.
+
    **Still open (not this slice):** an Agenda *view* (a full events
    list/tab -- this slice only ships the capped upcoming-events card) and
    drag-and-drop on the Kanban board (today's is click-only, a `.pill-

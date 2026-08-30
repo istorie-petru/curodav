@@ -169,3 +169,60 @@ class TestUpcomingEventsCard:
             _event(conn, f"e{i}", ["Trip"], when)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         assert len(resp.context["events"]) == 8
+
+
+class TestHeaderBannerAndAvatar:
+    """Direct request ("the banner header, the profile picture") -- this
+    page is a "dashboard type" page for the shared page-header convention
+    (_page_banner.html's own docstring already named this route as a
+    future caller) even though it deliberately has no widget grid. Covers
+    the same context _page_banner.html needs, plus the edit-mode-gated
+    Add/Change banner control -- not the image rendering itself, which
+    test_banners.py already covers generically."""
+
+    def test_no_banner_set_falls_back_to_default_and_renders_plain_title(self, conn):
+        _promote(conn, "Trip")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        body = resp.body.decode()
+        assert "page-banner-wrap" in body
+        assert "page-banner-title-plain" in body
+        assert resp.context["has_own_banner"] is False
+
+    def test_own_banner_renders_cover_and_avatar_overlap(self, conn):
+        _promote(conn, "Trip")
+        db.set_page_banner(conn, "Trip", {"kind": "remote", "image_url": "https://example.com/a.jpg", "alt": "x"})
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        body = resp.body.decode()
+        assert "page-banner-avatar-wrap" in body
+        assert "https://example.com/a.jpg" in body
+        assert resp.context["has_own_banner"] is True
+        assert 'class="page-banner-title"' in body
+
+    def test_add_banner_button_only_shows_in_edit_mode(self, conn):
+        _promote(conn, "Trip")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert "Add banner" not in resp.body.decode()
+        db.set_app_meta(conn, "edit_mode_enabled", "1")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        body = resp.body.decode()
+        assert "Add banner" in body
+        assert "/banners/editor?scope=Trip&amp;page_url=/projects/Trip" in body
+
+    def test_change_banner_label_once_a_banner_is_set(self, conn):
+        _promote(conn, "Trip")
+        db.set_page_banner(conn, "Trip", {"kind": "remote", "image_url": "https://example.com/a.jpg", "alt": "x"})
+        db.set_app_meta(conn, "edit_mode_enabled", "1")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        body = resp.body.decode()
+        assert "Change banner" in body
+        assert "Add banner" not in body
+
+    def test_page_url_points_at_the_projects_route_not_settings_labels(self, conn):
+        # Regression guard: dashboard_router._return_url would resolve a
+        # project label to /settings/labels/{name} (it predates this page)
+        # -- the banner editor must redirect back to /projects/{name}
+        # instead, or saving a banner here bounces the user to the wrong
+        # page.
+        _promote(conn, "Trip")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["page_url"] == "/projects/Trip"

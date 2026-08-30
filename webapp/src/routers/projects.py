@@ -38,7 +38,8 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import EDIT_MODE_KEY, get_db, templates
+from . import dashboard as dashboard_router
 from . import tasks as tasks_router
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -106,20 +107,36 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
     events.sort(key=lambda e: e["start_at"])
     events = events[:8]
 
-    return templates.TemplateResponse(
-        "project_detail.html",
-        {
-            "request": request,
-            "active_tab": "label",
-            "project": label,
-            "project_status": db.project_status(conn, label),
-            "events": events,
-            "columns": columns,
-            "board_statuses": board_statuses,
-            "status_labels": tasks_router.STATUS_LABELS,
-            "status_colors": tasks_router.STATUS_COLORS,
-        },
-    )
+    ctx = {
+        "request": request,
+        "active_tab": "label",
+        "project": label,
+        "project_status": db.project_status(conn, label),
+        "events": events,
+        "columns": columns,
+        "board_statuses": board_statuses,
+        "status_labels": tasks_router.STATUS_LABELS,
+        "status_colors": tasks_router.STATUS_COLORS,
+        # Header banner + avatar (2026-08-30, direct request -- "the banner
+        # header, the profile picture") -- same page-header treatment
+        # every other "dashboard type" page gets (Home/label_detail.html/
+        # spaces.py's own space_detail, per _page_banner.html's own
+        # docstring, which already named this route as a future caller).
+        # Not part of the widget-grid machinery this page deliberately
+        # doesn't have (no "New widget"/"Reset layout" -- those are
+        # per-widget actions with nothing to act on here); just the shared
+        # cover image + avatar overlap and the "Add/Change banner" control.
+        "edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+        "profile_photo": db.get_profile_photo(conn),
+        "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
+        # Not dashboard_router._return_url(name, conn=conn) -- that helper
+        # resolves a project label to /settings/labels/{name} (it predates
+        # this page), which would bounce the banner editor's save back to
+        # the wrong URL. This page's own path is simply /projects/{name}.
+        "page_url": f"/projects/{name}",
+    }
+    ctx.update(dashboard_router._page_banner_context(conn, name))
+    return templates.TemplateResponse("project_detail.html", ctx)
 
 
 @router.get("/{name}/calendar")

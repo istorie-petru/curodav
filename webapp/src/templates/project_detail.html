@@ -1,23 +1,41 @@
 {% extends "base.html" %}
 {% from "_widget_items.html" import widget_empty, widget_link_row %}
 {% block title %}{{ project.name }}{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
 <!-- Project page (rebuilt 2026-08-30, replacing the 2026-08-15 redirect
      stub -- see routers/projects.py's module docstring). Direct request:
      "not a traditional dashboard" -- so unlike label_detail.html/
-     dashboard.html this page has no customizable widget grid, no banner,
-     no Edit mode. Just this project's own tasks (Kanban, by status) with
-     an upcoming-events card above it. -->
+     dashboard.html this page has no customizable widget grid: no widget
+     add/edit/move/resize/stack, no "New widget", no "Reset layout". It
+     DOES still get the same page-header banner + avatar every other
+     "dashboard type" page has (_page_banner.html, direct request "the
+     banner header, the profile picture") -- that's a page-chrome
+     convention shared app-wide, not part of the widget-grid machinery
+     the "not a dashboard" feedback was actually about. -->
 {% block content %}
+<div class="page-banner-wrap">
+{% include "_page_banner.html" %}
+{% if banner %}
+<h1 class="page-banner-title">{{ icon(project.icon or 'folder') }} {{ project.name }}</h1>
+{% endif %}
+<div class="page-banner-actions">
+    {% if not banner %}
+    <h1 class="page-banner-title-plain">{{ icon(project.icon or 'folder') }} {{ project.name }}</h1>
+    {% endif %}
+    {% if edit_mode %}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    {% endif %}
+</div>
+</div>
+
 <div class="toolbar top-app-bar">
-    <a href="/settings/labels" class="icon-btn" title="Back to Labels">{{ icon('chevron-left') }}</a>
-    <span class="cell-tag cal-{{ project.color }}">{% if project.icon %}{{ icon(project.icon, 'icon-sm') }} {% endif %}{{ project.name }}</span>
     <span class="tag-usage-count" title="Lifecycle status">{{ project_status }}</span>
+    {% if project.start_date or project.end_date %}
+    <span class="settings-hint">{{ project.start_date or '?' }} &ndash; {{ project.end_date or '?' }}</span>
+    {% endif %}
     <div class="spacer"></div>
     <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab title="New task">{{ icon('plus') }} New task</a>
 </div>
-{% if project.start_date or project.end_date %}
-<p class="settings-hint">{{ project.start_date or '?' }} &ndash; {{ project.end_date or '?' }}</p>
-{% endif %}
 
 <!-- Upcoming events card -- every future event tagged with this project's
      label, see routers/projects.py::project_detail's own comment on why
