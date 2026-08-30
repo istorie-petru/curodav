@@ -145,10 +145,25 @@
     return h + (hour < 12 ? " AM" : " PM");
   }
 
-  function fmtDate(key) {
+  function fmtDate(key, compact) {
     if (!key) return "";
     const { year, month, day } = parseDateKey(key);
-    return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
+    const d = new Date(year, month - 1, day);
+    // 2026-08-30 (direct feedback, Tasks table: "the date seems a bit too
+    // long, too hard to read") -- `.dtp--compact` (the Tasks table's Date
+    // cell and the Work sessions card, the only two current callers) drops
+    // the weekday ("Fri, ") entirely and only prints the year when it
+    // isn't the current one -- "4 Sep" reads at a glance in a dense table
+    // row/column the way "Fri, 4 Sept 2026" doesn't. Every other `.dtp`
+    // caller (event/task/holiday forms, ...) is unaffected -- they don't
+    // carry the compact class, so they keep the fuller weekday+year format
+    // a form field has room for.
+    if (compact) {
+      const opts = { day: "numeric", month: "short" };
+      if (year !== new Date().getFullYear()) opts.year = "numeric";
+      return d.toLocaleDateString("en-GB", opts);
+    }
+    return d.toLocaleDateString("en-GB", {
       weekday: "short", day: "numeric", month: "short", year: "numeric",
     });
   }
@@ -180,6 +195,7 @@
     // was a native <input type="date" max="today">; future dates must not
     // be pickable there).
     const maxDate = container.getAttribute("data-dtp-max") || "";
+    const compact = container.classList.contains("dtp--compact");
     const inputs = container.querySelectorAll('input[type="hidden"]');
     const startInput = inputs[0];
     const endInput = inputs[1];
@@ -240,7 +256,7 @@
     container.appendChild(panel);
 
     function labelText() {
-      if (mode === "date") return state.date ? fmtDate(state.date) : placeholder;
+      if (mode === "date") return state.date ? fmtDate(state.date, compact) : placeholder;
       const start = state.startHour !== null ? fmtHour(state.startHour, use12h) : null;
       const end = state.endHour !== null ? fmtHour(state.endHour, use12h) : null;
       if (start === null || end === null) return placeholder;

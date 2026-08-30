@@ -62,10 +62,58 @@
    sliced the page on that id to isolate "the Project/Unassigned/
    Completed region" (as opposed to `#habits-table`) still find exactly
    that region, since none of them actually depended on the element
-   being a `<table>` rather than a container. Every group keeps its own
-   full `<thead>` (not a shared one) since it's genuinely a separate
-   table now -- a screen reader landing inside any one card still gets
-   real column headers, not just the divider row's plain text. #}
+   being a `<table>` rather than a container.
+
+   2026-08-30 direct follow-up ("make it a bit more minimalist... drop
+   repeated column headers"): each group's own `<table>` used to carry
+   its own full `<thead>` -- correct per-table semantics, but with
+   several groups on the page it meant "TITLE / STATUS / DATE / LABELS"
+   printed once per card, which read as noisy repetition rather than
+   real information. One shared header now sits above the whole list
+   instead (`.task-group-header-card`, a header-only table with no rows
+   of its own) -- still a real `<thead>`/`<th>` for a screen reader
+   landing on the page, just not restated inside every card. Its `<th>`
+   widths are copied verbatim from each group table's own `<colgroup>`
+   (below) so the columns still line up card to card -- each group table
+   no longer has its own `<th>` width declarations to anchor its columns
+   now that the `<thead>` moved out, so a `<colgroup>` (not just this
+   header table's) is what actually keeps every card's Status/Date/
+   Labels aligned to this header and to each other, regardless of how
+   wide any one row's own content happens to be. If either `<colgroup>`
+   changes, change both.
+
+   2026-08-30 further direct follow-up ("the columns don't align... date
+   seems too long") -- `table-layout:fixed` (style.css) makes this
+   `<colgroup>` authoritative rather than a hint, which is what actually
+   guarantees every group's separate `<table>` renders identical column
+   widths regardless of that table's own row content (a `<colgroup>`
+   alone isn't enough under the default `table-layout:auto` -- see that
+   rule's own comment). Title now gets an explicit width too (240px,
+   its old auto-layout max-width) rather than being left to "whatever's
+   left" -- under fixed layout an unspecified column still resolves
+   deterministically, but giving Title a real width and only leaving
+   Labels unspecified means Labels (genuinely variable -- zero to several
+   pills) is the one column that actually should flex, not Title. Date
+   narrowed 150px -> 110px alongside the compact date format itself
+   (static/datetime_picker.js's `fmtDate` -- "4 Sep" instead of "Fri, 4
+   Sept 2026" for `.dtp--compact`) -- both changes target the same
+   complaint, a width that no longer needs the extra room. #}
+{% set _task_colgroup %}<colgroup><col style="width:26px"><col style="width:240px"><col style="width:130px"><col style="width:110px"><col><col style="width:40px"></colgroup>{% endset %}
+<div class="card table-scroll task-group-header-card">
+<table class="task-table task-table-grouped">
+    {{ _task_colgroup }}
+    <thead>
+        <tr>
+            <th style="width:26px"></th>
+            <th style="width:240px">Title</th>
+            <th style="width:130px">Status</th>
+            <th style="width:110px">Date</th>
+            <th>Labels</th>
+            <th style="width:40px"></th>
+        </tr>
+    </thead>
+</table>
+</div>
 <div id="task-table" class="task-group-list">
 {% for grp in _other_groups %}
 {# 2026-08-30 (direct feedback: "how the table works, especially with
@@ -81,28 +129,8 @@
    lose. #}
 {% if grp.tasks or grp.kind != 'completed' %}
 <div class="card table-scroll task-group-card">
-<table class="task-table">
-    <thead>
-        <tr>
-            <th style="width:26px"></th>
-            <th>Title</th>
-            {# 2026-08-30 (direct feedback, "how the table works... grouped
-               rows") -- Status/Date used to have no width of their own;
-               table auto-layout handed their share of the leftover
-               (stretched-to-container) width to whichever column happened
-               to get it, which in practice showed up as a big blank gutter
-               between the Date and Labels columns rather than Labels
-               actually starting right after Date. Capping these two to
-               their real content width (a pill dropdown / a formatted
-               date + caret, neither ever gets much wider than this) means
-               the table's remaining stretch goes to Labels instead, where
-               it's actually useful. #}
-            <th style="width:130px">Status</th>
-            <th style="width:150px">Date</th>
-            <th>Labels</th>
-            <th style="width:40px"></th>
-        </tr>
-    </thead>
+<table class="task-table task-table-grouped">
+    {{ _task_colgroup }}
     <tbody>
         {# 2026-08-29 direct follow-up ("instead of a separate row for add
            task, have a + button on the group label name row") -- every

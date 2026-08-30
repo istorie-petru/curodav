@@ -8,6 +8,32 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Tasks table direct follow-up -- minimalist pass + column
+  alignment + shorter dates, complete (2026-08-30), on top of the Option B
+  grouping redesign below. Three pieces: (1) dropped the repeated Title/
+  Status/Date/Labels header each group card printed on its own -- one
+  shared header-only table (`.task-group-header-card`) now sits above the
+  list instead, still a real `<thead>`/`<th>` for screen readers, just not
+  restated per card. (2) The columns didn't actually line up card to card
+  -- a shared `<colgroup>` alone is only a hint under the default
+  `table-layout:auto` (each separate `<table>` sizes its own columns from
+  its own row content), so a card with short text and one with long text
+  could legitimately disagree on a column's width despite an identical
+  colgroup. New `.task-table-grouped{table-layout:fixed}` (scoped away
+  from `#habits-table`, a single self-contained table with no cross-table
+  alignment need) makes the colgroup authoritative instead of a hint --
+  every group card now renders pixel-identical columns. Traded off: a
+  `.task-title-cell`'s CSS-only "widen while editing" trick no longer
+  resizes the *column* under fixed layout (its `overflow-x:auto` still
+  lets the cell's own content scroll in place). (3) Date cells were "Fri,
+  4 Sept 2026" everywhere -- too long for a narrow, now-aligned column.
+  `static/datetime_picker.js`'s `fmtDate` gained a `compact` mode (drops
+  the weekday always, drops the year unless it isn't the current one --
+  "4 Sept" vs "4 Sept 2027"), gated on the existing `.dtp--compact` class
+  so every other `.dtp` caller (event/task/holiday forms) keeps the fuller
+  format a form field has room for; Date column narrowed 150px -> 110px to
+  match. No test changes needed -- existing structural tests didn't assert
+  on table-layout or exact date text. Full suite still 1934 passed.
 - **Fixed/Shipped:** UI critique pass -- Tasks table, modal windows, banners,
   complete (2026-08-30) -- five pieces, all direct feedback in one session:
   (1) **Modal min-height tiers**: `.modal`'s blanket `min-height:600px`

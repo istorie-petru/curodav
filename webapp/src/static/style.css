@@ -1264,6 +1264,29 @@ label.seg-btn[hidden]{display:none;}
   background-attachment:local, local, scroll, scroll;
 }
 table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
+/* 2026-08-30 (direct feedback, "the columns don't align" -- Option B's
+   per-group tables): default `table-layout:auto` sizes each column from
+   that specific table's own row content, so a `<colgroup>` shared across
+   several *separate* tables (_tasks_body.html's per-group `.task-table`s)
+   is only ever a hint under auto layout, not a guarantee -- one card with
+   short titles/dates and another with long ones could legitimately end up
+   with different actual column widths despite the identical colgroup,
+   which is exactly the misalignment reported. `table-layout:fixed` makes
+   the colgroup (or first row) authoritative and content-blind: every
+   `.task-table` with the same colgroup renders pixel-identical columns
+   regardless of what's actually in any given row. Trade-off: a fixed
+   column's width no longer responds to a `:has([data-editing])`-style
+   per-cell override (see `.task-title-cell`'s own comment) -- the title
+   cell's own `overflow-x:auto` still lets long/being-edited text scroll
+   in place, it just doesn't visibly widen the column anymore. */
+/* Scoped to `.task-table-grouped` specifically, not the whole `.task-table`
+   class -- `#habits-table` is a single self-contained table (no sibling
+   tables sharing its colgroup to stay aligned with), and its 5 flexible
+   columns (Title/Check-in/Cadence/Streak/Labels) genuinely benefit from
+   auto layout's content-based sizing; forcing fixed layout there would
+   just split them evenly regardless of how little a Check-in/Cadence
+   cell actually needs, squeezing Title/Labels for no reason. */
+.task-table-grouped{table-layout:fixed;}
 thead th{
   text-align:left; font-weight:600; color:var(--fg-secondary); font-size:13px;
   text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
@@ -1807,6 +1830,16 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    sideways in place (drag or shift-scroll to read the rest) instead of the
    whole row/table doing it. Every other column keeps its natural content
    width and stays fully visible regardless of how long any one title is. */
+/* 2026-08-30: `.task-table{table-layout:fixed}` (added for cross-card
+   column alignment, see that rule's own comment) makes the `<colgroup>`
+   authoritative for column width -- a `<td>`'s own min-width/max-width
+   below no longer changes the *column's* rendered width, only these two
+   rules' `overflow-x:auto` still does anything, letting long/being-
+   edited title text scroll sideways inside the cell's now-fixed 240px
+   column instead of widening it. Left in place rather than deleted: the
+   :has([data-editing]) rule is inert for sizing now but still harmless,
+   and reverting to auto layout would resurrect the alignment bug this
+   was written to fix. */
 .task-title-cell{min-width:140px; max-width:240px; overflow-x:auto; overflow-y:hidden;}
 .task-title-cell:has([data-editing]){min-width:280px; max-width:320px;}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
@@ -1836,6 +1869,19 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    open work rather than interleaving by date/priority. */
 .task-row-completed{opacity:.55;}
 .task-row-completed td:nth-child(2) a{text-decoration:line-through;}
+/* Shared column-header bar above the group card list (2026-08-30 direct
+   feedback, "make it a bit more minimalist... drop repeated column
+   headers") -- a header-only table with no body rows, so its `<th>`
+   widths line up with the identical widths each group's own table below
+   uses. Flattened relative to the plain `.card` it's built on (no
+   shadow, no hover-lift, tighter vertical padding) -- it's a label row,
+   not a bounded content card like the groups below it, and stacking two
+   card treatments back to back would be more chrome, not less. */
+.task-group-header-card{
+  box-shadow:none; padding:var(--space-2) var(--space-4); margin-bottom:var(--space-2);
+}
+.task-group-header-card:hover{box-shadow:none; transform:none;}
+.task-group-header-card thead th{padding-top:0; padding-bottom:0; border-bottom:none;}
 .task-section-divider td{
   padding:6px 10px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); border-bottom:1px solid var(--separator);
