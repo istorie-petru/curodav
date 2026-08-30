@@ -6,6 +6,13 @@
 {% include "_settings_breadcrumb.html" with context %}
 <h1>General</h1>
 
+{% if request.query_params.get('note') %}
+<div class="settings-hint" style="color:var(--md-primary,var(--accent))">{{ request.query_params.get('note') }}</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="settings-hint" style="color:var(--md-error,#b3261e)">{{ request.query_params.get('error') }}</div>
+{% endif %}
+
 <div class="card">
     <!-- Profile picture (2026-08-09, routers/settings.py) -- the user's
          own avatar, stored in app_meta (db.py's profile-photo helpers).
@@ -136,5 +143,76 @@
          direct request) -- the Month/Day switcher's visibility toggle added
          2026-08-28 is gone; both views are unconditionally available now,
          same as before that setting existed. -->
+</div>
+
+<!-- Login & security (2026-08-30) -- old/new/confirm password forms for
+     the app's own login (routers/settings.py::change_login_password) and
+     the app's stored Radicale connection credential (::
+     change_radicale_password). Each card is a no-op form (env hint,
+     no inputs) when the corresponding value is env-configured -- same
+     pattern /settings/radicale (Data & Maintenance) already uses. -->
+<div class="settings-group">
+    <h2 class="section-label">{{ icon('lock', 'icon-sm') }} Login & security</h2>
+    <div class="card">
+        {% if auth_env_configured %}
+        <p class="settings-hint">Login is set via environment variables (<code>CC_AUTH_USERNAME</code>/<code>CC_AUTH_PASSWORD</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
+        {% else %}
+        <p class="settings-hint">
+            {% if has_login_account %}Signed in as <strong>{{ login_username }}</strong>. Enter your current password to change it.
+            {% else %}No login is set up yet -- setting a password here turns login on for this install (username: <code>admin</code>).{% endif %}
+        </p>
+        <form method="post" action="/settings/change-password">
+            {% if has_login_account %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">Current password</span>
+                <span class="spacer"></span>
+                <input type="password" name="current_password" autocomplete="off" style="max-width: 320px;">
+            </div>
+            {% endif %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">New password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password" autocomplete="off" style="max-width: 320px;">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Repeat new password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password_confirm" autocomplete="off" style="max-width: 320px;">
+            </div>
+            <div class="settings-field-row">
+                <span class="spacer"></span>
+                <button type="submit" class="btn tonal">{{ icon('check-circle', 'icon-sm') }} {{ 'Change password' if has_login_account else 'Set password' }}</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+    <div class="card">
+        {% if radicale_env_configured %}
+        <p class="settings-hint">Radicale connection is set via environment variables (<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
+        {% else %}
+        <p class="settings-hint">Radicale sync password{% if radicale_username %} for <strong>{{ radicale_username }}</strong>{% endif %}. Updates this app's stored copy of the credential (not the Radicale server's own account) -- takes effect after a restart. Use <a href="/settings/data-maintenance">Data & Maintenance</a> to change the URL or username.</p>
+        <form method="post" action="/settings/radicale-password">
+            <div class="settings-field-row">
+                <span class="settings-field-label">Current password</span>
+                <span class="spacer"></span>
+                <input type="password" name="current_password" autocomplete="off" style="max-width: 320px;">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">New password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password" autocomplete="off" style="max-width: 320px;">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Repeat new password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password_confirm" autocomplete="off" style="max-width: 320px;">
+            </div>
+            <div class="settings-field-row">
+                <span class="spacer"></span>
+                <button type="submit" class="btn tonal">{{ icon('check-circle', 'icon-sm') }} Change Radicale password</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}

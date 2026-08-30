@@ -44,6 +44,19 @@ login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
     `Secure` flag for this request (see its own docstring) -- both deploy
     configs already pass uvicorn `--proxy-headers`, so this reflects the
     real scheme even behind a TLS-terminating reverse proxy.
+
+2026-08-30: Settings > General gained an old/new/confirm "Login &
+security" password-change form (`routers/settings.py::
+change_login_password`) -- the always-available counterpart to /setup's
+one-time account creation, since that page only ever renders once per
+install (and, in local/dev mode, never at all -- see setup_required).
+Works whether or not an account exists yet: with none, it creates one
+under a fixed "admin" username with no old-password check; with one, the
+current password must verify first. This is also why `auth_enabled` no
+longer special-cases `deploy_mode == "local"` -- a password set through
+this form has to actually take effect immediately, in every deploy mode,
+not just production (see `auth_enabled`'s own docstring for the tradeoff
+that change makes).
 """
 
 from __future__ import annotations
@@ -104,25 +117,32 @@ PUBLIC_PATHS = {"/login"}
 def auth_enabled(settings, conn=None) -> bool:
     """Whether login is enforced for this install: true when EITHER the
     env-var pair (CC_AUTH_USERNAME/PASSWORD, see config.py's docstring) is
-    configured, OR a first-run /setup account has been persisted
-    (has_persisted_credentials). A `None` settings (middleware before the
-    lifespan set it, or a bare test app) counts as disabled.
+    configured, OR a first-run /setup account (or a password set later
+    through Settings > General, routers/settings.py::change_login_password)
+    has been persisted (has_persisted_credentials). A `None` settings
+    (middleware before the lifespan set it, or a bare test app) counts as
+    disabled.
 
     `conn` is optional -- pass one in when the caller already holds it
     (routers do); otherwise a short-lived connection is opened only when
     the env pair is absent, the same "conn optional, opened on demand"
-    convention session_secret uses."""
+    convention session_secret uses.
+
+    2026-08-30: local/dev installs (deploy_mode == "local") now consult the
+    DB here too, same as production -- previously this short-circuited to
+    False for local mode unconditionally, on the reasoning that the env-var
+    pair was the only way to turn login on there. That made Settings >
+    General's password form silently no-op for the common "just run it
+    locally" case: a password would save to app_meta but never actually be
+    checked. AuthMiddleware._configured still caches the "is this
+    configured" answer on app.state once it flips True (see its own
+    docstring), so the steady-state cost of this change is one extra DB
+    read per request only for the genuinely-still-unconfigured window --
+    zero once an account exists, same as production always paid."""
     if not settings:
         return False
     if settings.auth_username and settings.auth_password:
         return True
-    if settings.deploy_mode == "local":
-        # Local dev/manual runs never consult the DB for this -- the
-        # env-var pair is the only way to turn login on there, so the
-        # common "nothing configured" case costs zero DB hits per request,
-        # exactly like before this function grew a persisted-credentials
-        # fallback at all.
-        return False
     return has_persisted_credentials(settings, conn)
 
 
@@ -344,17 +364,24 @@ class AuthMiddleware:
         # (deploy_mode != "local", see config.py) with no account
         # configured yet -- env pair or persisted -- must be walked through
         # GET/POST /setup before anything else is reachable. This check
-        # comes before the auth_enabled early-out below on purpose: an
+        # comes before the session-cookie check below on purpose: an
         # unconfigured production install is NOT "auth disabled", it's
-        # "not set up yet." Local dev/manual runs skip this branch
-        # entirely -- auth_enabled's own env-pair-only check below is all
-        # that applies there, same as before this feature existed.
+        # "not set up yet." Local dev/manual runs skip the forced-/setup
+        # redirect (they're never walked through /setup), but as of
+        # 2026-08-30 they use the *same* self._configured() check as
+        # production to decide whether a session is required at all --
+        # previously this branch called the module-level auth_enabled()
+        # directly, which special-cased local mode to ignore persisted
+        # credentials entirely (see auth_enabled's own docstring for why
+        # that changed): a password set through Settings > General while
+        # running locally now actually locks the app down, same as it
+        # always has in production.
         if settings and settings.deploy_mode != "local":
             if not self._configured(settings, scope):
                 if path == SETUP_PATH:
                     return await self.app(scope, receive, send)
                 return await self._deny(scope, receive, send, SETUP_PATH)
-        elif not auth_enabled(settings):
+        elif not self._configured(settings, scope):
             return await self.app(scope, receive, send)
 
         request = Request(scope)
@@ -381,16 +408,21 @@ class AuthMiddleware:
         return await response(scope, receive, send)
 
     def _configured(self, settings, scope) -> bool:
-        """Cached "does this install have an account yet" check (env pair
-        or persisted /setup account) -- only meaningful for a non-"local"
-        deploy_mode, where an unconfigured install must be forced to
-        /setup (see __call__). Once True, it stays True for the process
-        lifetime except for Settings > Purge all, which resets the cache
-        (see routers/settings.py::purge_all) -- a fresh install then needs
-        /setup again, matching a wiped database's actual state. The False
-        path (genuinely not set up yet) re-checks the DB every request,
-        same as _get_secret's own on-demand connection; that's expected
-        only for the brief window between install and finishing /setup."""
+        """Cached "does this install have an account yet" check (env pair,
+        a persisted /setup account, or a password set later through
+        Settings > General) -- used by both deploy modes now (2026-08-30):
+        production uses it to decide whether to force /setup, local mode
+        uses it to decide whether a session is required at all. Once True,
+        it stays True for the process lifetime except for Settings > Purge
+        all, which resets the cache (see routers/settings.py::purge_all) --
+        a fresh install then needs to reconfigure, matching a wiped
+        database's actual state. The False path (genuinely not configured
+        yet) re-checks the DB every request, same as _get_secret's own
+        on-demand connection; for production that's expected only for the
+        brief window between install and finishing /setup, and for a local
+        install that never configures anything it's the permanent (if
+        cheap) steady state -- see auth_enabled's docstring for that
+        tradeoff."""
         app = scope.get("app")
         state = getattr(app, "state", None)
         if state is not None and getattr(state, "_cc_auth_configured", False):

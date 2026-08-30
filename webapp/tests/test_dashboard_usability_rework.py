@@ -59,7 +59,14 @@ def _seed_task(conn, uid, due_at=None, tags=None, status="active"):
 
 
 def _request(path="/"):
-    return Request({"type": "http", "method": "GET", "path": path, "headers": []})
+    # query_string included (2026-08-30) -- settings_general.html now reads
+    # request.query_params.get('note'/'error') for its "Login & security"
+    # cards' flash messages (routers/settings.py::change_login_password/
+    # change_radicale_password), and starlette's Request.query_params
+    # property KeyErrors without this ASGI-spec-mandatory scope key.
+    return Request(
+        {"type": "http", "method": "GET", "path": path, "query_string": b"", "headers": []}
+    )
 
 
 def _make_space(conn, name):

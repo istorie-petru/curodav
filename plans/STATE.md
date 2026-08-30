@@ -8,6 +8,49 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Settings > General "Login & security" -- old/new/confirm
+  password forms, complete (2026-08-30) --
+  `routers/settings.py::change_login_password`/`change_radicale_password`,
+  the always-available counterparts to /setup's one-time account creation
+  and /settings/radicale's blind-overwrite form respectively. Both are
+  no-ops (redirect with an error note) when the corresponding value is
+  env-configured, same guard `/settings/radicale` already used.
+  `change_login_password` works two ways: no persisted account yet
+  (common in local/dev, where /setup never runs -- `auth.setup_required`)
+  creates one under a fixed `admin` username with no current-password
+  check; an existing account requires the current password to verify
+  first (`auth.verify_credentials`). On success it re-mints the session
+  cookie immediately (same shape as `login_submit`/`setup_submit`) and
+  marks `app.state._cc_auth_configured` True, so the response's own
+  redirect doesn't race a fresh DB read. `change_radicale_password`
+  verifies the current value (`hmac.compare_digest`) before writing a new
+  one to the same three `app_meta` keys the plain form uses -- it only
+  ever updates the app's own stored copy of the credential, not the
+  Radicale server's own htpasswd account (no reliable filesystem access to
+  that file from the app on either deploy target, see the entry below).
+  Required a real behavior change to make the login form work in local/dev
+  mode at all: `auth.auth_enabled()` used to hard-skip the DB entirely for
+  `deploy_mode == "local"` (env vars were the only way to turn login on
+  there, a deliberate zero-DB-hit optimization) -- removed that
+  special-case, and `AuthMiddleware` now uses its existing `_configured()`
+  cache for both deploy modes instead of only production, so a password
+  set locally actually enforces login on the very next request, not just
+  in production. Tradeoff: an install that never configures anything now
+  pays one extra DB read per request checking for an account (was zero) --
+  `_configured()`'s cache still makes it free forever once one exists.
+  New test file `test_settings_login_password.py` (16 tests, both routes'
+  no-op/create/verify/validate paths); `test_auth.py`'s `_settings()`
+  helper switched from one shared literal `/tmp/cc-auth-test.sqlite` path
+  to a fresh uuid-named file per call, since auth_enabled() consulting the
+  DB in every mode now made that shared path a real cross-test
+  contamination risk; the one test asserting the old local-mode DB-skip
+  behavior (`test_local_deploy_mode_ignores_persisted_credentials`) is
+  now `test_local_deploy_mode_honors_persisted_credentials` with the
+  inverted expectation. Still open, deliberately deferred: actually
+  editing the Radicale server's own account (its htpasswd file) from the
+  app -- Docker has no filesystem mount to it at all; systemd has one now
+  (see the ownership fix below) but the app still has no *code path* that
+  writes to it, only to its own app_meta copy.
 - **Fixed:** systemd install's Radicale htpasswd ownership bug, complete
   (2026-08-30) — `deploy/systemd/install.sh --with-radicale` created
   `$CONF_DIR/radicale/users` (the Radicale server's own auth file) via shell

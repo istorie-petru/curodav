@@ -12,7 +12,11 @@ categories, each earning its own focused page because each is a distinct
 thing a user thinks about, not because five is a tidy number --
 
   1. General     -- identity + format preferences: display name, week
-                     start, time format.
+                     start, time format; plus (2026-08-30) old/new/confirm
+                     password forms for the app's own login and the app's
+                     stored Radicale connection credential ("Login &
+                     security" -- see change_login_password/
+                     change_radicale_password below).
   2. Appearance   -- how the app looks: theme.
   3. Labels       -- the app's one organizing concept (spaces/projects/tags
                      collapsed into "labels", see features/architecture
@@ -92,6 +96,7 @@ whatever page was open before Settings was entered (redesign brief item 3).
 from __future__ import annotations
 
 import base64
+import hmac
 import uuid
 
 from datetime import datetime, timezone
@@ -115,7 +120,7 @@ from ..deps import (
     templates,
 )
 from .dashboard import DISPLAY_NAME_KEY
-from .export import _redirect_with_note, export_context
+from .export import _redirect_with_error, _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 
 router = APIRouter(tags=["settings"])
@@ -138,7 +143,7 @@ router = APIRouter(tags=["settings"])
 # unresolved conflict visible from the hub itself lives on this one row
 # (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
-    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
+    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format, login & security"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
@@ -177,8 +182,24 @@ def settings_index(request: Request, conn=Depends(get_db)):
     )
 
 
+def _current_settings(request: Request):
+    """request.app.state.settings, defensively. Most routers can assume
+    "app" is always in scope (a real request always has one), but
+    settings_general is exercised by several older tests that build a bare
+    Request with no "app" key at all (predating this route needing
+    app.state -- see test_page_header_narrow.py's _bare_request). None is
+    a safe fallback: every caller below already treats it as "nothing
+    env-configured" (has_persisted_credentials's own `if not settings`
+    early-out, and the getattr-guarded env checks)."""
+    try:
+        return request.app.state.settings
+    except (KeyError, AttributeError):
+        return None
+
+
 @router.get("/settings/general")
 def settings_general(request: Request, conn=Depends(get_db)):
+    settings = _current_settings(request)
     return templates.TemplateResponse(
         "settings_general.html",
         {
@@ -228,7 +249,153 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # helpers, same store as the display name). Rendered as the
             # avatar on this page.
             "profile_photo": db.get_profile_photo(conn),
+            # Login & security (2026-08-30) -- old/new/confirm password
+            # forms for the app's own login and its stored Radicale
+            # connection credential. auth_env_configured/radicale_env_
+            # configured gate each card between "form" and "edit
+            # curodav.env instead" (same pattern /settings/radicale
+            # already uses). has_login_account distinguishes "change your
+            # password" (current-password required) from "set a password
+            # for the first time" (no account yet -- common in local/dev,
+            # where /setup never runs).
+            "auth_env_configured": bool(
+                getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)
+            ),
+            "has_login_account": auth.has_persisted_credentials(settings, conn),
+            "login_username": (auth.get_persisted_credentials(conn) or (None,))[0],
+            "radicale_env_configured": getattr(settings, "radicale_env_configured", False),
+            "radicale_username": getattr(settings, "radicale_username", ""),
         },
+    )
+
+
+@router.post("/settings/change-password")
+def change_login_password(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    new_password_confirm: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Old/new/confirm change form for the app's own login password
+    (Settings > General > "Login & security"). A no-op, same as
+    /settings/radicale, when the env-var pair (CC_AUTH_USERNAME/CC_AUTH_
+    PASSWORD) is configured -- env always wins (auth.verify_credentials),
+    so a persisted-account write here would be silently shadowed; the
+    operator is told to edit curodav.env and restart instead.
+
+    Two shapes depending on whether a persisted account already exists
+    (auth.get_persisted_credentials):
+      - None yet (common in local/dev -- /setup never runs there, see
+        auth.setup_required): current_password isn't checked, and a first
+        account is created under a fixed "admin" username. Since
+        auth_enabled() consults the DB in every deploy mode now (see its
+        own 2026-08-30 docstring note), this genuinely turns login on
+        immediately, even for a local install.
+      - An account already exists: current_password must verify
+        (auth.verify_credentials, constant-time) before the new one is
+        accepted.
+
+    On success, re-mints the session cookie immediately (same shape as
+    routers/auth.py's login_submit/setup_submit) so the browser isn't
+    logged out by its own password change, and marks
+    app.state._cc_auth_configured True the same way setup_submit does, so
+    this response's own redirect doesn't race a fresh DB read."""
+    settings = request.app.state.settings
+    if settings.auth_username and settings.auth_password:
+        return _redirect_with_error(
+            "/settings/general",
+            "Login credentials are set via CC_AUTH_USERNAME/CC_AUTH_PASSWORD -- edit curodav.env and restart to change them.",
+        )
+    persisted = auth.get_persisted_credentials(conn)
+    error = None
+    if persisted:
+        username, _ = persisted
+        if not auth.verify_credentials(settings, username, current_password, conn):
+            error = "Current password is incorrect."
+    else:
+        username = "admin"
+    if not error:
+        if not new_password:
+            error = "Choose a new password."
+        elif len(new_password) < 8:
+            error = "New password must be at least 8 characters."
+        elif new_password != new_password_confirm:
+            error = "New passwords do not match."
+        elif persisted and new_password == current_password:
+            error = "New password must be different from the current password."
+    if error:
+        return _redirect_with_error("/settings/general", error)
+    auth.set_persisted_credentials(conn, username, new_password)
+    state = getattr(request.app, "state", None)
+    if state is not None:
+        state._cc_auth_configured = True
+    secret = auth.session_secret(settings, conn)
+    token = auth.make_session_token(secret, username)
+    response = _redirect_with_note(
+        "/settings/general",
+        "Password updated."
+        if persisted
+        else f'Login enabled for "{username}" -- you\'ll need this password to sign in from now on.',
+    )
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=auth.SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=auth.is_secure_request(request),
+        path="/",
+    )
+    return response
+
+
+@router.post("/settings/radicale-password")
+def change_radicale_password(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    new_password_confirm: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Old/new/confirm variant of /settings/radicale's password field
+    (Settings > General > "Login & security"). Same no-op-when-env-
+    configured guard as that route, but verifies the *current* value first
+    instead of blind-overwriting -- the plain 3-field form at /settings/
+    radicale (Data & Maintenance) still exists for changing the URL/
+    username together, or for a first-time connection with nothing to
+    verify against yet.
+
+    Only updates this app's own stored copy of the credential (app_meta,
+    same as the plain form) -- NOT the Radicale server's own account/
+    htpasswd file, which the app has no reliable filesystem access to on
+    either deploy target as of this writing (see plans/STATE.md's
+    2026-08-30 entry). Takes effect after a restart, same reason the plain
+    form documents (the CalDavBridge is only ever built once at process
+    start, main.py's lifespan)."""
+    settings = request.app.state.settings
+    if settings.radicale_env_configured:
+        return _redirect_with_error(
+            "/settings/general",
+            "Radicale connection is set via CC_RADICALE_URL -- edit curodav.env and restart to change it.",
+        )
+    if not hmac.compare_digest(current_password, settings.radicale_password):
+        return _redirect_with_error("/settings/general", "Current Radicale password is incorrect.")
+    new_password = new_password.strip()
+    if not new_password:
+        return _redirect_with_error("/settings/general", "Choose a new Radicale password.")
+    if new_password != new_password_confirm:
+        return _redirect_with_error("/settings/general", "New Radicale passwords do not match.")
+    if new_password == current_password:
+        return _redirect_with_error(
+            "/settings/general", "New Radicale password must be different from the current one."
+        )
+    db.set_app_meta(conn, config.RADICALE_URL_KEY, settings.radicale_base_url)
+    db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, settings.radicale_username)
+    db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, new_password)
+    return _redirect_with_note(
+        "/settings/general",
+        "Radicale password saved. Restart the app for it to take effect.",
     )
 
 

@@ -40,6 +40,8 @@ Coverage, following this suite's usual conventions:
 
 from __future__ import annotations
 
+import tempfile
+import uuid
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,6 +70,14 @@ def _reset_rate_limits():
 
 
 def _settings(*, enabled=True, **overrides) -> Settings:
+    # db_path is a fresh, uniquely-named file under the system tmpdir on
+    # every call (2026-08-30) -- since auth_enabled() now consults the DB
+    # in every deploy mode, not just production (see its own docstring), a
+    # single shared literal path here would let one test's persisted
+    # credentials leak into every other test that builds its own
+    # `_settings()` without overriding db_path (most of them). uuid4 keeps
+    # this a plain function (no fixture plumbing needed at ~60 call sites)
+    # while still giving each Settings instance its own isolated file.
     base = Settings(
         radicale_base_url="http://127.0.0.1:5232/devuser/",
         radicale_username="devuser",
@@ -75,9 +85,9 @@ def _settings(*, enabled=True, **overrides) -> Settings:
         calendar_collection="calendar",
         tasks_collection="tasks",
         contacts_collection="contacts",
-        db_path=Path("/tmp/cc-auth-test.sqlite"),
+        db_path=Path(tempfile.gettempdir()) / f"cc-auth-test-{uuid.uuid4().hex}.sqlite",
         sync_interval_seconds=60,
-        backup_dir=Path("/tmp/cc-auth-test-backups"),
+        backup_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-backups-{uuid.uuid4().hex}",
     )
     if enabled:
         base = replace(
@@ -242,12 +252,17 @@ class TestAuthEnabled:
     def test_no_settings_disables(self):
         assert not auth.auth_enabled(None)
 
-    def test_local_deploy_mode_ignores_persisted_credentials(self, conn):
-        # deploy_mode="local" (the default) never consults the DB -- a
-        # persisted /setup account only matters for a production deploy.
+    def test_local_deploy_mode_honors_persisted_credentials(self, conn):
+        # 2026-08-30: local mode (the default) used to ignore the DB
+        # entirely here -- only the env-var pair could turn login on for a
+        # local/dev install. Changed so Settings > General's password form
+        # (routers/settings.py::change_login_password) actually takes
+        # effect locally too, not just in production -- see auth_enabled's
+        # own docstring for the tradeoff.
         settings = _settings(enabled=False)
-        auth.set_persisted_credentials(conn, "alice", "s3cret123")
         assert not auth.auth_enabled(settings, conn)
+        auth.set_persisted_credentials(conn, "alice", "s3cret123")
+        assert auth.auth_enabled(settings, conn)
 
     def test_production_deploy_mode_honors_persisted_credentials(self, conn):
         settings = _settings(enabled=False, deploy_mode="production")
