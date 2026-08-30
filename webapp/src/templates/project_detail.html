@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_widget_items.html" import widget_empty, widget_link_row %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 <!-- Project page (rebuilt 2026-08-30, replacing the 2026-08-15 redirect
@@ -50,14 +50,26 @@
      card` -- the latter is `position:absolute` for the Dashboard's
      JS-positioned masonry grid, which doesn't apply on this plain page
      (bug fix: without a static variant this card had no geometry and
-     overlapped the Kanban board below it). -->
+     overlapped the Kanban board below it).
+
+     Direct follow-up request: the project's own deadline (label_config's
+     `end_date`) also appears in this list -- a synthetic, non-clickable
+     row (`e.is_deadline`, routers/projects.py's own comment on why it's
+     built as a plain dict rather than a real `events` row), sorted in
+     among the real events by date rather than pinned separately, with a
+     red "Deadline" pill instead of the usual date/time leading cell
+     doubling as its own signal. -->
 <div class="card widget-card-static">
     <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Upcoming events</h2></div>
     <div class="widget-content">
     {% if events %}
     <table>
         {% for e in events %}
+        {% if e.is_deadline %}
+        {{ widget_link_row(none, e.title, leading=e.start_at[:10], leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
+        {% else %}
         {{ widget_link_row('/events/' ~ e.uid, e.title, leading=(e.start_at[:10] ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+        {% endif %}
         {% endfor %}
     </table>
     {% else %}

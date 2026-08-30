@@ -514,6 +514,13 @@ bottom:
   schedule to page through), rendered through the same context-free
   `widget_link_row`/`widget_empty` macros (`_widget_items.html`) every
   widget list uses, without pulling in the widget/customize system itself.
+  Also includes the project's own deadline (`label_config.end_date`) as a
+  synthetic, non-clickable entry sorted in among the real events by date
+  (`is_deadline`, a plain dict shaped like an event rather than a real
+  `events` row -- a project's period is a `label_config` field, not
+  something that gets a shadow calendar event) -- red "Deadline" pill in
+  place of the usual date/time cell, shown whenever `end_date` is today or
+  later (a bare date, unlike a timed event, has no "already passed today").
 - **Kanban board** -- every non-archived, non-habit task carrying the
   project's label (`db.list_tasks_sharing_labels`), columns = task status
   (Active/In Progress/Waiting/Done -- Archived excluded, same "doesn't pile

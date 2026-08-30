@@ -138,13 +138,18 @@ class TestKanbanBoard:
 
 
 class TestUpcomingEventsCard:
+    # end=None throughout this class (unlike _promote's own 2026-12-31
+    # default) -- these tests assert exact event lists, and a default
+    # end_date would itself surface as a synthetic deadline row
+    # (TestProjectDeadlineAsEvent below), throwing off every count/order
+    # assertion here. Deadline behavior gets its own class/fixtures.
     def test_no_events_renders_empty(self, conn):
-        _promote(conn, "Trip")
+        _promote(conn, "Trip", end=None)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         assert resp.context["events"] == []
 
     def test_only_future_events_tagged_with_the_project_show(self, conn):
-        _promote(conn, "Trip")
+        _promote(conn, "Trip", end=None)
         future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
         past = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
         _event(conn, "e_future", ["Trip"], future)
@@ -154,7 +159,7 @@ class TestUpcomingEventsCard:
         assert [e["uid"] for e in resp.context["events"]] == ["e_future"]
 
     def test_events_are_sorted_soonest_first(self, conn):
-        _promote(conn, "Trip")
+        _promote(conn, "Trip", end=None)
         soon = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
         later = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
         _event(conn, "e_later", ["Trip"], later)
@@ -163,12 +168,66 @@ class TestUpcomingEventsCard:
         assert [e["uid"] for e in resp.context["events"]] == ["e_soon", "e_later"]
 
     def test_capped_at_eight(self, conn):
-        _promote(conn, "Trip")
+        _promote(conn, "Trip", end=None)
         for i in range(10):
             when = (datetime.now(timezone.utc) + timedelta(days=i + 1)).isoformat()
             _event(conn, f"e{i}", ["Trip"], when)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         assert len(resp.context["events"]) == 8
+
+
+class TestProjectDeadlineAsEvent:
+    """Direct follow-up request: the project's own deadline (label_config's
+    end_date) shows up in the upcoming-events card too, as a synthetic,
+    non-clickable entry (`is_deadline`) sorted in among the real events."""
+
+    def test_future_end_date_appears_as_a_deadline_entry(self, conn):
+        future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
+        _promote(conn, "Trip", end=future_end)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        events = resp.context["events"]
+        assert len(events) == 1
+        assert events[0]["is_deadline"] is True
+        assert events[0]["title"] == "Project deadline"
+        assert events[0]["start_at"] == f"{future_end}T00:00:00"
+
+    def test_deadline_dated_today_still_counts_as_upcoming(self, conn):
+        today = datetime.now(timezone.utc).date().isoformat()
+        _promote(conn, "Trip", end=today)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert len(resp.context["events"]) == 1
+        assert resp.context["events"][0]["is_deadline"] is True
+
+    def test_past_end_date_does_not_appear(self, conn):
+        past_end = (datetime.now(timezone.utc) - timedelta(days=5)).date().isoformat()
+        _promote(conn, "Trip", end=past_end)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["events"] == []
+
+    def test_no_end_date_means_no_deadline_entry(self, conn):
+        _promote(conn, "Trip", end=None)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["events"] == []
+
+    def test_deadline_sorts_alongside_real_events_by_date(self, conn):
+        future_end = (datetime.now(timezone.utc) + timedelta(days=5)).date().isoformat()
+        _promote(conn, "Trip", end=future_end)
+        sooner = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        later = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        _event(conn, "e_sooner", ["Trip"], sooner)
+        _event(conn, "e_later", ["Trip"], later)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        ordering = [e.get("uid") or e.get("title") for e in resp.context["events"]]
+        assert ordering == ["e_sooner", "Project deadline", "e_later"]
+
+    def test_deadline_renders_with_a_deadline_pill_and_no_link(self, conn):
+        future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
+        _promote(conn, "Trip", end=future_end)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        body = resp.body.decode()
+        assert "Project deadline" in body
+        assert "pill-red" in body
+        assert "Deadline" in body
 
 
 class TestHeaderBannerAndAvatar:

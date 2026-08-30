@@ -6801,6 +6801,30 @@ bundle unless they turn out to share the same CSS the first one touches.
    them inline near the title. Full suite still 1901 passed (no test
    assertions targeted the removed markup).
 
+   **Follow-up (2026-08-30, same session)** -- direct request ("in the
+   upcoming events, I would also like to see the project deadline as an
+   event"): the project's own `label_config.end_date` now appears in the
+   same upcoming-events card as a synthetic, non-clickable entry
+   (`is_deadline`, `routers/projects.py::project_detail`) -- not a real
+   `events` row (a project's period is a `label_config` field, §
+   Projects are labels, not a stored thing; it doesn't get a shadow
+   calendar event just to appear here), just a plain dict shaped like
+   one so it sorts into the same list by `start_at` rather than needing
+   its own separate slot. All-day-style naive `T00:00:00` `start_at` (no
+   tz offset, same convention real all-day events use), included when
+   `end_date >= today's date` (compared as a bare date, not against the
+   full current timestamp, so a deadline dated *today* still counts as
+   "upcoming" -- a bare date has no "already passed today" concept a
+   timed event has). Renders via a red "Deadline" pill in place of the
+   usual date/time leading cell (`widget_pill`, no link -- `url=none`
+   makes `widget_link_row` fall back to plain text, same as any other
+   linkless row). 6 new tests
+   (`TestProjectDeadlineAsEvent`); the 4 pre-existing `TestUpcomingEventsCard`
+   tests were updated to `_promote(..., end=None)` since `_promote`'s own
+   default `end_date` (2026-12-31, in the future relative to any
+   plausible test run) would otherwise itself surface as a deadline row
+   and throw off their exact-list assertions. Full suite 1907 passed.
+
    **Still open (not this slice):** an Agenda *view* (a full events
    list/tab -- this slice only ships the capped upcoming-events card) and
    drag-and-drop on the Kanban board (today's is click-only, a `.pill-

@@ -104,6 +104,28 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         e for e in db.list_events(conn, start=now_iso)
         if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"] >= now_iso
     ]
+    # The project's own deadline (label_config.end_date) as a synthetic,
+    # non-clickable entry in the same list -- direct request. Not a real
+    # `events` row (a project's period is a label_config field, § Projects
+    # are labels, not a stored thing -- it doesn't get a shadow calendar
+    # event just to appear here), so it's built as a plain dict shaped
+    # like one, `is_deadline` marking it for the template's own
+    # "no link, different pill" branch. All-day-style naive
+    # `T00:00:00` start_at (no tz offset), same convention real all-day
+    # events use (see test_calendar_allday_strip.py's own seeds) --
+    # end_date has no time component to be more precise about. Compared
+    # against just today's date (not the full `now_iso` timestamp) so a
+    # deadline dated *today* still counts as upcoming regardless of what
+    # time it currently is -- a bare date has no "already passed today"
+    # concept the way a timed event does.
+    if label.get("end_date") and label["end_date"] >= now_iso[:10]:
+        events.append({
+            "uid": None,
+            "title": "Project deadline",
+            "start_at": f"{label['end_date']}T00:00:00",
+            "all_day": True,
+            "is_deadline": True,
+        })
     events.sort(key=lambda e: e["start_at"])
     events = events[:8]
 
