@@ -4011,6 +4011,7 @@ body.command-palette-open{overflow:hidden;}
 .widget-resize-handle{
   position:absolute; top:0; right:-6px; width:12px; height:100%;
   cursor:ew-resize; touch-action:none; z-index:6;
+  user-select:none; -webkit-user-select:none;
 }
 .widget-resize-handle::after{
   content:""; position:absolute; top:0; bottom:0; left:50%; width:2px;
@@ -4020,7 +4021,16 @@ body.command-palette-open{overflow:hidden;}
 .widget-resize-handle:hover::after, .widget-card.is-resizing .widget-resize-handle::after{
   background:var(--accent-neutral);
 }
-.widget-card.is-resizing{transition:none; z-index:20;}
+/* .is-resizing is added to the whole .widget-card, not just the handle,
+   for the duration of the drag -- the pointer travels across the card's
+   own text content (title, rows) as it moves, not just the 12px handle
+   strip, so user-select has to be suppressed there too or the browser
+   still starts a text selection the moment the pointer crosses off the
+   handle itself mid-drag (confirmed live report: dragging "just selects
+   the text" -- static/app.js's pointerdown handler now also calls
+   preventDefault, the primary fix; this is the belt-and-suspenders CSS
+   layer for the drag's whole duration, not just its first pixel). */
+.widget-card.is-resizing{transition:none; z-index:20; user-select:none; -webkit-user-select:none;}
 /* Widget content height (2026-08-07 -- manual height editor/drag-resize
    removed per direct feedback: a widget's height should just be "how
    much content it is", no scrollbar, unless it goes over a max height).

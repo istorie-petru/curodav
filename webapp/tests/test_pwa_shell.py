@@ -424,8 +424,17 @@ class TestLocalWritePath:
         # dashboard_widget_preview.js's autosave calls refreshRegion,
         # app.js gained a medium-breakpoint quarter->half promotion and a
         # full drag-to-resize handle (both precached files changed).
+        # v40 (2026-08-30): bumped again, same session, immediate follow-up
+        # -- direct report the resize handle "just selects the text"
+        # instead of dragging. The handle is a plain <div> over ordinary
+        # text content (unlike the reorder handle, a real <button>, which
+        # browsers never start a text-selection drag from) -- its
+        # pointerdown now calls preventDefault (the load-bearing fix), and
+        # .widget-card.is-resizing/.widget-resize-handle both got
+        # user-select:none as a second CSS-only layer for the drag's
+        # whole duration, not just its first pixel.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v39"' in script
+        assert 'CACHE_NAME = "cc-shell-v40"' in script
 
 
 class TestOfflineToolbar:

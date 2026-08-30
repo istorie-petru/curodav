@@ -1058,6 +1058,17 @@ document.addEventListener("submit", (event) => {
     // reorder handler is ever refactored to delegate on `grid` the same
     // way this one does.
     e.stopPropagation();
+    // preventDefault is load-bearing, unlike the reorder drag handle
+    // above -- that handle is a real <button>, which browsers never
+    // start a text-selection drag from regardless. This resize handle is
+    // a plain <div> sitting right next to (and, while dragging, moving
+    // across) ordinary text content, so a mouse-drag starting on it is
+    // otherwise indistinguishable from "select this text" to the browser
+    // -- confirmed live report: "it shows the mouse action but it just
+    // selects the text". Blocking the default here (not just via CSS
+    // user-select, kept below as a second layer) is the standard fix for
+    // exactly this class of drag-handle-over-text problem.
+    e.preventDefault();
   });
 
   grid.addEventListener("pointermove", (e) => {

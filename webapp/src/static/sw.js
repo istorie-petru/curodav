@@ -139,7 +139,7 @@
 // btn's left padding and the header/toggle's sizing are unconditional
 // now, and both states' highlight uses the same --radius-sm) -- bumped
 // per the same v19 lesson.
-const CACHE_NAME = "cc-shell-v39";
+const CACHE_NAME = "cc-shell-v40";
 
 const SHELL_ASSETS = [
   "/offline",

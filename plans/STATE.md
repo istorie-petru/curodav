@@ -6531,6 +6531,33 @@ mouse resize them." Three independent fixes:
   bump) -- `test_pwa_shell.py` updated. Full suite **1890 passed** (five
   chunks: 642 + 489 + 323 + 431 + 5 = 1890 -- no failures at any point).
 
+## Immediate follow-up (2026-08-30, same session) -- resize handle was
+selecting text instead of dragging
+
+Direct report right after the resize handle shipped: "the mouse resize
+is not working. it shows the mouse action but it just selects the text."
+Root cause: the reorder drag handle (`.widget-drag-handle`) is a real
+`<button>`, which browsers never start a native text-selection drag
+from regardless of what JS does or doesn't call -- that's *why* its own
+pointerdown handler never needed `preventDefault()`. The new resize
+handle is a plain `<div>` sitting right next to (and, mid-drag, moving
+across) ordinary card text -- to a browser, a mouse-drag starting there
+is indistinguishable from "select this text" unless told otherwise.
+Fixed with the standard two-layer fix for this exact class of bug:
+`e.preventDefault()` in the resize handle's own `pointerdown` listener
+(load-bearing -- stops the browser from ever starting the selection
+drag) plus `user-select:none`/`-webkit-user-select:none` on both
+`.widget-resize-handle` and `.widget-card.is-resizing` (belt-and-
+suspenders CSS layer covering the drag's whole duration, since the
+pointer travels across the card's own text, not just the 12px handle
+strip, once dragging starts). `sw.js`: `CACHE_NAME` bumped
+`cc-shell-v39` -> `cc-shell-v40` (`app.js` + `style.css` both changed)
+-- `test_pwa_shell.py` updated. No new tests (pure CSS/JS behavior fix,
+same "no browser in this sandbox" ceiling every drag-interaction change
+this session has accepted -- can't be exercised from Python). Full suite
+**1890 passed** (five chunks: 642 + 489 + 323 + 431 + 5 = 1890, unchanged
+-- no Python-visible surface changed).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 
