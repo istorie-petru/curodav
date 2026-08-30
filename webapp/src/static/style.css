@@ -3932,6 +3932,23 @@ body.command-palette-open{overflow:hidden;}
 .dashboard-grid{position:relative; min-height:200px;}
 .widget-card{margin-bottom:0; position:absolute; box-sizing:border-box;
   transition:left var(--dur-normal) var(--ease-standard), top var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);}
+/* Widget card surface (2026-08-30 design pass, item 1 of the widget check-up
+   queue, plans/STATE.md) -- .widget-card previously inherited .card's full
+   MD3 treatment verbatim: elevation-1 shadow that lifts to elevation-2 +
+   translateY(-1px) on hover. That reads fine for one focused card (a modal
+   panel) but a dashboard shows 6+ of these in a grid at once -- constant
+   hover-lift across that many cards reads busy/skeuomorphic, and a
+   shadow-only edge (no border) looks soft next to the app's other flatter,
+   hairline-bordered surfaces (sidebar rail, table rows). Direct feedback:
+   "archaic... not minimalist," macOS/Material-3-hybrid direction requested.
+   Flattened to a quiet hairline border + the smaller --shadow-card (already
+   used for the app's other quiet surfaces, e.g. .table-scroll's bg), static
+   on hover -- still reads as a distinct surface via the border alone,
+   without the constant-motion feel at grid scale. Declared after .card's
+   own rules (this file's general-to-specific ordering) so it wins on equal
+   specificity without needing !important. */
+.widget-card{border:1px solid var(--separator); box-shadow:var(--shadow-card);}
+.widget-card:hover{box-shadow:var(--shadow-card); transform:none;}
 /* Widget drag-to-reorder (static/app.js), edit-mode only */
 .widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
 .widget-drag-handle:active{cursor:grabbing;}
@@ -3967,6 +3984,26 @@ body.command-palette-open{overflow:hidden;}
    letting any one widget dominate the page. */
 .widget-content{position:relative; overflow-y:auto; overflow-x:hidden; max-height:640px;}
 .widget-content td{word-wrap:break-word; overflow-wrap:break-word;}
+/* Widget row lists (2026-08-30 design pass, same slice as the two comments
+   above) -- .widget-content's own <table> (widget_link_row, UI guide §4 --
+   still a real <table>, that architectural choice is unchanged here) was
+   inheriting the app's generic table rule verbatim: a border-bottom under
+   every row plus a full-bleed row hover, tuned for a real multi-column data
+   table (Tasks, Labels settings) with a header row to anchor it. Inside a
+   small card with no <thead>, that reads as gridlines in a spreadsheet --
+   direct "row/table style" and "archaic" feedback. Rows keep their <tr>/<td>
+   markup but drop the per-row borders and tighten the vertical rhythm
+   (7px, down from the generic table's 10px) -- quieter and denser, closer
+   to how the app's other markup-light lists already read (.contact-list-
+   row, .project-preview-row: no separators, a plain hover tint). font-size
+   drops one notch to --text-footnote (14px, was --text-callout's 15.5px)
+   to match the compact scale the rest of a widget's body already uses
+   (.widget-section-label, stat captions). */
+.widget-content table{font-size:var(--text-footnote);}
+.widget-content tbody tr{border-bottom:none;}
+.widget-content tbody td{padding:7px 4px;}
+.widget-content tbody tr:first-child td{padding-top:2px;}
+.widget-content tbody tr:last-child td{padding-bottom:2px;}
 /* Stacking (2026-08-02) -- dropping one widget onto another's middle
    (not its narrow top/bottom or left/right reorder edges, see
    static/app.js's dashboard drag handler) merges them into one grid
@@ -4102,10 +4139,27 @@ body.command-palette-open{overflow:hidden;}
 /* Habit Check-in widget (_widget_habit_checkin.html) */
 .habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
 .habit-checkin-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0;}
-.widget-header{display:flex; align-items:center; gap:4px; margin-bottom:10px;}
-.widget-header h2{margin:0;}
+/* Widget header/title + section-label typography (2026-08-30 design pass,
+   same slice as the card-chrome comment above) -- .widget-header h2
+   previously fell through to the app's generic `h2` rule (17px,
+   browser-default bold weight, 20px top margin meant for a page-body
+   heading) -- oversized and heavier than the small card it actually
+   titles, direct "typography" feedback. Sized down to --text-body (15px)
+   with an explicit 600 weight instead of relying on browser-default bold,
+   and a hairline border-bottom now separates the header from the content
+   below it (was spacing-only before) -- a quieter macOS-style group-box
+   title instead of a page heading dropped into a card. .widget-section-
+   label picks up an explicit 600 weight too (previously unset, so it fell
+   back to normal/400 -- visibly thinner than the bold title above it
+   despite both being "the label typography" for a widget); no size/color
+   change, still the smallest, quietest text in a widget. */
+.widget-header{
+  display:flex; align-items:center; gap:6px; margin-bottom:var(--space-3);
+  padding-bottom:var(--space-2); border-bottom:1px solid var(--separator);
+}
+.widget-header h2{margin:0; font-size:var(--text-body); font-weight:600; letter-spacing:-.1px; color:var(--fg-primary);}
 .widget-section-label{
-  font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:10px 0 4px;
 }
 .widget-section-label:first-child{margin-top:0;}

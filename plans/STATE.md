@@ -6135,3 +6135,110 @@ Full suite **1869 passed** (four file-glob chunks: 608 + 433 + 498 + 330 =
 1869; down from 1921 — the 46 tests in the deleted file minus the 6 test
 files' worth of updates that stayed, i.e. no coverage silently lost, only
 coverage of the removed feature itself).
+
+## Next session queue — design check-ups, direct request 2026-08-30 (new
+backlog, not yet started)
+
+Direct user request, dumped as a raw list — broken into pieces below per
+this file's one-slice-per-session discipline. Not ordered by priority;
+pick whichever is smallest/cleanest next. Each is its own slice; don't
+bundle unless they turn out to share the same CSS the first one touches.
+
+1. **Shipped — Dashboard widgets, general CSS pass, complete (2026-08-30).**
+   Direct feedback before starting: widget styling read as "archaic,
+   incoherent, not minimalist"; asked for a macOS/Material-3-hybrid
+   direction (quiet flat surfaces, restrained shadows, tighter type),
+   confirmed via clarifying questions rather than guessed — the existing
+   widget markup (`_widget_card.html`/`_widget_inner.html`/
+   `_widget_items.html`) is already the product of a 2026-08-17 "widget
+   uniformity pass" (shared macros, MD3 tokens), so this was a *styling*
+   pass on top of that shared markup, not a markup rewrite. Three scoped
+   `static/style.css` changes, each additive/overriding rather than
+   touching the generic rules other pages still use:
+   - **`.widget-card` chrome** — was inheriting `.card`'s full MD3
+     elevation-1→elevation-2 + `translateY(-1px)` hover-lift verbatim,
+     which reads busy across a grid of 6+ simultaneously-hoverable cards.
+     Flattened to a hairline `1px solid var(--separator)` border +
+     `--shadow-card` (the smaller shadow token, already used elsewhere for
+     quiet surfaces), static on hover (`transform:none`) — declared after
+     `.card`'s own rules so it wins on equal specificity, no `!important`.
+   - **`.widget-header`/`.widget-header h2`/`.widget-section-label`** —
+     the header title was falling through to the generic page `h2` (17px,
+     browser-default bold, 20px top margin meant for a body heading),
+     oversized for a card title. Sized to `--text-body` (15px) with an
+     explicit 600 weight, and a hairline `border-bottom` now separates
+     header from content (was spacing-only). `.widget-section-label`
+     picked up an explicit `font-weight:600` (previously unset → 400,
+     visibly thinner than the title next to it despite both reading as
+     "the label typography").
+   - **`.widget-content table` row style** — `widget_link_row`'s real
+     `<table>` markup (UI guide §4, unchanged — still real `<tr>`/`<td>`,
+     not restructured to flex) was inheriting the app's generic table
+     rule verbatim: a `border-bottom` under every row plus a full-bleed
+     hover, tuned for a real header-bearing data table (Tasks, Labels),
+     which inside a small card with no `<thead>` reads as spreadsheet
+     gridlines. Dropped the per-row borders, tightened vertical rhythm to
+     7px (was 10px), dropped font-size one notch to `--text-footnote`
+     (14px, matching the rest of a widget's compact type scale). Hover
+     still comes from the existing global `tbody tr:hover` tint rule —
+     untouched, no border to clash with now.
+   - `sw.js`: `CACHE_NAME` bumped `cc-shell-v33` → `cc-shell-v34`
+     (style.css-only) — `test_pwa_shell.py` updated. Full suite **1869
+     passed** (five chunks: 621 + 489 + 323 + 431 + 5 = 1869; the +5 is
+     `test_caldav_bridge_live.py`, skipped in some environments via
+     `importorskip("radicale")` but not this one — same total as the
+     pre-change baseline, no tests added/removed for a CSS-only change).
+   Items 2 and 3 below (more visual/actionable widget content, Pinterest-
+   style auto layout) are separate slices — not started, may want their
+   own scoping conversation with the user first given how open-ended they
+   are, same as this one was.
+2. **Dashboard widgets — more visual/statistic/actionable content.** Direct
+   feedback: widgets should lean more visual/statistic (charts, sparklines,
+   progress rings — not just text rows) and more actionable (quick actions
+   inline, not just links out to another page) where the underlying data
+   supports it. Likely touches individual widget templates one at a time
+   rather than a single shared change — may need its own follow-up slices
+   per widget type once scoped.
+3. **Dashboard grid — Pinterest-style auto layout.** Direct feedback:
+   widgets are fixed-size and evenly gridded today; wants better automatic
+   spacing and a more masonry/Pinterest-like layout instead of fixed
+   dimensions. Needs its own investigation into the current grid mechanism
+   (CSS grid vs. JS-positioned) before estimating size — could be a bigger
+   slice than the others in this queue.
+4. **`.page-banner-wrap` — bigger bottom margin.** Small, mechanical:
+   `margin-bottom` should be `50px` (currently smaller — check current
+   value first). Good candidate for pairing with another small item below
+   if picked up alongside one.
+5. **Calendar page — better mouse interactions.** Direct feedback: moving
+   events and drag-and-drop need better feedback (today's interaction reads
+   as unpolished — unclear hover/drag affordances, no visual feedback
+   during a drag). Scope against the existing week-grid drag code (used by
+   both the global calendar and the project calendar's work-allocation
+   drag from 1.4 slice 3) before starting, since a fix here may need to
+   flow through both call sites.
+6. **Planner page — unscheduled work pills need a real design.** Direct
+   feedback: today's unscheduled-work pills are minimal/underdesigned;
+   wants a grid layout and more information surfaced per pill (task name
+   alone isn't enough today). Compare against the project calendar's own
+   "Unscheduled tasks" list (1.4 slice 3, `{project} > {task} ·
+   {remaining}h`) — may already have a richer format to reuse rather than
+   inventing a new one.
+7. **Tasks page — grouping table CSS.** Direct feedback: the `group_by=
+   project` header/grouping rows (1.5 slice, `_group_tasks_by_project`)
+   need a better visual representation — today's group headers are plain
+   and don't clearly separate groups. Table-view only.
+8. **Contacts list view — higher information density.** Direct feedback:
+   the list view has room for more data per row — email and/or quick-action
+   buttons (call/email/message) were suggested. Check what `_task_row.html`-
+   equivalent macro contacts uses today before deciding whether this is a
+   markup change or purely CSS.
+9. **Projects page — view-like, not dashboard-like; add Kanban + Agenda.**
+   Direct feedback: the project detail page (1.4 slice 2/3: Tasks view +
+   Week Calendar view, tab-switched) currently reads too much like a small
+   dashboard; wants a genuine view-style page instead, with a **Kanban
+   view** (by status, presumably) and an **Agenda view** for upcoming
+   events, added as more tabs alongside the existing Tasks/Week Calendar
+   switcher. Largest item in this queue — likely two slices (Kanban view,
+   Agenda view) rather than one, plus whatever the "not dashboard-like"
+   framing implies for the page's current progress-card header once
+   scoped.

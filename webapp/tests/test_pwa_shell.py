@@ -394,8 +394,12 @@ class TestLocalWritePath:
         # v33 (2026-08-30): bumped again, same session (icon jump between
         # collapsed/expanded fixed, active-highlight radius unified),
         # same lesson.
+        # v34 (2026-08-30): bumped again, new session (widget CSS pass --
+        # item 1 of the design check-up queue: .widget-card chrome, header/
+        # section-label typography, widget-content table row style), same
+        # style.css-only lesson.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v33"' in script
+        assert 'CACHE_NAME = "cc-shell-v34"' in script
 
 
 class TestOfflineToolbar:
