@@ -11,7 +11,19 @@
      "dashboard type" page has (_page_banner.html, direct request "the
      banner header, the profile picture") -- that's a page-chrome
      convention shared app-wide, not part of the widget-grid machinery
-     the "not a dashboard" feedback was actually about. -->
+     the "not a dashboard" feedback was actually about.
+
+     No separate `.toolbar.top-app-bar` row below the banner (removed,
+     direct follow-up request -- "not fitting") -- same call this app
+     already made for Tasks/Contacts/Calendar's own old toolbars
+     (_page_header_narrow.html's own comment: "redundant with the
+     sidebar's own quick-add", which covers task creation here too).
+     `project_status`/`start_date`/`end_date` are still computed in
+     routers/projects.py::project_detail's context but currently
+     unrendered -- a deliberate small leftover, not dead code to clean up
+     reflexively, in case a future pass wants them back inline near the
+     title. -->
+
 {% block content %}
 <div class="page-banner-wrap">
 {% include "_page_banner.html" %}
@@ -26,15 +38,6 @@
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
 </div>
-</div>
-
-<div class="toolbar top-app-bar">
-    <span class="tag-usage-count" title="Lifecycle status">{{ project_status }}</span>
-    {% if project.start_date or project.end_date %}
-    <span class="settings-hint">{{ project.start_date or '?' }} &ndash; {{ project.end_date or '?' }}</span>
-    {% endif %}
-    <div class="spacer"></div>
-    <a class="btn primary" href="/tasks/new?project={{ project.name | urlencode }}" data-modal data-fab title="New task">{{ icon('plus') }} New task</a>
 </div>
 
 <!-- Upcoming events card -- every future event tagged with this project's

@@ -6787,6 +6787,20 @@ bundle unless they turn out to share the same CSS the first one touches.
    columns need more than 1120px to sit side by side). 5 new tests, full
    suite 1901 passed.
 
+   **Follow-up (2026-08-30, same session)** -- direct request ("remove the
+   toolbar top-app-bar because it is not fitting"): dropped the
+   `.toolbar.top-app-bar` row below the banner (lifecycle status pill,
+   start/end dates, "New task" button). Same call this app already made
+   for Tasks/Contacts/Calendar's own old per-page toolbars
+   (`_page_header_narrow.html`'s own comment: their "+ New"/inline-search
+   controls were redundant with the sidebar's own global quick-add,
+   direct feedback at the time) -- covers task creation here too, no
+   replacement control added. `project_status`/`start_date`/`end_date`
+   stay computed in `project_detail`'s context, just currently unrendered
+   -- left in deliberately, not cleaned up, in case a future pass wants
+   them inline near the title. Full suite still 1901 passed (no test
+   assertions targeted the removed markup).
+
    **Still open (not this slice):** an Agenda *view* (a full events
    list/tab -- this slice only ships the capped upcoming-events card) and
    drag-and-drop on the Kanban board (today's is click-only, a `.pill-
