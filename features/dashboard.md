@@ -4,7 +4,7 @@ Home page at `/`, powered by a registry-driven widget system
 (`routers/dashboard.py`'s `WIDGET_TYPES`). Adding a widget type = one registry
 entry + a render function; add/edit/reorder/delete machinery is generic.
 
-## Widget types (12)
+## Widget types (8)
 
 2026-08-15 widget consolidation (`plans/open.md` § Widget consolidation):
 the original 11 types (`today_agenda`/`weekly_overview`/`upcoming_events`/
@@ -18,35 +18,43 @@ to Agenda), plus two brand-new types, Streak and Next Deadline. The three
 `quick_links`) were untouched by this pass, so the live registry was 11
 types at that point (`important_urgent` is since removed outright along
 with the rest of the Importance/Urgency feature, see
-`src/derived_state.py`'s module docstring; two more types, Organize Today
-and Weekly Schedule, were added later -- see the table below for the
-current 12). A one-time `app_meta`-guarded migration
-(`_migrate_widget_consolidation`) rewrote every existing dashboard's
-stored widget rows in place — nothing was lost, see its own docstring for
-the exact old-type -> new-config translation, and "Migration" below for
-the one visual side effect (width).
+`src/derived_state.py`'s module docstring; a further two types, Organize
+Today and Weekly Schedule, were added later). A one-time `app_meta`-guarded
+migration (`_migrate_widget_consolidation`) rewrote every existing
+dashboard's stored widget rows in place — nothing was lost, see its own
+docstring for the exact old-type -> new-config translation, and
+"Migration" below for the one visual side effect (width).
+
+**2026-08-30, direct requests** ("merge the quick links and spaces &
+projects into one data source" / "maybe just remove the next deadline,
+what needs organizing and streak widgets - not really that useful"):
+`quick_links` retired outright, merged into `spaces_projects`'s own
+"cards" style (an unscoped "cards" instance now renders every Space +
+every open project, the same set `quick_links` used to render on its
+own — see that render function's own comment); `streak`/`next_deadline`/
+`organize_today` removed outright, no replacement. A second one-time
+`app_meta`-guarded migration (`_migrate_widget_removal_2026_08_30`,
+same `widget_page_context` call site as the 2026-08-15 one) rewrites any
+existing `quick_links` row to `spaces_projects`/cards in place and
+deletes any existing row of the other three types. Back down to 8 types
+from the 12 the section header above once counted.
 
 | Type | Shows | Default width |
 |---|---|---|
 | `agenda` | Consolidated: Range (`today` / `next_7_days` / `next_30_days` / `all_upcoming`, `config["range"]`) picks how far out; Show (`config["show"]`, a subset of `overdue`/`tasks`/`events`, default all three) picks which sections render. `today`/`all_upcoming` render a flat list (Overdue always its own section regardless of Range); `next_7_days`/`next_30_days` render a day-by-day grid. `limit` applies to the `all_upcoming` Tasks/Events sections only. | half |
 | `at_a_glance` | 3-number stats strip (Overdue / Due today / Due this week), each linking to the matching filtered Tasks view | third |
 | `mini_month_calendar` | month grid, busy dots only, prev/next | half |
-| `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares per Space, linking to `/labels/{name}`). Scope (`config["scope"]`, `space` default or `everything`, Space/Project pages only) picks whether a page's own instance stays auto-scoped to that page's children (projects AND sub-Spaces both) or shows the app-wide list instead | third |
+| `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares, no `.widget-card` chrome — see `.widget-card--bare` — one per Space linking to `/spaces/{name}`, plus, when unscoped, one per open project linking to `/tasks`; 2026-08-30 merge, see above). Scope (`config["scope"]`, `space` default or `everything`, Space/Project pages only) picks whether a page's own instance stays auto-scoped to that page's children (projects AND sub-Spaces both) or shows the app-wide list instead | third |
 | `habit_checkin` | check-off-today per active habit (checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
 | `contact_list` | contacts filtered by labels, `limit` | third |
 | `scheduled_work_today` | today's work-allocation sessions + a completed-hours total — ported from the retired `/today` page (1.9 side work) | third |
-| `quick_links` | visual tile grid of every Space + every open project (label icon/color, `spaces_projects`' Cards-style CSS reused) — Home-only, 1.9 side work | full |
-| `streak` | current + longest run of consecutive days with >=1 task completed (`tasks.completed_at`) | third |
-| `next_deadline` | the single soonest open task due date and the single soonest upcoming event | third |
-| `organize_today` | "what needs organizing" — open tasks due within 3 days with no work session yet, and today's/tomorrow's events with no location or meeting link set (a proxy for the not-yet-shipped Format field, `plans/open.md`). Task rows reuse the planning grids' own `_unscheduled_task_item.html` partial (project pill + title + a "+"/"−" session stepper, `POST /tasks/{uid}/work-allocations[...]`), so a session can be added right from the widget. (Used to also surface open Urgency=3 tasks in a separate section — removed along with the rest of the Importance/Urgency feature.) | half |
 | `weekly_schedule` | a compact, **static** weekly-pattern grid of a label's long-lived recurring events (a "university timetable" without reviving the removed Schedule module, `plans/abandoned.md`) — a recurring event qualifies once its own rule spans >= 30 days from first to last occurrence (`_is_long_lived_recurrence`, filters out a short recurring reminder while keeping a real standing pattern); every qualifying event's grid slot comes straight from its own `start_at`/`end_at` weekday+time-of-day, not from expanding any one real calendar week — holidays/manual exceptions are deliberately not reflected. Only weekdays with a block become columns, the vertical range is tightened to the events' own time span (not a full 24h day), and a plain agenda-style list renders below the grid for full readable detail | half |
 
-`scheduled_work_today`/`streak`/`next_deadline`/`organize_today`/
-`weekly_schedule` are addable through the existing Source/View picker (all
-under the `calendar_tasks` source); `quick_links` and `spaces_projects`
-each have their own source (`quick_links`/`spaces_projects`), since both
-read `label_config` directly and have no tasks/events filter (`uses:
-set()`). Agenda's own view (`agenda_view`, source `calendar_tasks`) is
+`scheduled_work_today`/`weekly_schedule` are addable through the existing
+Source/View picker (both under the `calendar_tasks` source);
+`spaces_projects` has its own source, since it reads `label_config`
+directly and has no tasks/events filter (`uses: set()`). Agenda's own
+view (`agenda_view`, source `calendar_tasks`) is
 the one View that exposes both Range and Show controls in the builder
 form (`has_range`/`has_show` on its `WIDGET_VIEWS` entry); Spaces &
 Projects' view (`spaces_projects_view`) exposes the Style radio
@@ -85,11 +93,12 @@ members).
   show=[overdue]) — for Home and every label page;
   `_backfill_mini_calendar_widget` one-time migration. Reset layout
   re-seeds.
-- Scope rules: Home offers all types; a generated Space page excludes
-  `quick_links`; a plain label (Project) page excludes `spaces_projects` +
-  `quick_links` (`quick_links`'s "every Space + every project" view, and
-  `spaces_projects`' whole-registry-of-labels view, are both meaningless
-  once you're already inside one page).
+- Scope rules: Home offers all types; a generated Space page has no
+  exclusions; a plain label (Project) page excludes `spaces_projects`
+  (its whole-registry-of-labels view is meaningless once you're already
+  inside one page). Before the 2026-08-30 `quick_links` merge, both a
+  Space and a Project page also excluded `quick_links` for the same
+  "every Space + every project" reason -- gone along with the type.
 - `spaces_projects`' own **Scope** (2026-08-15, expanded scope,
   `plans/open.md` § Widget consolidation) is a widget-*instance* setting,
   not a second widget type — a Space/Project page's own instance is

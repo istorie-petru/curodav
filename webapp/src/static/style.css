@@ -3951,8 +3951,9 @@ body.command-palette-open{overflow:hidden;}
 .widget-card:hover{box-shadow:var(--shadow-card); transform:none;}
 /* "Bare" tile-grid widgets (2026-08-30, direct feedback -- see routers/
    dashboard.py::_is_bare_tile_widget's own comment for which widgets this
-   applies to: Quick Links, and Spaces & Projects when its own `style`
-   config is "cards"). Both already render `.filled-cards-grid`/
+   applies to: Spaces & Projects when its own `style` config is "cards" --
+   originally also the standalone Quick Links widget, retired the same
+   day and merged into this same style). Renders `.filled-cards-grid`/
    `.filled-card` tiles -- saturated fills with their own elevation-1
    shadow -- so the .card wrapper's border/shadow/background/padding was a
    second, redundant frame around an already-framed grid. `.widget-card--

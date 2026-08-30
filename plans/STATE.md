@@ -6235,6 +6235,98 @@ rather than guessed at:
   chunks: 628 + 489 + 323 + 431 + 5 = 1876; +6 over the 1870 baseline, the
   six new TestBareTileWidgets tests, nothing else changed).
 
+## Follow-up (2026-08-30, new session) -- Quick Links merged into Spaces
+& Projects; Next Deadline/Organize Today/Streak removed outright
+
+Direct requests after reviewing the bare-tile-widget change above:
+"habits still no" (data), "merge the quick links and spaces & projects
+into one data source", "maybe just remove the next deadline, what needs
+organizing and streak widgets - not really that useful".
+
+- **Traced, not a code bug -- Habit Check-in still showing "No habits
+  yet."** Seeded a `target_per_day=1` and a `target_per_day=3` habit and
+  called `_render_habit_checkin(conn, {})` directly (the exact unscoped
+  path a Home widget uses) -- both came back correctly in `rows`, `
+  is_quantity` set right for each. Grepped every `archived_at` write site
+  in `src/`: only `routers/habits.py`'s own `POST /habits/{uid}/archive`
+  endpoint ever sets it, no side-effect path archives a habit as a
+  consequence of something else. Confirmed the Tasks page's own Habits
+  group (`routers/tasks.py::_habit_group_items`) queries habits through
+  the identical unfiltered `db.list_habits(conn)` this widget uses, so
+  there's no listing-page-vs-widget drift either. Nothing changed in code
+  for this one -- since the render path is correct for the plain case,
+  the live discrepancy is either the actual habits carrying `archived_at`,
+  or (more likely, matching the Next Deadline finding two sessions ago)
+  this specific widget instance's own `label_name` scope pointing at a
+  project/space with none.
+- **Shipped -- Quick Links merged into `spaces_projects`'s "cards"
+  style.** `_render_spaces_projects`'s cards branch, when unscoped (no
+  `label_name`, or a `scope: "everything"` instance), now also folds in
+  every open (non-archived) project alongside every Space --
+  `db.list_project_labels`, the exact set the retired `quick_links` type
+  used to render on its own. Each card now carries a precomputed
+  `href`/`icon`/`meta` (Space -> `/spaces/{name}`, "N projects"; Project
+  -> `/tasks`, "Project") instead of the template hardcoding the Space
+  path and project-count caption inline, since one card shape now covers
+  both kinds. Scoped instances (a Space/Project page's own widget,
+  `label_name` set) are unaffected -- `db.list_child_labels` already
+  pools projects into `labels` there, so the new unscoped-only branch
+  doesn't double them up (`test_scoped_instance_does_not_double_up_projects`).
+  `_widget_spaces_projects.html`'s empty state changed to "No Spaces or
+  projects yet -- add one from Settings" (was Spaces-only wording).
+  `quick_links` itself -- render function, `WIDGET_TYPES`/`WIDGET_SOURCES`/
+  `WIDGET_VIEWS`/`_SELECTION_TO_TYPE`/`_TYPE_TO_SELECTION`/
+  `_SCOPE_EXCLUDED_TYPES` entries, `_is_bare_tile_widget`'s own check,
+  `_widget_quick_links.html` -- deleted outright, not deprecated in place
+  (this app's established convention for a fully-superseded type; the
+  2026-08-15 consolidation did the same for `project_preview`/
+  `filled_cards`). 11 new tests
+  (`TestSpacesProjectsCardsIncludesProjects`), `TestBareTileWidgets`'s own
+  quick_links-specific test/references updated to use `spaces_projects`/
+  cards instead.
+- **Shipped -- Next Deadline / Organize Today / Streak removed outright.**
+  Direct feedback: "not really that useful." All three render functions,
+  their `WIDGET_TYPES`/`WIDGET_VIEWS`/`_SELECTION_TO_TYPE`/
+  `_TYPE_TO_SELECTION` entries, and their three templates
+  (`_widget_next_deadline.html`/`_widget_organize_today.html`/
+  `_widget_streak.html`) deleted. `TestOrganizeTodayWidget` (the only
+  dedicated test class among the three -- Next Deadline/Streak had none)
+  replaced by `TestNextDeadlineOrganizeTodayStreakRemoved`, asserting the
+  render functions/registry entries/templates are actually gone rather
+  than just untested.
+- **Shipped -- `_migrate_widget_removal_2026_08_30`, one-time migration**
+  (same `app_meta`-guarded, `widget_page_context`-called pattern as
+  `_migrate_widget_consolidation`, own key so it doesn't collide) --
+  rewrites any existing `quick_links` row to `spaces_projects`/
+  `style=cards` in place (nothing lost, same "rewrite in place" precedent
+  as the 2026-08-15 migration), and deletes any existing `next_deadline`/
+  `organize_today`/`streak` row outright (no replacement type to rewrite
+  onto). Without this, an existing dashboard would either lose its Quick
+  Links tiles entirely or show `_widget_inner.html`'s generic "Unknown
+  widget type" empty state forever for the other three -- confirmed live
+  by seeding one row of each type and asserting `widget_page_context`
+  itself deletes/rewrites them (`TestWidgetRemovalMigration`, 6 tests,
+  including a "runs exactly once" guard test).
+- `features/dashboard.md` updated to match: widget count 12 -> 8, the
+  four removed/merged types' table rows dropped (their old descriptions
+  kept in the 2026-08-30 prose paragraph instead, not left as dead table
+  rows), Scope-rules paragraph's `quick_links` exclusions rewritten past
+  tense.
+- `sw.js`: `CACHE_NAME` bumped `cc-shell-v35` -> `cc-shell-v36`
+  (`.widget-card--bare`'s own style.css comment updated to stop naming
+  Quick Links by name -- comment-only, bumped anyway per this file's own
+  "any style.css change" convention) -- `test_pwa_shell.py` updated. Full
+  suite **1876 passed** (five chunks: 628 + 489 + 323 + 431 + 5 = 1876 --
+  same total as the prior session's baseline: 25 tests removed
+  (TestQuickLinksWidget's 4, test_quick_links_addable_via_source_view,
+  TestOrganizeTodayWidget's 8, test_quick_links_is_bare) exactly offset
+  by 25 added (TestNextDeadlineOrganizeTodayStreakRemoved's 4,
+  TestSpacesProjectsCardsIncludesProjects's 6, TestWidgetRemovalMigration's
+  6, `_render_quick_links`/`_render_streak`/`_render_next_deadline` no
+  longer referenced by name anywhere they'd need replacement 1-for-1) --
+  coincidental, not a rounding trick, verified by chunk-by-chunk pass
+  counts matching with zero failures throughout).
+
 ## Next session queue — design check-ups, direct request 2026-08-30 (new
 backlog, not yet started)
 

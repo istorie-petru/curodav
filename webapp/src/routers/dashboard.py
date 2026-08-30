@@ -461,7 +461,18 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     unscoped case instead -- a per-instance override, not a second widget
     type (per plans/open.md's own framing of this ask). Default ("space")
     preserves every existing/migrated widget's current behavior
-    unchanged."""
+    unchanged.
+
+    2026-08-30 merge: the "cards" style now also includes every open
+    (non-archived) project when unscoped -- direct request ("merge the
+    quick links and spaces & projects into one data source"). The
+    now-retired Quick Links widget rendered the exact same
+    `.filled-cards-grid` tiles for "every Space + every open project"
+    (Home-only, no config); this style already rendered a subset of that
+    (Spaces only) when unscoped. Scoped instances (`label_name` set, a
+    Space/Project page) are unaffected -- `db.list_child_labels` already
+    pools both projects and sub-Spaces under that label, unlike this
+    unscoped branch which otherwise only ever saw `list_space_labels`."""
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
     if label_name:
@@ -478,10 +489,36 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
             cards.append({
                 "uid": lbl["name"],
                 "name": lbl["name"],
+                "href": f"/spaces/{lbl['name']}",
+                "icon": lbl.get("icon") or "layers",
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
-                "project_count": len(children),
+                "meta": f"{len(children)} project{'' if len(children) == 1 else 's'}",
             })
+        if not label_name:
+            # Unscoped (Home, or a scoped instance opted out via
+            # scope=="everything") -- fold in every open project too, same
+            # "every Space + every open project" set Quick Links used to
+            # render on its own. Not reachable when label_name is set: that
+            # branch already sourced `labels` from list_child_labels above,
+            # which pools projects in directly -- adding them again here
+            # would duplicate every project card on a Space/Project page.
+            for lbl in db.list_project_labels(conn):
+                if lbl.get("archived_at"):
+                    continue
+                cards.append({
+                    "uid": lbl["name"],
+                    "name": lbl["name"],
+                    # 2026-08-15: /projects/{name} is gone -- points at the
+                    # Tasks table instead, same destination Quick Links'
+                    # own project tiles already used (see that widget's
+                    # own retired comment history in this file's git log).
+                    "href": "/tasks",
+                    "icon": lbl.get("icon") or "folder",
+                    "color": lbl.get("color") or "blue",
+                    "description": "",
+                    "meta": "Project",
+                })
         return {"style": "cards", "cards": cards}
 
     # Progress is derived from direct object_labels membership (tasks
@@ -498,121 +535,12 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     return {"style": "list", "previews": previews}
 
 
-def _render_streak(conn, config: dict, nav: dict | None = None) -> dict:
-    """Streak widget (2026-08-15 widget consolidation, new type) -- current
-    and longest run of consecutive days with at least one task completed,
-    read from `tasks.completed_at` (already shipped ahead of this slice,
-    auto-managed in db.upsert_task). "Current" counts back from today, but
-    treats today as not yet breaking the streak if nothing's been
-    completed today (the day isn't over) -- it counts back from yesterday
-    instead in that case, same "don't punish for the day not being over
-    yet" reasoning a habit tracker would use."""
-    tasks = _filtered_tasks(conn, config, open_only=False)
-    completed_days = {t["completed_at"][:10] for t in tasks if t.get("completed_at")}
-    today = date.today()
-
-    def _done(d: date) -> bool:
-        return d.isoformat() in completed_days
-
-    cursor = today if _done(today) else today - timedelta(days=1)
-    current = 0
-    while _done(cursor):
-        current += 1
-        cursor -= timedelta(days=1)
-
-    longest = 0
-    if completed_days:
-        ordered = sorted(date.fromisoformat(d) for d in completed_days)
-        run = 1
-        longest = 1
-        for prev, cur in zip(ordered, ordered[1:]):
-            run = run + 1 if (cur - prev).days == 1 else 1
-            longest = max(longest, run)
-
-    return {"current_streak": current, "longest_streak": longest, "completed_today": _done(today)}
-
-
-def _render_next_deadline(conn, config: dict, nav: dict | None = None) -> dict:
-    """Next Deadline widget (2026-08-15 widget consolidation, new type) --
-    the single soonest open task due date and the single soonest upcoming
-    event, a focused "what's next" stat distinct from Agenda's fuller
-    list."""
-    today = date.today()
-    now_iso = datetime.now(timezone.utc).isoformat()
-
-    tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at")]
-    tasks.sort(key=lambda t: t["due_at"])
-    next_task = tasks[0] if tasks else None
-
-    events = [e for e in _filtered_events(conn, config, start=now_iso) if e.get("start_at") and e["start_at"] >= now_iso]
-    events.sort(key=lambda e: e["start_at"])
-    next_event = events[0] if events else None
-
-    def _days_until(iso: str) -> int:
-        return (date.fromisoformat(iso[:10]) - today).days
-
-    return {
-        "next_task": next_task,
-        "next_task_days": _days_until(next_task["due_at"]) if next_task else None,
-        "next_event": next_event,
-        "next_event_days": _days_until(next_event["start_at"]) if next_event else None,
-    }
-
-
-def _render_organize_today(conn, config: dict, nav: dict | None = None) -> dict:
-    """"What needs organizing today" widget (2026-08-15 widget
-    consolidation, expanded scope, plans/open.md § Widget consolidation)
-    -- surfaces *decisions to make*, distinct from Agenda (which lists
-    what's already scheduled): open tasks due within 3 days with no work
-    session yet, and today's/tomorrow's events with no location or meeting
-    link set. "No session yet" reuses the exact same unscheduled rule
-    `routers/calendar.py::week_view`'s own "Unscheduled work" panel
-    applies (`db.work_allocation_panel_info`: no allocations at all, OR
-    at least one still undated -- only a task whose every session is
-    already dated has nothing left to organize), not a new rule. The
-    location/meeting-link check is a proxy for the not-yet-shipped
-    Format field (`plans/open.md` § Event format for simple events) --
-    both empty reads as "unclear", the same interpretation that field
-    will eventually formalize; this widget needs no changes once Format
-    ships, since `location`/`meeting_url` stay the underlying columns
-    either way.
-
-    This widget also used to surface open Urgency=3 tasks with no session
-    at all regardless of date, in a separate "Urgent, unscheduled" section
-    -- removed along with the rest of the Importance/Urgency feature (1.1);
-    see src/derived_state.py's module docstring.
-
-    Each task row reuses the exact `{"task", "project", "sessions"}` item
-    shape `week_view` builds for its own panel, so the shared
-    `_unscheduled_task_item.html` partial (project pill + title + the
-    "+"/"-" session stepper, `POST /tasks/{uid}/work-allocations[...]`)
-    renders identically here -- an inline quick action to add a work
-    session, not just a link to go fix it elsewhere."""
-    today = date.today()
-    today_iso = today.isoformat()
-    horizon_iso = (today + timedelta(days=3)).isoformat()
-    tomorrow_iso = (today + timedelta(days=1)).isoformat()
-
-    due_soon: list[dict] = []
-    for t in _filtered_tasks(conn, config):
-        info = db.work_allocation_panel_info(conn, t["uid"])
-        if info["count"] and not info["undated_count"]:
-            continue  # every session already dated -- nothing left to organize
-        due_at = t.get("due_at")
-        if due_at and due_at[:10] <= horizon_iso:
-            item = {"task": t, "project": db.project_label_config_for(conn, "task", t["uid"]), "sessions": info}
-            due_soon.append(item)
-    due_soon.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
-
-    events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{tomorrow_iso}T23:59:59")
-    unclear_format = [
-        e for e in events
-        if e.get("start_at") and today_iso <= e["start_at"][:10] <= tomorrow_iso
-        and not (e.get("location") or "").strip() and not (e.get("meeting_url") or "").strip()
-    ]
-    unclear_format.sort(key=lambda e: e.get("start_at") or "")
-
-    return {"due_soon": due_soon, "unclear_format": unclear_format}
+# _render_streak/_render_next_deadline/_render_organize_today (2026-08-15
+# widget consolidation types) removed 2026-08-30, direct request ("maybe
+# just remove the next deadline, what needs organizing and streak widgets
+# - not really that useful"). See _migrate_widget_removal's own comment
+# for how existing instances of these three types are cleaned up on a
+# live dashboard.
 
 
 # The 2026-08-15 "Weekly Schedule" widget's own threshold for "this
@@ -870,49 +798,6 @@ def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) ->
     return {"sessions": sessions, "total_hours": round(total_hours, 1), "today": today_iso}
 
 
-def _render_quick_links(conn, config: dict, nav: dict | None = None) -> dict:
-    """Quick Links -- a visual tile grid of every Space (generate_space=1)
-    and every open (non-archived) project (is_project=1), each linking to
-    its own page. The Dashboard's "more visual, less data-heavy" side work
-    (1.9): the app has no separate "pinned"/"favorite" concept (label_config
-    dropped `pinned` outright, see db.py's own SCHEMA_SQL comment) -- a
-    curated-by-nature set of "every Space + every open project" is the v1,
-    per plans/STATE.md's own note, no new schema needed. Uses each label's
-    own `icon`/`color` (label_config.icon, the same `icon()` Jinja helper
-    and `--cal-bg-<hue>` vars every other colored tile in this app already
-    uses -- filled_cards/project_preview) rather than inventing a new visual
-    language. Home-only (excluded on Space/Project pages, same as
-    filled_cards/project_preview -- see _SCOPE_EXCLUDED_TYPES): "every Space
-    + every project" is meaningless once you're already inside one of them."""
-    # "tiles", not "items" -- a plain dict key named "items" is unsafe with
-    # Jinja's attribute-then-item lookup (`data.items` silently resolves to
-    # dict.items, the builtin method, since attribute lookup is tried
-    # first).
-    tiles = []
-    for lbl in db.list_space_labels(conn):
-        tiles.append({
-            "name": lbl["name"], "href": f"/spaces/{lbl['name']}",
-            "icon": lbl.get("icon") or "layers", "color": lbl.get("color") or "blue",
-            "kind": "Space",
-        })
-    for lbl in db.list_project_labels(conn):
-        if lbl.get("archived_at"):
-            continue
-        tiles.append({
-            # 2026-08-15: /projects/{name} is gone (see routers/projects.py's
-            # module docstring) -- points at the Tasks table instead, the
-            # closest existing equivalent. 2026-08-28 "major rework" session:
-            # was `/tasks?label={name}` (a pre-filtered view) -- the Tasks
-            # table's label filter is gone (item 3), so this just opens the
-            # plain Table view, where the project already surfaces as its
-            # own group (routers/tasks.py's _build_task_groups).
-            "name": lbl["name"], "href": "/tasks",
-            "icon": lbl.get("icon") or "folder", "color": lbl.get("color") or "blue",
-            "kind": "Project",
-        })
-    return {"tiles": tiles}
-
-
 # Grid width -- there used to be a manual width picker/drag-resize here
 # (a "half"/"full" flag on WIDGET_TYPES, then from 2026-08-01 a per-
 # widget-instance override living in config["width"], picked from the
@@ -1052,41 +937,13 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": {"events"},
         "default_width": "third",
     },
-    "quick_links": {
-        "label": "Quick Links",
-        "template": "_widget_quick_links.html",
-        "render": _render_quick_links,
-        "uses": set(),
-        "default_width": "full",
-    },
-    # "streak"/"next_deadline" (2026-08-15 widget consolidation, new
-    # types) -- see _render_streak/_render_next_deadline.
-    "streak": {
-        "label": "Streak",
-        "template": "_widget_streak.html",
-        "render": _render_streak,
-        "uses": {"tasks"},
-        "default_width": "third",
-    },
-    "next_deadline": {
-        "label": "Next Deadline",
-        "template": "_widget_next_deadline.html",
-        "render": _render_next_deadline,
-        "uses": {"tasks", "events"},
-        "default_width": "third",
-    },
-    # "organize_today" (2026-08-15, expanded scope) -- see
-    # _render_organize_today's own docstring. "half" width: it can render
-    # up to three sections at once (each an _unscheduled_task_item.html
-    # list or a small table), more content than a "third"-width stat
-    # widget but not a full day-grid like Agenda's grouped mode either.
-    "organize_today": {
-        "label": "What Needs Organizing",
-        "template": "_widget_organize_today.html",
-        "render": _render_organize_today,
-        "uses": {"tasks", "events"},
-        "default_width": "half",
-    },
+    # "quick_links" (1.9 side work) retired 2026-08-30 -- merged into
+    # "spaces_projects"'s own "cards" style (direct request, "merge the
+    # quick links and spaces & projects into one data source"); see
+    # _render_spaces_projects's own 2026-08-30 comment. "streak"/
+    # "next_deadline"/"organize_today" (2026-08-15 widget consolidation)
+    # removed the same day, direct request ("not really that useful") --
+    # see the comment where their render functions used to be, above.
     # "weekly_schedule" (2026-08-15, new type) -- see
     # _render_weekly_schedule's own docstring. "half" width: a compact
     # grid + a short list, more content than a bare stat widget but not a
@@ -1126,18 +983,19 @@ WIDGET_SOURCES: dict[str, dict] = {
     "calendar_tasks": {"label": "WebDAV", "icon": "calendar"},
     "habits": {"label": "Habits", "icon": "activity"},
     "contacts": {"label": "Contacts", "icon": "users"},
-    # "quick_links" (1.9 side work) -- its own source rather than folded
-    # under "calendar_tasks", since it reads label_config directly (no
-    # tasks/events at all, same "uses: set()" shape spaces_projects
-    # already has) -- see _render_quick_links.
-    "quick_links": {"label": "Quick Links", "icon": "link"},
     # "spaces_projects" (2026-08-15 widget consolidation) -- re-added to
     # the builder as its own source now that it's one clean List/Cards
     # widget instead of two ("projects" was purged from the picker
     # entirely 2026-08-07 while project_preview/filled_cards were still
     # two separate, harder-to-explain types; see that comment's own
-    # history in this file's git log). Reads label_config directly, same
-    # "uses: set()" shape as quick_links.
+    # history in this file's git log). Reads label_config directly, no
+    # tasks/events at all (`"uses": set()` in WIDGET_TYPES).
+    #
+    # "quick_links" (1.9 side work, its own source for the same reason)
+    # retired 2026-08-30 -- its "every Space + every open project" tile
+    # grid merged into this source's own "cards" style (Style radio, see
+    # WIDGET_VIEWS' spaces_projects_view/has_style below) rather than
+    # staying a second, harder-to-explain source next to this one.
     "spaces_projects": {"label": "Spaces & Projects", "icon": "layers"},
 }
 
@@ -1164,15 +1022,12 @@ WIDGET_VIEWS: dict[str, dict] = {
     # to this flag, same `has_range`/`has_show`/`has_style` pattern.
     "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False, "has_limit": True},
     "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
-    "quick_links_view": {"label": "Quick links (tiles)", "source": "quick_links", "has_range": False},
-    # "spaces_projects_view"/"streak_view"/"next_deadline_view"
-    # (2026-08-15 widget consolidation) -- spaces_projects_view exposes
+    # "spaces_projects_view" (2026-08-15 widget consolidation) -- exposes
     # the List/Cards Style radio (see _widget_builder_fields.html), same
-    # gating idea as Agenda's has_show.
+    # gating idea as Agenda's has_show. "quick_links_view"/"streak_view"/
+    # "next_deadline_view"/"organize_today_view" retired 2026-08-30 along
+    # with their widget types -- see WIDGET_TYPES' own comment.
     "spaces_projects_view": {"label": "Spaces & Projects", "source": "spaces_projects", "has_range": False, "has_style": True},
-    "streak_view": {"label": "Streak", "source": "calendar_tasks", "has_range": False},
-    "next_deadline_view": {"label": "Next deadline", "source": "calendar_tasks", "has_range": False},
-    "organize_today_view": {"label": "What needs organizing", "source": "calendar_tasks", "has_range": False},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
 }
 
@@ -1210,11 +1065,7 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("checklist", None): ("habit_checkin", {}),
     ("contact_list_view", None): ("contact_list", {}),
     ("scheduled_work_view", None): ("scheduled_work_today", {}),
-    ("quick_links_view", None): ("quick_links", {}),
     ("spaces_projects_view", None): ("spaces_projects", {}),
-    ("streak_view", None): ("streak", {}),
-    ("next_deadline_view", None): ("next_deadline", {}),
-    ("organize_today_view", None): ("organize_today", {}),
     ("weekly_schedule_view", None): ("weekly_schedule", {}),
 }
 
@@ -1232,10 +1083,6 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("habit_checkin", None): ("habits", "checklist", None),
     ("contact_list", None): ("contacts", "contact_list_view", None),
     ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
-    ("quick_links", None): ("quick_links", "quick_links_view", None),
-    ("streak", None): ("calendar_tasks", "streak_view", None),
-    ("next_deadline", None): ("calendar_tasks", "next_deadline_view", None),
-    ("organize_today", None): ("calendar_tasks", "organize_today_view", None),
     ("weekly_schedule", None): ("calendar_tasks", "weekly_schedule_view", None),
 }
 
@@ -1298,9 +1145,13 @@ def _selection_from_widget(widget: dict) -> tuple[str, str, str | None]:
 # own linked lists/calendars.
 # --------------------------------------------------------------------- #
 
+# "quick_links" dropped from both sets 2026-08-30 -- retired outright
+# (merged into "spaces_projects"), nothing left to exclude it as. Space
+# pages have no exclusions left at all now (no "space" key -- same
+# `.get(scope) or set()` fallback _excluded_widget_types already uses for
+# Home's "" scope handles the now-absent key identically).
 _SCOPE_EXCLUDED_TYPES: dict[str, set[str]] = {
-    "space": {"quick_links"},
-    "project": {"spaces_projects", "quick_links"},
+    "project": {"spaces_projects"},
 }
 
 
@@ -1676,28 +1527,66 @@ def _migrate_widget_consolidation(conn) -> None:
     db.set_app_meta(conn, _WIDGET_CONSOLIDATION_KEY, "1")
 
 
+_WIDGET_REMOVAL_2026_08_30_KEY = "dashboard_widget_removal_2026_08_30"
+
+
+def _migrate_widget_removal_2026_08_30(conn) -> None:
+    """One-time migration (2026-08-30, direct requests: "merge the quick
+    links and spaces & projects into one data source" / "maybe just remove
+    the next deadline, what needs organizing and streak widgets") -- same
+    non-idempotent-forever pattern as `_migrate_widget_consolidation`
+    above (runs exactly once, tracked in its own app_meta key so it
+    doesn't re-run and doesn't collide with that migration's own guard).
+
+    - Every existing "quick_links" row becomes "spaces_projects" with
+      `style="cards"` in place (same rewrite-in-place approach
+      `_migrate_widget_consolidation` already uses for project_preview/
+      filled_cards) -- `_render_spaces_projects`'s own cards branch now
+      renders the identical "every Space + every open project" tile set
+      Quick Links used to when unscoped, so nothing is lost, just
+      relabeled onto the surviving type.
+    - Every existing "next_deadline"/"organize_today"/"streak" row is
+      deleted outright -- there's no replacement type to rewrite onto (a
+      straight removal, not a merge), and leaving the row in place would
+      otherwise render as `_widget_inner.html`'s generic "Unknown widget
+      type" empty state forever (`_widget_context` already degrades a
+      row whose `type` isn't in `WIDGET_TYPES` that way -- harmless, but
+      not what "remove" means here). `db.delete_dashboard_widget` is a
+      plain row delete; a removed widget that happened to be inside a
+      stack just stops appearing among that stack's children (nothing
+      else references it back)."""
+    if db.get_app_meta(conn, _WIDGET_REMOVAL_2026_08_30_KEY):
+        return
+    for w in db.list_all_dashboard_widgets(conn):
+        wtype = w["type"]
+        if wtype == "quick_links":
+            row = dict(w)
+            row["type"] = "spaces_projects"
+            row["config"] = {**(w.get("config") or {}), "style": "cards"}
+            db.upsert_dashboard_widget(conn, row)
+        elif wtype in ("next_deadline", "organize_today", "streak"):
+            db.delete_dashboard_widget(conn, w["uid"])
+    db.set_app_meta(conn, _WIDGET_REMOVAL_2026_08_30_KEY, "1")
+
+
 # "Bare" tile-grid widgets (2026-08-30, direct feedback: "i like the quick
-# links grid but i'd like to not have them inside a div card") -- Quick
-# Links and Spaces & Projects' own "cards" style both render the exact same
-# `.filled-cards-grid`/`.filled-card` tiles (see both templates' own
-# comments -- deliberately the same shared markup, not a coincidence: this
-# is why the two widgets read as near-duplicates of each other in the first
-# place, see plans/STATE.md's own note on this). Both already carry their
-# own visual weight (saturated filled tiles, MD3 "elevation-1" shadow per
-# tile) -- wrapping that grid a second time in the .card chrome (border +
-# shadow + padded box) was redundant framing, not information. `bare` opts
-# a widget INSTANCE's card wrapper out of that chrome (border/shadow/
-# background/padding -- see .widget-card--bare, static/style.css) while
-# keeping the same `.widget-card` class/id/data-* attributes the masonry
-# layout (static/app.js) and the async-CRUD single-widget refresh
-# (_widget_card.html's `#widget-<uid>` match) both still key off of --
-# structural role unchanged, only the visual box around it is gone.
+# links grid but i'd like to not have them inside a div card") -- Spaces &
+# Projects' own "cards" style renders `.filled-cards-grid`/`.filled-card`
+# tiles that already carry their own visual weight (saturated fills, MD3
+# "elevation-1" shadow per tile) -- wrapping that grid a second time in the
+# .card chrome (border + shadow + padded box) was redundant framing, not
+# information. Originally also covered the standalone "quick_links" widget
+# type, which rendered the identical tile grid -- retired the same day,
+# merged into this style (see _render_spaces_projects's own comment), so
+# only the one condition below remains. `bare` opts a widget INSTANCE's
+# card wrapper out of that chrome (border/shadow/background/padding -- see
+# .widget-card--bare, static/style.css) while keeping the same
+# `.widget-card` class/id/data-* attributes the masonry layout (static/
+# app.js) and the async-CRUD single-widget refresh (_widget_card.html's
+# `#widget-<uid>` match) both still key off of -- structural role
+# unchanged, only the visual box around it is gone.
 def _is_bare_tile_widget(widget: dict) -> bool:
-    if widget["type"] == "quick_links":
-        return True
-    if widget["type"] == "spaces_projects":
-        return (widget.get("config") or {}).get("style") == "cards"
-    return False
+    return widget["type"] == "spaces_projects" and (widget.get("config") or {}).get("style") == "cards"
 
 
 def _widget_context(conn, widget: dict, nav: dict | None = None) -> dict:
@@ -1795,6 +1684,7 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
     a `?edit=1` query param, since edit mode is now a persistent, app-wide
     Settings > Appearance toggle rather than a per-page one."""
     _migrate_widget_consolidation(conn)
+    _migrate_widget_removal_2026_08_30(conn)
     label_name = project_uid or space_uid
     widgets = db.list_dashboard_widgets(conn, label_name=label_name)
     widget_contexts = _build_widget_contexts(conn, widgets, nav)

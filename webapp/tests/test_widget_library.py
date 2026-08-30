@@ -21,12 +21,8 @@ VISUAL_WIDGETS = [
     "_widget_contact_list.html",
     "_widget_habit_checkin.html",
     "_widget_mini_month_calendar.html",
-    "_widget_next_deadline.html",
-    "_widget_organize_today.html",
-    "_widget_quick_links.html",
     "_widget_scheduled_work_today.html",
     "_widget_spaces_projects.html",
-    "_widget_streak.html",
     "_widget_weekly_schedule.html",
 ]
 

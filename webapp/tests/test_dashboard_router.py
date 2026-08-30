@@ -1045,15 +1045,130 @@ class TestSpacesProjectsScope:
         assert w["config"]["style"] == "cards"
 
 
+class TestSpacesProjectsCardsIncludesProjects:
+    """2026-08-30, direct request ("merge the quick links and spaces &
+    projects into one data source") -- an unscoped "cards" style instance
+    now includes every open project alongside every Space, the same
+    "every Space + every open project" set the retired Quick Links widget
+    used to render on its own (see TestNextDeadlineOrganizeTodayStreakRemoved
+    for the removal side of the same session)."""
+
+    def test_unscoped_cards_includes_spaces_and_open_projects(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        names = {c["name"]: c["meta"] for c in data["cards"]}
+        assert names["Uni"] == "0 projects"
+        assert names["CS101"] == "Project"
+
+    def test_archived_projects_excluded(self, conn):
+        db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "archived_at": _now(), "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        assert "Old" not in {c["name"] for c in data["cards"]}
+
+    def test_project_card_uses_label_icon_and_folder_fallback(self, conn):
+        db.upsert_label_config(conn, {"name": "NoIcon", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Iconed", "is_project": 1, "icon": "rocket", "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        by_name = {c["name"]: c for c in data["cards"]}
+        assert by_name["NoIcon"]["icon"] == "folder"
+        assert by_name["Iconed"]["icon"] == "rocket"
+        assert by_name["NoIcon"]["href"] == "/tasks"
+
+    def test_scope_everything_also_includes_projects(self, conn):
+        # scope=="everything" opts a Space/Project page's own widget
+        # instance out of its page auto-scope, rendering the same as an
+        # unscoped Home instance -- that includes this merge too, not just
+        # the Space-only behavior scope=="everything" had before.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything", "style": "cards"})
+        assert {c["name"] for c in data["cards"]} == {"Uni", "CS101"}
+
+    def test_scoped_instance_does_not_double_up_projects(self, conn):
+        # label_name set (a Space/Project page) -- `labels` already comes
+        # from list_child_labels, which pools projects in directly. The
+        # unscoped-only merge branch must not also run here, or a Space's
+        # own child project would render twice.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "style": "cards"})
+        names = [c["name"] for c in data["cards"]]
+        assert names.count("CS101") == 1
+
+    def test_empty_state_mentions_both_spaces_and_projects(self, conn):
+        import pathlib
+
+        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
+        text = (templates / "_widget_spaces_projects.html").read_text()
+        assert "No Spaces or projects yet" in text
+
+
+class TestWidgetRemovalMigration:
+    """2026-08-30 -- _migrate_widget_removal_2026_08_30, the one-time
+    migration for the same session's quick_links merge + next_deadline/
+    organize_today/streak removal, so an existing dashboard doesn't lose a
+    widget (or end up with a dead "Unknown widget type" card) just because
+    this version is running."""
+
+    def _seed_row(self, conn, uid, wtype, config=None, group_uid=None):
+        db.upsert_dashboard_widget(conn, {
+            "uid": uid, "type": wtype, "title": None, "config": config or {},
+            "position": 1, "created_at": _now(), "group_uid": group_uid,
+        })
+
+    def test_quick_links_becomes_spaces_projects_cards(self, conn):
+        self._seed_row(conn, "w1", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w = db.get_dashboard_widget(conn, "w1")
+        assert w["type"] == "spaces_projects"
+        assert w["config"]["style"] == "cards"
+
+    def test_quick_links_migration_preserves_other_config(self, conn):
+        self._seed_row(conn, "w1", "quick_links", config={"tags": ["Uni"]})
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w = db.get_dashboard_widget(conn, "w1")
+        assert w["config"]["tags"] == ["Uni"]
+        assert w["config"]["style"] == "cards"
+
+    def test_next_deadline_organize_today_streak_deleted(self, conn):
+        self._seed_row(conn, "w1", "next_deadline")
+        self._seed_row(conn, "w2", "organize_today")
+        self._seed_row(conn, "w3", "streak")
+        self._seed_row(conn, "w4", "agenda")  # untouched control
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        remaining = {w["uid"] for w in db.list_all_dashboard_widgets(conn)}
+        assert remaining == {"w4"}
+
+    def test_runs_exactly_once(self, conn):
+        self._seed_row(conn, "w1", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        # Simulate a user re-adding a fresh quick_links row after the
+        # migration already ran once (shouldn't happen in practice since
+        # the type is gone from the builder, but the guard itself -- "ran
+        # once, never touches new rows again" -- is what's under test).
+        self._seed_row(conn, "w2", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w2 = db.get_dashboard_widget(conn, "w2")
+        assert w2["type"] == "quick_links"  # untouched -- guard already tripped
+
+    def test_wired_into_widget_page_context(self, conn):
+        self._seed_row(conn, "w1", "next_deadline")
+        dashboard_router.widget_page_context(conn)
+        assert db.get_dashboard_widget(conn, "w1") is None
+
+
 class TestBareTileWidgets:
     """2026-08-30, direct feedback ("i like the quick links grid but i'd
-    like to not have them inside a div card") -- Quick Links and Spaces &
-    Projects' own "cards" style both render the same .filled-cards-grid
-    tiles, so both opt their widget instance out of the .card wrapper's
-    chrome (border/shadow/background/padding -- see .widget-card--bare,
-    static/style.css) via _widget_context's own "bare" key. Spaces &
-    Projects' "list" style keeps its normal card chrome -- only the tile
-    grid was the redundant-double-frame complaint."""
+    like to not have them inside a div card") -- Spaces & Projects' own
+    "cards" style renders .filled-cards-grid tiles, so a widget instance
+    using that style opts its .card wrapper out of the chrome (border/
+    shadow/background/padding -- see .widget-card--bare, static/style.css)
+    via _widget_context's own "bare" key. Spaces & Projects' "list" style
+    keeps its normal card chrome -- only the tile grid was the redundant-
+    double-frame complaint. (The standalone "quick_links" widget type this
+    originally also covered was retired the same day, merged into this
+    "cards" style -- see TestSpacesProjectsCardsIncludesProjects.)"""
 
     def _widget(self, conn, wtype, config=None):
         w = {
@@ -1062,11 +1177,6 @@ class TestBareTileWidgets:
         }
         db.upsert_dashboard_widget(conn, w)
         return w
-
-    def test_quick_links_is_bare(self, conn):
-        w = self._widget(conn, "quick_links")
-        wc = dashboard_router._widget_context(conn, w)
-        assert wc["bare"] is True
 
     def test_spaces_projects_cards_style_is_bare(self, conn):
         w = self._widget(conn, "spaces_projects", {"style": "cards"})
@@ -1088,13 +1198,13 @@ class TestBareTileWidgets:
         assert wc["bare"] is False
 
     def test_other_widget_types_are_not_bare(self, conn):
-        w = self._widget(conn, "streak")
+        w = self._widget(conn, "at_a_glance")
         wc = dashboard_router._widget_context(conn, w)
         assert wc["bare"] is False
 
     def test_bare_class_rendered_on_dashboard(self, conn):
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
-        self._widget(conn, "quick_links")
+        self._widget(conn, "spaces_projects", {"style": "cards"})
         from starlette.requests import Request
 
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
@@ -1103,62 +1213,38 @@ class TestBareTileWidgets:
         assert "widget-card--bare" in body
 
 
-class TestOrganizeTodayWidget:
-    """2026-08-15, widget consolidation expanded scope: "what needs
-    organizing today" -- decisions to make, not things already scheduled."""
+class TestNextDeadlineOrganizeTodayStreakRemoved:
+    """2026-08-30, direct request ("maybe just remove the next deadline,
+    what needs organizing and streak widgets - not really that useful")
+    -- these three 2026-08-15 widget-consolidation types are gone
+    outright, no replacement type. See TestWidgetRemovalMigration below
+    for how an existing dashboard carrying one of these rows is cleaned
+    up."""
 
-    def test_unallocated_task_due_soon_is_listed(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+    def test_render_functions_are_gone(self):
+        assert not hasattr(dashboard_router, "_render_next_deadline")
+        assert not hasattr(dashboard_router, "_render_organize_today")
+        assert not hasattr(dashboard_router, "_render_streak")
 
-    def test_task_due_soon_but_already_fully_scheduled_is_excluded(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
-        db.create_work_allocation(conn, "t1", start_at=f"{today.isoformat()}T09:00:00", end_at=f"{today.isoformat()}T10:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
+    def test_types_are_gone_from_every_registry(self):
+        for wtype in ("next_deadline", "organize_today", "streak"):
+            assert wtype not in dashboard_router.WIDGET_TYPES
+            assert not any(
+                cfg_type == wtype for cfg_type, _ in dashboard_router._SELECTION_TO_TYPE.values()
+            )
+            assert not any(key[0] == wtype for key in dashboard_router._TYPE_TO_SELECTION)
 
-    def test_task_due_soon_with_only_an_undated_session_is_still_listed(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=1)).isoformat())
-        db.create_work_allocation(conn, "t1")  # undated placeholder
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+    def test_views_are_gone(self):
+        for view in ("next_deadline_view", "organize_today_view", "streak_view"):
+            assert view not in dashboard_router.WIDGET_VIEWS
+            assert (view, None) not in dashboard_router._SELECTION_TO_TYPE
 
-    def test_task_due_beyond_the_horizon_is_excluded(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
+    def test_templates_are_deleted(self):
+        import pathlib
 
-    def test_event_with_no_location_or_url_is_unclear(self, conn):
-        today = date.today()
-        _seed_event(conn, "e1", start_at=f"{today.isoformat()}T09:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [e["uid"] for e in data["unclear_format"]] == ["e1"]
-
-    def test_event_with_a_location_is_not_unclear(self, conn):
-        today = date.today()
-        db.upsert_event(conn, {
-            "uid": "e1", "title": "e1", "description": "", "status": "active", "all_day": 0,
-            "start_at": f"{today.isoformat()}T09:00:00", "location": "Room 101",
-            "tags": [], "created_at": _now(),
-        })
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["unclear_format"] == []
-
-    def test_event_beyond_tomorrow_is_excluded(self, conn):
-        today = date.today()
-        _seed_event(conn, "e1", start_at=f"{(today + timedelta(days=2)).isoformat()}T09:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["unclear_format"] == []
-
-    def test_registered_in_widget_types_and_selection_tables(self, conn):
-        assert "organize_today" in dashboard_router.WIDGET_TYPES
-        assert ("organize_today_view", None) in dashboard_router._SELECTION_TO_TYPE
-        assert ("organize_today", None) in dashboard_router._TYPE_TO_SELECTION
+        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
+        for name in ("_widget_next_deadline.html", "_widget_organize_today.html", "_widget_streak.html"):
+            assert not (templates / name).exists()
 
 
 class TestLimitFieldExposedForMoreViews:

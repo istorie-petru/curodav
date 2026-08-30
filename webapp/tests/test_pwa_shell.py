@@ -401,8 +401,13 @@ class TestLocalWritePath:
         # v35 (2026-08-30): bumped again, same session (live bug report --
         # Weekly Schedule crash fix, .widget-card--bare for Quick Links/
         # Spaces & Projects cards style) -- style.css changed again.
+        # v36 (2026-08-30): bumped again, new session (quick_links merged
+        # into spaces_projects cards style; next_deadline/organize_today/
+        # streak removed outright) -- .widget-card--bare's own comment in
+        # style.css updated to match, comment-only but same file-changed
+        # convention as every other entry above.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v35"' in script
+        assert 'CACHE_NAME = "cc-shell-v36"' in script
 
 
 class TestOfflineToolbar:
