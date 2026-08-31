@@ -32,38 +32,20 @@
      .not-in-month cells at all: the window is a continuous 28 days and
      never bleeds into surrounding weeks/months). `.fourweek-viewport`
      just trims the height back from Month's 128vh (tuned for up to six
-     rows) so four rows don't stretch across a page-and-a-half. -->
-<div class="card calendar-viewport month-viewport fourweek-viewport">
-<div class="month-weekday-row">
-    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
-</div>
-{% for week in weeks %}
-<div class="month-week-grid">
-    {% for day in week.days %}
-    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
-        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
-        <div class="month-day-bottom">
-            {% for item in day.rows %}
-                {% if item.kind == "all_day" %}
-                    <a class="month-all-day cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}">{{ item.event.title }}</a>
-                {% elif item.kind == "event" %}
-                    <a class="month-task-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}">
-                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
-                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
-                        <span class="month-item-title">{{ item.event.title }}</span>
-                    </a>
-                {% else %}
-                    <a class="month-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
-                {% endif %}
-            {% endfor %}
-            {% if day.overflow_count %}
-                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
-            {% endif %}
-        </div>
-    </div>
-    {% endfor %}
-</div>
-{% endfor %}
-</div>
+     rows) so four rows don't stretch across a page-and-a-half.
+
+     2026-08-31: the grid itself moved into _calendar_fourweek_grid.html
+     (its own async-CRUD region, `#fourweek-grid`) instead of being
+     duplicated inline here -- that duplication is exactly what let
+     4-Week's chips drift out of sync with Month's drag hooks (missing
+     `.month-event-item`/`.month-due-task-item`/`data-uid`) in the first
+     place (direct bug report, "drag and drop still is not working ... 4
+     week view"). See that partial's own comment and routers/calendar.py's
+     _four_week_view_context docstring for the full story. -->
+{% include "_calendar_fourweek_grid.html" %}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script>{% endblock %}
+{% block extra_scripts %}
+<script src="{{ static_url('calendar_month.js') }}"></script>
+<script src="{{ static_url('calendar_month_drag.js') }}"></script>
+<script src="{{ static_url('async_calendar.js') }}"></script>
+{% endblock %}

@@ -3,9 +3,16 @@
 // grid's own drag-to-move, the command palette, a dashboard widget),
 // re-render just this page's calendar region instead of a full reload.
 //
-// Two regions, loaded by whichever calendar template includes this script:
+// Three regions, loaded by whichever calendar template includes this
+// script:
 //   * Month (calendar_month.html): #month-grid, static; re-bound via
 //     CCMonthGridCreate / CCMonthGridDrag.
+//   * 4-Week (calendar_fourweek.html): #fourweek-grid -- same grid shape
+//     and the same two re-bind hooks as Month (2026-08-31: split out of
+//     calendar_fourweek.html's own former inline markup, which had no
+//     region at all -- a drag's POST landed fine server-side but nothing
+//     on screen ever reflected it, since nothing here claimed the change
+//     event for that page; see _calendar_fourweek_grid.html's comment).
 //   * Week (calendar_week.html): #week-grid, the whole
 //     .project-calendar-layout; re-bound via CCWeekGrid / CCProjectCalendar /
 //     CCUnscheduledPanel. Its mutation endpoints (work-allocation create/
@@ -42,6 +49,23 @@
     }
   }
 
+  var fourweekEl = document.getElementById("fourweek-grid");
+  if (fourweekEl) {
+    var fourweekUrl = "/calendar/regions?region=fourweek&date_=" + encodeURIComponent(fourweekEl.dataset.date || "");
+    if (fourweekEl.dataset.label) fourweekUrl += "&label=" + encodeURIComponent(fourweekEl.dataset.label);
+
+    function refreshFourweek() {
+      return window.ccApi.refreshRegion(fourweekUrl, "fourweek-grid").then(function () {
+        fourweekEl = document.getElementById("fourweek-grid");
+        // Same create/drag scripts as Month re-bind here -- they query by
+        // class name only (.month-day-cell, .month-event-item[data-uid]),
+        // never by a container id, so they work unmodified on this grid.
+        if (window.CCMonthGridCreate) window.CCMonthGridCreate.init();
+        if (window.CCMonthGridDrag) window.CCMonthGridDrag.init();
+      });
+    }
+  }
+
   var weekEl = document.getElementById("week-grid");
   if (weekEl) {
     var weekUrl = "/calendar/regions?region=week&date_=" + encodeURIComponent(weekEl.dataset.date || "");
@@ -60,12 +84,14 @@
     }
   }
 
-  // A week page re-renders on task changes too (an allocation IS a task's
-  // scheduling; project_calendar.js's own mutations dispatch type "task").
+  // A month/4-week/week page re-renders on task changes too (a due-date
+  // drag or an allocation IS a task's scheduling; project_calendar.js's
+  // own mutations dispatch type "task", same as calendar_month_drag.js's
+  // task-chip drag now does).
   document.addEventListener("cc-entity-changed", function (e) {
     var detail = e.detail || {};
     if (detail.type !== "event" && detail.type !== "task") return;
-    var refresher = regionEl ? refreshMonth : weekEl ? refreshWeek : null;
+    var refresher = regionEl ? refreshMonth : fourweekEl ? refreshFourweek : weekEl ? refreshWeek : null;
     if (!refresher) return;
     detail.claimed = true;
     refresher().catch(function () {

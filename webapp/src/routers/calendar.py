@@ -539,6 +539,10 @@ def calendar_regions(
         return templates.TemplateResponse(
             "_calendar_week_grid.html", _week_view_context(conn, request, date_, label)
         )
+    if region == "fourweek":
+        return templates.TemplateResponse(
+            "_calendar_fourweek_grid.html", _four_week_view_context(conn, request, date_, label)
+        )
     return JSONResponse({"error": f"unknown calendar region: {region}"}, status_code=400)
 
 
@@ -562,6 +566,25 @@ def four_week_view(
     while the anchor week keeps its configured row -- direct feedback
     2026-08-11, "move by 1 week, not 4"); the `date_` param is the anchor
     (a bare date inside whatever window is shown)."""
+    return templates.TemplateResponse(
+        "calendar_fourweek.html", _four_week_view_context(conn, request, date_, label)
+    )
+
+
+def _four_week_view_context(conn, request, date_, label):
+    """Everything the 4-Week view needs, in one dict -- shared by
+    four_week_view (full page) and the async `#fourweek-grid` region
+    (features/async-crud.md), which re-renders just the grid after a drag-
+    to-move or an event/task change on the 4-Week page. Split out
+    2026-08-31 (direct bug report, "drag and drop still is not working ...
+    4 week view") -- 4-Week previously had no async region at all (its own
+    duplicated inline markup in calendar_fourweek.html, no `id`, no
+    `calendar_month_drag.js` script tag, and its event/task chips carried
+    none of Month's `.month-event-item`/`.month-due-task-item`/`data-uid`
+    hooks), so a drag's own POST landed fine server-side but nothing on
+    screen ever reflected it -- same silent-no-op shape as a `cc-entity-
+    changed` event nobody claims (see async_calendar.js's own comment on
+    the claimed protocol)."""
     today = date.today()
     anchor = date.fromisoformat(date_) if date_ else today
     week_start = _week_start(request)
@@ -581,27 +604,24 @@ def four_week_view(
 
     weeks = _four_week_grid(view_start, events, tasks, week_start)
 
-    return templates.TemplateResponse(
-        "calendar_fourweek.html",
-        {
-            "request": request,
-            # "calendar" (not "calendar_fourweek"): 4-Week IS what the
-            # "Calendar" tabbar destination opens now (see
-            # calendar_root_redirect's docstring above).
-            "active_tab": "calendar",
-            "calendar_view": "fourweek",
-            "today_iso": today.isoformat(),
-            "weeks": weeks,
-            "weekday_names": _weekday_names(week_start),
-            "view_start": view_start,
-            "view_end": view_end,
-            "anchor_iso": anchor.isoformat(),
-            "prev_start": (view_start - timedelta(days=7)).isoformat(),
-            "next_start": (view_start + timedelta(days=7)).isoformat(),
-            "event_label_names": db.list_event_label_names(conn),
-            "active_label": label or "",
-        },
-    )
+    return {
+        "request": request,
+        # "calendar" (not "calendar_fourweek"): 4-Week IS what the
+        # "Calendar" tabbar destination opens now (see
+        # calendar_root_redirect's docstring above).
+        "active_tab": "calendar",
+        "calendar_view": "fourweek",
+        "today_iso": today.isoformat(),
+        "weeks": weeks,
+        "weekday_names": _weekday_names(week_start),
+        "view_start": view_start,
+        "view_end": view_end,
+        "anchor_iso": anchor.isoformat(),
+        "prev_start": (view_start - timedelta(days=7)).isoformat(),
+        "next_start": (view_start + timedelta(days=7)).isoformat(),
+        "event_label_names": db.list_event_label_names(conn),
+        "active_label": label or "",
+    }
 
 
 @router.get("/week")

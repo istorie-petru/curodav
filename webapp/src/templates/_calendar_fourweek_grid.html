@@ -1,0 +1,52 @@
+<!-- 2026-08-31 (direct bug report, "drag and drop still is not working ...
+     4 week view") -- split out of calendar_fourweek.html's own former
+     inline markup so 4-Week gets the exact same async-CRUD region + drag
+     hooks Month already has via _calendar_month_grid.html, instead of a
+     second hand-maintained copy that had quietly drifted out of sync
+     (missing `.month-event-item`/`.month-due-task-item` classes and
+     `data-uid` attributes -- see routers/calendar.py's
+     _four_week_view_context docstring for the full story). Content here
+     is deliberately identical to _calendar_month_grid.html's, just with
+     a `fourweek-grid` id/data-date instead of `month-grid`'s id/data-year/
+     data-month -- calendar_month.js and calendar_month_drag.js both query
+     by class name only (`.month-day-cell`, `.month-event-item[data-uid]`,
+     etc.), never by a container id, so the same two scripts work
+     unmodified on either grid.
+
+     id="fourweek-grid": the 4-Week view's async-CRUD region
+     (features/async-crud.md) -- calendar_month.js/calendar_month_drag.js/
+     async_calendar.js refresh this element from GET /calendar/regions?
+     region=fourweek after an event/task change instead of a full page
+     reload, then re-run the drag-to-create / drag-to-move bindings. -->
+<div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}">
+<div class="month-weekday-row">
+    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
+</div>
+{% for week in weeks %}
+<div class="month-week-grid">
+    {% for day in week.days %}
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
+        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
+        <div class="month-day-bottom">
+            {% for item in day.rows %}
+                {% if item.kind == "all_day" %}
+                    <a class="month-all-day month-event-item cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ item.event.title }}</a>
+                {% elif item.kind == "event" %}
+                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
+                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
+                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
+                        <span class="month-item-title">{{ item.event.title }}</span>
+                    </a>
+                {% else %}
+                    <a class="month-task-item month-due-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
+                {% endif %}
+            {% endfor %}
+            {% if day.overflow_count %}
+                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+</div>

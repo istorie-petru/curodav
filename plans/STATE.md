@@ -8,6 +8,35 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Direct follow-up bug report, "drag and drop still is not
+  working for any type of data in the calendar (4 week view)"
+  (2026-08-31) -- the previous session's Month-view drag work never
+  reached 4-Week: it had no async-CRUD region at all (its own
+  hand-duplicated inline markup in calendar_fourweek.html, no `id`, no
+  `calendar_month_drag.js` script tag, and event/task chips missing
+  Month's `.month-event-item`/`.month-due-task-item`/`data-uid` hooks),
+  so a drag's POST landed fine server-side but nothing on screen ever
+  reflected it -- an unclaimed `cc-entity-changed` event, same silent-
+  no-op shape async_calendar.js's own comment already documents for a
+  page with no matching region. Fix: `routers/calendar.py`'s
+  `four_week_view` body split into `_four_week_view_context` (mirroring
+  `_week_view_context`'s shape) so the same context can back both the
+  full page and a new `region=fourweek` branch on `/calendar/regions`;
+  the grid markup itself moved out of calendar_fourweek.html into a new
+  `_calendar_fourweek_grid.html` partial -- byte-for-byte the same body
+  as `_calendar_month_grid.html` (so it carries the same drag hooks),
+  just with `id="fourweek-grid"`/`data-date` instead of `id="month-grid"`/
+  `data-year`/`data-month` (calendar_month.js and calendar_month_drag.js
+  both query by class name only, never by container id, so they run
+  unmodified against either grid). calendar_fourweek.html now includes
+  that partial and loads `calendar_month_drag.js` + `async_calendar.js`
+  (previously only `calendar_month.js`, drag-to-create); async_calendar.js
+  gained a third `#fourweek-grid` region block alongside Month/Week's
+  existing two, refreshing via the new region and re-running
+  `CCMonthGridCreate`/`CCMonthGridDrag`'s `init()` the same way Month's
+  own refresh already does. Recurring events remain non-draggable
+  everywhere (unchanged, deliberate). Full suite: 1934 passed (four
+  batches, ~21 files each).
 - **Added:** Two direct follow-up requests on the Calendar, complete
   (2026-08-31). (1) **Past days/events/tasks now dim**: nothing in
   style.css previously distinguished a past day from any other -- only
