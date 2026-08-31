@@ -198,6 +198,12 @@ window.CCWidgetPreview = {
     // Collect every autosave-wired form's flush function so the "Done"
     // button (below) can drain them all before navigating away.
     const pendingFlushes = [];
+    // One forced refreshRegion call per autosave-wired widget, run again
+    // after every flush lands (see the Done handler below) -- belt-and-
+    // suspenders against a mid-session refreshRegion call that silently
+    // failed (autosave()'s own refresh is best-effort, `.catch(() => {})`,
+    // with no retry).
+    const pendingRefreshes = [];
 
     root.querySelectorAll("form.widget-filters-autosave").forEach((form) => {
       const saveBtn = form.querySelector(".widget-save-filters-btn");
@@ -287,6 +293,11 @@ window.CCWidgetPreview = {
         if (savePromise) await savePromise;
       }
       pendingFlushes.push(flush);
+      if (widgetUid) {
+        pendingRefreshes.push(() =>
+          window.ccApi ? window.ccApi.refreshRegion("/dashboard/widgets/" + widgetUid, "widget-" + widgetUid) : Promise.resolve()
+        );
+      }
 
       // 'change' covers selects/checkboxes/radios (and number inputs on
       // blur/spinner) -- nothing left to debounce there. 'input' (typing
@@ -311,23 +322,53 @@ window.CCWidgetPreview = {
       form.addEventListener("input", scheduleAutosave);
     });
 
-    // "Done" button -- flush every pending autosave before navigating away.
-    // Without this, a field changed <500ms before clicking Done would be
-    // silently lost (the debounced save fires after the page has already
-    // navigated). `e.preventDefault()` holds the navigation; once every
-    // flush resolves, `window.location` does the actual navigate.
-    // Selects by class + text rather than a hardcoded href pattern, so it
-    // doesn't silently stop matching whenever the label/space page's own
-    // URL prefix changes (2026-08-28: broke once already when the labels
-    // router moved from /labels to /settings/labels).
-    const doneBtn = root.querySelector("a.btn.primary");
-    if (doneBtn && doneBtn.textContent.trim().match(/Done/i)) {
-      doneBtn.addEventListener("click", async (e) => {
-        if (pendingFlushes.length === 0) return; // nothing to flush -- let it navigate
-        e.preventDefault();
-        await Promise.all(pendingFlushes.map((f) => f()));
-        window.location = doneBtn.href;
-      });
+    // "Done" button -- flush every pending autosave (and force a fresh
+    // refreshRegion) before the modal closes. Without this, a field
+    // changed <500ms before clicking Done could still be mid-flight (or
+    // its own refreshRegion call could have silently failed -- see
+    // autosave()'s best-effort `.catch(() => {})` above) when the dialog
+    // closes, leaving the real widget card behind it stale until the next
+    // full reload.
+    //
+    // 2026-08-31 direct report ("editing the filters of a widget doesn't
+    // update the dashboard") traced to this selector: `_widget_edit_modal.
+    // html`'s Done/Cancel link is rendered by _modal_footer.html's cancel
+    // mode as `<a class="btn ghost" data-modal-cancel>`, never `.btn
+    // primary` -- so `root.querySelector("a.btn.primary")` never matched
+    // it at all, and this whole flush-before-close block was silently dead
+    // code (a debounced/in-flight save would still eventually finish and
+    // refresh the card in the background once its own timer/fetch
+    // resolved, since closing this modal doesn't reload or navigate away
+    // -- see modal.js's closeModal, `pendingReload` is never set for a
+    // data-modal-keep-open autosave form -- but there was no guarantee of
+    // *when*, and a failed refreshRegion had no retry at all). Selects by
+    // `[data-modal-cancel]` instead of a class+text combo, since that
+    // attribute is what actually identifies "the control that closes this
+    // modal" regardless of its visual class or label text (Done/Cancel).
+    const doneBtn = root.querySelector("[data-modal-cancel]");
+    if (doneBtn) {
+      doneBtn.addEventListener(
+        "click",
+        () => {
+          if (pendingFlushes.length === 0) return;
+          Promise.all(pendingFlushes.map((f) => f())).then(() => {
+            // Belt-and-suspenders: force one more refresh per autosave-
+            // wired widget after every pending save has landed, so a
+            // silently-swallowed mid-session refreshRegion failure doesn't
+            // leave the card stale after the modal's already gone and the
+            // user has no more "Saving…"/"Couldn't save" status text to
+            // notice it by.
+            pendingRefreshes.forEach((r) => r().catch(() => {}));
+          });
+        },
+        // Capture, before modal.js's own listener (wired the same way,
+        // also on click) runs closeModal() -- both fire on the same click,
+        // registration order on the same phase isn't guaranteed to put
+        // this one first otherwise, and the flush/refresh here doesn't
+        // need to block the close either way (best-effort, same as every
+        // individual autosave's own refresh).
+        true
+      );
     }
 
     // --- Live preview (any form carrying data-preview-url) ---------------

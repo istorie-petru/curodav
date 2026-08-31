@@ -8,6 +8,35 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** "editing a widget's filters doesn't update the dashboard"
+  (direct report, 2026-08-31) -- investigated, this exact symptom was
+  already fixed once before (2026-08-30 entry below: autosave() calls
+  `window.ccApi.refreshRegion` on every successful save). Verified that
+  mechanism is still intact end-to-end via a real HTTP round-trip
+  (TestClient: add a widget, POST an edit with the new Show/Width dropdown
+  fields, GET the widget's region fragment back) -- the saved config and
+  the region fragment both reflected the edit correctly (`data-span`
+  matched the new Width), so today's Show/Width dropdown conversion didn't
+  regress it. Did find one real, separate bug while tracing this:
+  `dashboard_widget_preview.js`'s "Done flushes pending autosaves before
+  closing" block selected `root.querySelector("a.btn.primary")` matching
+  text "Done" -- but the edit-widget modal's actual Done/Cancel link is
+  `_modal_footer.html`'s cancel-mode `<a class="btn ghost" data-modal-
+  cancel>`, never `.btn.primary`, so that selector never matched and the
+  whole flush block was dead code (harmless in the common case -- a
+  pending debounced save still fires and refreshes the card in the
+  background once its own timer resolves, since closing this modal never
+  reloads the page -- but gave a fast edit-then-Done click no guarantee of
+  *when*, and no retry at all if refreshRegion itself silently failed).
+  Fixed: selects `[data-modal-cancel]` instead (the attribute that
+  actually identifies the close control, regardless of class/label), and
+  now also forces one more `refreshRegion` per autosave-wired widget after
+  every pending flush lands, as a backstop against a swallowed mid-session
+  refresh failure. Couldn't fully verify real click-driven browser
+  behavior in this environment (no browser available, same ceiling the
+  2026-08-30 entry already noted) -- flagged to the user to confirm live
+  and report back with exact repro (which field, does a manual reload fix
+  it, any console errors) if the original symptom persists.
 - **Added:** Four more direct follow-up requests on the widget builder +
   Agenda widget, complete (2026-08-31). (1) **Show/Width as dropdowns**:
   both used to be a visible `.field-toggle-group` of checkboxes (Show:
