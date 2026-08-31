@@ -117,12 +117,22 @@
     {% set ms_root_class = 'widget-range-select' %}
     {% include "_widget_list_multiselect.html" %}
     <div class="field widget-limit-field">
+        <!-- 2026-08-31 direct feedback: "add a way to set the limit to 0
+             (0 = unlimited)" -- min was 1, which blocked both the stepper's
+             own decrement (static/stepper.js clamps to the input's `min`)
+             and a plain typed 0 in some browsers' native validation, so
+             there was no way to reach it. _render_agenda/_render_contact_
+             list (routers/dashboard.py) already treat a stored `0` as
+             "no cap" -- only an absent config value falls back to the
+             10/20 default -- so this is purely a "let the field reach 0"
+             change, no template-side unlimited-specific handling needed. -->
         <label>Limit</label>
         <div class="stepper">
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
-            <input type="number" name="limit" class="widget-preview-field stepper-input" min="1" placeholder="10">
+            <input type="number" name="limit" class="widget-preview-field stepper-input" min="0" placeholder="10">
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
         </div>
+        <div class="field-hint">0 = unlimited</div>
     </div>
     <!-- Width (2026-08-30, reinstated -- see this file's own header
          comment) -- every widget type gets this, unlike Show/Style/Scope
@@ -202,9 +212,17 @@
      tags_labels together with the legacy tags= string field
      into the same comma-separated config["tags"] it always
      stored, so no stored-config format changed. -->
+{# "No label" (2026-08-31 direct feedback: "add a way to not select any
+   label to filter by") -- a synthetic option ahead of the real label
+   list, carrying routers/dashboard.py's NO_LABEL_SENTINEL as its value.
+   Distinct from leaving every checkbox unchecked (which already means
+   "All", no filter at all -- see _widget_list_multiselect.html's own
+   "filter" mode comment): this filters *for* items that carry no label,
+   the one thing the checkbox list couldn't express before since every
+   other option is a real label name. #}
 {% set ms_name = 'tags_labels' %}
 {% set ms_label = 'Labels' %}
-{% set ms_items = tag_name_items %}
+{% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
 {% set ms_selected = [] %}
 {% include "_widget_list_multiselect.html" %}
 {% if task_lists %}

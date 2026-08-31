@@ -87,12 +87,22 @@
         {% include "_widget_list_multiselect.html" %}
         {% endif %}
         <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list') %}style="display:none"{% endif %}>
+            <!-- 2026-08-31 direct feedback: "add a way to set the limit to
+                 0 (0 = unlimited)" -- see _widget_builder_fields.html's own
+                 comment on this same field for why min changed from 1 to 0
+                 and why no other template-side change was needed.
+                 `widget.config.limit or ''` would itself have collapsed a
+                 stored `0` back to blank/placeholder -- `is defined`
+                 check keeps an explicitly-saved 0 showing as 0, not as an
+                 empty field that reads as "unset" (10/20 default) again
+                 the next time this form loads. -->
             <label>Limit</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
-                <input type="number" name="limit" class="stepper-input" min="1" value="{{ widget.config.limit or '' }}" placeholder="10">
+                <input type="number" name="limit" class="stepper-input" min="0" value="{{ widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '' }}" placeholder="10">
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
             </div>
+            <div class="field-hint">0 = unlimited</div>
         </div>
         <!-- Width (2026-08-30, reinstated -- see _widget_builder_fields.
              html's own header comment) -- every widget type, pre-selected
@@ -171,11 +181,18 @@
              _combine_tags still merges tags_labels into) so
              editing Labels/Source/View never silently drops
              that Project scoping on save. -->
-        {% set _extra_tags = (widget.config.tags or []) | reject('in', tag_names) | list %}
+        {# "No label" filter (2026-08-31 direct feedback, see
+           _widget_builder_fields.html's own comment for the full
+           rationale) -- __no_label__ isn't a real label name, so it must
+           also be excluded from the reject-list below the same way, or it
+           would round-trip as a hidden "extra tag to preserve" instead of
+           a re-checked box in the multiselect the next time this form
+           loads. #}
+        {% set _extra_tags = (widget.config.tags or []) | reject('in', tag_names) | reject('equalto', '__no_label__') | list %}
         {% if _extra_tags %}<input type="hidden" name="tags" value="{{ _extra_tags|join(',') }}">{% endif %}
         {% set ms_name = 'tags_labels' %}
         {% set ms_label = 'Labels' %}
-        {% set ms_items = tag_name_items %}
+        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
         {% set ms_selected = widget.config.tags or [] %}
         {% include "_widget_list_multiselect.html" %}
         {% if spec and 'tasks' in spec.uses and task_lists %}

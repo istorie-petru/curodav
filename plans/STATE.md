@@ -8,6 +8,39 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Added/Fixed:** Three direct follow-up requests on the widget builder +
+  Agenda widget, complete (2026-08-31). (1) **"No label" filter**: the
+  Labels chip multiselect (widget builder + per-widget Filters editor)
+  could already reach "All" (no filter) by unchecking everything, but had
+  no way to filter *for* items carrying no label at all -- every checkbox
+  was a real label name. New synthetic "No label" option (value
+  `NO_LABEL_SENTINEL = "__no_label__"`, routers/dashboard.py) prepended
+  ahead of the real label list in both `_widget_builder_fields.html`/
+  `_widget_edit_form.html`'s Labels field only (not the same partial's
+  reuse elsewhere for actual label assignment). `_passes_filters` ORs it
+  in: an item passes if it has zero tags and the sentinel is selected, or
+  it shares a real tag with whatever else is selected -- same "matches
+  any selected option" semantics multi-select filtering already had.
+  (2) **Limit = 0 (unlimited)**: the Limit stepper's `min="1"` blocked
+  both the stepper's own decrement and reaching 0 by typing; `_render_
+  agenda`/`_render_contact_list` also collapsed a stored `0` back to the
+  10/20 default via `config.get("limit") or 10`, since `0` is falsy.
+  `min="0"` now on both templates' inputs, and both render functions use
+  `int(v) if v is not None else default` instead, only slicing
+  `tasks`/`events`/`contacts` when `limit` is truthy. (3) **Next 30 days
+  should look like All upcoming**: `_render_agenda`'s Next 30 days used to
+  build the same day-by-day grid Next 7 days does (`mode: "days"`) -- 30
+  mostly-empty boxes read as more cluttered than useful. Next 30 days now
+  shares All upcoming's flat, limit-capped, chronological list code path
+  (`mode: "flat"`), just windowed to a real 30-day span for both
+  Tasks (due_at bound) and Events (recurrence-expansion window) instead of
+  All upcoming's unbounded-tasks/+730-day-event-window shape; Next 7 days
+  is untouched, still a grid (small enough to stay readable as one).
+  `test_next_30_days_range` (assumed a `days` list) replaced with two
+  tests against the new flat shape; new tests added for the no-label
+  filter and both limit=0 cases. Full suite: 1939 passed (872+622+445,
+  three batches -- still doesn't finish inside this environment's
+  single-command time budget).
 - **Fixed:** Two direct bug reports, complete (2026-08-31). (1) **Agenda
   widget ("Upcoming") showing nothing**: `_render_agenda` (routers/
   dashboard.py, Today/This week/All upcoming ranges) filtered events by

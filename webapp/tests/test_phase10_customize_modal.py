@@ -193,7 +193,9 @@ class TestBuilderFieldsRework:
         assert 'class="stepper-btn stepper-dec"' in body
         assert 'class="stepper-btn stepper-inc"' in body
         assert 'name="limit"' in body
-        assert '<input type="number" name="limit" class="widget-preview-field stepper-input" min="1"' in body
+        # min="0" (2026-08-31 direct feedback: "add a way to set the limit
+        # to 0 (0 = unlimited)") -- was min="1", which blocked reaching 0.
+        assert '<input type="number" name="limit" class="widget-preview-field stepper-input" min="0"' in body
 
     def test_labels_is_a_chip_multiselect_over_known_label_names(self, conn):
         db.upsert_task(conn, {

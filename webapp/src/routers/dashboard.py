@@ -154,6 +154,23 @@ def _effective_tags_filter(conn, config: dict) -> list[str]:
     return tags_filter
 
 
+# Sentinel stored in config["tags"]/submitted via the Labels chip
+# multiselect's `tags_labels` field (2026-08-31, direct feedback: "add a
+# way to not select any label to filter by") -- distinct from an *empty*
+# tags_filter, which already means "All" (no filter at all, see
+# _widget_list_multiselect.html's own "filter" mode comment). This is the
+# opposite: an explicit filter for items that carry *no* label at all,
+# which nothing could express before (every real label name in tag_names
+# is a possible checkbox value; there was no checkbox for "none of the
+# above"). Never a real label name itself -- `_widget_builder_fields.html`/
+# `_widget_edit_form.html` prepend a synthetic "No label" option carrying
+# this exact value ahead of the real tag_name_items list, only inside the
+# widget builder's own Labels field (not the plain-assignment Labels
+# picker task_form/event_form/etc. reuse the same partial for, which never
+# sets this sentinel as one of its real options).
+NO_LABEL_SENTINEL = "__no_label__"
+
+
 def _passes_filters(item_tags: list[str], tags_filter: list[str]) -> bool:
     """Phase 1 (label-space rework, 2026-08-06) dropped `task_lists`/
     `calendars` -- the project/space/list filters below used to resolve
@@ -166,10 +183,22 @@ def _passes_filters(item_tags: list[str], tags_filter: list[str]) -> bool:
     rather than excluding everything. `tags_filter` is the already-
     resolved list from `_effective_tags_filter` (config["tags"] plus
     whatever `label_name` folds in), computed once per `_filtered_tasks`/
-    `_filtered_events` call rather than per item."""
-    if tags_filter and not (set(item_tags or []) & set(tags_filter)):
-        return False
-    return True
+    `_filtered_events` call rather than per item.
+
+    NO_LABEL_SENTINEL (2026-08-31) is an OR'd-in alternative match, not a
+    real tag: an item passes if it has no tags at all AND the sentinel is
+    selected, *or* it shares a real tag with whatever else is selected --
+    same "matches any selected option" semantics multi-select filtering
+    already has elsewhere, just with "no label" as one more option instead
+    of a separate exclusive mode. Selecting only "No label" (real_tags
+    empty) means only unlabeled items pass."""
+    if not tags_filter:
+        return True
+    item_tags_set = set(item_tags or [])
+    real_tags = set(tags_filter) - {NO_LABEL_SENTINEL}
+    if NO_LABEL_SENTINEL in tags_filter and not item_tags_set:
+        return True
+    return bool(real_tags and (item_tags_set & real_tags))
 
 
 def _child_label_names(conn, config: dict) -> set[str] | None:
@@ -277,19 +306,30 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
 
     "Overdue" is always every currently-open overdue task regardless of
     Range -- Range only bounds the forward-looking Tasks/Events sections.
-    Today renders a flat single-day list (`mode: "flat"`, same shape
-    today_agenda used); Next 7/30 days renders day-by-day
+    Today and Next 7 days are the only two ranges still shaped for their
+    own old widget: Today renders a flat single-day list (`mode: "flat"`,
+    same shape today_agenda used); Next 7 days renders day-by-day
     (`mode: "days"`, same shape weekly_overview used, plus an Overdue
-    section ahead of the grid when that's shown too); All upcoming
-    renders a flat, `limit`-capped forward list for whichever of
-    Tasks/Events are shown (Tasks: every open task with due_at >= today;
-    Events: every future event, unbounded -- upcoming_events' own
-    semantics)."""
+    section ahead of the grid when that's shown too) -- 7 boxes is still
+    small enough to read at a glance. Next 30 days and All upcoming both
+    render the same flat, `limit`-capped chronological list (2026-08-31
+    direct feedback: "next 30 days range css should look like all
+    upcoming" -- a 30-cell day-by-day grid was mostly empty boxes and
+    harder to scan than a flat list); Next 30 days bounds Tasks/Events to
+    its own 30-day window, All upcoming leaves Tasks unbounded forward and
+    only windows Events for recurrence-expansion purposes (every future
+    event, unbounded -- upcoming_events' own semantics)."""
     show = _agenda_show(config)
     range_ = _agenda_range(config)
     today = date.today()
     today_iso = today.isoformat()
-    limit = int(config.get("limit") or 10)
+    # `0` means "unlimited" (2026-08-31 direct feedback) -- `config.get
+    # ("limit")` can legitimately be the int `0` now (see _config_from_form,
+    # which already stores it verbatim), so this can't collapse falsy-0
+    # into the "not set" default the way `... or 10` used to; only an
+    # absent/None config value falls back to 10.
+    _raw_limit = config.get("limit")
+    limit = int(_raw_limit) if _raw_limit is not None else 10
 
     overdue_tasks: list[dict] = []
     if "overdue" in show:
@@ -307,10 +347,9 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             events.sort(key=lambda e: e.get("start_at") or "")
         return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
 
-    if range_ in ("next_7_days", "next_30_days"):
-        range_days = 7 if range_ == "next_7_days" else 30
-        end = today + timedelta(days=range_days - 1)
-        days = [(today + timedelta(days=i)) for i in range(range_days)]
+    if range_ == "next_7_days":
+        end = today + timedelta(days=6)
+        days = [(today + timedelta(days=i)) for i in range(7)]
 
         tasks_pool: list[dict] = []
         if "tasks" in show:
@@ -330,12 +369,25 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today_iso, "tasks": day_tasks, "events": day_events})
         return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso}
 
-    # all_upcoming
+    # next_30_days / all_upcoming -- same flat-list shape; only the window
+    # each bounds Tasks/Events to differs (see this function's own
+    # docstring).
+    task_end_iso = None if range_ == "all_upcoming" else (today + timedelta(days=29)).isoformat()
+    # A window end far enough out that even a yearly-recurring event still
+    # produces its next occurrence (same generous cap
+    # `_is_long_lived_recurrence` above uses for the same reason) --
+    # Next 30 days windows Events to its own real 30-day span instead.
+    event_window_end = (today + timedelta(days=730)) if range_ == "all_upcoming" else (today + timedelta(days=29))
+
     tasks = []
     if "tasks" in show:
-        tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] >= today_iso]
+        tasks = [
+            t for t in _filtered_tasks(conn, config)
+            if t.get("due_at") and t["due_at"][:10] >= today_iso and (task_end_iso is None or t["due_at"][:10] <= task_end_iso)
+        ]
         tasks.sort(key=lambda t: t["due_at"])
-        tasks = tasks[:limit]
+        if limit:
+            tasks = tasks[:limit]
     events = []
     if "events" in show:
         # Local naive "now" -- same convention `date.today()`/
@@ -352,10 +404,6 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         # one as already past), depending on which side of midnight UTC
         # the comparison landed on.
         now_str = datetime.now().isoformat()
-        # A window end far enough out that even a yearly-recurring event
-        # still produces its next occurrence (same generous cap
-        # `_is_long_lived_recurrence` above uses for the same reason).
-        window_end = today + timedelta(days=730)
         # db.list_events' own `start` filter is "(end_at IS NULL OR end_at
         # >= start)" -- deliberately permissive so an ongoing/no-end-date
         # event doesn't disappear from a filtered range it's still
@@ -364,9 +412,10 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         # date) shouldn't count as upcoming just because it has no end.
         # Filter on start_at explicitly here rather than relying on
         # list_events' own start param alone.
-        events = [e for e in _filtered_events_expanded(conn, config, today, window_end) if e.get("start_at") and e["start_at"] >= now_str]
+        events = [e for e in _filtered_events_expanded(conn, config, today, event_window_end) if e.get("start_at") and e["start_at"] >= now_str]
         events.sort(key=lambda e: e.get("start_at") or "")
-        events = events[:limit]
+        if limit:
+            events = events[:limit]
     return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
 
 
@@ -772,8 +821,12 @@ def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
             c for c in contacts
             if any(tag.lower() in tags_lower for tag in (c.get("tags") or []))
         ]
-    limit = int(config.get("limit") or 20)
-    return {"contacts": contacts[:limit]}
+    # `0` means "unlimited" -- see _render_agenda's own comment on the same
+    # `config.get("limit")` pattern for why `... or 20` can't be used here
+    # any more now that `0` is a legitimate stored value, not "unset".
+    _raw_limit = config.get("limit")
+    limit = int(_raw_limit) if _raw_limit is not None else 20
+    return {"contacts": contacts[:limit] if limit else contacts}
 
 
 def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:

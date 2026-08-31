@@ -118,6 +118,21 @@ class TestFiltering:
         result = dashboard_router._filtered_tasks(conn, {"tags": ["uni"]})
         assert {t["uid"] for t in result} == {"t1"}
 
+    def test_no_label_sentinel_matches_only_unlabeled_items(self, conn):
+        # 2026-08-31 direct feedback: "add a way to not select any label
+        # to filter by" -- distinct from an empty tags filter (= "All").
+        _seed_task(conn, "tagged", due_at=date.today().isoformat(), tags=["uni"])
+        _seed_task(conn, "untagged", due_at=date.today().isoformat(), tags=[])
+        result = dashboard_router._filtered_tasks(conn, {"tags": [dashboard_router.NO_LABEL_SENTINEL]})
+        assert {t["uid"] for t in result} == {"untagged"}
+
+    def test_no_label_sentinel_ors_with_real_labels(self, conn):
+        _seed_task(conn, "uni", due_at=date.today().isoformat(), tags=["uni"])
+        _seed_task(conn, "personal", due_at=date.today().isoformat(), tags=["personal"])
+        _seed_task(conn, "untagged", due_at=date.today().isoformat(), tags=[])
+        result = dashboard_router._filtered_tasks(conn, {"tags": ["uni", dashboard_router.NO_LABEL_SENTINEL]})
+        assert {t["uid"] for t in result} == {"uni", "untagged"}
+
     def test_project_filter_is_a_noop_since_task_lists_are_gone(self, conn):
         # Phase 1 (label-space rework, 2026-08-06) dropped `task_lists` --
         # there's no more list->project link to resolve a task's project
@@ -195,9 +210,24 @@ class TestAgendaWidgetDays:
         all_task_uids = {t["uid"] for day in data["days"] for t in day["tasks"]}
         assert all_task_uids == {"t1", "t2"}
 
-    def test_next_30_days_range(self, conn):
+    def test_next_30_days_range_is_flat_like_all_upcoming(self, conn):
+        # 2026-08-31 direct feedback: "next 30 days range css should look
+        # like all upcoming" -- it's flat/limit-capped/chronological now,
+        # not a 30-cell day grid.
+        today = date.today()
+        _seed_task(conn, "t_in", due_at=(today + timedelta(days=3)).isoformat())
+        _seed_task(conn, "t_out", due_at=(today + timedelta(days=40)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "next_30_days"})
-        assert len(data["days"]) == 30
+        assert data["mode"] == "flat"
+        assert "days" not in data
+        assert {t["uid"] for t in data["tasks"]} == {"t_in"}
+
+    def test_next_30_days_windows_events_for_recurrence(self, conn):
+        today = date.today()
+        _seed_recurring_event(conn, "recur", start_at=f"{(today - timedelta(days=30)).isoformat()}T09:00", recurrence="FREQ=WEEKLY")
+        data = dashboard_router._render_agenda(conn, {"range": "next_30_days", "show": ["events"]})
+        assert data["mode"] == "flat"
+        assert any(e["uid"] == "recur" for e in data["events"])
 
 
 class TestAgendaWidgetAllUpcoming:
@@ -215,6 +245,17 @@ class TestAgendaWidgetAllUpcoming:
             _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 2})
         assert len(data["events"]) == 2
+
+    def test_limit_zero_means_unlimited(self, conn):
+        # 2026-08-31 direct feedback: "add a way to set the limit to 0
+        # (0 = unlimited)" -- `config.get("limit") or 10` used to collapse
+        # a stored 0 back into the 10-item default; must not slice at all
+        # once explicitly set to 0.
+        now = datetime.now(timezone.utc)
+        for i in range(15):
+            _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 0})
+        assert len(data["events"]) == 15
 
 
 class TestAgendaWidgetOverdueOnly:
@@ -1019,6 +1060,14 @@ class TestContactListWidget:
             self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 3})
         assert len(data["contacts"]) == 3
+
+    def test_limit_zero_means_unlimited(self, conn):
+        # 2026-08-31 direct feedback: "add a way to set the limit to 0
+        # (0 = unlimited)".
+        for i in range(25):
+            self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
+        data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 0})
+        assert len(data["contacts"]) == 25
 
     def test_registered_in_widget_types(self, conn):
         assert "contact_list" in dashboard_router.WIDGET_TYPES
