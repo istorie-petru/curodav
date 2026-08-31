@@ -161,14 +161,20 @@ class TestNewWidgetTriggerWideSizing:
 
 
 class TestWidgetCustomizeModalFooter:
-    def test_customize_modal_is_primary_only_no_back_link(self, conn):
+    def test_customize_modal_has_cancel_and_primary(self, conn):
+        # 2026-08-07 made this footer primary-only (no back/cancel link,
+        # relying on the dialog's own X); 2026-08-31 direct feedback ("add
+        # a button to cancel ... adding a new widget") brings a Cancel
+        # link back -- see _modal_widget_customize.html's own comment for
+        # why this is safe (nothing POSTs here until Add widget is
+        # clicked, so Cancel is a plain close with no side effects, unlike
+        # the old stay-open/Duplicate/Edit flow 2026-08-07 removed).
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
         assert 'class="modal-footer"' in body
         assert 'form="widget-builder-form"' in body
         assert "Add widget" in body
-        # deliberately no back/cancel link at all -- the dialog's own X
-        # closes it (2026-08-07 "one button" decision, preserved by slice D).
-        assert "data-modal-cancel" not in body
+        assert "data-modal-cancel" in body
+        assert "Cancel</a>" in body
         assert "detail-delete-link" not in body
         # plain title, no icon prefix -- rule 3.
         assert "<h1>Customize" in body

@@ -2201,8 +2201,29 @@ def _config_from_form(
     return config
 
 
-def _agenda_show_from_form(show_overdue: bool, show_tasks: bool, show_events: bool) -> list[str]:
-    return [name for name, on in (("overdue", show_overdue), ("tasks", show_tasks), ("events", show_events)) if on]
+def _agenda_show_from_form(show: list[str] | None) -> list[str]:
+    """2026-08-31 direct feedback ("show should be another checkbox
+    dropdown") -- the Show field used to submit as three independent
+    `show_overdue`/`show_tasks`/`show_events` booleans (one `<input
+    type="checkbox">` each, always visible); now a single `name="show"`
+    field submitting 0+ values, same shared-checkbox-list-in-a-dropdown
+    shape Labels/Task lists/Calendars already use
+    (_widget_list_multiselect.html, ms_mode="select" since an empty
+    selection here is a real "show nothing" state, not "no filter/show
+    everything" the way Labels' own empty selection means). Always
+    returned in AGENDA_SHOWS' own canonical order regardless of the
+    submitted order, and silently drops anything that isn't a real Show
+    value -- same "not our job to validate a forged/stale value here"
+    convention `_config_from_form`'s width handling already follows.
+    `show` is defensively coerced to a list -- same reason
+    `_combine_tags`'s own `tags_labels` coercion exists (see its own
+    comment): a test that calls add_widget/edit_widget/preview_widget as a
+    plain Python function without passing `show` gets this parameter's own
+    `Form([])` default, a FastAPI marker object rather than an actual
+    empty list outside of real request handling, which isn't iterable."""
+    if not isinstance(show, list):
+        show = []
+    return [name for name in AGENDA_SHOWS if name in set(show)]
 
 
 @router.post("/dashboard/widgets/preview")
@@ -2221,9 +2242,7 @@ def preview_widget(
     style: str = Form(""),
     scope: str = Form(""),
     width: str = Form(""),
-    show_overdue: bool = Form(False),
-    show_tasks: bool = Form(False),
-    show_events: bool = Form(False),
+    show: list[str] = Form([]),
     space_uid: str = Form(""),
     conn=Depends(get_db),
 ):
@@ -2241,9 +2260,11 @@ def preview_widget(
     Customize form -- see add_widget below for why the preview has to
     auto-scope the same way the real save does. `tags_labels` (2026-08-07)
     is the Labels chip multiselect's checkboxes -- see _combine_tags.
-    `style`/`show_*` (2026-08-15 widget consolidation) are Spaces &
-    Projects' Style radio and Agenda's Show checkboxes; `width` (2026-08-30,
-    reinstated) is the Width radio -- see _config_from_form. The preview
+    `style`/`show` (2026-08-15 widget consolidation; `show` reworked
+    2026-08-31 into a single multi-value field, see
+    _agenda_show_from_form) are Spaces & Projects' Style radio and
+    Agenda's Show checkboxes; `width` (2026-08-30, reinstated) is the
+    Width radio -- see _config_from_form. The preview
     card itself ignores width visually either way (`.widget-preview-card`
     is reset to `position:static; width:auto`, static/style.css), but it's
     threaded through anyway so the previewed widget's data/behavior stays
@@ -2255,7 +2276,7 @@ def preview_widget(
         )
     wtype, extra = _resolve_selection(source, view, range or None)
     spec = WIDGET_TYPES[wtype]
-    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    show = _agenda_show_from_form(show) if wtype == "agenda" else None
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",
@@ -2286,9 +2307,7 @@ def add_widget(
     style: str = Form(""),
     scope: str = Form(""),
     width: str = Form(""),
-    show_overdue: bool = Form(False),
-    show_tasks: bool = Form(False),
-    show_events: bool = Form(False),
+    show: list[str] = Form([]),
     space_uid: str = Form(""),
     conn=Depends(get_db),
 ):
@@ -2314,7 +2333,7 @@ def add_widget(
     wtype, extra = _resolve_selection(source, view, range or None)
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
         return RedirectResponse(url=_return_url(page_label, conn=conn), status_code=303)
-    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    show = _agenda_show_from_form(show) if wtype == "agenda" else None
     config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",
@@ -2353,9 +2372,7 @@ def edit_widget(
     style: str = Form(""),
     scope: str = Form(""),
     width: str = Form(""),
-    show_overdue: bool = Form(False),
-    show_tasks: bool = Form(False),
-    show_events: bool = Form(False),
+    show: list[str] = Form([]),
     conn=Depends(get_db),
 ):
     existing = db.get_dashboard_widget(conn, uid)
@@ -2389,7 +2406,7 @@ def edit_widget(
     if wtype in _excluded_widget_types(_page_scope(conn, page_label)):
         return RedirectResponse(url=_return_url(page_label, conn=conn), status_code=303)
     row = dict(existing)
-    show = _agenda_show_from_form(show_overdue, show_tasks, show_events) if wtype == "agenda" else None
+    show = _agenda_show_from_form(show) if wtype == "agenda" else None
     new_config = _config_from_form(
         project_uid, _combine_tags(tags, tags_labels), task_list_uids, calendar_uids, limit,
         extra=extra, style=style if wtype == "spaces_projects" else "",

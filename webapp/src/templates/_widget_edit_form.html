@@ -112,32 +112,54 @@
              of its own, see _widget_workspace.html's stack header -- just
              drag + dissolve), so a stack's own shared config["width"]
              (seeded once at creation, per _widget_width's own comment) is
-             untouched by this field either way. -->
-        <div class="field widget-width-field">
-            <label>Width</label>
-            <div class="field-toggle-group">
-                {% set _w = widget.config.width or '' %}
-                <label class="field-toggle"><input type="radio" name="width" value="" {% if _w not in ('quarter', 'half', 'three_quarters', 'full') %}checked{% endif %}> Auto</label>
-                <label class="field-toggle"><input type="radio" name="width" value="quarter" {% if _w == 'quarter' %}checked{% endif %}> 25%</label>
-                <label class="field-toggle"><input type="radio" name="width" value="half" {% if _w == 'half' %}checked{% endif %}> 50%</label>
-                <label class="field-toggle"><input type="radio" name="width" value="three_quarters" {% if _w == 'three_quarters' %}checked{% endif %}> 75%</label>
-                <label class="field-toggle"><input type="radio" name="width" value="full" {% if _w == 'full' %}checked{% endif %}> 100%</label>
-            </div>
-        </div>
+             untouched by this field either way. 2026-08-31 direct feedback
+             ("all width should be a radio drop down") -- see
+             _widget_builder_fields.html's own comment on this same field
+             for why it's now the single-select dropdown View/Range use
+             instead of a `.field-toggle-group`. -->
+        {% set _w = widget.config.width or '' %}
+        {% set ms_name = 'width' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Width' %}
+        {% set ms_items = [
+            {'uid': '', 'name': 'Auto'},
+            {'uid': 'quarter', 'name': '25%'},
+            {'uid': 'half', 'name': '50%'},
+            {'uid': 'three_quarters', 'name': '75%'},
+            {'uid': 'full', 'name': '100%'},
+        ] %}
+        {% set ms_selected = _w if _w in ('quarter', 'half', 'three_quarters', 'full') else '' %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = 'widget-width-field' %}
+        {% set ms_root_class = 'widget-width-select' %}
+        {% include "_widget_list_multiselect.html" %}
         <!-- Show -- Agenda-only (2026-08-15 widget consolidation), see
              _widget_builder_fields.html's own comment for the rationale.
              Pre-checked from this widget's own config.show (defaulting to
              all three, same AGENDA_DEFAULT_SHOW the render function
-             falls back to when config.show is unset). -->
+             falls back to when config.show is unset). 2026-08-31 direct
+             feedback ("show should be another checkbox dropdown") -- see
+             _widget_builder_fields.html's own comment on this same field
+             for the shape change; `ms_hidden` (native `hidden` attribute
+             + style.css's own `.field.widget-show-field[hidden]` override)
+             replaces the old inline `style="display:none"`, same "hide it
+             the same way the same-shaped Task lists/Calendars fields
+             elsewhere in this form do" convention. -->
         {% set _agenda_show_set = (widget.config.show if widget.config.show is defined and widget.config.show is not none else ['overdue', 'tasks', 'events']) %}
-        <div class="field widget-show-field" {% if widget.type != 'agenda' %}style="display:none"{% endif %}>
-            <label>Show</label>
-            <div class="field-toggle-group">
-                <label class="field-toggle"><input type="checkbox" name="show_overdue" value="1" {% if 'overdue' in _agenda_show_set %}checked{% endif %}> Overdue</label>
-                <label class="field-toggle"><input type="checkbox" name="show_tasks" value="1" {% if 'tasks' in _agenda_show_set %}checked{% endif %}> Tasks</label>
-                <label class="field-toggle"><input type="checkbox" name="show_events" value="1" {% if 'events' in _agenda_show_set %}checked{% endif %}> Events</label>
-            </div>
-        </div>
+        {% set ms_name = 'show' %}
+        {% set ms_mode = 'select' %}
+        {% set ms_label = 'Show' %}
+        {% set ms_items = [
+            {'uid': 'overdue', 'name': 'Overdue'},
+            {'uid': 'tasks', 'name': 'Tasks'},
+            {'uid': 'events', 'name': 'Events'},
+        ] %}
+        {% set ms_selected = _agenda_show_set %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = 'widget-show-field' %}
+        {% set ms_root_class = 'widget-show-select' %}
+        {% set ms_hidden = widget.type != 'agenda' %}
+        {% include "_widget_list_multiselect.html" %}
         <!-- Style -- Spaces & Projects-only (2026-08-15 widget
              consolidation), pre-selected from this widget's own
              config.style (defaulting to "list", same as the render

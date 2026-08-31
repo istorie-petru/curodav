@@ -301,8 +301,8 @@ class TestWidgetCRUD:
             source = dashboard_router.WIDGET_VIEWS[view]["source"]
             dashboard_router.add_widget(
                 source=source, view=view, range=range_ or "", title="", project_uid="", tags="",
-                task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show_overdue=False,
-                show_tasks=False, show_events=False, space_uid="", conn=conn,
+                task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show=[],
+                space_uid="", conn=conn,
             )
             w = db.list_dashboard_widgets(conn)[-1]
             assert w["type"] == expected_type
@@ -1221,7 +1221,7 @@ class TestSpacesProjectsScope:
         dashboard_router.add_widget(
             source="spaces_projects", view="spaces_projects_view", range="", title="", project_uid="",
             tags="", task_list_uids=[], calendar_uids=[], limit="", style="cards", scope="everything",
-            show_overdue=False, show_tasks=False, show_events=False, space_uid="Uni", conn=conn,
+            show=[], space_uid="Uni", conn=conn,
         )
         w = db.list_dashboard_widgets(conn, space_uid="Uni")[0]
         assert w["type"] == "spaces_projects"

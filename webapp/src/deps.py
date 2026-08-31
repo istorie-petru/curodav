@@ -5,7 +5,7 @@ CalDavBridge singleton (writes go through this to reach Radicale)."""
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
@@ -558,6 +558,44 @@ def _fmt_birthday(value: str | None) -> str:
 
 
 templates.env.filters["fmt_birthday"] = _fmt_birthday
+
+
+def _relative_date(value: str | None) -> str:
+    """Jinja filter for a short/relative date -- `{{ t.due_at[:10] |
+    relative_date }}` instead of a raw "2026-09-05" (2026-08-31 direct
+    feedback on the Dashboard's Agenda widget: "make the dates ...
+    shorthand or relative"). Today/Tomorrow/Yesterday for the immediate
+    cases (the ones worth naming instead of counting), otherwise "5 Sep"
+    -- same day-drop-year-unless-different convention static/
+    datetime_picker.js's own `.dtp--compact` fmtDate already established
+    for the Tasks table's Date column (2026-08-30, praised then as "reads
+    at a glance"); this is that same convention's server-rendered
+    equivalent for read-only widget text rather than an editable picker's
+    trigger label. No @pass_context needed (unlike fmt_time/fmt_hour) --
+    pure function of the stored value and today's date, no per-request
+    Settings preference involved. Expects a plain "YYYY-MM-DD" (or a
+    longer ISO timestamp -- only the first 10 chars are read); anything
+    that doesn't parse is returned unchanged, same "display filter
+    degrades to the original value" rule as fmt_time/fmt_dt above."""
+    if not value:
+        return value
+    try:
+        d = date.fromisoformat(value[:10])
+    except ValueError:
+        return value
+    today = date.today()
+    delta = (d - today).days
+    if delta == 0:
+        return "Today"
+    if delta == 1:
+        return "Tomorrow"
+    if delta == -1:
+        return "Yesterday"
+    day_month = f"{d.day} {d.strftime('%b')}"
+    return day_month if d.year == today.year else f"{day_month} {d.year}"
+
+
+templates.env.filters["relative_date"] = _relative_date
 
 
 def _format_datetime_value(value: str, fmt: str) -> str:

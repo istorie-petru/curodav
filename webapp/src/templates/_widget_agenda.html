@@ -2,19 +2,26 @@
      see routers/dashboard.py::_render_agenda. Consolidated Agenda widget
      (2026-08-15 widget consolidation) replacing today_agenda/
      weekly_overview/upcoming_events/overdue_tasks -- mode="flat" (Range:
-     Today/All upcoming) renders a flat list, same shape today_agenda/
-     upcoming_events used; mode="days" (Range: Next 7/30 days) renders a
-     day-by-day grid, same shape weekly_overview used, with an Overdue
-     section (when shown) ahead of the grid. Rows render through the shared
-     widget row/pill/empty-state macros (_widget_items.html) -- the complete
-     checkbox, section labels, "Today" pill and event-time cells are all
-     composed from the library rather than hand-rolled here. -->
+     Today/Next 30 days/All upcoming, since 2026-08-31 -- "next 30 days
+     css should look like all upcoming") renders a flat list, same shape
+     today_agenda/upcoming_events used; mode="days" (Range: Next 7 days
+     only now) renders a day-by-day grid, same shape weekly_overview used,
+     with an Overdue section (when shown) ahead of the grid. Rows render
+     through the shared widget row/pill/empty-state macros
+     (_widget_items.html) -- the complete checkbox, section labels,
+     "Today" pill and event-time cells are all composed from the library
+     rather than hand-rolled here. Non-today dates (Overdue/Tasks/Events
+     rows in flat mode) go through the `relative_date` filter (deps.py,
+     2026-08-31 direct feedback: "make the dates ... shorthand or
+     relative") -- "Today"/"Tomorrow"/"Yesterday", else "5 Sep" (year only
+     when it isn't the current one), instead of a raw "2026-09-05". -->
+
 {% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button %}
 {% macro overdue_table(tasks) %}
 {{ widget_section_label('Overdue') }}
 <table>
     {% for t in tasks %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=t.due_at[:10]) }}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(t.due_at[:10] | relative_date)) }}
     {% endfor %}
 </table>
 {% endmacro %}
@@ -44,7 +51,7 @@
 {{ widget_section_label('Tasks') }}
 <table>
     {% for t in data.tasks %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else t.due_at[:10])) }}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else (t.due_at[:10] | relative_date))) }}
     {% endfor %}
 </table>
 {% endif %}
@@ -55,7 +62,7 @@
     {% if data.range == 'today' %}
     {{ widget_link_row('/events/' ~ e.uid, e.title, leading=('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), leading_class='widget-row-time') }}
     {% else %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=(e.start_at[:10] ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
     {% endif %}
     {% endfor %}
 </table>

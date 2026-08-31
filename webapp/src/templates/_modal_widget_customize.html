@@ -50,9 +50,15 @@
         </div>
     </div>
 </div>
-{# 2026-08-15 modal uniformization slice D: primary-only footer (no
-   footer_back_url set at all) -- deliberately the one button, per the
-   2026-08-07 decision above; the dialog's own X closes it. #}
+{# 2026-08-31 direct feedback ("add a button to cancel ... adding a new
+   widget") reverses the 2026-08-15 primary-only footer above -- this form
+   only POSTs on an explicit "Add widget" click (unlike the per-widget
+   Filters editor's autosave form in _widget_edit_modal.html, nothing here
+   is saved until then), so a Cancel is a plain close-with-no-side-effects,
+   same "#" + default cancel mode every no-list-to-return-to utility modal
+   already uses (quick_add.html, _widget_edit_modal.html's own "Done"). #}
+{% set footer_back_url = '#' %}
+{% set footer_back_label = 'Cancel' %}
 {% set footer_primary_form = 'widget-builder-form' %}
 {% set footer_primary_label = 'Add widget' %}
 {% set footer_primary_icon = 'plus' %}

@@ -2297,6 +2297,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    higher-specificity override -- same reason .event-start-end-field above
    can't just rely on `hidden` either. */
 .field.holiday-field[hidden]{display:none;}
+/* Per-widget Filters editor's Show field (_widget_edit_form.html,
+   2026-08-31 -- converted from a plain toggle-group with an inline
+   `style="display:none"` to the shared checkbox-dropdown, which is hidden
+   server-side via `ms_hidden` instead) -- same `.field{display:flex}`-
+   beats-bare-`[hidden]` reason .field.holiday-field's own comment above
+   explains. */
+.field.widget-show-field[hidden]{display:none;}
 /* Format field (2026-08-15, "Event format for simple events") --
    Location/Meeting URL (_event_form_fields.html) both start hidden;
    picking a Format radio reveals only its own field. Same

@@ -8,6 +8,46 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Added:** Four more direct follow-up requests on the widget builder +
+  Agenda widget, complete (2026-08-31). (1) **Show/Width as dropdowns**:
+  both used to be a visible `.field-toggle-group` of checkboxes (Show:
+  Overdue/Tasks/Events) or radios (Width: Auto/25/50/75/100), the only two
+  fields on this form still styled that way once Labels/Task lists/
+  Calendars (checkboxes) and View/Range (radios) had already moved to the
+  shared dropdown (`_widget_list_multiselect.html`). Both now use that
+  same partial -- Show as `ms_mode="select"` (an empty selection is a
+  real "show nothing" state, not "no filter"), Width as `ms_mode="single"`
+  (matching View/Range exactly). Backend: Show used to submit as three
+  independent `show_overdue`/`show_tasks`/`show_events` booleans;
+  `_agenda_show_from_form` now takes one `show: list[str]` (defensively
+  coerced to a list, same reason `_combine_tags`'s `tags_labels` already
+  is -- a test calling add_widget/edit_widget/preview_widget as a plain
+  function without passing `show` gets the bare `Form([])` marker, not an
+  actual list). Two tests asserting the old three-boolean call signature
+  updated to `show=[]`. (2) **Cancel button, Add/Edit widget modals**: the
+  2026-08-07 "Add widget is the only footer button" decision (relying on
+  the dialog's own X) is reversed for the Add-widget modal
+  (`_modal_widget_customize.html`) -- nothing POSTs there until Add widget
+  is actually clicked, so a Cancel is a plain close with no side effects,
+  safe to bring back without reviving the old stay-open/Duplicate/Edit
+  flow 2026-08-07 actually meant to remove. The per-widget Filters editor
+  (`_widget_edit_modal.html`) already had a "Done" close button -- left
+  as-is rather than relabeled, since that form autosaves each change
+  immediately (no draft state a "Cancel" could discard; flagged to the
+  user rather than building a revert-on-cancel feature nobody asked for
+  yet). Two tests asserting "no back link" on the Add-widget modal
+  rewritten for the new Cancel link. (3) **Relative/short dates in the
+  Agenda widget**: `deps.py` gained a `relative_date` Jinja filter --
+  "Today"/"Tomorrow"/"Yesterday", else "5 Sep" (year only when it isn't
+  the current one) -- same day-drop-year-unless-different convention
+  static/datetime_picker.js's own `.dtp--compact` fmtDate already
+  established for the Tasks table's Date column. Applied to
+  `_widget_agenda.html`'s Overdue/Tasks/Events rows in flat mode (Today's
+  own rows already showed a "Today" pill or a bare time, unaffected).
+  (4) **No-label filter is a checkbox, confirmed**: direct feedback asked
+  "why not have a checkbox one" for Labels -- it already is (a checkbox
+  dropdown, same shape now extended to Show); no change needed there.
+  Full suite: 1939 passed (872+622+445, three batches).
 - **Added/Fixed:** Three direct follow-up requests on the widget builder +
   Agenda widget, complete (2026-08-31). (1) **"No label" filter**: the
   Labels chip multiselect (widget builder + per-widget Filters editor)

@@ -136,34 +136,58 @@
     </div>
     <!-- Width (2026-08-30, reinstated -- see this file's own header
          comment) -- every widget type gets this, unlike Show/Style/Scope
-         below which are gated to one type each. Auto (blank, checked by
-         default) leaves the type's own default_width in charge. -->
-    <div class="field widget-width-field">
-        <label>Width</label>
-        <div class="field-toggle-group">
-            <label class="field-toggle"><input type="radio" name="width" value="" checked> Auto</label>
-            <label class="field-toggle"><input type="radio" name="width" value="quarter"> 25%</label>
-            <label class="field-toggle"><input type="radio" name="width" value="half"> 50%</label>
-            <label class="field-toggle"><input type="radio" name="width" value="three_quarters"> 75%</label>
-            <label class="field-toggle"><input type="radio" name="width" value="full"> 100%</label>
-        </div>
-    </div>
+         below which are gated to one type each. Auto (blank, first/
+         default item) leaves the type's own default_width in charge.
+         2026-08-31 direct feedback ("all width should be a radio drop
+         down") -- was a `.field-toggle-group` of visible radio buttons;
+         now the same single-select dropdown View/Range already use
+         (_widget_list_multiselect.html, ms_mode="single") instead of a
+         second, differently-styled radio control on the same form. -->
+    {% set ms_name = 'width' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Width' %}
+    {% set ms_items = [
+        {'uid': '', 'name': 'Auto'},
+        {'uid': 'quarter', 'name': '25%'},
+        {'uid': 'half', 'name': '50%'},
+        {'uid': 'three_quarters', 'name': '75%'},
+        {'uid': 'full', 'name': '100%'},
+    ] %}
+    {% set ms_selected = '' %}
+    {% set ms_wide = false %}
+    {% set ms_extra_class = 'widget-width-field' %}
+    {% set ms_root_class = 'widget-width-select' %}
+    {% include "_widget_list_multiselect.html" %}
     <!-- Show -- Agenda-only (2026-08-15 widget consolidation), gated by
          static/dashboard_widget_preview.js the same way Range/Limit are
          (hidden unless the current View is agenda_view, never removed/
          disabled, so a no-JS submission still works). Replaces the old
          "agenda"/"upcoming_list"/"overdue_list" View choices -- which
-         sections render is now these three independent checkboxes
-         instead of a fourth name in the View picker. All three default
-         checked (today_agenda's own old default content). -->
-    <div class="field widget-show-field">
-        <label>Show</label>
-        <div class="field-toggle-group">
-            <label class="field-toggle"><input type="checkbox" name="show_overdue" value="1" checked> Overdue</label>
-            <label class="field-toggle"><input type="checkbox" name="show_tasks" value="1" checked> Tasks</label>
-            <label class="field-toggle"><input type="checkbox" name="show_events" value="1" checked> Events</label>
-        </div>
-    </div>
+         sections render is now these three checkboxes instead of a
+         fourth name in the View picker. All three default checked
+         (today_agenda's own old default content). 2026-08-31 direct
+         feedback ("show should be another checkbox dropdown") -- was a
+         `.field-toggle-group` of three independently-named
+         `show_overdue`/`show_tasks`/`show_events` booleans, always
+         visible; now one `name="show"` field in the same checkbox-
+         dropdown shape Labels/Task lists/Calendars use
+         (_widget_list_multiselect.html), just ms_mode="select" instead of
+         "filter" -- an empty selection here is a real "show nothing"
+         state, not "no filter" the way Labels' own empty selection reads
+         as "All" (see _agenda_show_from_form, routers/dashboard.py). -->
+    {% set ms_name = 'show' %}
+    {% set ms_mode = 'select' %}
+    {% set ms_label = 'Show' %}
+    {% set ms_items = [
+        {'uid': 'overdue', 'name': 'Overdue'},
+        {'uid': 'tasks', 'name': 'Tasks'},
+        {'uid': 'events', 'name': 'Events'},
+    ] %}
+    {% set ms_selected = ['overdue', 'tasks', 'events'] %}
+    {% set ms_wide = false %}
+    {% set ms_extra_class = 'widget-show-field' %}
+    {% set ms_root_class = 'widget-show-select' %}
+    {% include "_widget_list_multiselect.html" %}
     <!-- Style -- Spaces & Projects-only (2026-08-15 widget consolidation),
          same gating idea as Show above -- List (the old project_preview
          default) or Cards (the old filled_cards look). -->
