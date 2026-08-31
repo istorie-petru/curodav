@@ -153,10 +153,23 @@
   }
 
   // init() is re-invocable: async_calendar.js re-runs it after swapping in
-  // a fresh #month-grid region (async-CRUD, features/async-crud.md) so the
-  // newly-rendered event chips get their pointerdown bindings again.
+  // a fresh #month-grid/#fourweek-grid region (async-CRUD, features/async-
+  // crud.md) so the newly-rendered chips get their pointerdown bindings
+  // again.
+  //
+  // 2026-08-31 bug fix: this selector only ever matched
+  // `.month-event-item[data-uid]` -- when task-chip dragging was added
+  // (end()'s `isTask` branch, posting to /tasks/{uid}/update-field), the
+  // selector here was never widened to also pick up
+  // `.month-due-task-item[data-uid]` (task chips carry that class, not
+  // `.month-event-item`). Every task-chip drag handler that branch wrote
+  // was consequently dead code -- no pointerdown listener was ever bound
+  // to a task chip in the first place, so nothing dragged, on Month OR
+  // 4-Week (direct report, "there should also be the capability to move
+  // tasks" / "the tasks on the 4 week calendar", 2026-08-31). Selector
+  // now matches either class.
   function init() {
-    items = Array.from(document.querySelectorAll(".month-event-item[data-uid]"));
+    items = Array.from(document.querySelectorAll(".month-event-item[data-uid], .month-due-task-item[data-uid]"));
     if (!items.length) return;
     cells = Array.from(document.querySelectorAll(".month-day-cell"));
     items.forEach(setupItem);

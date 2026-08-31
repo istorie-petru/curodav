@@ -8,6 +8,25 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Direct follow-up bug report, "there should also be the
+  capability to move tasks" / "the tasks on the 4 week calendar"
+  (2026-08-31) -- the previous session's task-chip drag support
+  (calendar_month_drag.js) never actually worked, on Month OR 4-Week: its
+  `end()` handler correctly branched on a `.month-due-task-item` class to
+  POST `/tasks/{uid}/update-field` instead of `/events/{uid}/reschedule`,
+  but `init()`'s own `querySelectorAll` was never widened to match that
+  class -- it only ever selected `.month-event-item[data-uid]`, so no
+  pointerdown listener was ever attached to a task chip in the first
+  place. The whole task branch was dead code from the moment it was
+  written; asking to drag a task chip just... did nothing, no request
+  ever fired. Fixed: selector now matches
+  `.month-event-item[data-uid], .month-due-task-item[data-uid]`. Also
+  caught the same gap in style.css -- `.month-event-item.dragging` was
+  the only drag-affordance rule (faded opacity + grabbing cursor); now
+  `.month-due-task-item.dragging` shares it, so a task chip mid-drag gets
+  the same visual feedback an event chip already did. No Python touched,
+  so verified via the existing calendar test files (140 passed) plus a
+  full-suite regression pass (1934 passed, three batches).
 - **Fixed:** Direct follow-up bug report, "drag and drop still is not
   working for any type of data in the calendar (4 week view)"
   (2026-08-31) -- the previous session's Month-view drag work never

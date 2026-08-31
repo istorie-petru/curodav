@@ -2992,7 +2992,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    Week/Day grid's own .time-col.drop-hover, so "this cell is the drop
    target" reads consistently across every calendar view. */
 .month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle);}
-.month-event-item.dragging{opacity:.5; cursor:grabbing;}
+.month-event-item.dragging, .month-due-task-item.dragging{opacity:.5; cursor:grabbing;}
 
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,
    static/timeline.js. Everything absolutely positioned within one
