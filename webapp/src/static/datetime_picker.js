@@ -726,11 +726,24 @@
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   // Outside click closes whatever is open; resize keeps it anchored.
+  //
+  // Reads e.composedPath() rather than walking .closest()/.contains() off
+  // e.target: a month-nav arrow's own click handler (shiftMonth ->
+  // renderPanel) runs first (target-phase listeners fire before the event
+  // bubbles up to document) and does `panel.innerHTML = ""`, which
+  // detaches the very button that was clicked. By the time this bubbled
+  // listener ran, `openInst.panel.contains(e.target)` was checking a
+  // *detached* node against the live panel and always got `false` --
+  // read as an outside click, so the whole picker closed itself on every
+  // month-arrow click. composedPath() is captured at dispatch time,
+  // before any of that DOM mutation, so it still lists the panel as an
+  // ancestor of the click even after the click handler detaches the node.
   document.addEventListener("click", (e) => {
     if (!openInst) return;
-    const hitTrigger = e.target.closest(".dtp-trigger");
+    const path = e.composedPath ? e.composedPath() : [e.target];
+    const hitTrigger = path.find((n) => n.classList && n.classList.contains("dtp-trigger"));
     if (hitTrigger && openInst.container.contains(hitTrigger)) return;
-    if (openInst.panel.contains(e.target)) return;
+    if (path.includes(openInst.panel)) return;
     openInst.close();
     openInst = null;
   });

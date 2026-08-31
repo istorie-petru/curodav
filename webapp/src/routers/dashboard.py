@@ -210,6 +210,29 @@ def _filtered_events(conn, config: dict, start: str | None = None, end: str | No
     return out
 
 
+def _filtered_events_expanded(conn, config: dict, window_start: date, window_end: date) -> list[dict]:
+    """Same pool `_filtered_events` returns, but with every recurring row
+    expanded into its real occurrences inside [window_start, window_end]
+    first (routers/calendar.py's month/week/day views already do this via
+    `recurrence_expand.expand_events` -- the Agenda widget never did, so a
+    recurring event only ever showed up on the literal day its master row
+    happened to be created on, then vanished from Today/This week/All
+    upcoming forever after that one date passed. `db.list_events`'s own
+    bounds clause already lets every recurring master row through
+    regardless of `start`/`end` -- see its own docstring -- so the pool
+    passed to `expand_events` here already has every candidate recurring
+    row in it; this just turns each one into 0+ real occurrence rows dated
+    inside the window instead of leaving it as its own unexpanded anchor)."""
+    events = _filtered_events(conn, config)
+    return recurrence_expand.expand_events(
+        events,
+        window_start,
+        window_end,
+        db.list_holidays_by_calendar(conn),
+        db.list_event_occurrence_overrides_by_master(conn),
+    )
+
+
 # --------------------------------------------------------------------- #
 # Widget renderers -- each takes (conn, config) and returns a plain dict
 # the widget's partial template renders. Registered below in WIDGET_TYPES.
@@ -280,7 +303,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             tasks.sort(key=lambda t: t["due_at"])
         events = []
         if "events" in show:
-            events = [e for e in _filtered_events(conn, config) if e.get("start_at") and e["start_at"][:10] == today_iso]
+            events = [e for e in _filtered_events_expanded(conn, config, today, today) if e.get("start_at") and e["start_at"][:10] == today_iso]
             events.sort(key=lambda e: e.get("start_at") or "")
         return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
 
@@ -294,7 +317,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             tasks_pool = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and today_iso <= t["due_at"][:10] <= end.isoformat()]
         events_pool: list[dict] = []
         if "events" in show:
-            events_pool = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{end.isoformat()}T23:59:59")
+            events_pool = _filtered_events_expanded(conn, config, today, end)
 
         by_day = []
         for d in days:
@@ -315,7 +338,24 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         tasks = tasks[:limit]
     events = []
     if "events" in show:
-        now_iso = datetime.now(timezone.utc).isoformat()
+        # Local naive "now" -- same convention `date.today()`/
+        # `datetime.now().hour` already use everywhere else in this file
+        # (see `_greeting_for_hour`'s own comment) for "no separate
+        # timezone handling introduced here". `start_at` is stored exactly
+        # as the event form's local `datetime-local` input sends it (see
+        # routers/calendar.py's create_event) -- naive local wall-clock
+        # text, not a UTC-aware ISO string. Comparing that against
+        # `datetime.now(timezone.utc)` (this branch's old behavior) mixed
+        # a UTC clock reading with locally-stored strings and mis-filtered
+        # by exactly the server's UTC offset -- a recently-started local
+        # event could still read as "upcoming" (or a genuinely upcoming
+        # one as already past), depending on which side of midnight UTC
+        # the comparison landed on.
+        now_str = datetime.now().isoformat()
+        # A window end far enough out that even a yearly-recurring event
+        # still produces its next occurrence (same generous cap
+        # `_is_long_lived_recurrence` above uses for the same reason).
+        window_end = today + timedelta(days=730)
         # db.list_events' own `start` filter is "(end_at IS NULL OR end_at
         # >= start)" -- deliberately permissive so an ongoing/no-end-date
         # event doesn't disappear from a filtered range it's still
@@ -324,7 +364,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         # date) shouldn't count as upcoming just because it has no end.
         # Filter on start_at explicitly here rather than relying on
         # list_events' own start param alone.
-        events = [e for e in _filtered_events(conn, config, start=now_iso) if e.get("start_at") and e["start_at"] >= now_iso]
+        events = [e for e in _filtered_events_expanded(conn, config, today, window_end) if e.get("start_at") and e["start_at"] >= now_str]
         events.sort(key=lambda e: e.get("start_at") or "")
         events = events[:limit]
     return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}

@@ -8,6 +8,45 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Two direct bug reports, complete (2026-08-31). (1) **Agenda
+  widget ("Upcoming") showing nothing**: `_render_agenda` (routers/
+  dashboard.py, Today/This week/All upcoming ranges) filtered events by
+  their raw stored row only -- it never ran recurring rows through
+  `recurrence_expand.expand_events` the way every calendar view
+  (routers/calendar.py's month/week/day) already does, so a recurring
+  event only ever showed up on the literal calendar date its master row
+  happened to be created on, then silently vanished from every Agenda
+  view forever after that one date passed. New `_filtered_events_expanded`
+  helper wraps `_filtered_events` with `expand_events` over each range's
+  own window (today: single day; next 7/30: today..range end; all
+  upcoming: today..+730 days, same generous cap `_is_long_lived_recurrence`
+  already uses) -- used by all three range branches. While in that same
+  block: All upcoming's events filter also compared `start_at` (stored as
+  the event form's naive local `datetime-local` text, never UTC) against
+  `datetime.now(timezone.utc)` -- mixed a UTC clock reading with
+  locally-stored strings, so depending on the server's UTC offset a
+  recently-started local event could still read as "upcoming" (confirmed
+  via a manual repro at UTC+3: an event that started 1h ago still showed).
+  Switched to `datetime.now()` (naive local), matching the `date.today()`/
+  `datetime.now().hour` convention already used everywhere else in this
+  file (see `_greeting_for_hour`'s own comment). (2) **Date-picker closes
+  itself on month-arrow click**: `datetime_picker.js`'s outside-click
+  handler checked `openInst.panel.contains(e.target)` -- a month-nav
+  arrow's own click listener (`shiftMonth` -> `renderPanel`) runs first
+  (target-phase, before the event bubbles to `document`) and does
+  `panel.innerHTML = ""`, detaching the very button just clicked; by the
+  time the bubbled listener ran, checking a now-detached node against the
+  live panel always returned `false`, read as an outside click, and
+  closed the whole picker on every month-arrow click. Switched to
+  `e.composedPath()`, captured at dispatch time before any of that DOM
+  mutation, so it still lists the panel as an ancestor even after the
+  click handler detaches the node. No test changes needed for either
+  (no existing test exercised a recurring event through `_render_agenda`,
+  or drove a synchronous DOM-mutating click handler through the picker's
+  outside-click path); both verified with manual repros against the
+  dashboard/db layer directly. Full suite still 1934 passed (run in three
+  batches -- 867+622+445 -- since it doesn't finish inside this
+  environment's single-command time budget).
 - **Fixed:** Tasks table, column widths reverted to plain auto-layout
   (direct feedback: "just remove the width for all of them beside the
   title column"), complete (2026-08-30). Closes out the same-day column-
