@@ -2531,6 +2531,11 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .time-grid-head.day{grid-template-columns:1fr;}
 .time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-footnote); font-weight:600; border-bottom:1px solid var(--separator);}
 .time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:700;}
+/* 2026-08-31 -- same past-day dimming as Month's .month-day-cell.is-past,
+   applied per-column here since Week/Day split a day across three
+   separate elements (header cell, all-day strip cell, hour-grid column)
+   instead of Month's one nested cell -- each needs its own opacity rule. */
+.time-grid-head .thd.is-past{opacity:.5;}
 /* 2026-08-09 -- all-day strip between the day-of-week header and the hour
    grid on Week/Day, showing all-day events and due tasks per day. Same
    52px-gutter + column grid as .time-grid-body so its columns line up
@@ -2546,6 +2551,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .allday-cols.week{grid-template-columns:repeat(7,1fr);}
 .allday-cols.day{grid-template-columns:1fr;}
 .allday-col{display:flex; flex-direction:column; gap:1px; padding:2px 4px 4px; border-left:1px solid var(--separator); overflow:hidden;}
+.allday-col.is-past{opacity:.5;}
 .allday-task{
   display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
@@ -2585,6 +2591,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    over it, so a cross-column move has a clear "it will land here" cue
    instead of just the block silently jumping between columns. */
 .time-col.drop-hover{background-color:var(--accent-neutral-subtle);}
+.time-col.is-past{opacity:.55;}
 /* Hover/drag-create preview ghost (Schedule grid, static/schedule_grid.js)
    -- a faint outline showing where a click (or click-drag, for a custom
    length) would create a new class, same idea as the reference app's
@@ -2889,6 +2896,18 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .month-day-cell:last-child{border-right:none;}
 .month-day-cell.not-in-month{opacity:.4;}
+/* 2026-08-31 (direct request, "past events/tasks should show dim") -- a day
+   already gone gets the same opacity-on-the-cell treatment as
+   .not-in-month above (day number, color dots, and every event/task row
+   inside all fade together, not just the cell background -- the exact
+   "would also fade the day number and event chips inside it" effect
+   .is-selecting's own comment above deliberately avoided there, but is the
+   whole point here). Applied after (below) .is-today in the cascade so
+   today itself is never dimmed even on a redundant is-past class (it
+   can't be, since routers/calendar.py's day < today only ever fires for
+   days strictly before today, but keeping the rule order today-safe
+   costs nothing). */
+.month-day-cell.is-past{opacity:.55;}
 .month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
 .month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention

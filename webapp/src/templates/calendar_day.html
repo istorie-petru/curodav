@@ -40,12 +40,12 @@
 <div class="time-grid-wrap">
 <div class="time-grid-top">
 <div class="time-grid-head day">
-    <div class="thd {% if day == today_iso %}is-today{% endif %}">{{ day }}</div>
+    <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}">{{ day }}</div>
 </div>
 <div class="time-grid-allday day">
     <div class="allday-gutter">All day</div>
     <div class="allday-cols day">
-        <div class="allday-col">
+        <div class="allday-col {% if day < today_iso %}is-past{% endif %}">
             {% for e in all_day %}
             <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                 <span class="color-dot cal-{{ e.calendar_color }}"></span>
@@ -66,7 +66,7 @@
         {% endfor %}
     </div>
     <div class="time-cols day">
-        <div class="time-col calendar-create-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
+        <div class="time-col calendar-create-col {% if day < today_iso %}is-past{% endif %}" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
             {% for ov in time_block_overlays %}
             <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
             {% endfor %}

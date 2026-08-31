@@ -1,19 +1,23 @@
-// Drag-to-move an event chip between day cells on the Month grid
-// (templates/calendar_month.html). Loaded alongside calendar_month.js
-// (which owns click-and-hold drag-to-CREATE on empty cell space); this
-// file owns dragging an EXISTING event chip (`.month-event-item` --
-// `.month-all-day` and the "event" kind of `.month-task-item`) onto a
-// different day cell to reschedule it. Task chips (due-date items, the
-// "task" kind of `.month-task-item`, no `.month-event-item` class) are
-// left alone -- only events move here.
+// Drag-to-move an event OR due-date task chip between day cells on the
+// Month grid (templates/calendar_month.html). Loaded alongside
+// calendar_month.js (which owns click-and-hold drag-to-CREATE on empty
+// cell space); this file owns dragging an EXISTING chip (`.month-event-
+// item` -- `.month-all-day` and the "event" kind of `.month-task-item`,
+// or `.month-due-task-item` -- the "task" kind, a bare due-date item with
+// no linked event) onto a different day cell to reschedule it.
 //
-// Reuses the same JSON endpoint the Week/Day grid's own drag already
-// posts to (POST /events/{uid}/reschedule, see static/calendar.js) --
-// Month has no time axis, so the move only ever shifts the *date*, never
-// the time-of-day: the dragged event's existing start/end timestamps are
-// shifted by the same whole-day delta between the cell it was picked up
-// from and the cell it was dropped on, and the drop cell's own weekday
-// position never touches the stored time-of-day at all.
+// Events reuse the same JSON endpoint the Week/Day grid's own drag
+// already posts to (POST /events/{uid}/reschedule, see
+// static/calendar.js); tasks post to the Table/Kanban views' own inline-
+// edit endpoint (POST /tasks/{uid}/update-field, field="due_at" --
+// routers/tasks.py's `_UPDATABLE_FIELDS`), same call tasks_table.js's
+// date-cell click-to-edit already makes, just supplying a shifted date
+// instead of a picker value. Either way Month has no time axis, so the
+// move only ever shifts the *date*, never the time-of-day: the dragged
+// item's existing timestamp(s) are shifted by the same whole-day delta
+// between the cell it was picked up from and the cell it was dropped on,
+// and the drop cell's own weekday position never touches any stored
+// time-of-day at all.
 //
 // Recurring events are deliberately excluded (no data-uid rendered for
 // them by calendar_month.html): reschedule_event only ever moves a plain
@@ -101,16 +105,26 @@
       if (!deltaDays) return;
 
       const uid = el.dataset.uid;
-      const newStart = shiftDate(el.dataset.start, deltaDays);
-      const newEnd = el.dataset.end ? shiftDate(el.dataset.end, deltaDays) : "";
+      const isTask = el.classList.contains("month-due-task-item");
 
-      fetch(`/events/${uid}/reschedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start_at: newStart, end_at: newEnd || null }),
-      }).then((resp) => {
+      const request = isTask
+        ? fetch(`/tasks/${uid}/update-field`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ field: "due_at", value: shiftDate(el.dataset.due, deltaDays) }),
+          })
+        : fetch(`/events/${uid}/reschedule`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              start_at: shiftDate(el.dataset.start, deltaDays),
+              end_at: el.dataset.end ? shiftDate(el.dataset.end, deltaDays) : null,
+            }),
+          });
+
+      request.then((resp) => {
         if (!resp.ok) throw new Error("reschedule failed");
-        // async-CRUD (features/async-crud.md): the moved event now needs to
+        // async-CRUD (features/async-crud.md): the moved item now needs to
         // move between two day cells' own `rows`/overflow-count lists,
         // which the server recomputes correctly on a fresh render -- unlike
         // the Week grid's single-block top/left, there's no cheap local DOM
@@ -119,7 +133,7 @@
         // instead of reloading the page. The change event's listener
         // (async_calendar.js) refreshes the region and re-inits the month
         // drag/create bindings.
-        window.ccApi.dispatchChange({ type: "event", action: "move" });
+        window.ccApi.dispatchChange({ type: isTask ? "task" : "event", action: "move" });
       }).catch(() => {
         window.ccToast({ message: "Could not save that move.", variant: "error" });
       });

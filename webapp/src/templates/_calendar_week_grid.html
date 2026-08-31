@@ -42,14 +42,14 @@
     <div class="time-grid-top">
     <div class="time-grid-head week">
         {% for day in days %}
-        <div class="thd {% if day.is_today %}is-today{% endif %}">{{ day.date.strftime('%a %d') }}</div>
+        <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}">{{ day.date.strftime('%a %d') }}</div>
         {% endfor %}
     </div>
     <div class="time-grid-allday week">
         <div class="allday-gutter">All day</div>
         <div class="allday-cols week">
             {% for day in days %}
-            <div class="allday-col">
+            <div class="allday-col{% if day.is_past %} is-past{% endif %}">
                 {% for e in day.all_day %}
                 <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                     <span class="color-dot cal-{{ e.calendar_color }}"></span>
@@ -72,7 +72,7 @@
         </div>
         <div class="time-cols week">
             {% for day in days %}
-            <div class="time-col calendar-create-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
+            <div class="time-col calendar-create-col project-calendar-col {% if day.is_past %}is-past{% endif %}" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
                 {% for ov in day.time_block_overlays %}
                 <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
                 {% endfor %}

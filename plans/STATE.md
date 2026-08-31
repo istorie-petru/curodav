@@ -8,6 +8,46 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Added:** Two direct follow-up requests on the Calendar, complete
+  (2026-08-31). (1) **Past days/events/tasks now dim**: nothing in
+  style.css previously distinguished a past day from any other -- only
+  `.is-today` (bold circle) and Month's `.not-in-month` (adjacent-month
+  greying) existed. `routers/calendar.py` now computes `is_past` (`day <
+  today`) alongside each view's existing `is_today` -- `_month_day_cells`
+  (shared by Month and 4-Week) and the Week view's per-day loop; Day
+  reuses the `today_iso` string already in its context via a plain
+  Jinja `day < today_iso` comparison (ISO dates sort correctly as
+  strings) since it has no per-day dict to thread a flag through.
+  Templates render `is-past` on the relevant cell/column per view:
+  `.month-day-cell` (Month, 4-Week), `.thd`/`.allday-col`/`.time-col`
+  (Week, Day). CSS opacity on each (~.5, matching `.not-in-month`'s .4)
+  dims the cell as a whole -- day number, color dots, and every event/
+  task row inside fade together, deliberately the same "opacity on the
+  cell itself" approach `.month-day-cell.is-selecting`'s own comment
+  had ruled out for *that* rule (would dim contents, not just background)
+  but is exactly the point here. (2) **Task chips now drag in Month
+  view**: `calendar_month_drag.js` previously only bound
+  `.month-event-item` (all-day + timed events) -- plain due-date task
+  chips (`.month-task-item` with no event class) had no drag handler at
+  all, only events did, and even those only on Month (Week/Day's own
+  time-grid drag in calendar.js was already there, unaffected). Task
+  chips gained a `.month-due-task-item` class + `data-uid`/`data-due` in
+  `_calendar_month_grid.html`; the drag script's `end()` now branches on
+  that class -- events still POST `/events/{uid}/reschedule`, tasks POST
+  the Table/Kanban view's existing inline-edit endpoint (`/tasks/{uid}/
+  update-field`, `field=due_at`, `routers/tasks.py`'s `_UPDATABLE_FIELDS`
+  already allowed it, no backend change needed there) with the same
+  whole-day `shiftDate` delta events already used. Recurring events
+  remain excluded from drag (unchanged, still footgun-avoidance per the
+  file's own comment); 4-Week's day cells got the `is-past` class too
+  but NOT task/event drag -- 4-Week never had event drag either (its own
+  inline markup, no `calendar_month_drag.js` script tag), out of scope
+  here since that's a separate, pre-existing gap. Full suite: 1934
+  passed (four batches this time, ~21 files each, since a straight
+  quarter-split fits this environment's single-command time budget
+  better than the previous three-batch split -- `test_caldav_bridge_
+  live.py` excluded from all batches as before, a live/network test
+  unrelated to this change).
 - **Fixed:** "editing a widget's filters doesn't update the dashboard"
   (direct report, 2026-08-31) -- investigated, this exact symptom was
   already fixed once before (2026-08-30 entry below: autosave() calls

@@ -333,6 +333,7 @@ def _month_day_cells(
                 "iso": key,
                 "in_month": is_window_day(day),
                 "is_today": day == today,
+                "is_past": day < today,
                 "rows": visible,
                 "overflow_count": len(rows) - len(visible),
             }
@@ -695,6 +696,7 @@ def _week_view_context(conn, request, date_, label):
                 "date": d,
                 "iso": key,
                 "is_today": d == date.today(),
+                "is_past": d < date.today(),
                 "all_day": day_all_day,
                 "timed": timed,
                 "tasks": day_tasks,
