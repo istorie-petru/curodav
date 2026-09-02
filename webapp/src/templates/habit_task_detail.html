@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_habit_heatmap.html" import heatmap %}
+{% from "_label_pill.html" import label_pill with context %}
 {% block title %}{{ task.title if task else "Habit" }}{% endblock %}
 {% block content %}
 <!-- Dedicated view modal for a habit-tracked task (2026-08-29 direct
@@ -39,7 +40,7 @@
         {% if _other_tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in _other_tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in _other_tags %}{{ label_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

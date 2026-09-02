@@ -8,6 +8,30 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed:** Direct follow-up bug report same day (2026-09-02), "in the
+  tasks page it doesn't work" -- the label-pill pass below (previous
+  entry) missed the Habits code path entirely. Habits are NOT rendered
+  through `_task_row.html`/`task_detail.html` -- `_tasks_body.html`'s own
+  header comment already says the Habits group is "pulled out into its
+  own `<table id="habits-table">`" using `_habit_row.html::habit_row`,
+  and `routers/tasks.py::task_detail` renders `habit_task_detail.html`
+  instead of the generic `task_detail.html` for any task carrying the
+  habit label (habit_task_detail.html's own header comment says so too) --
+  three call sites this session's earlier pass never touched, each with
+  its own hand-rolled `cell-tag tag-blue`: `_habit_row.html` (Tasks page's
+  Habits sub-table), `_habit_detail_body.html` (the standalone Habit
+  entity's own detail view), `habit_task_detail.html` (a habit-tagged
+  task's "other tags" row). All three now use the same `_label_pill.html`
+  macro. Caught by actually reproducing end-to-end with a real ASGI
+  TestClient (ad hoc script, not added to the suite) seeding a
+  habit-tagged task with a colored+iconed label and hitting `/tasks` +
+  `/tasks/{uid}` -- the first pass's own "77 passed" verification only
+  ever exercised bare-`Request` router-function-call tests, which swallow
+  `_label_color`/`_label_icon`'s broad try/except (no real `request.app`)
+  and so silently pass either way; they never would have caught this.
+  Full suite still 1934 passed (unaffected, no test covers Habits label
+  color/icon rendering either).
+
 - **Shipped:** Direct request (2026-09-02), design pass following four
   mockups shown in-conversation ("implement all. the view modal should
   reflect rules we already have in place, the body design is good. just
