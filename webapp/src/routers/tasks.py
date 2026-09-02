@@ -943,12 +943,14 @@ _UPDATABLE_FIELDS = {"status", "due_at", "title", "tags"}
 
 @router.post("/{uid}/update-field")
 async def update_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit, used by both the Table view's click-to-edit
-    pills/date cell and the Kanban board's drag-to-a-new-column (which is
-    just a `field=status` call). Deliberately a JSON body, not a Form --
-    this is only ever called from tasks_table.js/tasks_kanban.js via
-    fetch(), never from a plain HTML form/no-JS fallback, unlike every
-    other route in this router.
+    """Single-field inline edit, used by the Table view's click-to-edit
+    pills/date/labels cells. Deliberately a JSON body, not a Form -- this is
+    only ever called from tasks_table.js via fetch(), never from a plain
+    HTML form/no-JS fallback, unlike every other route in this router. (The
+    Projects page's Kanban board used to call this too for its own per-card
+    status dropdown -- removed 2026-09-02, "no inline editing"; a status
+    change there now happens by opening the task's own edit form instead,
+    which POSTs through the normal `/tasks/{uid}` route, not this one.)
 
     `tags` (2026-08-29, STATE.md backlog item 9, "Labels ... become
     always-clickable checkbox dropdown menus") -- the Table view's Labels

@@ -61,6 +61,7 @@
         {% set ms_items = tag_name_items %}
         {% set ms_selected = [] %}
         {% set ms_mode = 'select' %}
+        {% set ms_pill = true %}
         {% include "_widget_list_multiselect.html" %}
     </div>
     <button type="button" id="bulk-tag-add" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Add</button>

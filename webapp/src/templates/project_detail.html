@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill %}
+{% from "_label_pill.html" import label_pill with context %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 <!-- Project page (rebuilt 2026-08-30, replacing the 2026-08-15 redirect
@@ -82,18 +83,26 @@
      grouped by status. Reuses the (retired) global Tasks Kanban's own
      `.kanban-*` CSS/layout verbatim (templates/tasks_board.html itself
      was deleted in the 2026-08-28 rework, but the CSS was left in place
-     unused). Status changes are click-based, not drag-and-drop, by direct
-     choice when scoping this page (a plain `.pill-select` per card, same
-     "native <select> styled as a pill" pattern _task_row.html's own
-     comment documents as this app's pre-multiselect status control) --
-     see static/tasks_kanban.js, which POSTs through the same
-     /tasks/{uid}/update-field endpoint (`field=status`) the Table view's
-     status pill and the old drag-based board both used, then moves the
-     card to its new column client-side rather than reloading. Importance/
-     Urgency chips the old board template rendered are gone -- that
-     feature was removed outright (2026-08-30, see routers/tasks.py's own
-     comment); Due date and labels remain. -->
-<div class="kanban-board" id="kanban-board" data-status-colors="{{ status_colors | tojson | e }}">
+     unused). Cards carry no inline status control any more (2026-09-02
+     redesign, direct request: "kanban redesign with support for better
+     pills show, no inline editing" -- clarified the replacement is
+     "open task to change status") -- the card's own title already opens
+     the task detail modal via `data-modal`; static/tasks_kanban.js and its
+     per-card `.pill-select` (a native <select> styled as a pill) are gone,
+     column membership is purely a render of `columns[status]`. Editing a
+     task's status inside that modal saves through task_form.html's plain
+     `data-cc-change="task"` form; this page claims no live region for that
+     event, so modal.js's own fallback (`window.location.reload()`) is what
+     moves the card to its new column -- see modal.js's "no surface listener
+     claims the event" comment, not a mechanism specific to this page.
+     Drag-and-drop between columns remains out of scope (still the
+     2026-08-30 "Still open" note in plans/STATE.md -- a deliberate,
+     separate decision from removing the dropdown). Importance/Urgency
+     chips the old board template rendered are gone -- that feature was
+     removed outright (2026-08-30, see routers/tasks.py's own comment);
+     Due date and labels (now colored/iconed pills, _label_pill.html)
+     remain. -->
+<div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}
     <div class="kanban-column" data-status="{{ status }}">
         <div class="kanban-column-head">
@@ -119,13 +128,8 @@
                 <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
                 <div class="kanban-card-meta">
                     {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
-                    {% for tag in t.tags %}{% if tag != project.name %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endif %}{% endfor %}
+                    {% for tag in t.tags %}{% if tag != project.name %}{{ label_pill(tag) }}{% endif %}{% endfor %}
                 </div>
-                <select class="pill-select pill-{{ status_colors[t.status] }} kanban-status-select" data-uid="{{ t.uid }}" title="Change status">
-                    {% for s in board_statuses %}
-                    <option value="{{ s }}" {% if s == t.status %}selected{% endif %}>{{ status_labels[s] }}</option>
-                    {% endfor %}
-                </select>
             </div>
             {% else %}
             <div class="kanban-empty">No tasks</div>
@@ -135,4 +139,3 @@
     {% endfor %}
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('tasks_kanban.js') }}"></script>{% endblock %}

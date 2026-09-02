@@ -152,7 +152,22 @@ ms_hidden    -- when true, the outer `.field` starts with the
                       `.holiday-field` via `ms_extra_class`).
       ms_autosubmit -- when true, adds `onchange="this.form.requestSubmit()"`
                       to checkbox/radio inputs so the form submits immediately
-                      on selection change (for settings that auto-save). #}
+                      on selection change (for settings that auto-save).
+      ms_pill      -- (2026-09-02, direct request: "labels also as pills ...
+                      that reflect the colors for that label, and also have
+                      icons") when true, each option's `<span>{{ it.name }}
+                      </span>` is replaced with `_label_pill.html`'s shared
+                      colored/iconed pill instead of plain text -- only
+                      meaningful when `it.name` is a real label name (every
+                      Labels-picker caller of this partial), never set by
+                      Task lists/Calendars/View/Range, whose items aren't
+                      labels and have no `label_config` row to color from.
+                      The synthetic `{'uid': '__no_label__', 'name': 'No
+                      label'}` row some Labels *filter* callers prepend
+                      renders as plain text even with ms_pill on (it isn't a
+                      real label, coloring it would just paint it the
+                      default blue like an actual unconfigured label and
+                      imply it's one). #}
 {% set _mode = ms_mode | default('filter') %}
 {% set _single = _mode == 'single' %}
 {% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
@@ -162,6 +177,8 @@ ms_hidden    -- when true, the outer `.field` starts with the
 {% set _wide = ms_wide | default(true) %}
 {% set _sel_item = (ms_items | selectattr('uid', 'equalto', ms_selected) | list | first) if (_single and ms_selected) else ((ms_items | first) if (_single and ms_items) else none) %}
 {% set _autosubmit = ms_autosubmit | default(false) %}
+{% set _pill = ms_pill | default(false) %}
+{% if _pill %}{% from "_label_pill.html" import label_pill with context %}{% endif %}
 <div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
     <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
@@ -177,7 +194,7 @@ ms_hidden    -- when true, the outer `.field` starts with the
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
                        {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}
                        {% if _autosubmit %}onchange="this.form.requestSubmit()"{% endif %}>
-                <span>{{ it.name }}</span>
+                {% if _pill and it.uid != '__no_label__' %}{{ label_pill(it.name) }}{% else %}<span>{{ it.name }}</span>{% endif %}
             </label>
             {% endfor %}
             {% if _allow_new %}

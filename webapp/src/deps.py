@@ -485,6 +485,38 @@ def _label_icon(request: Request, label: str) -> str:
 templates.env.globals["label_icon"] = _label_icon
 
 
+def _label_color(request: Request, label: str) -> str:
+    """The `.cal-*` swatch name (e.g. "teal") a label's own pill should
+    paint with -- the read side of the same `label_config.color` field
+    the picker in `_color_swatch_picker.html` writes. Unlike `_label_icon`
+    above, this is NOT gated behind the "Show icons next to labels"
+    toggle -- color isn't an opt-in decoration, every label already has
+    one (`_LABEL_CONFIG_DEFAULTS["color"]` is "blue", so an unconfigured
+    label resolves to the same blue every `.cell-tag tag-blue` hardcode
+    used to paint everywhere, before this existed -- purely additive for
+    any label that's actually picked a color). Same per-request memoize +
+    broad try/except-on-bare-Request pattern as `_label_icon`, own cache
+    attr so the two never fight over one dict shape."""
+    cache_attr = "_cc_label_color_cache"
+    cache = getattr(request.state, cache_attr, None)
+    if cache is None:
+        cache = {}
+        setattr(request.state, cache_attr, cache)
+    if label in cache:
+        return cache[label]
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            cfg = db.effective_label_config_ci(conn, label or "")
+            color = cfg.get("color") or "blue"
+    except Exception:
+        color = "blue"
+    cache[label] = color
+    return color
+
+
+templates.env.globals["label_color"] = _label_color
+
+
 def _format_time_value(value: str, fmt: str) -> str:
     """Shared formatting core for the two filters below -- accepts either
     a full ISO datetime ("2026-08-08T14:30:00") or a bare "HH:MM" string

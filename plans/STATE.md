@@ -8,6 +8,82 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request (2026-09-02), design pass following four
+  mockups shown in-conversation ("implement all. the view modal should
+  reflect rules we already have in place, the body design is good. just
+  implement the design first") -- three pieces:
+  1. **Labels render as colored/iconed pills everywhere**, not just a
+     flat `tag-blue` -- new `deps.py::_label_color` global (mirrors
+     `_label_icon`'s per-request memoized `effective_label_config_ci`
+     lookup, own cache attr; NOT gated behind the "Show icons next to
+     labels" toggle, since color isn't opt-in decoration, and an
+     unconfigured label's default color is "blue" -- same shade every old
+     hardcode painted, so this is purely additive) and a new shared macro,
+     `templates/_label_pill.html::label_pill(tag)`, replacing five
+     near-identical hand-rolled `<span class="cell-tag tag-blue">...`
+     blocks: task_detail.html, event_detail.html, contact_detail.html
+     (didn't even resolve icons before -- now consistent with the other
+     two), project_detail.html's Kanban cards, `_task_row.html` (both the
+     Tasks table's read display and its Labels dropdown's own option
+     rows). Also reaches every Labels checkbox-dropdown built on
+     `_widget_list_multiselect.html` via a new `ms_pill` param (task/
+     event/contact/note forms, Tasks table's bulk-tag picker, the widget
+     builder's Labels filter) -- the synthetic `{'uid': '__no_label__', ...}`
+     row some Labels *filters* prepend stays plain text even with
+     `ms_pill` on, not painted like a real label. `ms_pill` is reset to
+     `false` after each Labels include in `_widget_builder_fields.html`/
+     `_widget_edit_form.html` -- Jinja `{% set %}` isn't block-scoped, so
+     leaving it on would have bled into the Task lists/Calendars includes
+     right after.
+  2. **Unscheduled-work panel: smaller pills, wraps into rows** instead of
+     one fixed-220px-per-item horizontal scroll strip (direct feedback:
+     "smaller, minimalist and be able to fit inline, and to have more
+     rows") -- `style.css`'s `.unscheduled-task-list` is `flex-wrap:wrap`
+     now (was `nowrap`+`overflow-x:auto`); `.unscheduled-task-item` sizes
+     to its own content (`flex:0 1 auto`, `max-width:190px`, was a fixed
+     220px box) at a smaller type scale throughout. Markup/JS (drag
+     source, stepper POSTs) untouched -- CSS-only.
+  3. **Kanban board: no inline status editing** (direct request,
+     clarified: "open task to change status") -- the per-card
+     `.kanban-status-select` `<select>` and its driver,
+     `static/tasks_kanban.js`, are gone outright; the card's own title
+     already opens the task detail modal via `data-modal`. No new JS
+     needed to keep the board in sync after an edit: `task_form.html`'s
+     save already dispatches a plain `data-cc-change="task"` (not a
+     claimed async-CRUD region on this page), so `modal.js`'s existing
+     "no surface listener claims this event" fallback
+     (`window.location.reload()`) already moves the card to its new
+     column. Drag-and-drop between columns stays out of scope (unchanged
+     from the 2026-08-30 "Still open" note below).
+  `sw.js` CACHE_NAME bumped v44 -> v45 (style.css + template/JS changes;
+  test_pwa_shell.py's pin updated). Also fixed one now-flaky pre-existing
+  test unrelated to this change, caught by the full-suite run:
+  `test_calendar_allday_strip.py::test_week_strip_has_seven_day_columns`
+  was asserting an exact `class="allday-col"` string count of 7 -- the
+  2026-08-31 past-day-dimming feature appends `is-past` to that class on
+  any past day in the displayed week, which as of today's date (a
+  Wednesday, so the current week's Mon/Tue are now in the past) makes 2 of
+  the 7 render as `class="allday-col is-past"` instead, undercounting to
+  5. Not a regression from today's change -- reproduced on a clean stash
+  of this session's diff too -- just a date-dependent test that only now
+  started failing; fixed to count on a word boundary instead of the exact
+  attribute value, robust to either class. Full suite: 1934 passed (four
+  chunks, ~21 files each, run in parallel this session instead of
+  sequentially -- this environment has 16 cores and no per-call time limit
+  above ~45s, so four `pytest` processes in the background of one shell
+  call finish inside that window where one serial run doesn't any more at
+  today's suite size; `test_caldav_bridge_live.py` excluded as always).
+
+  **Still open from this same request** (not this slice -- design-only
+  pass, per "just implement the design first"): the calendar drag-feedback
+  bug (Month view chips don't track the pointer during drag, unlike Week
+  view's own drag) and the oversized dropdown-panel-vs-content bug are
+  real bugs, not mockup items, and still need their own fix. The mockups
+  didn't cover the Kanban board's drag-and-drop (still deferred, per
+  above) or a Pinterest-style dashboard grid (the user said this one isn't
+  needed any more, dropped from the backlog entirely -- see the "Next
+  session queue -- design check-ups" entry below, item 3, now moot).
+
 - **Fixed:** Direct follow-up bug report, "there should also be the
   capability to move tasks" / "the tasks on the 4 week calendar"
   (2026-08-31) -- the previous session's task-chip drag support

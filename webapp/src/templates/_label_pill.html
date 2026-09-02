@@ -1,0 +1,14 @@
+{# Shared read-only label pill -- a `.cell-tag` painted in the label's own
+   color (deps.py's `label_color`, falls back to "blue" for an
+   unconfigured label -- same shade every hardcoded `tag-blue` pill used
+   before this existed, so a label with no color picked renders exactly
+   as it always did) with its assigned icon in front when the "Show icons
+   next to labels" setting is on (`label_icon`, already gates that).
+   Replaces five near-identical hand-rolled `cell-tag tag-blue` + `{% set
+   _li = label_icon(...) %}` blocks (task_detail.html, event_detail.html,
+   contact_detail.html, project_detail.html's Kanban cards, _task_row.html)
+   with one source of truth -- direct feedback 2026-09-02 ("labels also as
+   pills, that reflect the colors for that label, and also have icons").
+   Import `with context` -- reads `request` from context; `label_color`/
+   `label_icon`/`icon` are Jinja globals, not locals. #}
+{% macro label_pill(tag) %}<span class="cell-tag cal-{{ label_color(request, tag) }}">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }} {% endif %}{{ tag }}</span>{% endmacro %}

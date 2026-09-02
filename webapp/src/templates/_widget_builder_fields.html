@@ -248,7 +248,9 @@
 {% set ms_label = 'Labels' %}
 {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
 {% set ms_selected = [] %}
+{% set ms_pill = true %}
 {% include "_widget_list_multiselect.html" %}
+{% set ms_pill = false %}
 {% if task_lists %}
 {% set ms_name = 'task_list_uids' %}
 {% set ms_label = 'Task lists' %}

@@ -153,7 +153,15 @@
 // with no such JS on this plain page it had no top/left/width at all.
 // New `.widget-card-static` repeats only the flattened visual treatment,
 // not the positioning; style.css changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v44";
+// v45 (2026-09-02): direct-feedback design pass -- labels now render as
+// colored/iconed pills everywhere (new `.cell-tag.cal-*` usage via
+// _label_pill.html, no new classes of their own) instead of the old flat
+// `tag-blue`; Unscheduled-work pills (style.css's `.unscheduled-task-*`)
+// shrunk and now wrap instead of scrolling; the Kanban board's per-card
+// `.kanban-status-select` is gone along with static/tasks_kanban.js
+// (removed from the page entirely, was never in SHELL_ASSETS). style.css
+// changed, bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v45";
 
 const SHELL_ASSETS = [
   "/offline",

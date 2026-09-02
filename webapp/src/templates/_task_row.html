@@ -58,6 +58,7 @@
        detail modal (`data-modal`, unchanged) -- see inline_edit.js's own
        header comment for how the two are told apart on the same element
        without one accidentally triggering the other. #}
+{% from "_label_pill.html" import label_pill with context %}
 {% macro task_row(t, show_select=true) %}
 <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
     {% if show_select %}
@@ -121,7 +122,7 @@
             <button type="button" class="multiselect-trigger cell-tags-trigger" aria-haspopup="true" aria-expanded="false">
                 <span class="cell-tags">
                 {% if t.tags %}
-                    {% for tag in t.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span>{% endfor %}
+                    {% for tag in t.tags %}{{ label_pill(tag) }}{% endfor %}
                 {% else %}
                     <span class="ms-summary text-muted">No labels</span>
                 {% endif %}
@@ -132,7 +133,7 @@
                 {% for name in (tag_names | default([])) %}
                 <label class="multiselect-option">
                     <input type="checkbox" class="task-label-checkbox" data-uid="{{ t.uid }}" value="{{ name }}" {% if name in t.tags %}checked{% endif %}>
-                    <span>{{ name }}</span>
+                    {{ label_pill(name) }}
                 </label>
                 {% endfor %}
             </div>

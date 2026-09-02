@@ -2069,14 +2069,11 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .kanban-card-title:hover{text-decoration:underline;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
 .kanban-empty{color:var(--fg-tertiary); font-size:var(--text-caption); text-align:center; padding:14px 0;}
-/* Project page Kanban board's per-card status control (templates/
-   project_detail.html, static/tasks_kanban.js) -- a plain .pill-select
-   (native <select>, no drag-and-drop -- see that JS file's own comment on
-   why this page is click-based). align-self:flex-start keeps it sized to
-   its own content instead of stretching to the card's full width, the
-   default cross-axis behavior a column flex child gets with no explicit
-   align-items on the parent. */
-.kanban-status-select{align-self:flex-start; margin-top:2px;}
+/* 2026-09-02: the per-card status `<select>` (.kanban-status-select) is
+   gone -- "no inline editing", direct request -- status now only changes
+   by opening the card's own task (its title link already does that). No
+   replacement rule needed here; removing this without a replacement
+   selector is deliberate, not an oversight. */
 
 /* Narrow windows / mobile: from a full-width desktop screen down to
    1100px the columns just resize to fill the board (flex:1 1 0 +
@@ -2693,40 +2690,42 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .project-calendar-unscheduled.collapsed .unscheduled-panel-head h2,
 .project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
 .project-calendar-unscheduled.collapsed #unscheduled-panel-toggle svg{transform:rotate(180deg);}
-/* Horizontal strip, not a vertical list -- scrolls sideways
-   (overflow-x:auto) instead of growing the panel tall. Each item gets a
-   fixed basis (flex:none) so a short title doesn't shrink the card below
-   readable width the way an auto-sized row item would; .unscheduled-task-
-   title's own ellipsis (below) still handles a title too long for that
-   fixed width. */
-.unscheduled-task-list{display:flex; flex-direction:row; flex-wrap:nowrap; gap:6px; overflow-x:auto; padding-bottom:4px;}
+/* 2026-09-02 redesign (direct feedback: "smaller, minimalist and be able
+   to fit inline, and to have more rows"): a wrapping grid, not a
+   horizontal scroll strip -- flex-wrap:wrap instead of nowrap+
+   overflow-x:auto, so the panel grows tall (more rows) instead of wide.
+   Each item is sized to its own content (flex:0 1 auto) up to a max-width
+   cap, not the old fixed 220px basis -- several short items now sit on
+   one row instead of each claiming a full 220px slot. */
+.unscheduled-task-list{display:flex; flex-direction:row; flex-wrap:wrap; gap:5px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
-   partial on the planning grids). ONE line (2026-08-14 design): a project
-   pill (icon + name) then the task title on the left, the session-count
-   stepper on the right -- no hours readout, no due date, no grip. This is a
-   POINTER-based drag source (not native HTML5 DnD -- see project_calendar.js
-   interaction 1), so it needs touch-action:none + user-select:none for
-   reliable pointermove on touch and to keep a drag from also selecting text. */
+   partial on the planning grids). ONE line (2026-08-14 design, sized down
+   2026-09-02): a project pill (icon + name) then the task title on the
+   left, the session-count stepper on the right -- no hours readout, no due
+   date, no grip. This is a POINTER-based drag source (not native HTML5
+   DnD -- see project_calendar.js interaction 1), so it needs
+   touch-action:none + user-select:none for reliable pointermove on touch
+   and to keep a drag from also selecting text. */
 .unscheduled-task-item{
-  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px;
+  display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:6px;
   background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
-  font-size:13px; touch-action:none; user-select:none; -webkit-user-select:none;
-  flex:0 0 220px; width:220px;
+  font-size:11px; touch-action:none; user-select:none; -webkit-user-select:none;
+  flex:0 1 auto; max-width:190px;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .unscheduled-task-item.item-dragging{opacity:.5;}
 .unscheduled-project-pill{
-  flex:none; display:inline-flex; align-items:center; gap:4px; max-width:130px;
-  padding:2px 9px; border-radius:999px; background:var(--accent-neutral-subtle);
-  color:var(--fg-primary); font-size:11px; font-weight:600; white-space:nowrap;
+  flex:none; display:inline-flex; align-items:center; gap:3px; max-width:80px;
+  padding:1px 7px; border-radius:999px; background:var(--accent-neutral-subtle);
+  color:var(--fg-primary); font-size:10px; font-weight:600; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis;
 }
 .unscheduled-project-pill .icon{flex:none;}
 .unscheduled-task-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.unscheduled-stepper{flex:none; display:flex; align-items:center; gap:2px;}
+.unscheduled-stepper{flex:none; display:flex; align-items:center; gap:1px;}
 .unscheduled-stepper form{margin:0;}
-.unscheduled-step-btn{width:20px; height:20px;}
-.unscheduled-count{min-width:18px; text-align:center; font-size:12px; font-weight:600; color:var(--fg-secondary);}
+.unscheduled-step-btn{width:16px; height:16px;}
+.unscheduled-count{min-width:14px; text-align:center; font-size:10px; font-weight:600; color:var(--fg-secondary);}
 /* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
    pointer-following copy of the source item while dragging -- hidden until
    the gesture passes the drag threshold, so a plain click isn't mistaken

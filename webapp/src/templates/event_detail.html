@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_label_pill.html" import label_pill with context %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
 {% block content %}
 <!-- 2026-08-08 direct feedback ("add for events a way like for tasks to
@@ -70,7 +71,7 @@
         {% if event.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in event.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span> {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in event.tags %}{{ label_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

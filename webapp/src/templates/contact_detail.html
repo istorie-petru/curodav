@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_label_pill.html" import label_pill with context %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html/task_detail.html for why this is wrapped -- opens
@@ -128,7 +129,7 @@
         {% if contact.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in contact.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in contact.tags %}{{ label_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

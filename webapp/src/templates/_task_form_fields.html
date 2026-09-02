@@ -83,6 +83,7 @@
             {% set ms_selected = task.tags if task else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}
+            {% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
         <!-- 2026-08-08 follow-up ("both tasks and event should have
