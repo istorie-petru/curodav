@@ -41,75 +41,6 @@
             <input type="checkbox" id="all_day" name="all_day" value="1" {% if (event and event.all_day) or (not event and prefill_all_day) %}checked{% endif %}>
             <label for="all_day">All day</label>
         </div>
-        <!-- Format field (2026-08-15, "Event format for simple events") --
-             most events are simple and don't need both Location and
-             Meeting URL visible at once, so a Format choice reveals only
-             the relevant one (In person -> Location, Online -> Meeting
-             URL) instead of always showing both. No backing column: Format
-             is purely derived from which of the two fields already has a
-             value (see the `_has_location`/`_has_meeting` set below) --
-             cheaper than a new column and can't drift out of sync with the
-             two fields it switches between. If an existing event somehow
-             has both fields set (legacy data predating this field),
-             Location/In person wins the tie -- documented here since
-             there's no real "both" state in the new model.
-             static/event_format_toggle.js clears the *other* field's value
-             on switch (so a hidden stale value can't silently resubmit and
-             leave both columns populated again); the show/hide itself is
-             plain CSS (#event-form:has(#event_format_in_person:checked),
-             style.css), same pattern as #all_day/.holiday-field above.
-
-             2026-09-03 direct feedback ("move away from how the Format
-             toggle looks -- too cramped between icons and text, the gray
-             out of place, no clear subordination for what they do, no
-             clear 'not one of these' state"): rebuilt on the existing
-             tile/card picker pattern (.tile-select/.tile-option, style.css
-             "Tile/card picker" section, already used by the widget
-             builder's Data source field) instead of the cramped
-             .segmented/.seg-btn pill row -- three equal cards, icon above
-             label, an unmistakable selected look (border + tint) vs. a
-             plain neutral outline when not selected. "Neither picked" used
-             to be an implicit state (both radios simply unchecked); it's
-             now a real third, visibly-selectable option (`event_format_
-             none`, id kept alongside the original two ids/wrapper class so
-             existing tests and event_format_toggle.js's selector still
-             match), checked whenever neither Location nor Meeting URL has
-             a value -- including every brand-new event. -->
-        {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
-        {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
-        <div class="field field-wide">
-            <label>Format</label>
-            <div class="tile-select event-format-segmented" role="radiogroup" aria-label="Event format">
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_in_person" class="tile-radio" value="in_person" {% if _has_location %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('map-pin', 'icon-sm') }}</span>
-                    <span class="tile-option-label">In person</span>
-                </label>
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_online" class="tile-radio" value="online" {% if _has_meeting and not _has_location %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('video', 'icon-sm') }}</span>
-                    <span class="tile-option-label">Online</span>
-                </label>
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_none" class="tile-radio" value="none" {% if not _has_location and not _has_meeting %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('x', 'icon-sm') }}</span>
-                    <span class="tile-option-label">None</span>
-                </label>
-            </div>
-        </div>
-        <div class="field field-format-location">
-            <label>Location</label>
-            <!-- `or ''` + the empty-check below: the DB has legacy literal
-                 "None" strings from a pre-2026-08-08 str(None) sync bug
-                 (see db.py's init_schema self-heal) -- treat those as
-                 empty here too, so they render as a blank field with a
-                 placeholder example rather than a value that re-saves. -->
-            <input type="text" name="location" placeholder="e.g. Coffee Shop, Room 204" value="{{ event.location if event and event.location not in (None, 'None', 'Nothing') else '' }}">
-        </div>
-        <div class="field field-format-meeting">
-            <label>Meeting URL</label>
-            <input type="url" name="meeting_url" placeholder="e.g. https://meet.example.com/abc123" value="{{ event.meeting_url if event and event.meeting_url not in (None, 'None', 'Nothing') else '' }}">
-        </div>
         <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
              Phase B), same pattern as task_form.html -- see that
              template's own comment. -->
@@ -124,7 +55,15 @@
             {% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        <div class="field field-wide">
+        <!-- 2026-09-03 direct feedback ("make the input boxes more dense:
+             half width... especially valuable for reminders, recurrence,
+             holiday calendar") -- both fields below dropped their
+             `field-wide` class, so they now sit side by side as plain
+             `.field`s in the 2-column `.field-grid` instead of each
+             claiming a full row for one short input. Same treatment
+             Holiday calendar already had via `ms_wide=false` further
+             down -- these two just never got it. -->
+        <div class="field">
             <!-- static/reminders_picker.js turns this into a set of preset
                  checkboxes ("At start time"/"5 minutes before"/etc.) plus a
                  small "other minutes" escape hatch, all feeding back into
@@ -135,7 +74,7 @@
             <label>Reminders</label>
             <input type="text" name="reminders" class="reminders-input" value="{{ event.reminders|join(', ') if event else '' }}">
         </div>
-        <div class="field field-wide">
+        <div class="field">
             <!-- static/recurrence_picker.js turns this into a preset
                  dropdown (Daily/Weekly/Monthly/Yearly/Custom...) instead of
                  typed-out RRULE syntax -- see that file's own comment.
@@ -196,4 +135,83 @@
              'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
         ] %}
         {% include "_widget_list_multiselect.html" %}
+
+        <!-- Format field (2026-08-15, "Event format for simple events") --
+             most events are simple and don't need both Location and
+             Meeting URL visible at once, so a Format choice reveals only
+             the relevant one (In person -> Location, Online -> Meeting
+             URL) instead of always showing both. No backing column: Format
+             is purely derived from which of the two fields already has a
+             value (see the `_has_location`/`_has_meeting` set below) --
+             cheaper than a new column and can't drift out of sync with the
+             two fields it switches between. If an existing event somehow
+             has both fields set (legacy data predating this field),
+             Location/In person wins the tie -- documented here since
+             there's no real "both" state in the new model.
+             static/event_format_toggle.js clears the *other* field's value
+             on switch (so a hidden stale value can't silently resubmit and
+             leave both columns populated again); the show/hide itself is
+             plain CSS (#event-form:has(#event_format_in_person:checked),
+             style.css), same pattern as #all_day/.holiday-field above.
+
+             2026-09-03 direct feedback ("move away from how the Format
+             toggle looks -- too cramped between icons and text, the gray
+             out of place, no clear subordination for what they do, no
+             clear 'not one of these' state"): rebuilt on the existing
+             tile/card picker pattern (.tile-select/.tile-option, style.css
+             "Tile/card picker" section, already used by the widget
+             builder's Data source field) instead of the cramped
+             .segmented/.seg-btn pill row -- three equal cards, icon above
+             label, an unmistakable selected look (border + tint) vs. a
+             plain neutral outline when not selected. "Neither picked" used
+             to be an implicit state (both radios simply unchecked); it's
+             now a real third, visibly-selectable option (`event_format_
+             none`, id kept alongside the original two ids/wrapper class so
+             existing tests and event_format_toggle.js's selector still
+             match), checked whenever neither Location nor Meeting URL has
+             a value -- including every brand-new event.
+
+             2026-09-03 immediate follow-up (direct request: "the format
+             settings should be right at the end of the modal, not before
+             the reminders") -- moved from right after All day/before
+             Labels down to the very end of the field grid, after Holiday
+             calendar. Purely a reorder: the `_has_location`/`_has_meeting`
+             sets and the field's own show/hide CSS don't care about
+             position in the DOM, only that they exist somewhere inside
+             #event-form. -->
+        {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
+        {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
+        <div class="field field-wide">
+            <label>Format</label>
+            <div class="tile-select event-format-segmented" role="radiogroup" aria-label="Event format">
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_in_person" class="tile-radio" value="in_person" {% if _has_location %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('map-pin', 'icon-sm') }}</span>
+                    <span class="tile-option-label">In person</span>
+                </label>
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_online" class="tile-radio" value="online" {% if _has_meeting and not _has_location %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('video', 'icon-sm') }}</span>
+                    <span class="tile-option-label">Online</span>
+                </label>
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_none" class="tile-radio" value="none" {% if not _has_location and not _has_meeting %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('x', 'icon-sm') }}</span>
+                    <span class="tile-option-label">None</span>
+                </label>
+            </div>
+        </div>
+        <div class="field field-format-location">
+            <label>Location</label>
+            <!-- `or ''` + the empty-check below: the DB has legacy literal
+                 "None" strings from a pre-2026-08-08 str(None) sync bug
+                 (see db.py's init_schema self-heal) -- treat those as
+                 empty here too, so they render as a blank field with a
+                 placeholder example rather than a value that re-saves. -->
+            <input type="text" name="location" placeholder="e.g. Coffee Shop, Room 204" value="{{ event.location if event and event.location not in (None, 'None', 'Nothing') else '' }}">
+        </div>
+        <div class="field field-format-meeting">
+            <label>Meeting URL</label>
+            <input type="url" name="meeting_url" placeholder="e.g. https://meet.example.com/abc123" value="{{ event.meeting_url if event and event.meeting_url not in (None, 'None', 'Nothing') else '' }}">
+        </div>
     </div>

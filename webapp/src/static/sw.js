@@ -161,7 +161,7 @@
 // `.kanban-status-select` is gone along with static/tasks_kanban.js
 // (removed from the page entirely, was never in SHELL_ASSETS). style.css
 // changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v46";
+const CACHE_NAME = "cc-shell-v47";
 
 const SHELL_ASSETS = [
   "/offline",

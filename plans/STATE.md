@@ -8,6 +8,37 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), on top of the
+  Format-toggle rework right below: "make the input boxes more dense: half
+  width modal windows (especially valuable for the reminders, recurrence,
+  holiday calendar). The format settings should be right at the end of the
+  modal, not before the reminders." Both purely a `_event_form_fields.html`
+  reorder/class change, no CSS/JS touched -- the 2-column `.field-grid`
+  and the `.field` (half) vs. `.field field-wide` (full row) split already
+  existed (Holiday calendar was already `ms_wide=false`/half; Labels was
+  already a plain half-width `.field` too):
+  1. **Reminders and Recurrence dropped `field-wide`.** Each used to claim
+     a full row for one short input; now plain `.field`s, so they land
+     side by side in the grid the same way Holiday calendar already did.
+  2. **Format (+ its Location/Meeting URL fields) moved from right after
+     All day/before Labels down to the very end of the field grid, after
+     Holiday calendar.** Pure reorder -- the `_has_location`/`_has_meeting`
+     Jinja sets and the field's show/hide CSS (`#event-form:has(...)`,
+     style.css, untouched) don't care where in the DOM the field sits.
+  New field order: Title, Description, Start & end, All day, Labels,
+  Reminders + Recurrence (side by side), Holiday calendar (+ Exclude Sat/
+  Sun, hidden until recurring), Format (+ Location or Meeting URL,
+  whichever the Format pick reveals) last. Verified with an ad hoc
+  TestClient-free script (new_event_form's rendered body, not added to the
+  suite -- no existing test asserts field order, confirmed by grep before
+  starting) that `reminders` < `recurrence` < `holiday_calendar` <
+  `event_format_in_person` by string offset, and that neither Reminders'
+  nor Recurrence's own `.field` div carries `field-wide` anymore. `sw.js`
+  CACHE_NAME bumped v46 -> v47 (template-only change), `test_pwa_shell.
+  py`'s pin updated. Full suite: 1945 passed (four parallel chunks, same
+  as the entry below), unaffected since no test asserted the old order or
+  width.
+
 - **Shipped:** Direct request, same day (2026-09-03), two view/edit-modal
   design follow-ups the user flagged as still outstanding from the
   2026-09-02 detail-modal design pass ("we have not restyled the view
