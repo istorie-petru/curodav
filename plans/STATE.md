@@ -8,6 +8,52 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03): "don't repeat
+  column headers, say them once. don't group tasks by label anymore, make
+  one single big table. also I want the white card background div back."
+  Three changes on top of the design pass right below:
+  1. **One flat table, one header.** `_tasks_body.html`'s per-group
+     `.card`+`<table>`+`<thead>` (Project/Unassigned/Completed, each
+     repeating Title/Status/Date/Labels in its own header) is gone --
+     collapsed into one `<table id="task-table">` inside one `.card` with
+     one plain `<thead>`. `routers/tasks.py`'s `_build_task_groups`/
+     `groups` context is untouched (still Project-alphabetical -> Habits
+     -> Unassigned -> Completed, per `test_tasks_grouping.py`) -- the
+     template just concatenates every non-Habits, non-Completed group's
+     tasks into one `<tbody>` in that same order, then Completed's own
+     tasks last in the same `<tbody>` (still dimmed via the existing
+     `.task-row-completed` class, just no longer behind its own header).
+     Habits keeps its fully separate table/header/`+` -- confirmed with the
+     user this wasn't part of the "grouped by label" complaint, it's a
+     different column set for a different row kind, not a label grouping.
+  2. **Single "+ Task nou" add button**, replacing every per-group `+` --
+     `_tasks_toolbar.html` now renders one `<a href="/tasks/new" ... class="btn
+     primary" data-fab>` next to the Date filter in the page header's
+     actions slot (same slot/pattern Notes' own header button uses); the
+     project a new task belongs to is picked inside the create modal's own
+     Labels field, same as every other path that ever set one.
+  3. **White card background back** -- reverted the same session's earlier
+     `.task-group-card`/`.task-table-habits` flattening override
+     (`background:none`/no shadow/no hover-lift) entirely; both fall back
+     to the plain `.card`+`.table-scroll` elevated look with no override.
+     Moot for `.task-group-card` specifically now anyway, since (1) above
+     means there's only ever one of it on the page.
+  Confirmed with the user before implementing (AskUserQuestion, two
+  questions): Completed tasks stay clustered at the end of the one table
+  (dimmed, no header) rather than fully interleaved by date, and the
+  add-task affordance is one button above the table (project picked in the
+  form) rather than a per-row project column. Updated
+  `test_tasks_table_habits_split.py`'s `TestGroupNameAndAddButtonInTableHeader`
+  -- its three per-group-header tests asserted exactly the design being
+  undone here (`>Garden (1)<`/`>Unassigned (1)<`/`>Completed (1)<` inside a
+  `<thead>`), replaced with tests asserting the merged table's single
+  header, that Project/Unassigned tasks actually land in the same
+  `<tbody>`, that Completed still renders dimmed inline, and that exactly
+  one `href="/tasks/new"` exists on the page; the Habits-table-specific
+  test in the same class was untouched (that table didn't change). Full
+  suite: 1940 passed (four parallel chunks, `test_caldav_bridge_live.py`
+  excluded as always).
+
 - **Shipped:** Direct request (2026-09-03), seven-point design pass on the
   Tasks table's density/hierarchy ("kill the giant empty space in every
   row... stop treating every group as a giant card... make the task name

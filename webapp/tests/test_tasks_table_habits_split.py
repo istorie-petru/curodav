@@ -103,10 +103,22 @@ class TestGroupNameAndAddButtonInTableHeader:
     entirely, folding its name+count+`+` into its own table's <thead>
     instead -- then a further same-day direct follow-up ("I like how the
     habits table looks... make the same style for all") applied that same
-    shape to Project/Unassigned/Completed too. Every group's `<thead>` now
-    carries its own name+count in place of a generic "Title" label, and
-    its own `+` (task/habit groups only) in the trailing header cell --
-    there is no more `.task-section-divider` row anywhere on this page."""
+    shape to Project/Unassigned/Completed too, so every group's `<thead>`
+    carried its own name+count and its own `+`.
+
+    2026-09-03 direct follow-up ("don't repeat column headers, say them
+    once -- don't group tasks by label any more, make one single big
+    table"): Project/Unassigned/Completed's own per-group `.card`+
+    `<table>`+`<thead>` (and their per-group `+`) are gone -- collapsed
+    into one `#task-table` with one plain Title/Status/Date/Labels
+    `<thead>` and one flat `<tbody>` (routers/tasks.py's `groups` context
+    is unchanged -- see test_tasks_grouping.py -- only this template's
+    rendering of it changed). The one remaining way to add a task is the
+    "+ Task nou" button _tasks_toolbar.html now renders once, above the
+    region. Habits keeps its own separate table/header/`+` exactly as
+    before -- it was never part of this complaint (see this class's -- and
+    _tasks_body.html's own -- reasoning: it's a different set of columns
+    for a different kind of row, not "grouping tasks by label")."""
 
     def test_no_task_add_row_left_in_either_table(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
@@ -115,19 +127,42 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert "task-add-row" not in body
         assert "task-section-divider" not in body
 
-    def test_unassigned_group_name_and_add_link_are_in_its_header(self, conn):
-        _seed_task(conn, "t1")
+    def test_task_table_has_exactly_one_plain_header_no_group_names(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
+        _seed_task(conn, "t1", tags=["Garden"])
+        _seed_task(conn, "t2", tags=[])
+        db.upsert_task(conn, dict(db.get_task(conn, "t2"), status="done"))
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        header = body.split(">Unassigned (1)<", 1)[1].split("</thead>")[0]
-        assert 'href="/tasks/new"' in header
-        assert 'title="Add task"' in header
+        task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
+        # Exactly one <thead> in the task table's own region -- not one per
+        # group -- and the column labels appear only that once.
+        assert task_table.count("<thead>") == 1
+        assert task_table.count(">Title<") == 1
+        assert task_table.count(">Status<") == 1
+        assert task_table.count(">Date<") == 1
+        assert task_table.count(">Labels<") == 1
+        # No more per-group name+count header text anywhere.
+        assert "Garden (1)" not in body
+        assert "Unassigned (1)" not in body
+        assert "Completed (1)" not in body
 
-    def test_project_group_name_and_add_link_are_in_its_header(self, conn):
+    def test_project_and_unassigned_tasks_share_the_one_table(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
+        _seed_task(conn, "a1", tags=["Garden"])
+        _seed_task(conn, "loose1", tags=[])
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        task_table = body.split('id="task-table"', 1)[1].split('task-table-habits')[0]
+        assert "a1" in task_table
+        assert "loose1" in task_table
+        # Only one <table> element opens in this region (the merged one).
+        assert task_table.count("<table") == 1
+
+    def test_single_add_task_button_above_the_table_not_per_group(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "t1", tags=["Garden"])
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        header = body.split(">Garden (1)<", 1)[1].split("</thead>")[0]
-        assert "/tasks/new?project=Garden" in header
+        assert body.count('href="/tasks/new"') == 1
+        assert "/tasks/new?project=Garden" not in body
 
     def test_habits_group_name_and_add_link_are_in_its_header(self, conn):
         _seed_task(conn, "t1")
@@ -138,12 +173,19 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert 'href="/tasks/new?habit=1"' in header
         assert 'title="Add habit"' in header
 
-    def test_completed_group_header_has_no_add_link(self, conn):
-        _seed_task(conn, "t1")
-        db.upsert_task(conn, dict(db.get_task(conn, "t1"), status="done"))
+    def test_completed_tasks_render_dimmed_in_the_same_table_no_own_header(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
+        _seed_task(conn, "open1", tags=["Garden"])
+        _seed_task(conn, "done1", tags=["Garden"])
+        db.upsert_task(conn, dict(db.get_task(conn, "done1"), status="done"))
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        header = body.split(">Completed (1)<", 1)[1].split("</thead>")[0]
-        assert "icon-btn" not in header
+        task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
+        assert "open1" in task_table
+        assert "done1" in task_table
+        assert task_table.count("<thead>") == 1  # still just the one shared header
+        after_uid = task_table.split('data-uid="done1"', 1)[1]
+        done_row_open_tag = after_uid.split(">", 1)[0]
+        assert "task-row-completed" in done_row_open_tag
 
 
 class TestHabitRowTitleInlineEdit:

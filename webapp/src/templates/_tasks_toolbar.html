@@ -37,3 +37,12 @@
 {% set fd_mode = 'single' %}
 {% set fd_form_id = 'tasks-filters-form' %}
 {% include '_filter_dropdown.html' %}
+
+{# 2026-09-03 (direct request: "don't group tasks by label anymore, make
+   one single big table" + "how do I add a task to a project without the
+   per-group + button?") -- with every group's own "+" gone (_tasks_body.
+   html now renders one flat table), this is the one remaining way to
+   create a task from this page; the project it belongs to is picked
+   inside the create modal's own Labels field, same as every other way a
+   task ever gets a project label (quick-add, command palette). #}
+<a href="/tasks/new" data-modal class="btn primary" data-fab>{{ icon('plus') }} Task nou</a>

@@ -41,99 +41,59 @@
    fighting for space among them. `t.work_hours` itself (routers/tasks.py's
    `db.task_work_hours_bulk` batch) is untouched -- still attached to every
    row's context, just no longer rendered as its own column.
+
+   2026-09-03 (direct request: "don't repeat column headers, say them once
+   -- don't group tasks by label any more, make one single big table --
+   also I want the white card background back") -- the several rounds of
+   per-group `.card`+`<table>`+`<thead>` (Project/Unassigned/Completed each
+   bounded and each repeating Title/Status/Date/Labels in its own header,
+   2026-08-30 history above) are gone. `routers/tasks.py`'s `_build_task_
+   groups`/`groups` context is UNCHANGED -- still computes Project
+   (alphabetical) -> Habits -> Unassigned -> Completed exactly as before
+   (test_tasks_grouping.py asserts that backend shape directly, not this
+   template's markup) -- only the rendering collapses every non-Habits,
+   non-Completed group's tasks into one flat `<tbody>`, in the same
+   Project-alphabetical-then-Unassigned order the groups list already
+   provides, followed by Completed's own tasks in that same `<tbody>`
+   (still visually dimmed via the existing `.task-row-completed` class,
+   still last, just no longer behind its own header/card boundary). One
+   `<table id="task-table">` inside one `.card.table-scroll` wrapper (the
+   plain elevated-card look restored -- see style.css's own comment on the
+   `.task-group-card`/`.task-table-habits` flattening override this
+   removes), one `<thead>` with the plain Title/Status/Date/Labels labels
+   -- no group name, no count, no per-group `+`. The one remaining way to
+   add a task is the "+ Task nou" button _tasks_toolbar.html now renders
+   above this region (the project it belongs to is picked inside the
+   create modal's own Labels field). The Habits table is entirely
+   untouched by this -- still its own bounded `.card`+`<table id="habits-
+   table">`+`<thead>` with its own name/count/`+`, per the reasoning
+   above: it isn't "grouping tasks by label," it's a different set of
+   columns for a different kind of row.
    Expects: groups, has_any, today_iso, q, active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
 {% from "_habit_row.html" import habit_row with context %}
 {% set _habits_group = (groups | selectattr('kind', 'equalto', 'habits') | first) %}
-{% set _other_groups = groups | rejectattr('kind', 'equalto', 'habits') | list %}
+{% set _completed_group = (groups | selectattr('kind', 'equalto', 'completed') | first) %}
+{% set _flat_groups = groups | rejectattr('kind', 'equalto', 'habits') | rejectattr('kind', 'equalto', 'completed') | list %}
 <div id="tasks-body">
 {% if has_any %}
-{# 2026-08-30 (direct request, "Option B" of three grouping mockups --
-   see plans/STATE.md): Project/Unassigned/Completed used to be three
-   `<tbody>`s inside one shared `<table id="task-table">` -- a divider
-   `<tr>` between them was the only visual separation, so the whole
-   region read as one dense sheet with no real boundary between groups.
-   Each group is now its own bounded `.card` with its own `<table>`,
-   matching how every other bounded object in this app (`.card` is the
-   canonical surface per UI_CONSISTENCY_GUIDE.md #1) is presented, and
-   giving a project with a lot of tasks a clear edge instead of bleeding
-   into the next group. `id="task-table"` moves from the old single
-   `<table>` onto this wrapping `<div>` -- existing tests/scripts that
-   sliced the page on that id to isolate "the Project/Unassigned/
-   Completed region" (as opposed to `#habits-table`) still find exactly
-   that region, since none of them actually depended on the element
-   being a `<table>` rather than a container.
-
-   2026-08-30 direct follow-up ("make it a bit more minimalist... drop
-   repeated column headers"), then reversed by a later same-day direct
-   follow-up ("I like how the habits table looks... make the same style
-   for all"): briefly, every group shared one plain "TITLE/STATUS/DATE/
-   LABELS" header bar above the whole list, with each group's own name/
-   count/`+` still living on a separate divider row per card (like the
-   Habits table itself had before its own divider row was dropped, see
-   below). Once Habits collapsed its name+count+`+` directly into its own
-   header row, keeping the other groups on the older two-row shape read
-   as inconsistent -- so every group's `<thead>` now folds its own name
-   (in place of the generic "Title") and its own `+` (in the trailing
-   cell) into one header row, exactly like Habits. No more shared header
-   bar, no more `.task-section-divider` row -- each card is fully self-
-   contained again, just with a richer first `<th>` than a plain "Title"
-   ever was.
-
-   2026-08-30, several further same-day direct follow-ups on column
-   widths, ending in "just remove the width for all of them beside the
-   title column": the intervening attempts (`<colgroup>` +
-   `table-layout:fixed` forcing pixel-identical Status/Date/Labels widths
-   across every separate card, then rebalancing which column absorbed
-   the leftover space) kept solving one width complaint by relocating it
-   -- more engineering, not less. Settled on the plain, low-tech answer:
-   only the title column gets an explicit width (`.task-title-cell`,
-   style.css); Status/Date/Labels/checkbox/delete have none, so ordinary
-   `table-layout:auto` sizes each one to its own content, same as any
-   plain HTML table. Traded away on purpose: a card with very different
-   row content can size Status/Date/Labels a few px differently from its
-   neighbor (no more cross-card pixel alignment guarantee) -- accepted,
-   since chasing that guarantee is what produced the last several rounds
-   of "now something else looks wrong." #}
-<div id="task-table" class="task-group-list">
-{% for grp in _other_groups %}
-{# 2026-08-30 (direct feedback: "how the table works, especially with
-   grouped rows") -- Completed used to always render its own divider
-   row even with zero tasks ("COMPLETED (0)"), a full-width header with
-   nothing under it and no `+` (that kind never gets one, finishing a
-   task doesn't belong in an already-completed bucket) -- pure dead
-   space. Project/Unassigned stay unconditional even when empty: each
-   one's `+` is a real, load-bearing way to create a task (this page's
-   toolbar has no add-task button of its own), so hiding an empty one
-   would remove the only path to adding an unlabeled task once at
-   least one other group exists. Completed has no such affordance to
-   lose. #}
-{% if grp.tasks or grp.kind != 'completed' %}
-<div class="card table-scroll task-group-card">
+<div id="task-table" class="card table-scroll task-group-card">
 <table class="task-table">
     <thead>
         <tr>
             <th></th>
-            <th>{{ grp.name if grp.name else 'Unassigned' }} ({{ grp.tasks|length }})</th>
+            <th>Title</th>
             <th>Status</th>
             <th>Date</th>
             <th>Labels</th>
-            <th class="task-table-add-th">
-                {% if grp.kind == 'project' %}
-                <a href="/tasks/new?project={{ grp.name|urlencode }}" data-modal class="icon-btn task-add-btn" title="Add task to {{ grp.name }}">{{ icon('plus', 'icon-sm') }}<span class="task-add-btn-label">Add task</span></a>
-                {% elif grp.kind == 'unassigned' %}
-                <a href="/tasks/new" data-modal class="icon-btn task-add-btn" title="Add task">{{ icon('plus', 'icon-sm') }}<span class="task-add-btn-label">Add task</span></a>
-                {% endif %}
-            </th>
+            <th></th>
         </tr>
     </thead>
     <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
+        {% for grp in _flat_groups %}{% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}{% endfor %}
+        {% if _completed_group %}{% for t in _completed_group.tasks %}{{ task_row(t) }}{% endfor %}{% endif %}
     </tbody>
 </table>
-</div>
-{% endif %}
-{% endfor %}
 </div>
 
 {% if _habits_group %}
@@ -143,17 +103,13 @@
         <tr>
             {# 2026-08-30 ("remove the grouping for habits, it's
                redundant") -- Title renamed to this group's own name +
-               count, same as every other group's `<th>` above, so the
-               generic "Title" this table used to print (redundant with
-               its own Check-in/Cadence/Streak columns already saying
-               "this is Habits") now carries real information instead.
-
-               2026-08-30 further follow-up ("just remove the width for
-               all of them beside the title column") -- only the first
-               `<th>` (this group's own name) keeps a width (`.task-
-               title-cell`); Check-in/Cadence/Streak/Labels have none,
-               same plain `table-layout:auto` content-sizing as the
-               grouped tables above. #}
+               count, so the generic "Title" this table used to print
+               (redundant with its own Check-in/Cadence/Streak columns
+               already saying "this is Habits") carries real information
+               instead. Kept as-is by the 2026-09-03 flattening above --
+               Habits was never part of the Project/Unassigned/Completed
+               "grouped by label" complaint, it's a structurally different
+               row shape (see this file's own top comment). #}
             <th></th>
             <th>{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
             <th>Check-in</th>

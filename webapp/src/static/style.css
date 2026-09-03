@@ -1897,29 +1897,18 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
       `tbody td` rule would have shrunk every other table in the app too. */
 .task-table thead th{padding:8px 8px;}
 .task-table tbody td{padding:8px 8px;}
-/* 2. Lighter groups -- `.task-group-card`/`.task-table-habits` both also
-   carry `.card` (elevated surface, box-shadow, hover-lift) and
-   `.table-scroll` (its own opaque `background-color` + edge-fade gradient
-   layers, all painted in `var(--bg-elevated)`). Stripping both back to a
-   flat, borderless section -- just the header row's own 2px
-   `border-bottom` (thead th's existing rule, unchanged) marks where one
-   group ends and the next begins -- turns five floating islands into one
-   continuous list of sections, per the request's own "one canvas, multiple
-   sections" framing. `background:none` (not just `background-color`)
-   deliberately also drops `.table-scroll`'s edge-fade gradients, not just
-   its base fill -- a fade painted in `--bg-elevated` over an otherwise flat
-   page background would show as a stray tinted rectangle at each edge
-   instead of a fade; `overflow-x:auto` (the actual scroll mechanism, from
-   `.table-scroll`) is untouched, so a table that's still too wide for its
-   column still scrolls, it just loses the fade cue while doing it -- an
-   accepted trade for not looking like a UI glitch on every ordinary-width
-   table. Both selectors kept at 2-class specificity (`.task-group-card
-   .table-scroll` etc.) so they win over `.card`/`.table-scroll`'s own
-   1-class rules regardless of source order. */
-.task-group-card.table-scroll, .task-table-habits.table-scroll{
-  background:none; box-shadow:none; border-radius:0; padding:0; margin-bottom:var(--space-6);
-}
-.task-group-card.table-scroll:hover, .task-table-habits.table-scroll:hover{box-shadow:none; transform:none;}
+/* 2. Groups -- 2026-09-03 direct follow-up ("I want the white background
+   of the card div back"): the flattened/borderless treatment this rule
+   used to apply (`background:none`, no shadow, no hover-lift -- shipped
+   the same session, see the removed comment in git history) is reverted.
+   `.task-group-card`/`.task-table-habits` fall back to the plain `.card`
+   + `.table-scroll` look with no override at all now -- moot anyway for
+   `.task-group-card`, since the same-day "one single big table" request
+   collapsed Project/Unassigned/Completed into one table inside one card
+   (_tasks_body.html), so there's only ever one of these on the page, not
+   several stacked "islands" needing visual separation from each other.
+   `.task-table-habits` (the separate Habits table right below it) keeps
+   its own ordinary card spacing from `.card`'s own `margin-bottom`. */
 /* 3. Title dominant -- the one piece of every row that should actually
    read as the primary content, not tied visually with Status/Date/Labels. */
 .task-title-cell a{font-weight:600; font-size:var(--text-body); color:var(--fg-primary);}
