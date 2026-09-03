@@ -1189,19 +1189,22 @@ label.seg-btn[hidden]{display:none;}
 /* 2026-09-03 direct follow-up ("could we also rework the work sessions...
    without having the background color card div") -- same "drop the
    elevated tonal .detail-card" treatment .detail-meta-panel got, applied
-   to the Work sessions section (task_detail.html/habit_task_detail.html):
-   a top hairline instead of a bottom one, since this section comes after
-   the meta panel rather than before it, so the two panels' rules aren't
-   just each other's mirror by accident -- each is closing off from
-   whatever's *above* it in reading order. Not reused by anything wrapped
-   in .detail-meta-panel itself (that already has its own bottom rule) or
-   by any other .detail-card consumer (habit heatmap, occurrence card) --
-   this is scoped to sections that come after other content, not every
-   card in a detail modal. */
+   to the Work sessions section (task_detail.html/habit_task_detail.html).
+
+   2026-09-03, later same-day fix ("the two lines in the middle of this
+   modal") -- this rule originally had its own border-top too, on the
+   theory that it needed to close itself off from whatever came before it
+   (mirroring .detail-meta-panel's border-bottom). Wrong: in both actual
+   call sites, the thing right before .detail-plain-section already draws
+   that line itself -- .detail-meta-panel's own border-bottom (when it's
+   not :last-child, i.e. exactly when something like Work sessions follows
+   it) or the habit heatmap's real .detail-card box edge/shadow. Adding a
+   second border-top right under either one produced two parallel hairline
+   rules a `margin-top` gap apart, reading as a doubled/messy divider
+   instead of one clean line -- border-top removed, margin-top alone
+   provides the spacing. */
 .detail-plain-section{
-  padding-top:var(--space-4);
   margin-top:var(--space-4);
-  border-top:1px solid var(--separator);
 }
 /* Crisp value typography -- the label stays the small gray caption above
    (.detail-meta-label); the value gets the larger, heavier, primary-color

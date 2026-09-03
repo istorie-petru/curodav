@@ -9,6 +9,22 @@ session, right before the final commit of that session.
 ## Right now
 
 - **Shipped:** Direct follow-up, same day (2026-09-03), immediately on top
+  of the header-clipping-fix + Work-sessions-header-merge entry right
+  below ("the two lines in the middle of this modal"): the merge fixed the
+  divider *between* "Work sessions" and "Scheduled work" (by deleting the
+  second heading entirely), but `.detail-plain-section`'s own border-top
+  was still redundant with whatever came right before it -- `.detail-meta-
+  panel`'s own border-bottom (active whenever it's not `:last-child`,
+  which is exactly when Work sessions follows it) or the habit heatmap's
+  real `.detail-card` box edge/shadow. Two hairlines a `margin-top` gap
+  apart where one already existed. Fix: `.detail-plain-section`'s
+  border-top removed outright, `margin-top` alone provides the spacing --
+  confirmed by rendering the real template output directly (a short ad
+  hoc script, not a screenshot guess) before and after. `sw.js`
+  CACHE_NAME bumped v51 -> v52, `test_pwa_shell.py`'s pin updated. Full
+  suite: 1952 passed.
+
+- **Shipped:** Direct follow-up, same day (2026-09-03), immediately on top
   of the badge-clipping-fix + Work-sessions-rework entry right below:
   1. **Real regression fix** ("edit the header so that it doesn't clip
      (margins)"), caught from a screenshot of the *edit* event modal, not

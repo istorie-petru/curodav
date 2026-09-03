@@ -195,7 +195,15 @@
 // .detail-plain-section's own -- see _task_work_allocations.html's own
 // comment). style.css + all 4 detail templates + _task_work_allocations.
 // html changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v51";
+// v52 (2026-09-03, same day, immediate follow-up: "the two lines in the
+// middle of this modal") -- .detail-plain-section's own border-top is
+// gone. It was always redundant: in both real call sites, whatever comes
+// right before it already draws that line itself (.detail-meta-panel's
+// border-bottom when it isn't :last-child, or the habit heatmap's real
+// .detail-card box edge) -- so Work sessions was showing two parallel
+// hairlines a margin-top gap apart instead of one. style.css changed,
+// bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v52";
 
 const SHELL_ASSETS = [
   "/offline",
