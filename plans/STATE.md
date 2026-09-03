@@ -8,6 +8,40 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), on top of the two
+  entries right below: "labels should all look like pils and have their
+  respective icons visible. also all pils should have the same rounded
+  corners and text should have the same size." The quiet dot+muted-text
+  Labels treatment from the density-pass entry below (`label_pill_quiet`,
+  `.cell-tag-quiet`) is reverted outright, same day it shipped -- the
+  Tasks/Habits row's Labels cell goes back to the original `label_pill`
+  (full color fill + icon, same macro every other page's read-only tag
+  display already used); `label_pill_quiet` deleted from _label_pill.html
+  rather than left as dead code, its two call sites (_task_row.html/
+  _habit_row.html) reverted to `label_pill`. Icon visibility itself is
+  unchanged code -- gated by `_show_label_icons()` (Settings > Appearance
+  > "Show icons next to labels", off by default) AND the individual
+  label's own configured icon (Settings > Labels) -- neither of those
+  toggles was touched this session; if a label still shows no icon after
+  this, check both settings, not a code path. New this round: the Labels
+  pill and the Status chip next to it now share one shape -- `.cell-tag`'s
+  app-wide default (`var(--radius-sm)` 8px / `var(--text-caption)` 13px)
+  never matched the Status trigger's own compact-chip override from the
+  density pass (`var(--radius-pill)` fully rounded / 11px), which is what
+  read as "not all pills have the same rounded corners." Fixed with a
+  `.task-labels-select .cell-tag` override (radius-pill + 11px) scoped to
+  this one row's Labels cell specifically -- every other page's label
+  pills (task/event/contact detail, project Kanban, widget builder) keep
+  the app's normal 8px/13px look untouched. Full suite: 1940 passed (four
+  parallel chunks). Verified the reverted markup directly (bare-Request
+  script, same harness limitation as always -- no real `request.app`, so
+  `_label_color`/`_label_icon`'s broad except silently falls back to
+  default color/no icon in that harness specifically; not evidence of a
+  real bug, just untestable outside a live ASGI request the way this
+  suite is structured) -- confirmed `.task-labels-select .cell-tag` with
+  the new radius/font-size lands, `label_pill`'s icon-conditional markup
+  is back in place.
+
 - **Shipped:** Direct follow-up, same day (2026-09-03): "don't repeat
   column headers, say them once. don't group tasks by label anymore, make
   one single big table. also I want the white card background div back."

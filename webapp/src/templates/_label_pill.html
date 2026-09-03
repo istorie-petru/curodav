@@ -13,17 +13,9 @@
    `label_icon`/`icon` are Jinja globals, not locals. #}
 {% macro label_pill(tag) %}<span class="cell-tag cal-{{ label_color(request, tag) }}">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }} {% endif %}{{ tag }}</span>{% endmacro %}
 
-{# Quiet variant (2026-09-03, direct design feedback: "the labels need to be
-   less visually aggressive... labels are secondary metadata") -- for a row
-   context where a label is read-only display, not the thing being chosen
-   (the Tasks table's closed-state Labels cell). A small color-coded dot
-   (reuses `.color-dot`, the same fixed-circle class the calendar's own
-   color swatches use, painted via the label's own `.cal-<color>` class --
-   `.color-dot` has no text content, so only the `background` half of that
-   pair rule is ever used here) plus plain muted text instead of a bold
-   filled pill. `label_pill` itself is untouched and still used everywhere
-   a label IS the interactive/selectable thing (the Labels dropdown panel's
-   own option rows, every other page's read-only tag display) -- per the
-   same feedback's own carve-out: "the exception is when labels are an
-   important filtering mechanism... then color can matter." #}
-{% macro label_pill_quiet(tag) %}<span class="cell-tag-quiet"><span class="color-dot cal-{{ label_color(request, tag) }}"></span>{{ tag }}</span>{% endmacro %}
+{# `label_pill_quiet` (a small color-dot + plain muted text, no fill) lived
+   here briefly on 2026-09-03 for the Tasks table's closed-state Labels
+   cell -- reverted the same day, immediate direct follow-up ("labels
+   should all look like pills and have their respective icons visible" --
+   the row's Labels cell now uses `label_pill` again, same as everywhere
+   else in the app), so it's gone rather than left as dead code. #}

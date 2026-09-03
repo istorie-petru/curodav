@@ -1941,19 +1941,28 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .task-status-select .multiselect-trigger.pill-select-trigger{
   padding:2px 7px; font-size:11px; border-radius:var(--radius-pill);
 }
-/* 5. Labels: quiet by default (`.cell-tag-quiet`, _label_pill.html's new
-   `label_pill_quiet` -- a small color-coded dot, reusing `.color-dot` +
-   the label's own `.cal-<color>` class purely for its `background`, plus
-   plain muted text) instead of a bold filled `.cell-tag` pill. Only the
-   Tasks table row's closed-state display switched to this -- the Labels
-   dropdown *panel* (where you're actually choosing/filtering labels) still
-   renders full colored `.cell-tag` pills via the original `label_pill`,
-   per the request's own carve-out for when color is load-bearing. */
-.cell-tag-quiet{
-  display:inline-flex; align-items:center; gap:5px; font-size:var(--text-caption);
-  font-weight:500; color:var(--fg-secondary); white-space:nowrap;
+/* 5. Labels -- 2026-09-03, immediate direct follow-up ("labels should all
+   look like pils and have their respective icons visible. also all pils
+   should have the same rounded corners and text should have the same
+   size"): the quiet dot+muted-text treatment this rule used to apply
+   (`.cell-tag-quiet`, _label_pill.html's short-lived `label_pill_quiet`)
+   is reverted -- the row's Labels cell goes back to the original
+   `label_pill` (full color fill + icon, same macro every other page's
+   read-only tag display uses). What's new this round: the Labels pill and
+   the Status chip right next to it now share the exact same shape.
+   `.cell-tag`'s app-wide default (`var(--radius-sm)`, 8px corners /
+   `var(--text-caption)`, 13px) never matched the Status trigger's own
+   compact-chip override just above (`var(--radius-pill)` fully rounded /
+   11px) -- that mismatch is what read as "not all pills have the same
+   rounded corners." Scoped to `.task-labels-select` (this row's Labels
+   cell specifically) rather than a bare `.cell-tag` rule, so every other
+   page's label pills (task/event/contact detail, project Kanban, widget
+   builder) keep the app's normal 8px/13px pill look -- only the two pills
+   sitting side by side in this one row need to visually match each
+   other. */
+.task-labels-select .cell-tag{
+  border-radius:var(--radius-pill); padding:2px 7px; font-size:11px;
 }
-.cell-tag-quiet + .cell-tag-quiet{margin-left:8px;}
 /* 6. The header's own "+" -- icon-only by default (unchanged size/position,
    `.task-table-add-th .icon-btn` above), but now carries a hidden "Add
    task"/"Add habit" label (`.task-add-btn-label`, zero-width + zero-
