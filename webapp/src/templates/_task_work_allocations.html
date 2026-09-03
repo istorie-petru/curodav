@@ -30,50 +30,59 @@
    (a little more vertical padding than the default .checklist-row
    density, plus a small clock icon ahead of the "Session N" label) purely
    for visual polish -- no new fields, no new endpoints, same set-times/
-   remove forms as before. #}
+   remove forms as before.
+
+   2026-09-03 immediate follow-up, same day ("merge the Work sessions and
+   the Scheduled work 1.0h / 1.0h, because it's redundant... don't have
+   two dividers between the two - none is enough") -- the separate
+   "Scheduled work" sub-heading (a .relations-group/.relations-group-head
+   pair, a leftover from when this card could hold more than one group --
+   see the old Relations card, removed 2026-08-29) is gone; its hours
+   readout is now just a second .checklist-progress pill on the "Work
+   sessions" heading itself, right after the count pill. That also
+   removes the extra divider: .relations-group's own border-top was
+   rendering (it's the *second* child of this macro's output, after the
+   <h2>, so its :first-child CSS exemption never actually applied) on top
+   of .detail-plain-section's own top border above the whole section --
+   two hairlines where the merged single heading now needs none. #}
 {% from "_datetime_picker.html" import datetime_picker with context %}
 {% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
 {% if show_header %}
 <h2 class="work-sessions-head">
     <span>Work sessions</span>
     {% if work_allocations %}<span class="checklist-progress">{{ work_allocations|length }}</span>{% endif %}
+    {% if work_hours and work_hours.scheduled %}
+    <span class="checklist-progress">{{ "%.1f"|format(work_hours.completed) }}h / {{ "%.1f"|format(work_hours.scheduled) }}h</span>
+    {% endif %}
     <form class="work-session-add" method="post" action="/tasks/{{ task.uid }}/work-allocations" data-modal-keep-open>
         <button type="submit" class="icon-btn" title="Add a work session (date it later in the Timetable)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
     </form>
 </h2>
 {% endif %}
-<div class="relations-group">
-    <div class="relations-group-head">
-        Scheduled work
-        {% if work_hours and work_hours.scheduled %}
-        <span class="checklist-progress">{{ "%.1f"|format(work_hours.completed) }}h / {{ "%.1f"|format(work_hours.scheduled) }}h</span>
-        {% endif %}
+{% if work_allocations %}
+<div class="checklist">
+    {% for wa in work_allocations %}
+    <div class="checklist-row work-session-row">
+        <span class="checklist-text">{{ icon('clock', 'icon-sm') }} Session {{ loop.index }}</span>
+        <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
+            {# The shared range picker (submit mode) dates this session:
+               closing the panel with a complete, edited start/end
+               posts the hidden start_at/end_at to the set-times
+               endpoint above (no Apply button -- datetime_picker.js
+               commits live and submits on close), and
+               data-modal-keep-open refreshes the card in place. The
+               trigger shows the current when and is blank ("Set
+               time…") for an undated session. #}
+            {{ datetime_picker('start_at', 'end_at', wa.start_at or '', wa.end_at or '', 'range', true, 'dtp--compact') }}
+        </form>
+        <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>
+            <input type="hidden" name="event_uid" value="{{ wa.uid }}">
+            <button type="submit" class="checklist-delete" title="Remove work session">{{ icon('x') }}</button>
+        </form>
     </div>
-    {% if work_allocations %}
-    <div class="checklist">
-        {% for wa in work_allocations %}
-        <div class="checklist-row work-session-row">
-            <span class="checklist-text">{{ icon('clock', 'icon-sm') }} Session {{ loop.index }}</span>
-            <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
-                {# The shared range picker (submit mode) dates this session:
-                   closing the panel with a complete, edited start/end
-                   posts the hidden start_at/end_at to the set-times
-                   endpoint above (no Apply button -- datetime_picker.js
-                   commits live and submits on close), and
-                   data-modal-keep-open refreshes the card in place. The
-                   trigger shows the current when and is blank ("Set
-                   time…") for an undated session. #}
-                {{ datetime_picker('start_at', 'end_at', wa.start_at or '', wa.end_at or '', 'range', true, 'dtp--compact') }}
-            </form>
-            <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>
-                <input type="hidden" name="event_uid" value="{{ wa.uid }}">
-                <button type="submit" class="checklist-delete" title="Remove work session">{{ icon('x') }}</button>
-            </form>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state" style="padding:10px 0">No work sessions yet -- add one with the + button, then drag it onto a slot in the Timetable.</div>
-    {% endif %}
+    {% endfor %}
 </div>
+{% else %}
+<div class="empty-state" style="padding:10px 0">No work sessions yet -- add one with the + button, then drag it onto a slot in the Timetable.</div>
+{% endif %}
 {% endmacro %}

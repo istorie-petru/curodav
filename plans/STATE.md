@@ -8,6 +8,43 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), immediately on top
+  of the badge-clipping-fix + Work-sessions-rework entry right below:
+  1. **Real regression fix** ("edit the header so that it doesn't clip
+     (margins)"), caught from a screenshot of the *edit* event modal, not
+     a detail-view modal -- the v48 `.modal-header` rewrite (`padding:0`,
+     so the cover banner could bleed edge-to-edge) had stripped the
+     *only* margin every plain `*_form.html` edit modal's bare `<h1>`
+     relied on (event/task/contact/habit/label/note/... -- 20+ templates,
+     confirmed by grepping every `.modal-header` consumer, not assumed).
+     `.modal-header`'s original padding + row layout is restored exactly;
+     the cover-bleed behavior moved to a new `.detail-header-inner`
+     wrapper (negative margins sized to match that padding exactly, both
+     the desktop and mobile-breakpoint values) used only by the 4
+     detail-view templates, which now wrap their `detail_cover(...)` +
+     `.detail-heading-row` pair in it instead of putting them directly in
+     `.modal-header`.
+  2. **Work sessions header merge** (direct follow-up: "merge the Work
+     sessions and the Scheduled work 1.0h / 1.0h, because it's
+     redundant... don't have two dividers between the two - none is
+     enough") -- the separate "Scheduled work" sub-heading
+     (`.relations-group`/`.relations-group-head`, a leftover from when
+     this card could hold more than one labeled group) is gone; its hours
+     readout is now a second `.checklist-progress` pill on the "Work
+     sessions" heading itself. This also fixed an unintended second
+     divider: `.relations-group`'s own `border-top` was firing because it
+     was the *second* child of the macro's output (after the `<h2>`), so
+     its `:first-child` CSS exemption never actually matched -- on top of
+     `.detail-plain-section`'s own top border from the earlier entry
+     below, that read as two hairlines where one now suffices.
+     `.relations-group`/`.relations-group-head` CSS removed as fully dead
+     (its only other two consumers were already the same unreferenced
+     `_task_relations.html`/`_event_relations.html` files noted in the
+     `.detail-identity-dot` cleanup below).
+  `sw.js` CACHE_NAME bumped v50 -> v51 (checked `git log` first, no
+  concurrent commits since this session's own v50), `test_pwa_shell.py`'s
+  pin updated. Full suite: 1952 passed (four parallel chunks by file).
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), two small fixes on
   top of the cover-banner baseline shipped earlier the same day:
   1. **Bug fix** ("the icon is cut by the body, not sitting on top") --

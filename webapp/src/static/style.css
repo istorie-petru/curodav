@@ -2385,9 +2385,17 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    the shared picker overlay (static/command_palette.js) instead of the
    old `<select>` -- see .relations-picker-trigger below and
    _task_relations.html's comment. */
-.relations-group{border-top:1px solid var(--separator); padding-top:var(--space-3); margin-top:var(--space-3);}
-.relations-group:first-child{border-top:none; padding-top:0; margin-top:0;}
-.relations-group-head{display:flex; align-items:baseline; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:4px; text-transform:uppercase; letter-spacing:.4px;}
+/* 2026-09-03: .relations-group/.relations-group-head (a labeled
+   sub-section for when a card held more than one group -- Related tasks/
+   Related events in the old Relations card, or the "Scheduled work"
+   sub-heading _task_work_allocations.html used to have above its own
+   rows) are gone. Their only two other consumers, _task_relations.html/
+   _event_relations.html, are already dead/unreferenced templates
+   (confirmed via grep, same as the .detail-identity-dot cleanup earlier
+   today) -- and _task_work_allocations.html's own "Scheduled work" line
+   merged into the "Work sessions" heading itself (direct feedback: "merge
+   the Work sessions and the Scheduled work... because it's redundant"),
+   so nothing renders these classes anymore. */
 .relations-picker-trigger{display:inline-flex; align-items:center; gap:6px;}
 
 /* Contacts list (contacts_list.html) */
@@ -3566,34 +3574,63 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    from{opacity:.6; transform:translateY(5px) scale(.995);}
    to{opacity:1; transform:translateY(0) scale(1);}
 }
-/* Modal header -- MD3 top app bar pattern inside the dialog, holding the
-    cover banner (see .detail-cover below) above a title row, separated
-    from the body by a subtle divider. 2026-09-03: was a single flex row
-    (dot + title); now a column so the cover can bleed edge-to-edge above
-    the title row's own padding. static/modal.js's injectModalContent only
-    copies this div's *innerHTML* into the dialog's persistent #modal-header
-    (which already carries this same class/CSS) when opened as a JS modal
-    -- so this rule change applies uniformly to both the direct full-page
-    render and the modal-JS path, but any conditional styling has to live
-    on a *child* element's own class (.detail-cover-fill vs. an <img>),
-    never on this div's own class list, or it would silently vanish in the
-    modal-JS path. */
+/* Modal header -- MD3 top app bar pattern inside the dialog: title
+    on the left, close button on the right, separated by a subtle
+    divider from the body. Gives the dialog a clear "page" identity
+    instead of floating content with no hierarchy.
+
+    2026-09-03: briefly rewritten to a padding-less flex column so the
+    cover banner (.detail-cover below) could bleed edge-to-edge -- direct
+    bug report the same day ("edit the header so that it doesn't clip
+    (margins)") caught the regression that caused: every *_form.html edit
+    modal (event/task/contact/habit/label/note/... -- 20+ templates) has
+    always been a bare `<h1>` directly inside .modal-header with NO cover,
+    relying entirely on *this* rule's own padding to keep the title off
+    the dialog's edges. Stripping that padding for the cover's sake left
+    every one of those titles flush against the left/top edge instead.
+    Reverted to the original row layout + padding below; the cover-bleed
+    behavior now lives entirely in .detail-header-inner (a wrapper used
+    only by the 4 detail-view templates, escaping this padding via
+    negative margins sized to match it exactly) instead of changing this
+    shared rule's own contract. static/modal.js's injectModalContent only
+    copies this div's *innerHTML* into the dialog's persistent
+    #modal-header (which carries this same class/CSS) when opened as a JS
+    modal -- so, as before, any state that needs to differ between pages
+    has to live on a *child* element's own class, never on this div's own
+    class list, or it would silently vanish in the modal-JS path. */
 .modal-header{
-   display:flex; flex-direction:column;
+   display:flex; align-items:center; gap:var(--space-3);
+   padding:var(--space-4) var(--space-5) var(--space-3);
+   padding-right:44px;
    border-bottom:1px solid var(--separator);
    flex:none;
 }
+.modal-header h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* Wrapper for the 4 detail-view templates' cover+title combo, the single
+    child that replaces a bare <h1> inside .modal-header for those pages
+    only. Negative margins exactly matching .modal-header's own padding
+    (top/left/right-close-gutter) let .detail-cover bleed flush to the
+    dialog's real edges/rounded corners without touching .modal-header's
+    padding itself (see that rule's own 2026-09-03 comment for why) --
+    .detail-heading-row below re-adds the equivalent side/bottom padding
+    once the cover has had its bleed. flex:1/min-width:0 mirror the plain
+    h1 rule above so this wrapper still fills the header row exactly like
+    a lone h1 would. */
+.detail-header-inner{
+   flex:1; min-width:0; display:flex; flex-direction:column;
+   margin:calc(-1 * var(--space-4)) -44px calc(-1 * var(--space-3)) calc(-1 * var(--space-5));
+}
 /* Cover banner -- Variant B baseline (2026-09-03 direct request: "I like
     variant B so much I want it to be the baseline for all view modal
-    windows"). Full-bleed strip at the very top of the header (zero
-    padding on .modal-header above makes this flush with the dialog's own
-    edges), a real resolved banner image when one exists or a flat
-    accent-gradient fill otherwise (see _detail_cover.html), with a
-    floating icon/avatar badge overlapping its bottom edge. border-radius
-    only matters on the direct full-page render (no dialog chrome there);
-    inside the actual .modal dialog it's redundant with that element's own
-    overflow:hidden + border-radius:28px, which already clips this to the
-    same rounded top corners for free. */
+    windows"). Full-bleed strip at the very top of the header (the
+    negative margins on .detail-header-inner above make this flush with
+    the dialog's own edges), a real resolved banner image when one exists
+    or a flat accent-gradient fill otherwise (see _detail_cover.html),
+    with a floating icon/avatar badge overlapping its bottom edge.
+    border-radius only matters on the direct full-page render (no dialog
+    chrome there); inside the actual .modal dialog it's redundant with
+    that element's own overflow:hidden + border-radius:28px, which
+    already clips this to the same rounded top corners for free. */
 /* 2026-09-03 fix ("the icon is cut by the body, not sitting on top") --
     .detail-cover-wrap is the positioning context for the badge; .detail-
     cover itself (the thing that actually needs overflow:hidden, to clip
@@ -3637,13 +3674,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    width:100%; height:100%; font-size:16px;
    box-shadow:0 0 0 3px var(--bg-elevated), var(--shadow-card);
 }
-/* Title row below the cover -- top padding clears the badge's overhang
-    (see .detail-cover-icon's comment), side padding matches the old
-    .modal-header's own (var(--space-5), minus the close-button gutter on
-    the right). */
+/* Title row below the cover, inside .detail-header-inner -- re-adds the
+    side/bottom padding .detail-header-inner's negative margins stripped
+    (matching .modal-header's own original values exactly), plus extra
+    top padding to clear the badge's overhang (see .detail-cover-icon's
+    comment). */
 .detail-heading-row{
    display:flex; align-items:flex-start; gap:var(--space-3);
-   padding:24px var(--space-5) var(--space-4);
+   padding:24px var(--space-5) var(--space-3);
    padding-right:44px;
 }
 .detail-heading-row h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -3856,6 +3894,13 @@ body.command-palette-open{overflow:hidden;}
      display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
      margin:var(--space-2) auto 0; flex:none; touch-action:none;
    }
+    .modal-header{padding:var(--space-3) var(--space-4) var(--space-2); padding-right:44px;}
+    /* Mobile's .modal-header padding differs from desktop's -- .detail-
+       header-inner's negative margins have to match it here too, or the
+       cover either leaves a thin gap (undershoot) or bleeds past the
+       dialog's own edge (overshoot). See the desktop rule's own comment
+       for why this wrapper exists at all. */
+    .detail-header-inner{margin:calc(-1 * var(--space-3)) -44px calc(-1 * var(--space-2)) calc(-1 * var(--space-4));}
     .detail-cover{height:56px; border-radius:0;}
     .detail-cover-icon{left:var(--space-4); bottom:-16px; width:40px; height:40px;}
     .detail-heading-row{padding:22px var(--space-4) var(--space-2); padding-right:44px;}

@@ -36,6 +36,16 @@
      edge. See _detail_cover.html's own docstring for why image-vs-color
      was a real decision, not a guess.
 
+     2026-09-03 fix, same day ("edit the header so that it doesn't clip
+     (margins)") -- the cover+title now sit inside a new
+     .detail-header-inner wrapper (style.css) instead of directly in
+     .modal-header. Stripping .modal-header's own padding to let the
+     cover bleed had also stripped it from every plain *_form.html edit
+     modal (a bare <h1>, no cover, that padding was its only margin) --
+     .detail-header-inner escapes just its own padding via negative
+     margins instead, so .modal-header's padding could be restored
+     unchanged for everything else.
+
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
      for "Save"), and #modal-target carries the modal-stable-height marker
@@ -45,10 +55,12 @@
 <div id="modal-target" class="modal-stable-height">
 {% if event %}
 <div class="modal-header">
-    {{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}
-    <div class="detail-heading-row">
-        <div class="detail-heading-text">
-            <h1 class="detail-title">{{ event.title }}</h1>
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ event.title }}</h1>
+            </div>
         </div>
     </div>
 </div>

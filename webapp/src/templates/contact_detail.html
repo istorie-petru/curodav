@@ -41,21 +41,28 @@
 <div id="modal-target" class="modal-stable-height">
 {% if contact %}
 <div class="modal-header">
-    {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, avatar(contact, 'avatar-large'), avatar_mode=true) }}
-    <div class="detail-heading-row">
-        <div class="detail-heading-text">
-            <h1 class="detail-title">{{ contact.full_name }}</h1>
-            {% if contact.title or contact.org %}
-            <div class="detail-heading-sub">
-                {%- if contact.title and contact.org -%}
-                {{ contact.title }} at {{ contact.org }}
-                {%- elif contact.title -%}
-                {{ contact.title }}
-                {%- else -%}
-                {{ contact.org }}
-                {%- endif -%}
+    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
+         (margins)") -- .detail-header-inner (style.css) wraps the
+         cover+title, escaping .modal-header's own padding via negative
+         margins so that padding could stay intact for every plain
+         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, avatar(contact, 'avatar-large'), avatar_mode=true) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ contact.full_name }}</h1>
+                {% if contact.title or contact.org %}
+                <div class="detail-heading-sub">
+                    {%- if contact.title and contact.org -%}
+                    {{ contact.title }} at {{ contact.org }}
+                    {%- elif contact.title -%}
+                    {{ contact.title }}
+                    {%- else -%}
+                    {{ contact.org }}
+                    {%- endif -%}
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </div>
 </div>

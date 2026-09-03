@@ -58,10 +58,17 @@
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
-    <div class="detail-heading-row">
-        <div class="detail-heading-text">
-            <h1 class="detail-title">{{ task.title }}</h1>
+    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
+         (margins)") -- .detail-header-inner (style.css) wraps the
+         cover+title, escaping .modal-header's own padding via negative
+         margins so that padding could stay intact for every plain
+         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ task.title }}</h1>
+            </div>
         </div>
     </div>
 </div>

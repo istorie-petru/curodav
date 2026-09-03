@@ -180,7 +180,22 @@
 // hairline, same treatment the meta grid already got), plus a small
 // per-row polish pass (.work-session-row). style.css + three templates
 // changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v50";
+// v51 (2026-09-03, same day, immediate follow-up): (1) real bug fix, not
+// just polish -- v48's .modal-header rewrite (padding:0, for the cover to
+// bleed) had stripped the *only* margin every plain *_form.html edit
+// modal's bare <h1> relied on (event_form.html "Edit event" reported
+// clipped flush against the dialog's edge) -- .modal-header's original
+// padding/row layout is restored, and the cover-bleed behavior moved to a
+// new .detail-header-inner wrapper (negative margins matching that
+// padding) used only by the 4 detail-view templates, so the other 20+
+// plain-title modals go back to their original, correct layout untouched.
+// (2) Work sessions' separate "Scheduled work X.Xh / Y.Yh" sub-heading
+// merged into the "Work sessions" heading itself (direct feedback:
+// redundant, and it was rendering a second, unwanted divider on top of
+// .detail-plain-section's own -- see _task_work_allocations.html's own
+// comment). style.css + all 4 detail templates + _task_work_allocations.
+// html changed, bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v51";
 
 const SHELL_ASSETS = [
   "/offline",
