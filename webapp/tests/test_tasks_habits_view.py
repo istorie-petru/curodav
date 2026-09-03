@@ -154,6 +154,27 @@ class TestHabitsViewRetired:
         unassigned = next(g for g in resp.context["groups"] if g["kind"] == "unassigned")
         assert unassigned["tasks"] == []
 
+    def test_standalone_habit_entity_carries_its_own_labels(self, conn):
+        # 2026-09-03 bug fix -- found while verifying an unrelated label-
+        # icon fix: `_habit_group_items`'s standalone-entity branch
+        # hardcoded `"tags": []`, discarding the real labels `db.
+        # list_habits`/`_habit_row_to_dict` already attaches as `h["tags"]`
+        # (the same `object_labels` mechanism every other entity type
+        # uses) -- so a label on a standalone Habit never rendered on this
+        # page, icon or no icon, unlike a habit-labeled *task* right next
+        # to it (which reads `t.get("tags")` correctly, never had this
+        # bug). Regression guard: entity-kind items must round-trip their
+        # own labels same as task-kind ones do.
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        db.upsert_habit(conn, {"uid": "hb1", "name": "Meditate", "created_at": _now()})
+        db.set_object_labels(conn, "habit", "hb1", ["Garden"])
+
+        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
+        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
+        item = next(it for it in habits_group["habit_items"] if it["uid"] == "hb1")
+        assert item["kind"] == "entity"
+        assert item["tags"] == ["Garden"]
+
 
 class TestSetTaskCompletion:
     def test_posts_an_explicit_value(self, conn):

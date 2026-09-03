@@ -109,7 +109,7 @@
     <td class="task-scheduled-cell">
         <span title="{{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}">{{ habit_streak_text(request, item.current_streak) }}</span>
     </td>
-    <td>{% for tag in item.tags %}{{ label_pill(tag) }}{% endfor %}</td>
+    <td><span class="cell-tags">{% for tag in item.tags %}{{ label_pill(tag) }}{% endfor %}</span></td>
     <td style="text-align:right" class="task-row-actions">
         <form class="form-inline" method="post" action="{{ item.delete_url }}" data-delete-undo="{{ item.title }}" data-cc-change="task">
             <button type="submit" class="icon-btn task-row-delete" title="Delete">{{ icon('trash') }}</button>

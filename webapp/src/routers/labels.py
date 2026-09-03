@@ -298,6 +298,7 @@ def update_label(
     name: str,
     new_name: str = Form(""),
     color: str = Form("blue"),
+    icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
     role: str = Form("none"),
@@ -310,8 +311,24 @@ def update_label(
     old Space/Project checkbox pair, see label_form_modal.html's own
     comment -- "none"/"space"/"project" is mutually exclusive by
     construction now, a radio group can't submit two values at once, so
-    there's no "both somehow submitted" case left to resolve here."""
+    there's no "both somehow submitted" case left to resolve here.
+
+    2026-09-03 bug fix (direct report: "chose icons individually and they
+    don't save"): `icon` was never declared as a Form param here even
+    though _icon_swatch_picker.html's radios (`name="icon"`) have posted
+    into this exact form since the icon picker existed -- FastAPI silently
+    drops any submitted field a route doesn't declare, and `db.
+    upsert_label_config`'s own "only touch what you're told to" partial-
+    update contract (its own docstring) means an absent key isn't
+    "cleared", it's "left exactly as it was" -- so every Save from this
+    modal silently no-opped the Icon picker's selection, while `color`/
+    `label_group`/`description` (all declared) saved fine right next to
+    it. The now-orphaned `set_label` route below (`/{name}/set`, no
+    template posts to it any more -- superseded by this one when
+    label_form_modal.html was built) already had the correct `icon.strip()
+    or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
+    icon = (icon or "").strip() or None
     label_group = (label_group or "").strip() or None
     start_date = start_date.strip() if isinstance(start_date, str) else ""
     end_date = end_date.strip() if isinstance(end_date, str) else ""
@@ -331,6 +348,7 @@ def update_label(
     row = {
         "name": name,
         "color": color or "blue",
+        "icon": icon,
         "label_group": label_group,
         "description": description,
         "generate_space": generate_space,
@@ -395,6 +413,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
 def create_label(
     new_name: str = Form(...),
     color: str = Form("blue"),
+    icon: str = Form(""),
     label_group: str = Form(""),
     role: str = Form("none"),
     start_date: str = Form(""),
@@ -404,11 +423,17 @@ def create_label(
     """Create a new label with zero items attached -- labels are first-class
     organizational tools, not tied to any object. `role` (2026-08-29: see
     update_label's own comment) is the single Role radio value now, not two
-    separately-submitted checkboxes."""
+    separately-submitted checkboxes.
+
+    2026-09-03 bug fix -- same missing-`icon`-Form-param bug as
+    update_label right above (see its own comment); a brand-new label
+    created with an icon already picked in the New Label modal silently
+    got no icon at all, not just an edit losing one."""
     new_name = new_name.strip()
     if not new_name:
         raise HTTPException(400, "Label name is required")
 
+    icon = (icon or "").strip() or None
     label_group = label_group.strip() or None
     role = role if role in ("none", "space", "project") else "none"
 
@@ -418,6 +443,7 @@ def create_label(
     row = {
         "name": new_name,
         "color": color or "blue",
+        "icon": icon,
         "label_group": label_group,
         "generate_space": 1 if role == "space" else 0,
         "is_project": 1 if role == "project" else 0,

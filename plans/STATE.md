@@ -8,6 +8,60 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Fixed two real bugs + one more design follow-up**, same day
+  (2026-09-03), reported as "the setting is on, no icons show, something's
+  rotten... the Tasks table doesn't match Habits (font, corner radius)...
+  also I want label colors lighter/pastel, based on the chosen color":
+  1. **Bug: an icon picked in the label editor never saved.**
+     `label_form_modal.html` (the live "New Label"/"Edit label" modal --
+     confirmed via `routers/labels.py::edit_label_modal`, which template
+     actually serves the Edit button, since `label_edit_modal.html` looked
+     plausible but turned out to be orphaned/unrouted) posts an `icon`
+     radio (`_icon_swatch_picker.html`) into `create_label`/`update_label`
+     -- neither route declared an `icon: str = Form(...)` param, so
+     FastAPI silently dropped the field on every submit, and `db.
+     upsert_label_config`'s own partial-update contract ("only touch what
+     you're told to") meant an absent key wasn't cleared, just silently
+     never changed. Confirmed end-to-end with a `Request` carrying a real
+     `.app.state.settings.db_path` (the bare-`Request` harness this suite
+     otherwise uses can't exercise `label_icon()`'s DB-backed path at all
+     -- see the entry below) that the render side was already correct
+     given a label that actually has an icon; the picker's own submit was
+     the break. Fixed by declaring `icon` on both routes. New tests in
+     `test_phase2_labels.py::TestIconPersistence` (create, update-new,
+     update-change, "No icon" radio clears it, doesn't disturb color/
+     group saved alongside it).
+  2. **Bug (found while verifying #1): a standalone Habit entity's own
+     labels never rendered anywhere**, icon or plain. `routers/tasks.py`'s
+     `_habit_group_items` hardcoded `"tags": []` on the entity-kind branch
+     instead of reading `h.get("tags")` -- `db.list_habits`'s own
+     `_habit_row_to_dict` already attaches real labels via `object_labels`,
+     the same mechanism every other entity type uses, so the data existed
+     and was computed, just discarded one line later. A habit-*labeled
+     task* right above it in the same function (`kind: "task"`,
+     `t.get("tags")`) never had this bug. New test:
+     `test_tasks_habits_view.py::TestHabitsViewRetired::
+     test_standalone_habit_entity_carries_its_own_labels`.
+  3. **Design: Tasks/Habits row pills now match each other exactly, and
+     are pastel.** `_habit_row.html`'s Labels cell had no `.cell-tags`
+     wrapper (only `_task_row.html`'s did), so the density pass's radius/
+     font-size override (originally `.task-labels-select .cell-tag`) never
+     reached it -- Habits kept the app's default 8px/13px pill next to
+     Tasks' new fully-rounded 11px one. Added the same `.cell-tags` wrapper
+     to `_habit_row.html`, retargeted the CSS rule to `.cell-tags
+     .cell-tag` so one selector now covers both. Separately, label pills
+     everywhere (`label_pill`'s `.cell-tag.cal-<color>`, not just these two
+     rows) now paint with the same light/tinted `--tag-<color>-bg`/`-fg`
+     pair `.tag-<color>` pills already used elsewhere in the app (all 16
+     colors already had one, light AND dark theme -- nothing new to
+     invent) instead of the bold saturated `--cal-bg-*`/`--cal-fg-*` pair
+     built for the calendar's own filled surfaces. Scoped to `.cell-tag.cal-
+     *` (2-class, beats the bare `.cal-*` rule regardless of source order)
+     so calendar dots/filled-cards/timeline bars keep their original bold
+     look -- only the label-pill element repaints, everywhere it's used.
+  Full suite: 1946 passed (four parallel chunks, `test_caldav_bridge_live.py`
+  excluded as always).
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), on top of the two
   entries right below: "labels should all look like pils and have their
   respective icons visible. also all pils should have the same rounded

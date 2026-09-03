@@ -1398,6 +1398,40 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .tag-magenta{background:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
 .tag-slate{background:var(--tag-slate-bg); color:var(--tag-slate-fg);}
 
+/* 2026-09-03 (direct request: "labels' colors should be lighter/pastel,
+   based on the chosen color"). `label_pill` (_label_pill.html) paints a
+   label pill with `.cal-<color>`, not `.tag-<color>` -- the bold,
+   saturated white-on-color pair (`--cal-bg-*`/`--cal-fg-*` above) built
+   for the calendar's own filled surfaces (event chips, all-day bars),
+   where standing out against a busy grid matters. A label pill isn't
+   that: reusing the SAME light/tinted-background pair the app's original
+   `.tag-<color>` pills already use (`--tag-<color>-bg`/`-fg`, right
+   above -- these exist for all 16 label/habit colors already, nothing
+   new to invent) gives every label pill a pastel look while keeping the
+   exact hue the user picked, light and dark theme both (the `--tag-*`
+   tokens already have their own dark-theme redefinitions). Scoped to
+   `.cell-tag.cal-<color>` specifically (2-class specificity beats the
+   bare `.cal-<color>` rule above regardless of source order) so every
+   OTHER `.cal-<color>` consumer -- calendar month/agenda dots, the
+   filled-card all-day strip, timeline bars -- keeps its own bold/
+   saturated look untouched; only the label-pill element repaints. */
+.cell-tag.cal-red{background:var(--tag-red-bg); color:var(--tag-red-fg);}
+.cell-tag.cal-orange{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
+.cell-tag.cal-yellow{background:var(--tag-yellow-bg); color:var(--tag-yellow-fg);}
+.cell-tag.cal-lime{background:var(--tag-lime-bg); color:var(--tag-lime-fg);}
+.cell-tag.cal-green{background:var(--tag-green-bg); color:var(--tag-green-fg);}
+.cell-tag.cal-mint{background:var(--tag-mint-bg); color:var(--tag-mint-fg);}
+.cell-tag.cal-teal{background:var(--tag-teal-bg); color:var(--tag-teal-fg);}
+.cell-tag.cal-cyan{background:var(--tag-cyan-bg); color:var(--tag-cyan-fg);}
+.cell-tag.cal-blue{background:var(--tag-blue-bg); color:var(--tag-blue-fg);}
+.cell-tag.cal-indigo{background:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
+.cell-tag.cal-purple{background:var(--tag-purple-bg); color:var(--tag-purple-fg);}
+.cell-tag.cal-magenta{background:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
+.cell-tag.cal-pink{background:var(--tag-pink-bg); color:var(--tag-pink-fg);}
+.cell-tag.cal-brown{background:var(--tag-brown-bg); color:var(--tag-brown-fg);}
+.cell-tag.cal-gray{background:var(--tag-gray-bg); color:var(--tag-gray-fg);}
+.cell-tag.cal-slate{background:var(--tag-slate-bg); color:var(--tag-slate-fg);}
+
 .warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
 .credit-pill{
   display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:var(--radius-pill);
@@ -1954,13 +1988,17 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    `var(--text-caption)`, 13px) never matched the Status trigger's own
    compact-chip override just above (`var(--radius-pill)` fully rounded /
    11px) -- that mismatch is what read as "not all pills have the same
-   rounded corners." Scoped to `.task-labels-select` (this row's Labels
-   cell specifically) rather than a bare `.cell-tag` rule, so every other
-   page's label pills (task/event/contact detail, project Kanban, widget
-   builder) keep the app's normal 8px/13px pill look -- only the two pills
-   sitting side by side in this one row need to visually match each
-   other. */
-.task-labels-select .cell-tag{
+   rounded corners." Scoped to `.cell-tags` -- the wrapping span every
+   row's Labels cell puts its pills in, `_task_row.html`'s closed-state
+   trigger AND (as of this same follow-up) `_habit_row.html`'s read-only
+   Labels cell, added there specifically so the Habits table's own pills
+   match instead of quietly staying at the app-wide 8px/13px size right
+   next to the Tasks table's now-different one -- rather than a bare
+   `.cell-tag` rule, so every OTHER page's label pills (task/event/contact
+   detail, project Kanban, widget builder) keep the app's normal 8px/13px
+   pill look; only the two table rows' own pills need to visually match
+   their neighboring Status chip. */
+.cell-tags .cell-tag{
   border-radius:var(--radius-pill); padding:2px 7px; font-size:11px;
 }
 /* 6. The header's own "+" -- icon-only by default (unchanged size/position,

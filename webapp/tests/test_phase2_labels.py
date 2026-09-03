@@ -73,6 +73,61 @@ def _request(path="/labels"):
 
 
 # --------------------------------------------------------------------- #
+# Icon persistence (2026-09-03 bug fix -- direct report: "chose icons
+# individually and they don't save"). label_form_modal.html's icon picker
+# (_icon_swatch_picker.html, `name="icon"` radios) has posted into this
+# form since it existed; routers/labels.py's create_label/update_label
+# never declared an `icon` Form param to receive it, so FastAPI silently
+# dropped the field on every submit and db.upsert_label_config's own
+# partial-update contract ("only touch what you're told to") meant the
+# icon just... never changed. Fixed by declaring `icon` on both routes.
+# --------------------------------------------------------------------- #
+
+
+class TestIconPersistence:
+    # Every Form(...) param is passed explicitly here, including ones this
+    # test doesn't otherwise care about (role/start_date/end_date/
+    # description/label_group) -- calling a FastAPI route function
+    # directly (not through the app) bypasses Form()'s normal request-body
+    # resolution, so any parameter left at its Python default literally
+    # holds FastAPI's own `Form(...)` marker object, not the string a real
+    # submit would inject (same caveat routers/labels.py's own
+    # `set_label`/`create_label` already document for `abbreviation`).
+
+    def test_create_label_saves_the_chosen_icon(self, conn):
+        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", label_group="", role="none", start_date="", end_date="", conn=conn)
+        cfg = db.get_label_config(conn, "Garden")
+        assert cfg["icon"] == "leaf"
+
+    def test_update_label_saves_a_newly_chosen_icon(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["icon"] == "leaf"
+
+    def test_update_label_changes_an_existing_icon(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["icon"] == "flag"
+
+    def test_update_label_no_icon_radio_clears_it(self, conn):
+        # The picker's "No icon" option submits icon="" (_icon_swatch_
+        # picker.html) -- an explicit clear, not "leave unchanged".
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["icon"] is None
+
+    def test_update_label_still_saves_color_and_group_alongside_icon(self, conn):
+        # Regression guard: adding the new `icon` param shouldn't disturb
+        # the fields that already worked.
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="purple", icon="leaf", label_group="Home", description="", role="none", start_date="", end_date="", conn=conn)
+        cfg = db.get_label_config(conn, "Garden")
+        assert cfg["icon"] == "leaf"
+        assert cfg["color"] == "purple"
+        assert cfg["label_group"] == "Home"
+
+
+# --------------------------------------------------------------------- #
 # Rename
 # --------------------------------------------------------------------- #
 

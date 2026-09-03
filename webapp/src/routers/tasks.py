@@ -264,7 +264,17 @@ def _habit_group_items(conn) -> list[dict]:
                 "kind": "entity",
                 "uid": h["uid"],
                 "title": h["name"],
-                "tags": [],
+                # 2026-09-03 bug fix (found while verifying the label-icon
+                # fix above): this was hardcoded to `[]` -- a standalone
+                # Habit entity's own labels (`db.list_habits`'s
+                # `_habit_row_to_dict` already attaches them as `h["tags"]`,
+                # same `object_labels` mechanism every other entity type
+                # uses) were computed and then silently discarded, so no
+                # label a Habit entity carried ever rendered on this page's
+                # Habits group, icon or no icon. A habit-labeled *task*
+                # right above (`kind: "task"`, `t.get("tags")`) never had
+                # this bug -- only the standalone-entity branch did.
+                "tags": h.get("tags") or [],
                 "is_quantity": target > 1,
                 "target": target,
                 "today_value": today_value,
