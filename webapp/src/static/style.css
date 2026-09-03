@@ -1874,6 +1874,122 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .task-table-add-th{text-align:right; padding-top:6px; padding-bottom:6px;}
 .task-table-add-th .icon-btn{color:var(--fg-tertiary);}
 .task-table-add-th .icon-btn:hover{color:var(--fg-primary);}
+
+/* 2026-09-03 (direct design feedback, seven numbered points on the Tasks
+   table's density/hierarchy -- "kill the giant empty space in every row",
+   "stop treating every group as a giant card", "make the task name
+   dominant", "status should not consume an entire column", "labels need to
+   be less visually aggressive", "put the + where it actually belongs",
+   "delete should be hidden until hover"). All seven land as CSS (plus the
+   handful of template hooks -- `.task-add-btn`/`.task-add-btn-label`,
+   `.task-row-actions`/`.task-row-delete`, `.cell-tag-quiet` from
+   _label_pill.html's new `label_pill_quiet` -- added alongside this rule
+   block); no JS, no column layout change, so tasks_table.js's delegated
+   selectors and the Python-side markup-assertion tests (test_tasks_table_*)
+   are untouched.
+
+   1. Row height -- `.task-table`'s own td/th padding is now tighter than
+      the app's default 10px/12px table padding (tbody tr's tallest cell is
+      the trailing delete icon-btn, 28px square; 8px top+bottom padding on
+      top of that lands right in the 44-52px row-height ask, not a made-up
+      number). Scoped to `.task-table` specifically, same reasoning
+      #labels-table's own scoped override above already documents -- a bare
+      `tbody td` rule would have shrunk every other table in the app too. */
+.task-table thead th{padding:8px 8px;}
+.task-table tbody td{padding:8px 8px;}
+/* 2. Lighter groups -- `.task-group-card`/`.task-table-habits` both also
+   carry `.card` (elevated surface, box-shadow, hover-lift) and
+   `.table-scroll` (its own opaque `background-color` + edge-fade gradient
+   layers, all painted in `var(--bg-elevated)`). Stripping both back to a
+   flat, borderless section -- just the header row's own 2px
+   `border-bottom` (thead th's existing rule, unchanged) marks where one
+   group ends and the next begins -- turns five floating islands into one
+   continuous list of sections, per the request's own "one canvas, multiple
+   sections" framing. `background:none` (not just `background-color`)
+   deliberately also drops `.table-scroll`'s edge-fade gradients, not just
+   its base fill -- a fade painted in `--bg-elevated` over an otherwise flat
+   page background would show as a stray tinted rectangle at each edge
+   instead of a fade; `overflow-x:auto` (the actual scroll mechanism, from
+   `.table-scroll`) is untouched, so a table that's still too wide for its
+   column still scrolls, it just loses the fade cue while doing it -- an
+   accepted trade for not looking like a UI glitch on every ordinary-width
+   table. Both selectors kept at 2-class specificity (`.task-group-card
+   .table-scroll` etc.) so they win over `.card`/`.table-scroll`'s own
+   1-class rules regardless of source order. */
+.task-group-card.table-scroll, .task-table-habits.table-scroll{
+  background:none; box-shadow:none; border-radius:0; padding:0; margin-bottom:var(--space-6);
+}
+.task-group-card.table-scroll:hover, .task-table-habits.table-scroll:hover{box-shadow:none; transform:none;}
+/* 3. Title dominant -- the one piece of every row that should actually
+   read as the primary content, not tied visually with Status/Date/Labels. */
+.task-title-cell a{font-weight:600; font-size:var(--text-body); color:var(--fg-primary);}
+/* Title column's floor width used to be 140px unconditionally (see that
+   rule's own long history above) -- enough that a one-character title like
+   "h" left a wide dead gap before the Status pill started, exactly the
+   "checkbox -> enormous whitespace -> status" complaint. A short floor
+   (just enough for a "..." affordance) plus the existing edit-mode
+   `:has([data-editing])` override (unchanged, still 280px so there's room
+   to type) means the column now actually shrinks to short content instead
+   of always reserving space nothing's using. */
+.task-title-cell{min-width:64px;}
+.task-title-cell:has([data-editing]){min-width:280px;}
+/* Date -- still legible, but a rung below the title now (was full
+   `--fg-primary` via the shared `.dtp-trigger` rule, unset by
+   `.dtp--compact`'s own override, which only ever touched padding/border/
+   background). */
+.dtp--compact .dtp-trigger{color:var(--fg-secondary);}
+/* 4. Status: compact colored chip instead of a full-width pill block --
+   shrunk further than the existing `.pill-select-trigger` padding/font
+   (already fairly small, from the 2026-08-29 native-<select> replacement),
+   small enough to read as a status *indicator* you click to open the same
+   menu, not a column-filling control. Kept as a filled color chip rather
+   than a literal single dot -- this app has four statuses (Active/
+   Completed/Archived/Paused), and the request's own fallback for "more
+   than two states" is "use a tiny status indicator... clicking it opens
+   the state menu," which a small chip still satisfies while keeping every
+   status distinguishable at a glance without opening the menu (a bare dot
+   alone would need a legend). */
+.task-status-select .multiselect-trigger.pill-select-trigger{
+  padding:2px 7px; font-size:11px; border-radius:var(--radius-pill);
+}
+/* 5. Labels: quiet by default (`.cell-tag-quiet`, _label_pill.html's new
+   `label_pill_quiet` -- a small color-coded dot, reusing `.color-dot` +
+   the label's own `.cal-<color>` class purely for its `background`, plus
+   plain muted text) instead of a bold filled `.cell-tag` pill. Only the
+   Tasks table row's closed-state display switched to this -- the Labels
+   dropdown *panel* (where you're actually choosing/filtering labels) still
+   renders full colored `.cell-tag` pills via the original `label_pill`,
+   per the request's own carve-out for when color is load-bearing. */
+.cell-tag-quiet{
+  display:inline-flex; align-items:center; gap:5px; font-size:var(--text-caption);
+  font-weight:500; color:var(--fg-secondary); white-space:nowrap;
+}
+.cell-tag-quiet + .cell-tag-quiet{margin-left:8px;}
+/* 6. The header's own "+" -- icon-only by default (unchanged size/position,
+   `.task-table-add-th .icon-btn` above), but now carries a hidden "Add
+   task"/"Add habit" label (`.task-add-btn-label`, zero-width + zero-
+   opacity) that expands into view on hover/focus instead of a bare glyph
+   that's easy to miss sitting alone at the end of a header row. */
+.icon-btn.task-add-btn{
+  width:auto; height:28px; padding:0 6px; gap:0; border-radius:var(--radius-control);
+}
+.task-add-btn-label{
+  display:inline-block; max-width:0; overflow:hidden; opacity:0; white-space:nowrap;
+  font-size:var(--text-caption); font-weight:600;
+  transition:max-width var(--dur-fast) var(--ease-standard), opacity var(--dur-fast) var(--ease-standard), margin-left var(--dur-fast) var(--ease-standard);
+}
+.task-add-btn:hover .task-add-btn-label, .task-add-btn:focus-visible .task-add-btn-label{
+  max-width:90px; opacity:1; margin-left:5px;
+}
+/* 7. Delete: hidden until the row is actually being interacted with --
+   `opacity` (not `display`/`visibility`) so a keyboard user tabbing
+   through the row still lands on a real, focusable button; `:focus-within`
+   reveals it the moment focus reaches it (just before a sighted keyboard
+   user would need to see it to confirm what they're about to activate),
+   not just `:hover`, so keyboard-only use isn't a strictly worse
+   experience than a mouse. */
+.task-row-delete{opacity:0; transition:opacity var(--dur-fast) var(--ease-standard);}
+tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 /* 2026-08-28 "major rework" session (item 3): the "+" add-row at the end
    of every Tasks-table group (except Completed) -- _tasks_body.html.
    "Colored like a normal row" per the session brief: same row height/

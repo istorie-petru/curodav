@@ -8,6 +8,89 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request (2026-09-03), seven-point design pass on the
+  Tasks table's density/hierarchy ("kill the giant empty space in every
+  row... stop treating every group as a giant card... make the task name
+  dominant... status should not consume an entire column... labels need to
+  be less visually aggressive... put the + where it actually belongs...
+  delete should be hidden until hover"). All CSS plus a handful of small
+  template hooks, no column-layout rewrite, no JS changes — kept the
+  existing `<table>`/`<tr>`/`<td>` structure (and its Status/Date/Labels
+  `<th>`s) rather than the two-line flex-row shape the request's own
+  mockups sketched, specifically so `static/tasks_table.js`'s delegated
+  selectors (`closest("tr")`, `td:nth-child(2) a`, etc.) and the existing
+  markup-assertion tests (`test_tasks_table_labels_status_title.py`,
+  `test_tasks_table_habits_split.py`) didn't need touching:
+  1. Row height: `.task-table thead th`/`tbody td` padding scoped down
+     from the app's default 10-12px to 8px (same "#labels-table gets its
+     own scoped override, not a bare `tbody td` rule" precedent already in
+     style.css) — lands at ~44px (the trailing delete `.icon-btn` is the
+     tallest cell at 28px square).
+  2. Groups: `.task-group-card`/`.task-table-habits` (both also `.card` +
+     `.table-scroll`) flattened — `background:none` (drops the elevated
+     fill AND `.table-scroll`'s edge-fade gradients, which are painted in
+     the same now-absent `--bg-elevated` and would otherwise show as stray
+     tinted rectangles at the edges), `box-shadow:none`, no hover-lift. The
+     header row's own 2px `border-bottom` (unchanged) is now the only
+     boundary between groups.
+  3. Title: `.task-title-cell a` bumped to 600 weight / `--text-body`. The
+     title column's floor width dropped 140px -> 64px (140px was the
+     "checkbox -> enormous whitespace -> status" gap the request pointed
+     at directly — a short title like "h" was reserving room nothing used);
+     the existing `:has([data-editing])` 280px floor while typing is
+     untouched. Date (`.dtp--compact .dtp-trigger`) recolored to
+     `--fg-secondary`, a rung below the title.
+  4. Status: `.task-status-select .pill-select-trigger` padding/font
+     shrunk further (2px 7px / 11px) into a small colored chip. Not a
+     literal single dot — four live statuses (Active/Completed/Archived/
+     Paused) need to stay distinguishable without opening the menu, which
+     the request's own fallback wording ("if you have multiple states, use
+     a tiny status indicator... clicking it opens the state menu") already
+     allows for.
+  5. Labels: new `_label_pill.html::label_pill_quiet(tag)` macro — a small
+     `.color-dot` (reused as-is, just painted via the label's own
+     `.cal-<color>` class for its `background`) plus plain muted text,
+     replacing the old bold filled `.cell-tag` pill in the Tasks/Habits
+     row's *closed-state* display only (`_task_row.html`, `_habit_row.html`).
+     The Labels dropdown *panel* options still render the original
+     `label_pill` (full color) — the request's own carve-out for "when
+     labels are an important filtering mechanism." Every other `label_pill`
+     caller (task/event/contact detail, project Kanban, widget builder)
+     untouched.
+  6. Header `+`: `.task-add-btn`/`.task-add-btn-label` — icon stays
+     icon-only at rest, a `max-width:0`-collapsed "Add task"/"Add habit"
+     label expands in on hover/focus instead of a bare glyph alone at the
+     end of a header row.
+  7. Delete: `.task-row-delete{opacity:0}`, revealed on `tr:hover` OR
+     `tr:focus-within` (not `display`/`visibility`, so it stays a real
+     focusable target for keyboard tabbing — `:focus-within` reveals it the
+     moment focus reaches it, before a sighted keyboard user needs to see
+     it) — new `.task-row-actions`/`.task-row-delete` classes on the
+     trailing `<td>`/button in both `_task_row.html` and `_habit_row.html`.
+  Deliberately NOT built: the mockups' ⋮ Edit/Duplicate/Move/Delete menu —
+  Edit and Delete already exist (open the row, delete icon), but Duplicate
+  and Move have no backend support at all (no duplicate-task endpoint, no
+  per-row move-to-list action outside the bulk-actions bar), so inventing
+  menu items for features that don't exist would be worse than the plain
+  hover-reveal delete this ships instead. Also not built: using the
+  bulk-select checkbox itself as a one-click "mark complete" toggle (the
+  mockups' `□`/`✓` idea) — that checkbox is the bulk-selection control
+  (`static/tasks_table.js`'s whole shift-click/drag-paint/bulk-actions-bar
+  system keys off it); overloading it with a second, conflicting meaning
+  would break bulk-select outright, not simplify the row. Status stays its
+  own compact control instead (item 4 above).
+  Verified: full suite passed (four parallel chunks by test-file, this
+  environment's background-process-per-bash-call limitation meant a single
+  bash call had to launch all four AND `wait` on them together rather than
+  polling separately — 1939 passed, 0 failed, `test_caldav_bridge_live.py`
+  excluded as always). Also spot-checked the rendered `/tasks` HTML
+  directly (a seeded in-memory-DB script, not added to the suite) to
+  confirm `label_pill_quiet`'s markup and the new hover/`+`-label classes
+  actually land where expected — the Python test suite has no JS/CSS
+  harness (per this file's own recurring note), so the seven points above
+  are validated by source/markup inspection, not a computed-style
+  assertion.
+
 - **Fixed:** Direct follow-up bug report same day (2026-09-02), "in the
   tasks page it doesn't work" -- the label-pill pass below (previous
   entry) missed the Habits code path entirely. Habits are NOT rendered

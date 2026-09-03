@@ -58,7 +58,7 @@
        detail modal (`data-modal`, unchanged) -- see inline_edit.js's own
        header comment for how the two are told apart on the same element
        without one accidentally triggering the other. #}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import label_pill, label_pill_quiet with context %}
 {% macro task_row(t, show_select=true) %}
 <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
     {% if show_select %}
@@ -122,7 +122,7 @@
             <button type="button" class="multiselect-trigger cell-tags-trigger" aria-haspopup="true" aria-expanded="false">
                 <span class="cell-tags">
                 {% if t.tags %}
-                    {% for tag in t.tags %}{{ label_pill(tag) }}{% endfor %}
+                    {% for tag in t.tags %}{{ label_pill_quiet(tag) }}{% endfor %}
                 {% else %}
                     <span class="ms-summary text-muted">No labels</span>
                 {% endif %}
@@ -139,9 +139,9 @@
             </div>
         </div>
     </td>
-    <td style="text-align:right">
+    <td style="text-align:right" class="task-row-actions">
         <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}" data-cc-change="task">
-            <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
+            <button type="submit" class="icon-btn task-row-delete" title="Delete">{{ icon('trash') }}</button>
         </form>
     </td>
 </tr>
