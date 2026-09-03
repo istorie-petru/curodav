@@ -2027,22 +2027,16 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .cell-tags .cell-tag{
   border-radius:var(--radius-pill); padding:2px 7px;
 }
-/* 6. The header's own "+" -- icon-only by default (unchanged size/position,
-   `.task-table-add-th .icon-btn` above), but now carries a hidden "Add
-   task"/"Add habit" label (`.task-add-btn-label`, zero-width + zero-
-   opacity) that expands into view on hover/focus instead of a bare glyph
-   that's easy to miss sitting alone at the end of a header row. */
-.icon-btn.task-add-btn{
-  width:auto; height:28px; padding:0 6px; gap:0; border-radius:var(--radius-control);
-}
-.task-add-btn-label{
-  display:inline-block; max-width:0; overflow:hidden; opacity:0; white-space:nowrap;
-  font-size:var(--text-caption); font-weight:600;
-  transition:max-width var(--dur-fast) var(--ease-standard), opacity var(--dur-fast) var(--ease-standard), margin-left var(--dur-fast) var(--ease-standard);
-}
-.task-add-btn:hover .task-add-btn-label, .task-add-btn:focus-visible .task-add-btn-label{
-  max-width:90px; opacity:1; margin-left:5px;
-}
+/* 6. The header's own "+" -- 2026-09-03 direct follow-up removed the
+   hover-expanding "Add task"/"Add habit" label this used to grow
+   (`.task-add-btn`/`.task-add-btn-label`, a same-day addition): plain
+   icon-only `.icon-btn` again (`.task-table-add-th .icon-btn` above still
+   covers its color/hover), no hover state beyond that. Only the Habits
+   table still has one of these at all -- the Tasks table's own per-group
+   "+" was removed outright by the same-day "one single big table"
+   flattening (_tasks_body.html), and the single header-level replacement
+   button that briefly stood in for it is gone too (direct follow-up,
+   "remove the Task nou button in the header"). */
 /* 7. Delete: hidden until the row is actually being interacted with --
    `opacity` (not `display`/`visibility`) so a keyboard user tabbing
    through the row still lands on a real, focusable button; `:focus-within`

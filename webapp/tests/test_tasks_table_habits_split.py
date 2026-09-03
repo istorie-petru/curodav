@@ -113,12 +113,15 @@ class TestGroupNameAndAddButtonInTableHeader:
     into one `#task-table` with one plain Title/Status/Date/Labels
     `<thead>` and one flat `<tbody>` (routers/tasks.py's `groups` context
     is unchanged -- see test_tasks_grouping.py -- only this template's
-    rendering of it changed). The one remaining way to add a task is the
-    "+ Task nou" button _tasks_toolbar.html now renders once, above the
-    region. Habits keeps its own separate table/header/`+` exactly as
-    before -- it was never part of this complaint (see this class's -- and
-    _tasks_body.html's own -- reasoning: it's a different set of columns
-    for a different kind of row, not "grouping tasks by label")."""
+    rendering of it changed). _tasks_toolbar.html briefly grew a single
+    "+ Task nou" header button the same day to replace the removed
+    per-group links, then direct follow-up removed that too -- task
+    creation from this page now relies entirely on the sidebar's own
+    global quick-add and the command palette. Habits keeps its own
+    separate table/header/`+` exactly as before -- it was never part of
+    this complaint (see this class's -- and _tasks_body.html's own --
+    reasoning: it's a different set of columns for a different kind of
+    row, not "grouping tasks by label")."""
 
     def test_no_task_add_row_left_in_either_table(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
@@ -157,11 +160,17 @@ class TestGroupNameAndAddButtonInTableHeader:
         # Only one <table> element opens in this region (the merged one).
         assert task_table.count("<table") == 1
 
-    def test_single_add_task_button_above_the_table_not_per_group(self, conn):
+    def test_no_per_group_add_task_link_left_anywhere(self, conn):
+        # 2026-09-03 direct follow-up: the single "+ Task nou" header
+        # button this test used to require (added the same day the
+        # per-group "+" links were removed) was itself removed a moment
+        # later, direct request -- task creation from this page now falls
+        # back entirely to the sidebar's global quick-add/command palette.
+        # This test keeps only the half of the original assertion that
+        # still holds: no per-group `?project=` add link ever came back.
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "t1", tags=["Garden"])
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert body.count('href="/tasks/new"') == 1
         assert "/tasks/new?project=Garden" not in body
 
     def test_habits_group_name_and_add_link_are_in_its_header(self, conn):
