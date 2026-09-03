@@ -49,15 +49,15 @@
         <div class="allday-gutter">All day</div>
         <div class="allday-cols week">
             {% for day in days %}
-            <div class="allday-col{% if day.is_past %} is-past{% endif %}">
+            <div class="allday-col{% if day.is_past %} is-past{% endif %}" data-date="{{ day.iso }}">
                 {% for e in day.all_day %}
-                <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
+                <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}" {% if not e.recurrence %}data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"{% endif %}>
                     <span class="color-dot cal-{{ e.calendar_color }}"></span>
                     {{ e.title }}
                 </a>
                 {% endfor %}
                 {% for t in day.tasks %}
-                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
+                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
                 {% endfor %}
             </div>
             {% endfor %}

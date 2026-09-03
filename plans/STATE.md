@@ -8,6 +8,56 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), calendar drag-and-drop
+  consistency + a new capability, three bundled changes from one
+  conversation ("in the planner and calendar pages... there should be drag
+  and drop support" -> turned out Week/4-Week/Month already had it wired,
+  the actual gaps were narrower):
+  1. **CSS bug: the Month/4-Week dragging chip looked like it was
+     disappearing, not being picked up.** `.month-event-item.dragging,
+     .month-due-task-item.dragging` was `opacity:.5; cursor:grabbing` only
+     -- no shadow/outline/z-index, unlike Week's `.time-event.dragging`
+     (ring outline + elevated shadow + z-index:30 + opacity:.95). Direct
+     feedback: "the css is wrong... the events are not shown as dragged."
+     Now both share the same ring-outline/shadow/opacity-.95 treatment
+     (Month/4-Week uses z-index:5, not Week's 30 -- no tall shared
+     absolutely-positioned canvas there to clear).
+  2. **New: drag-and-drop for the Week view's all-day row.**
+     `_calendar_week_grid.html`'s `.allday-task` items (events and
+     due-date tasks) had zero drag wiring before this -- not broken, never
+     built; `calendar.js` only ever binds `.time-event:not(.work-
+     allocation)`, which this row's items never carry. New file
+     `static/calendar_week_allday_drag.js`, modeled directly on Month/
+     4-Week's own `calendar_month_drag.js`: day-shift only (no time axis,
+     no resize -- multi-day span-resize is a separate unbuilt feature), same
+     `/events/{uid}/reschedule` and `/tasks/{uid}/update-field` (field
+     `due_at`) endpoints, same recurring-event exclusion (no `data-uid`
+     rendered for a recurring event, so it stays click-only). Needed
+     `data-date` added to `.allday-col` and `data-uid`/`data-start`/
+     `data-end`/`data-due` added to the two `.allday-task` link kinds,
+     neither of which existed before. Wired into `calendar_week.html`'s
+     script block and into `async_calendar.js`'s `refreshWeek()` re-bind
+     (`CCWeekAllDayDrag.init()`) so a swapped-in `#week-grid` region after
+     any change gets the bindings re-attached, same pattern every other
+     region-refresh hook already uses. Day view's own `.allday-task` strip
+     (`calendar_day.html`) was deliberately left alone -- out of scope,
+     wasn't requested.
+  3. **Task due-date chips: fallback icon changed from `square` (read as
+     an empty checkbox) to `alert-triangle`.** Direct feedback: "the icon
+     next to tasks... should not be a checkbox, but better a warning sign
+     (because that is the due date of the task)." The `default('square',
+     true)` fallback (used whenever a task's own label has no configured
+     icon) was one identical pattern repeated in 5 templates --
+     `_calendar_week_grid.html`, `calendar_day.html`,
+     `_calendar_month_grid.html`, `_calendar_fourweek_grid.html`,
+     `_widget_agenda.html` -- confirmed with the user this should change
+     everywhere, not just Week, since it's genuinely the same element/
+     meaning in each place.
+  Full suite: 1941 passed (four file-list chunks, `test_caldav_bridge_live.py`
+  excluded as always -- background/nohup pytest runs don't survive between
+  tool calls in this sandbox, so chunks were run as direct foreground calls
+  against explicit file-list slices instead).
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), "the font in the
   tasks table is much too small, compare the two tables -- I want a much
   more standardized font." The three density-pass sizes fighting for

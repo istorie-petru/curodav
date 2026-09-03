@@ -33,7 +33,7 @@
     <div class="week-overview-day-label">{{ day.label }}</div>
     {% if day.tasks or day.events %}
     {% for t in day.tasks %}
-    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
+    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
     {% endfor %}
     {% for e in day.events %}
     <a class="week-overview-item" href="/events/{{ e.uid }}" data-modal>{{ icon('calendar', 'icon-sm') }} {{ e.title }}</a>

@@ -36,7 +36,7 @@
                         <span class="month-item-title">{{ item.event.title }}</span>
                     </a>
                 {% else %}
-                    <a class="month-task-item month-due-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('square', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
+                    <a class="month-task-item month-due-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}

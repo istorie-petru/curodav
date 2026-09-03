@@ -2728,6 +2728,21 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .allday-task > *{overflow:hidden; text-overflow:ellipsis;}
 .allday-task .color-dot{margin:0;}
 .allday-task:hover{text-decoration:underline;}
+/* Week all-day row drag-to-move (static/calendar_week_allday_drag.js,
+   2026-09-03) -- only items carrying data-uid get a drag cursor/touch-
+   action override (a recurring event has no data-uid and stays a plain
+   click-to-open link, same exclusion Month/4-Week already make). Dragging
+   state/drop-target cue reuse the exact same visual vocabulary as Month/
+   4-Week's own chip drag (see .month-event-item.dragging above) and Week's
+   own .time-col.drop-hover, so every calendar view's drag feedback now
+   reads identically. */
+.allday-task[data-uid]{cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;}
+.allday-task.dragging{
+  opacity:.95; cursor:grabbing; position:relative; z-index:5;
+  box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent-neutral), 0 6px 14px rgba(0,0,0,.22);
+  background:var(--bg-elevated); border-radius:4px;
+}
+.allday-col.drop-hover{background-color:var(--accent-neutral-subtle);}
 .time-grid-body{display:grid; grid-template-columns:52px 1fr; position:relative;}
 /* 2026-08-09 -- lock the hour grid into its own stacking context one
    layer BELOW the sticky top (z-index:1 vs .time-grid-top/.time-grid-head's
@@ -3163,7 +3178,20 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    Week/Day grid's own .time-col.drop-hover, so "this cell is the drop
    target" reads consistently across every calendar view. */
 .month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle);}
-.month-event-item.dragging, .month-due-task-item.dragging{opacity:.5; cursor:grabbing;}
+/* The dragged chip itself, previously just opacity:.5 -- direct feedback
+   (2026-09-03), "the events are not shown as dragged": fading toward
+   invisible reads as the chip disappearing, not as picked up. Now matches
+   .time-event.dragging's "lifted" treatment exactly (ring outline, elevated
+   shadow, higher z-index, opacity .95 not .5) so a chip grabbed on Month/
+   4-Week looks and behaves the same as one grabbed on Week. z-index:5 is
+   enough to clear a day cell's own siblings/overflow link without needing
+   Week's z-index:30 (Month chips aren't absolutely positioned over a tall
+   shared canvas the way timed events are, so there's no equivalent stack
+   of other absolutely-positioned siblings to clear). */
+.month-event-item.dragging, .month-due-task-item.dragging{
+  opacity:.95; cursor:grabbing; position:relative; z-index:5;
+  box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent-neutral), 0 6px 14px rgba(0,0,0,.22);
+}
 
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,
    static/timeline.js. Everything absolutely positioned within one

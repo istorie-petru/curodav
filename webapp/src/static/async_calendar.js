@@ -15,7 +15,7 @@
 //     event for that page; see _calendar_fourweek_grid.html's comment).
 //   * Week (calendar_week.html): #week-grid, the whole
 //     .project-calendar-layout; re-bound via CCWeekGrid / CCProjectCalendar /
-//     CCUnscheduledPanel. Its mutation endpoints (work-allocation create/
+//     CCWeekAllDayDrag / CCUnscheduledPanel. Its mutation endpoints (work-allocation create/
 //     move/delete in project_calendar.js) POST through ccApi with
 //     change.type "task" and dispatch this same event, so the refreshed
 //     region is also what moves the dragged block out from under the
@@ -79,6 +79,7 @@
         // All re-query their own elements/scroll container per init call.
         if (window.CCWeekGrid) window.CCWeekGrid.init();
         if (window.CCProjectCalendar) window.CCProjectCalendar.init();
+        if (window.CCWeekAllDayDrag) window.CCWeekAllDayDrag.init();
         if (window.CCUnscheduledPanel) window.CCUnscheduledPanel.init();
       });
     }
