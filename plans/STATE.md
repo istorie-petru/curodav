@@ -8,6 +8,64 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request, same day (2026-09-03) -- reworked the shared
+  date+time range picker's hour selection (`_datetime_picker.html`'s
+  `datetime_picker` macro / `static/datetime_picker.js`), used by the event
+  create/edit modal (`_event_form_fields.html`'s Start & end field) among
+  other callers. Reached via several mockup rounds (static HTML, shared as
+  files, not built against real data) rather than a single guess: a first
+  pass of grid/slider/preset alternatives to the old scrolling 24-row hour
+  list was all rejected as "counterintuitive" (the slider drags/rounds
+  imprecisely, the grids/presets don't reach every hour); a follow-up typed
+  HH:MM text-field pass was rejected too, as "too much input needed"; a
+  compact single-column mockup (full calendar + two small Start/End chips
+  under it, no second column) landed on its "closed" state but not its
+  click-to-open-a-dropdown interaction; the final round dropped the dropdown
+  in favor of segmented in-place editing and was approved outright ("yes.
+  this one. implement").
+  1. **Range mode's panel is a single column now** (`.dtp-panel--range`,
+     style.css, flex column instead of a 2-col grid) -- month calendar, then
+     one `.dtp-hour-row` of two `.dtp-hour-chip`s (Start/End) underneath,
+     same width as date mode's own panel. The old scrolling/click-drag
+     24-row `.dtp-hour` list is gone entirely (datetime_picker.js's
+     `renderHours`/`paintHours`/`pickHour`/`attachHourDrag` removed).
+  2. **Each chip is a native-time-input-style segmented field** -- hour and
+     minute (plus AM/PM, 12h setting only) segments, exactly one highlighted
+     ("active") at a time while that chip has real focus. Arrow Up/Down nudge
+     the active segment (wrapping 23→00/59→00); Arrow Left/Right move which
+     segment is active; typing digits sets a value directly and
+     auto-advances hour→minute after two digits (`typeDigit`); Backspace
+     clears the active segment. Minutes are a real independently-tracked
+     `state.startMinute`/`endMinute` now, not derived via the old
+     "keep-the-original-minute-unless-hour-changes" trick the whole-hour
+     click grid needed.
+  3. **No Apply button anywhere (range or time mode).** Every edit -- a day
+     click, a segment nudge, a typed digit -- commits straight to the hidden
+     inputs immediately (`commitLive`), the same auto-commit contract `date`
+     mode already had; the panel just stays open afterward since one edit is
+     rarely the last one. Time mode (hours-only, no calendar -- the weekly
+     Sleep/Leisure block picker) reuses the exact same chip row, gaining a
+     minimal one-row header (`renderTimeHeader`) just to hold Clear.
+  4. **Clear moved into the header, icon-only,** for range mode too now
+     (previously only date mode had this; range/time had a text Clear in a
+     footer that no longer exists) -- reuses the existing `.dtp-clear-nav`
+     treatment next to the month-nav arrows, still hidden whenever `submit`
+     is set.
+  5. **Submit-mode callers** (event_detail.html's "Move this occurrence",
+     `_task_work_allocations.html`'s per-session set-times, both
+     `data-dtp-submit="1"`) lost their Apply-triggered `requestSubmit()` and
+     gained a close-triggered one instead: a new `state.dirty` flag (reset
+     on open, set on any real edit) means the enclosing form submits only if
+     the panel is closed *after* an actual edit landed a complete value --
+     opening a submit-mode picker just to look, then clicking away, no
+     longer silently re-POSTs unchanged values.
+  `sw.js` CACHE_NAME bumped v48 → v49 (style.css + datetime_picker.js
+  changed), `test_pwa_shell.py`'s pin updated. No other tests touch this
+  component's JS-rendered markup (grepped `dtp-hour`/`dtp-panel`/
+  `dtp-trigger`/etc. across `tests/` first -- none), so no other test
+  changes were needed. Full suite: 1952 passed (four chunks by file, same
+  convention as every other multi-file session this file documents).
+
 - **Shipped:** Direct request, same day (2026-09-03) -- "all dates should be
   displayed more minimally, with a single script that resolves all dates
   from the standard complicated format to a more human readable format.

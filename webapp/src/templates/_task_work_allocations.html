@@ -13,11 +13,13 @@
    ...). 2026-08-17: each row's when-area is now the shared date+time range
    picker (_datetime_picker.html's datetime_picker macro,
    static/datetime_picker.js) in submit mode -- clicking it opens the month
-   calendar + hour grid and Apply posts to the session's own set-times
-   endpoint, so a session can be dated right here instead of only by drag.
-   The hidden start_at/end_at inputs inside the per-session <form> carry the
-   values. Shared by task_detail.html (header shown) and task_form.html
-   (same spot). #}
+   calendar and a Start/End hour:minute chip row, and closing the panel with
+   a complete edited value posts to the session's own set-times endpoint
+   (2026-09-03: there's no Apply button any more, see datetime_picker.js's
+   header comment), so a session can be dated right here instead of only by
+   drag. The hidden start_at/end_at inputs inside the per-session <form>
+   carry the values. Shared by task_detail.html (header shown) and
+   task_form.html (same spot). #}
 {% from "_datetime_picker.html" import datetime_picker with context %}
 {% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
 {% if show_header %}
@@ -43,10 +45,13 @@
             <span class="checklist-text">Session {{ loop.index }}</span>
             <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
                 {# The shared range picker (submit mode) dates this session:
-                   Apply posts the hidden start_at/end_at to the set-times
-                   endpoint above, and data-modal-keep-open refreshes the
-                   card in place. The trigger shows the current when and is
-                   blank ("Set time…") for an undated session. #}
+                   closing the panel with a complete, edited start/end
+                   posts the hidden start_at/end_at to the set-times
+                   endpoint above (no Apply button -- datetime_picker.js
+                   commits live and submits on close), and
+                   data-modal-keep-open refreshes the card in place. The
+                   trigger shows the current when and is blank ("Set
+                   time…") for an undated session. #}
                 {{ datetime_picker('start_at', 'end_at', wa.start_at or '', wa.end_at or '', 'range', true, 'dtp--compact') }}
             </form>
             <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>

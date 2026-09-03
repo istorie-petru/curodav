@@ -5446,9 +5446,14 @@ body.command-palette-open{overflow:hidden;}
   box-shadow:var(--elevation-3); padding:var(--space-3);
 }
 .dtp-panel.is-open{display:block;}
-.dtp-panel--range{display:none; grid-template-columns:minmax(224px, 1fr) minmax(150px, 1fr); gap:var(--space-3);}
-.dtp-panel--range.is-open{display:grid;}
-.dtp-col{display:flex; flex-direction:column; gap:var(--space-2); min-width:0;}
+/* 2026-09-03 rework (direct feedback after a round of mockups -- see
+   datetime_picker.js's header comment for the full history): range mode
+   used to lay a month calendar and a scrolling 24-row hour list side by
+   side in a two-column grid, which read as "too bulky." It's a single
+   column now, the same width as date mode's own panel -- the calendar,
+   then the hour:minute chip row underneath (.dtp-hour-row further down). */
+.dtp-panel--range{display:none; flex-direction:column; gap:var(--space-2);}
+.dtp-panel--range.is-open{display:flex;}
 .dtp-panel-head{display:flex; align-items:center; justify-content:space-between; gap:6px;}
 .dtp-panel--date{display:none; aspect-ratio:1/1;}
 .dtp-panel--date.is-open{display:flex; flex-direction:column;}
@@ -5456,19 +5461,21 @@ body.command-palette-open{overflow:hidden;}
 .dtp-panel--date .dtp-cal-grid{flex:1; grid-template-rows:repeat(6,1fr);}
 .dtp-panel-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
 .dtp-month-nav{width:24px; height:24px;}
-/* Date mode's Clear (2026-08-29, STATE.md backlog item 9: "remove the
-   Apply button entirely; Clear button loses its text label, becomes
-   icon-only") -- sits in the calendar header next to the Next-month arrow
-   instead of alone in an otherwise-empty footer (see datetime_picker.js's
-   renderCalendar). Same exact box as `.dtp-month-nav` (24x24, no padding)
-   so its round `:hover` background stays a perfect circle like every
-   other icon-btn in this header -- an earlier pass added a left border +
-   padding-left here for "visible separation," but padding eating into a
-   fixed-width/height box turns the hover circle into an off-center blob,
-   and a divider line reads as busier than this small a control needs.
-   margin-left alone (space-between/the title's own flex:1 don't reach
-   this far right) is enough separation from the Next-month arrow without
-   either problem. */
+/* Date and range modes' Clear (2026-08-29, STATE.md backlog item 9:
+   "remove the Apply button entirely; Clear button loses its text label,
+   becomes icon-only" -- extended to range mode 2026-09-03 when Apply was
+   dropped there too, see datetime_picker.js's header comment) -- sits in
+   the calendar header next to the Next-month arrow instead of alone in a
+   footer (range/time no longer render one at all; see
+   datetime_picker.js's renderCalendar/renderTimeHeader). Same exact box as
+   `.dtp-month-nav` (24x24, no padding) so its round `:hover` background
+   stays a perfect circle like every other icon-btn in this header -- an
+   earlier pass added a left border + padding-left here for "visible
+   separation," but padding eating into a fixed-width/height box turns the
+   hover circle into an off-center blob, and a divider line reads as
+   busier than this small a control needs. margin-left alone (space-
+   between/the title's own flex:1 don't reach this far right) is enough
+   separation from the Next-month arrow without either problem. */
 .dtp-clear-nav{width:24px; height:24px; margin-left:var(--space-2);}
 .dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
 .dtp-day{
@@ -5484,18 +5491,32 @@ body.command-palette-open{overflow:hidden;}
 .dtp-day.is-disabled{color:var(--fg-tertiary); opacity:.5; cursor:not-allowed;}
 .dtp-day.is-disabled:hover{background:none;}
 [data-theme="dark"] .dtp-day.is-today{background:#494949;}
-.dtp-hours-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
-.dtp-hours{display:flex; flex-direction:column; gap:2px; max-height:300px; overflow-y:auto;}
-.dtp-hour{
-  text-align:left; padding:5px 10px; font-size:var(--text-caption); color:var(--fg-secondary);
-  background:none; border:none; border-radius:var(--radius-sm); font-family:inherit; cursor:pointer;
+/* Hour:minute chips (2026-09-03, replaces the old scrolling/click-drag
+   24-row `.dtp-hour` list -- see datetime_picker.js's header comment for
+   why). One chip per Start/End, each holding 2-3 small "segment" spans
+   (hour, minute, and -- 12h setting only -- AM/PM); exactly one segment
+   is highlighted at a time via `.is-active`, painted only while its chip
+   has real focus (`.is-focused`) so the highlight can't go stale once
+   focus moves elsewhere. Arrow keys/typed digits mutate a segment in
+   place (datetime_picker.js's paintChips) rather than rebuilding the
+   chip, so repeated key presses keep working without losing focus. */
+.dtp-hour-row{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  margin-top:var(--space-1); padding-top:var(--space-2); border-top:1px solid var(--separator);
 }
-.dtp-hour:hover{background:var(--row-alt);}
-.dtp-hour:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
-.dtp-hour.in-range{background:var(--accent-neutral-subtle); color:var(--fg-primary);}
-.dtp-hour.is-start, .dtp-hour.is-end{background:var(--accent); color:var(--fg-on-accent); font-weight:600;}
-.dtp-panel-footer{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);}
-.dtp-panel--range .dtp-panel-footer{grid-column:1 / -1;}
+.dtp-hour-chip{
+  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-caption); font-weight:500;
+  color:var(--fg-primary); background:var(--bg-secondary); border-radius:var(--radius-control);
+  border:1.5px solid transparent; font-variant-numeric:tabular-nums; font-family:inherit; cursor:text;
+}
+.dtp-hour-chip.is-focused{border-color:var(--accent); background:var(--bg-elevated);}
+.dtp-hour-chip:focus-visible{outline:none;}
+.dtp-hour-colon{color:var(--fg-tertiary); padding:0 1px;}
+.dtp-hour-seg{border-radius:4px; padding:1px 3px;}
+.dtp-hour-seg.is-active{background:var(--accent); color:var(--fg-on-accent);}
+.dtp-hour-seg-ampm{margin-left:4px; font-size:11px; color:var(--fg-tertiary);}
+.dtp-hour-seg-ampm.is-active{color:var(--fg-on-accent);}
+.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-caption);}
 
 /* --------------------------------------------------------------------- */
 /* Data & Maintenance page (2026-08-26 redesign, third pass same day)     */

@@ -18,9 +18,12 @@
        date only -- e.g. a holiday's From/To -- written as "YYYY-MM-DD",
        which replaces the native <input type="date"> picker that otherwise
        pops the browser's own, unstylable calendar).
-     submit -- when true, Apply immediately submits the enclosing <form>
-       (the Work-sessions card's per-session set-times form) instead of just
-       filling values for a later Save.
+     submit -- when true, closing the panel with a complete, actually-edited
+       value submits the enclosing <form> immediately (the Work-sessions
+       card's per-session set-times form, event_detail.html's "Move this
+       occurrence") instead of just filling values for a later Save. There
+       is no Apply button (2026-09-03 rework) -- every edit commits live;
+       submit mode just also fires the form once the panel closes.
      required -- when true, the hidden input carries `required` so the
        browser still blocks an empty form submit the way the native date
        input it replaces did.

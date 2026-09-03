@@ -161,7 +161,15 @@
 // `.kanban-status-select` is gone along with static/tasks_kanban.js
 // (removed from the page entirely, was never in SHELL_ASSETS). style.css
 // changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v48";
+// v49 (2026-09-03): the shared date+time range picker's hour selection was
+// reworked after a round of mockups (direct feedback: the old scrolling/
+// click-drag 24-row hour grid was "too bulky," a follow-up grid/slider/
+// preset/typed-field pass was all rejected too) -- static/
+// datetime_picker.js (page-specific, not itself a SHELL_ASSETS entry, but
+// runtime-cached like any other static file) and style.css both changed;
+// bumped per the same v15/v19 lesson so an already-installed PWA doesn't
+// keep serving the old click-drag grid from its runtime cache.
+const CACHE_NAME = "cc-shell-v49";
 
 const SHELL_ASSETS = [
   "/offline",

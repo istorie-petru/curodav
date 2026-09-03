@@ -10,21 +10,45 @@
 //   - a trigger button (the current range, or a placeholder) -- keyboard
 //     accessible (Tab + Enter/Space to open), same trigger+panel shape as
 //     the app's other dropdown pickers;
-//   - a panel with a month calendar (range mode only) and a column of 24
-//     clickable hour rows ("like the Week grid"), portaled out to
+//   - a panel with a month calendar (range mode only) and, below it, a pair
+//     of small hour:minute "chips" -- Start / End -- portaled out to
 //     #multiselect-portal on open so it escapes any modal's clipping, the
 //     same technique app.js's .multiselect handling already uses.
 //
-// Hour selection is whole-hour granularity -- the deliberate trade of "easy
-// hour select" (a "14:30" event reopened here shows 14:00). To keep that
-// from silently mangling an existing half-hour value, the original minutes
-// are remembered: re-saving the same hour keeps them, moving to a new hour
-// resets to :00.
+// 2026-09-03 rework (direct feedback, after a round of mockups: a scrolling
+// 24-row hour list felt bulky and capped at whole hours, a click-drag hour
+// grid/timeline-slider/preset-chip concepts were all rejected as
+// "counterintuitive," and a plain typed HH:MM text field was rejected as
+// "too much input needed" -- the one that landed was the narrowest of the
+// bunch: keep the single-column calendar-sized panel, represent Start/End as
+// two small chips under it, and edit a chip like a native time input's own
+// segments -- one of "hour"/"minute" highlighted at a time, arrow keys
+// nudge it in place, typing digits jumps straight to a value). This
+// replaces the old click/click-to-pick, click-and-drag 24-row hour grid
+// entirely -- see git history for that version. Consequences of the
+// rework, all direct feedback too:
+//   - No Apply button anywhere (range or time mode) -- every edit (a day
+//     click, an hour/minute nudge, a typed digit) commits straight to the
+//     hidden inputs immediately, the same "auto-commit" contract "date"
+//     mode already had. There is nothing left to Apply.
+//   - Clear moves out of the footer (which no longer exists) and into the
+//     panel header as an icon-only button next to the month-nav arrows --
+//     exactly `date` mode's own existing `.dtp-clear-nav` treatment,
+//     because that's now what "Clear" means everywhere this component
+//     appears, not just in date mode. Still hidden whenever `submit` is
+//     set (was already the case; a submit-mode picker's caller -- e.g. a
+//     work session's set-times form -- has no "empty" state to clear back
+//     to).
+//   - Minutes are a real, independently editable segment now, not the
+//     derived "keep the original minute unless you change hour" trick the
+//     old whole-hour-snapped grid needed to avoid silently mangling a
+//     half-hour value -- state carries `startMinute`/`endMinute` outright.
 //
 // Modes (data-dtp-mode):
-//   "range" (default) -- date + start/end hours, writes "YYYY-MM-DDTHH:MM".
-//   "time"            -- hours only (a weekly Sleep/Leisure block has no
-//                        date), writes "HH:MM".
+//   "range" (default) -- date + start/end hour:minute chips, writes
+//                        "YYYY-MM-DDTHH:MM".
+//   "time"            -- hour:minute chips only (a weekly Sleep/Leisure
+//                        block has no date), writes "HH:MM".
 //   "date"            -- a single date only, written "YYYY-MM-DD" -- the
 //                        native <input type="date"> contract, added
 //                        2026-08-17 so every native date input in the app
@@ -32,18 +56,21 @@
 //                        due/start, habit entry date) pops the themed
 //                        panel instead of the browser's own unstylable
 //                        calendar.
-// data-dtp-submit="1" makes Apply submit the enclosing <form> immediately
-// (the Work-sessions card's per-session set-times form) instead of just
-// filling values for a later Save. data-dtp-12h="1" labels the hour grid in
-// 12-hour form, honoring the Settings > General time-format preference the
-// server passes down (deps.py's fmt_time). data-dtp-max="YYYY-MM-DD"
-// disables every day after that bound (the habit check-in's entry date,
-// which was a native <input type="date" max="today">).
+// data-dtp-submit="1" makes the enclosing <form> submit itself as soon as
+// the panel closes with a complete, actually-edited value (see `dirty`
+// below) -- the Work-sessions card's per-session set-times form, and
+// event_detail.html's "Move this occurrence" range, both rely on this.
+// data-dtp-12h="1" edits/labels the hour segment in 12-hour form (a third
+// AM/PM segment appears alongside hour/minute), honoring the Settings >
+// General time-format preference the server passes down (deps.py's
+// fmt_time). data-dtp-max="YYYY-MM-DD" disables every day after that bound
+// (the habit check-in's entry date, which was a native
+// <input type="date" max="today">).
 //
-// Committing (Apply) or clearing also fires a `change` event on the start
-// hidden input -- the same event the replaced native input produced -- so
-// the Tasks table's inline due-date cell (tasks_table.js) keeps saving the
-// single-field update without any picker-specific wiring.
+// Committing (any edit) or clearing also fires a `change` event on the
+// start hidden input -- the same event the replaced native input produced
+// -- so the Tasks table's inline due-date cell (tasks_table.js) keeps
+// saving the single-field update without any picker-specific wiring.
 //
 // "date" mode's footer (2026-08-29, STATE.md backlog item 9, "remove the
 // Apply button entirely; Clear button loses its text label, becomes
@@ -55,17 +82,17 @@
 // calendar header instead, next to the month prev/next arrows, as an
 // icon-only button (`.dtp-clear-nav`, styled with a left border + margin
 // in style.css for "visible separation, not crowded against" the next-
-// month arrow it sits beside). Range/time mode's footer (Apply text +
-// Clear text, or just Apply when `submit` is set) is unchanged -- neither
-// of those modes auto-commits on a single pick, so Apply still earns its
-// keep there.
+// month arrow it sits beside). 2026-09-03: range mode now shares this same
+// header Clear (see above) -- time mode, which has no calendar/header,
+// grows a minimal one-row header of its own just to hold it.
 //
-// Mouse: click a day; click an hour to start a range, click again to end it
-// (an earlier second click swaps so start is always first), or press and
-// drag across hours. Keyboard: Tab to the trigger, Enter opens; in the
-// calendar Arrow keys move the focused day and Enter selects; in the hour
-// grid Arrow Up/Down move and Enter sets start/end. Escape or an outside
-// click closes.
+// Mouse: click a day, or a specific hour/minute segment inside a chip (that
+// segment becomes the active one). Keyboard: Tab to the trigger, Enter
+// opens; in the calendar Arrow keys move the focused day and Enter selects;
+// on a chip Arrow Up/Down nudge the active segment, Arrow Left/Right move
+// which segment is active (and cycle through hour/minute/AM-PM in 12h
+// mode), digits type a value directly and auto-advance after two digits.
+// Escape or an outside click closes.
 //
 // Same "scan on DOMContentLoaded + MutationObserver" convention as
 // reminders_picker.js / recurrence_picker.js so modal-injected content
@@ -79,6 +106,10 @@
   // ------------------------------------------------------------------ //
   function pad2(n) {
     return String(n).padStart(2, "0");
+  }
+
+  function clampWrap(n, max) {
+    return ((n % max) + max) % max;
   }
 
   // "YYYY-MM-DDTHH:MM" (or longer, e.g. a full ISO timestamp) -> parsed or null
@@ -139,10 +170,13 @@
     return key === dateKey(n.getFullYear(), n.getMonth() + 1, n.getDate());
   }
 
-  function fmtHour(hour, use12h) {
-    if (!use12h) return pad2(hour) + ":00";
+  // 24h "HH:MM", or 12h "H:MM AM/PM" -- used for the trigger's own label,
+  // not for the chip segments themselves (those always show plain digits;
+  // see renderHourRow's use of displayHour/displayAmpm).
+  function fmtHourMin(hour, minute, use12h) {
+    if (!use12h) return pad2(hour) + ":" + pad2(minute);
     const h = hour % 12 || 12;
-    return h + (hour < 12 ? " AM" : " PM");
+    return h + ":" + pad2(minute) + (hour < 12 ? " AM" : " PM");
   }
 
   function fmtDate(key, compact) {
@@ -176,8 +210,6 @@
     right:
       '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>',
     x: '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"></use></svg>',
-    check:
-      '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-check-square"></use></svg>',
   };
 
   // ------------------------------------------------------------------ //
@@ -209,9 +241,14 @@
       mode, submit, use12h, placeholder,
       date: null, // "YYYY-MM-DD" (range and date modes)
       viewYear: null, viewMonth: null, // calendar month being shown
-      startHour: null, endHour: null,
-      origStart: { hour: null, minute: null },
-      origEnd: { hour: null, minute: null },
+      startHour: null, startMinute: null,
+      endHour: null, endMinute: null,
+      // Set on any real edit while the panel is open, cleared on open --
+      // lets a submit-mode picker (Work sessions' set-times, event_detail's
+      // "Move this occurrence") tell "the user changed something and closed"
+      // from "the user just opened it to look, then clicked away," so
+      // opening/closing without editing never re-submits the form.
+      dirty: false,
     };
 
     // Prefill from whatever the hidden inputs already hold.
@@ -220,13 +257,13 @@
     if (ps) {
       if (mode !== "date") {
         state.startHour = ps.hour;
-        state.origStart = { hour: ps.hour, minute: ps.minute };
+        state.startMinute = ps.minute;
       }
       if (mode !== "time") state.date = dateKey(ps.year, ps.month, ps.day);
     }
     if (pe) {
       state.endHour = pe.hour;
-      state.origEnd = { hour: pe.hour, minute: pe.minute };
+      state.endMinute = pe.minute;
     }
     if (mode !== "time") {
       const base = ps ? { y: ps.year, m: ps.month } : null;
@@ -257,12 +294,12 @@
 
     function labelText() {
       if (mode === "date") return state.date ? fmtDate(state.date, compact) : placeholder;
-      const start = state.startHour !== null ? fmtHour(state.startHour, use12h) : null;
-      const end = state.endHour !== null ? fmtHour(state.endHour, use12h) : null;
+      const start = state.startHour !== null ? fmtHourMin(state.startHour, state.startMinute || 0, use12h) : null;
+      const end = state.endHour !== null ? fmtHourMin(state.endHour, state.endMinute || 0, use12h) : null;
       if (start === null || end === null) return placeholder;
-      if (mode === "time") return start + "\u2013" + end;
+      if (mode === "time") return start + "–" + end;
       if (!state.date) return placeholder;
-      return fmtDate(state.date) + " \u00b7 " + start + "\u2013" + end;
+      return fmtDate(state.date) + " · " + start + "–" + end;
     }
 
     function updateTrigger() {
@@ -275,23 +312,14 @@
     function renderPanel() {
       panel.innerHTML = "";
       if (mode === "range") {
-        const calCol = document.createElement("div");
-        calCol.className = "dtp-col";
-        renderCalendar(calCol);
-        const hourCol = document.createElement("div");
-        hourCol.className = "dtp-col";
-        renderHours(hourCol);
-        panel.appendChild(calCol);
-        panel.appendChild(hourCol);
+        renderCalendar(panel);
+        renderHourRow(panel);
       } else if (mode === "date") {
         renderCalendar(panel);
       } else {
-        renderHours(panel);
+        renderTimeHeader(panel);
+        renderHourRow(panel);
       }
-      // Date mode's "Clear" lives in the calendar header now (renderCalendar
-      // appends it there) and has no Apply at all -- see this file's header
-      // comment. Range/time keep the full footer.
-      if (mode !== "date") renderFooter();
 
       if (mode !== "time") {
         // Focus the selected (or today's) day so arrow-key navigation works
@@ -299,9 +327,8 @@
         const focusKey = state.date || dateKey(state.viewYear, state.viewMonth, Math.min(todayInView(), daysInMonth(state.viewYear, state.viewMonth)));
         const target = panel.querySelector('.dtp-day[data-date="' + focusKey + '"]');
         if (target) target.focus();
-      } else {
-        const target = panel.querySelector(".dtp-hour.is-start") || panel.querySelector(".dtp-hour");
-        if (target) target.focus();
+      } else if (chips.start) {
+        chips.start.el.focus();
       }
     }
 
@@ -338,14 +365,14 @@
       prev.addEventListener("click", () => shiftMonth(-1));
       next.addEventListener("click", () => shiftMonth(1));
 
-      // Date mode only (2026-08-29, STATE.md backlog item 9): Apply is
-      // gone entirely (a day click already auto-commits, see below), so
-      // Clear is the only footer action left -- moved up here, icon-only,
-      // next to the month-nav arrows instead of sitting alone in an
-      // otherwise-empty footer. `.dtp-clear-nav` (style.css) adds a
-      // left border + margin for "visible separation, not crowded
-      // against" the Next-month arrow it sits beside.
-      if (mode === "date" && !submit) {
+      // Date and range modes both auto-commit on every edit (see this
+      // file's header comment) and neither has a footer any more, so
+      // Clear lives here, icon-only, next to the month-nav arrows --
+      // `.dtp-clear-nav` (style.css) adds a left border + margin for
+      // "visible separation, not crowded against" the Next-month arrow it
+      // sits beside. Hidden in submit mode, same as before: a submit-mode
+      // picker's caller has no "empty" state worth clearing back to.
+      if ((mode === "date" || mode === "range") && !submit) {
         const clearNav = document.createElement("button");
         clearNav.type = "button";
         clearNav.className = "icon-btn dtp-clear-nav";
@@ -393,6 +420,12 @@
             // Date mode: auto-commit on selection (like native <input type="date">)
             applySelection();
           } else {
+            // Range mode: the date is one part of a still-editable value --
+            // commit it live (so a picker that already has hours filled in
+            // updates its saved value right away) but keep the panel open,
+            // same as any other single-segment edit.
+            state.dirty = true;
+            commitLive();
             renderPanel();
           }
         });
@@ -402,6 +435,29 @@
       host.appendChild(head);
       host.appendChild(weekdays);
       host.appendChild(grid);
+    }
+
+    // Time mode has no calendar, so it gets its own minimal one-row header
+    // just to hold the Clear button in the same place every other mode
+    // keeps it.
+    function renderTimeHeader(host) {
+      const head = document.createElement("div");
+      head.className = "dtp-panel-head";
+      const title = document.createElement("span");
+      title.className = "dtp-panel-title";
+      title.textContent = "Hours";
+      head.appendChild(title);
+      if (!submit) {
+        const clearNav = document.createElement("button");
+        clearNav.type = "button";
+        clearNav.className = "icon-btn dtp-clear-nav";
+        clearNav.setAttribute("aria-label", "Clear");
+        clearNav.title = "Clear";
+        clearNav.innerHTML = ICON.x;
+        clearNav.addEventListener("click", clearSelection);
+        head.appendChild(clearNav);
+      }
+      host.appendChild(head);
     }
 
     function shiftMonth(delta) {
@@ -414,110 +470,231 @@
       renderPanel();
     }
 
-    let hoursGrid = null;
+    // ------------------------------------------------------------------ //
+    // Hour:minute chips (2026-09-03 rework -- replaces the old scrolling/
+    // click-drag 24-row hour grid). Each of Start/End is one small
+    // focusable chip with a "hour" and "minute" segment (plus "ampm" in
+    // 12h mode); exactly one segment is "active" at a time, shown with a
+    // highlight, and only while that chip has real DOM focus -- so the
+    // highlight is never stale once focus moves elsewhere. The chip
+    // elements themselves are built once per renderPanel() call and then
+    // only *mutated* (text + class changes) on every key press --
+    // rebuilding them on every arrow-key tap would drop focus and break
+    // repeated key presses, the same reason the old grid's click-drag used
+    // a targeted `paintHours()` instead of a full re-render.
+    // ------------------------------------------------------------------ //
+    let chips = {}; // { start: {el, hourSeg, minSeg, ampmSeg}, end: {...} }
+    let chipEdit = {}; // { start: {seg, buffer, bufferTimer}, end: {...} }
 
-    function renderHours(host) {
-      const title = document.createElement("div");
-      title.className = "dtp-hours-title";
-      title.textContent = mode === "time" ? "Hours" : "Hours on this day";
-      const grid = document.createElement("div");
-      grid.className = "dtp-hours";
-      hoursGrid = grid;
-
-      for (let h = 0; h < 24; h++) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "dtp-hour";
-        btn.dataset.hour = String(h);
-        btn.textContent = fmtHour(h, use12h);
-        grid.appendChild(btn);
-      }
-      paintHours(grid);
-      attachHourDrag(grid);
-      host.appendChild(title);
-      host.appendChild(grid);
+    function segList() {
+      return use12h ? ["hour", "min", "ampm"] : ["hour", "min"];
     }
 
-    function paintHours(grid) {
-      const buttons = grid.querySelectorAll(".dtp-hour");
-      buttons.forEach((btn) => {
-        const h = parseInt(btn.dataset.hour, 10);
-        btn.classList.toggle("is-start", state.startHour === h);
-        btn.classList.toggle("is-end", state.endHour === h);
-        btn.classList.toggle(
-          "in-range",
-          state.startHour !== null &&
-            state.endHour !== null &&
-            h > Math.min(state.startHour, state.endHour) &&
-            h < Math.max(state.startHour, state.endHour)
-        );
-      });
+    function displayHour(h) {
+      if (h === null) return "--";
+      if (!use12h) return pad2(h);
+      return String(h % 12 || 12);
     }
 
-    function pickHour(h) {
-      // Click-click: first click is the start, second is the end (an earlier
-      // second click swaps so start stays first); a third click restarts.
-      if (state.startHour === null) {
-        state.startHour = h;
-        state.endHour = null;
-      } else if (state.endHour === null) {
-        if (h < state.startHour) {
-          state.endHour = state.startHour;
-          state.startHour = h;
-        } else {
-          state.endHour = h;
-        }
-        // Auto-commit when both start and end are selected (range/time mode)
-        if (hoursGrid) paintHours(hoursGrid);
-        if (mode !== "date") {
-          applySelection();
-          return;
-        }
+    function displayMinute(m) {
+      return m === null ? "--" : pad2(m);
+    }
+
+    function displayAmpm(h) {
+      return h === null ? "--" : h < 12 ? "AM" : "PM";
+    }
+
+    // First interaction with an unset chip needs a starting value: default
+    // to "now" (rounded to the hour) for Start, or Start's own value for
+    // End (so nudging End from blank starts right next to Start instead of
+    // at an unrelated default) -- both are just starting points, not
+    // constraints; every segment stays independently editable afterward.
+    function ensureVal(role) {
+      if (state[role + "Hour"] !== null) return;
+      if (role === "end" && state.startHour !== null) {
+        state.endHour = state.startHour;
+        state.endMinute = state.startMinute;
       } else {
-        state.startHour = h;
-        state.endHour = null;
+        const n = new Date();
+        state[role + "Hour"] = n.getHours();
+        state[role + "Minute"] = 0;
       }
-      if (hoursGrid) paintHours(hoursGrid);
     }
 
-    function attachHourDrag(grid) {
-      // Pointer drag and plain click both start here: pointerdown applies the
-      // same pick rule a click would (so a click with no drag is one pick,
-      // and dragging simply extends the end as the pointer moves). No separate
-      // click listener is attached to the hour buttons -- pointerdown + a
-      // pointerup would otherwise fire a click too and double-pick.
-      let dragging = false;
-      grid.addEventListener("pointerdown", (e) => {
-        const btn = e.target.closest(".dtp-hour");
-        if (!btn) return;
-        dragging = true;
-        pickHour(parseInt(btn.dataset.hour, 10));
+    function adjustSeg(role, seg, delta) {
+      ensureVal(role);
+      state.dirty = true;
+      if (seg === "hour") {
+        state[role + "Hour"] = clampWrap(state[role + "Hour"] + delta, 24);
+      } else if (seg === "min") {
+        state[role + "Minute"] = clampWrap(state[role + "Minute"] + delta, 60);
+      } else if (seg === "ampm") {
+        state[role + "Hour"] = clampWrap(state[role + "Hour"] + 12, 24);
+      }
+      commitLive();
+      paintChips();
+    }
+
+    function typeDigit(role, seg, digit) {
+      const ed = chipEdit[role];
+      ensureVal(role);
+      state.dirty = true;
+      clearTimeout(ed.bufferTimer);
+      ed.buffer += digit;
+      let n = parseInt(ed.buffer, 10);
+      const max = seg === "hour" ? (use12h ? 12 : 23) : seg === "min" ? 59 : null;
+      if (max !== null && n > max) {
+        ed.buffer = digit;
+        n = parseInt(digit, 10);
+      }
+      if (seg === "hour") {
+        if (use12h) {
+          const isPM = state[role + "Hour"] >= 12;
+          state[role + "Hour"] = (n % 12) + (isPM ? 12 : 0);
+        } else {
+          state[role + "Hour"] = n;
+        }
+      } else if (seg === "min") {
+        state[role + "Minute"] = n;
+      }
+      commitLive();
+      if (ed.buffer.length >= 2) {
+        ed.buffer = "";
+        if (seg === "hour") ed.seg = "min";
+        paintChips();
+      } else {
+        ed.bufferTimer = setTimeout(() => { ed.buffer = ""; }, 700);
+        paintChips();
+      }
+    }
+
+    function buildChip(role) {
+      const el = document.createElement("div");
+      el.className = "dtp-hour-chip";
+      el.tabIndex = 0;
+      el.setAttribute("role", "group");
+      el.setAttribute("aria-label", (role === "start" ? "Start" : "End") + " time");
+
+      const hourSeg = document.createElement("span");
+      hourSeg.className = "dtp-hour-seg";
+      hourSeg.dataset.seg = "hour";
+      const colon = document.createElement("span");
+      colon.className = "dtp-hour-colon";
+      colon.textContent = ":";
+      const minSeg = document.createElement("span");
+      minSeg.className = "dtp-hour-seg";
+      minSeg.dataset.seg = "min";
+      el.appendChild(hourSeg);
+      el.appendChild(colon);
+      el.appendChild(minSeg);
+
+      let ampmSeg = null;
+      if (use12h) {
+        ampmSeg = document.createElement("span");
+        ampmSeg.className = "dtp-hour-seg dtp-hour-seg-ampm";
+        ampmSeg.dataset.seg = "ampm";
+        el.appendChild(ampmSeg);
+      }
+
+      chips[role] = { el, hourSeg, minSeg, ampmSeg };
+      chipEdit[role] = { seg: "hour", buffer: "", bufferTimer: null };
+
+      el.addEventListener("mousedown", (e) => {
+        const segEl = e.target.closest(".dtp-hour-seg");
+        if (segEl) chipEdit[role].seg = segEl.dataset.seg;
       });
-      document.addEventListener("pointermove", (e) => {
-        if (!dragging) return;
-        const btn = e.target.closest(".dtp-hour");
-        if (!btn) return;
-        const h = parseInt(btn.dataset.hour, 10);
-        if (h === state.startHour) return;
-        state.endHour = h;
-        paintHours(grid);
+      el.addEventListener("focus", () => paintChips());
+      el.addEventListener("blur", () => {
+        chipEdit[role].buffer = "";
+        paintChips();
       });
-      document.addEventListener("pointerup", () => {
-        dragging = false;
+      el.addEventListener("keydown", (e) => onChipKeydown(e, role));
+      return el;
+    }
+
+    function onChipKeydown(e, role) {
+      const ed = chipEdit[role];
+      const segs = segList();
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        adjustSeg(role, ed.seg, e.key === "ArrowUp" ? 1 : -1);
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const idx = segs.indexOf(ed.seg);
+        const nextIdx = e.key === "ArrowLeft" ? Math.max(0, idx - 1) : Math.min(segs.length - 1, idx + 1);
+        ed.seg = segs[nextIdx];
+        ed.buffer = "";
+        paintChips();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        close();
+        trigger.focus();
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        ed.buffer = "";
+        state.dirty = true;
+        if (ed.seg === "hour") state[role + "Hour"] = null;
+        else if (ed.seg === "min") state[role + "Minute"] = null;
+        commitLive();
+        paintChips();
+      } else if (ed.seg === "ampm" && (e.key === "a" || e.key === "A" || e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        ensureVal(role);
+        state.dirty = true;
+        const wantPM = e.key === "p" || e.key === "P";
+        const isPM = state[role + "Hour"] >= 12;
+        if (wantPM !== isPM) state[role + "Hour"] = clampWrap(state[role + "Hour"] + 12, 24);
+        commitLive();
+        paintChips();
+      } else if (/^[0-9]$/.test(e.key) && ed.seg !== "ampm") {
+        e.preventDefault();
+        typeDigit(role, ed.seg, e.key);
+      }
+    }
+
+    function paintChips() {
+      ["start", "end"].forEach((role) => {
+        const c = chips[role];
+        if (!c) return;
+        const h = state[role + "Hour"];
+        const m = state[role + "Minute"];
+        c.hourSeg.textContent = displayHour(h);
+        c.minSeg.textContent = displayMinute(m);
+        if (c.ampmSeg) c.ampmSeg.textContent = displayAmpm(h);
+        const focused = document.activeElement === c.el;
+        const ed = chipEdit[role];
+        c.hourSeg.classList.toggle("is-active", focused && ed.seg === "hour");
+        c.minSeg.classList.toggle("is-active", focused && ed.seg === "min");
+        if (c.ampmSeg) c.ampmSeg.classList.toggle("is-active", focused && ed.seg === "ampm");
+        c.el.classList.toggle("is-focused", focused);
       });
     }
 
-    // Shared by the footer's Clear button (range/time) and the calendar
-    // header's icon-only Clear (date, see renderCalendar) -- resets
-    // everything and commits the empty value, same as before this was
-    // split across two call sites. `endInput` may not exist at all in date
-    // mode (_datetime_picker.html only renders the one hidden input then),
-    // so this guards it rather than assuming it's always there the way the
-    // pre-split code did.
+    function renderHourRow(host) {
+      const row = document.createElement("div");
+      row.className = "dtp-hour-row";
+      chips = {};
+      chipEdit = {};
+      row.appendChild(buildChip("start"));
+      const sep = document.createElement("span");
+      sep.className = "dtp-hour-sep";
+      sep.textContent = "–";
+      row.appendChild(sep);
+      row.appendChild(buildChip("end"));
+      host.appendChild(row);
+      paintChips();
+    }
+
+    // Shared by the header's icon-only Clear (date/range/time) -- resets
+    // everything and commits the empty value. `endInput` may not exist at
+    // all in date mode (_datetime_picker.html only renders the one hidden
+    // input then), so this guards it.
     function clearSelection() {
       state.date = null;
       state.startHour = null;
+      state.startMinute = null;
       state.endHour = null;
+      state.endMinute = null;
       startInput.value = "";
       if (endInput) endInput.value = "";
       updateTrigger();
@@ -525,34 +702,13 @@
       close();
     }
 
-    function renderFooter() {
-      const footer = document.createElement("div");
-      footer.className = "dtp-panel-footer";
-
-      if (!submit) {
-        const clear = document.createElement("button");
-        clear.type = "button";
-        clear.className = "btn outlined btn-sm";
-        clear.innerHTML = ICON.x + "Clear";
-        clear.addEventListener("click", clearSelection);
-        footer.appendChild(clear);
-      }
-
-      const apply = document.createElement("button");
-      apply.type = "button";
-      apply.className = "btn primary btn-sm";
-      apply.innerHTML = ICON.check + "Apply";
-      apply.addEventListener("click", applySelection);
-      footer.appendChild(apply);
-
-      panel.appendChild(footer);
-    }
-
     // ------------------------------------------------------------------ //
     // Commit
     // ------------------------------------------------------------------ //
-    function minuteFor(hour, orig) {
-      return hour === orig.hour ? orig.minute : 0;
+    function haveCompleteValue() {
+      if (mode === "range") return !!state.date && state.startHour !== null && state.endHour !== null;
+      if (mode === "time") return state.startHour !== null && state.endHour !== null;
+      return !!state.date;
     }
 
     // Fires the same change event the native input this picker replaces
@@ -565,32 +721,34 @@
       startInput.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    function applySelection() {
-      if (mode === "date") {
-        if (!state.date) return;
-        startInput.value = state.date;
+    // Range/time modes' live-commit path (2026-09-03) -- every chip edit
+    // calls this directly instead of waiting for an Apply click that no
+    // longer exists. Writes whatever is currently complete to the hidden
+    // inputs and updates the trigger label; leaves the panel open (unlike
+    // date mode's applySelection(), which both commits and closes on a
+    // single day pick) since a chip edit is one segment of a value the
+    // user is very likely still adjusting.
+    function commitLive() {
+      if (!haveCompleteValue()) {
         updateTrigger();
-        commitChange();
-        close();
-        if (submit) {
-          const form = container.closest("form");
-          if (form) form.requestSubmit();
-        }
         return;
       }
-      const haveRange = state.startHour !== null && state.endHour !== null;
-      if (mode === "range" && (!state.date || !haveRange)) return;
-      if (mode === "time" && !haveRange) return;
-
-      const startMin = minuteFor(state.startHour, state.origStart);
-      const endMin = minuteFor(state.endHour, state.origEnd);
-      if (mode === "time") {
-        startInput.value = pad2(state.startHour) + ":" + pad2(startMin);
-        endInput.value = pad2(state.endHour) + ":" + pad2(endMin);
-      } else {
-        startInput.value = state.date + "T" + pad2(state.startHour) + ":" + pad2(startMin);
-        endInput.value = state.date + "T" + pad2(state.endHour) + ":" + pad2(endMin);
+      if (mode === "range") {
+        startInput.value = state.date + "T" + pad2(state.startHour) + ":" + pad2(state.startMinute || 0);
+        endInput.value = state.date + "T" + pad2(state.endHour) + ":" + pad2(state.endMinute || 0);
+      } else if (mode === "time") {
+        startInput.value = pad2(state.startHour) + ":" + pad2(state.startMinute || 0);
+        endInput.value = pad2(state.endHour) + ":" + pad2(state.endMinute || 0);
       }
+      updateTrigger();
+      commitChange();
+    }
+
+    // Date mode only now -- range/time commit live (commitLive above) as
+    // each segment is edited, so they never call this.
+    function applySelection() {
+      if (!state.date) return;
+      startInput.value = state.date;
       updateTrigger();
       commitChange();
       close();
@@ -626,6 +784,7 @@
         return;
       }
       if (openInst) openInst.close();
+      state.dirty = false;
       const pt = document.getElementById("multiselect-portal");
       if (pt) pt.appendChild(panel);
       panel.classList.add("is-open");
@@ -641,6 +800,16 @@
           trigger.setAttribute("aria-expanded", "false");
           panel.style.left = panel.style.top = panel.style.minWidth = "";
           container.appendChild(panel);
+          // Range/time + submit (Work sessions' set-times, event_detail's
+          // "Move this occurrence"): there's no Apply button left to post
+          // the form, so closing a panel that was actually edited into a
+          // complete value is what posts it now -- `dirty` (reset on open,
+          // set on any real edit) keeps a no-op open-then-close from
+          // silently re-submitting unchanged values.
+          if (submit && mode !== "date" && state.dirty && haveCompleteValue()) {
+            const form = container.closest("form");
+            if (form) form.requestSubmit();
+          }
         },
       };
     }
@@ -655,6 +824,8 @@
     trigger.addEventListener("click", open);
 
     // Keyboard navigation inside the panel: arrows move, Enter selects.
+    // Chip keydowns are handled by onChipKeydown (attached per-chip in
+    // buildChip) rather than here.
     panel.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -663,47 +834,37 @@
         return;
       }
       const day = e.target.closest(".dtp-day");
-      const hour = e.target.closest(".dtp-hour");
-      if (day) {
-        const { year, month, day: d } = parseDateKey(day.dataset.date);
-        let moved = null;
-        if (e.key === "ArrowLeft") moved = addDays(new Date(year, month - 1, d), -1);
-        else if (e.key === "ArrowRight") moved = addDays(new Date(year, month - 1, d), 1);
-        else if (e.key === "ArrowUp") moved = addDays(new Date(year, month - 1, d), -7);
-        else if (e.key === "ArrowDown") moved = addDays(new Date(year, month - 1, d), 7);
-        else if (e.key === "Enter" || e.key === " ") {
-          if (day.classList.contains("is-disabled")) {
-            e.preventDefault();
-            return;
-          }
-          state.date = day.dataset.date;
-          renderPanel();
+      if (!day) return;
+      const { year, month, day: d } = parseDateKey(day.dataset.date);
+      let moved = null;
+      if (e.key === "ArrowLeft") moved = addDays(new Date(year, month - 1, d), -1);
+      else if (e.key === "ArrowRight") moved = addDays(new Date(year, month - 1, d), 1);
+      else if (e.key === "ArrowUp") moved = addDays(new Date(year, month - 1, d), -7);
+      else if (e.key === "ArrowDown") moved = addDays(new Date(year, month - 1, d), 7);
+      else if (e.key === "Enter" || e.key === " ") {
+        if (day.classList.contains("is-disabled")) {
           e.preventDefault();
           return;
         }
-        if (moved) {
-          e.preventDefault();
-          const ky = dateKey(moved.getFullYear(), moved.getMonth() + 1, moved.getDate());
-          if (moved.getFullYear() !== state.viewYear || moved.getMonth() + 1 !== state.viewMonth) {
-            state.viewYear = moved.getFullYear();
-            state.viewMonth = moved.getMonth() + 1;
-            renderPanel();
-          }
-          const target = panel.querySelector('.dtp-day[data-date="' + ky + '"]');
-          if (target) target.focus();
+        state.date = day.dataset.date;
+        if (mode === "range") {
+          state.dirty = true;
+          commitLive();
         }
-      } else if (hour) {
-        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.preventDefault();
-          const delta = e.key === "ArrowUp" ? -1 : 1;
-          const all = Array.from(panel.querySelectorAll(".dtp-hour"));
-          const idx = all.indexOf(hour);
-          const next = all[Math.min(Math.max(idx + delta, 0), all.length - 1)];
-          if (next) next.focus();
-        } else if (e.key === "Enter" || e.key === " ") {
-          pickHour(parseInt(hour.dataset.hour, 10));
-          e.preventDefault();
+        renderPanel();
+        e.preventDefault();
+        return;
+      }
+      if (moved) {
+        e.preventDefault();
+        const ky = dateKey(moved.getFullYear(), moved.getMonth() + 1, moved.getDate());
+        if (moved.getFullYear() !== state.viewYear || moved.getMonth() + 1 !== state.viewMonth) {
+          state.viewYear = moved.getFullYear();
+          state.viewMonth = moved.getMonth() + 1;
+          renderPanel();
         }
+        const target = panel.querySelector('.dtp-day[data-date="' + ky + '"]');
+        if (target) target.focus();
       }
     });
 
