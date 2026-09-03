@@ -20,6 +20,8 @@ from starlette.requests import Request
 
 from src import db, deps
 from src.routers import banners as banners_router
+from src.routers import calendar as calendar_router
+from src.routers import contacts as contacts_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
 from src.routers import projects as projects_router
@@ -386,15 +388,24 @@ class TestLabelSettingsBannerEntryPoint:
 
 
 class TestBannerRendersOnTaskDetailAndKanban:
-    """The two consumers of db.banner_for_task besides a label's own
-    generated page (2026-08-30 direct request): task_detail.html's modal
-    header and project_detail.html's Kanban cards."""
+    """The consumers of db.banner_for_task/db.banner_for_object besides a
+    label's own generated page (2026-08-30 direct request for tasks/kanban;
+    2026-09-03 direct request generalized the resolution to every detail
+    modal's cover banner -- "I like variant B so much I want it to be the
+    baseline for all view modal windows"): task_detail.html's (and now
+    event_detail.html's/contact_detail.html's) cover banner, and
+    project_detail.html's Kanban cards. 2026-09-03: task_detail.html's old
+    standalone `.detail-modal-banner` body strip is gone -- the resolved
+    image now renders inside the shared `.detail-cover` (`.detail-cover-img`)
+    in the header instead, so these two tests assert the new class/location."""
 
-    def test_task_detail_shows_no_banner_by_default(self, conn):
+    def test_task_detail_shows_the_gradient_fallback_by_default(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [], "created_at": _now()})
         resp = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn)
         assert resp.context["banner"] is None
-        assert "detail-modal-banner" not in resp.body.decode()
+        body = resp.body.decode()
+        assert 'class="detail-cover-fill"' in body
+        assert "detail-cover-img" not in body
 
     def test_task_detail_shows_the_resolved_label_banner(self, conn):
         # cached=False (the default) -- a hotlink-only legacy remote banner
@@ -407,8 +418,40 @@ class TestBannerRendersOnTaskDetailAndKanban:
         resp = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn)
         assert resp.context["banner"]["image_url"] == "https://cdn.example.com/label.jpg"
         body = resp.body.decode()
-        assert 'class="detail-modal-banner"' in body
+        assert 'class="detail-cover-img"' in body
         assert 'src="https://cdn.example.com/label.jpg"' in body
+        assert "detail-cover-fill" not in body
+
+    def test_event_detail_shows_the_resolved_label_banner(self, conn):
+        # db.banner_for_object generalized from db.banner_for_task
+        # 2026-09-03 -- events now resolve the same way, wired up in
+        # routers/calendar.py's event_detail (STATE.md had flagged this as
+        # "generalizes, just not wired to event_detail.html yet").
+        _make_label(conn, "Work")
+        _set_remote(conn, scope="Work", image_url="https://cdn.example.com/work.jpg")
+        db.upsert_event(
+            conn,
+            {
+                "uid": "e1", "title": "e1", "description": "", "start_at": "2026-09-04T09:00:00",
+                "status": "active", "all_day": False, "created_at": _now(), "updated_at": _now(),
+            },
+        )
+        db.set_object_labels(conn, "event", "e1", ["Work"])
+        resp = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn)
+        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/work.jpg"
+        body = resp.body.decode()
+        assert 'class="detail-cover-img"' in body
+        assert 'src="https://cdn.example.com/work.jpg"' in body
+
+    def test_contact_detail_falls_back_to_a_stable_color_when_no_banner(self, conn):
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada Lovelace", "created_at": _now(), "updated_at": _now()})
+        resp = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn)
+        assert resp.context["banner"] is None
+        body = resp.body.decode()
+        assert 'class="detail-cover-fill"' in body
+        # deps._stable_color("c1") is deterministic, so this is exact, not
+        # just "some cal-accent value is present."
+        assert f"--cover-accent:var(--cal-accent-{deps._stable_color('c1')})" in body
 
     def test_kanban_card_carries_the_resolved_project_banner(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})

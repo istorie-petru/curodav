@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html/task_detail.html for why this is wrapped -- opens
@@ -20,6 +21,17 @@
      the plain .detail-meta-panel (style.css), not the elevated tonal
      .detail-card the paragraph above originally described.
 
+     2026-09-03 direct request, same day ("I like variant B so much I want
+     it to be the baseline for all view modal windows") -- the avatar moved
+     out of the title row and into the shared _detail_cover.html cover
+     banner's floating badge slot (avatar_mode=true -- a ringed photo/
+     initials circle instead of an icon on a white card). Cover fill is the
+     contact's resolved label/Project/Space banner image
+     (db.banner_for_object) when set, else a flat gradient in a color
+     derived from the contact's own uid (deps.py's stable_color) -- contacts
+     have no color field of their own the way events/tasks do, and a flat
+     neutral cover for every contact would have looked undesigned.
+
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
      for "Save"), and #modal-target carries the modal-stable-height marker
@@ -29,20 +41,22 @@
 <div id="modal-target" class="modal-stable-height">
 {% if contact %}
 <div class="modal-header">
-    {{ avatar(contact, 'avatar-large') }}
-    <div class="detail-heading-text">
-        <h1 class="detail-title">{{ contact.full_name }}</h1>
-        {% if contact.title or contact.org %}
-        <div class="detail-heading-sub">
-            {%- if contact.title and contact.org -%}
-            {{ contact.title }} at {{ contact.org }}
-            {%- elif contact.title -%}
-            {{ contact.title }}
-            {%- else -%}
-            {{ contact.org }}
-            {%- endif -%}
+    {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, avatar(contact, 'avatar-large'), avatar_mode=true) }}
+    <div class="detail-heading-row">
+        <div class="detail-heading-text">
+            <h1 class="detail-title">{{ contact.full_name }}</h1>
+            {% if contact.title or contact.org %}
+            <div class="detail-heading-sub">
+                {%- if contact.title and contact.org -%}
+                {{ contact.title }} at {{ contact.org }}
+                {%- elif contact.title -%}
+                {{ contact.title }}
+                {%- else -%}
+                {{ contact.org }}
+                {%- endif -%}
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </div>
 

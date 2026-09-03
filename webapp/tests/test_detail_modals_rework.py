@@ -12,6 +12,9 @@ three contexts in a single stroke):
 2. The header carries the entity's identity at a glance: a large bold
    `.detail-title` plus a colored `.detail-identity-dot` (event's calendar
    color, task's status color) or the contact's `.avatar-large`.
+   (2026-09-03: the identity dot/avatar moved into the shared
+   `_detail_cover.html` cover banner's floating badge -- see
+   `TestIdentityMark` below, updated the same day.)
 
 3. The body holds the 2-column `.detail-meta-grid`, whose values use the
    crisp `.detail-meta-value` typography. (2026-09-03 direct feedback:
@@ -137,31 +140,40 @@ class TestDetailModalSections:
 
 
 class TestIdentityMark:
-    """The header leads with a big bold title plus a color-coded dot (or
-    the contact's avatar), so the entity is identified at a glance."""
+    """The header leads with a cover banner whose floating badge carries a
+    color-coded icon (or the contact's avatar), so the entity is identified
+    at a glance. 2026-09-03: rewritten for the Variant B cover-banner
+    baseline ("I like variant B so much I want it to be the baseline for
+    all view modal windows") -- the old .detail-identity-dot beside the
+    title is gone; the same color now drives .detail-cover-icon's `color`
+    (an icon's stroke is `currentColor`, see style.css's `.icon` rule) when
+    no real banner image is resolved."""
 
-    def test_event_identity_dot_uses_calendar_color(self, conn):
+    def test_event_identity_badge_uses_calendar_color(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-blue"' in body
+        assert 'class="detail-cover-icon" style="color:var(--cal-accent-blue)"' in body
+        assert '#icon-calendar' in body
         assert 'class="detail-title"' in body
 
-    def test_event_identity_dot_follows_a_label_color(self, conn):
+    def test_event_identity_badge_follows_a_label_color(self, conn):
         # An event's calendar_color is its first label's color -- a red
-        # label must drive both the identity dot and the Start value's own
-        # color-dot (2026-09-03: the meta panel itself no longer carries a
-        # colored accent, so these two are the only remaining color tells).
+        # label must drive both the cover badge's color and the Start
+        # value's own color-dot (2026-09-03: the meta panel itself no
+        # longer carries a colored accent, so these two are the only
+        # remaining color tells).
         _seed_event(conn, "e1")
         db.upsert_label_config(conn, {"name": "Work", "color": "red"})
         db.set_object_labels(conn, "event", "e1", ["Work"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-red"' in body
+        assert 'class="detail-cover-icon" style="color:var(--cal-accent-red)"' in body
         assert 'class="color-dot cal-red"' in body
 
-    def test_task_identity_dot_uses_status_color(self, conn):
+    def test_task_identity_badge_uses_status_color(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-orange"' in body
+        assert 'class="detail-cover-icon" style="color:var(--cal-accent-orange)"' in body
+        assert '#icon-check-square' in body
         assert 'class="detail-title"' in body
 
     def test_task_detail_has_no_subtask_identity(self, conn):

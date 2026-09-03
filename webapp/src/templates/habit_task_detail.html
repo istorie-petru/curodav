@@ -2,6 +2,7 @@
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Habit" }}{% endblock %}
 {% block content %}
 <!-- Dedicated view modal for a habit-tracked task (2026-08-29 direct
@@ -16,12 +17,25 @@
      source _completion_heatmap_weeks/_habit_group_items already read),
      current streak via the same habit_streak_text() phrasing the Habits
      group's row uses, and the Work sessions card so sessions can be added
-     here exactly like any other task's Work sessions card. -->
+     here exactly like any other task's Work sessions card.
+
+     2026-09-03 direct request ("I like variant B so much I want it to be
+     the baseline for all view modal windows") -- this header had no
+     identity mark at all before (no dot, unlike task_detail.html); it now
+     gets the same shared _detail_cover.html cover banner every other
+     detail modal has, reusing the same status_colors/banner context keys
+     tasks_router.task_detail already puts on `ctx` for both templates
+     (habit_task_detail.html is a habit-tracked task rendered via that same
+     route) -- a repeat icon distinguishes it from a plain task's
+     check-square. -->
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    <div class="detail-heading-text">
-        <h1 class="detail-title">{{ task.title }}</h1>
+    {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('repeat')) }}
+    <div class="detail-heading-row">
+        <div class="detail-heading-text">
+            <h1 class="detail-title">{{ task.title }}</h1>
+        </div>
     </div>
 </div>
 

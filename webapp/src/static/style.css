@@ -1125,23 +1125,22 @@ label.seg-btn[hidden]{display:none;}
   .detail-meta-grid{grid-template-columns:1fr;}
 }
 
-/* Identity mark in the modal header (event_detail/task_detail) -- a
-   saturated dot in the entity's own color, the same .cal-* hues the
-   calendar swatches use, so the object's identity is readable at a
-   glance before any field value. Slightly larger than .color-dot and
-   ringed with a hairline so it reads against both the light and dark
-   dialog surfaces. Contacts use the avatar instead (see .avatar-large). */
-.detail-identity-dot{width:14px; height:14px; border-radius:50%; flex:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
-/* Title + optional subtitle column inside .modal-header (contact org,
-   a task's parent). .modal-header h1 already owns flex:1/ellipsis; this
-   only layers a subtitle line beneath it. */
+/* 2026-09-03: the old .detail-identity-dot (a saturated dot in the
+   entity's own color, sitting beside the title) is gone -- that identity
+   signal now lives in the cover's icon badge instead (.detail-cover-icon
+   above), which is why this class has no rule anymore. Contacts' avatar
+   moved the same way, from beside the title into the cover's badge slot
+   (.detail-cover-icon-avatar) -- see _detail_cover.html. */
+/* Title + optional subtitle column inside .detail-heading-row (contact
+   org, a task's parent). .detail-heading-row h1 already owns
+   flex:1/ellipsis; this only layers a subtitle line beneath it. */
 .detail-heading-text{flex:1; min-width:0;}
 .detail-heading-text h1{margin:0;}
-/* Large, bold semantic title for the detail modals -- .modal-header h1
-   already provides the base size/ellipsis; this layers on the heavier
+/* Large, bold semantic title for the detail modals -- .detail-heading-row
+   h1 already provides the base size/ellipsis; this layers on the heavier
    weight and tighter tracking that makes the entity's name the dominant
    thing in the dialog. */
-.modal-header .detail-title{font-weight:700; letter-spacing:-0.3px;}
+.detail-heading-row .detail-title{font-weight:700; letter-spacing:-0.3px;}
 .detail-heading-sub{margin-top:2px; font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 /* The elevated "panel" every detail modal's body is wrapped in -- a
@@ -3536,18 +3535,77 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    from{opacity:.6; transform:translateY(5px) scale(.995);}
    to{opacity:1; transform:translateY(0) scale(1);}
 }
-/* Modal header -- MD3 top app bar pattern inside the dialog: title
-    on the left, close button on the right, separated by a subtle
-    divider from the body. Gives the dialog a clear "page" identity
-    instead of floating content with no hierarchy. */
+/* Modal header -- MD3 top app bar pattern inside the dialog, holding the
+    cover banner (see .detail-cover below) above a title row, separated
+    from the body by a subtle divider. 2026-09-03: was a single flex row
+    (dot + title); now a column so the cover can bleed edge-to-edge above
+    the title row's own padding. static/modal.js's injectModalContent only
+    copies this div's *innerHTML* into the dialog's persistent #modal-header
+    (which already carries this same class/CSS) when opened as a JS modal
+    -- so this rule change applies uniformly to both the direct full-page
+    render and the modal-JS path, but any conditional styling has to live
+    on a *child* element's own class (.detail-cover-fill vs. an <img>),
+    never on this div's own class list, or it would silently vanish in the
+    modal-JS path. */
 .modal-header{
-   display:flex; align-items:center; gap:var(--space-3);
-   padding:var(--space-4) var(--space-5) var(--space-3);
-   padding-right:44px;
+   display:flex; flex-direction:column;
    border-bottom:1px solid var(--separator);
    flex:none;
 }
-.modal-header h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* Cover banner -- Variant B baseline (2026-09-03 direct request: "I like
+    variant B so much I want it to be the baseline for all view modal
+    windows"). Full-bleed strip at the very top of the header (zero
+    padding on .modal-header above makes this flush with the dialog's own
+    edges), a real resolved banner image when one exists or a flat
+    accent-gradient fill otherwise (see _detail_cover.html), with a
+    floating icon/avatar badge overlapping its bottom edge. border-radius
+    only matters on the direct full-page render (no dialog chrome there);
+    inside the actual .modal dialog it's redundant with that element's own
+    overflow:hidden + border-radius:28px, which already clips this to the
+    same rounded top corners for free. */
+.detail-cover{
+   position:relative; height:72px; overflow:hidden; flex:none;
+   border-radius:20px 20px 0 0; background:var(--bg-secondary);
+}
+.detail-cover-img{width:100%; height:100%; object-fit:cover; display:block;}
+.detail-cover-fill{
+   width:100%; height:100%;
+   background:radial-gradient(120% 160% at 15% 15%, rgba(255,255,255,.22), transparent 55%), var(--cover-accent);
+}
+/* Floating badge overlapping the cover's bottom edge -- an icon on a small
+    white card (event/task/habit-task) or a ringed avatar (contact, see
+    .detail-cover-icon-avatar below). bottom:-18px + height:44px means it
+    reads roughly 26px into the cover and 18px below it; .detail-heading-row's
+    own top padding (24px) is sized to clear that 18px overhang plus a
+    small gap, not tied to this value by anything but eyeballing -- if this
+    height/offset ever changes, re-check that padding too. */
+.detail-cover-icon{
+   position:absolute; left:var(--space-5); bottom:-18px; width:44px; height:44px;
+   border-radius:var(--radius-md); background:var(--bg-elevated); box-shadow:var(--shadow-card);
+   border:1px solid var(--separator);
+   display:flex; align-items:center; justify-content:center;
+}
+.detail-cover-icon .icon{width:20px; height:20px;}
+/* Contact's avatar badge -- the photo/initials circle already reads as an
+    identity mark on its own; a white icon-card background under it would
+    look like an unwanted frame around a photo, so this strips that chrome
+    down to a thin ring (box-shadow, not border, so it doesn't add to the
+    circle's own box size) instead. */
+.detail-cover-icon-avatar{background:none; border:none; box-shadow:none;}
+.detail-cover-icon-avatar .avatar-circle{
+   width:100%; height:100%; font-size:16px;
+   box-shadow:0 0 0 3px var(--bg-elevated), var(--shadow-card);
+}
+/* Title row below the cover -- top padding clears the badge's overhang
+    (see .detail-cover-icon's comment), side padding matches the old
+    .modal-header's own (var(--space-5), minus the close-button gutter on
+    the right). */
+.detail-heading-row{
+   display:flex; align-items:flex-start; gap:var(--space-3);
+   padding:24px var(--space-5) var(--space-4);
+   padding-right:44px;
+}
+.detail-heading-row h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .modal-close{
    position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
    justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
@@ -3563,18 +3621,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      full-page version's markup. */
  .modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
  .modal-body .card:hover{box-shadow:none;}
- /* task_detail.html's resolved banner strip (2026-08-30, db.banner_for_
-    task) -- bleeds to .modal-body's own left/right/top edges (negative
-    margin matching its padding exactly) so it reads as a hero image sitting
-    flush under the header's divider line, not an inset thumbnail; no
-    border-radius since it doesn't reach the dialog's own rounded corners
-    (the header sits above it and already owns those). Always the first
-    element in .modal-body -- a task with no resolved banner (the common
-    case) renders the body exactly as before this existed. */
- .detail-modal-banner{
-   width:calc(100% + var(--space-5) * 2); height:120px; object-fit:cover; display:block;
-   margin:calc(var(--space-4) * -1) calc(var(--space-5) * -1) var(--space-4);
- }
+ /* 2026-09-03: task_detail.html's resolved-banner strip (2026-08-30,
+    db.banner_for_task) that used to render here, as the first element in
+    .modal-body, is gone -- its image now renders in the header's own
+    .detail-cover instead (see _detail_cover.html), the same cover slot
+    every other detail modal now has, rather than a task-only extra strip
+    stacked below it. .detail-modal-banner itself is retired (no more
+    consumers -- project_detail.html's Kanban-card banner is a different,
+    unrelated class, .kanban-card-banner, untouched by this). */
 
 /* Modal footer -- MD3 bottom sheet action bar: a flex row of
     buttons at the bottom of the dialog, separated from the body
@@ -3761,7 +3815,9 @@ body.command-palette-open{overflow:hidden;}
      display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
      margin:var(--space-2) auto 0; flex:none; touch-action:none;
    }
-    .modal-header{padding:var(--space-3) var(--space-4) var(--space-2); padding-right:44px;}
+    .detail-cover{height:56px; border-radius:0;}
+    .detail-cover-icon{left:var(--space-4); bottom:-16px; width:40px; height:40px;}
+    .detail-heading-row{padding:22px var(--space-4) var(--space-2); padding-right:44px;}
    .modal-body{padding:var(--space-3) var(--space-4);}
    .modal-footer{padding:var(--space-2) var(--space-4) var(--space-3);}
 }

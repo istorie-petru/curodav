@@ -269,6 +269,22 @@ open piece remains:
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)
 
+## Event banners (not yet scoped)
+
+**Status:** captured 2026-09-03, direct request ("let's not forget") made
+alongside a view-modal mockup pass — not yet designed or slice-sized. Two
+distinct things could be meant, need a decision before this becomes a real
+slice (see `view_modal_mockups.html`, shared with the user the same day, for
+a rough visual of both):
+
+1. **Multi-day event bars spanning cells** in `calendar_month`/`week`/`day`
+   — Google/Outlook-style continuous bar instead of (presumably) a repeated
+   per-day chip. Needs confirming how multi-day events actually render today
+   before scoping the fix.
+2. **"Starting soon" notice banner** — a dismissible strip surfacing the next
+   imminent event wherever the user currently is, closer to a notification
+   than a calendar-rendering change.
+
 ## Known open risks
 
 Model- and architecture-level risks are tracked in

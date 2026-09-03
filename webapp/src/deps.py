@@ -4,6 +4,7 @@ CalDavBridge singleton (writes go through this to reach Radicale)."""
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -139,6 +140,34 @@ def _icon(name: str, cls: str = "") -> Markup:
 
 
 templates.env.globals["icon"] = _icon
+
+
+# Same 16 names as routers/labels.py's COLORS -- not imported directly,
+# since deps.py is imported by every router including labels.py itself
+# (importing back would be circular); duplicated here as a short, stable
+# list rather than restructuring the import graph just for this.
+_STABLE_COLOR_NAMES = (
+    "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
+    "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
+)
+
+
+def _stable_color(seed: str) -> str:
+    """Deterministic `.cal-*`/`--cal-accent-*` color name for something
+    with no color of its own (2026-09-03, contact detail-view cover
+    banner -- Variant B's baseline header treatment needs an accent for
+    every entity type's gradient-fallback cover, but contacts have no
+    color field the way events (calendar_color) and tasks (status) do.
+    A flat neutral cover for every contact would read as "nothing was
+    designed here"; a name-derived color instead gives each contact a
+    stable, distinct identity across visits without adding a real color
+    field/picker to the contact model. Seed on `contact.uid` (stable for
+    the contact's lifetime), not `full_name` (would jump on a rename)."""
+    digest = hashlib.md5(seed.encode("utf-8")).hexdigest()
+    return _STABLE_COLOR_NAMES[int(digest, 16) % len(_STABLE_COLOR_NAMES)]
+
+
+templates.env.globals["stable_color"] = _stable_color
 
 
 def _avatar(contact: dict | None, cls: str = "") -> Markup:

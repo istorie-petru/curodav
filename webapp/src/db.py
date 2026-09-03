@@ -4718,36 +4718,42 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
     return banner
 
 
-def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] | None:
+def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str, Any]) -> dict[str, Any] | None:
     """2026-08-30 (direct request, tasks/kanban banner strip + task detail
-    modal header): the banner a task should show, if any, resolved by
-    priority -- its own directly-set plain label(s) first, then its
-    Project label, then that project's parent Space (`label_config.
-    parent_name`, the "Group" field label_edit_modal.html exposes). No new
-    storage: a label's banner already exists (get_page_banner/
-    routers/banners.py, keyed by label name) as the image a label's own
-    generated dashboard page shows -- this just resolves which one of a
-    task's several labels wins, the same banner data either way.
+    modal header), generalized 2026-09-03 (direct request: the same cover
+    treatment as the baseline "Variant B" detail-modal header for events/
+    contacts/habit-tasks too, not just tasks) -- the banner an object
+    should show, if any, resolved by priority: its own directly-set plain
+    label(s) first, then its Project label, then that project's parent
+    Space (`label_config.parent_name`, the "Group" field
+    label_edit_modal.html exposes). No new storage: a label's banner
+    already exists (get_page_banner/routers/banners.py, keyed by label
+    name) as the image a label's own generated dashboard page shows --
+    this just resolves which one of an object's several labels wins, the
+    same banner data either way.
 
-    `task` needs `uid` (to look up its Project label) and `tags`
-    (routers/tasks.py's task dicts, and db.list_tasks rows, both already
-    carry both). Every tag but the project's own is tried in list order
-    before falling through to the project/Space tiers -- a task with
-    both a Project label and a more specific plain label (e.g. "Client
-    call") should show the specific one, not the broader project's,
-    which is why the project tag itself is skipped in this first pass
-    rather than tried alongside its siblings.
+    `object_type` is whatever `object_labels`/`project_label_for` already
+    key on ("task", "event", "contact" -- anything `set_object_labels` is
+    called with). `obj` needs `uid` (to look up its Project label) and
+    `tags` (every router's own dict-building helper already attaches
+    both -- routers/tasks.py's task dicts, _attach_tags(conn, "event"/
+    "contact", ...), db.list_tasks rows). Every tag but the project's own
+    is tried in list order before falling through to the project/Space
+    tiers -- an object with both a Project label and a more specific
+    plain label (e.g. "Client call") should show the specific one, not
+    the broader project's, which is why the project tag itself is skipped
+    in this first pass rather than tried alongside its siblings.
 
     The returned dict carries one extra key beyond get_page_banner's own
     shape: `scope` -- the label name the banner actually came from. A
     template needs this to build the /banners/image?scope=... URL (an
     uploaded banner's bytes are served per-scope, and the winning scope
-    here is whichever label/project/Space matched, not the task itself,
+    here is whichever label/project/Space matched, not the object itself,
     which has no scope of its own). Safe to inject: this dict is a fresh
     json.loads() from get_page_banner, never written back through
     set_page_banner, so the extra key can't leak into storage."""
-    tags = task.get("tags") or []
-    project = project_label_for(conn, "task", task["uid"]) if task.get("uid") else None
+    tags = obj.get("tags") or []
+    project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:
         if tag == project:
             continue
@@ -4768,6 +4774,17 @@ def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str,
                 banner["scope"] = space
                 return banner
     return None
+
+
+def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] | None:
+    """Thin, name-preserving wrapper over `banner_for_object` for task's
+    two pre-existing consumers (task_detail.html's cover, project_detail.
+    html's Kanban cards) -- kept as its own function (rather than inlining
+    `banner_for_object(conn, "task", task)` at both call sites) so neither
+    call site needed to change when this generalized 2026-09-03, and so
+    test_banners.py's own `TestBannerForTask` keeps testing the exact name
+    it always has."""
+    return banner_for_object(conn, "task", task)
 
 
 def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, Any]) -> None:

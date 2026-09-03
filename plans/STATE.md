@@ -8,6 +8,67 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request, same day (2026-09-03), on top of the two
+  view/edit-modal design follow-ups right below: after a mockup pass (4
+  static HTML variants, shared as a file, not built against real data)
+  exploring ways to "spice up" the bland restyled view modal, the user
+  picked one outright -- "I like variant B so much I want it to be the
+  baseline for all view modal windows. Implement." -- a Notion-style cover
+  banner replacing the plain `.detail-identity-dot + title` header row
+  across all four detail modals (event/task/contact/habit-task).
+  1. **New shared `_detail_cover.html` macro** (`detail_cover(accent,
+     banner, badge_html, avatar_mode=false)`), imported by all four
+     detail templates. Renders a `.detail-cover` strip: a real resolved
+     banner image (`.detail-cover-img`) when one exists, else a flat
+     accent-color gradient fill (`.detail-cover-fill`, CSS custom prop
+     `--cover-accent`) -- with a floating `.detail-cover-icon` badge
+     (a small white icon card, or `.detail-cover-icon-avatar` for
+     contacts, a ringed avatar with no card chrome) overlapping its
+     bottom edge. Which of the two wins was a real design collision, not
+     a guess -- resolved via AskUserQuestion before touching any code
+     (real image wins, color is the fallback, one cover slot instead of
+     stacking a color header above the pre-existing task image banner).
+  2. **`db.banner_for_task` generalized to `db.banner_for_object(conn,
+     object_type, obj)`** (same label > Project > Space priority chain,
+     now keyed on any `object_labels` type) -- `banner_for_task` kept as
+     a thin name-preserving wrapper so its own tests and both pre-existing
+     call sites (task_detail, project_detail's Kanban cards) didn't need
+     to change. Wired up fresh for events (`routers/calendar.py`'s
+     `event_detail` -- STATE.md had flagged this exact gap, "generalizes,
+     just not wired to event_detail.html yet") and contacts
+     (`routers/contacts.py`'s `contact_detail`); habit-task detail reuses
+     task_detail's route so it got `banner`/`status_colors` for free.
+  3. **New `deps.py` global `stable_color(seed)`** -- contacts have no
+     color field the way events (calendar_color) and tasks (status) do,
+     so a contact's cover-fill color is deterministically derived from
+     its own `uid` (md5 -> one of the same 16 `.cal-*` names
+     routers/labels.py's `COLORS` uses, duplicated locally rather than
+     imported to avoid a circular import with routers/labels.py).
+  4. **task_detail.html's old standalone `.detail-modal-banner` body
+     strip is retired** -- that resolved image now renders inside the
+     new cover instead of a second, separate strip below the header.
+     `.detail-identity-dot` CSS is removed too (its only other consumers,
+     `_task_relations.html`/`_event_relations.html`, were already dead/
+     unreferenced templates per routers/tasks.py's and routers/
+     calendar.py's own "now unreferenced" comments -- confirmed via grep
+     before removing, not assumed).
+  `.modal-header` restructured from a single flex row to a column (cover
+  above a new `.detail-heading-row` for the title) -- a global rule
+  change, safe because static/modal.js's `injectModalContent` copies this
+  div's *children* into the dialog's persistent `#modal-header` (which
+  carries the same class/CSS), never the div's own class list, so no
+  modifier class on `.modal-header` itself would have survived the
+  modal-JS path; every state that differs (image vs. gradient) lives on a
+  child element's class instead. Mobile breakpoint updated to match
+  (shorter, unrounded cover under the bottom-sheet's drag handle).
+  `sw.js` CACHE_NAME bumped v47 -> v48, `test_pwa_shell.py`'s pin updated.
+  `test_detail_modals_rework.py`'s `TestIdentityMark` rewritten for the
+  new markup (3 tests); `test_banners.py`'s task-detail banner tests
+  updated for the new `.detail-cover-img`/`.detail-cover-fill` classes/
+  location, plus 2 new tests covering the event/contact wiring. Full
+  suite: 1952 passed (four parallel chunks by file, same convention as
+  every other multi-file session this file documents).
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), on top of the
   Format-toggle rework right below: "make the input boxes more dense: half
   width modal windows (especially valuable for the reminders, recurrence,

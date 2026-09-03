@@ -1136,6 +1136,12 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "event": event,
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
+            # 2026-09-03 (direct request, view-modal cover banner baseline)
+            # -- same resolved label/Project/Space banner db.banner_for_task
+            # already gave tasks, generalized to db.banner_for_object and
+            # wired up here too (STATE.md had flagged this as "generalizes,
+            # just not wired to event_detail.html yet").
+            "banner": db.banner_for_object(conn, "event", event) if event else None,
         },
     )
 

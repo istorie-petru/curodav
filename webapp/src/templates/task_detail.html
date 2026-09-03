@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js. Task
@@ -37,6 +38,17 @@
      The Work sessions card below it is a separate, real .detail-card,
      unchanged.
 
+     2026-09-03 direct request, same day ("I like variant B so much I want
+     it to be the baseline for all view modal windows") -- the header's old
+     colored dot + title row is now the shared _detail_cover.html cover
+     banner, and the resolved banner image (db.banner_for_task) that used
+     to render as its own hero strip at the top of .modal-body moved *into*
+     that same cover slot instead of staying a second, separate banner --
+     stacking a color header above an image banner would have looked like
+     two unrelated banners, confirmed via AskUserQuestion rather than
+     guessed. A task with no resolved banner gets the flat gradient fill in
+     its status color instead, with a floating check-square icon badge.
+
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
      for "Save"), and #modal-target carries the modal-stable-height marker
@@ -46,34 +58,15 @@
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    <span class="detail-identity-dot cal-{{ status_colors[task.status] }}"></span>
-    <div class="detail-heading-text">
-        <h1 class="detail-title">{{ task.title }}</h1>
+    {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
+    <div class="detail-heading-row">
+        <div class="detail-heading-text">
+            <h1 class="detail-title">{{ task.title }}</h1>
+        </div>
     </div>
 </div>
 
 <div class="modal-body">
-{# 2026-08-30 (direct request) -- db.banner_for_task's resolved label/
-   project/Space banner, if any, as a hero strip at the top of the body.
-   Deliberately inside .modal-body (not a sibling of .modal-header/
-   .modal-body) -- static/modal.js's injectModalContent only copies the
-   innerHTML of the three named .modal-header/-body/-footer sections into
-   the dialog's persistent slots when opened via data-modal, so anything
-   sitting outside all three would silently vanish in the actual modal
-   (not the no-JS full-page fallback, where it'd still show -- exactly
-   the kind of "works standalone, broken as a modal" gap this app's
-   progressive-enhancement pattern is meant to avoid). version gates
-   served-bytes vs. a legacy hotlink-only remote banner's own image_url,
-   same branch _page_banner.html/banner_editor.html both use. Purely
-   additive -- a task with no resolvable banner (the common case) renders
-   this body exactly as before. #}
-{% if banner %}
-{% if banner.version %}
-<img class="detail-modal-banner" src="/banners/image?scope={{ banner.scope|urlencode }}&amp;v={{ banner.version }}" alt="">
-{% else %}
-<img class="detail-modal-banner" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
-{% endif %}
-{% endif %}
 <div class="detail-meta-panel">
     <div class="detail-meta-grid">
         <div class="detail-meta-item">

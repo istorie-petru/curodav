@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
 {% block content %}
 <!-- 2026-08-08 direct feedback ("add for events a way like for tasks to
@@ -25,6 +26,16 @@
      described. The occurrence card rendered conditionally further down
      keeps the real .detail-card treatment; only the meta grid changed.
 
+     2026-09-03 direct request, same day ("I like variant B so much I want
+     it to be the baseline for all view modal windows") -- the header's
+     old colored dot + title row is now the shared _detail_cover.html cover
+     banner: the event's resolved label/Project/Space banner image
+     (db.banner_for_object, routers/calendar.py's event_detail) when one
+     exists, else a flat gradient fill in the event's own calendar color,
+     with a floating calendar-icon badge overlapping the cover's bottom
+     edge. See _detail_cover.html's own docstring for why image-vs-color
+     was a real decision, not a guess.
+
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
      for "Save"), and #modal-target carries the modal-stable-height marker
@@ -34,8 +45,12 @@
 <div id="modal-target" class="modal-stable-height">
 {% if event %}
 <div class="modal-header">
-    <span class="detail-identity-dot cal-{{ event.calendar_color }}"></span>
-    <h1 class="detail-title">{{ event.title }}</h1>
+    {{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}
+    <div class="detail-heading-row">
+        <div class="detail-heading-text">
+            <h1 class="detail-title">{{ event.title }}</h1>
+        </div>
+    </div>
 </div>
 
 <div class="modal-body">

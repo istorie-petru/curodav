@@ -1,0 +1,53 @@
+{# Shared detail-modal cover banner -- 2026-09-03 direct request ("I like
+   variant B so much I want it to be the baseline for all view modal
+   windows"), replacing the old plain `.detail-identity-dot + title` header
+   row across event_detail.html/task_detail.html/contact_detail.html/
+   habit_task_detail.html with one Notion-style cover strip: a resolved
+   real banner image when the entity's label/Project/Space has one set
+   (db.banner_for_object, already existed for tasks as db.banner_for_task
+   -- generalized rather than duplicated), falling back to a flat
+   accent-color gradient fill (the entity's own identity color: event's
+   calendar color, task/habit's status color, a contact's name-derived
+   `stable_color`) when it doesn't -- decided over AskUserQuestion rather
+   than guessing, since stacking both a color header AND the pre-existing
+   task-body image banner would have looked like two unrelated banners.
+
+   One cover slot either way, so a task/event/contact with a real banner
+   never shows a redundant color header behind it, and one that doesn't
+   still gets a header worth looking at instead of a bare title.
+
+   Params:
+     accent      -- a ready-to-use CSS color value, e.g. "var(--cal-accent-blue)"
+                     (only used for the gradient-fallback fill + the icon
+                     badge's color when `banner` is falsy).
+     banner      -- db.banner_for_object's result dict, or None/undefined.
+                     Reads `version` + `scope` (served-bytes /banners/image
+                     URL, same version-gated branch _page_banner.html/
+                     task_detail.html's old body banner both already use)
+                     or `image_url` (legacy hotlink-only remote banner).
+     badge_html  -- pre-rendered Markup for the floating badge -- an
+                     `icon(...)` call for events/tasks/habit-tasks, or
+                     `avatar(contact, 'avatar-large')` for contacts.
+     avatar_mode -- true for the contact avatar badge, which replaces the
+                     badge's own white card chrome with a plain ring
+                     (the avatar already reads as a photo, not an icon
+                     needing a background to sit on).
+
+   Import `with context` -- reads nothing from context directly today, but
+   matches every other partial macro in this app (label_pill etc.) so a
+   future edit that does need request/settings doesn't have to also go
+   fix every import site. #}
+{% macro detail_cover(accent, banner, badge_html, avatar_mode=false) %}
+<div class="detail-cover">
+    {% if banner %}
+        {% if banner.version %}
+        <img class="detail-cover-img" src="/banners/image?scope={{ banner.scope|urlencode }}&amp;v={{ banner.version }}" alt="">
+        {% else %}
+        <img class="detail-cover-img" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+        {% endif %}
+    {% else %}
+    <div class="detail-cover-fill" style="--cover-accent:{{ accent }}"></div>
+    {% endif %}
+    <div class="detail-cover-icon{% if avatar_mode %} detail-cover-icon-avatar{% endif %}"{% if not banner %} style="color:{{ accent }}"{% endif %}>{{ badge_html }}</div>
+</div>
+{% endmacro %}

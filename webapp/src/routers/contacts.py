@@ -325,6 +325,10 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
+            # 2026-09-03 (direct request, view-modal cover banner baseline)
+            # -- same resolved label/Project/Space banner db.banner_for_task
+            # already gave tasks, generalized to db.banner_for_object.
+            "banner": db.banner_for_object(conn, "contact", contact) if contact else None,
         },
     )
 
