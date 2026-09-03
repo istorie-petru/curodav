@@ -1930,7 +1930,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
       #labels-table's own scoped override above already documents -- a bare
       `tbody td` rule would have shrunk every other table in the app too. */
 .task-table thead th{padding:8px 8px;}
-.task-table tbody td{padding:8px 8px;}
+.task-table tbody td{padding:8px 8px; font-size:var(--text-footnote);}
 /* 2. Groups -- 2026-09-03 direct follow-up ("I want the white background
    of the card div back"): the flattened/borderless treatment this rule
    used to apply (`background:none`, no shadow, no hover-lift -- shipped
@@ -1961,6 +1961,19 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    `.dtp--compact`'s own override, which only ever touched padding/border/
    background). */
 .dtp--compact .dtp-trigger{color:var(--fg-secondary);}
+/* 2026-09-03 further follow-up ("the font in the tasks table is much too
+   small, compare the two tables -- I want a much more standardized
+   font"): the compact date trigger's own site-wide rule (`.dtp--compact
+   .dtp-trigger`, further down this file) hardcodes `font-size:var(--text-
+   caption)` (13px) for every one of its callers, including the Work-
+   sessions card's inline date -- inside this table specifically that sat
+   next to Habits' plain-text Cadence cell (`.text-muted`, no size
+   override, inheriting whatever the table's base size was), which read as
+   two different sizes on what's visually the same "small metadata text"
+   role. Overridden back to this table's own unified size (right below,
+   `.task-table tbody td`) rather than any fixed number, so Date always
+   tracks whatever that one baseline is. */
+.task-table .dtp--compact .dtp-trigger{font-size:inherit;}
 /* 4. Status: compact colored chip instead of a full-width pill block --
    shrunk further than the existing `.pill-select-trigger` padding/font
    (already fairly small, from the 2026-08-29 native-<select> replacement),
@@ -1971,9 +1984,17 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    than two states" is "use a tiny status indicator... clicking it opens
    the state menu," which a small chip still satisfies while keeping every
    status distinguishable at a glance without opening the menu (a bare dot
-   alone would need a legend). */
+   alone would need a legend).
+
+   2026-09-03 follow-up ("font much too small, compare the two tables"):
+   the original 11px here (padding 2px 7px) was one of three different
+   small sizes fighting for attention in the same row (11px chip / 13px
+   date / ~15.5px plain Habits text) -- dropped the `font-size` override
+   entirely so this chip inherits the same one unified size (`.task-table
+   tbody td`, right above) everything else in both tables now uses,
+   instead of hand-picking its own. */
 .task-status-select .multiselect-trigger.pill-select-trigger{
-  padding:2px 7px; font-size:11px; border-radius:var(--radius-pill);
+  padding:2px 7px; border-radius:var(--radius-pill);
 }
 /* 5. Labels -- 2026-09-03, immediate direct follow-up ("labels should all
    look like pils and have their respective icons visible. also all pils
@@ -1986,20 +2007,25 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    the Status chip right next to it now share the exact same shape.
    `.cell-tag`'s app-wide default (`var(--radius-sm)`, 8px corners /
    `var(--text-caption)`, 13px) never matched the Status trigger's own
-   compact-chip override just above (`var(--radius-pill)` fully rounded /
-   11px) -- that mismatch is what read as "not all pills have the same
-   rounded corners." Scoped to `.cell-tags` -- the wrapping span every
-   row's Labels cell puts its pills in, `_task_row.html`'s closed-state
-   trigger AND (as of this same follow-up) `_habit_row.html`'s read-only
-   Labels cell, added there specifically so the Habits table's own pills
-   match instead of quietly staying at the app-wide 8px/13px size right
-   next to the Tasks table's now-different one -- rather than a bare
-   `.cell-tag` rule, so every OTHER page's label pills (task/event/contact
-   detail, project Kanban, widget builder) keep the app's normal 8px/13px
-   pill look; only the two table rows' own pills need to visually match
-   their neighboring Status chip. */
+   compact-chip override just above (`var(--radius-pill)` fully rounded) --
+   that mismatch is what read as "not all pills have the same rounded
+   corners." Scoped to `.cell-tags` -- the wrapping span every row's
+   Labels cell puts its pills in, `_task_row.html`'s closed-state trigger
+   AND (as of this same follow-up) `_habit_row.html`'s read-only Labels
+   cell, added there specifically so the Habits table's own pills match
+   instead of quietly staying at the app-wide 8px/13px size right next to
+   the Tasks table's now-different one -- rather than a bare `.cell-tag`
+   rule, so every OTHER page's label pills (task/event/contact detail,
+   project Kanban, widget builder) keep the app's normal 8px/13px pill
+   look; only the two table rows' own pills need to visually match their
+   neighboring Status chip and the rest of the row.
+
+   2026-09-03 further follow-up (font standardization, same reasoning as
+   the Status chip just above): dropped this rule's own `font-size:11px`
+   too, for the same reason -- inherits `.task-table tbody td`'s one
+   unified size instead of a third hand-picked number. */
 .cell-tags .cell-tag{
-  border-radius:var(--radius-pill); padding:2px 7px; font-size:11px;
+  border-radius:var(--radius-pill); padding:2px 7px;
 }
 /* 6. The header's own "+" -- icon-only by default (unchanged size/position,
    `.task-table-add-th .icon-btn` above), but now carries a hidden "Add

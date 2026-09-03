@@ -8,6 +8,25 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), "the font in the
+  tasks table is much too small, compare the two tables -- I want a much
+  more standardized font." The three density-pass sizes fighting for
+  attention in one row (Status chip 11px, compact Date 13px, everything
+  else -- Habits' plain-text Cadence/Streak/Check-in, both tables' Labels
+  pills -- inheriting whatever the page default happened to be, ~15.5px)
+  are now one number: `.task-table tbody td{font-size:var(--text-
+  footnote)}` (14px), with the Status chip's and Labels pill's own
+  `font-size:11px` overrides dropped entirely (inherit the td's 14px) and
+  a new `.task-table .dtp--compact .dtp-trigger{font-size:inherit;}`
+  overriding the compact date trigger's normally-global 13px specifically
+  inside this table. The Title cell keeps its own explicit larger size
+  (`.task-title-cell a`, `var(--text-body)`, from the original density
+  pass) -- an element's own directly-matching rule always wins over an
+  inherited ancestor value regardless of the ancestor selector's
+  specificity, so this one deliberate exception to the new baseline was
+  safe to leave alone. Pure CSS, no markup touched -- full suite unaffected
+  (1946 passed, same as before this entry).
+
 - **Fixed two real bugs + one more design follow-up**, same day
   (2026-09-03), reported as "the setting is on, no icons show, something's
   rotten... the Tasks table doesn't match Habits (font, corner radius)...
