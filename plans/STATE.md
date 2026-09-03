@@ -8,6 +8,36 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Bug fix:** Direct report, same day (2026-09-03) -- "the data is not put
+  in the today widget or the upcoming correctly." Real, reproduced bug in
+  `routers/dashboard.py::_render_agenda`'s `next_30_days`/`all_upcoming`
+  branch: it compared an event's full `start_at` timestamp against
+  `datetime.now().isoformat()` (wall-clock precision), so any event whose
+  clock time on *today's own date* was earlier than the moment the page
+  rendered (midnight, or any earlier hour) got silently dropped from
+  "Upcoming" -- exactly the screenshot's symptom, three real events on
+  today's date, all missing, jumping straight to +3/+7-day events instead.
+  Fixed to a pure date-level comparison (`start_at[:10] >= today_iso`),
+  matching the convention every other boundary in this same function
+  already uses (the Tasks branch two lines up, the `range == "today"`
+  branch's own `[:10] == today_iso`) and matching routers/calendar.py's
+  month/week/day views, which only ever reason in whole days. New
+  regression test (`test_dashboard_router.py::TestAgendaWidgetAllUpcoming
+  ::test_todays_earlier_events_still_count_as_upcoming`) seeds an event
+  earlier today, one an hour from now, and one yesterday -- only yesterday
+  should drop. Pure Python fix, no template/CSS/JS touched -- no `sw.js`
+  bump needed. Full suite: 1953 passed.
+
+  Separately flagged, not changed without confirming first: the same
+  screenshot's "Today" pane (shown as "Nothing to show") is very likely
+  the default stack's third member -- `{"range": "today", "show":
+  ["overdue"]}`, deliberately Overdue-only by design (`_DEFAULT_STACK_
+  MEMBER_TYPES`) -- so it never renders today's tasks/events regardless of
+  this fix, and its "Nothing to show" is expected whenever nothing's
+  overdue. Whether that pane's *title* ("Today") is genuinely misleading
+  given what it actually shows (an intentional design question, not a
+  bug) is worth asking the user directly before touching it.
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), immediately on top
   of the header-clipping-fix + Work-sessions-header-merge entry right
   below ("the two lines in the middle of this modal"): the merge fixed the

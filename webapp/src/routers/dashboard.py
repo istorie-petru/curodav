@@ -390,29 +390,40 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             tasks = tasks[:limit]
     events = []
     if "events" in show:
-        # Local naive "now" -- same convention `date.today()`/
-        # `datetime.now().hour` already use everywhere else in this file
-        # (see `_greeting_for_hour`'s own comment) for "no separate
-        # timezone handling introduced here". `start_at` is stored exactly
-        # as the event form's local `datetime-local` input sends it (see
-        # routers/calendar.py's create_event) -- naive local wall-clock
-        # text, not a UTC-aware ISO string. Comparing that against
-        # `datetime.now(timezone.utc)` (this branch's old behavior) mixed
-        # a UTC clock reading with locally-stored strings and mis-filtered
-        # by exactly the server's UTC offset -- a recently-started local
-        # event could still read as "upcoming" (or a genuinely upcoming
-        # one as already past), depending on which side of midnight UTC
-        # the comparison landed on.
-        now_str = datetime.now().isoformat()
+        # 2026-09-03 direct bug report ("the data is not put in the...
+        # Upcoming correctly") -- this used to compare the *full*
+        # `start_at` timestamp against `datetime.now().isoformat()`
+        # (wall-clock precision), which silently dropped every one of
+        # today's own events whose stored clock time was earlier than the
+        # moment the page rendered (an all-day/midnight event, or one
+        # earlier in the day) -- exactly the reported symptom: three real
+        # events on today's date, none of them showing in "Upcoming."
+        # Fixed to a pure date-level comparison, `>= today_iso`, matching
+        # every other boundary in this function (the Tasks branch two
+        # lines up, and the `range == "today"` branch's own `[:10] ==
+        # today_iso`) and matching routers/calendar.py's month/week/day
+        # views, which only ever reason in whole days too -- "upcoming"
+        # means "today or later," the same as the rest of the app, not
+        # "later than this literal instant."
+        #
+        # `start_at` is stored exactly as the event form's local
+        # `datetime-local` input sends it (see routers/calendar.py's
+        # create_event) -- naive local wall-clock text, not a UTC-aware
+        # ISO string -- so comparing it against `date.today()` (also
+        # naive-local, see `_greeting_for_hour`'s own comment) keeps the
+        # "no separate timezone handling introduced here" convention this
+        # file already uses everywhere else; slicing to `[:10]` sidesteps
+        # the clock-time entirely rather than needing a second, correctly-
+        # timezoned "now" to compare against.
+        #
         # db.list_events' own `start` filter is "(end_at IS NULL OR end_at
         # >= start)" -- deliberately permissive so an ongoing/no-end-date
         # event doesn't disappear from a filtered range it's still
-        # "within". That's the right behavior for a calendar view, but
-        # wrong for "upcoming": an event that already started (no end
-        # date) shouldn't count as upcoming just because it has no end.
-        # Filter on start_at explicitly here rather than relying on
-        # list_events' own start param alone.
-        events = [e for e in _filtered_events_expanded(conn, config, today, event_window_end) if e.get("start_at") and e["start_at"] >= now_str]
+        # "within". Filtering on start_at explicitly here (rather than
+        # relying on list_events' own start param alone) is still needed
+        # for the *next_30_days*/*all_upcoming* window's forward edge, just
+        # no longer wall-clock-precise about it.
+        events = [e for e in _filtered_events_expanded(conn, config, today, event_window_end) if e.get("start_at") and e["start_at"][:10] >= today_iso]
         events.sort(key=lambda e: e.get("start_at") or "")
         if limit:
             events = events[:limit]

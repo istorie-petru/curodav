@@ -239,6 +239,23 @@ class TestAgendaWidgetAllUpcoming:
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"]})
         assert [e["uid"] for e in data["events"]] == ["soon", "later"]
 
+    def test_todays_earlier_events_still_count_as_upcoming(self, conn):
+        # 2026-09-03 direct bug report ("the data is not put in the...
+        # Upcoming correctly") -- this branch used to compare the full
+        # start_at timestamp against datetime.now().isoformat(), so an
+        # event whose clock time on *today's own date* was earlier than
+        # the moment this renders got silently dropped, even though it's
+        # still today, not "past." Only a fully past *date* should be
+        # excluded -- an event a minute from now, and one already an hour
+        # ago earlier today, must both still show.
+        now = datetime.now(timezone.utc)
+        today_str = now.date().isoformat()
+        _seed_event(conn, "earlier_today", start_at=f"{today_str}T00:00:00")
+        _seed_event(conn, "yesterday", start_at=(now - timedelta(days=1)).isoformat())
+        _seed_event(conn, "soon", start_at=(now + timedelta(hours=1)).isoformat())
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"]})
+        assert {e["uid"] for e in data["events"]} == {"earlier_today", "soon"}
+
     def test_respects_limit(self, conn):
         now = datetime.now(timezone.utc)
         for i in range(5):
