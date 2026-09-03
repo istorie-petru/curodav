@@ -67,9 +67,9 @@
     <table>
         {% for e in events %}
         {% if e.is_deadline %}
-        {{ widget_link_row(none, e.title, leading=e.start_at[:10], leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
+        {{ widget_link_row(none, e.title, leading=(e.start_at | relative_date), leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
         {% else %}
-        {{ widget_link_row('/events/' ~ e.uid, e.title, leading=(e.start_at[:10] ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+        {{ widget_link_row('/events/' ~ e.uid, e.title, leading=((e.start_at | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
         {% endif %}
         {% endfor %}
     </table>
@@ -127,7 +127,7 @@
                 {% endif %}
                 <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
                 <div class="kanban-card-meta">
-                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at[:10] }}</span>{% endif %}
+                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
                     {% for tag in t.tags %}{% if tag != project.name %}{{ label_pill(tag) }}{% endif %}{% endfor %}
                 </div>
             </div>

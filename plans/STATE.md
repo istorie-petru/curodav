@@ -8,6 +8,38 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request, same day (2026-09-03) -- "all dates should be
+  displayed more minimally, with a single script that resolves all dates
+  from the standard complicated format to a more human readable format.
+  EVERYWHERE." Audited every template for raw ISO date/datetime display
+  text (`grep` across `src/templates` for `_at`/`date_from`/`date_to`/
+  `created_at`/`checked_at` references, excluding form-input `value=`
+  attributes and JS `data-*` attributes, which must stay raw ISO for
+  `datetime_picker.js`/drag-calc to keep working) rather than adding a new
+  formatter: the app already had a "single script" for this --
+  `deps.py`'s `relative_date` Jinja filter (short dates: "Today"/
+  "Tomorrow"/"Yesterday"/"5 Sep"/"5 Sep 2027") and `fmt_dt` filter (full
+  timestamps: "Aug 25, 2026, 8:57 PM") -- it just wasn't applied
+  everywhere yet. Six templates had raw `value[:10]`/bare-field date text
+  that skipped both filters; switched each to whichever of the two
+  already-established filters matches the field (short date vs.
+  full timestamp), no new code: `task_detail.html` (due/start),
+  `event_detail.html` (start/end, occurrence-card date, "Moved to" date --
+  the datetime_picker's own prefill value at line 150 left untouched, it
+  needs raw ISO), `project_detail.html` (deadline/event leading date,
+  Kanban card due-date tag), `settings_holidays.html` (date_from/date_to
+  range), `settings_data_maintenance.html` (sync-conflict `created_at`,
+  integrity `checked_at`, both `fmt_dt` to match the pre-existing
+  `latest_backup.created_at | fmt_dt` on the same page). Confirmed via
+  grep that calendar grid templates' `start_at`/`end_at` uses are all
+  `data-start`/`data-end` JS attributes or already-filtered `fmt_time`
+  calls, not raw display text -- left alone. `test_settings_holidays.py`'s
+  `test_lists_existing_holidays_as_rows_with_edit_buttons` updated
+  ("2026-12-20"/"2027-01-05" -> "20 Dec"/"5 Jan 2027", the new
+  `relative_date` output for today = 2026-09-03). Full suite: 1952 passed
+  (four parallel chunks by file). No new filter, no `sw.js` cache bump
+  (server-rendered text, not a static asset).
+
 - **Shipped:** Direct request, same day (2026-09-03), on top of the two
   view/edit-modal design follow-ups right below: after a mockup pass (4
   static HTML variants, shared as a file, not built against real data)

@@ -38,7 +38,7 @@
                     <td>{{ c.entity_type }} &middot; {{ c.entity_uid }}</td>
                     <td>{{ 'Project label' if c.field_name == 'project_label' else c.field_name }}</td>
                     <td>{{ c.losing_value if c.losing_value is not none else '(empty)' }}</td>
-                    <td>{{ c.created_at }}</td>
+                    <td>{{ c.created_at | fmt_dt }}</td>
                     <td style="text-align:right;white-space:nowrap">
                         <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/restore" style="display:inline">
                             <button type="submit" class="btn ghost btn-sm">{{ icon('repeat', 'icon-sm') }} Restore</button>
@@ -112,7 +112,7 @@
             <div class="status-card-meta">
                 <span>{{ entities.task_count + entities.event_count + entities.contact_count | int }} records &middot; {{ storage.db_size_bytes | filesizeformat }}</span>
                 {% if integrity.checked_at %}
-                <span class="text-muted">Last checked {{ integrity.checked_at }}</span>
+                <span class="text-muted">Last checked {{ integrity.checked_at | fmt_dt }}</span>
                 {% endif %}
             </div>
         </div>

@@ -66,8 +66,8 @@ class TestSettingsHolidaysPage:
         assert 'id="holidays-table"' in body
         assert "Winter break" in body
         assert "University" in body
-        assert "2026-12-20" in body
-        assert "2027-01-05" in body
+        assert "20 Dec" in body
+        assert "5 Jan 2027" in body
         assert 'href="/settings/holidays/h1/edit"' in body
         assert "data-modal" in body
         assert 'class="inline-text"' not in body

@@ -58,12 +58,12 @@
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value"><span class="color-dot cal-{{ event.calendar_color }}"></span>{% if event.all_day %}{{ event.start_at[:10] }} (all day){% else %}{{ event.start_at[:10] }} {{ event.start_at | fmt_time }}{% endif %}</span>
+            <span class="detail-meta-value"><span class="color-dot cal-{{ event.calendar_color }}"></span>{% if event.all_day %}{{ event.start_at | relative_date }} (all day){% else %}{{ event.start_at | relative_date }} {{ event.start_at | fmt_time }}{% endif %}</span>
         </div>
         {% if event.end_at %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">End</span>
-            <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at[:10] }}{% else %}{{ event.end_at[:10] }} {{ event.end_at | fmt_time }}{% endif %}</span>
+            <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at | relative_date }}{% else %}{{ event.end_at | relative_date }} {{ event.end_at | fmt_time }}{% endif %}</span>
         </div>
         {% endif %}
         {% if event.location %}
@@ -120,7 +120,7 @@
 <div class="detail-card detail-section-gap">
     <h2>{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
     <p class="text-muted-secondary" style="font-size:var(--text-caption)">
-        {{ occurrence_date[:10] }} — changes here affect only this one
+        {{ occurrence_date | relative_date }} — changes here affect only this one
         occurrence, not the whole recurring series.
     </p>
     {% if occurrence_override %}
@@ -128,7 +128,7 @@
         <p class="cell-tag tag-orange">Cancelled</p>
         {% else %}
         <p class="cell-tag tag-blue">
-            Moved to {{ occurrence_override.start_at[:10] }} {{ occurrence_override.start_at | fmt_time }}
+            Moved to {{ occurrence_override.start_at | relative_date }} {{ occurrence_override.start_at | fmt_time }}
         </p>
         {% endif %}
         <form method="post" action="/events/{{ event.uid }}/occurrences/restore" data-cc-change="event" data-cc-action="restore">

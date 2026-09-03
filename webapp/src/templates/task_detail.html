@@ -82,13 +82,13 @@
         {% if task.due_at %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Due</span>
-            <span class="detail-meta-value">{{ task.due_at[:10] }}</span>
+            <span class="detail-meta-value">{{ task.due_at | relative_date }}</span>
         </div>
         {% endif %}
         {% if task.start_at %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value">{{ task.start_at[:10] }}</span>
+            <span class="detail-meta-value">{{ task.start_at | relative_date }}</span>
         </div>
         {% endif %}
         {% if task.recurrence %}
