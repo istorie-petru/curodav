@@ -49,25 +49,52 @@
              is purely derived from which of the two fields already has a
              value (see the `_has_location`/`_has_meeting` set below) --
              cheaper than a new column and can't drift out of sync with the
-             two fields it switches between. A brand-new event starts with
-             neither radio checked, so both fields stay hidden until a
-             Format is actually picked -- "neither picked" is a valid third
-             state (e.g. an all-day reminder needs neither). If an existing
-             event somehow has both fields set (legacy data predating this
-             field), Location/In person wins the tie -- documented here
-             since there's no real "both" state in the new model.
+             two fields it switches between. If an existing event somehow
+             has both fields set (legacy data predating this field),
+             Location/In person wins the tie -- documented here since
+             there's no real "both" state in the new model.
              static/event_format_toggle.js clears the *other* field's value
              on switch (so a hidden stale value can't silently resubmit and
              leave both columns populated again); the show/hide itself is
              plain CSS (#event-form:has(#event_format_in_person:checked),
-             style.css), same pattern as #all_day/.holiday-field above. -->
+             style.css), same pattern as #all_day/.holiday-field above.
+
+             2026-09-03 direct feedback ("move away from how the Format
+             toggle looks -- too cramped between icons and text, the gray
+             out of place, no clear subordination for what they do, no
+             clear 'not one of these' state"): rebuilt on the existing
+             tile/card picker pattern (.tile-select/.tile-option, style.css
+             "Tile/card picker" section, already used by the widget
+             builder's Data source field) instead of the cramped
+             .segmented/.seg-btn pill row -- three equal cards, icon above
+             label, an unmistakable selected look (border + tint) vs. a
+             plain neutral outline when not selected. "Neither picked" used
+             to be an implicit state (both radios simply unchecked); it's
+             now a real third, visibly-selectable option (`event_format_
+             none`, id kept alongside the original two ids/wrapper class so
+             existing tests and event_format_toggle.js's selector still
+             match), checked whenever neither Location nor Meeting URL has
+             a value -- including every brand-new event. -->
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
         <div class="field field-wide">
             <label>Format</label>
-            <div class="segmented event-format-segmented" role="radiogroup" aria-label="Event format">
-                <label class="seg-btn"><input type="radio" name="event_format" id="event_format_in_person" class="seg-radio" value="in_person" {% if _has_location %}checked{% endif %}> {{ icon('map-pin', 'icon-sm') }} In person</label>
-                <label class="seg-btn"><input type="radio" name="event_format" id="event_format_online" class="seg-radio" value="online" {% if _has_meeting and not _has_location %}checked{% endif %}> {{ icon('video', 'icon-sm') }} Online</label>
+            <div class="tile-select event-format-segmented" role="radiogroup" aria-label="Event format">
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_in_person" class="tile-radio" value="in_person" {% if _has_location %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('map-pin', 'icon-sm') }}</span>
+                    <span class="tile-option-label">In person</span>
+                </label>
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_online" class="tile-radio" value="online" {% if _has_meeting and not _has_location %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('video', 'icon-sm') }}</span>
+                    <span class="tile-option-label">Online</span>
+                </label>
+                <label class="tile-option">
+                    <input type="radio" name="event_format" id="event_format_none" class="tile-radio" value="none" {% if not _has_location and not _has_meeting %}checked{% endif %}>
+                    <span class="tile-icon">{{ icon('x', 'icon-sm') }}</span>
+                    <span class="tile-option-label">None</span>
+                </label>
             </div>
         </div>
         <div class="field field-format-location">

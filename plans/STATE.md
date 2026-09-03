@@ -8,6 +8,63 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct request, same day (2026-09-03), two view/edit-modal
+  design follow-ups the user flagged as still outstanding from the
+  2026-09-02 detail-modal design pass ("we have not restyled the view
+  modal to not use the colored bg card div... also we have not fixed the
+  CSS for some edit modal... I would prefer to move away from how the
+  Format toggle looks — too cramped between icons and text, the gray, out
+  of place, no clear subordination, no clear 'not one of these' state").
+  Confirmed direction via AskUserQuestion (3 questions) before touching
+  code:
+  1. **View modals: the meta grid's wrapper is no longer an elevated
+     tonal `.detail-card` with a colored left accent.** New `style.css`
+     class `.detail-meta-panel` (no background/border/shadow/hover-lift,
+     just a bottom hairline separating it from whatever follows) replaces
+     `.detail-card` on the *meta grid specifically* in all four detail
+     modals — `event_detail.html`, `task_detail.html`,
+     `contact_detail.html`, `habit_task_detail.html` — including dropping
+     the now-unused `style="--detail-accent: ..."` inline attribute from
+     the two that had one (event/task). Scoped deliberately narrow: a
+     *second*, later `.detail-card` in event/task/habit-task (the
+     occurrence card, Work sessions card, habit heatmap) keeps the real
+     card treatment untouched — the feedback was about the meta display
+     specifically, not every card in a detail modal. Calendar-color signal
+     for events still survives via the header's `.detail-identity-dot`
+     and the Start value's own `.color-dot`, so nothing about "which
+     color is this" was lost, just the big tinted box.
+  2. **Edit modal's Format toggle (In person / Online) rebuilt on the
+     existing tile/card picker pattern** (`.tile-select`/`.tile-option`,
+     already used by the widget builder's Data source field) instead of
+     the cramped `.segmented`/`.seg-btn` pill row — `_event_form_fields.
+     html`, three equal cards now, icon above label, obvious selected
+     look (border + tint) vs. a plain neutral outline unselected. Added a
+     third, explicit **None** option (`id="event_format_none"`, value
+     `none`) — "neither Location nor Meeting URL set" used to be an
+     implicit state (both radios simply unchecked, including on every
+     brand-new event); it's now a real, visibly-selected third choice,
+     checked whenever `_has_location`/`_has_meeting` are both false. Kept
+     the original `event_format_in_person`/`event_format_online` ids and
+     the `event-format-segmented` wrapper class in place (just added
+     `tile-select` alongside) specifically so existing tests and
+     `event_format_toggle.js`'s own selector didn't need touching beyond
+     the one real behavior change: picking None now clears *both*
+     Location and Meeting URL (previously the clear-the-other-field logic
+     only ever knew about one "other" field, since None wasn't a value it
+     handled).
+  `sw.js` CACHE_NAME bumped v45 → v46 (style.css + templates + JS
+  changed), `test_pwa_shell.py`'s pin updated. `test_detail_modals_rework.
+  py` updated for the `.detail-card` → `.detail-meta-panel` rename (3
+  tests asserting the literal wrapper class, 1 asserting `--detail-accent`
+  presence — replaced with an assertion on the still-present
+  `.color-dot`/`.detail-identity-dot`, 1 card-count test dropped from 2 to
+  1 now that only the Work sessions card is a real `.detail-card` on the
+  task page); `test_event_format_field.py` gained a new
+  `TestFormatFieldNoneOption` class (4 tests: new-event/edit-with-neither
+  check None, edit-with-location/edit-with-meeting don't). Full suite:
+  1945 passed (four parallel chunks by file, same convention as every
+  other multi-file session this file documents).
+
 - **Shipped:** Direct follow-up, same day (2026-09-03), calendar drag-and-drop
   consistency + a new capability, three bundled changes from one
   conversation ("in the planner and calendar pages... there should be drag

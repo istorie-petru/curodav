@@ -13,10 +13,12 @@ three contexts in a single stroke):
    `.detail-title` plus a colored `.detail-identity-dot` (event's calendar
    color, task's status color) or the contact's `.avatar-large`.
 
-3. The body is one elevated tonal `.detail-card` -- with a colored left
-   accent following the entity's identity color via `--detail-accent` --
-   holding the 2-column `.detail-meta-grid`, whose values use the crisp
-   `.detail-meta-value` typography.
+3. The body holds the 2-column `.detail-meta-grid`, whose values use the
+   crisp `.detail-meta-value` typography. (2026-09-03 direct feedback:
+   the grid's wrapper is the plain `.detail-meta-panel` -- no elevated
+   tonal surface, no colored left accent -- the identity color instead
+   stays only on the header's `.detail-identity-dot` and, for events, the
+   `.color-dot` next to the Start value.)
 
 4. The old filled-red `.btn.danger` Delete is demoted to a quiet
    `.detail-delete-link` text-link in the footer, letting the primary
@@ -146,13 +148,15 @@ class TestIdentityMark:
 
     def test_event_identity_dot_follows_a_label_color(self, conn):
         # An event's calendar_color is its first label's color -- a red
-        # label must drive both the identity dot and the card accent red.
+        # label must drive both the identity dot and the Start value's own
+        # color-dot (2026-09-03: the meta panel itself no longer carries a
+        # colored accent, so these two are the only remaining color tells).
         _seed_event(conn, "e1")
         db.upsert_label_config(conn, {"name": "Work", "color": "red"})
         db.set_object_labels(conn, "event", "e1", ["Work"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
         assert 'class="detail-identity-dot cal-red"' in body
-        assert "--detail-accent: var(--cal-accent-red)" in body
+        assert 'class="color-dot cal-red"' in body
 
     def test_task_identity_dot_uses_status_color(self, conn):
         _seed_task(conn, "t1", status="in_progress")
@@ -179,20 +183,21 @@ class TestIdentityMark:
 
 
 class TestDetailCardAndMetaGrid:
-    """The body is an elevated tonal .detail-card with a colored left
-    accent, a 2-column meta grid, and crisp value typography."""
+    """2026-09-03: the meta grid's wrapper is the plain .detail-meta-panel
+    (no elevated tonal surface, no colored left accent -- direct feedback
+    that the colored bg card read wrong for showing plain metadata), just
+    the 2-column grid and crisp value typography."""
 
     def test_event_card_has_calendar_accent(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-card"' in body
-        assert "--detail-accent: var(--cal-accent-blue)" in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_task_card_has_status_accent(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert "--detail-accent: var(--cal-accent-orange)" in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_contact_uses_the_shared_meta_grid_not_the_old_table(self, conn):
@@ -208,7 +213,7 @@ class TestDetailCardAndMetaGrid:
             addresses=[{"type": "Other", "street": "1 St"}],
         )
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
-        assert 'class="detail-card"' in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-grid"' in body
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
@@ -218,10 +223,13 @@ class TestDetailCardAndMetaGrid:
         # Relations card is fully removed -- this test used to assert
         # meta + Relations + Work sessions (three detail cards); now it's
         # just meta + Work sessions (1.4, plans/open-priority.md § Work
-        # allocations).
+        # allocations). 2026-09-03: the meta grid itself moved off
+        # .detail-card onto the plain .detail-meta-panel, so Work sessions
+        # is now the *only* real .detail-card on this page.
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert body.count('class="detail-card') == 2
+        assert 'class="detail-meta-panel"' in body
+        assert body.count('class="detail-card') == 1
 
 
 class TestFooterActions:

@@ -25,10 +25,17 @@
      2026-08-08 visual rework (all three detail modals at once -- events,
      tasks, contacts -- one cohesive stroke): header = identity (a dot in
      the task's status color + the large bold title), body = the meta grid
-     and the relations list inside elevated tonal .detail-cards (the first
-     one's left border follows the status color), footer = a quiet "Done"
-     back-link, a demoted Delete text-link, and the primary Edit action
-     taking center stage.
+     and the Work sessions card, footer = a quiet "Done" back-link, a
+     demoted Delete text-link, and the primary Edit action taking center
+     stage.
+
+     2026-09-03 direct feedback ("restyle the view modal to not use the
+     colored bg card div to view the meta"): the meta grid's wrapper is now
+     the plain .detail-meta-panel (style.css), not the elevated tonal
+     .detail-card with a status-colored left border the paragraph above
+     originally described -- just the grid plus a hairline rule underneath.
+     The Work sessions card below it is a separate, real .detail-card,
+     unchanged.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -67,7 +74,7 @@
 <img class="detail-modal-banner" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
 {% endif %}
 {% endif %}
-<div class="detail-card" style="--detail-accent: var(--cal-accent-{{ status_colors[task.status] }});">
+<div class="detail-meta-panel">
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>

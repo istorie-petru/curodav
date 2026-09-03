@@ -12,9 +12,13 @@
      layout) is gone -- contacts now use the exact same header/body/footer
      language as event/task detail: header = identity (the contact's
      avatar + large bold title + org subtitle), body = the meta fields in
-     the same 2-column grid and elevated tonal .detail-card, footer = a
-     quiet "Done" back-link, a demoted Delete text-link, and the primary
-     Edit action taking center stage.
+     the same 2-column grid, footer = a quiet "Done" back-link, a demoted
+     Delete text-link, and the primary Edit action taking center stage.
+
+     2026-09-03 direct feedback ("restyle the view modal to not use the
+     colored bg card div to view the meta"): the meta grid's wrapper is now
+     the plain .detail-meta-panel (style.css), not the elevated tonal
+     .detail-card the paragraph above originally described.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -56,7 +60,7 @@
 </div>
 {% endif %}
 
-<div class="detail-card">
+<div class="detail-meta-panel">
     <div class="detail-meta-grid">
         {% for p in contact.phones %}
         <div class="detail-meta-item">

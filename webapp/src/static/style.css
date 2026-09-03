@@ -1169,6 +1169,24 @@ label.seg-btn[hidden]{display:none;}
    level h2 top margin -- same "first heading inside a card" rule .card
    already has. */
 .detail-card > h2{margin-top:0;}
+
+/* Meta panel (2026-09-03, direct feedback: "restyle the view modal to not
+   use the colored bg card div to view the meta") -- replaces .detail-card
+   as the wrapper for the top Start/End/Status-style meta grid in every
+   detail modal (event/task/contact/habit-task). No elevated tonal
+   surface, no colored left accent, no shadow/hover-lift -- just the plain
+   .detail-meta-grid rows sitting directly on the modal body, closed off
+   from whatever follows (Description, or a real secondary .detail-card
+   like Work sessions/Relations) by a single hairline rule instead of a
+   box. Those secondary cards keep the original .detail-card treatment
+   unchanged -- this is scoped to the meta grid specifically, the one the
+   feedback was about, not every card in a detail modal. */
+.detail-meta-panel{
+  padding-bottom:var(--space-4);
+  margin-bottom:var(--space-4);
+  border-bottom:1px solid var(--separator);
+}
+.detail-meta-panel:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
 /* Crisp value typography -- the label stays the small gray caption above
    (.detail-meta-label); the value gets the larger, heavier, primary-color
    treatment so it reads as the answer to that label. inline-flex so a

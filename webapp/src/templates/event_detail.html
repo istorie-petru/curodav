@@ -13,10 +13,17 @@
      2026-08-08 visual rework (all three detail modals at once -- events,
      tasks, contacts -- one cohesive stroke): header = identity (a colored
      dot in the event's calendar color + the large bold title), body = the
-     meta grid inside an elevated tonal .detail-card with a colored left
-     accent, footer = a quiet "Done" back-link, a demoted Delete text-link
+     meta grid, footer = a quiet "Done" back-link, a demoted Delete text-link
      (was the loudest filled-red button on the view), and the primary Edit
      action taking center stage.
+
+     2026-09-03 direct feedback ("restyle the view modal to not use the
+     colored bg card div to view the meta"): the meta grid's wrapper is now
+     the plain .detail-meta-panel (style.css) -- no elevated surface, no
+     colored left accent, just a hairline rule under the block -- instead
+     of the elevated tonal .detail-card the paragraph above originally
+     described. The occurrence card rendered conditionally further down
+     keeps the real .detail-card treatment; only the meta grid changed.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -32,7 +39,7 @@
 </div>
 
 <div class="modal-body">
-<div class="detail-card" style="--detail-accent: var(--cal-accent-{{ event.calendar_color }});">
+<div class="detail-meta-panel">
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
