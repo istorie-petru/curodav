@@ -543,6 +543,11 @@ def calendar_regions(
         return templates.TemplateResponse(
             "_calendar_fourweek_grid.html", _four_week_view_context(conn, request, date_, label)
         )
+    if region == "day":
+        return templates.TemplateResponse(
+            "_calendar_day_grid.html",
+            _day_view_context(conn, request, date_ or date.today().isoformat(), label),
+        )
     return JSONResponse({"error": f"unknown calendar region: {region}"}, status_code=400)
 
 
@@ -944,6 +949,17 @@ def day_view(
     _build_agenda_days (the separate rolling-30-day list that used to sit
     beside it). GET /calendar/agenda (agenda_view, below) still redirects
     here."""
+    return templates.TemplateResponse("calendar_day.html", _day_view_context(conn, request, day, label))
+
+
+def _day_view_context(conn, request, day, label):
+    """Everything the Day view needs, in one dict -- shared by day_view (full
+    page) and the async `#day-grid` region (features/async-crud.md), split
+    out the same way `_week_view_context`/`_four_week_view_context` already
+    are so a drag-to-move/resize on this page can re-render just the grid
+    (fixing its `left_pct`/`width_pct` overlap layout) instead of a full
+    reload -- see calendar.js's own comment on the `.time-event` drag
+    handler for why that recompute has to come from here, not the client."""
     d = date.fromisoformat(day)
     events = db.list_events(conn, start=day, end=day + "T23:59:59")
     events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
@@ -969,27 +985,24 @@ def day_view(
     day_time_blocks = db.list_time_blocks(conn)
     time_block_overlays = _time_block_overlays_for_day(day_time_blocks, d)
 
-    return templates.TemplateResponse(
-        "calendar_day.html",
-        {
-            "request": request,
-            "active_tab": "calendar",
-            "calendar_view": "day",
-            "today_iso": date.today().isoformat(),
-            "day": day,
-            "prev_day": (d - timedelta(days=1)).isoformat(),
-            "next_day": (d + timedelta(days=1)).isoformat(),
-            "all_day": all_day,
-            "timed": timed,
-            "tasks": tasks,
-            "time_block_overlays": time_block_overlays,
-            "hours": list(range(grid_layout.GRID_HOURS)),
-            "px_per_hour": grid_layout.PX_PER_HOUR,
-            "event_label_names": db.list_event_label_names(conn),
-            "active_label": label or "",
-            "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
-        },
-    )
+    return {
+        "request": request,
+        "active_tab": "calendar",
+        "calendar_view": "day",
+        "today_iso": date.today().isoformat(),
+        "day": day,
+        "prev_day": (d - timedelta(days=1)).isoformat(),
+        "next_day": (d + timedelta(days=1)).isoformat(),
+        "all_day": all_day,
+        "timed": timed,
+        "tasks": tasks,
+        "time_block_overlays": time_block_overlays,
+        "hours": list(range(grid_layout.GRID_HOURS)),
+        "px_per_hour": grid_layout.PX_PER_HOUR,
+        "event_label_names": db.list_event_label_names(conn),
+        "active_label": label or "",
+        "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
+    }
 
 
 @router.get("/agenda")

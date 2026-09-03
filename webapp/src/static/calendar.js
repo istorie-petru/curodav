@@ -11,10 +11,23 @@
 // 2026-07-19 fix; this avoids repeating that by snapping the displayed
 // position on every mousemove, not just at the end). On release, the new
 // time (and day column, for a cross-day move in the week view) is saved via
-// POST /events/{uid}/reschedule, then the page reloads -- simplest way to
-// guarantee the reload reflects whatever the server actually persisted
-// (including a server-side conflict/validation outcome), rather than
-// trusting the client's optimistic position.
+// POST /events/{uid}/reschedule, then `window.ccApi.dispatchChange` fires
+// the app-wide `cc-entity-changed` event (async-CRUD,
+// features/async-crud.md) -- async_calendar.js re-fetches the whole
+// #week-grid/#day-grid region and swaps it in, which re-runs
+// grid_layout.layout_day server-side. That's deliberate, not just "reuse
+// the existing plumbing": this is also the fix for a direct bug report --
+// two overlapping events (each rendered at half-width by layout_day) where
+// dragging one so it no longer overlaps left BOTH stuck at their old
+// width, because `left_pct`/`width_pct` are baked into the HTML once at
+// render time and this handler used to only ever touch `top`/`height`
+// (and, on success, patch the `.te-time` label text) -- never the lane
+// layout of the event just moved OR the one it used to overlap with,
+// which a client-side patch can't fix without duplicating layout_day's
+// packing algorithm in JS. Every other calendar drag path (month/day-cell
+// drag, all-day-row drag, work-allocation drag) already dispatches this
+// same event on success; this handler was the one holdout still patching
+// DOM by hand instead.
 //
 // move/up listeners are attached to `document`, not the dragged
 // element itself, for the drag's duration -- earlier used
@@ -141,15 +154,22 @@
       // no-op if the page has no configured blocks or the script didn't load.
       if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
 
-      // Optimistic, same as Kanban's drag-and-drop (tasks_board.js) --
-      // the position on screen is already correct the instant the pointer
-      // is released (that's what the whole drag was doing), so a reload
-      // on *every* successful save was throwing away a fluid interaction
-      // with a jarring full-page flash at the very last step. Only revert
-      // (back to the exact day/top/height this drag started from) and
-      // reload on an actual failure, so the one case that still reloads
-      // is also the one case where the user needs to see the server's
-      // real, authoritative state rather than trust the optimistic guess.
+      // Optimistic during the drag itself, same as Kanban's drag-and-drop
+      // (tasks_board.js) -- the position on screen is already correct the
+      // instant the pointer is released (that's what the whole drag was
+      // doing), so there's no visible flash waiting on the network before
+      // the block appears to land. On success, though, dispatch the
+      // app-wide change event instead of patching this one element by
+      // hand: async_calendar.js's listener re-fetches the whole
+      // #week-grid/#day-grid region, which re-runs grid_layout.layout_day
+      // server-side and so fixes up `left_pct`/`width_pct` for every event
+      // in the column -- not just this one's label -- covering both the
+      // dragged event and whatever it used to (or now does) overlap with.
+      // Only revert (back to the exact day/top/height this drag started
+      // from) and reload on an actual failure, so the one case that still
+      // does a full reload is also the one case where the user needs to
+      // see the server's real, authoritative state rather than trust the
+      // optimistic guess.
       fetch(`/events/${uid}/reschedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,15 +179,7 @@
         }),
       }).then((resp) => {
         if (!resp.ok) throw new Error("reschedule failed");
-        // The block's position already reflects the new time (that's what
-        // the drag just did) -- but its *label* is still server-rendered
-        // text from before the drag (e.g. "14:00-15:00"), and nothing
-        // reloads the page anymore to refresh it. Update it directly so
-        // the visible time doesn't silently go stale after a successful
-        // move. `.te-time` can appear twice on Day view (time range +
-        // location) -- the time range is always the first one.
-        const timeEl = el.querySelector(".te-time");
-        if (timeEl) timeEl.textContent = `${minutesToDisplayTime(startMin)}–${minutesToDisplayTime(endMin)}`;
+        window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
       }).catch(() => {
         el.style.top = origTop + "px";
         el.style.height = origHeight + "px";
@@ -231,27 +243,13 @@
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
-  // 2026-08-08 -- display-only counterpart to minutesToHHMM above:
-  // respects the "24-hour time" Settings > General preference (deps.py's
-  // time_format(), exposed here via base.html's `data-time-format` body
-  // attribute, same pattern as `data-px-per-hour`) for the drag-resize
-  // preview *label* text. Deliberately a separate function, not a
-  // TIME_FORMAT branch added to minutesToHHMM itself -- that function's
-  // output also feeds `start_time`/`end_time` prefill values for the New
-  // Event redirect (see setupCreateCol below), which a native
-  // `<input type="time">` requires in plain 24-hour "HH:MM" regardless of
-  // this display preference; branching the one function by format would
-  // have silently broken that prefill whenever "12-hour time" was on.
-  const TIME_FORMAT = document.body.dataset.timeFormat || "24h";
-  function minutesToDisplayTime(totalMinutes) {
-    if (TIME_FORMAT !== "12h") return minutesToHHMM(totalMinutes);
-    totalMinutes = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    const period = h < 12 ? "AM" : "PM";
-    const h12 = h % 12 || 12;
-    return h12 + ":" + String(m).padStart(2, "0") + " " + period;
-  }
+  // (A `minutesToDisplayTime` 12-hour-format helper used to live here,
+  // feeding the drag-resize handler's `.te-time` label patch below. That
+  // patch is gone now -- a successful move/resize dispatches the app-wide
+  // change event instead, so async_calendar.js's region refresh
+  // re-renders the label server-side, honoring 12h/24h the same way the
+  // rest of the page's `fmt_time` filter already does. Removed rather
+  // than left dead.)
 
   // Deliberately NOT given `touch-action:none` the way .time-event/
   // .timeline-bar are -- those are small, unambiguous drag targets, but

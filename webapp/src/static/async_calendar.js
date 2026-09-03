@@ -21,6 +21,16 @@
 //     region is also what moves the dragged block out from under the
 //     pointer -- the swapped-in DOM replaces the stale one the drag was
 //     mutating.
+//   * Day (calendar_day.html): #day-grid -- added alongside the fix for
+//     the direct bug report "two events overlap, I move one, they still
+//     show half-width" (calendar.js's `.time-event` drag handler now
+//     dispatches type "event" on a successful move/resize instead of only
+//     patching the `.te-time` label in place). Day had no region at all
+//     before this -- a Day-view drag had nothing to refresh and stayed
+//     stale until a real page load. Re-bound the same way Week's
+//     `.time-event`/create-col bindings are, via CCWeekGrid.init()
+//     (calendar.js's shared init: it queries generically, not by page, so
+//     it works unmodified here).
 //
 // Claims the change event only when a region is actually on this page (the
 // ccApi.claimed protocol); on a refresh failure it falls back to a reload so
@@ -85,14 +95,31 @@
     }
   }
 
-  // A month/4-week/week page re-renders on task changes too (a due-date
+  var dayEl = document.getElementById("day-grid");
+  if (dayEl) {
+    var dayUrl = "/calendar/regions?region=day&date_=" + encodeURIComponent(dayEl.dataset.date || "");
+    if (dayEl.dataset.label) dayUrl += "&label=" + encodeURIComponent(dayEl.dataset.label);
+
+    function refreshDay() {
+      return window.ccApi.refreshRegion(dayUrl, "day-grid").then(function () {
+        dayEl = document.getElementById("day-grid");
+        // Same shared init as Week's ordinary events + drag-to-create --
+        // Day never loads project_calendar.js/CCWeekAllDayDrag/
+        // CCUnscheduledPanel (no work-allocation blocks or unscheduled
+        // panel on this page), so only the one re-bind applies here.
+        if (window.CCWeekGrid) window.CCWeekGrid.init();
+      });
+    }
+  }
+
+  // A month/4-week/week/day page re-renders on task changes too (a due-date
   // drag or an allocation IS a task's scheduling; project_calendar.js's
   // own mutations dispatch type "task", same as calendar_month_drag.js's
   // task-chip drag now does).
   document.addEventListener("cc-entity-changed", function (e) {
     var detail = e.detail || {};
     if (detail.type !== "event" && detail.type !== "task") return;
-    var refresher = regionEl ? refreshMonth : fourweekEl ? refreshFourweek : weekEl ? refreshWeek : null;
+    var refresher = regionEl ? refreshMonth : fourweekEl ? refreshFourweek : weekEl ? refreshWeek : dayEl ? refreshDay : null;
     if (!refresher) return;
     detail.claimed = true;
     refresher().catch(function () {

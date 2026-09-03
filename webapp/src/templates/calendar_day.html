@@ -35,56 +35,15 @@
      calendar-viewport behave like the calendar week view, and remove the
      agenda at the bottom of the calendar day view) -- the old Day+Agenda
      side-by-side split is gone; the 24-hour grid fills the viewport and
-     scrolls internally exactly like calendar_week.html's. -->
-<div class="card calendar-viewport">
-<div class="time-grid-wrap">
-<div class="time-grid-top">
-<div class="time-grid-head day">
-    <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}">{{ day }}</div>
-</div>
-<div class="time-grid-allday day">
-    <div class="allday-gutter">All day</div>
-    <div class="allday-cols day">
-        <div class="allday-col {% if day < today_iso %}is-past{% endif %}">
-            {% for e in all_day %}
-            <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
-                <span class="color-dot cal-{{ e.calendar_color }}"></span>
-                {{ e.title }}
-            </a>
-            {% endfor %}
-            {% for t in tasks %}
-            <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-</div>
-<div class="time-grid-body" style="--hr-h:{{ px_per_hour }}px; height:calc(25 * var(--hr-h));">
-    <div class="time-gutter">
-        {% for h in hours %}
-        <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ h | fmt_hour }}</div>
-        {% endfor %}
-    </div>
-    <div class="time-cols day">
-        <div class="time-col calendar-create-col {% if day < today_iso %}is-past{% endif %}" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day }}">
-            {% for ov in time_block_overlays %}
-            <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
-            {% endfor %}
-            {% for e in timed %}
-            <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
-               href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
-               style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
-                <span class="te-name">{{ e.title }}</span>
-                <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
-                {% if e.location %}<span class="te-time">{{ e.location }}</span>{% endif %}
-                <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-</div>
-</div>
+     scrolls internally exactly like calendar_week.html's.
+
+     Split into _calendar_day_grid.html (id="day-grid", direct bug report:
+     a drag-to-move/resize that removed an overlap left the moved and/or
+     left-behind event stuck at their old half-width -- see that partial's
+     own comment) so async_calendar.js can refresh just this block via
+     GET /calendar/regions?region=day after any event/task change,
+     matching Week's id="week-grid" region. -->
+{% include "_calendar_day_grid.html" %}
 {% endblock %}
 {% block extra_scripts %}
 <!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
@@ -93,4 +52,5 @@
 <script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
 <script src="{{ static_url('time_blocks.js') }}"></script>
 <script src="{{ static_url('calendar.js') }}"></script>
+<script src="{{ static_url('async_calendar.js') }}"></script>
 {% endblock %}
