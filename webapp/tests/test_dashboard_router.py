@@ -54,8 +54,11 @@ class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
         # today) + a stack of At a Glance / Agenda (all_upcoming, events
-        # only) / Agenda (today, overdue only) -- see
-        # dashboard_router._seed_agenda_stack_layout.
+        # only) / Agenda (today, overdue+tasks+events) -- see
+        # dashboard_router._seed_agenda_stack_layout. 2026-09-03: the
+        # third member's Show list used to be overdue-only, direct
+        # follow-up widened it to overdue+tasks+events so a "Today" pane
+        # actually shows today's tasks/events, not just what's overdue.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
@@ -65,7 +68,7 @@ class TestDefaultWidgetSeeding:
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
         assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
         assert members[1]["config"]["show"] == ["events"]
-        assert members[2]["config"]["show"] == ["overdue"]
+        assert members[2]["config"]["show"] == ["overdue", "tasks", "events"]
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
         # The main Agenda widget and the stack share the width split

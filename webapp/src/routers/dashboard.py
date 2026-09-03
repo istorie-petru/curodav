@@ -1388,10 +1388,25 @@ _DEFAULT_STACK_CONFIG: dict = {"width": "half"}
 # are now Agenda widgets configured to show just one Show section each
 # (Events-only/all-upcoming, Overdue-only), reproducing the exact same
 # two panes the old seed showed.
+#
+# 2026-09-03 direct request (following a live bug report about the
+# all_upcoming branch above dropping today's own events, and a follow-up
+# question about this pane specifically) -- the third member's Show list
+# was ["overdue"] only, so a widget titled "Today" (by user convention --
+# both members are seeded with title=None and fall back to the generic
+# "Agenda" spec label until renamed) rendered "Nothing to show" any time
+# nothing was overdue, even with real tasks/events due/happening today.
+# Now ["overdue", "tasks", "events"] -- every Show section range="today"
+# actually supports -- so a fresh "Today" pane shows what its name
+# implies. Existing installs aren't touched by this (it's the seed used
+# only the first time a page's widgets are created, per
+# _ensure_default_widgets/_ensure_default_label_widgets's own one-time
+# app_meta flag) -- someone who already customized their own copy of this
+# widget keeps their own Show selection.
 _DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict]] = [
     ("at_a_glance", {}),
     ("agenda", {"range": "all_upcoming", "show": ["events"]}),
-    ("agenda", {"range": "today", "show": ["overdue"]}),
+    ("agenda", {"range": "today", "show": ["overdue", "tasks", "events"]}),
 ]
 
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"

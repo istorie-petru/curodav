@@ -240,12 +240,16 @@ class TestDefaultSeedIncludesNewWidgets:
         # full-width top-level entries.
         # 2026-08-15 widget consolidation: "Overdue Tasks" is now an
         # `agenda` widget configured with show=["overdue"] rather than its
-        # own type -- see _DEFAULT_STACK_MEMBER_TYPES.
+        # own type -- see _DEFAULT_STACK_MEMBER_TYPES. 2026-09-03: that
+        # Show list widened to ["overdue", "tasks", "events"] (direct
+        # follow-up to a live "Today" widget showing "Nothing to show"
+        # bug report) -- still the same third stack member, just showing
+        # more than overdue-only now.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
         assert top_level[0]["type"] == "agenda"
 
@@ -255,7 +259,7 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
 
     def test_fresh_space_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_space(conn, "Uni")
@@ -263,14 +267,14 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="Uni")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
 
     def test_new_label_widgets_auto_scoped_with_label_name(self, conn):
         _make_project(conn, "CS101")
         dashboard_router._ensure_default_label_widgets(conn, "CS101")
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         at_a_glance = next(w for w in widgets if w["type"] == "at_a_glance")
-        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue"])
+        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"])
         assert at_a_glance["config"]["label_name"] == "CS101"
         assert overdue["config"]["label_name"] == "CS101"
 

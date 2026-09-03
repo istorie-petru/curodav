@@ -28,15 +28,21 @@ session, right before the final commit of that session.
   should drop. Pure Python fix, no template/CSS/JS touched -- no `sw.js`
   bump needed. Full suite: 1953 passed.
 
-  Separately flagged, not changed without confirming first: the same
-  screenshot's "Today" pane (shown as "Nothing to show") is very likely
-  the default stack's third member -- `{"range": "today", "show":
-  ["overdue"]}`, deliberately Overdue-only by design (`_DEFAULT_STACK_
-  MEMBER_TYPES`) -- so it never renders today's tasks/events regardless of
-  this fix, and its "Nothing to show" is expected whenever nothing's
-  overdue. Whether that pane's *title* ("Today") is genuinely misleading
-  given what it actually shows (an intentional design question, not a
-  bug) is worth asking the user directly before touching it.
+  Separate follow-up, same day, immediately after: confirmed via
+  AskUserQuestion that the "Today" pane's "Nothing to show" was exactly
+  the flagged design gap above (the user had already hand-fixed their own
+  copy of the widget) -- direct request to change the *default* for
+  future first-time seeds: "modify the default to not be overdue only,
+  but be overdue, tasks and events." `_DEFAULT_STACK_MEMBER_TYPES`'s third
+  member's `show` widened from `["overdue"]` to `["overdue", "tasks",
+  "events"]` -- every Show section `range="today"` actually supports, so
+  a fresh "Today" pane shows what its name implies. Scoped to the one-time
+  seed only (`_ensure_default_widgets`/`_ensure_default_label_widgets`'s
+  own app_meta flag) -- doesn't touch anyone who already has widgets,
+  seeded or hand-built. 5 assertions across `test_dashboard_router.py`
+  and `test_dashboard_usability_rework.py` updated for the new default
+  Show list. Pure Python change, no `sw.js` bump needed. Full suite:
+  1953 passed.
 
 - **Shipped:** Direct follow-up, same day (2026-09-03), immediately on top
   of the header-clipping-fix + Work-sessions-header-merge entry right
