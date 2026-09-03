@@ -36,18 +36,30 @@
    Import `with context` -- reads nothing from context directly today, but
    matches every other partial macro in this app (label_pill etc.) so a
    future edit that does need request/settings doesn't have to also go
-   fix every import site. #}
+   fix every import site.
+
+   2026-09-03 fix (direct feedback: "the icon is cut by the body, not
+   sitting on top") -- the badge used to be a *child* of .detail-cover
+   itself, which needs overflow:hidden to clip the image/gradient fill to
+   the cover's own rounded top corners; that same overflow:hidden was
+   clipping the badge's own bottom overhang (its whole point is to stick
+   out below the cover). Fixed by moving .detail-cover-icon out to be a
+   sibling of .detail-cover instead, both wrapped in .detail-cover-wrap
+   (position:relative, no overflow -- purely a positioning context, clips
+   nothing). #}
 {% macro detail_cover(accent, banner, badge_html, avatar_mode=false) %}
-<div class="detail-cover">
-    {% if banner %}
-        {% if banner.version %}
-        <img class="detail-cover-img" src="/banners/image?scope={{ banner.scope|urlencode }}&amp;v={{ banner.version }}" alt="">
+<div class="detail-cover-wrap">
+    <div class="detail-cover">
+        {% if banner %}
+            {% if banner.version %}
+            <img class="detail-cover-img" src="/banners/image?scope={{ banner.scope|urlencode }}&amp;v={{ banner.version }}" alt="">
+            {% else %}
+            <img class="detail-cover-img" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+            {% endif %}
         {% else %}
-        <img class="detail-cover-img" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+        <div class="detail-cover-fill" style="--cover-accent:{{ accent }}"></div>
         {% endif %}
-    {% else %}
-    <div class="detail-cover-fill" style="--cover-accent:{{ accent }}"></div>
-    {% endif %}
+    </div>
     <div class="detail-cover-icon{% if avatar_mode %} detail-cover-icon-avatar{% endif %}"{% if not banner %} style="color:{{ accent }}"{% endif %}>{{ badge_html }}</div>
 </div>
 {% endmacro %}

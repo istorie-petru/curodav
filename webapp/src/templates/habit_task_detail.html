@@ -70,7 +70,13 @@
     {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide', interactive=false) }}
 </div>
 
-<div class="detail-card detail-section-gap">
+<!-- 2026-09-03 direct follow-up ("could we also rework the work sessions
+     ... without having the background color card div") -- was
+     `.detail-card detail-section-gap`; now `.detail-plain-section`
+     (style.css), same as task_detail.html's own Work sessions card the
+     same day. The heatmap card right above stays a real .detail-card,
+     unaffected -- the feedback was about Work sessions specifically. -->
+<div class="detail-plain-section">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>
 

@@ -1186,6 +1186,23 @@ label.seg-btn[hidden]{display:none;}
   border-bottom:1px solid var(--separator);
 }
 .detail-meta-panel:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+/* 2026-09-03 direct follow-up ("could we also rework the work sessions...
+   without having the background color card div") -- same "drop the
+   elevated tonal .detail-card" treatment .detail-meta-panel got, applied
+   to the Work sessions section (task_detail.html/habit_task_detail.html):
+   a top hairline instead of a bottom one, since this section comes after
+   the meta panel rather than before it, so the two panels' rules aren't
+   just each other's mirror by accident -- each is closing off from
+   whatever's *above* it in reading order. Not reused by anything wrapped
+   in .detail-meta-panel itself (that already has its own bottom rule) or
+   by any other .detail-card consumer (habit heatmap, occurrence card) --
+   this is scoped to sections that come after other content, not every
+   card in a detail modal. */
+.detail-plain-section{
+  padding-top:var(--space-4);
+  margin-top:var(--space-4);
+  border-top:1px solid var(--separator);
+}
 /* Crisp value typography -- the label stays the small gray caption above
    (.detail-meta-label); the value gets the larger, heavier, primary-color
    treatment so it reads as the answer to that label. inline-flex so a
@@ -2315,6 +2332,20 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .work-sessions-head{display:flex; align-items:center; gap:6px;}
 .work-sessions-head .work-session-add{margin-left:auto;}
 .session-when{color:var(--fg-secondary); font-size:var(--text-caption); white-space:nowrap;}
+/* 2026-09-03 direct follow-up ("could we also rework the work sessions")
+   -- a .work-session-row modifier (not a change to the shared
+   .checklist-row itself, which contact_form.html/search.html/etc. also
+   use unrelated to this) for a little more breathing room than the
+   default checklist density, plus a small clock icon ahead of "Session N"
+   so each row reads as a scheduling entity rather than a bare label --
+   the visual identity the meta grid's own icon-less rows don't need
+   (they're not individually orderable/actionable the way sessions are).
+   Extra gap before the delete X keeps it from reading glued to the
+   time-picker trigger. */
+.work-session-row{padding:9px 0; gap:var(--space-3);}
+.work-session-row .checklist-text{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); font-weight:500;}
+.work-session-row .checklist-text .icon{color:var(--fg-tertiary); flex:none;}
+.work-session-row .checklist-delete{margin-left:2px;}
 
 /* contact_form.html's Phone/Email rows (Contacts field parity slice 2 of 6)
    -- a type <select> + value input per row, reusing .checklist-delete for
@@ -3563,8 +3594,16 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     inside the actual .modal dialog it's redundant with that element's own
     overflow:hidden + border-radius:28px, which already clips this to the
     same rounded top corners for free. */
+/* 2026-09-03 fix ("the icon is cut by the body, not sitting on top") --
+    .detail-cover-wrap is the positioning context for the badge; .detail-
+    cover itself (the thing that actually needs overflow:hidden, to clip
+    the image/gradient fill to the rounded top corners) no longer contains
+    the badge, so that same overflow:hidden can't also clip the badge's
+    own bottom overhang anymore -- see _detail_cover.html's own comment
+    for the full before/after. */
+.detail-cover-wrap{position:relative; flex:none;}
 .detail-cover{
-   position:relative; height:72px; overflow:hidden; flex:none;
+   height:72px; overflow:hidden;
    border-radius:20px 20px 0 0; background:var(--bg-secondary);
 }
 .detail-cover-img{width:100%; height:100%; object-fit:cover; display:block;}
@@ -3574,11 +3613,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 /* Floating badge overlapping the cover's bottom edge -- an icon on a small
     white card (event/task/habit-task) or a ringed avatar (contact, see
-    .detail-cover-icon-avatar below). bottom:-18px + height:44px means it
-    reads roughly 26px into the cover and 18px below it; .detail-heading-row's
-    own top padding (24px) is sized to clear that 18px overhang plus a
-    small gap, not tied to this value by anything but eyeballing -- if this
-    height/offset ever changes, re-check that padding too. */
+    .detail-cover-icon-avatar below). Positioned against .detail-cover-wrap
+    (not .detail-cover, which clips) so bottom:-18px + height:44px is free
+    to actually stick out below the cover -- roughly 26px overlapping the
+    cover and 18px below it; .detail-heading-row's own top padding (24px)
+    is sized to clear that 18px overhang plus a small gap, not tied to this
+    value by anything but eyeballing -- if this height/offset ever changes,
+    re-check that padding too. */
 .detail-cover-icon{
    position:absolute; left:var(--space-5); bottom:-18px; width:44px; height:44px;
    border-radius:var(--radius-md); background:var(--bg-elevated); box-shadow:var(--shadow-card);

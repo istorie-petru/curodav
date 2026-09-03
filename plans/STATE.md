@@ -8,6 +8,43 @@ session, right before the final commit of that session.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-03), two small fixes on
+  top of the cover-banner baseline shipped earlier the same day:
+  1. **Bug fix** ("the icon is cut by the body, not sitting on top") --
+     `.detail-cover-icon` (the floating badge) used to be a child of
+     `.detail-cover`, which needs `overflow:hidden` to clip the image/
+     gradient fill to the cover's rounded top corners; that same
+     `overflow:hidden` was clipping the badge's own bottom overhang, its
+     entire reason for existing. Fixed by introducing `.detail-cover-wrap`
+     (a plain, non-clipping positioning context) as the actual parent of
+     both `.detail-cover` and `.detail-cover-icon`, siblings now instead
+     of parent/child -- `_detail_cover.html` + style.css both changed, no
+     other template changes needed (all four detail modals go through the
+     one shared macro).
+  2. **Work sessions rework** (direct request: "could we also rework the
+     work sessions" -> clarified via AskUserQuestion -> "visual polish
+     without having the background color card div"): task_detail.html's
+     and habit_task_detail.html's Work sessions section dropped the
+     elevated `.detail-card` wrapper for the new `.detail-plain-section`
+     (a top hairline instead of a tonal box -- same "no background card"
+     treatment the meta grid got in the very first 2026-09-03 session
+     today) plus a `.work-session-row` modifier per row (a little more
+     vertical padding than the default `.checklist-row` density, a small
+     clock icon ahead of "Session N") -- purely visual, no new fields or
+     endpoints. The habit heatmap card right above it on the habit-task
+     page keeps its real `.detail-card` treatment, unaffected -- scoped
+     to Work sessions specifically, matching how the meta-grid change was
+     scoped narrowly too.
+  `sw.js` CACHE_NAME bumped v49 -> v50 (picking up from another session's
+  concurrent v48->v49 datetime-picker bump the same day -- this repo saw
+  parallel sessions today, checked via `git log` before bumping rather than
+  assuming the last value this session itself had written), `test_pwa_
+  shell.py`'s pin updated. `test_detail_modals_rework.py`'s task-page
+  card-count test rewritten (Work sessions was the last real `.detail-card`
+  on that page; now there are zero). Full suite: 1952 passed (four
+  parallel chunks by file, same convention as every other multi-file
+  session this file documents).
+
 - **Shipped:** Direct request, same day (2026-09-03) -- reworked the shared
   date+time range picker's hour selection (`_datetime_picker.html`'s
   `datetime_picker` macro / `static/datetime_picker.js`), used by the event

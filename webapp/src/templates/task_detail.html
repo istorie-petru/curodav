@@ -119,7 +119,12 @@
           allocations (event_task_relations rows with is_work_allocation=1)
           are a distinct feature and are untouched -- see
           _task_work_allocations.html. -->
-     <div class="detail-card detail-section-gap">
+     <!-- 2026-09-03 direct follow-up ("could we also rework the work
+          sessions... without having the background color card div") --
+          was `.detail-card detail-section-gap` (the elevated tonal card);
+          now `.detail-plain-section` (style.css), the same "no background
+          card" treatment the meta grid got earlier the same day. -->
+     <div class="detail-plain-section">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>
 

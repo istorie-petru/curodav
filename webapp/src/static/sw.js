@@ -169,7 +169,18 @@
 // runtime-cached like any other static file) and style.css both changed;
 // bumped per the same v15/v19 lesson so an already-installed PWA doesn't
 // keep serving the old click-drag grid from its runtime cache.
-const CACHE_NAME = "cc-shell-v49";
+// v50 (2026-09-03, same day, two direct follow-ups on the cover-banner
+// baseline from v48): (1) bug fix -- the cover's floating icon badge was
+// getting clipped by .detail-cover's own overflow:hidden (needed to clip
+// the image/gradient fill to the rounded top corners), so the badge's
+// bottom overhang -- its whole point -- was invisible; fixed by moving it
+// out to a sibling .detail-cover-wrap that isn't itself clipped. (2) Work
+// sessions section (task_detail.html/habit_task_detail.html) dropped its
+// elevated .detail-card background in favor of .detail-plain-section (a
+// hairline, same treatment the meta grid already got), plus a small
+// per-row polish pass (.work-session-row). style.css + three templates
+// changed, bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v50";
 
 const SHELL_ASSETS = [
   "/offline",

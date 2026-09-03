@@ -19,7 +19,18 @@
    header comment), so a session can be dated right here instead of only by
    drag. The hidden start_at/end_at inputs inside the per-session <form>
    carry the values. Shared by task_detail.html (header shown) and
-   task_form.html (same spot). #}
+   task_form.html (same spot).
+
+   2026-09-03 direct follow-up ("could we also rework the work sessions...
+   without having the background color card div") -- the elevated
+   .detail-card wrapper task_detail.html/habit_task_detail.html used
+   around this whole section is gone (see .detail-plain-section, style.
+   css, the same "drop the tonal card" treatment the meta grid itself
+   already got); each row also picked up the .work-session-row modifier
+   (a little more vertical padding than the default .checklist-row
+   density, plus a small clock icon ahead of the "Session N" label) purely
+   for visual polish -- no new fields, no new endpoints, same set-times/
+   remove forms as before. #}
 {% from "_datetime_picker.html" import datetime_picker with context %}
 {% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
 {% if show_header %}
@@ -41,8 +52,8 @@
     {% if work_allocations %}
     <div class="checklist">
         {% for wa in work_allocations %}
-        <div class="checklist-row">
-            <span class="checklist-text">Session {{ loop.index }}</span>
+        <div class="checklist-row work-session-row">
+            <span class="checklist-text">{{ icon('clock', 'icon-sm') }} Session {{ loop.index }}</span>
             <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
                 {# The shared range picker (submit mode) dates this session:
                    closing the panel with a complete, edited start/end

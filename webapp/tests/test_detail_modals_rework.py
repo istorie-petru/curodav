@@ -230,18 +230,22 @@ class TestDetailCardAndMetaGrid:
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
 
-    def test_task_work_sessions_card_is_a_second_detail_card(self, conn):
+    def test_task_page_has_no_detail_card_left(self, conn):
         # 2026-08-29 (STATE.md backlog item 4, direct request): the
         # Relations card is fully removed -- this test used to assert
-        # meta + Relations + Work sessions (three detail cards); now it's
-        # just meta + Work sessions (1.4, plans/open-priority.md § Work
-        # allocations). 2026-09-03: the meta grid itself moved off
-        # .detail-card onto the plain .detail-meta-panel, so Work sessions
-        # is now the *only* real .detail-card on this page.
+        # meta + Relations + Work sessions (three detail cards), then just
+        # meta + Work sessions after that (1.4, plans/open-priority.md §
+        # Work allocations). 2026-09-03: the meta grid moved off
+        # .detail-card onto .detail-meta-panel, and the same day Work
+        # sessions moved onto .detail-plain-section ("could we also rework
+        # the work sessions... without having the background color card
+        # div") -- so the task detail page now has zero real .detail-cards
+        # left at all.
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert 'class="detail-meta-panel"' in body
-        assert body.count('class="detail-card') == 1
+        assert 'class="detail-plain-section"' in body
+        assert body.count('class="detail-card') == 0
 
 
 class TestFooterActions:
