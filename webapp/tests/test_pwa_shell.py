@@ -450,12 +450,11 @@ class TestLocalWritePath:
         # outright, not fixed a third time -- the Filters panel's own
         # Width field is confirmed working ("the dashboard customise is
         # fine") and is the only way to set width now.
-        # v53 (2026-09-04): mobile-nav redesign (plans/STATE.md) -- new
-        # static/mobile_nav_drawer.js added to SHELL_ASSETS (same category
-        # as sidebar_tree.js, a base.html script needed on every page),
-        # style.css's mobile bottom-bar/drawer rules rewritten.
+        # v54 (2026-09-04, same day): touch-target follow-up fixes --
+        # .task-row-delete's @media (hover:none) fallback and .icon-btn's
+        # @media (pointer:coarse) size bump, both style.css only.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v53"' in script
+        assert 'CACHE_NAME = "cc-shell-v54"' in script
 
 
 class TestOfflineToolbar:

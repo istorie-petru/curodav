@@ -17,6 +17,38 @@ session start.
 
 ## Right now
 
+- **Shipped:** Direct follow-up, same day (2026-09-04), immediately after
+  the mobile-nav redesign below -- "also implement and fix the other
+  problems described in this conversation," the two touch-target gaps the
+  earlier Cowork audit flagged but deliberately left unfixed (audit-only
+  was the scope at the time):
+  1. **`.task-row-delete` (Tasks/Habits table row delete button) had no
+     touch fallback.** It's hover-reveal-only (`tr:hover`/
+     `tr:focus-within`, opacity not display, so it stays a real focusable
+     target) -- fine for keyboard/mouse, but a touch device has no
+     reliable `:hover` state and there was no way to reach `:focus-within`
+     either (tapping the row's title link navigates away instead of just
+     focusing it), so the button was tappable but practically invisible on
+     a phone. Added `@media (hover:none){ .task-row-delete{opacity:.55;} }`
+     -- feature-detects the input mechanism rather than screen width (also
+     covers a touch-primary tablet at a wide viewport), dimmed rather than
+     full-opacity so it still reads as secondary the way hover-reveal
+     signals on desktop.
+  2. **`.icon-btn` (modal close, calendar nav arrows, etc.) was 28px,
+     under the ~44px touch-target guideline** (Apple HIG / Material
+     Design) -- fine for a mouse, tight for a finger. Added
+     `@media (pointer:coarse){ .icon-btn{width:40px; height:40px;} }` --
+     real box growth (not a padding-only/pseudo-element hit-area trick),
+     scoped to the base rule only; more specific overrides further down
+     (`.cropper-rotate-group .icon-btn`'s 32px compact toolbar, etc.) are
+     untouched, each would need its own layout check before growing.
+  `sw.js` CACHE_NAME bumped v53 -> v54 (style.css changed), `test_pwa_
+  shell.py`'s pin updated. Neither class is referenced by any existing
+  test (grepped `tests/` first). Full suite: 1948 passed across 5
+  foreground chunks (same count as the mobile-nav slice right below --
+  no tests added this round, just two CSS fixes),
+  `test_caldav_bridge_live.py` excluded as always.
+
 - **Shipped:** Direct request, 2026-09-04 -- mobile navigation redesign,
   reached via a Cowork mobile-touch/nav audit (no code changes -- Pointer
   Events/`touch-action:none` already covered every drag interaction, only

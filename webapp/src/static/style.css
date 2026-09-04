@@ -541,6 +541,24 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
 .icon-btn:hover{background:var(--bg-secondary); color:var(--fg-primary);}
 .icon-btn:active{transform:scale(.92); background:var(--bg-secondary);}
 .icon-btn:disabled{opacity:.4; cursor:not-allowed; pointer-events:none;}
+/* 2026-09-04 (Cowork mobile touch audit, plans/STATE.md): 28px is under
+   the ~44px touch-target floor (Apple HIG / Material Design) -- fine for
+   a mouse pointer, whose accuracy this size was originally tuned for, but
+   tight for a finger. `(pointer:coarse)` (not a max-width breakpoint)
+   targets the input mechanism directly, so a touch-primary tablet at a
+   wide viewport gets the bigger target too, and a narrow mouse-driven
+   window doesn't. Real box growth (not a padding-only/pseudo-element
+   hit-area trick) -- deliberately, so it also nudges apart any two
+   icon-btns sitting close together in a row via their container's
+   existing flex gap, rather than growing invisible hit-areas that could
+   overlap and steal taps from a neighboring button. Scoped to the base
+   rule only: `.cropper-rotate-group .icon-btn`'s own 32px (a deliberately
+   compact toolbar inside the avatar-crop modal) and other explicit
+   overrides further down are left alone -- out of scope here, and each
+   would need its own layout check before growing. */
+@media (pointer:coarse){
+  .icon-btn{width:40px; height:40px;}
+}
 /* The topbar's Settings gear is an icon-btn, not a .tab-btn, but still
    needs an active/current-section indicator -- reuses .tab-btn.active's
    accent treatment rather than inventing a second "this is where I am"
@@ -2080,9 +2098,26 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    reveals it the moment focus reaches it (just before a sighted keyboard
    user would need to see it to confirm what they're about to activate),
    not just `:hover`, so keyboard-only use isn't a strictly worse
-   experience than a mouse. */
+   experience than a mouse.
+   2026-09-04 (Cowork mobile touch audit, plans/STATE.md): a touch device
+   has no reliable `:hover` state at all (most mobile browsers only
+   simulate one on first tap, inconsistently, and there was no
+   `:focus-within` path to it either since tapping the row's own title
+   link navigates away instead of just focusing it) -- this button was
+   technically tappable (opacity, not display/visibility) but invisible on
+   phones, discoverable only by accident. `(hover:none)` is the standard
+   feature-detection query for "this input can't hover" (unlike a max-
+   width breakpoint, it also covers a touch-primary tablet/2-in-1 at a
+   wide viewport, and leaves a mouse-driven narrow window alone) -- shown
+   at a dimmed-but-visible opacity there instead of full opacity, so it
+   still reads as secondary to Title/Status/Date the way hover-reveal
+   already signals on desktop, just without requiring a gesture the
+   platform can't perform to discover it exists. */
 .task-row-delete{opacity:0; transition:opacity var(--dur-fast) var(--ease-standard);}
 tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
+@media (hover:none){
+  .task-row-delete{opacity:.55;}
+}
 /* 2026-08-28 "major rework" session (item 3): the "+" add-row at the end
    of every Tasks-table group (except Completed) -- _tasks_body.html.
    "Colored like a normal row" per the session brief: same row height/

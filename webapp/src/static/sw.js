@@ -214,7 +214,15 @@
 // shell rather than relying solely on runtime caching). Bumped per the
 // v15/v16/v19 lesson: any style.css or SHELL_ASSETS-script change needs
 // this regardless of how small.
-const CACHE_NAME = "cc-shell-v53";
+// v54 (2026-09-04, same day, direct follow-up -- "implement and fix the
+// other problems described in this conversation," the two gaps flagged
+// but not fixed by the earlier mobile touch-equivalents audit): 1)
+// `.task-row-delete` gets an `@media (hover:none)` fallback (dimmed but
+// visible) since it was hover-only-reveal with no way to discover it on a
+// touch device; 2) `.icon-btn` grows to 40px under `@media
+// (pointer:coarse)` (was 28px, under the ~44px touch-target guideline).
+// style.css changed, bumped per the same v15 lesson.
+const CACHE_NAME = "cc-shell-v54";
 
 const SHELL_ASSETS = [
   "/offline",
