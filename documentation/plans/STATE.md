@@ -17,6 +17,70 @@ session start.
 
 ## Right now
 
+- **Shipped:** Direct request, 2026-09-04 -- mobile navigation redesign,
+  reached via a Cowork mobile-touch/nav audit (no code changes -- Pointer
+  Events/`touch-action:none` already covered every drag interaction, only
+  gap found was `.task-row-delete`'s hover-only reveal, not fixed here)
+  followed by a real install screenshot: the old `@media (max-width:720px)`
+  treatment packed all ~8 rail destinations (Home/Calendar/Planner/Tasks/
+  Contacts/Search/Settings/+New) into one crushed 64px row, exactly what
+  the screenshot showed. Pushed back once on the user's own 3-item
+  proposal (Calendar/Tasks dropping to two-tap access) before building --
+  they confirmed the minimal version anyway, so this isn't a compromise,
+  it's what was asked for after the tradeoff was surfaced.
+  1. **New persistent `.mobile-tabbar`** (`templates/base.html`) -- exactly
+     3 buttons fixed to the bottom edge: a Sidebar toggle
+     (`#mobile-nav-toggle`), Home, Search. Desktop-hidden entirely (style.
+     css scopes it to `max-width:720px`); `.tabbar` (the rail) renders
+     normally above that width and this bar never displays.
+  2. **`.tabbar` itself becomes a bottom-sheet drawer below 720px** --
+     same rail markup desktop uses, not a trimmed copy (explicit decision:
+     "mirrors the desktop expanded sidebar's content, not a subset"), so
+     Spaces/Projects/tree-toggles -- hidden outright in the old mobile
+     block -- are un-hidden and given the same row layout
+     `html[data-sidebar-expanded]` uses on desktop (duplicated into the
+     mobile media query since that ruleset itself is guarded to
+     `@media (min-width:721px)` and never fires at phone widths). Hidden
+     below the viewport by default (`transform:translateY(110%)`), toggled
+     via `html[data-mobile-nav-open]` (new `static/mobile_nav_drawer.js`).
+     Rows are 44px min-height (not desktop-expanded's 36px) for a real
+     touch-target floor. `#mobile-nav-handle` gives it the same drag-to-
+     dismiss grab handle `#modal-handle` (static/modal.js) already uses,
+     same Pointer Events pattern, same ~90px dismiss threshold -- one
+     visual/interaction convention for both bottom sheets in the app, not
+     two. `#mobile-nav-scrim` darkens behind it, tap to close, stopping
+     short of `.mobile-tabbar` (`bottom:64px`, not 0) so Home/Search/the
+     toggle stay reachable while the drawer is open.
+  3. Caught and fixed before commit: the "hide these three elements above
+     the mobile breakpoint" default rule was accidentally placed *after*
+     the `@media (max-width:720px)` block in style.css -- since both share
+     equal specificity, source order (not media-query nesting) decides the
+     winner when both apply, so it was clobbering the mobile-only
+     `display:` overrides at every width including mobile ones. Moved
+     before the block instead.
+  `sw.js` CACHE_NAME bumped v52 -> v53 (new `static/mobile_nav_drawer.js`
+  added to SHELL_ASSETS -- same "base.html script needed on every page"
+  category as `sidebar_tree.js` -- plus style.css/base.html changed),
+  `test_pwa_shell.py`'s pin updated. No existing test asserts the old
+  mobile markup/CSS shape (this suite has no JS/CSS rendering harness, per
+  this file's own recurring note) -- `test_sidebar_tree.py`/
+  `test_nav_and_deactivation.py` (assert `.tabbar`'s inner markup, which
+  is unchanged -- only wrapped differently at mobile widths) re-run clean.
+  Full suite: 1948 passed across 5 foreground chunks (this sandbox's
+  background-process-per-bash-call limitation, `test_caldav_bridge_live.py`
+  excluded as always).
+
+  **Not done, flagged not fixed:** an unrelated, large *pre-existing*
+  staged-but-uncommitted change was found sitting in this repo's index at
+  session start (`git status --short` before any edit here) -- a docs
+  reorg (`plans/`/`features/`/root guide `.md` files moved under
+  `documentation/`), deploy script removal, new `.github/workflows/`.
+  Not this session's work, not touched or folded into this commit --
+  committed only this slice's own files (`git commit -- <paths>`, a
+  partial commit that leaves the rest of the index staged and alone).
+  Whoever owns that restructuring still needs to commit or discard it
+  separately.
+
 - **Bug fix:** Direct report, 2026-09-04 -- "two events overlap in the week
   view, I move one via mouse but they still show half width... they should
   go to normal width when the event is moved and there is no overlap."

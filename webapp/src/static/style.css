@@ -3387,43 +3387,142 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    .fab{display:flex; bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
 }
 
-/* Mobile: rail becomes a bottom bar (§6 Material Design) */
+/* .mobile-nav-handle/.mobile-tabbar/.mobile-nav-scrim markup exists on
+   every page (base.html) but must render as nothing above the mobile
+   breakpoint -- this default has to sit BEFORE the `@media (max-
+   width:720px)` block below, not after: both this rule and that block's
+   own `display:` overrides share the same specificity (one class each),
+   so whichever comes later in source order wins whenever both apply.
+   Placed after the mobile block once by mistake and caught before commit
+   -- that ordering made the unconditional `display:none` here win even
+   inside the media query (later in the file beats "inside a more specific
+   media condition," there's no implicit precedence for the latter), which
+   would have hidden the mobile bar/drawer/scrim at every width including
+   mobile ones. */
+.mobile-nav-handle, .mobile-tabbar, .mobile-nav-scrim{display:none;}
+
+/* Mobile (2026-09-04 redesign, plans/STATE.md mobile-nav decision -- direct
+   report with a screenshot: the old approach below packed all ~8 rail
+   destinations into one 64px row, which is exactly what it looks like --
+   crushed icons, no room left to add anything, no "Sidebar" grouping the
+   less-used destinations out of the way). Replaces the old "rail becomes a
+   bottom bar of every destination" treatment with two pieces:
+   1. `.mobile-tabbar` -- a new, separate, always-visible 3-button bar
+      (Sidebar toggle / Home / Search, markup in base.html) fixed to the
+      very bottom edge.
+   2. `.tabbar` itself (the exact same rail markup desktop uses, not a
+      trimmed copy) becomes a bottom-sheet drawer above that: hidden below
+      the viewport by default (`transform:translateY(...)`), slid in via
+      `html[data-mobile-nav-open]` (static/mobile_nav_drawer.js), styled as
+      a scrollable list (icon + full label per row, tree toggles for
+      Spaces with children) rather than the desktop rail's icon-only
+      column -- the explicit decision was "mirrors the desktop *expanded*
+      sidebar's content, not a trimmed subset," so every section hidden
+      outright in the old block below (Spaces/Projects/tree toggles) is
+      un-hidden here instead, reusing the exact same rules
+      `html[data-sidebar-expanded]` applies on desktop (duplicated here,
+      not shared, since that ruleset is itself guarded to
+      `@media (min-width:721px)` and doesn't fire at this width). */
 @media (max-width:720px){
   .app-window{flex-direction:column;}
   .tabbar{
-    position:fixed; top:auto; left:0; right:0; bottom:0;
-    width:100%; height:64px;
-    flex-direction:row; justify-content:center;
+    position:fixed; left:0; right:0; top:auto;
+    bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+    width:100%; max-height:75vh;
+    display:flex; flex-direction:column; align-items:stretch;
+    gap:2px;
     border-right:none; border-top:1px solid var(--separator);
-    box-shadow:0 -2px 8px rgba(0,0,0,.08);
-    padding:0 4px;
-    padding-bottom:env(safe-area-inset-bottom, 0px);
-    gap:0; overflow:visible;
-    z-index:100;
+    border-radius:28px 28px 0 0;
+    box-shadow:var(--elevation-3);
+    padding:0 var(--space-3) var(--space-3);
+    overflow-y:auto; overflow-x:hidden;
+    z-index:150;
+    transform:translateY(110%);
+    transition:transform var(--dur-normal) var(--ease-standard);
   }
+  html[data-mobile-nav-open] .tabbar{transform:translateY(0);}
   .tabbar .spacer{display:none;}
-  /* Spaces in the sidebar are a desktop-rail-only convenience (2026-08-08)
-     -- the bottom bar's fixed destinations already use `flex:1` to fill
-     the width evenly (see .tab-btn below); an arbitrary, user-growable
-     count of Spaces sharing that same row would shrink every icon
-     unpredictably as more get created, on the one layout with no spare
-     width to give them. Reaching a Space on mobile still works the same
-     way it always has -- Settings > Labels, or that label's own page. */
-  .tab-separator, .tab-btn-space, .tab-btn-project, .sidebar-section-label{display:none;}
-  /* 2026-08-29 sidebar redesign slice 13a + follow-ups: the expand toggle,
-     nested tree wrapper divs, and rail "+ New" button are new (base.html),
-     same desktop-only convenience as Spaces/Projects above -- hide them
-     outright rather than leaving empty flex containers in the bottom
-     bar's layout. The mobile "+ New" equivalent is each page's own
-     existing .fab (still shown here, see the .fab mobile block above). */
-  .sidebar-expand-toggle, .sidebar-tree-item, .sidebar-quick-add{display:none;}
+  /* Grab handle -- same drag-to-dismiss affordance/markup pattern as
+     #modal-handle (style.css's own .modal-handle rule, static/modal.js),
+     hidden on desktop (base rule further up sets display:none) and shown
+     here only. */
+  .mobile-nav-handle{
+    display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
+    margin:var(--space-2) auto var(--space-1); flex:none; touch-action:none;
+  }
+  /* No separate collapse/expand state exists at this width -- the drawer
+     is always the "expanded" look, so the desktop toggle/app-name header
+     has nothing to do here (the grab handle above is this drawer's own
+     top affordance instead). "+ New" stays off the drawer specifically
+     (not "expanded content" in general) -- every page already has its own
+     .fab for this (see the .fab mobile block above), so the drawer isn't
+     the only way to reach it and doesn't need to duplicate it. */
+  .sidebar-header, .sidebar-quick-add{display:none;}
+  /* Spaces/Projects sections and the nested Spaces tree: shown here (not
+     hidden the way the old bottom-bar block did) per the explicit "mirror
+     the desktop expanded sidebar, not a trimmed subset" decision --
+     layout mirrors `html[data-sidebar-expanded]`'s own rules further up
+     this file almost exactly, since that's the look being mirrored. */
+  .tab-separator{width:100%; height:1px; background:var(--separator); margin:var(--space-2) 0;}
+  .sidebar-section-label{display:block; width:100%; padding:10px 8px 4px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-tertiary); text-align:left;}
+  .sidebar-tree-item{display:flex; width:100%; flex-direction:column; align-items:stretch;}
+  .sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:flex-start; gap:4px;}
+  .sidebar-tree-toggle{display:flex;}
+  .sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded="true"]) + .sidebar-tree-children{display:flex;}
+  .tab-btn-child{padding-left:34px;}
+  /* Every rail entry becomes a full-width icon+label row -- a touch list,
+     not the desktop rail's icon-only column. min-height 44px (not
+     desktop-expanded's 36px) meets the standard mobile touch-target floor
+     since every row here is a real tap target, unlike the desktop rail
+     where a mouse pointer doesn't need the same margin for error. */
   .tab-btn{
-    width:auto; min-height:auto; flex:1;
+    flex-direction:row; width:100%; min-height:44px;
+    justify-content:flex-start; align-items:center; gap:10px;
+    padding:6px 8px;
+  }
+  .tab-btn .icon{width:20px; height:20px;}
+  .tab-btn span{display:block; margin-top:0; max-width:none; overflow:visible; text-overflow:clip; white-space:normal;}
+  .tab-btn.active::before{top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-sm);}
+  /* New persistent 3-button bar (base.html's .mobile-tabbar) -- Sidebar
+     toggle / Home / Search, replacing the old all-destinations row this
+     block used to render via .tabbar itself. */
+  .mobile-tabbar{
+    display:flex; position:fixed; left:0; right:0; bottom:0;
+    height:64px; z-index:160;
+    background:var(--bg-elevated); border-top:1px solid var(--separator);
+    box-shadow:0 -2px 8px rgba(0,0,0,.08);
+    padding:0 4px; padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-tabbar-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; background:none; border:none; cursor:pointer;
+    color:var(--fg-secondary); text-decoration:none;
+    font-size:12px; font-weight:500; line-height:1.1;
     padding:8px 4px 6px;
   }
-  .tab-btn .icon{width:18px; height:18px;}
-  .tab-btn.active::before{top:4px; width:48px; height:26px; border-radius:13px;}
-  /* Content shifts: no rail, but reserve bottom bar space */
+  .mobile-tabbar-btn .icon{width:20px; height:20px;}
+  .mobile-tabbar-btn:hover{color:var(--fg-primary); text-decoration:none;}
+  .mobile-tabbar-btn:active{opacity:.7;}
+  .mobile-tabbar-btn.active, .mobile-tabbar-btn[aria-expanded="true"]{color:var(--fg-primary); font-weight:600;}
+  /* Scrim behind the open drawer, stopping short of .mobile-tabbar itself
+     (bottom:64px, not 0) so Home/Search/the toggle stay reachable while
+     the drawer is open rather than being covered by their own scrim.
+     Same opacity+visibility pattern as .modal-overlay (style.css, further
+     down) for an identical open/close feel. */
+  .mobile-nav-scrim{
+    display:block; position:fixed; left:0; right:0; top:0;
+    bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+    background:var(--overlay-scrim); z-index:140;
+    opacity:0; visibility:hidden;
+    transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
+  }
+  html[data-mobile-nav-open] .mobile-nav-scrim{
+    opacity:1; visibility:visible;
+    transition:opacity var(--dur-normal) var(--ease-standard);
+  }
+  /* Content shifts: no rail, but reserve bottom bar space (unchanged --
+     .mobile-tabbar is the same 64px height the old full-width .tabbar row
+     was, so the reserved space main already had is still correct). */
   main{margin-left:0; padding-bottom:80px;}
 }
 

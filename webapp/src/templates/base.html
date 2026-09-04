@@ -94,7 +94,17 @@
          Schedule's one distinguishing feature; see plans/STATE.md's
          removal entry. -->
     {% if not hide_tabbar %}
-    <nav class="tabbar" role="navigation" aria-label="Main">
+    <nav class="tabbar" id="mobile-nav-drawer" role="navigation" aria-label="Main">
+        <!-- Mobile nav drawer grab handle (2026-09-04, plans/STATE.md
+             mobile-nav decision) -- only visible/interactive below the
+             mobile breakpoint (style.css's `.mobile-nav-handle` rule),
+             where this whole <nav> becomes a bottom-sheet drawer instead
+             of the desktop rail (see the new `.mobile-tabbar`/
+             `.mobile-nav-scrim` further down + static/
+             mobile_nav_drawer.js). Same drag-to-dismiss visual pattern as
+             `#modal-handle` (static/modal.js) deliberately, rather than
+             inventing a second one for this second bottom sheet. -->
+        <div class="mobile-nav-handle" id="mobile-nav-handle" aria-hidden="true"></div>
         <!-- 2026-08-29 sidebar redesign, direct follow-up to slice 13a: the
              expand/collapse toggle moved here, to a fixed spot at the very
              top of the rail, always rendered (not conditional on having a
@@ -375,6 +385,33 @@
            (settings_appearance.html), keeping the topbar free of a second,
            less capable way to change the same setting. #}
     </nav>
+    <!-- Mobile bottom bar (2026-09-04, plans/STATE.md mobile-nav decision)
+         -- replaces the old icon-only bottom row of every tabbar
+         destination (crushed/overflowing at phone widths, direct report
+         against a real install screenshot) with exactly 3 persistent
+         controls: a Sidebar toggle that opens the .tabbar above as a
+         bottom-sheet drawer (full nav content, not a trimmed subset --
+         confirmed explicitly, not a default), Home, and Search. Desktop-
+         hidden entirely (style.css scopes both this and .tabbar's own
+         drawer treatment to max-width:720px); above that breakpoint
+         .tabbar renders as the normal rail and this bar never displays.
+         A plain <nav>, not reusing `.tabbar`'s own class -- its 3 buttons
+         need a completely different fixed layout (one row of 3, not a
+         scrollable column of many) rather than trying to make one class
+         cover both shapes. -->
+    <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
+        <button type="button" id="mobile-nav-toggle" class="mobile-tabbar-btn" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Open navigation menu">{{ icon('sidebar') }}<span>Menu</span></button>
+        <a href="/" data-tab="dashboard" class="mobile-tabbar-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
+        <a href="/search" data-tab="search" data-command-palette-open class="mobile-tabbar-btn {% if active_tab == 'search' %}active{% endif %}">{{ icon('command') }}<span>Search</span></a>
+    </nav>
+    <!-- Scrim behind the open drawer -- tap to close (static/
+         mobile_nav_drawer.js), sibling of the thing it darkens rather
+         than a wrapper around it, same portal reasoning as
+         #modal-overlay/#color-popover further down. Stops short of
+         .mobile-tabbar itself (style.css: bottom:64px, not 0) so Home/
+         Search/the toggle stay reachable while the drawer is open instead
+         of being covered by their own scrim. -->
+    <div class="mobile-nav-scrim" id="mobile-nav-scrim" aria-hidden="true"></div>
 {% endif %}
     <!-- 2026-08-07: the main-class block below lets a page opt out of the
          default 1120px-max-width centered column -- Calendar (Month/
@@ -466,6 +503,14 @@
 <script src="{{ static_url('toast.js') }}"></script>
 <script src="{{ static_url('app.js') }}"></script>
 <script src="{{ static_url('sidebar_tree.js') }}"></script>
+<!-- Mobile nav drawer (2026-09-04, plans/STATE.md mobile-nav decision) --
+     toggles the .mobile-tabbar Sidebar button / .tabbar bottom-sheet
+     drawer / scrim added above. Loaded globally like sidebar_tree.js
+     right above it (same category: a base.html nav control needed on
+     every page, not a page-specific script) -- it no-ops instantly via an
+     early return when its target elements aren't present (hide_tabbar
+     pages). -->
+<script src="{{ static_url('mobile_nav_drawer.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.

@@ -203,7 +203,18 @@
 // .detail-card box edge) -- so Work sessions was showing two parallel
 // hairlines a margin-top gap apart instead of one. style.css changed,
 // bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v52";
+// v53 (2026-09-04, mobile-nav redesign, plans/STATE.md) -- the old mobile
+// bottom bar (all ~8 tabbar destinations crushed into one row, direct
+// report against a real install screenshot) is replaced by a 3-button
+// `.mobile-tabbar` (Sidebar/Home/Search) plus a bottom-sheet drawer that
+// reuses `.tabbar` itself. style.css + templates/base.html changed, plus a
+// new static/mobile_nav_drawer.js (added to SHELL_ASSETS below, same
+// v19 reasoning as sidebar_tree.js -- a base.html script needed on every
+// page for core navigation, not a page-specific one, so it belongs in the
+// shell rather than relying solely on runtime caching). Bumped per the
+// v15/v16/v19 lesson: any style.css or SHELL_ASSETS-script change needs
+// this regardless of how small.
+const CACHE_NAME = "cc-shell-v53";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -212,6 +223,7 @@ const SHELL_ASSETS = [
   "/static/toast.js",
   "/static/app.js",
   "/static/sidebar_tree.js",
+  "/static/mobile_nav_drawer.js",
   "/static/modal.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
