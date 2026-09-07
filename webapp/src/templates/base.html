@@ -501,9 +501,9 @@
     </div>
 </div>
 
-<script src="{{ static_url('toast.js') }}"></script>
-<script src="{{ static_url('app.js') }}"></script>
-<script src="{{ static_url('sidebar_tree.js') }}"></script>
+<script defer src="{{ static_url('toast.js') }}"></script>
+<script defer src="{{ static_url('app.js') }}"></script>
+<script defer src="{{ static_url('sidebar_tree.js') }}"></script>
 <!-- Mobile nav drawer (2026-09-04, plans/STATE.md mobile-nav decision) --
      toggles the .mobile-tabbar Sidebar button / .tabbar bottom-sheet
      drawer / scrim added above. Loaded globally like sidebar_tree.js
@@ -511,19 +511,19 @@
      every page, not a page-specific script) -- it no-ops instantly via an
      early return when its target elements aren't present (hide_tabbar
      pages). -->
-<script src="{{ static_url('mobile_nav_drawer.js') }}"></script>
+<script defer src="{{ static_url('mobile_nav_drawer.js') }}"></script>
 <!-- Icon-only accessible names (audit-fixes-2.0.md slice 5) -- sets
      aria-label from title on any icon-only control app-wide. Loaded
      globally and needs no wireContent() hook: it watches the whole
      document via MutationObserver, so modal/region-refresh/quick-add
      content injected later is covered automatically. -->
-<script src="{{ static_url('a11y_icon_labels.js') }}"></script>
-<script src="{{ static_url('modal.js') }}"></script>
+<script defer src="{{ static_url('a11y_icon_labels.js') }}"></script>
+<script defer src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.
      Loaded before every page/extra script so modal.js, app.js and each
      page's own listeners can rely on window.ccApi existing. -->
-<script src="{{ static_url('async_crud.js') }}"></script>
+<script defer src="{{ static_url('async_crud.js') }}"></script>
 <!-- Notion-style click-to-edit table cells (2026-08-28, direct feedback:
      "once you click two times on an element it becomes editable in a
      non-discrete way") -- a plain `[data-inline-edit]` span renders as
@@ -532,17 +532,17 @@
      form.requestSubmit()) so any future table cell can opt in with the
      same data attributes -- the Habits group's check-in counter
      (_habit_row.html) is the first, not the only intended user. -->
-<script src="{{ static_url('inline_edit.js') }}"></script><script src="{{ static_url('tag_input.js') }}"></script>
-<script src="{{ static_url('recurrence_picker.js') }}"></script>
-<script src="{{ static_url('reminders_picker.js') }}"></script>
+<script defer src="{{ static_url('inline_edit.js') }}"></script><script defer src="{{ static_url('tag_input.js') }}"></script>
+<script defer src="{{ static_url('recurrence_picker.js') }}"></script>
+<script defer src="{{ static_url('reminders_picker.js') }}"></script>
 <!-- Shared date+time range picker (2026-08-17, _datetime_picker.html,
      static/datetime_picker.js) -- the event form, the time-block modal and
      the Work sessions card are all injected into modals via innerHTML,
      which never runs <script> tags, so this loads globally like the other
      "picker" scripts and modal.js's wireContent() calls window.CCDateTimePicker
      against freshly-injected content. -->
-<script src="{{ static_url('datetime_picker.js') }}"></script>
-<script src="{{ static_url('stepper.js') }}"></script>
+<script defer src="{{ static_url('datetime_picker.js') }}"></script>
+<script defer src="{{ static_url('stepper.js') }}"></script>
 {#
     Widget scripts (2026-08-03) -- loaded globally (not just the Customize
     modal's own extra_scripts) so modal.js's wireContent() can call
@@ -559,40 +559,40 @@
     non-keep-open modal form in this app; see _modal_widget_customize.html's
     own comment.
 #}
-<script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
+<script defer src="{{ static_url('dashboard_widget_preview.js') }}"></script>
 <!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
      -- loaded globally for the same reason as the Widget scripts above:
      contact_form.html is normally injected into the modal via innerHTML,
      which never runs <script> tags, so modal.js's wireContent() calls
      CCAvatarCropper.init(body) against the freshly-injected content. -->
-<script src="{{ static_url('avatar_cropper.js') }}"></script>
+<script defer src="{{ static_url('avatar_cropper.js') }}"></script>
 <!-- contact_form.html's Phone/Email rows (Contacts field parity slice 2 of
      6) -- same reason as the scripts above: contact_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()
      calls CCContactPhoneEmailRows.init(body) against the freshly-injected
      content. -->
-<script src="{{ static_url('contact_phone_email_rows.js') }}"></script>
+<script defer src="{{ static_url('contact_phone_email_rows.js') }}"></script>
 <!-- task_form.html's Daily target field (2026-08-08) -- loaded globally
      for the same reason as the scripts above: task_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()
      calls CCHabitFieldToggle.init(body) against the freshly-injected
      content. -->
- <script src="{{ static_url('task_habit_field_toggle.js') }}"></script>
+ <script defer src="{{ static_url('task_habit_field_toggle.js') }}"></script>
 <!-- label_edit_modal.html's Role picker (2026-08-15) -- same reason as
      the scripts above: that page is only ever opened via data-modal, so
      modal.js's wireContent() calls CCLabelRolePicker.init(body) against
      the freshly-injected content. -->
-<script src="{{ static_url('label_role_picker.js') }}"></script>
+<script defer src="{{ static_url('label_role_picker.js') }}"></script>
 <!-- label_form_modal.html's Space/Project checkbox toggles -- same reason:
      page is only opened via data-modal, modal.js's wireContent() calls
      CCLabelFormPicker.init(body) against the freshly-injected content. -->
-<script src="{{ static_url('label_form_picker.js') }}"></script>
+<script defer src="{{ static_url('label_form_picker.js') }}"></script>
 <!-- _event_form_fields.html's Format field (2026-08-15) -- loaded globally
      for the same reason as the scripts above: event_form.html/quick_add.html
      are normally injected into the modal via innerHTML, so modal.js's
      wireContent() calls CCEventFormatToggle.init(body) against the
      freshly-injected content. -->
-<script src="{{ static_url('event_format_toggle.js') }}"></script>
+<script defer src="{{ static_url('event_format_toggle.js') }}"></script>
 <!-- Universal command surface (1.2 side work) -- global Ctrl-K/Cmd-K search
      plus the Relations cards' "add related X" picker
      (_task_relations.html/_event_relations.html, replacing the old
@@ -602,13 +602,13 @@
      modal-injected-content scripts above it needs no wireContent()
      re-init hook -- delegation already covers content injected via
      modal.js's innerHTML swap. -->
-<script src="{{ static_url('command_palette.js') }}"></script>
+<script defer src="{{ static_url('command_palette.js') }}"></script>
 <!-- Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
      loaded globally for the same reason as the scripts above: quick_add.html
      is normally injected into the modal via innerHTML (which never runs
      <script> tags), so modal.js's wireContent() calls CCQuickAdd.init(body)
      against the freshly-injected content to wire its Task/Event tab switch. -->
-<script src="{{ static_url('quick_add.js') }}"></script>
+<script defer src="{{ static_url('quick_add.js') }}"></script>
 {# PWA shell (1.8 slice 3) -- DISABLED
 <script src="{{ static_url('pwa.js') }}"></script>
 #}

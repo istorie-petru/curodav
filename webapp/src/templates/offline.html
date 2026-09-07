@@ -113,7 +113,7 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('offline_write.js') }}"></script>
-<script src="{{ static_url('offline_quick_capture.js') }}"></script>
-<script src="{{ static_url('offline_shell.js') }}"></script>
+<script defer src="{{ static_url('offline_write.js') }}"></script>
+<script defer src="{{ static_url('offline_quick_capture.js') }}"></script>
+<script defer src="{{ static_url('offline_shell.js') }}"></script>
 {% endblock %}

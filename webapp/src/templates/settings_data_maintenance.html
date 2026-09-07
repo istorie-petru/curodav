@@ -332,7 +332,7 @@
 
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('data_maintenance.js') }}"></script>
+<script defer src="{{ static_url('data_maintenance.js') }}"></script>
 <script>
   async function forceSyncFromServer() {
     const btn = document.querySelector('[onclick="forceSyncFromServer()"]');

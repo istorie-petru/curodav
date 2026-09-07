@@ -17,6 +17,71 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 10, performance
+  housekeeping (the last mandatory item before the CSP `unsafe-inline`
+  migration). Two parts per the doc's own spec:
+  1. **`defer` added to every global/page `<script src>` tag.** Not just
+     `base.html`'s 22 global scripts (lines 504-611 at the time this slice
+     started) -- auditing first (via a dispatched research pass) found
+     that `base.html`'s own `{% block extra_scripts %}` placeholder is
+     immediately followed, in the rendered HTML, by each page template's
+     page-specific scripts, and those were still plain synchronous
+     `<script src>` tags. Deferring only the base.html globals while
+     leaving page-specific scripts synchronous would have **reversed**
+     execution order: deferred scripts run only after the whole document
+     finishes parsing (right before `DOMContentLoaded`), so a page's own
+     synchronous extra_scripts content would have started running before
+     `window.ccApi` (async_crud.js), `CCModal`, `CCQuickAdd`, etc. existed
+     -- exactly the kind of regression this suite's lack of a JS-execution
+     test harness wouldn't catch. Fixed by deferring both: base.html's 22
+     tags, plus every `<script src>` in the 15 page templates that
+     override extra_scripts with real script tags (`tasks_list.html`,
+     `calendar_fourweek.html`, `calendar_month.html`, `calendar_day.html`,
+     `calendar_week.html`, `label_detail.html`, `dashboard.html`,
+     `contacts_list.html`, `published_lists.html`, `notes.html`,
+     `habit_detail.html`, `offline.html`, `settings_data_maintenance.html`,
+     `labels_manage.html`, `settings_time_blocks.html`,
+     `settings_holidays.html`). `time_block_edit_modal.html`/
+     `holiday_edit_modal.html` were confirmed to have no real
+     extra_scripts content (modal-only templates, per their own comments)
+     -- correctly excluded. Inline `<script>` blocks with no `src`
+     (base.html's head theme-init script; extra_scripts' own inline
+     blocks like `calendar_week.html`'s `window.PROJECT_CALENDAR`
+     assignment, and the `bulk_select.js`-consuming `DOMContentLoaded`
+     listeners in `labels_manage.html`/`settings_time_blocks.html`/
+     `settings_holidays.html`) can't take `defer` (browsers ignore it on
+     scripts without `src`) and didn't need to -- audited each one first
+     and confirmed none calls a base-global synchronously at top level
+     outside a `DOMContentLoaded` listener or later `onclick` handler, so
+     none was at risk. The four PWA-shell scripts already disabled inside
+     a Jinja `{# #}` comment (pwa.js, offline_db.js,
+     offline_sync_client.js, offline_status.js) were left alone -- dead
+     code, never rendered either way.
+  2. **Dependency lockfile check.** `pyproject.toml`'s own deps are indeed
+     lower-bounded only, as the audit item says, but `uv.lock` (repo root,
+     tracked in git, not gitignored) already pins every dependency to an
+     exact version with a hash -- confirmed by reading it directly rather
+     than trusting the audit item's framing at face value. No action
+     needed for this half of the item.
+  No `sw.js` bump -- only the `defer` attribute changed on existing
+  `<script>` tags in templates; no static JS file content changed and no
+  entry was added to or removed from `SHELL_ASSETS`, same "templates-only
+  change" reasoning as every other slice in this list that didn't bump
+  the cache version. Full suite: 1970 passed (same count as slice 9 -- a
+  load-order/timing change with no test harness for JS execution in this
+  suite, verified instead by the extra_scripts audit above rather than a
+  new test), run as 84 parallel per-file background processes in one
+  call, `test_caldav_bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #11, the CSP
+  `unsafe-inline` migration -- move `security_headers.py:52-62` to a
+  nonce-based CSP for script-src/style-src. Saved for last on purpose:
+  largest and riskiest item in the list, touches every inline
+  script/style across templates. Independent second-wave items #12-15
+  also remain open (z-index scale, and others per `audit-fixes-2.0.md`'s
+  own listing) -- no dependency chain between them and #11, doable in any
+  order.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 9, lower-priority UI
   consistency polish, reached via a user-shared proposal to restructure
   `templates/` into a layouts/components/widgets/pages folder split

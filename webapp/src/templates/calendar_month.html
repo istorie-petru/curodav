@@ -41,4 +41,4 @@
      drop their fixed-height floor). Desktop only, see that same comment. -->
 {% include "_calendar_month_grid.html" %}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('calendar_month.js') }}"></script><script src="{{ static_url('calendar_month_drag.js') }}"></script><script src="{{ static_url('async_calendar.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('calendar_month.js') }}"></script><script defer src="{{ static_url('calendar_month_drag.js') }}"></script><script defer src="{{ static_url('async_calendar.js') }}"></script>{% endblock %}

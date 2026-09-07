@@ -84,4 +84,4 @@
    the "Habits" group below, right alongside Project/Unassigned/Completed
    (see _tasks_body.html and routers/tasks.py's _build_task_groups). #}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

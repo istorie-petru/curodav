@@ -112,11 +112,14 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    pages split, evaluated and mostly declined (the codebase already has
    an equivalent, informally named) — see `roadmap.md`'s 2.0 section.
 
-10. **Performance housekeeping.** Add `defer` to the 24 `<script>` tags in
-    `templates/base.html:503-604` that don't need to block; confirm a
-    dependency lockfile exists and pins exact versions (pyproject.toml's
-    listed deps are all lower-bounded only). Quick, no risk, no user-facing
-    change.
+10. ~~**Performance housekeeping.**~~ **Shipped 2026-09-07** — see
+    `STATE.md`'s entry of the same date. Turned out to need more than
+    `base.html` alone: every page template's `extra_scripts` block sits
+    immediately after `base.html`'s globals in the rendered HTML, so those
+    page-specific `<script src>` tags got `defer` too, to avoid reversing
+    execution order against the now-deferred globals. `uv.lock` was
+    confirmed to already pin exact dependency versions — no action needed
+    for that half.
 
 11. **CSP `unsafe-inline` migration.** `security_headers.py:52-62` — move to
     a nonce-based CSP for script-src/style-src. Saved for last on purpose:

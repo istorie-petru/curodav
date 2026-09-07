@@ -50,7 +50,7 @@
      Settings > Sleep & Leisure Time) -- loaded before calendar.js so it
      can call window.ccTimeBlocks. -->
 <script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
-<script src="{{ static_url('time_blocks.js') }}"></script>
-<script src="{{ static_url('calendar.js') }}"></script>
-<script src="{{ static_url('async_calendar.js') }}"></script>
+<script defer src="{{ static_url('time_blocks.js') }}"></script>
+<script defer src="{{ static_url('calendar.js') }}"></script>
+<script defer src="{{ static_url('async_calendar.js') }}"></script>
 {% endblock %}

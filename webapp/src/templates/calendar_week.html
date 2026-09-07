@@ -41,7 +41,7 @@
      Settings > Sleep & Leisure Time) -- loaded before calendar.js/
      project_calendar.js so both can call window.ccTimeBlocks. -->
 <script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
-<script src="{{ static_url('time_blocks.js') }}"></script>
+<script defer src="{{ static_url('time_blocks.js') }}"></script>
 <script>
   // See this template's own top comment -- ordinary events keep calendar.js's
   // interactions; work-allocation blocks get project_calendar.js's, pointed
@@ -58,9 +58,9 @@
     weekDate: "{{ monday.isoformat() }}",
   };
 </script>
-<script src="{{ static_url('calendar.js') }}"></script>
-<script src="{{ static_url('project_calendar.js') }}"></script>
-<script src="{{ static_url('calendar_week_allday_drag.js') }}"></script>
-<script src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
-<script src="{{ static_url('async_calendar.js') }}"></script>
+<script defer src="{{ static_url('calendar.js') }}"></script>
+<script defer src="{{ static_url('project_calendar.js') }}"></script>
+<script defer src="{{ static_url('calendar_week_allday_drag.js') }}"></script>
+<script defer src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
+<script defer src="{{ static_url('async_calendar.js') }}"></script>
 {% endblock %}

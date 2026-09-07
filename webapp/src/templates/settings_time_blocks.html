@@ -144,7 +144,7 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('bulk_select.js') }}"></script>
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     window.CCBulkSelect.init({
