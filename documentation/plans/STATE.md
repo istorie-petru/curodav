@@ -17,6 +17,45 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 4, the modal keyboard
+  focus trap (`documentation/reports/full-app-audit-2026-09-07.md` finding
+  #2, the one accessibility finding rated high -- WCAG 2.1.2/2.4.3, a
+  keyboard user could Tab straight out of an open modal into the page
+  behind it). `static/modal.js` previously had only an Escape handler
+  (line 557); added `trapTabKey`, wired into the same document-level
+  `keydown` listener, alongside a new `getFocusableElements`/
+  `FOCUSABLE_SELECTOR` helper. Queries `#modal-dialog` (the persistent
+  wrapper element -- see `stabilizeHeight`'s own comment on why this is
+  the stable element to query, not `#modal-body`, since content underneath
+  it gets swapped by `refreshModalContent`/navigation) fresh on every
+  Tab keypress rather than caching a focusable list at open time, so it
+  stays correct across those swaps. Shift+Tab off the first focusable (or
+  from outside the dialog entirely) wraps to last; Tab off the last (or
+  from outside) wraps to first; a modal with zero focusable elements
+  (rare, but not provably impossible) sends focus to the dialog itself
+  instead of doing nothing -- needed `tabindex="-1"` added to
+  `#modal-dialog` in `base.html` (JS-focusable fallback target, not in the
+  natural tab order).
+
+  `sw.js` CACHE_NAME bumped v54 -> v55 (`modal.js` is in `SHELL_ASSETS`),
+  `test_pwa_shell.py`'s pin updated. No existing test exercises modal
+  keyboard behavior (this suite has no JS-execution harness, per this
+  file's own recurring note) -- grepped `tests/` for `focus.trap`/`Tab`/
+  `modal.js` first, the only hits were `test_pwa_shell.py`'s precache-list
+  assertion, already updated. Full suite: all 84 non-live test files
+  green, run as one file-per-background-process batch inside a single
+  bash call (16 cores available this session, so per-file parallelism
+  finished well under the 45s per-call cap instead of needing pre-built
+  chunk files -- `test_caldav_bridge_live.py` excluded as always).
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #5, icon-button
+  accessible names -- an `aria-label` fallback keyed off each element's
+  existing `title`, touching `_task_row.html:144`, `_habit_row.html:115`,
+  `labels_manage.html:75`, `_labels_table_body.html:28`,
+  `settings_holidays.html:61`, `settings_time_blocks.html:63,125`, and the
+  widget/picker/relation-row templates the audit report lists. Mechanical,
+  many touch points, low risk.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 3, the N+1 query fix
   flagged as the highest-impact single fix in the whole audit report
   (`documentation/reports/full-app-audit-2026-09-07.md` finding #1).

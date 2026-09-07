@@ -554,12 +554,66 @@
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeModal();
   });
+
+  // Keyboard focus trap (audit-fixes-2.0.md #4, full-app-audit-2026-09-07.md
+  // finding #2, WCAG 2.1.2/2.4.3) -- Escape-to-close already existed below,
+  // but nothing stopped Tab/Shift+Tab from walking focus straight out of an
+  // open modal into the page behind it. `dialog` (#modal-dialog) is the
+  // fixed element that wraps header/body/footer across every open/refresh/
+  // navigate cycle (see stabilizeHeight's comment above), so querying it
+  // fresh on every keydown -- rather than caching a focusable list at open
+  // time -- stays correct across refreshModalContent()/form navigation
+  // swapping #modal-body's content underneath it.
+  const FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled]):not([type=hidden])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+
+  function getFocusableElements() {
+    if (!dialog) return [];
+    return Array.prototype.filter.call(
+      dialog.querySelectorAll(FOCUSABLE_SELECTOR),
+      (el) => el.offsetParent !== null // skip hidden (display:none) elements
+    );
+  }
+
+  function trapTabKey(e) {
+    if (!overlay.classList.contains("is-open") || !dialog) return;
+    const focusable = getFocusableElements();
+    if (focusable.length === 0) {
+      e.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      // Shift+Tab off the first focusable (or from outside the dialog
+      // entirely, e.g. focus landed on the overlay backdrop) wraps to last.
+      if (active === first || !dialog.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last || !dialog.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && openPicker) {
       closeOpenPopover();
       return;
     }
     if (e.key === "Escape" && overlay.classList.contains("is-open")) closeModal();
+    if (e.key === "Tab" && overlay.classList.contains("is-open")) trapTabKey(e);
   });
 
   // Wire up any color/icon pickers already present on a plain full page

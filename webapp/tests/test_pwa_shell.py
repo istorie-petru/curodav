@@ -453,8 +453,10 @@ class TestLocalWritePath:
         # v54 (2026-09-04, same day): touch-target follow-up fixes --
         # .task-row-delete's @media (hover:none) fallback and .icon-btn's
         # @media (pointer:coarse) size bump, both style.css only.
+        # v55 (2026-09-07, audit-fixes-2.0.md slice 4): static/modal.js
+        # keyboard focus trap (Tab/Shift+Tab cycling within an open .modal).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v54"' in script
+        assert 'CACHE_NAME = "cc-shell-v55"' in script
 
 
 class TestOfflineToolbar:

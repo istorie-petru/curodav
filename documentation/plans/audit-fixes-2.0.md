@@ -53,9 +53,14 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    change, so the existing suite covers it as-is (1970 passed, no test
    changes needed).
 
-4. **Modal keyboard focus trap.** `static/modal.js` — add Tab/Shift+Tab
-   cycling within an open `.modal` alongside the existing Escape handler.
-   The one accessibility finding rated high; isolated to one JS file.
+4. ~~**Modal keyboard focus trap.**~~ **Shipped 2026-09-07** — see
+   `STATE.md`'s entry of the same date. `static/modal.js` gained
+   Tab/Shift+Tab cycling (`trapTabKey`) within `#modal-dialog` alongside
+   the existing Escape handler; `#modal-dialog` also gained `tabindex="-1"`
+   in `base.html` as a fallback focus target for the (rare) zero-
+   focusable-element case. No test harness for JS behavior in this suite,
+   so verification was read-through + the full suite staying green (no
+   markup assertions broken).
 
 5. **Icon-button accessible names.** Add an `aria-label` fallback (ideally
    a shared macro/JS default keyed off the existing `title`, not 30

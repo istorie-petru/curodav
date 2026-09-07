@@ -222,7 +222,11 @@
 // touch device; 2) `.icon-btn` grows to 40px under `@media
 // (pointer:coarse)` (was 28px, under the ~44px touch-target guideline).
 // style.css changed, bumped per the same v15 lesson.
-const CACHE_NAME = "cc-shell-v54";
+// v55 (2026-09-07, audit-fixes-2.0.md slice 4, full-app-audit-2026-09-07.md
+// finding #2) -- static/modal.js gained a keyboard focus trap (Tab/Shift+Tab
+// cycling within an open .modal, alongside the existing Escape handler) --
+// modal.js is in SHELL_ASSETS below, bumped per the v15/v16/v19 lesson.
+const CACHE_NAME = "cc-shell-v55";
 
 const SHELL_ASSETS = [
   "/offline",
