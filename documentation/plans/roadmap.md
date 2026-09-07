@@ -307,6 +307,46 @@ close out here.
 With 1.1–1.9 implemented, the next full release is **2.0**: a stable, supported
 version of the reworked app.
 
+**Gate:** a full-app audit (code quality, security, UX/accessibility/mobile,
+performance, UI consistency) ran 2026-09-07 —
+`documentation/reports/full-app-audit-2026-09-07.md`. Its findings are
+worked through as ordered slices in
+`documentation/plans/audit-fixes-2.0.md` before 2.0 ships; one item there
+(CSP `unsafe-inline` migration) is the largest/riskiest and is sequenced
+last on purpose.
+
+**UI componentization (2026-09-07 discussion):** a proposal to restructure
+`templates/` into a layouts/components/widgets/pages folder split (plus a
+`.ui-*` CSS prefix) was evaluated against the actual codebase state before
+adopting it wholesale. Verdict: the app already has a working, if
+informally named, equivalent (underscore-prefixed partials + `{% macro %}`
+for parameterized pieces, one consistent `.btn` convention) — a full
+folder/prefix rename would mostly relabel working conventions rather than
+fix real duplication. The one piece with grep-confirmed teeth (the
+`.bulk-actions-bar` markup copy-pasted across settings pages) was folded
+into `audit-fixes-2.0.md` item 9 (shipped 2026-09-07) instead of standing
+up a parallel track. No new roadmap track added on the strength of this
+alone.
+
+A follow-up pass the same day, deliberately comparing this app's CSS/
+template conventions against a generic component-library checklist
+(Bootstrap's, as a stand-in for "what does a mature UI system usually
+have") to check for real gaps rather than just re-labeling existing
+conventions, found four more concrete items — folded into
+`audit-fixes-2.0.md` as items 12–15 rather than opening a new doc, same
+reasoning as item 9: no dependency chain, single-file findings, the
+existing "one slice per session" queue already fits them. Briefly: no
+shared z-index scale (currently correct by accumulated scattered
+comments, not currently broken, but fragile — item 12); two more
+duplicated-markup extractions in the same shape as item 9's bulk-
+actions-bar, missed in that pass (item 13: edit/delete icon-button pair,
+4 copies; item 14: empty-state table row, 5 copies); and one confirmed-
+stale claim in this very doc's own 1.9 section (Tasks-table pagination —
+shipped, then deliberately retired 2026-08-28 when the table's grouping
+became unconditional, roadmap never updated to say so — item 15). See
+each item in `audit-fixes-2.0.md` for full detail; each is written to be
+actionable without this conversation's context.
+
 ## Things that can slip past the map
 
 - **DAVx5 hosting** is blocked on infrastructure the repo can't provide

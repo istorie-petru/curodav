@@ -632,7 +632,7 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 | `CC_DB_PATH` | `~/.command_center_web/cache.sqlite` | SQLite cache path |
 | `CC_BACKUP_DIR` | `db_path.parent / "backups"` | Settings > Data health backups |
 | `CC_SYNC_INTERVAL` | `60` | Background pull interval, seconds |
-| `CC_AUTH_USERNAME` | *(none)* | Single-user login username — set together with `CC_AUTH_PASSWORD` to enable auth (see [`features/auth.md`](../features/auth.md)) |
+| `CC_AUTH_USERNAME` | *(none)* | Single-user login username — set together with `CC_AUTH_PASSWORD` to enable auth (see [`features/auth.md`](features/auth.md)) |
 | `CC_AUTH_PASSWORD` | *(none)* | The one account's password (see above) |
 | `CC_AUTH_SECRET` | *(auto-generated)* | Session-cookie signing key; unset = auto-generated and stored in the DB |
 
@@ -640,7 +640,7 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 
 - **No auth by default.** The app ships open; login is only enforced when
   `CC_AUTH_USERNAME` + `CC_AUTH_PASSWORD` are both set (see
-  [`features/auth.md`](../features/auth.md)). Without them it assumes it's
+  [`features/auth.md`](features/auth.md)). Without them it assumes it's
   reachable only over a trusted network (e.g. Tailscale) — matching the
   earlier decision to avoid public exposure. Add auth (or a reverse proxy
   that does) before that assumption changes.
@@ -658,22 +658,18 @@ tab -- feature parity with desktop's Calendar module (`features/calendar.md`):
 ## Deploying for real
 
 The app runs standalone — all reads *and* writes live in its own SQLite
-store, and Radicale is only needed for phone/CalDAV sync. There are two
-one-command deploys (a native systemd service and Docker Compose), each with
-an optional `--with-radicale` flag, documented in
-[`deploy/README.md`](../deploy/README.md):
-
-```bash
-sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/systemd/install.sh)
-sudo bash <(curl -LsSf https://github.com/istorie-petru/curodav/raw/main/deploy/docker/install.sh) --with-radicale
-```
+store, and Radicale is only needed for phone/CalDAV sync. The supported
+deploy path is a native systemd service via
+[`scripts/curodav-ctl`](../scripts/curodav-ctl) — see the root
+[`README.md`](../README.md#deployment) for the bootstrap/install/update/
+remove workflow and CI/CD wiring. (There is no Docker deploy path anymore;
+it was dropped in favor of keeping one minimal, well-tested installer.)
 
 The app boots even when Radicale is unreachable: the sync bridge is created
 lazily-ish at startup and a failed connection logs
 `Radicale unreachable at startup; running without the sync bridge` and keeps
 serving — a Radicale outage never takes the app down (the `published-lists`
-mutating routes return 503 until it's back). See
-[`deploy/README.md`](../deploy/README.md) for the config file, the
-`CC_RADICALE_URL` shape (`http://host:5232/<user>/`), updating, and
-uninstalling. Remember: this app has no auth — run it over a trusted network
-(Tailscale) or behind an authenticated reverse proxy.
+mutating routes return 503 until it's back). Remember: this app has no auth
+of its own beyond the optional `CC_AUTH_USERNAME`/`CC_AUTH_PASSWORD` pair —
+run it over a trusted network (Tailscale) or behind an authenticated reverse
+proxy.
