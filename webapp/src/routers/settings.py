@@ -330,7 +330,17 @@ def change_login_password(
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_configured = True
-    secret = auth.session_secret(settings, conn)
+    # 2026-09-07 audit fix: rotate the session-signing secret so every
+    # session issued under the old password -- this browser or any other
+    # -- stops verifying immediately instead of staying valid for the
+    # rest of its 30-day life (auth.rotate_session_secret's docstring).
+    # The in-process cache AuthMiddleware reads on every request is
+    # updated here too, same as purge_all already does, so this
+    # response's own freshly-minted cookie (signed below) doesn't look
+    # unauthenticated on the very next request.
+    secret = auth.rotate_session_secret(settings, conn)
+    if state is not None:
+        state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
     response = _redirect_with_note(
         "/settings/general",

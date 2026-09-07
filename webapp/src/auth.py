@@ -57,6 +57,19 @@ longer special-cases `deploy_mode == "local"` -- a password set through
 this form has to actually take effect immediately, in every deploy mode,
 not just production (see `auth_enabled`'s own docstring for the tradeoff
 that change makes).
+
+2026-09-07: audit fix (session revocation, `documentation/reports/
+full-app-audit-2026-09-07.md`) -- `rotate_session_secret` is now called
+whenever persisted credentials are (re)established (both /setup and
+change_login_password), reusing the exact mechanism `routers/settings.py
+::purge_all` already used to force a re-login after a purge: an
+auto-generated session secret lives in `app_meta`, so replacing it makes
+`read_session_token`'s HMAC check fail for every cookie signed under the
+old one. Previously a stolen cookie or the just-replaced password itself
+stayed valid for the rest of the 30-day session, even after the account
+owner changed their password -- see SESSION_MAX_AGE_SECONDS's own
+docstring for the narrower caveat that remains (a fixed `CC_AUTH_SECRET`
+can't be rotated this way).
 """
 
 from __future__ import annotations
@@ -104,8 +117,12 @@ PBKDF2_ITERATIONS = 260_000
 # How long a login stays valid. 30 days -- a personal single-user app where
 # "log me in once, keep me logged in" is the expected UX; the deploy's own
 # threat model is a trusted network / authenticated proxy anyway (see
-# deploy/README.md), this is a front-door check, not a session-revocation
-# mechanism.
+# deploy/README.md). Early revocation is narrow, not general-purpose: a
+# credentials change (rotate_session_secret) or Settings > Purge all
+# invalidates every outstanding session, but there is no way to revoke one
+# specific session/device without touching the others, and a fixed
+# CC_AUTH_SECRET can't be rotated at all (see rotate_session_secret's own
+# docstring).
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 # Paths that must never require a session. /login is the whole point;
@@ -265,6 +282,42 @@ def _persisted_secret(conn) -> str:
     secret = db.get_app_meta(conn, AUTH_SECRET_KEY)
     if secret:
         return secret
+    secret = secrets.token_urlsafe(32)
+    db.set_app_meta(conn, AUTH_SECRET_KEY, secret)
+    return secret
+
+
+def rotate_session_secret(settings, conn) -> str:
+    """Generates and persists a new session-signing secret, invalidating
+    every session cookie already issued: `read_session_token`'s HMAC check
+    fails for a cookie signed under a secret that no longer matches what's
+    in `app_meta`. This is the same mechanism `routers/settings.py::
+    purge_all` already relies on to force a re-login after a purge -- see
+    its comment -- generalized to a second trigger: call this whenever
+    persisted login credentials are (re)established (`set_persisted_
+    credentials`, from either /setup or Settings > General's password-change
+    form), so a stolen cookie -- or a session started under the
+    just-replaced password -- can't keep working past the moment the
+    account owner changes their password. Closes the gap flagged by the
+    2026-09-07 audit (`documentation/reports/full-app-audit-2026-09-07.md`):
+    previously nothing invalidated an outstanding session early, so it
+    stayed valid for the rest of its full 30-day `SESSION_MAX_AGE_SECONDS`
+    regardless of a later password change.
+
+    A no-op returning the existing value when `CC_AUTH_SECRET` is
+    configured (`settings.auth_session_secret`) -- that secret is
+    operator-fixed, never stored in `app_meta`, and can't be rotated from
+    here; the module docstring's "change CC_AUTH_SECRET to force everyone
+    to re-login" is the equivalent action for that configuration.
+
+    The caller is responsible for updating any in-process cache of the old
+    value the same way `purge_all` does (`AuthMiddleware` caches the secret
+    on `app.state._cc_auth_secret`) -- otherwise the very request that
+    triggered the rotation would look unauthenticated to itself on its next
+    hit, since the middleware would still be comparing against the secret
+    this call just replaced."""
+    if settings and settings.auth_session_secret:
+        return settings.auth_session_secret
     secret = secrets.token_urlsafe(32)
     db.set_app_meta(conn, AUTH_SECRET_KEY, secret)
     return secret

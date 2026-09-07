@@ -445,6 +445,45 @@ class TestSessionSecret:
             assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == secret
 
 
+class TestRotateSessionSecret:
+    """2026-09-07 audit fix -- see auth.rotate_session_secret's docstring
+    and documentation/reports/full-app-audit-2026-09-07.md."""
+
+    def test_generates_and_persists_a_new_secret(self, conn):
+        settings = _settings(auth_session_secret=None)
+        old = auth.session_secret(settings, conn)
+        new = auth.rotate_session_secret(settings, conn)
+        assert new != old
+        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == new
+
+    def test_old_token_no_longer_verifies_after_rotation(self, conn):
+        settings = _settings(auth_session_secret=None)
+        old_secret = auth.session_secret(settings, conn)
+        old_token = auth.make_session_token(old_secret, "alice")
+        assert auth.read_session_token(old_secret, old_token) == "alice"
+
+        new_secret = auth.rotate_session_secret(settings, conn)
+        # The same token, checked against the now-current secret, fails --
+        # this is the actual revocation: a stale in-flight cookie stops
+        # verifying without needing to know which cookies exist.
+        assert auth.read_session_token(new_secret, old_token) is None
+
+    def test_no_op_when_env_secret_is_fixed(self, conn):
+        settings = _settings(auth_session_secret="fixed-env-secret")
+        result = auth.rotate_session_secret(settings, conn)
+        assert result == "fixed-env-secret"
+        # Nothing to rotate -- a fixed CC_AUTH_SECRET never lives in
+        # app_meta in the first place.
+        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+
+    def test_repeated_rotation_produces_different_secrets(self, conn):
+        settings = _settings(auth_session_secret=None)
+        first = auth.rotate_session_secret(settings, conn)
+        second = auth.rotate_session_secret(settings, conn)
+        assert first != second
+        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == second
+
+
 # --------------------------------------------------------------------- #
 # src/auth.py -- AuthMiddleware over a real ASGI app
 # --------------------------------------------------------------------- #
@@ -917,6 +956,31 @@ class TestSetupSubmit:
             conn=conn,
         )
         assert req.app.state._cc_auth_configured is True
+
+    def test_persists_a_session_secret_and_caches_it_on_app_state(self, conn):
+        """2026-09-07 audit fix -- setup_submit now goes through
+        auth.rotate_session_secret (same call change_login_password makes)
+        instead of session_secret, so app_meta and app.state agree with
+        the cookie this same response mints. See documentation/reports/
+        full-app-audit-2026-09-07.md."""
+        settings = _prod_no_account_settings()
+        req = _request(settings)
+        resp = auth_router.setup_submit(
+            req,
+            username="alice",
+            password="s3cret123",
+            password_confirm="s3cret123",
+            radicale_url="",
+            radicale_username="",
+            radicale_password="",
+            conn=conn,
+        )
+        persisted = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+        assert persisted
+        assert req.app.state._cc_auth_secret == persisted
+        set_cookie = resp.headers["set-cookie"]
+        token = set_cookie.split(auth.SESSION_COOKIE + "=", 1)[1].split(";", 1)[0]
+        assert auth.read_session_token(persisted, token) == "alice"
 
     def test_secure_cookie_flag_over_https(self, conn):
         settings = _prod_no_account_settings()

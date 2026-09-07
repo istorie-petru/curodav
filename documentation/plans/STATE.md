@@ -17,6 +17,56 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- a Cowork full-app audit (code quality, security,
+  UX/accessibility/mobile, performance, UI consistency) ran this same day;
+  findings are in `documentation/reports/full-app-audit-2026-09-07.md`, and
+  the fix order before 2.0 is `documentation/plans/audit-fixes-2.0.md`
+  (linked from `roadmap.md`'s 2.0 section). This entry is **slice 1 of
+  that list**: session revocation.
+
+  **Bug (well, gap) fixed:** sessions were stateless 30-day signed cookies
+  with no revocation path at all -- changing the login password (Settings
+  > General or first-run /setup) didn't invalidate any cookie already
+  issued under the old password, so a stolen cookie (or the just-replaced
+  password's own session) stayed valid for up to 30 more days regardless.
+  Fixed by reusing the exact mechanism `routers/settings.py::purge_all`
+  already had for this (drop the auto-generated session-signing secret,
+  which lives in `app_meta`, so every cookie's HMAC stops verifying) and
+  generalizing it to a second trigger: new `auth.rotate_session_secret`
+  is now called from both `routers/auth.py::setup_submit` and
+  `routers/settings.py::change_login_password`, right where each already
+  mints its own fresh cookie for the current browser -- so the account
+  owner's own session survives (re-signed under the new secret) while
+  every other outstanding session, and a stolen cookie, immediately stops
+  working. A no-op when `CC_AUTH_SECRET` is set (operator-fixed, not in
+  `app_meta` -- see the function's own docstring for the equivalent
+  operator action there). Both call sites also update
+  `app.state._cc_auth_secret` in the same request (the in-process cache
+  `AuthMiddleware` reads), matching what `purge_all` already had to do --
+  without it, the very redirect the password-change response issues would
+  have looked unauthenticated to itself.
+
+  New tests: `test_auth.py::TestRotateSessionSecret` (4 cases: persists a
+  new secret, an old token stops verifying against the rotated one, no-op
+  when `CC_AUTH_SECRET` is fixed, repeated calls produce different
+  secrets) plus `TestSetupSubmit::test_persists_a_session_secret_and_
+  caches_it_on_app_state`; `test_settings_login_password.py` gained
+  `test_rotates_session_secret_so_old_sessions_are_revoked` (end-to-end:
+  a pre-change token fails against the post-change secret, the response's
+  own new cookie succeeds, `app.state` agrees) and `test_env_fixed_secret_
+  is_not_rotated`. Pure Python change (auth.py + the two router files),
+  no template/CSS/JS touched -- no `sw.js` bump needed. Full suite: 1955
+  passed, run as 12 chunks of ~7 files each (this sandbox's own
+  background-process-per-bash-call limitation meant even smaller per-call
+  chunks than usual were needed this session -- some individual test
+  files, e.g. `test_offline_sync.py`, take ~20s alone here, apparently
+  slow disk I/O in this particular sandbox rather than anything about the
+  test itself), `test_caldav_bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #2, the two
+  silent-misconfiguration guards (unauthenticated local mode exposed
+  publicly; the dev Radicale password fallback in production).
+
 - **Shipped:** Direct follow-up, same day (2026-09-04), immediately after
   the mobile-nav redesign below -- "also implement and fix the other
   problems described in this conversation," the two touch-target gaps the

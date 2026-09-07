@@ -161,6 +161,54 @@ class TestChangeLoginPassword:
         )
         assert "error=" in resp.headers["location"]
 
+    def test_rotates_session_secret_so_old_sessions_are_revoked(self, conn):
+        """2026-09-07 audit fix -- see auth.rotate_session_secret's
+        docstring and documentation/reports/full-app-audit-2026-09-07.md.
+        auth_session_secret=None here (unlike every other test in this
+        class) so the secret actually lives in app_meta and can rotate;
+        the env-fixed-secret case is covered by
+        test_env_fixed_secret_is_not_rotated below."""
+        auth.set_persisted_credentials(conn, "alice", "oldpassword1")
+        old_secret = auth.session_secret(SimpleNamespace(auth_session_secret=None), conn)
+        old_token = auth.make_session_token(old_secret, "alice")
+
+        req = _request(auth_session_secret=None)
+        resp = settings_router.change_login_password(
+            req,
+            current_password="oldpassword1",
+            new_password="newpassword1",
+            new_password_confirm="newpassword1",
+            conn=conn,
+        )
+        assert resp.status_code == 303
+
+        new_secret = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+        assert new_secret and new_secret != old_secret
+        # The pre-change cookie no longer verifies against the now-current
+        # secret -- the actual revocation.
+        assert auth.read_session_token(new_secret, old_token) is None
+        # The response's own freshly-minted cookie does verify.
+        set_cookie = resp.headers["set-cookie"]
+        new_token = set_cookie.split(auth.SESSION_COOKIE + "=", 1)[1].split(";", 1)[0]
+        assert auth.read_session_token(new_secret, new_token) == "alice"
+        # And the in-process cache AuthMiddleware reads is updated in the
+        # same request, so its very next hit isn't compared against a
+        # stale cached secret.
+        assert req.app.state._cc_auth_secret == new_secret
+
+    def test_env_fixed_secret_is_not_rotated(self, conn):
+        auth.set_persisted_credentials(conn, "alice", "oldpassword1")
+        resp = settings_router.change_login_password(
+            _request(auth_session_secret="test-signing-secret"),
+            current_password="oldpassword1",
+            new_password="newpassword1",
+            new_password_confirm="newpassword1",
+            conn=conn,
+        )
+        assert resp.status_code == 303
+        # A fixed CC_AUTH_SECRET never gets written to app_meta.
+        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+
 
 class TestChangeRadicalePassword:
     def test_no_op_when_env_configured(self, conn):
