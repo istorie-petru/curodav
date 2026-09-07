@@ -98,9 +98,9 @@
                  the next time this form loads. -->
             <label>Limit</label>
             <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit" tabindex="-1">&minus;</button>
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
                 <input type="number" name="limit" class="stepper-input" min="0" value="{{ widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '' }}" placeholder="10">
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit" tabindex="-1">+</button>
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
             </div>
             <div class="field-hint">0 = unlimited</div>
         </div>

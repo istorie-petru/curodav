@@ -458,8 +458,11 @@ class TestLocalWritePath:
         # v56 (2026-09-07, audit-fixes-2.0.md slice 5): new static/
         # a11y_icon_labels.js, sets aria-label from title on icon-only
         # controls app-wide.
+        # v57 (2026-09-07, audit-fixes-2.0.md slice 6): style.css + base.html
+        # only (touch-target bumps, skip-link, --fg-tertiary, breakpoint
+        # alignment) -- no new SHELL_ASSETS files.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v56"' in script
+        assert 'CACHE_NAME = "cc-shell-v57"' in script
 
 
 class TestOfflineToolbar:

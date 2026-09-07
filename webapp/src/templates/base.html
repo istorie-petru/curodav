@@ -55,6 +55,7 @@
     </script>
 </head>
 <body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}">
+<a href="#main-content" class="skip-link">Skip to main content</a>
 {% include "_icons_sprite.html" %}
 <div class="app-window">
     <!-- Icons + a scrollable, snap-aligned row (see .tabbar in style.css)
@@ -421,7 +422,7 @@
          sidebar rather than being boxed in like a text-heavy page. Empty
          by default so every other page keeps the current column width
          unchanged. -->
-    <main class="{% block main_class %}{% endblock %}">
+    <main id="main-content" class="{% block main_class %}{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 </div>

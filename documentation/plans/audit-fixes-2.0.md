@@ -71,14 +71,15 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    covered automatically. A `MutationObserver` re-applies it to
    modal/region-refresh-injected content with no per-feature wiring.
 
-6. **Touch-target + skip-link + contrast bundle.** One CSS-mostly slice,
-   same shape as the 2026-09-04 touch-target session: coarse-pointer size
-   bump for `.color-swatch-current` and `.heatmap-cell`; fix `.stepper-btn`
-   (both its missing coarse-pointer size and its `tabindex="-1"` removing
-   it from keyboard tab order); add a skip-to-content link in `base.html`;
-   darken `--fg-tertiary` (light theme) or restrict it to large/bold text;
-   align `.week-overview-grid`'s `700px` breakpoint to the app's standard
-   `720px`.
+6. ~~**Touch-target + skip-link + contrast bundle.**~~ **Shipped
+   2026-09-07** — see `STATE.md`'s entry of the same date. All five items
+   landed as sketched: coarse-pointer bumps for `.color-swatch-current`
+   (20->32px) and `.heatmap-cell` (11->16px); `.stepper-btn` got both a
+   coarse-pointer width bump (30->44px) and `tabindex="-1"` removed from
+   all 12 occurrences; a new `.skip-link` in `base.html` jumps to a new
+   `#main-content` on `<main>`; `--fg-tertiary` darkened `#8e8e93` ->
+   `#737378` in light theme only (dark theme already cleared AA contrast);
+   `.week-overview-grid`'s breakpoint moved `700px` -> `720px`.
 
 7. **Dead code cleanup.** Delete `db.py`'s `find_contact_by_name` and
    `list_task_label_names`, and templates `_labels_body.html`,

@@ -155,9 +155,9 @@
              id="habit-target-field" data-habit-label="{{ habit_label }}" data-form-id="task-form">
             <label>Daily target</label>
             <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
                 <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day|int if task and task.target_per_day else 1 }}">
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
             </div>
         </div>
     </div>

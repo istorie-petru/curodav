@@ -17,6 +17,65 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 6, the touch-target +
+  skip-link + contrast bundle (`documentation/reports/full-app-audit-
+  2026-09-07.md`'s remaining low/medium accessibility findings not covered
+  by slices 4/5). One CSS-mostly slice, same shape as the 2026-09-04
+  touch-target session:
+  1. **Coarse-pointer size bumps** for `.color-swatch-current` (20px ->
+     32px) and `.heatmap-cell` (11px -> 16px), same `@media (pointer:
+     coarse)` pattern `.icon-btn`'s existing fix already established --
+     `.heatmap{overflow-x:auto}` already handles a wider grid, so growing
+     cells needed no other layout change.
+  2. **`.stepper-btn` fixed on both axes**: a coarse-pointer width bump
+     (30px -> 44px, matching the app's own "~44px touch-target floor"
+     precedent) plus `tabindex="-1"` removed from all 12 occurrences
+     across 6 templates (`_task_form_fields.html`, `_widget_builder_
+     fields.html`, `habit_form.html`, `_widget_edit_form.html`,
+     `habit_task_form.html`, `_habit_detail_body.html`) -- these are real
+     `<button>` elements with their own `aria-label`, `stepper.js` only
+     ever binds a click handler, so removing the attribute restores
+     natural tab order with no JS change needed.
+  3. **New skip-to-content link** (`base.html`, first element in `<body>`,
+     before `_icons_sprite.html`/`.app-window`) jumping to a new `id=
+     "main-content"` on the existing `<main>`. New `.skip-link` CSS class
+     (style.css, next to `.sr-only`) -- deliberately not `.sr-only` itself,
+     since that's clip-based with no un-clip state; this one sits off-
+     screen via `top:-40px` and slides to `top:var(--space-3)` on
+     `:focus`, `z-index:1000` (the app's highest existing layer) so it
+     renders above the sidebar/topbar it's meant to skip past.
+  4. **`--fg-tertiary` darkened, light theme only** (`#8e8e93` ->
+     `#737378`) -- the old value read ~3.3:1 against `--bg-elevated`,
+     below WCAG AA's 4.5:1, and is used at small sizes in several places
+     (`.week-overview-day-label`, `.heatmap-empty`, `.heatmap-month-
+     label`). `#737378` clears 4.5:1+ against white while staying
+     visibly a step lighter than `--fg-secondary` (`#6e6e73`) -- verified
+     with a short ad hoc relative-luminance/contrast-ratio script, not
+     eyeballed. Dark theme's `--fg-tertiary` (`#a3a3a8`) was left alone --
+     already clears ~4.3:1+ against its own backgrounds, and the audit
+     finding was scoped to light theme specifically.
+  5. **`.week-overview-grid`'s breakpoint aligned**: `700px` -> `720px`,
+     matching the ~20 other `max-width:720px`/`min-width:721px` uses
+     already in style.css (confirmed via grep which of 720/721 dominates
+     before picking).
+  `sw.js` CACHE_NAME bumped v56 -> v57 (style.css + base.html changed, no
+  new files added to `SHELL_ASSETS`), `test_pwa_shell.py`'s pin updated.
+  No test asserted the old stepper `tabindex="-1"`, the 700px breakpoint,
+  or the pre-darkened `--fg-tertiary` value (grepped `tests/` for each
+  first) -- no test changes needed. Full suite: 1970 passed (same count as
+  slices 4/5 -- no row/behavior change to add coverage for), run as 84
+  parallel per-file background processes in one call, `test_caldav_
+  bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #7, dead code
+  cleanup -- delete `db.py`'s `find_contact_by_name`/`list_task_label_
+  names` and templates `_labels_body.html`/`_widget_add_form.html`/
+  `_task_relations.html`/`_event_relations.html`/`label_edit_modal.html`.
+  Before deleting `_task_heatmap.html`, confirm whether `task_detail.html`
+  used to render a recurring-task heatmap and silently lost it (regression)
+  versus the comment just being stale -- do not delete on the assumption
+  it's dead until that's confirmed.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 5, icon-only
   accessible names (`documentation/reports/full-app-audit-2026-09-07.md`'s
   "icon-only buttons relying on `title` alone with no `aria-label`" finding

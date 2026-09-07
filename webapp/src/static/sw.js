@@ -230,7 +230,12 @@
 // a11y_icon_labels.js (added to SHELL_ASSETS below, same "base.html script
 // needed on every page" category as mobile_nav_drawer.js right above it),
 // sets aria-label from title on icon-only controls app-wide.
-const CACHE_NAME = "cc-shell-v56";
+// v57 (2026-09-07, audit-fixes-2.0.md slice 6) -- style.css changed
+// (coarse-pointer bumps for .color-swatch-current/.heatmap-cell/
+// .stepper-btn, new .skip-link rule, darkened --fg-tertiary,
+// .week-overview-grid breakpoint) and base.html changed (skip-to-content
+// link + #main-content id). No new files added to SHELL_ASSETS.
+const CACHE_NAME = "cc-shell-v57";
 
 const SHELL_ASSETS = [
   "/offline",

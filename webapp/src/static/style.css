@@ -48,7 +48,14 @@
   --accent-neutral:#efefef;--accent-neutral-hover:#e2e2e2;--accent-neutral-active:#d4d4d4;--accent-neutral-subtle:rgba(130,130,135,.1);--accent-neutral-subtle-strong:rgba(130,130,135,.18);
   --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
   --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
-  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#8e8e93;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#2c2c2e;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#737378;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#2c2c2e;
+  /* --fg-tertiary darkened 2026-09-07 (audit-fixes-2.0.md slice 6, light
+     theme only -- the dark-theme token already clears ~4.3:1+ against its
+     own backgrounds) -- the old #8e8e93 read ~3.3:1 against --bg-elevated,
+     below WCAG AA's 4.5:1 for normal text, and this token is used at small
+     sizes in several places (.week-overview-day-label, .heatmap-empty,
+     .heatmap-month-label). #737378 clears 4.5:1+ against --bg-elevated
+     while staying visibly a step lighter than --fg-secondary (#6e6e73). */
   --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
   --control-bg:#ffffff;--control-bg-hover:#f5f5f7;--control-border:rgba(0,0,0,.14);
   --overlay-scrim:rgba(0,0,0,.35);--shadow-window:0 16px 44px rgba(0,0,0,.18);
@@ -271,6 +278,22 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
   position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
   clip:rect(0,0,0,0); white-space:nowrap; border:0;
 }
+/* Skip-to-content link (audit-fixes-2.0.md slice 6) -- first focusable
+   element in base.html, before the sidebar/tabbar, so a keyboard/screen-
+   reader user doesn't have to tab through the full nav on every page load.
+   `.sr-only`'s clip-based hiding is deliberately not reused here: this
+   needs to become visible on focus, and clip-rect(0,0,0,0) has no un-clip
+   state to toggle, so it's off-screen via a large negative top instead
+   (moved on-screen with `top:0` on `:focus`). z-index:1000 matches the
+   app's highest existing layer (the drag-ghost tooltip) so it renders
+   above the sidebar/topbar it's meant to skip past. */
+.skip-link{
+  position:absolute; top:-40px; left:var(--space-3); z-index:1000;
+  background:var(--accent); color:var(--fg-on-accent); padding:8px 16px;
+  border-radius:var(--radius-sm); text-decoration:none; font-weight:600;
+  transition:top .15s ease;
+}
+.skip-link:focus{top:var(--space-3);}
 .tab-btn:focus-visible, .seg-btn:focus-visible, .icon-btn:focus-visible,
 button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
   outline-offset:-2px; border-radius:var(--radius-sm);
@@ -2652,6 +2675,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .stepper-btn:hover{background:var(--control-bg-hover); color:var(--fg-primary);}
 .stepper-btn:active{opacity:.7;}
+/* Coarse-pointer touch-target bump (audit-fixes-2.0.md slice 6) -- 30px
+   wide is under the ~44px touch-target floor `.icon-btn`'s own coarse-
+   pointer fix (above) already established for this app; the stepper's
+   height already matches `.stepper-input`'s row height, so only width
+   needs growing. */
+@media (pointer:coarse){
+  .stepper-btn{width:44px;}
+}
 .settings-grid{display:grid; grid-template-columns:repeat(3,minmax(150px,220px)); gap:0 var(--space-6);}
 .form-inline{display:inline;}
 
@@ -4087,6 +4118,12 @@ body.command-palette-open{overflow:hidden;}
   border:none; padding:0; cursor:pointer; -webkit-appearance:none; appearance:none;
 }
 .color-swatch-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral);}
+/* Coarse-pointer touch-target bump (audit-fixes-2.0.md slice 6) -- same
+   `(pointer:coarse)` pattern as `.icon-btn` above: 20px is fine for a
+   mouse but under the ~24px WCAG 2.5.8 floor for a finger. */
+@media (pointer:coarse){
+  .color-swatch-current{width:32px; height:32px;}
+}
 /* Only visible while actually inside the floating popover -- at its
    "home" location (right next to the trigger, in the un-opened markup)
    it stays display:none so it never occupies layout space there. */
@@ -4398,6 +4435,14 @@ body.command-palette-open{overflow:hidden;}
 .heatmap-cell{
   width:11px; height:11px; border-radius:2px; border:none; padding:0; cursor:pointer;
   display:block; background:var(--bg-secondary);
+}
+/* Coarse-pointer touch-target bump (audit-fixes-2.0.md slice 6) -- the
+   habit heatmap is a daily-use check-in control, not just a readout, so
+   its 11px cells matter more on a phone than the size alone suggests.
+   `.heatmap{overflow-x:auto}` already handles a grid wider than the
+   viewport, so growing cells here doesn't need extra layout work. */
+@media (pointer:coarse){
+  .heatmap-cell{width:16px; height:16px;}
 }
 .heatmap-cell.level-0{background:var(--bg-secondary);}
 .heatmap-cell.level-1{background:var(--accent-neutral); opacity:.3;}
@@ -5030,7 +5075,7 @@ body.command-palette-open{overflow:hidden;}
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .week-overview-empty{font-size:12px; color:var(--fg-tertiary);}
-@media (max-width:700px){
+@media (max-width:720px){
   .week-overview-grid{grid-template-columns:repeat(2,1fr);}
 }
 
