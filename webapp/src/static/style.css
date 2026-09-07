@@ -5709,13 +5709,24 @@ body.command-palette-open{overflow:hidden;}
    _page_banner.html's own comment for the full rationale and the
    `page_banner()` macro this now renders through. */
 .page-banner-header-row{
-  display:flex; align-items:center; gap:var(--space-3);
+  display:flex; align-items:flex-end; gap:var(--space-3);
   /* Pulls the row up by half the avatar's own height (avatar-hero is
      72px) so the avatar straddles the cover's bottom edge exactly the
      way it did when it was absolutely positioned -- expressed relative to
      the avatar's own size, not the (responsive, aspect-ratio-driven)
      cover height, so this stays correct at every viewport width without
-     needing to know the image's actual rendered height. */
+     needing to know the image's actual rendered height.
+
+     align-items:flex-end (not center, 2026-09-07 follow-up fix -- direct
+     report: dark-image/light-theme title text was unreadable) --
+     center-aligning the title against the avatar's full 72px height put
+     the title's own top half literally over the cover photo (the row's
+     top 36px still overlaps the image), so the page's normal --fg-primary
+     text color -- correct once it's actually below the photo -- was
+     reading against whatever the image's own colors were up there
+     instead. Bottom-aligning both keeps the title entirely within the
+     row's lower 36px, which is the part that's actually below the photo,
+     matching the avatar's own bottom half. */
   margin-top:-36px; margin-bottom:var(--space-4);
   padding-left:var(--space-4); padding-right:var(--space-4);
   position:relative; z-index:1;

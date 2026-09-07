@@ -17,6 +17,43 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- same-day follow-up direct report on the
+  Notion-style banner rework two entries below: "the text has a bit of a
+  problem if it's sitting behind a dark banner and the text is black,
+  while the theme is white... make the text sit below the banner." Root
+  cause: `.page-banner-header-row` used `align-items:center`, which
+  vertically centers the title against the avatar's full 72px height --
+  since the row itself starts 36px above the cover's bottom edge (the
+  overlap that lets the avatar straddle it), centering put the title's own
+  top half inside that overlapping 36px too, i.e. literally over the
+  photo, where the page's normal `--fg-primary` text color reads against
+  whatever the image's own colors are instead of the page background. The
+  avatar was never affected (its own straddle is the intended look), only
+  the shorter title sharing its row.
+
+  Fixed with `align-items:flex-end` instead -- both the avatar and the
+  title now bottom-align within the row, so the title (always shorter than
+  72px) sits entirely inside the row's lower 36px, which is the actual
+  below-the-photo portion, matching the avatar's own bottom half. One-line
+  CSS change (style.css's `.page-banner-header-row`), no template/DOM
+  changes.
+
+  `sw.js` `CACHE_NAME` bumped `v70` -> `v71`; `test_pwa_shell.py` updated.
+  No new tests -- the existing `TestPageBannerNotionStyleHeaderRow` tests
+  (added two entries below) only assert DOM order, which is unchanged;
+  this was a pure vertical-alignment fix, verified by re-checking the
+  row's geometry by hand rather than a new assertion (nothing meaningful
+  to assert about "which side of a computed box a flex child's baseline
+  lands on" without an actual rendered screenshot, still not available
+  this session). Full suite: 2015 collected, same total as the entry two
+  below (no tests added/removed), 2014 passed + the same 1 pre-existing
+  unrelated failure noted in the entry below.
+
+  **Next slice:** none mandated -- direct report. Worth a real visual
+  check (both light and dark theme, against a genuinely dark banner image)
+  once a browser is reachable -- same recurring verification gap this
+  whole banner-rework arc has had all session.
+
 - **Shipped:** 2026-09-07 -- direct report (with a screenshot): "the
   avatar and text for the big banner is a bit off... remake it Notion-
   like." Root cause: `.page-banner-title` (Home's greeting / a label's

@@ -515,8 +515,12 @@ class TestLocalWritePath:
         # big banner is a bit off... remake it Notion-like"): reworked
         # .page-banner's title/avatar layout, see style.css's own
         # .page-banner-header-row comment.
+        # v71 (2026-09-07, same-day follow-up direct report -- dark-image/
+        # light-theme title text unreadable): .page-banner-header-row
+        # align-items center -> flex-end, keeping the title fully below
+        # the cover instead of straddling it like the avatar does.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v70"' in script
+        assert 'CACHE_NAME = "cc-shell-v71"' in script
 
 
 class TestOfflineToolbar:
