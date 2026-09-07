@@ -70,6 +70,22 @@ stayed valid for the rest of the 30-day session, even after the account
 owner changed their password -- see SESSION_MAX_AGE_SECONDS's own
 docstring for the narrower caveat that remains (a fixed `CC_AUTH_SECRET`
 can't be rotated this way).
+
+2026-09-07: second audit fix, same report -- `AuthMiddleware` now logs
+loudly (once per process) the first time it sees a request land on a
+non-loopback interface while running fully open (`deploy_mode == "local"`,
+no account configured). This is deliberately reactive, not a startup-time
+bind-address check: the ASGI app is never told what host/port uvicorn was
+told to `--host` (systemd's unit, `python -m src.main`'s hardcoded
+0.0.0.0, and a bare `uvicorn` CLI invocation all bypass any config this
+module owns), but every request's ASGI scope carries the real local
+socket address that accepted it (`scope["server"]`) -- for a listener
+bound to 0.0.0.0, that is the actual interface IP a connection arrived on,
+not the literal string "0.0.0.0". So the first non-loopback request is
+proof the app is genuinely reachable from somewhere other than the same
+machine, at the exact moment the "no login unless you ask for it" default
+stops being a safe one. See `_is_loopback_host`/`AuthMiddleware.
+_warn_if_exposed`.
 """
 
 from __future__ import annotations
@@ -78,6 +94,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 from urllib.parse import urlencode, urlsplit
@@ -86,6 +103,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
 from . import db
+
+logger = logging.getLogger(__name__)
 
 # The cookie name + the app_meta key the auto-generated signing secret is
 # persisted under (see module docstring). Both are module-level constants
@@ -375,6 +394,17 @@ def _wants_json(scope: dict) -> bool:
     return b"application/json" in accept
 
 
+def _is_loopback_host(host: str | None) -> bool:
+    """True for the addresses this app's "open unless you configure it"
+    local-dev default has always assumed as the trusted boundary -- the
+    machine talking to itself. Anything else (a LAN/Tailscale IP, a public
+    address, ...) means a request reached this process from somewhere that
+    default didn't anticipate. IPv6-mapped/loopback forms included since a
+    dual-stack listener can hand either form to `scope["server"]` depending
+    on how the client connected."""
+    return host in ("127.0.0.1", "::1", "localhost")
+
+
 def _settings_from_scope(scope: dict):
     """The app's Settings, read off `scope["app"].state.settings` -- the
     lifespan sets them there (main.py). A bare/no-lifespan app (this
@@ -435,6 +465,14 @@ class AuthMiddleware:
                     return await self.app(scope, receive, send)
                 return await self._deny(scope, receive, send, SETUP_PATH)
         elif not self._configured(settings, scope):
+            # Reached only for deploy_mode == "local" (or a settings-less
+            # test app) with no account configured -- i.e. auth is
+            # genuinely off for this request. Harmless on an actual
+            # localhost-only install; the 2026-09-07 audit's "silent
+            # misconfiguration" finding is specifically the case where
+            # that's not true anymore (see _warn_if_exposed).
+            if settings is not None:
+                self._warn_if_exposed(scope)
             return await self.app(scope, receive, send)
 
         request = Request(scope)
@@ -484,6 +522,35 @@ class AuthMiddleware:
         if configured and state is not None:
             state._cc_auth_configured = True
         return configured
+
+    def _warn_if_exposed(self, scope) -> None:
+        """Logs a loud, one-time-per-process warning the first time a
+        request reaches this (unauthenticated) install via a non-loopback
+        interface -- see the 2026-09-07 audit-fix note in this module's
+        docstring for why this is checked here (request-time, off
+        `scope["server"]`) rather than at process startup. Cached on
+        `app.state` the same way `_configured` caches its own answer, so a
+        busy exposed install logs this once, not on every request."""
+        app = scope.get("app")
+        state = getattr(app, "state", None)
+        if state is not None and getattr(state, "_cc_exposure_warned", False):
+            return
+        server = scope.get("server")
+        host = server[0] if server else None
+        if _is_loopback_host(host):
+            return
+        logger.warning(
+            "SECURITY: this request reached the app at host %r, but it is "
+            "running with no login configured (CC_DEPLOY_MODE=local and no "
+            "CC_AUTH_USERNAME/PASSWORD, no /setup account). Anyone who can "
+            "reach this address has full, unauthenticated access. Set "
+            "CC_AUTH_USERNAME/CC_AUTH_PASSWORD, or set "
+            "CC_DEPLOY_MODE=production to require first-run /setup, before "
+            "exposing this beyond localhost.",
+            host,
+        )
+        if state is not None:
+            state._cc_exposure_warned = True
 
     def _get_secret(self, settings, scope) -> str:
         """The signing secret, cached on `app.state` for the process

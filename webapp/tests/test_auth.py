@@ -191,6 +191,47 @@ class TestConfig:
         assert load_settings().radicale_env_configured is True
 
 
+class TestUsesDefaultRadicaleCredentials:
+    """2026-09-07 audit fix -- documentation/reports/
+    full-app-audit-2026-09-07.md's "dev Radicale password ships as a
+    fallback" finding. main.py's lifespan only calls this after a
+    production deploy's CalDavBridge actually connects (see its own
+    comment); this class only covers the pure predicate."""
+
+    def test_true_for_the_load_settings_default(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        for var in ("CC_RADICALE_URL", "CC_RADICALE_USER", "CC_RADICALE_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        from src.config import load_settings, uses_default_radicale_credentials
+
+        assert uses_default_radicale_credentials(load_settings()) is True
+
+    def test_false_when_password_overridden(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        monkeypatch.setenv("CC_RADICALE_PASSWORD", "a-real-password")
+        from src.config import load_settings, uses_default_radicale_credentials
+
+        assert uses_default_radicale_credentials(load_settings()) is False
+
+    def test_false_when_username_overridden(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "c.sqlite"))
+        monkeypatch.setenv("CC_RADICALE_USER", "someone-else")
+        from src.config import load_settings, uses_default_radicale_credentials
+
+        assert uses_default_radicale_credentials(load_settings()) is False
+
+    def test_true_when_a_persisted_override_happens_to_match_the_default(self, conn):
+        # apply_persisted_radicale_overrides runs first in main.py's
+        # lifespan -- if an operator's /setup-entered Radicale password
+        # literally is "devpass" (re-using the dev default on purpose or by
+        # accident), the check still catches it; it compares the effective
+        # settings, not just the env-var path.
+        from src.config import uses_default_radicale_credentials
+
+        settings = _settings(radicale_username="devuser", radicale_password="devpass")
+        assert uses_default_radicale_credentials(settings) is True
+
+
 class TestApplyPersistedRadicaleOverrides:
     def test_no_op_when_env_configured(self, conn):
         from src.config import apply_persisted_radicale_overrides
@@ -383,6 +424,19 @@ class TestIsSecureRequest:
 
     def test_http_scheme(self):
         assert not auth.is_secure_request(_request(_settings(), scheme="http"))
+
+
+class TestIsLoopbackHost:
+    """2026-09-07 audit fix -- AuthMiddleware._warn_if_exposed's own
+    loopback/non-loopback distinction."""
+
+    @pytest.mark.parametrize("host", ["127.0.0.1", "::1", "localhost"])
+    def test_loopback_hosts(self, host):
+        assert auth._is_loopback_host(host) is True
+
+    @pytest.mark.parametrize("host", ["192.168.1.50", "0.0.0.0", "testserver", None])
+    def test_non_loopback_hosts(self, host):
+        assert auth._is_loopback_host(host) is False
 
 
 class TestSessionToken:
@@ -614,6 +668,59 @@ class TestAuthMiddlewareForcedSetup:
             db.set_app_meta(c, auth.AUTH_PASSWORD_HASH_KEY, "")
         second = client.get("/hello")
         assert second.status_code == 302 and "/login?next=" in second.headers["location"]
+
+
+class TestAuthMiddlewareExposureWarning:
+    """2026-09-07 audit fix -- see AuthMiddleware._warn_if_exposed's own
+    docstring and documentation/reports/full-app-audit-2026-09-07.md.
+    TestClient sets scope["server"] from the request URL's own host (see
+    starlette.testclient.TestClient._send / TestTransport), so overriding
+    `base_url` is how these tests control what "interface" the request
+    appears to arrive on -- the same signal AuthMiddleware reads from a
+    real ASGI server."""
+
+    def test_loopback_request_does_not_warn(self, caplog):
+        client = TestClient(
+            _auth_app(_settings(enabled=False)), base_url="http://127.0.0.1", follow_redirects=False
+        )
+        with caplog.at_level("WARNING", logger="src.auth"):
+            client.get("/hello")
+        assert "SECURITY" not in caplog.text
+
+    def test_non_loopback_request_warns_once(self, caplog):
+        client = TestClient(
+            _auth_app(_settings(enabled=False)), base_url="http://192.168.1.50", follow_redirects=False
+        )
+        with caplog.at_level("WARNING", logger="src.auth"):
+            client.get("/hello")
+            client.get("/hello")
+        # Cached on app.state after the first hit -- a second request from
+        # the same exposed interface doesn't re-log.
+        assert caplog.text.count("SECURITY") == 1
+        assert "192.168.1.50" in caplog.text
+
+    def test_configured_local_install_does_not_warn(self, caplog):
+        # Auth actually enabled -- the elif branch (and its warning) is
+        # never reached at all, regardless of which interface the request
+        # arrives on.
+        client = TestClient(
+            _auth_app(_settings(enabled=True)), base_url="http://192.168.1.50", follow_redirects=False
+        )
+        with caplog.at_level("WARNING", logger="src.auth"):
+            client.get("/login")
+        assert "SECURITY" not in caplog.text
+
+    def test_forced_setup_production_does_not_warn(self, tmp_path, caplog):
+        # Production + unconfigured takes the forced-/setup branch, not the
+        # elif -- this guard is specific to local mode's "silently stays
+        # open" default, not production's "not set up yet" one (which
+        # already redirects everything to /setup instead of serving pages).
+        client = TestClient(
+            _auth_app(_prod_settings(tmp_path)), base_url="http://192.168.1.50", follow_redirects=False
+        )
+        with caplog.at_level("WARNING", logger="src.auth"):
+            client.get("/hello")
+        assert "SECURITY" not in caplog.text
 
 
 # --------------------------------------------------------------------- #

@@ -17,6 +17,76 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 2, "silent-
+  misconfiguration guards" (two independent fixes, `documentation/reports/
+  full-app-audit-2026-09-07.md` findings #4 and the `config.py:69` Radicale
+  one). Both diverged from the doc's original one-line sketch once actually
+  implemented -- see `audit-fixes-2.0.md`'s own entry for the reasoning,
+  summarized here:
+
+  1. **Non-loopback exposure warning** (`src/auth.py`). The finding asked
+     for a startup-time check, but the ASGI app is never told what host
+     uvicorn bound to (systemd's `--host 0.0.0.0`, `main.py::main()`'s own
+     hardcoded `0.0.0.0`, and a bare `uvicorn` CLI invocation all bypass
+     any config this app owns) -- there is no "at startup" hook with that
+     information. Landed as a request-time check instead:
+     `AuthMiddleware._warn_if_exposed`, called from the existing `elif not
+     self._configured(...)` branch (the exact "deploy_mode == local, no
+     account configured, i.e. auth is genuinely off" branch, so no new DB
+     read), reads the real local socket address off `scope["server"]` --
+     for a listener bound to `0.0.0.0`, that's the actual interface a
+     connection arrived on, not the literal string `"0.0.0.0"` -- and logs
+     a `logger.warning` once per process the first time that address isn't
+     loopback (`127.0.0.1`/`::1`/`localhost`, new `_is_loopback_host`
+     helper), cached on `app.state._cc_exposure_warned` the same way
+     `_configured` caches its own answer.
+  2. **Radicale devpass fail-startup** (`src/config.py` +
+     `src/main.py`). The finding's literal phrasing ("fail startup in
+     production mode if creds are still at the dev default") would have
+     broken every existing standalone production deploy that doesn't run
+     Radicale at all -- the common case, since `scripts/curodav-ctl`'s env
+     template ships `CC_RADICALE_*` commented out, which means the
+     devuser/devpass fallback is what a perfectly correctly-configured
+     no-Radicale production install already runs with today, silently and
+     harmlessly (there's nothing real behind that URL, so the credentials
+     never actually authenticate anywhere). An unconditional check would
+     have failed all of those too -- directly contradicting this doc's own
+     "no behavior change for a correctly-configured deploy" framing. Landed
+     gated on the bridge actually connecting: `main.py`'s lifespan (the
+     existing Radicale-optional `try`/`except`, which must never raise for
+     an unreachable server) gained an `else` branch that runs only after
+     `CalDavBridge(settings)` succeeds -- if `deploy_mode == "production"`
+     and the now-live connection is still authenticated with the exact
+     devuser/devpass pair (new `config.uses_default_radicale_credentials`,
+     checked against the *effective* settings, i.e. after
+     `apply_persisted_radicale_overrides`, so a /setup-entered password
+     that happens to literally be "devpass" is still caught), it raises
+     `RuntimeError` -- deliberately allowed to propagate and fail the whole
+     lifespan startup, unlike the broad `except Exception` right above it.
+     A standalone/no-Radicale production deploy (bridge stays `None`) never
+     reaches this branch at all, so it boots exactly as before.
+
+  New tests: `test_auth.py::TestIsLoopbackHost` (6 cases),
+  `TestAuthMiddlewareExposureWarning` (4 cases -- loopback silent,
+  non-loopback warns once via `caplog`, auth-enabled silent, forced-/setup
+  production silent), `TestUsesDefaultRadicaleCredentials` (4 cases). The
+  `main.py` lifespan wiring itself has no test harness in this suite (no
+  `test_main.py` exists) -- verified instead with two ad hoc scripts (not
+  added to the suite, same convention this file has used before for
+  lifespan-adjacent checks): one confirms the `RuntimeError` actually fires
+  end-to-end with a stubbed always-connects `CalDavBridge`, the other
+  confirms an unreachable-Radicale stub still boots clean. Pure Python
+  change (`auth.py`, `config.py`, `main.py`), no template/CSS/JS touched --
+  no `sw.js` bump needed. Full suite: 1970 passed, run as 12 parallel
+  chunks within one call (this sandbox doesn't persist `/tmp` or
+  background processes *between* bash calls this session, unlike some
+  prior sessions -- chunking + backgrounding + `wait` all had to happen
+  inside one call), `test_caldav_bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #3, the `_attach_tags`/
+  `_attach_contact_phones_emails` N+1 query fix -- flagged as the
+  highest-impact single fix in the whole audit.
+
 - **Shipped:** 2026-09-07 -- a Cowork full-app audit (code quality, security,
   UX/accessibility/mobile, performance, UI consistency) ran this same day;
   findings are in `documentation/reports/full-app-audit-2026-09-07.md`, and

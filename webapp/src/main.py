@@ -17,7 +17,7 @@ from starlette.types import Scope
 from . import db, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
-from .config import apply_persisted_radicale_overrides, load_settings
+from .config import apply_persisted_radicale_overrides, load_settings, uses_default_radicale_credentials
 from .security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +73,30 @@ async def lifespan(app: FastAPI):
     except Exception:
         bridge = None
         logger.exception("Radicale unreachable at startup; running without the sync bridge")
+    else:
+        # 2026-09-07 audit fix (documentation/reports/
+        # full-app-audit-2026-09-07.md): a production deploy that just
+        # authenticated to a REACHABLE Radicale server using the dev-only
+        # devuser/devpass fallback (config.py's load_settings default) is
+        # refused outright -- unlike the broad except above, this is
+        # deliberately allowed to raise and fail the whole lifespan startup.
+        # Gated on the bridge having actually connected (the `else` branch,
+        # not a bare settings check before the try) so a standalone install
+        # with no Radicale server at all -- which never authenticates
+        # against anything with these credentials -- isn't forced to set
+        # them just to boot; only a deploy where the fallback pair is
+        # genuinely live and reachable is the real exposure the audit
+        # flagged ("only reachable if a real deploy forgets to set
+        # CC_RADICALE_URL/CC_RADICALE_PASSWORD").
+        if settings.deploy_mode == "production" and uses_default_radicale_credentials(settings):
+            raise RuntimeError(
+                "CC_DEPLOY_MODE=production connected to a live Radicale "
+                "server using the dev-only fallback credentials "
+                "(devuser/devpass) -- set CC_RADICALE_USER/"
+                "CC_RADICALE_PASSWORD (or configure real credentials via "
+                "Settings > Data & Maintenance) before running this in "
+                "production."
+            )
     app.state.bridge = bridge
 
     # Populate the cache synchronously once at startup so the first page

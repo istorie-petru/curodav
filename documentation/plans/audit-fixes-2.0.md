@@ -20,13 +20,27 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    schema to add. Called from both `setup_submit` and
    `change_login_password` whenever persisted credentials change.
 
-2. **Silent-misconfiguration guards.** Bundle two small, independent fixes:
-   log loudly at startup if the app is bound to a non-loopback address with
-   `deploy_mode=local` (auth is off) (`auth.py:143-146,384-389`); fail
-   startup in production mode if Radicale credentials are still at the
-   `"devpass"` fallback (`config.py:69`). Both are "warn instead of
-   silently exposing" fixes, no behavior change for a correctly-configured
-   deploy.
+2. ~~**Silent-misconfiguration guards.**~~ **Shipped 2026-09-07** — see
+   `STATE.md`'s entry of the same date. Both landed slightly differently
+   than first sketched here, for reasons found while implementing:
+   - The non-loopback warning couldn't actually run "at startup" as
+     originally phrased — the ASGI app has no visibility into what host
+     uvicorn was told to bind to (systemd's unit, `python -m src.main`'s
+     hardcoded `0.0.0.0`, and a bare `uvicorn` CLI invocation all bypass
+     any config this app owns). Landed as a request-time check instead
+     (`AuthMiddleware._warn_if_exposed`, `auth.py`), reading the real local
+     socket address off `scope["server"]` — logs once, the first time a
+     request actually arrives via a non-loopback interface.
+   - The Radicale-devpass fail-startup couldn't fire unconditionally either
+     — every production deploy that runs standalone (no Radicale server at
+     all, the common case per `scripts/curodav-ctl`'s commented-out
+     `CC_RADICALE_*` template lines) would hit the fallback and be broken
+     by a hard, unconditional failure, contradicting this doc's own "no
+     behavior change for a correctly-configured deploy" framing. Landed
+     gated on the bridge actually connecting (`main.py`'s lifespan, `else`
+     branch of the existing Radicale-optional `try`) — only a production
+     deploy where the devuser/devpass pair is live and reachable fails to
+     boot; an unreachable/absent Radicale still boots exactly as before.
 
 3. **N+1 query fix on every list render.** `db.py:1415` `_attach_tags` plus
    `db.py:3038-3042` `_attach_contact_phones_emails` — batch-fetch labels

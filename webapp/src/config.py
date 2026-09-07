@@ -10,6 +10,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# The dev-only Radicale fallback credentials (webapp/.dev/radicale/) --
+# never meant to protect anything reachable off localhost. Named as
+# constants (not just inline literals in load_settings' os.environ.get
+# calls) so `uses_default_radicale_credentials` below can compare against
+# the exact same values without the two ever drifting apart.
+_DEV_RADICALE_USERNAME = "devuser"
+_DEV_RADICALE_PASSWORD = "devpass"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -65,8 +73,8 @@ def load_settings() -> Settings:
         radicale_base_url=os.environ.get(
             "CC_RADICALE_URL", "http://127.0.0.1:5232/devuser/"
         ),
-        radicale_username=os.environ.get("CC_RADICALE_USER", "devuser"),
-        radicale_password=os.environ.get("CC_RADICALE_PASSWORD", "devpass"),
+        radicale_username=os.environ.get("CC_RADICALE_USER", _DEV_RADICALE_USERNAME),
+        radicale_password=os.environ.get("CC_RADICALE_PASSWORD", _DEV_RADICALE_PASSWORD),
         calendar_collection=os.environ.get("CC_CALENDAR_COLLECTION", "calendar"),
         tasks_collection=os.environ.get("CC_TASKS_COLLECTION", "tasks"),
         contacts_collection=os.environ.get("CC_CONTACTS_COLLECTION", "contacts"),
@@ -132,4 +140,23 @@ def apply_persisted_radicale_overrides(settings: "Settings", conn) -> "Settings"
         radicale_base_url=url,
         radicale_username=username,
         radicale_password=password,
+    )
+
+
+def uses_default_radicale_credentials(settings: "Settings") -> bool:
+    """True when `settings` would authenticate to Radicale with the
+    dev-only devuser/devpass fallback (load_settings' defaults) -- true
+    whether that's because CC_RADICALE_USER/PASSWORD were never set, or
+    because a /setup-persisted override (apply_persisted_radicale_overrides,
+    called before this) happens to match the same values verbatim. Checked
+    by main.py's lifespan (2026-09-07 audit fix,
+    `documentation/reports/full-app-audit-2026-09-07.md`) only AFTER a
+    production deploy's CalDavBridge actually connects -- a standalone
+    install with no reachable Radicale at all never exercises these
+    credentials against anything, so it must not be forced to change them
+    just to boot; see main.py's own comment for why the check is gated on
+    a live connection rather than firing unconditionally."""
+    return (
+        settings.radicale_username == _DEV_RADICALE_USERNAME
+        and settings.radicale_password == _DEV_RADICALE_PASSWORD
     )
