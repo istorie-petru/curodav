@@ -9,7 +9,7 @@
      6 virtual columns off the grid's own (boxed) rendered width, so the
      fix is simply giving the grid the full width to lay out in, not a
      change to the masonry math itself. -->
-{% block main_class %}main-full-width{% endblock %}
+{% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
 <!-- Header banner + one page-action bar (2026-08-10) -- the banner cover
      (when set, routers/banners.py) and ALL of this page's actions live
@@ -74,8 +74,17 @@
 
 <!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
      with every Space page (routers/projects.py's space_detail) via
-     routers/dashboard.py's widget_page_context. See _widget_workspace.html. -->
+     routers/dashboard.py's widget_page_context. See _widget_workspace.html.
+     Wrapped in .main-shell-body (2026-09-07, direct request extending the
+     flex-shell model here) -- #dashboard-grid itself keeps setting its own
+     JS-computed `style.height` (static/app.js's masonry layout, sized off
+     total card content, often taller than the viewport), unchanged; this
+     wrapper is the one that actually gets the fixed viewport-derived
+     height + overflow-y:auto, so the grid scrolls inside it exactly the
+     same way Calendar's .time-grid-body scrolls inside .time-grid-wrap. -->
+<div class="main-shell-body">
 {% include "_widget_workspace.html" %}
+</div>
 
 {% endblock %}
 {% block extra_scripts %}

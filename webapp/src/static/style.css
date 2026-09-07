@@ -3826,6 +3826,68 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   }
 }
 
+/* Generic "flex shell" page layout (2026-09-07, direct request: extend
+   Calendar/Planner's viewport-fit model to every page with a clear
+   header+scrollable-body shape). Same flex-shell mechanics as
+   main.main-calendar above -- lock main's own height to the viewport,
+   hand the header flex:none, hand the body flex:1 -- generalized behind
+   a plain `main-shell` modifier instead of anything calendar-specific.
+
+   Unlike Calendar's .calendar-viewport/.project-calendar-layout, there's
+   no single shared class name across these pages' body markup to hang a
+   descendant selector off of (a task table, a contact list, a labels
+   table, a masonry widget grid are shaped nothing alike) -- so each
+   page's own template applies one explicit `.main-shell-body` class to
+   whichever element is actually its scrollable region: #tasks-body,
+   #contacts-body, #notes-body, #modal-target (Labels manage's existing
+   wrapper -- see that template's own comment on why it's wrapped at
+   all), and a new wrapper div around Dashboard's widget-grid include.
+   Dashboard's #dashboard-grid itself keeps setting its own JS-computed
+   `style.height` (static/app.js's masonry layout, sized off total card
+   content) completely unchanged -- .main-shell-body is what actually
+   gets the fixed viewport-derived height + overflow-y:auto, so the grid
+   scrolls inside it the same way Calendar's .time-grid-body scrolls
+   inside .time-grid-wrap, one level up.
+
+   main.main-calendar itself intentionally isn't folded into this (it
+   already works, and its own body element IS always .calendar-viewport/
+   .project-calendar-layout -- no reason to touch a working, freshly-
+   verified ruleset just to save one shared class name).
+
+   Scope of this pass, per direct confirmation: Tasks, Contacts, Notes,
+   Labels manage, Dashboard. Settings (hub + sub-pages), Search,
+   Published lists, and Project/Label detail pages are held for a
+   follow-up -- several of them don't have this same clean "one header,
+   one scrollable body" shape (multi-column forms, a Kanban board) and
+   need their own look at what should actually scroll before getting
+   this treatment. */
+main.main-shell{
+  display:flex; flex-direction:column; overflow:hidden;
+}
+main.main-shell > h1.sr-only,
+main.main-shell > .page-header-narrow,
+main.main-shell > .page-banner-wrap,
+main.main-shell > .toolbar.top-app-bar,
+main.main-shell > .bulk-actions-bar{
+  flex:none;
+}
+.main-shell-body{
+  flex:1 1 auto; min-height:0; overflow-y:auto;
+}
+@media (min-width:721px){
+  /* No bottom bar to reserve on desktop, same as main.main-calendar. */
+  main.main-shell{height:100vh; height:100dvh;}
+}
+@media (max-width:720px){
+  /* Same 64px mobile-tabbar reservation and 100dvh reasoning as
+     main.main-calendar's own mobile block above. */
+  main.main-shell{
+    height:calc(100vh - 64px);
+    height:calc(100dvh - 64px);
+    padding-bottom:var(--space-3);
+  }
+}
+
 .toast-stack{
   position:fixed; left:0; right:0; bottom:var(--space-5); z-index:var(--z-toast);
   display:flex; flex-direction:column; align-items:center; gap:var(--space-2); pointer-events:none;

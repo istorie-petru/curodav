@@ -5,6 +5,7 @@
    palette's page-navigation entry or a direct /notes visit. #}
 {% extends "base.html" %}
 {% block title %}Notes{% endblock %}
+{% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Notes", "file-text") }}

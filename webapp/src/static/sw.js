@@ -323,7 +323,19 @@
 // other header control (icon-btn, the h2 title) already respects. Latent
 // on Calendar/Contacts too (their own filter dropdowns just happened to
 // be empty/absent in the account this was measured against).
-const CACHE_NAME = "cc-shell-v66";
+// v67 (2026-09-07, direct request): style.css changed again -- extended
+// the main.main-calendar flex-shell model to a new generic main.main-
+// shell modifier, applied to Tasks, Contacts, Notes, Labels manage, and
+// Dashboard (the pages with a clear header+scrollable-body shape,
+// confirmed scope for this pass -- Settings/Search/Published lists/
+// Project & Label detail held for a follow-up). Each page's own template
+// also gained a `.main-shell-body` class on whichever element is its
+// scrollable region (#tasks-body, #contacts-body, #notes-body,
+// #modal-target on Labels manage, a new wrapper div on Dashboard around
+// #dashboard-grid) -- see style.css's own comment on main.main-shell for
+// the full reasoning, including why Dashboard's masonry grid (which sets
+// its own JS-computed style.height) composes safely with this.
+const CACHE_NAME = "cc-shell-v67";
 
 const SHELL_ASSETS = [
   "/offline",

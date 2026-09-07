@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Labels{% endblock %}
+{% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
@@ -7,7 +8,7 @@
 {% from "_empty_state_row.html" import empty_state_row %}
 {{ page_header_narrow("Labels", "tag") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
-<div id="modal-target">
+<div id="modal-target" class="main-shell-body">
 {% include "_settings_breadcrumb.html" with context %}
 
 <h1>Labels</h1>

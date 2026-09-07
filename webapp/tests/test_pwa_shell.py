@@ -501,8 +501,11 @@ class TestLocalWritePath:
         # v66 (2026-09-07, direct measurement): .filter-dropdown-trigger
         # 40px -> 32px so Tasks' header (58px) matches the 48px every
         # other page's header measured at -- see sw.js's own v66 comment.
+        # v67 (2026-09-07, direct request): new generic main.main-shell
+        # flex-shell modifier, applied to Tasks/Contacts/Notes/Labels
+        # manage/Dashboard -- see sw.js's own v67 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v66"' in script
+        assert 'CACHE_NAME = "cc-shell-v67"' in script
 
 
 class TestOfflineToolbar:

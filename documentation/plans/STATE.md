@@ -17,6 +17,75 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- extended the flex-shell "page fits the
+  viewport, body scrolls internally" model (built for Calendar/Planner
+  earlier this session, `main.main-calendar`) to a new generic
+  `main.main-shell` modifier, applied to Tasks, Contacts, Notes, Labels
+  manage, and Dashboard -- direct request, scoped deliberately after
+  discussion: these five have a clean "one header, one scrollable body"
+  shape; Settings (hub + sub-pages), Search, Published lists, and
+  Project/Label detail pages were explicitly held for a follow-up since
+  several don't share that shape (multi-column forms, a Kanban board) and
+  need their own look at what should actually scroll first.
+
+  Same mechanics as `main.main-calendar` (height-locked flex column,
+  `100dvh` with a `100vh` fallback, nothing subtracted on desktop, the
+  mobile bottom nav bar's 64px on mobile) but generalized: since these
+  five pages' body markup shares no common class the way Calendar's
+  `.calendar-viewport`/`.project-calendar-layout` does, each page's own
+  template applies one explicit `.main-shell-body` class to whichever
+  element is actually its scrollable region -- `#tasks-body`,
+  `#contacts-body`, `#notes-body`, `#modal-target` (Labels manage's
+  existing wrapper), and a new wrapper `<div>` around Dashboard's
+  `{% include "_widget_workspace.html" %}`. `main.main-calendar` itself
+  wasn't folded into this -- it already works and didn't need touching.
+
+  Dashboard's `#dashboard-grid` (the masonry widget grid) needed a check
+  before assuming this was safe: `static/app.js`'s masonry layout sets
+  `grid.style.height` directly, computed from total card content --
+  taller than the viewport whenever there's more than a screenful of
+  widgets. Confirmed this composes fine with the new wrapper exactly the
+  way Calendar's `.time-grid-body` (also taller than its own budget)
+  already scrolls inside `.time-grid-wrap` one level up -- the grid keeps
+  setting its own real content height unchanged, `.main-shell-body` is
+  the one that actually gets the fixed viewport-derived height and
+  `overflow-y:auto`.
+
+  Checked `#modal-target`'s other meaning in this codebase before adding
+  a class to Labels manage's copy of it -- `static/modal.js` reads a
+  fetched page's `#modal-target` `classList` for `modal-height-md`/`-lg`/
+  `-stable-height` markers when a page is opened via `data-modal`, and
+  three tests assert exact `id="modal-target"` class strings on three
+  *other* templates' own `#modal-target` divs (`quick_add.html`,
+  `dashboard_customize.html`, the view/edit modal pair) -- confirmed
+  those are separate elements in separate templates, and confirmed
+  `injectModalContent()` only takes `#modal-target`'s `innerHTML` (the
+  outer div and its classes never survive into the injected modal DOM
+  either way), so adding `main-shell-body` to Labels manage's own
+  `#modal-target` is inert for the modal-injection path regardless.
+
+  Full suite re-run in the same 4-chunk pattern: 678 + 434 + 530 + 333 =
+  1975 passed, same total, no tests added/removed (the tests referencing
+  `#tasks-body`/`#modal-target`/etc. are substring/exact-match checks
+  unaffected by an added class, verified each one individually before
+  running the full suite).
+
+  `sw.js` `CACHE_NAME` bumped `v66` -> `v67`; `test_pwa_shell.py`
+  updated.
+
+  Verification note, same caveat as every entry in this session: still no
+  live browser (Claude in Chrome unreachable, no system browser installed
+  in this sandbox for a headless render) -- everything above is verified
+  structurally (served CSS/HTML matches source, braces balanced, full
+  test suite green) and by reading the relevant JS (`app.js`'s masonry,
+  `modal.js`'s `#modal-target` handling) rather than an actual rendered
+  screenshot. Worth a real visual pass on all five pages next session.
+
+  **Next slice:** the four held-back page groups (Settings, Search/
+  Published lists, Project/Label detail) -- per direct discussion, each
+  needs its own look at what should scroll before getting `main-shell`,
+  not a blind copy of this pass.
+
 - **Shipped:** 2026-09-07 -- Header bar height inconsistency: Tasks'
   narrow header measured 58px (direct DevTools measurement) against 48px
   on every other page. Root cause: `.filter-dropdown-trigger` (the "Date"

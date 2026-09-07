@@ -75,7 +75,7 @@
 {% set _habits_group = (groups | selectattr('kind', 'equalto', 'habits') | first) %}
 {% set _completed_group = (groups | selectattr('kind', 'equalto', 'completed') | first) %}
 {% set _flat_groups = groups | rejectattr('kind', 'equalto', 'habits') | rejectattr('kind', 'equalto', 'completed') | list %}
-<div id="tasks-body">
+<div id="tasks-body" class="main-shell-body">
 {% if has_any %}
 <div id="task-table" class="card table-scroll task-group-card">
 <table class="task-table">
