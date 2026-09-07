@@ -129,3 +129,122 @@ Not included above: items the audit report explicitly called "not a
 finding" or "no action needed" (clean error handling, `detail_cover()`
 macro adoption, `.icon-btn` naming consistency, existing DB indexes, etc.)
 — those don't need a slice.
+
+---
+
+Items 12–15 below are a **second wave**, found 2026-09-07 during the same
+UI-componentization discussion that produced item 9 (see `STATE.md`'s
+item-9 entry and `roadmap.md`'s 2.0 section for that discussion's full
+context) — a follow-up pass specifically comparing this app's CSS/template
+conventions against a generic component-library checklist (Bootstrap's,
+as a stand-in for "what does a mature UI system usually have") to find
+real gaps, not just re-label existing ones. Independent of item 11 (CSP):
+do them before or after it, in any order among themselves too — there's
+no dependency chain, just the usual one-slice-per-session discipline.
+Each item below is written to be actionable cold, without needing the
+2026-09-07 conversation for context.
+
+12. **Z-index: no shared scale.** `static/style.css` has ~50 raw
+    `z-index` declarations (values from -1 up to 1000, no CSS custom
+    properties, no documented ladder — contrast Bootstrap's own explicit
+    dropdown/sticky/fixed/modal/popover/tooltip scale). **This is not
+    currently broken** — checked before writing this item: `.skip-link`
+    and `.drag-ghost` both sit at `z-index:1000` deliberately (the
+    skip-link's own comment says it copied `.drag-ghost`'s value on
+    purpose, "the app's highest existing layer"); `.command-palette-
+    overlay` and `.cropper-overlay` both sit at `z-index:200`, above
+    `.modal-overlay`'s `z-index:100`, also deliberately (each one's own
+    comment explains it needs to render above an already-open modal).
+    So today's stacking is *correct*, just correct via a dozen scattered
+    comments cross-referencing each other instead of one source of
+    truth — the risk is a future edit changing one value (e.g. bumping a
+    dropdown's `z-index:150` for an unrelated reason) breaking an
+    implicit relationship nobody re-checks at edit time, because there's
+    nowhere that documents the relationship exists.
+
+    Scope: (1) grep `style.css` for every `z-index` declaration and group
+    the found values by actual visual layer (base content -> drag/reorder
+    handles -> dropdown/menu panels -> sticky nav/tabbar -> modal overlay
+    -> stacked-above-modal overlays [command palette, cropper] -> toast/
+    skip-link); (2) introduce CSS custom properties for each layer (e.g.
+    `--z-dropdown`, `--z-modal`, `--z-modal-stacked`, `--z-toast`) next to
+    the existing token block (`style.css` section 1, "Tokens"); (3)
+    replace the raw numbers with the new variables, preserving every
+    existing documented relationship (don't just sort-and-renumber — read
+    each comment first, some orderings are load-bearing); (4) keep the
+    explanatory comments, they're still useful, just point them at the
+    variable name instead of a bare number. No visual change expected if
+    done correctly — this is a refactor, not a redesign; the full test
+    suite won't catch a stacking regression (no CSS-rendering harness in
+    this suite, per `STATE.md`'s recurring note), so also do a manual
+    check of: opening a modal, then the command palette from inside it;
+    dragging a widget/task while a dropdown is open; focusing the skip
+    link.
+
+13. **Icon-button edit/delete pair, duplicated 4x.** Same shape as item
+    9's `.bulk-actions-bar` extraction, not caught in that pass:
+    `settings_holidays.html`, `settings_time_blocks.html`,
+    `labels_manage.html`, and `_labels_table_body.html` each repeat an
+    identical block —
+
+    ```jinja
+    <div class="action-buttons">
+        <a href="{URL}/edit" class="icon-btn" data-modal title="Edit {X}">{{ icon('edit', 'icon-sm') }}</a>
+        <form method="post" action="{URL}/delete" data-confirm-sheet="Delete &quot;{NAME}&quot;? {MESSAGE}">
+            <button type="submit" class="icon-btn danger" title="Delete {X}">{{ icon('trash', 'icon-sm') }}</button>
+        </form>
+    </div>
+    ```
+
+    — differing only in the edit/delete URLs, the `title` noun, and the
+    confirm-sheet message. Extract to a macro (new `_row_action_buttons.
+    html`, following the exact convention `_bulk_actions_bar.html`
+    established in item 9: header comment explaining what it replaces and
+    why, `{% macro %}` + named params, imported via `{% from ... import
+    ... %}` at each call site) — params should cover: edit URL, delete
+    URL, the noun for `title`/aria text, and the confirm-sheet message
+    (which varies enough per-caller — e.g. labels' "clears usage, not a
+    real delete" wording — that it must stay a parameter, not be
+    hardcoded). Grep `tests/` for `action-buttons`/`data-confirm-sheet`
+    plus each of the 4 templates' own delete-button `title=` text before
+    changing anything, same as item 9's process.
+
+14. **Empty-state table row, duplicated 5x.** `_labels_table_body.html`,
+    `labels_manage.html`, `settings_holidays.html`, and
+    `settings_time_blocks.html` (twice — Sleep and Leisure) each repeat:
+
+    ```jinja
+    <tr id="empty-state-row">
+        <td colspan="5" class="text-muted" style="font-size: var(--text-footnote);">No {X} yet</td>
+    </tr>
+    ```
+
+    — differing only in the `colspan` (check each call site, don't assume
+    it's always 5) and the message text. Extract to a macro alongside
+    (or inside) `_bulk_actions_bar.html`/`_row_action_buttons.html`'s
+    file, or its own `_empty_state_row.html` — whichever this app's
+    existing convention favors for a partial this small (check how
+    `_label_pill.html` — a similarly tiny one-line macro — was scoped,
+    and match it). **Out of scope, deliberately:** `settings_data_
+    maintenance.html:191`'s "No backups yet" text is a different shape
+    entirely (a `<span>` in a plain list, not a `<tr>`/`<td>` in a table)
+    — don't force it into this macro just because the copy reads
+    similarly; that would fix a naming coincidence, not real duplication.
+
+15. **Stale roadmap claim: Tasks-table pagination.** `roadmap.md`'s 1.9
+    section says pagination "shipped 2026-08-15: `GET /tasks?page=&limit=`
+    paginates the Table view's Open section." Confirmed via `git log`
+    this is no longer true: commit `2162403` shipped it, but the later
+    `d86a34d` ("Major rework session, 2026-08-28") retired it as a
+    documented *consequence* of un-conditionally grouping the Tasks table
+    (Project -> Habits -> Unassigned -> Completed) — that commit's own
+    message says so explicitly ("pagination retired as a consequence").
+    Not a bug, not something to restore — the grouped-table design this
+    app settled on doesn't have an "Open section" to paginate anymore.
+    Purely a documentation staleness fix: update `roadmap.md`'s 1.9
+    section to stop claiming a retired feature is shipped (either drop
+    the claim or note it shipped-then-was-superseded, matching how this
+    doc already handles superseded decisions elsewhere). Two-minute fix,
+    but do it before 2.0 ships — a roadmap that claims dead features
+    exist is exactly the kind of thing that wastes a future session's
+    time re-discovering this same dead end.
