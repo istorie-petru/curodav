@@ -494,8 +494,12 @@ class TestLocalWritePath:
         # breakpoint-independent main.main-calendar ruleset (no more
         # --calendar-chrome-h magic number) -- see sw.js's own v64
         # comment.
+        # v65 (2026-09-07, direct report): fixed Planner's Unscheduled-
+        # work/grid gap being 32px instead of 16px (flex gap stacking
+        # with each card's own margin-bottom) -- see sw.js's own v65
+        # comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v64"' in script
+        assert 'CACHE_NAME = "cc-shell-v65"' in script
 
 
 class TestOfflineToolbar:

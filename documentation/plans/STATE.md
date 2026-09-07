@@ -17,6 +17,26 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Planner: fixed the gap between the
+  "Unscheduled work" panel and the time grid below it reading as roughly
+  double what it should be (direct report against a real screenshot).
+  Root cause: `.project-calendar-layout` (the flex column wrapping both)
+  has its own `gap:16px`, but both children also carry the plain `.card`
+  class, whose `margin-bottom:var(--space-4)` (also 16px) stacks on top
+  of the flex gap instead of collapsing into it -- flex `gap` and margins
+  never collapse with each other, so the real space was 32px. Fixed with
+  `.project-calendar-layout > .card{margin-bottom:0;}`, scoped to just
+  this flex layout's direct children rather than touching `.card`'s
+  `margin-bottom` itself, which still does real work in every plain
+  document-flow context `.card` is used in elsewhere.
+
+  `sw.js` `CACHE_NAME` bumped `v64` -> `v65`; `test_pwa_shell.py`
+  updated. Full suite re-run in the same 4-chunk pattern: 678 + 434 + 530
+  + 333 = 1975 passed, same total, no tests added/removed.
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, structural
   cleanup pass on top of the three entries below. Two direct asks, both
   in `style.css`:

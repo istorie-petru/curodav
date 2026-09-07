@@ -309,7 +309,15 @@
 // distribute the rest between the header and the widget) needs no
 // number to estimate. See style.css's own comment on that ruleset for
 // the full reasoning and a sources list.
-const CACHE_NAME = "cc-shell-v64";
+// v65 (2026-09-07, direct report): style.css changed again -- Planner's
+// "Unscheduled work" panel and the time grid below it had a 32px gap
+// instead of the intended 16px. .project-calendar-layout's own flex
+// `gap:16px` was stacking with each child's plain .card margin-bottom
+// (also 16px, and flex gap/margin never collapse into each other) --
+// zeroed margin-bottom on .project-calendar-layout's direct .card
+// children only, leaving .card's own margin-bottom untouched everywhere
+// else it's used in normal document flow.
+const CACHE_NAME = "cc-shell-v65";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -3147,6 +3147,16 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    below this block) -- now always column, at every width, so the fix isn't
    sidebar-state-dependent. */
 .project-calendar-layout{display:flex; flex-direction:column; gap:16px;}
+/* Both children carry the plain .card class, whose own margin-bottom:
+   var(--space-4) (16px) stacks on top of this flex column's own 16px
+   gap instead of collapsing into it (flex gap and margin never collapse
+   with each other) -- direct report the space between "Unscheduled
+   work" and the grid looked oversized: it was really 32px, not the 16px
+   it reads as everywhere else `gap` is used. Zeroed here, scoped to just
+   this flex layout's own direct children, rather than touching .card's
+   margin-bottom itself -- that default still does real work in every
+   plain document-flow context .card is used in elsewhere. */
+.project-calendar-layout > .card{margin-bottom:0;}
 .project-calendar-unscheduled{width:100%; flex:none;}
 .project-calendar-grid{flex:1; min-width:0;}
 /* Collapsible "Unscheduled work" strip (1.9 side work,
