@@ -1,7 +1,11 @@
+<!-- 2026-09-07 (same fix as Contacts' own #contacts-body, direct report)
+     -- .card moved off the unconditional outer wrapper and onto
+     .checklist itself (only rendered when there are notes), so the
+     empty state -- a sibling now, not a descendant -- no longer shows a
+     card background behind it, matching Tasks' own #tasks-body pattern. -->
 <div id="notes-body" class="main-shell-body">
-<div class="card">
 {% if notes %}
-<div class="checklist">
+<div class="card checklist">
     {% for n in notes %}
     <div class="checklist-row">
         {{ icon('file-text', 'icon-sm') }}
@@ -29,5 +33,4 @@
     {% endif %}
 </div>
 {% endif %}
-</div>
 </div>

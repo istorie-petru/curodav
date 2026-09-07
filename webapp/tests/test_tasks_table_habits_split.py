@@ -75,14 +75,42 @@ class TestHabitsOwnTable:
         assert ">Cadence<" in habits_table.split("</table>")[0]
         assert ">Streak<" in habits_table.split("</table>")[0]
 
-    def test_habits_table_is_always_present_even_with_no_habits_yet(self, conn):
-        # The "+ Add habit" affordance needs somewhere to live even before
-        # any habit exists -- same "always show the group" behavior the
-        # combined table had before the split.
+    def test_habits_table_is_hidden_when_there_are_no_habits_yet(self, conn):
+        # 2026-09-07 (direct report: "the habits or completed tables
+        # should appear only if there is data") -- reverses the
+        # 2026-08-29 decision this test used to encode (see git history
+        # for that version): _build_task_groups always appends a Habits
+        # group regardless of whether there are any habits, which used to
+        # mean an empty "Habits (0)" table with a header row and no data
+        # rows rendered unconditionally. Direct instruction now is the
+        # opposite -- hide it when there's nothing to show, same as any
+        # other empty section. The "+ Add habit" affordance that lived in
+        # this table's header is gone along with it in the empty case;
+        # creating a first habit still works via the sidebar's global
+        # quick-add / task creation's own habit toggle, just not from a
+        # dedicated empty table anymore.
+        _seed_task(conn, "t1")
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        assert 'id="habits-table"' not in body
+
+    def test_habits_table_reappears_once_a_habit_exists(self, conn):
+        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert 'id="habits-table"' in body
         assert "Add habit" in body
+
+    def test_main_task_table_is_hidden_when_only_habits_exist(self, conn):
+        # The companion half of the same direct report: an account with
+        # only habits (no regular/completed tasks) used to still render
+        # the whole empty Title/Status/Date/Labels table above the Habits
+        # one, because the old has_any flag didn't distinguish "habits
+        # exist" from "regular tasks exist" -- routers/tasks.py's new
+        # has_main_tasks flag is what actually gates this table now.
+        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        assert 'id="task-table"' not in body
+        assert 'id="habits-table"' in body
 
     def test_habit_entity_row_is_in_the_habits_table_not_the_task_table(self, conn):
         db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
@@ -174,10 +202,15 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert "/tasks/new?project=Garden" not in body
 
     def test_habits_group_name_and_add_link_are_in_its_header(self, conn):
+        # 2026-09-07 follow-up: the table itself is now hidden at zero
+        # habits (see TestHabitsOwnTable's own reversal above), so this
+        # needs a real habit seeded to exercise the header at all --
+        # count reads "Habits (1)", not the old always-rendered "(0)".
+        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         habits_table = body.split('id="habits-table"', 1)[1]
-        assert ">Habits (0)<" in habits_table.split("</thead>")[0]
+        assert ">Habits (1)<" in habits_table.split("</thead>")[0]
         header = habits_table.split("</thead>")[0]
         assert 'href="/tasks/new?habit=1"' in header
         assert 'title="Add habit"' in header

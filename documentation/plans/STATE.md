@@ -17,6 +17,75 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- two direct reports, both about empty states
+  showing content that isn't there:
+
+  1. **Empty-state card background** (Contacts specifically reported,
+     Tasks named as the good example): `#contacts-body` carried `.card`
+     on the OUTER wrapper unconditionally, so the empty state (a sibling
+     of the actual contact list inside that same wrapper) inherited a
+     card background it was never meant to have -- Tasks' own
+     `#tasks-body` has no such wrapper class; only the actual table's own
+     wrapper div is `.card`. Moved `.card` off `#contacts-body` onto
+     `.contact-list` itself (only rendered when there are contacts) to
+     match. Found and fixed the identical bug in Notes' `#notes-body`
+     while auditing for the same pattern (not explicitly reported, but
+     structurally the same issue) -- `.card` moved onto `.checklist`.
+     Labels manage wasn't affected -- its empty state is a `<tr>` inside
+     the same always-present `<table>`, a different pattern already
+     normalized earlier (`_empty_state_row.html`, audit-fixes-2.0.md item
+     14), not a card-behind-empty-state case.
+
+  2. **Tasks: empty Habits/main table rendering unconditionally.**
+     `_build_task_groups` (routers/tasks.py) always appends a Habits
+     group regardless of whether any habits exist -- grouping is
+     unconditional, one fixed order, per that function's own 2026-08-28
+     comment -- so the template's `{% if _habits_group %}` was always
+     true, rendering an empty "Habits (0)" table (header row, no data)
+     whenever there were zero habits. Direct instruction reverses a prior
+     explicit decision here (`test_habits_table_is_always_present_even_
+     with_no_habits_yet`, 2026-08-29: "the '+ Add habit' affordance needs
+     somewhere to live even before any habit exists") -- renamed that
+     test to assert the opposite and documented the reversal in its own
+     comment; creating a first habit still works via the sidebar's global
+     quick-add/task creation's own habit toggle, just not from a
+     dedicated empty table anymore.
+
+     Root-caused a second, related bug while fixing this: an account with
+     *only* habits (no regular/completed tasks) still rendered the whole
+     empty Project/Unassigned/Completed table above the Habits one --
+     `has_any` (used to gate the whole content-vs-empty-state branch)
+     didn't distinguish "habits exist" from "regular tasks exist," it was
+     just their combined OR. Added two narrower flags to `_tasks_list_
+     context`, `has_main_tasks` (`open_tasks or completed_tasks`) and
+     `has_habits` (the Habits group's own item count) -- `has_any` stays
+     as their combined OR for the page's own top-level empty state,
+     `_tasks_body.html` now gates each table independently on the
+     narrower flag. Completed itself was never a separate table to begin
+     with (its tasks flatten into `#task-table`'s own `<tbody>`) -- an
+     empty Completed group already contributed zero rows silently,
+     nothing to gate there; the report's mention of it was really about
+     the combined main-table-with-Completed-rows case, covered by
+     `has_main_tasks`.
+
+     `_tasks_list_context` is shared between the full page and the
+     async-CRUD fragment route (`GET /tasks/regions?region=table`, both
+     call it directly) -- both new flags flow through automatically, no
+     second place to update.
+
+  Two tests updated (`test_habits_table_is_always_present_even_with_no_
+  habits_yet` renamed + inverted, `test_habits_group_name_and_add_link_
+  are_in_its_header` given a real habit to seed since the table it
+  asserts against no longer renders at zero), two new tests added
+  (`test_habits_table_reappears_once_a_habit_exists`, `test_main_task_
+  table_is_hidden_when_only_habits_exist`). No `style.css` changes this
+  pass -- templates + `routers/tasks.py` + tests only, no `sw.js` cache
+  bump needed. Full suite: 1977 passed (+2 net new tests over the 1975
+  baseline, both accounted for above).
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- follow-up correction to the header-height
   fix two entries below: direct measurement after that fix still showed
   50px on pages with the filter-dropdown button and 46px on plain pages,

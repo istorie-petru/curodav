@@ -69,7 +69,8 @@
    table">`+`<thead>` with its own name/count/`+`, per the reasoning
    above: it isn't "grouping tasks by label," it's a different set of
    columns for a different kind of row.
-   Expects: groups, has_any, today_iso, q, active_date_filter. #}
+   Expects: groups, has_any, has_main_tasks, has_habits, today_iso, q,
+   active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
 {% from "_habit_row.html" import habit_row with context %}
 {% set _habits_group = (groups | selectattr('kind', 'equalto', 'habits') | first) %}
@@ -77,6 +78,22 @@
 {% set _flat_groups = groups | rejectattr('kind', 'equalto', 'habits') | rejectattr('kind', 'equalto', 'completed') | list %}
 <div id="tasks-body" class="main-shell-body">
 {% if has_any %}
+<!-- 2026-09-07 (direct report: "the habits or completed tables should
+     appear only if there is data") -- _build_task_groups
+     (routers/tasks.py) always appends a Habits group regardless of
+     whether there are any habits (grouping is unconditional, one fixed
+     order), so `_habits_group` here is always truthy even at zero --
+     gating on has_main_tasks/has_habits (routers/tasks.py's own new,
+     narrower flags) instead of group presence is what actually hides an
+     empty table. Completed was never a separate table to begin with (its
+     tasks are flattened into this same #task-table's <tbody>, right
+     below) -- an empty Completed group already contributed zero rows
+     silently, nothing to gate there. What WAS visibly broken: an
+     account with only habits (no regular/completed tasks) still got this
+     whole empty Title/Status/Date/Labels table rendered above the Habits
+     one, since the old `has_any` check didn't distinguish "habits exist"
+     from "regular tasks exist." -->
+{% if has_main_tasks %}
 <div id="task-table" class="card table-scroll task-group-card">
 <table class="task-table">
     <thead>
@@ -95,8 +112,9 @@
     </tbody>
 </table>
 </div>
+{% endif %}
 
-{% if _habits_group %}
+{% if has_habits %}
 <div class="card table-scroll task-table-habits">
 <table class="task-table" id="habits-table">
     <thead>

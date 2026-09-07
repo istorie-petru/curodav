@@ -1,6 +1,14 @@
-<div id="contacts-body" class="card main-shell-body">
+<!-- 2026-09-07 (direct report: the empty state was showing the card
+     background behind it, unlike Tasks' own empty state which has none)
+     -- .card moved off this outer body wrapper and onto .contact-list
+     itself (the actual list, only rendered when there are contacts),
+     matching Tasks' own pattern (#tasks-body carries no .card; the
+     table's own wrapper div does). The empty state below is a sibling of
+     .contact-list, not a descendant, so it no longer inherits a card
+     background it was never meant to have. -->
+<div id="contacts-body" class="main-shell-body">
 {% if contacts %}
-<div class="contact-list">
+<div class="card contact-list">
     {% for c in contacts %}
     <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
         {{ avatar(c) }}

@@ -377,7 +377,20 @@ def _tasks_list_context(
         t["work_hours"] = _hours[t["uid"]]
 
     groups = _build_task_groups(conn, open_tasks, completed_tasks)
-    has_any = bool(open_tasks or completed_tasks or groups[-3]["habit_items"])  # the Habits group
+    has_habits = bool(groups[-3]["habit_items"])  # the Habits group
+    # 2026-09-07 (direct report: "the habits or completed tables should
+    # appear only if there is data") -- _build_task_groups always appends
+    # a Habits group (see its own comment: grouping is unconditional, one
+    # fixed order), so `_habits_group` in the template was always truthy
+    # even with zero habits, rendering an empty "Habits (0)" table with a
+    # header row and no data. has_any (below) stayed a combined "is there
+    # anything to show at all" flag for the page's own top-level empty
+    # state -- has_main_tasks is the new, narrower flag _tasks_body.html
+    # uses to gate the Project/Unassigned/Completed table specifically,
+    # so an account with only habits (no regular tasks) doesn't also get
+    # an empty main table above them.
+    has_main_tasks = bool(open_tasks or completed_tasks)
+    has_any = has_main_tasks or has_habits
 
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
@@ -385,6 +398,8 @@ def _tasks_list_context(
         {
             "groups": groups,
             "has_any": has_any,
+            "has_main_tasks": has_main_tasks,
+            "has_habits": has_habits,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
             "active_date_filter": date_filter,
