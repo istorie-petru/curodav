@@ -17,6 +17,61 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Calendar/Planner "fit the page" layout,
+  mobile follow-up (direct report against a resized/narrow browser
+  window, not a phone: the Calendar widget left a dead strip of blank
+  page below it instead of filling the screen, and Planner's 24-hour
+  grid scrolled the whole page instead of scrolling internally). The
+  2026-08-08 desktop pass (`.calendar-viewport`'s own comment, style.css)
+  explicitly punted on mobile ("a shrink-to-fit calendar grid on top of
+  that is a separate problem this pass doesn't attempt to solve blind")
+  -- this is that follow-up, scoped to the max-width:720px breakpoint
+  (which also fires on a narrow *desktop* window, not just real phones).
+
+  Rather than porting the desktop block's fixed `--calendar-chrome-h`
+  estimate (tuned for a two-row toolbar that doesn't exist at this width,
+  and the header's filter row can wrap to a second line here, making any
+  fixed guess unreliable), went with a flex-shell approach instead: new
+  `main-calendar` modifier class (calendar_day/week/month/fourweek.html's
+  `main_class` block only -- NOT `main-full-width` itself, which
+  dashboard.html/label_detail.html/project_detail.html also use for
+  unrelated widget-grid/Kanban content that should keep ordinary page
+  scroll). `main.main-calendar` becomes a height-locked flex column
+  (`height:calc(100vh - 64px - env(safe-area-inset-bottom))`, the 64px
+  matching `.mobile-tabbar`'s own height) -- the page header sizes itself
+  (`flex:none`), and whatever's left goes to the actual view widget
+  (`.calendar-viewport` directly for Month/4-Week/Day, or
+  `.project-calendar-layout` for Planner/Week, whose own
+  `.calendar-viewport` is one level deeper next to the Unscheduled-work
+  aside). No magic number to keep in sync with header content, and Week/
+  Day's `.time-grid-wrap` keeps the same sticky-header-then-scroll
+  pattern the desktop rule already established (`position:sticky` on
+  `.time-grid-top`/`.time-grid-head`, `overflow-y:auto` on the wrap).
+  Month/4-Week get a plain `overflow-y:auto` directly on
+  `.calendar-viewport` instead of desktop's shrink-to-fit grid math
+  (`.month-viewport` row-flexing) -- simpler, and matches what was
+  actually asked for ("the widget should have a scrollbar"), not desktop's
+  shrink-to-fit look.
+
+  style.css only (new rules inside the existing `@media (max-width:720px)`
+  block) + the 4 templates' `main_class` block gaining the new class --
+  no JS, no Python. Per the `sw.js` v15/v16 lesson already documented
+  there (style.css changes need a `CACHE_NAME` bump to actually reach an
+  installed PWA), bumped `cc-shell-v60` -> `v61`; `test_pwa_shell.py`'s
+  version-pin assertion updated to match. Full suite re-run in 4
+  sequential chunks (background/parallel test running isn't reliable in
+  this sandbox -- a detached process doesn't survive across tool calls
+  here, unlike the 12-parallel-chunk approach the CSP slice above used
+  elsewhere): 678 + 434 + 530 + 333 = 1975 passed, same total as the
+  CSP slice's own baseline (no tests added/removed, just one assertion's
+  expected string updated).
+
+  **Next slice:** none mandated -- 2.0's fix list (`audit-fixes-2.0.md`)
+  was already fully shipped before this slice; this was a direct request,
+  not on that list. Check `roadmap.md`'s 2.0 section fresh next session
+  per the CSP slice's own note below, to confirm 2.0 is actually ready to
+  ship.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 11, the CSP
   `unsafe-inline` migration -- the last mandatory item on the pre-2.0 fix
   list, saved for last on purpose as the largest/riskiest. Scoped as

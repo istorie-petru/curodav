@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Week of {{ monday.isoformat() }} - Calendar{% endblock %}
-{% block main_class %}main-full-width{% endblock %}
+{% block main_class %}main-full-width main-calendar{% endblock %}
 {% block content %}
 {# Planner (Week view) -- own title/icon matching its own tabbar identity
    (base.html: icon('clock'), label "Planner"), not "Calendar"/'calendar' --

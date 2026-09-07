@@ -260,7 +260,13 @@
 // habit_checkin.js are page-specific (not base.html-loaded), same
 // "not itself a SHELL_ASSETS entry" category datetime_picker.js's own
 // v14 note already established, so neither is added here.
-const CACHE_NAME = "cc-shell-v60";
+// v61 (2026-09-07): style.css changed again (mobile follow-up to the
+// desktop-only "Calendar fit the page" pass -- new main.main-calendar
+// rules under the max-width:720px block) plus calendar_day/week/month/
+// fourweek.html each gained the new `main-calendar` class on main_class.
+// Templates aren't shell-precached (only static/* is), so only the
+// style.css half needs this bump per the v15/v16 lesson above.
+const CACHE_NAME = "cc-shell-v61";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -471,8 +471,13 @@ class TestLocalWritePath:
         # dynamic_styles.js added to SHELL_ASSETS (the generic `data-style`
         # -> CSSOM applier, same "base.html script needed on every page"
         # category as a11y_icon_labels.js).
+        # v61 (2026-09-07, direct report against a resized/narrow browser
+        # window): mobile follow-up to the desktop-only "Calendar fit the
+        # page" pass -- new main.main-calendar rules under style.css's
+        # max-width:720px block. No new SHELL_ASSETS files (templates
+        # aren't shell-precached).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v60"' in script
+        assert 'CACHE_NAME = "cc-shell-v61"' in script
 
 
 class TestOfflineToolbar:
