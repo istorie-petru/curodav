@@ -274,7 +274,29 @@
 // direct follow-up request for the same "widget scrolls, page doesn't"
 // treatment Week/Day already had. Bumped regardless of the width mix-up,
 // since the desktop block's rules did materially change.
-const CACHE_NAME = "cc-shell-v62";
+// v63 (2026-09-07, same-day follow-up again): style.css changed again --
+// v62's overflow-y:auto only covers content taller than the box; it did
+// nothing for Month/4-Week when content is shorter (the actual "dead
+// space" case in the original report), so added flex:1 1 0 on
+// .month-week-grid in both the desktop and mobile blocks so rows grow to
+// fill leftover space, same as the pre-2026-08-08 intent minus the old
+// shrink-below-floor squeeze. Also switched main.main-calendar's mobile
+// height from 100vh to 100dvh (direct report: widget overflowing behind
+// the bottom nav bar -- the classic mobile 100vh-measures-the-largest-
+// possible-viewport bug) and dropped a second, redundant
+// safe-area-inset-bottom subtraction (.mobile-tabbar's own inset is
+// already baked inside its fixed 64px height, not added past it).
+//
+// NOTE for whoever reads this next: base.html's manifest <link> and
+// pwa.js's registration call are both currently commented out ("PWA
+// shell -- DISABLED"), so no service worker is actually registered
+// right now and this whole CACHE_NAME mechanism is inert -- bumped
+// anyway to keep the log accurate for whenever the shell is re-enabled,
+// per the established convention in this file, but it is NOT why a
+// browser might still be showing a stale layout today. A plain browser
+// HTTP cache (or an un-restarted dev server) is the more likely culprit
+// until pwa.js is back in base.html.
+const CACHE_NAME = "cc-shell-v63";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -481,8 +481,15 @@ class TestLocalWritePath:
         # scrolls, page doesn't" treatment as Week/Day -- see sw.js's own
         # v62 comment for why (the "v61 changed nothing" report was a
         # >720px width, where v61's mobile-only rules never applied).
+        # v63 (2026-09-07, same-day follow-up again): flex:1 1 0 on
+        # .month-week-grid (desktop + mobile) so rows actually grow to
+        # fill leftover space -- v62's overflow-y:auto alone only helped
+        # when content overflowed, not when it was shorter than the box.
+        # Also 100vh -> 100dvh for main.main-calendar's mobile height
+        # (direct report: widget overflowing behind the bottom nav bar).
+        # See sw.js's own v63 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v62"' in script
+        assert 'CACHE_NAME = "cc-shell-v63"' in script
 
 
 class TestOfflineToolbar:

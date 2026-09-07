@@ -17,6 +17,77 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, two
+  same-day correction passes on top of the two entries below (screenshots
+  showing the Month/4-Week card still ending after 4 rows with blank
+  space beneath it, on both a desktop-width and mobile-width screenshot,
+  plus a new "widget overflows behind the mobile bottom nav" report).
+
+  1. **The real bug the screenshots caught:** the prior two passes gave
+     `.calendar-viewport` a height budget and `overflow-y:auto`, but
+     never anything that grows Month/4-Week's rows to actually use that
+     budget when their content is *shorter* than it -- a plain flex
+     column doesn't stretch its children just because the column itself
+     has room. So the "dead space" symptom hadn't gone away, it had just
+     moved from "below the widget" (page background) to "inside the
+     widget" (still inside `.calendar-viewport`'s own barely-different
+     card background, #3e3e3e vs #363636 in dark mode -- easy to miss in
+     a screenshot, but the same visual problem). Fix: `flex:1 1 0` on
+     `.month-week-grid` (both the desktop `min-width:721px` block and the
+     mobile `main.main-calendar` block) so week rows grow to fill
+     leftover space -- `.month-day-cell`'s own unmodified base
+     `min-height:90px` still acts as each row's floor, and
+     `.calendar-viewport`'s `overflow-y:auto` is still the fallback if
+     that floor ever adds up to more than the budget. Net effect: rows
+     grow to fill when there's room (the old 2026-08-08 shrink-to-fit
+     pass's actual goal, just via growing instead of shrinking), scroll
+     when there isn't -- no case left where the box has unused space.
+
+  2. **Mobile overflowing behind the bottom nav bar** (separate direct
+     report): `main.main-calendar`'s mobile height was
+     `calc(100vh - 64px - env(safe-area-inset-bottom))`. Two bugs: (a)
+     `.mobile-tabbar` is a fixed `height:64px` box with its own
+     safe-area padding baked *inside* that 64px (border-box), not added
+     past it, so subtracting the inset a second time here just left an
+     unwanted gap, not the overflow itself; (b) the real culprit is the
+     classic mobile `100vh` bug -- `100vh` measures the *largest*
+     possible viewport (address bar hidden), which on a real phone can
+     be taller than what's actually on screen, letting a
+     `height:100vh`-based box run past the true bottom of the screen and
+     under the fixed nav bar. Switched to `100dvh` (dynamic viewport
+     height, tracks the real current viewport), kept as a second
+     declaration after the `100vh` one so browsers without `dvh` support
+     still get the old value instead of losing the property outright.
+
+  Also confirmed while investigating the "nothing changed" reports across
+  both this pass and the two below: `base.html`'s manifest `<link>` and
+  `pwa.js`'s registration are both currently commented out ("PWA shell --
+  DISABLED"), so **no service worker is actually registered right now**
+  and the whole `CACHE_NAME` mechanism (bumped for all three passes,
+  matching the file's own established convention, now at `v63`) is
+  inert. It was never what was blocking these reports from showing up --
+  a plain browser HTTP cache or an un-restarted dev server is the more
+  likely explanation, worth checking directly (view-source or DevTools
+  computed style against the live `/static/style.css`) before assuming a
+  CSS logic bug next time something "doesn't show up."
+
+  Tried to verify this pass in a live browser (Claude in Chrome) instead
+  of reasoning from static screenshots alone -- the extension wasn't
+  reachable this session, so verification stayed at: braces-balanced
+  check, `curl` against this sandbox's own running `webapp` instance
+  confirming the new rules are actually in the served `/static/
+  style.css`, and the full test suite. Worth an actual live-browser pass
+  (resize to a real mobile width, screenshot, check DevTools computed
+  height on `.calendar-viewport`) next session if another visual report
+  comes in.
+
+  `sw.js` `CACHE_NAME` bumped `v62` -> `v63`; `test_pwa_shell.py`
+  updated. Full suite re-run in the same 4-chunk pattern: 678 + 434 + 530
+  + 333 = 1975 passed, same total, no tests added/removed.
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, desktop
   follow-up to the mobile entry directly below. Direct report that the
   mobile fix "isn't working, nothing new has been added" turned out to be

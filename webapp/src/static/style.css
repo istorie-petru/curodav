@@ -2897,7 +2897,21 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     display:flex; flex-direction:column;
     overflow-y:auto;
   }
-  .month-weekday-row{position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
+  /* 2026-09-07 (same-day correction): `overflow-y:auto` alone only
+     covers content TALLER than the box -- Month/4-Week's rows have no
+     stake in the leftover space when the box is TALLER than their
+     content (the box's own height:calc(...) above still reserves the
+     full budget, but a flex column doesn't stretch its children to fill
+     it unless told to), which is exactly the "dead space inside/below
+     the widget" the direct report was about. `flex:1 1 0` on each week
+     row grows them to fill whatever's left; `.month-day-cell`'s own
+     min-height:90px (its plain, non-media base rule) still acts as each
+     row's floor via the grid it sits in, so rows never shrink below
+     legible -- if 90px * (row count) ever exceeds the box's own height
+     (a great many rows, or a very short window), `.calendar-viewport`'s
+     overflow-y:auto above is the fallback, same as before. */
+  .month-weekday-row{flex:none; position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
+  .month-week-grid{flex:1 1 0;}
 
   /* Week/Day: the time grid is a real fixed height (24 * one hour's own
      pixel height, the same spacing every other time-grid view in the app
@@ -3757,7 +3771,27 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      shape and should keep ordinary page scroll. */
   main.main-calendar{
     display:flex; flex-direction:column;
-    height:calc(100vh - 64px - env(safe-area-inset-bottom, 0px));
+    /* .mobile-tabbar (above) is a fixed height:64px box -- its own
+       safe-area-inset-bottom padding is baked INSIDE that 64px (border-
+       box), not added past it, so the space it actually reserves at the
+       bottom of the screen is exactly 64px, not 64px + the inset. The
+       first version of this rule subtracted the inset a second time here
+       too, leaving an unwanted gap above the bar rather than the
+       overflow-behind-it bug it was meant to prevent.
+       `100vh` -> `100dvh` (2026-09-07, direct report: widget content was
+       overflowing behind the bottom nav bar on mobile) -- `100vh` on
+       mobile Safari/Chrome measures the *largest* possible viewport
+       (address bar hidden), which can be taller than what's actually
+       visible when the address bar is showing, so a height:100vh-based
+       box can run past the real bottom of the screen and under a
+       position:fixed element anchored to the true visual viewport --
+       the textbook mobile "100vh bug." `100dvh` (dynamic viewport
+       height) tracks the real, current visual viewport instead. Kept as
+       a second declaration (not a replacement) so browsers without dvh
+       support fall back to the vh value instead of the property being
+       dropped entirely. */
+    height:calc(100vh - 64px);
+    height:calc(100dvh - 64px);
     padding-bottom:var(--space-3);
     overflow:hidden;
   }
@@ -3783,6 +3817,15 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   main.main-calendar .month-weekday-row{
     position:sticky; top:0; z-index:2; background:var(--bg-elevated);
   }
+  /* Same correction as the desktop block above (see its own comment):
+     overflow-y:auto only helps when content is TALLER than the box --
+     Month/4-Week's rows still need flex:1 1 0 to grow and fill leftover
+     space when it's SHORTER, or the "dead space" complaint just moves
+     from "below the widget" to "inside the widget," unchanged to look
+     at. .month-day-cell's own min-height:90px (unmodified base rule)
+     is still the floor before overflow-y:auto takes over. */
+  main.main-calendar .month-weekday-row{flex:none;}
+  main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 
 .toast-stack{
