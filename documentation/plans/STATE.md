@@ -17,6 +17,51 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 8, settings-page
+  heading consistency (`audit-fixes-2.0.md`'s item 8). Wrapped
+  `settings_holidays.html`'s and `settings_time_blocks.html`'s sections in
+  the `.settings-group` + `h2.section-label` pattern `settings_general.
+  html`/`settings_appearance.html`/`settings_data_maintenance.html` already
+  use, replacing bare `<h1>`-only content (Holidays) and inline-styled
+  `<h2 style="margin:...">` sub-headings (Sleep Time / Leisure Time).
+
+  `settings_holidays.html` had only one logical section, so the whole
+  bulk-actions-bar + table block is now wrapped in one `<div class=
+  "settings-group">` with a new `<h2 class="section-label">{{ icon
+  ('calendar', 'icon-sm') }} Holidays</h2>` -- the page's own `<h1>Holidays
+  </h1>` title is left in place (same "h1 page title + h2 section label"
+  layering `settings_data_maintenance.html` already uses), even though the
+  two labels read the same word here since there's only one section to
+  name. `settings_time_blocks.html` got two `.settings-group` wraps, one
+  per existing sub-section, each swapping its old `style="margin:..."` h2
+  for `<h2 class="section-label">` with `moon`/`sun` icons (matching the
+  page's own `moon` header icon for Sleep, `sun` as Leisure's nearest
+  sprite-available opposite -- no dedicated "leisure" icon exists in
+  `_icons_sprite.html`).
+
+  Pure template change (both files), no CSS/JS touched -- `.settings-group`/
+  `.section-label` are pre-existing classes already used elsewhere, nothing
+  new added to style.css. No `sw.js` bump needed (server-rendered templates,
+  not static assets, same reasoning as every other templates-only slice in
+  this list). Grepped `tests/` for the old markup first (`Sleep Time`,
+  `Leisure Time`, `settings_holidays`, `settings_time_blocks`, bare
+  `<h1>Holidays</h1>`) -- no test asserted the removed inline styles or the
+  old unwrapped structure, so no test changes needed. Full suite: 1970
+  passed (same count as slice 7 -- no row/behavior change), run as 84
+  parallel per-file background processes in one call, `test_caldav_
+  bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #9, lower-priority UI
+  consistency polish (optional, doesn't block 2.0 -- promote
+  `settings_data_maintenance.html`'s inline-styled "Needs attention" card
+  to a `.card-danger`/`.card-tinted` utility class; extract the copy-pasted
+  `.bulk-actions-bar` markup across `settings_holidays.html`/
+  `settings_time_blocks.html`/`labels_manage.html` into one shared partial;
+  confirm whether `_filter_dropdown.html`'s class-renaming wrapper over
+  `_widget_list_multiselect.html` is still earning its keep). If skipping
+  #9 as optional, the next mandatory slice is #10, performance housekeeping
+  (`defer` on the 24 `<script>` tags).
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 7, dead code cleanup
   (`documentation/plans/audit-fixes-2.0.md`'s item 7). Deleted `db.py`'s
   `find_contact_by_name` and `list_task_label_names` (zero call sites

@@ -11,8 +11,13 @@
 
 <p class="settings-hint">Weekly recurring hours -- no dates, just a time-of-day range and which days it applies to (e.g. 00:00&ndash;05:59 Monday-Sunday). The Week and Day calendar views hatch these hours (red for Sleep, green for Leisure) and warn -- but never block -- when an event or scheduled work session is placed inside one.</p>
 
-<!-- Sleep Time -->
-<h2 style="margin:20px 0 8px">Sleep Time</h2>
+<!-- 2026-09-07 (audit-fixes-2.0.md item 8): Sleep Time and Leisure Time
+     wrapped in the same .settings-group + h2.section-label pattern
+     settings_general.html/settings_appearance.html/settings_data_
+     maintenance.html already use, instead of the old inline-styled bare
+     <h2>. -->
+<div class="settings-group">
+<h2 class="section-label">{{ icon('moon', 'icon-sm') }} Sleep Time</h2>
 <!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
      "bulk actions on tables"). Sleep and Leisure are two independent
      `CCBulkSelect` instances (own bar/table ids each) -- see that
@@ -80,9 +85,10 @@
             </tbody>
         </table>
 </div>
+</div>
 
-<!-- Leisure Time -->
-<h2 style="margin:24px 0 8px">Leisure Time</h2>
+<div class="settings-group">
+<h2 class="section-label">{{ icon('sun', 'icon-sm') }} Leisure Time</h2>
 <div class="bulk-actions-bar" id="leisure-bulk-bar" style="display:none">
     <span id="leisure-bulk-count" class="bulk-count"></span>
     <div class="spacer"></div>
@@ -141,6 +147,7 @@
                 </tr>
             </tbody>
         </table>
+</div>
 </div>
 </div>
 {% endblock %}
