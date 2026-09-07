@@ -1423,6 +1423,36 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
     return d
 
 
+def _attach_tags_bulk(
+    conn: sqlite3.Connection, object_type: str, dicts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Batch form of `_attach_tags` -- one `IN (...)` query for the whole
+    result set instead of one `list_labels_for_object` call per row. Every
+    `list_*` function that returns more than one row should call this
+    instead of looping `_attach_tags` per row (the N+1 finding in
+    `documentation/reports/full-app-audit-2026-09-07.md` #1, `db.py:1415`
+    -- confirmed the hottest path in the app: dashboard, calendar,
+    tasks table, contacts). Mutates and returns `dicts` in place, same
+    "attach in place" contract `_attach_tags` already has, so callers that
+    build a list comprehension around it don't need to change shape."""
+    if not dicts:
+        return dicts
+    ids = [d["uid"] for d in dicts]
+    placeholders = ", ".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT object_id, label_name FROM object_labels "
+        f"WHERE object_type = ? AND object_id IN ({placeholders}) "
+        "ORDER BY label_name COLLATE NOCASE",
+        (object_type, *ids),
+    ).fetchall()
+    by_id: dict[str, list[str]] = {}
+    for r in rows:
+        by_id.setdefault(r["object_id"], []).append(r["label_name"])
+    for d in dicts:
+        d["tags"] = by_id.get(d["uid"], [])
+    return dicts
+
+
 # --------------------------------------------------------------------- #
 # Events
 # --------------------------------------------------------------------- #
@@ -1536,7 +1566,7 @@ def list_events(
         query += " WHERE (recurrence IS NOT NULL OR (" + " AND ".join(bounds_clauses) + "))"
     query += " ORDER BY start_at ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -1900,7 +1930,7 @@ def list_tasks(
     # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def list_habit_tasks(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -1914,7 +1944,7 @@ def list_habit_tasks(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     rows = conn.execute(
         f"SELECT * FROM tasks WHERE uid IN ({placeholders}) ORDER BY title COLLATE NOCASE", uids
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def all_task_uids(conn: sqlite3.Connection) -> set[str]:
@@ -1989,7 +2019,7 @@ def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[di
         "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC",
         (event_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
@@ -1999,7 +2029,7 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
         "WHERE r.task_uid = ? ORDER BY events.start_at ASC",
         (task_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -2084,7 +2114,7 @@ def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> l
         "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.created_at ASC, events.uid ASC",
         (task_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | None:
@@ -2375,7 +2405,7 @@ def list_tasks_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) 
         f"ORDER BY tasks.title COLLATE NOCASE",
         (*labels, habit_label),
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def list_events_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) -> list[dict[str, Any]]:
@@ -2392,7 +2422,7 @@ def list_events_sharing_labels(conn: sqlite3.Connection, label_names: list[str])
         f"ORDER BY events.start_at ASC",
         labels,
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -2537,9 +2567,9 @@ def _search_tasks(
     # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS))
+    for d in dicts:
         out.append(
             {
                 "type": "task",
@@ -2596,9 +2626,9 @@ def _search_events(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY start_at ASC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS))
+    for d in dicts:
         start = d.get("start_at") or ""
         subtitle = f"{start[:10]} {start[11:16]}" if start else "No start time"
         out.append(
@@ -2651,9 +2681,11 @@ def _search_contacts(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name COLLATE NOCASE"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_contact_phones_emails_bulk(
+        conn, _attach_tags_bulk(conn, "contact", [_row_to_dict(r, _CONTACT_JSON_FIELDS) for r in rows])
+    )
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+    for d in dicts:
         first_email = d["emails"][0]["value"] if d.get("emails") else d.get("email")
         first_phone = d["phones"][0]["value"] if d.get("phones") else d.get("phone")
         subtitle = d.get("org") or d.get("title") or first_email or first_phone or ""
@@ -2702,9 +2734,9 @@ def _search_notes(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY updated_at DESC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS))
+    for d in dicts:
         title = note_title(d)
         body = (d.get("content") or "").strip()
         subtitle = body[len(title) :].strip()[:80] if body.startswith(title) else body[:80]
@@ -3043,6 +3075,45 @@ def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -
     return d
 
 
+def _attach_contact_phones_emails_bulk(
+    conn: sqlite3.Connection, dicts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Batch form of `_attach_contact_phones_emails` -- one `IN (...)`
+    query per child table (5 total) for the whole contact list instead of
+    5 queries per row (the second half of the N+1 finding, `db.py:3038-
+    3042` in the audit report -- a contacts-list render used to cost the
+    base query plus 6 extra queries *per row*). Mutates and returns
+    `dicts` in place, same contract as `_attach_contact_phones_emails`."""
+    if not dicts:
+        return dicts
+    ids = [d["uid"] for d in dicts]
+    placeholders = ", ".join("?" for _ in ids)
+
+    def _grouped(table: str) -> dict[str, list[dict[str, Any]]]:
+        rows = conn.execute(
+            f"SELECT * FROM {table} WHERE contact_uid IN ({placeholders}) "
+            "ORDER BY position ASC, created_at ASC",
+            ids,
+        ).fetchall()
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            grouped.setdefault(r["contact_uid"], []).append(dict(r))
+        return grouped
+
+    phones = _grouped("contact_phones")
+    emails = _grouped("contact_emails")
+    websites = _grouped("contact_websites")
+    addresses = _grouped("contact_addresses")
+    social_profiles = _grouped("contact_social_profiles")
+    for d in dicts:
+        d["phones"] = phones.get(d["uid"], [])
+        d["emails"] = emails.get(d["uid"], [])
+        d["websites"] = websites.get(d["uid"], [])
+        d["addresses"] = addresses.get(d["uid"], [])
+        d["social_profiles"] = social_profiles.get(d["uid"], [])
+    return dicts
+
+
 def list_contacts(
     conn: sqlite3.Connection,
     q: str | None = None,
@@ -3070,10 +3141,10 @@ def list_contacts(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
-    return [
-        _backfill_contact_photo_version(conn, _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS))))
-        for r in rows
-    ]
+    dicts = _attach_contact_phones_emails_bulk(
+        conn, _attach_tags_bulk(conn, "contact", [_row_to_dict(r, _CONTACT_JSON_FIELDS) for r in rows])
+    )
+    return [_backfill_contact_photo_version(conn, d) for d in dicts]
 
 
 # --------------------------------------------------------------------- #
@@ -3381,7 +3452,7 @@ def list_notes(conn: sqlite3.Connection, q: str | None = None) -> list[dict[str,
         params.append(f"%{q}%")
     query += " ORDER BY updated_at DESC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
 
 
 def note_title(note: dict[str, Any]) -> str:

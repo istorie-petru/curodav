@@ -17,6 +17,48 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 3, the N+1 query fix
+  flagged as the highest-impact single fix in the whole audit report
+  (`documentation/reports/full-app-audit-2026-09-07.md` finding #1).
+  `db.py:1415` `_attach_tags` and `db.py:3030` `_attach_contact_phones_
+  emails` were each called once per row inside every `list_*`/`_search_*`
+  function (14 call sites: `list_events`, `list_tasks_*` x3, `related_
+  tasks_for_event`, `related_events_for_task`, `work_allocations_for_task`,
+  `list_tasks_by_labels`, `list_events_by_labels`, `_search_tasks`,
+  `_search_events`, `_search_contacts`, `_search_notes`, `list_contacts`,
+  `list_notes`) -- each contact row alone cost the base query plus 6 extra
+  per-row queries (tags + 5 child tables: phones/emails/websites/
+  addresses/social_profiles).
+
+  Fixed with two new batch helpers, `_attach_tags_bulk` and `_attach_
+  contact_phones_emails_bulk` (both right next to their per-row
+  originals), each running one `SELECT ... WHERE ... IN (...)` for the
+  whole result set and grouping rows by uid in Python instead of querying
+  per row. Every one of the 14 call sites above now decodes its rows into
+  plain dicts first (`_row_to_dict`), batch-attaches tags (and phones/
+  emails for contacts) once, then does whatever per-row shaping it used to
+  do (search's `out.append({...})`, `list_contacts`'s photo-version
+  backfill) over the already-tagged dicts. The single-row `get_event`/
+  `get_task`/`get_contact`/`get_note`-style functions were deliberately
+  left calling the original per-row `_attach_tags`/`_attach_contact_
+  phones_emails` -- one row has no N+1 to fix, and a bulk query of size 1
+  would just be the same query with extra ceremony.
+
+  No schema change, no row-shape change (each dict still gets the same
+  `tags`/`phones`/`emails`/etc. keys attached, just computed via a
+  different query shape) -- existing tests cover this as-is, no test
+  changes needed. Pure Python change, isolated to db.py, no template/CSS/
+  JS touched -- no `sw.js` bump needed. Full suite: 1970 passed, run as 12
+  parallel background chunks within one call (this sandbox's own /tmp-
+  and background-process-don't-persist-between-bash-calls limitation, same
+  as every other multi-chunk session this file documents -- build the file
+  list, split, launch, and `wait` all inside one call), `test_caldav_
+  bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #4, the modal
+  keyboard focus trap (`static/modal.js` -- Tab/Shift+Tab cycling within
+  an open `.modal`).
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 2, "silent-
   misconfiguration guards" (two independent fixes, `documentation/reports/
   full-app-audit-2026-09-07.md` findings #4 and the `config.py:69` Radicale

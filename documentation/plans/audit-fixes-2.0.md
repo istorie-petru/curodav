@@ -42,13 +42,16 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
      deploy where the devuser/devpass pair is live and reachable fails to
      boot; an unreachable/absent Radicale still boots exactly as before.
 
-3. **N+1 query fix on every list render.** `db.py:1415` `_attach_tags` plus
-   `db.py:3038-3042` `_attach_contact_phones_emails` — batch-fetch labels
-   (and contact child rows) for a whole result set in one `IN (...)` query
-   instead of one query per row. Highest-impact single fix in the whole
-   report: it's on the hot path for dashboard, calendar, tasks table, and
-   contacts. Isolated to db.py; existing tests should catch any regression
-   in row shape.
+3. ~~**N+1 query fix on every list render.**~~ **Shipped 2026-09-07** — see
+   `STATE.md`'s entry of the same date. New `_attach_tags_bulk`/
+   `_attach_contact_phones_emails_bulk` (one `IN (...)` query per table for
+   the whole result set) replace every per-row `_attach_tags`/
+   `_attach_contact_phones_emails` call inside a `list_*`/`_search_*`
+   function (14 call sites across events/tasks/notes/contacts) — the
+   single-row `get_*` functions keep the original per-row helpers, since
+   there's no N+1 to fix there. Isolated to db.py, no schema/row-shape
+   change, so the existing suite covers it as-is (1970 passed, no test
+   changes needed).
 
 4. **Modal keyboard focus trap.** `static/modal.js` — add Tab/Shift+Tab
    cycling within an open `.modal` alongside the existing Escape handler.
