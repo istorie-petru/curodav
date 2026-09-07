@@ -17,6 +17,29 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Header bar height inconsistency: Tasks'
+  narrow header measured 58px (direct DevTools measurement) against 48px
+  on every other page. Root cause: `.filter-dropdown-trigger` (the "Date"
+  filter button, rendered inside `_page_header_narrow.html`'s actions
+  slot) is `height:40px`, taller than the 32px content budget every other
+  header control (`.icon-btn`, the h2 title) fits inside -- forces the
+  whole flex row taller wherever it renders. Tasks' Date filter is
+  unconditional so it always renders and always showed this; Calendar's
+  label filter and Contacts' tag filter are conditional on having any
+  labels/tags, so an empty account's headers happened to dodge the same
+  bug -- it would have surfaced there too the moment either page had a
+  real filter to show. Fixed at the source: `.filter-dropdown-trigger`
+  `height:40px` -> `32px`, so every header stays 48px regardless of which
+  controls happen to render in it.
+
+  `sw.js` `CACHE_NAME` bumped `v65` -> `v66`; `test_pwa_shell.py`
+  updated. Full suite: 1975 passed, same total, no tests added/removed
+  (the two tests referencing `filter-dropdown-trigger` only check class
+  presence/ordering, not pixel values).
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- Planner: fixed the gap between the
   "Unscheduled work" panel and the time grid below it reading as roughly
   double what it should be (direct report against a real screenshot).

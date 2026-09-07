@@ -1734,7 +1734,20 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    rotation below keys off. */
 .filter-dropdown-trigger{
   display:inline-flex; align-items:center; gap:6px;
-  height:40px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
+  /* 2026-09-07 (direct report: Tasks' header bar measured 58px against
+     48px everywhere else): this is the one control _page_header_narrow.
+     html's actions slot renders that's taller than the icon-btn/h2-title
+     content that otherwise caps the header at 48px (8px+8px padding
+     around a 32px-tall content row) -- 40px forced the whole flex row
+     (align-items:center) taller wherever this button actually renders.
+     Latent on Calendar/Contacts too (their own filter dropdowns are
+     conditional on having any labels/tags to filter by, so an empty
+     account's headers happened to dodge it) -- Tasks' Date filter is
+     unconditional, so it's the one that surfaced this first. Shrunk to
+     32px to fit the same budget every other header control already
+     respects, so this button no longer changes the header's height
+     depending on whether it happens to render. */
+  height:32px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
   background:var(--bg-secondary); color:var(--fg-secondary);
   font-family:inherit; font-size:var(--text-footnote); font-weight:600;
   cursor:pointer; white-space:nowrap;

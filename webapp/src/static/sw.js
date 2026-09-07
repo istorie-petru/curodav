@@ -317,7 +317,13 @@
 // zeroed margin-bottom on .project-calendar-layout's direct .card
 // children only, leaving .card's own margin-bottom untouched everywhere
 // else it's used in normal document flow.
-const CACHE_NAME = "cc-shell-v65";
+// v66 (2026-09-07, direct measurement: Tasks' header bar was 58px against
+// 48px everywhere else): style.css changed again -- .filter-dropdown-
+// trigger's height dropped 40px -> 32px so it fits the same budget every
+// other header control (icon-btn, the h2 title) already respects. Latent
+// on Calendar/Contacts too (their own filter dropdowns just happened to
+// be empty/absent in the account this was measured against).
+const CACHE_NAME = "cc-shell-v66";
 
 const SHELL_ASSETS = [
   "/offline",
