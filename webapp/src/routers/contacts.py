@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
 from ..deps import get_db, respond, templates
+from ..image_sniff import sniff_image_type
 from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -55,7 +56,15 @@ async def _read_photo(photo: UploadFile | None) -> tuple[str, str] | None:
     data = await photo.read()
     if len(data) > _MAX_PHOTO_BYTES:
         raise HTTPException(400, "Photo is too large (max 5MB).")
-    return base64.b64encode(data).decode("ascii"), vcard_type
+    # 2026-09-07 fix (flagged in an earlier audit): `vcard_type` above only
+    # reflects the browser's own Content-Type claim -- confirm the bytes
+    # actually are a real image before they go anywhere near a vCard,
+    # using whatever the bytes actually are rather than trusting the
+    # (possibly spoofed) header any further.
+    sniffed = sniff_image_type(data)
+    if sniffed is None:
+        raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
+    return base64.b64encode(data).decode("ascii"), sniffed.upper()
 
 
 def _attach_photo_url(contact: dict) -> dict:

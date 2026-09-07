@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 from datetime import datetime, timezone
 
 import pytest
@@ -46,6 +47,19 @@ def _request(path="/"):
 
 def _make_label(conn, name):
     db.upsert_label_config(conn, {"name": name, "color": "blue", "created_at": _now()})
+
+
+class _FakeUploadFile:
+    """Duck-types the bits of fastapi.UploadFile routers/banners.py's
+    upload_banner actually touches (`.filename`, `.content_type`,
+    `.file.read()`) -- calling the route function directly (not through a
+    real TestClient/multipart request) needs something UploadFile-shaped,
+    not a real UploadFile (which wants an ASGI request to build)."""
+
+    def __init__(self, data: bytes, content_type: str, filename: str = "x.jpg"):
+        self.filename = filename
+        self.content_type = content_type
+        self.file = io.BytesIO(data)
 
 
 def _set_remote(
@@ -154,6 +168,37 @@ class TestBannerUploadUsesCropEditor:
         body = banners_router.banner_editor(_request("/banners/editor"), conn=conn).body.decode()
         assert 'onchange="window.CCBannerUpload' not in body
         assert '<input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">' in body
+
+
+class TestBannerUploadImageSniffing:
+    """2026-09-07 fix (flagged in an earlier audit): upload_banner used to
+    trust the browser-supplied Content-Type header alone -- an
+    unauthenticated POST (this app has no auth) could claim "image/jpeg"
+    for any bytes at all. Now the actual bytes are sniffed
+    (src/image_sniff.py) and must match a real image signature."""
+
+    def test_rejects_bytes_that_dont_match_any_real_image_signature(self, conn):
+        fake = _FakeUploadFile(b"not-an-image-at-all", "image/jpeg")
+        with pytest.raises(HTTPException) as excinfo:
+            banners_router.upload_banner(scope="", page_url="", banner_file=fake, conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_page_banner(conn, "") is None
+
+    def test_accepts_real_jpeg_magic_bytes(self, conn):
+        data = b"\xff\xd8\xff\xe0" + b"rest-of-a-jpeg"
+        fake = _FakeUploadFile(data, "image/jpeg")
+        banners_router.upload_banner(scope="", page_url="", banner_file=fake, conn=conn)
+        banner = db.get_page_banner(conn, "")
+        assert banner["kind"] == "upload"
+        assert banner["image_type"] == "jpeg"
+
+    def test_stores_the_sniffed_type_even_when_the_header_claims_otherwise(self, conn):
+        # Content-Type header says JPEG, bytes are really a PNG -- the
+        # sniffed type wins, since the header is just an unverified claim.
+        data = b"\x89PNG\r\n\x1a\n" + b"rest-of-a-png"
+        fake = _FakeUploadFile(data, "image/jpeg")
+        banners_router.upload_banner(scope="", page_url="", banner_file=fake, conn=conn)
+        assert db.get_page_banner(conn, "")["image_type"] == "png"
 
 
 class TestPageBannerAvatar:

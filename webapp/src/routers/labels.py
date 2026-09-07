@@ -52,6 +52,24 @@ from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
 
+
+def _reject_reserved_label_name(name: str) -> None:
+    """2026-09-07 fix (flagged in an earlier audit) -- guards every write
+    path that can set a label's *name* against colliding with one of the
+    sentinel banner scopes (db.PAGE_HEADER_BANNER_SCOPE /
+    db.SEASON_BANNER_SCOPES). Both live in the exact same
+    `page_banner_<key>` app_meta namespace a real label's own banner does
+    (db.get_page_banner/set_page_banner's `page_key` is just a free-form
+    string) -- nothing previously stopped a label literally named e.g.
+    "__page_header__" from silently reading/writing the app-wide default
+    banner instead of getting its own. The reserved names are already
+    double-underscore-wrapped specifically so no name a person would
+    naturally type collides with them; this just makes that non-collision
+    enforced instead of assumed."""
+    reserved = {db.PAGE_HEADER_BANNER_SCOPE, *db.SEASON_BANNER_SCOPES.values()}
+    if name in reserved:
+        raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
+
 # 2026-08-08: grew from 8 to 16 -- direct feedback ("more colors options
 # (16) with small label under each color"). Order is a rough rainbow
 # sweep (warm to cool) ending in the two neutrals, so the picker grid
@@ -341,13 +359,14 @@ def update_label(
         raise HTTPException(400, "A project needs both a start and end date.")
 
     if new_name != name:
+        _reject_reserved_label_name(new_name)
         db.rename_label(conn, name, new_name)
         name = new_name
 
     existing = db.get_label_config(conn, name) or {}
     row = {
         "name": name,
-        "color": color or "blue",
+        "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": label_group,
         "description": description,
@@ -372,6 +391,7 @@ def update_label(
 
 @router.post("/{name}/rename")
 def rename_label(name: str, new_name: str = Form(...), conn=Depends(get_db)):
+    _reject_reserved_label_name((new_name or "").strip())
     db.rename_label(conn, name, new_name)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
@@ -379,6 +399,7 @@ def rename_label(name: str, new_name: str = Form(...), conn=Depends(get_db)):
 @router.post("/{name}/merge")
 def merge_label(name: str, dest_name: str = Form(...), conn=Depends(get_db)):
     if dest_name and dest_name != name:
+        _reject_reserved_label_name(dest_name.strip())
         db.merge_labels(conn, name, dest_name)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
@@ -432,6 +453,7 @@ def create_label(
     new_name = new_name.strip()
     if not new_name:
         raise HTTPException(400, "Label name is required")
+    _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
     label_group = label_group.strip() or None
@@ -442,7 +464,7 @@ def create_label(
 
     row = {
         "name": new_name,
-        "color": color or "blue",
+        "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": label_group,
         "generate_space": 1 if role == "space" else 0,
@@ -505,13 +527,14 @@ def set_label(
     # `abbreviation` still holds FastAPI's Form("") marker object, not the
     # "" a real request would inject (same coercion _combine_tags does for
     # its Form([]) default).
+    _reject_reserved_label_name(name)
     abbreviation = abbreviation if isinstance(abbreviation, str) else ""
     abbreviation = abbreviation.strip()[:5] or None
     db.upsert_label_config(
         conn,
         {
             "name": name,
-            "color": color or "blue",
+            "color": color if color in COLORS else "blue",
             "icon": icon.strip() or None,
             "description": description,
             "parent_name": parent_name.strip() or None,

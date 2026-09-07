@@ -22,8 +22,10 @@ inline behavior."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
+import io
 from datetime import datetime, timezone
 
 import pytest
@@ -32,6 +34,23 @@ from fastapi import HTTPException
 from src import db, deps
 from src.routers import contacts as contacts_router
 from src.routers import settings as settings_router
+
+
+class _FakeUploadFile:
+    """Duck-types the bits of fastapi.UploadFile the photo-upload routes
+    actually touch (`.filename`, `.content_type`, plus either `.file.read()`
+    or async `.read()` -- routers/contacts.py's _read_photo awaits `.read()`,
+    routers/settings.py's set_profile_photo reads `.file` synchronously, so
+    this supports both)."""
+
+    def __init__(self, data: bytes, content_type: str, filename: str = "x.jpg"):
+        self.filename = filename
+        self.content_type = content_type
+        self.file = io.BytesIO(data)
+        self._data = data
+
+    async def read(self):
+        return self._data
 
 
 @pytest.fixture()
@@ -92,6 +111,46 @@ class TestContactPhotoVersion:
         conn.commit()
         rows = db.list_contacts(conn)
         assert rows[0]["photo_version"] == hashlib.md5(b64.encode("ascii")).hexdigest()[:12]
+
+
+class TestPhotoUploadImageSniffing:
+    """2026-09-07 fix (flagged in an earlier audit): both contacts._read_
+    photo and settings.set_profile_photo used to trust the browser-supplied
+    Content-Type header alone -- an unauthenticated POST could claim
+    "image/jpeg" for any bytes at all. Now the actual bytes are sniffed
+    (src/image_sniff.py) and must match a real image signature."""
+
+    def test_contact_photo_rejects_bytes_that_dont_match_any_real_image_signature(self):
+        fake = _FakeUploadFile(b"not-an-image-at-all", "image/jpeg")
+        with pytest.raises(HTTPException) as excinfo:
+            asyncio.run(contacts_router._read_photo(fake))
+        assert excinfo.value.status_code == 400
+
+    def test_contact_photo_accepts_real_gif_magic_bytes(self):
+        fake = _FakeUploadFile(b"GIF89a" + b"rest-of-a-gif", "image/gif")
+        result = asyncio.run(contacts_router._read_photo(fake))
+        assert result is not None
+        _, vcard_type = result
+        assert vcard_type == "GIF"
+
+    def test_contact_photo_uses_the_sniffed_type_even_when_the_header_lies(self):
+        # Header says GIF, bytes are really a PNG.
+        fake = _FakeUploadFile(b"\x89PNG\r\n\x1a\n" + b"rest-of-a-png", "image/gif")
+        _, vcard_type = asyncio.run(contacts_router._read_photo(fake))
+        assert vcard_type == "PNG"
+
+    def test_profile_photo_rejects_bytes_that_dont_match_any_real_image_signature(self, conn):
+        fake = _FakeUploadFile(b"not-an-image-at-all", "image/png")
+        with pytest.raises(HTTPException) as excinfo:
+            settings_router.set_profile_photo(photo=fake, conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_profile_photo(conn) is None
+
+    def test_profile_photo_accepts_real_webp_magic_bytes(self, conn):
+        data = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"rest-of-a-webp"
+        fake = _FakeUploadFile(data, "image/webp")
+        settings_router.set_profile_photo(photo=fake, conn=conn)
+        assert db.get_profile_photo(conn)["photo_type"] == "webp"
 
 
 class TestProfilePhotoVersion:

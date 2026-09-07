@@ -128,6 +128,84 @@ class TestIconPersistence:
 
 
 # --------------------------------------------------------------------- #
+# Color validation + reserved-name guard (2026-09-07 fixes, both flagged
+# in an earlier audit): `color` used to be written to storage unchecked
+# (`color or "blue"`, accepting literally any string), and nothing stopped
+# a label from being named after one of the sentinel banner scopes
+# (db.PAGE_HEADER_BANNER_SCOPE / db.SEASON_BANNER_SCOPES), which live in
+# the exact same app_meta namespace a label's own banner does.
+# --------------------------------------------------------------------- #
+
+
+class TestColorValidation:
+    def test_create_label_rejects_an_unknown_color(self, conn):
+        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["color"] == "blue"
+
+    def test_create_label_accepts_a_real_color(self, conn):
+        labels_router.create_label(new_name="Garden", color="teal", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["color"] == "teal"
+
+    def test_update_label_rejects_an_unknown_color(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["color"] == "blue"
+
+    def test_set_label_rejects_an_unknown_color(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        labels_router.set_label(name="Garden", color="whatever", icon="", description="", parent_name="", generate_space="", abbreviation="", return_to="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["color"] == "blue"
+
+
+class TestReservedLabelNameGuard:
+    def test_create_label_rejects_the_page_header_scope_name(self, conn):
+        with pytest.raises(Exception) as excinfo:
+            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
+
+    def test_create_label_rejects_a_season_scope_name(self, conn):
+        with pytest.raises(Exception) as excinfo:
+            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+
+    def test_update_label_rejects_renaming_into_a_reserved_name(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        with pytest.raises(Exception) as excinfo:
+            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+        # Rejected before the rename happened -- the label is untouched.
+        assert db.get_label_config(conn, "Garden") is not None
+
+    def test_update_label_editing_in_place_is_unaffected(self, conn):
+        # Sanity check the guard only fires on an actual name *change* --
+        # every ordinary edit (new_name == name) must keep working.
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Garden")["color"] == "teal"
+
+    def test_rename_endpoint_rejects_a_reserved_destination(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        with pytest.raises(Exception) as excinfo:
+            labels_router.rename_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_label_config(conn, "Garden") is not None
+
+    def test_merge_rejects_a_reserved_destination(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
+        with pytest.raises(Exception) as excinfo:
+            labels_router.merge_label(name="Garden", dest_name=db.PAGE_HEADER_BANNER_SCOPE, conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_label_config(conn, "Garden") is not None
+
+    def test_set_label_rejects_a_reserved_name(self, conn):
+        with pytest.raises(Exception) as excinfo:
+            labels_router.set_label(name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", description="", parent_name="", generate_space="", abbreviation="", return_to="", conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
+
+
+# --------------------------------------------------------------------- #
 # Rename
 # --------------------------------------------------------------------- #
 

@@ -106,6 +106,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import auth, config, data_health, db, offline_sync
+from ..image_sniff import sniff_image_type
 from ..deps import (
     EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
@@ -460,7 +461,15 @@ def set_profile_photo(
         data = photo.file.read()
         if len(data) > _MAX_PROFILE_PHOTO_BYTES:
             raise HTTPException(400, "Photo is too large (max 5MB).")
-        db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), image_type)
+        # 2026-09-07 fix (flagged in an earlier audit): `image_type` above
+        # only reflects the browser's own Content-Type claim -- confirm the
+        # bytes actually are a real image before storing them, using
+        # whatever the bytes actually are rather than trusting the
+        # (possibly spoofed) header any further.
+        sniffed = sniff_image_type(data)
+        if sniffed is None:
+            raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
+        db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), sniffed)
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

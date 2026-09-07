@@ -17,6 +17,73 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- direct request: fixed the three real gaps an
+  earlier ad-hoc audit flagged in the banner/customization surfaces
+  (documented in that audit's own summary, not a file in this repo).
+
+  1. **Label/Space color was never validated server-side.** `create_label`/
+     `update_label`/`set_label` (routers/labels.py) all wrote `color or
+     "blue"` -- any string at all, not just one of the 16 names in this
+     file's own `COLORS` list -- straight into `label_config.color`, which
+     three templates (`_label_pill.html`, `_labels_table_body.html`,
+     `_widget_items.html`'s `widget_pill`) then interpolate into a CSS
+     class with no matching rule for a bogus value (rendering an unstyled
+     pill, not a security issue -- Jinja2 autoescapes the attribute). Fixed
+     at all three write sites: `color if color in COLORS else "blue"`,
+     matching the one consumer (`filled_card`) that already validated this
+     way.
+
+  2. **Reserved banner-scope name collision.** The global default banner
+     and the four season banners (`db.PAGE_HEADER_BANNER_SCOPE`/`db.
+     SEASON_BANNER_SCOPES`, both added this week) live in the same
+     `page_banner_<key>` app_meta namespace a label's own banner does nothing
+     stopped a label literally named e.g. `__page_header__` from silently
+     reading/writing the app-wide default. New `_reject_reserved_label_
+     name` guard in routers/labels.py, called from every write path that
+     can set a label's *name*: `create_label`, `update_label` (only when
+     actually renaming), the standalone `/{name}/rename` endpoint,
+     `/{name}/merge`'s `dest_name`, and the legacy `/{name}/set` route's
+     own `name` (defense in depth -- a direct POST to that URL could set a
+     label_config row under a reserved name without ever going through
+     create_label).
+
+  3. **Photo/banner uploads trusted the browser's Content-Type header
+     alone.** This app has no auth, so any POST could claim `image/jpeg`
+     for arbitrary bytes; the three upload routes (routers/banners.py's
+     `upload_banner`, routers/contacts.py's `_read_photo`, routers/
+     settings.py's `set_profile_photo`) stored and later re-served
+     whatever type the header claimed, never checking the bytes
+     themselves. New `src/image_sniff.py` (`sniff_image_type`) -- a small
+     hand-rolled magic-byte check for JPEG/PNG/GIF/WEBP, deliberately not
+     Pillow (contacts.py's own pre-existing comment already rules that out
+     as "a new dependency" this codebase avoids). All three routes now
+     reject a file whose bytes don't match any real image signature, and
+     store the *sniffed* type rather than the declared one (so a
+     correctly-imaged-but-mislabeled upload isn't rejected, just
+     re-typed). Checked `banner_editor.html`'s "5:1 aspect ratio" language
+     first, in case that looked like an enforceable rule too -- it isn't:
+     the template's own copy says "Non-5:1 images are center-cropped to
+     fit," so aspect ratio was never a real constraint to enforce, just a
+     crop-tool default.
+
+  19 new tests across `test_phase2_labels.py` (`TestColorValidation` +
+  `TestReservedLabelNameGuard`, 11), `test_banners.py`
+  (`TestBannerUploadImageSniffing`, 3), and `test_image_caching.py`
+  (`TestPhotoUploadImageSniffing`, 5 -- two of which drive
+  `contacts._read_photo` via `asyncio.run(...)` since this suite has no
+  pytest-asyncio configured and this is the first async route function to
+  need a direct-call test). Full suite: 2011 collected, 2010 passed + 1
+  pre-existing unrelated failure (`test_dashboard_router.py::
+  TestAgendaWidgetAllUpcoming::test_todays_earlier_events_still_count_as_
+  upcoming` -- confirmed via `git stash` that it fails identically on the
+  prior commit, a real but out-of-scope bug, not touched this pass). No
+  `sw.js` bump (no static asset changed).
+
+  **Next slice:** the dashboard_router agenda test failure above is worth
+  a look -- not investigated further this pass since it's unrelated to
+  the audit fixes, but it's a real assertion failure, not a flake that
+  passed on retry.
+
 - **Shipped:** 2026-09-07 -- direct request: first-run default banners +
   avatar, sourced from image files the user dropped in a new repo-root
   `pictures/` directory (`banner_51.jpg`, `spring_51.jpg`/`summer_51.jpg`/
