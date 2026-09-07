@@ -2876,48 +2876,28 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    precision here. */
 @media (min-width:721px){
   :root{--calendar-chrome-h:172px;}
+  /* 2026-09-07 (direct follow-up, same day as the mobile pass below):
+     Month/4-Week used to shrink their rows to fit a fixed vh budget
+     instead of scrolling ("a slight resize", 2026-08-08 -- see git
+     history for that version if the shrink-to-fit look is ever wanted
+     back). Direct feedback since then asked for the same "widget gets an
+     internal scrollbar, page doesn't" treatment Week/Day already had --
+     dropped the shrink math (the 128vh/100vh budget tuning,
+     `.month-viewport`'s `overflow:hidden`, and the `.month-week-grid`/
+     `.month-day-cell` flex-shrink overrides) so all four calendar views
+     now share one model: `.calendar-viewport` is a height-locked flex
+     column that scrolls internally the moment its content is taller
+     than the budget, full stop. `.month-weekday-row` picks up the same
+     sticky-header treatment `.time-grid-top`/`.time-grid-head` already
+     had on Week/Day (below), so it stays visible while the week rows
+     scroll underneath it instead of scrolling away with them. */
   .calendar-viewport{
     height:calc(100vh - var(--calendar-chrome-h));
     min-height:320px;
     display:flex; flex-direction:column;
+    overflow-y:auto;
   }
-  /* Month: no scroll -- the grid itself shrinks to fit ("a slight
-     resize"). Each week row flex-grows evenly across whatever vertical
-     space is left under the weekday header, and day cells drop their
-     usual fixed-height floor (see .month-day-cell's own base rule) so
-     they can actually shrink instead of forcing the card taller than
-     its budget -- the same day-cell content (day number, event bars,
-     task list) just renders a bit more tightly on a short viewport.
-     2026-08-08 direct feedback: Month specifically gets a taller budget
-     than the shared 100vh baseline (108vh, still against the same
-     --calendar-chrome-h estimate) -- more selector-specificity than
-     `.calendar-viewport` alone (two classes) so it wins without an
-     `!important`. Week/Day intentionally keep the 100vh rule above --
-     they scroll their time grid internally instead of resizing, so a
-     taller budget there would just be unused blank space, not more
-     visible content the way it is for Month's shrink-to-fit grid.
-     2026-08-08 follow-up: 108vh -> 128vh -- direct feedback that tasks
-     were still overflowing cells badly even with the item cap below
-     (routers/calendar.py's MONTH_MAX_VISIBLE_ITEMS, dropped 3 -> 2 in the
-     same follow-up). More vh means each of the 6 week rows gets a taller
-     share of the page, at the cost of the grid now running taller than
-     one screen (page scrolls to see the last week row or two) -- an
-     accepted tradeoff per the same feedback, same as 108vh already was
-     accepted over 100vh. */
-  .calendar-viewport.month-viewport{height:calc(128vh - var(--calendar-chrome-h));}
-  .month-viewport{overflow:hidden;}
-  .month-viewport .month-weekday-row{flex:none;}
-  .month-viewport .month-week-grid{flex:1 1 0; min-height:0;}
-  .month-viewport .month-day-cell{min-height:0;}
-  /* 4-Week view (2026-08-11) -- same shrink-to-fit grid mechanics as
-     Month (.month-viewport above), but the grid is always exactly four
-     week rows, so it gets the shared 100vh budget rather than Month's
-     128vh (which is tuned for its up-to-six-week grid): four rows at
-     100vh leave each row a comparable height to a five-row Month while
-     keeping the whole grid on (roughly) one screen. Equal specificity
-     to .calendar-viewport.month-viewport above; this rule is later, so
-     it wins when a card carries both classes. */
-  .calendar-viewport.fourweek-viewport{height:calc(100vh - var(--calendar-chrome-h));}
+  .month-weekday-row{position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
 
   /* Week/Day: the time grid is a real fixed height (24 * one hour's own
      pixel height, the same spacing every other time-grid view in the app
@@ -3799,7 +3779,8 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   }
   main.main-calendar .project-calendar-unscheduled{flex:none;}
   main.main-calendar .time-grid-wrap{flex:1 1 auto; min-height:0; overflow-y:auto;}
-  main.main-calendar .time-grid-top, main.main-calendar .time-grid-head{
+  main.main-calendar .time-grid-top, main.main-calendar .time-grid-head,
+  main.main-calendar .month-weekday-row{
     position:sticky; top:0; z-index:2; background:var(--bg-elevated);
   }
 }

@@ -266,7 +266,15 @@
 // fourweek.html each gained the new `main-calendar` class on main_class.
 // Templates aren't shell-precached (only static/* is), so only the
 // style.css half needs this bump per the v15/v16 lesson above.
-const CACHE_NAME = "cc-shell-v61";
+// v62 (2026-09-07, same-day follow-up): style.css changed again -- direct
+// report that v61 wasn't visible turned out to be a width mismatch, not a
+// caching bug (the report was at a >720px window, where v61's mobile-only
+// rules never applied at all) -- while investigating, also dropped Month/
+// 4-Week's 2026-08-08 shrink-to-fit row logic in the >=721px block per a
+// direct follow-up request for the same "widget scrolls, page doesn't"
+// treatment Week/Day already had. Bumped regardless of the width mix-up,
+// since the desktop block's rules did materially change.
+const CACHE_NAME = "cc-shell-v62";
 
 const SHELL_ASSETS = [
   "/offline",

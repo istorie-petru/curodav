@@ -476,8 +476,13 @@ class TestLocalWritePath:
         # page" pass -- new main.main-calendar rules under style.css's
         # max-width:720px block. No new SHELL_ASSETS files (templates
         # aren't shell-precached).
+        # v62 (2026-09-07, same-day follow-up): dropped Month/4-Week's
+        # shrink-to-fit row logic in the >=721px block too, same "widget
+        # scrolls, page doesn't" treatment as Week/Day -- see sw.js's own
+        # v62 comment for why (the "v61 changed nothing" report was a
+        # >720px width, where v61's mobile-only rules never applied).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v61"' in script
+        assert 'CACHE_NAME = "cc-shell-v62"' in script
 
 
 class TestOfflineToolbar:

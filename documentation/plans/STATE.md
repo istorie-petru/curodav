@@ -17,6 +17,38 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, desktop
+  follow-up to the mobile entry directly below. Direct report that the
+  mobile fix "isn't working, nothing new has been added" turned out to be
+  a width mix-up, not a caching bug: the report was made from a browser
+  window still >720px wide, where the mobile-only rules never applied at
+  all (desktop already had its own, older fit-the-page behavior from
+  2026-08-08, which is why "desktop works" -- just not the same way).
+
+  Separately, direct follow-up request: make desktop Month/4-Week use the
+  same "widget gets a scrollbar, page doesn't" model Week/Day already
+  had, instead of their own 2026-08-08 shrink-to-fit row logic. Dropped
+  that logic from the `@media (min-width:721px)` block in style.css (the
+  128vh/100vh per-view budget tuning, `.month-viewport`'s
+  `overflow:hidden`, and the `.month-week-grid`/`.month-day-cell`
+  flex-shrink overrides) -- all four calendar views now share one
+  `.calendar-viewport{height:calc(100vh - var(--calendar-chrome-h));
+  overflow-y:auto}` rule. `.month-weekday-row` picked up the same
+  `position:sticky` treatment `.time-grid-top`/`.time-grid-head` already
+  had, so it stays pinned while the week rows scroll underneath instead
+  of scrolling away with them. Old shrink-to-fit CSS is recoverable via
+  `git log -p` on this file if that look is ever wanted back (commit
+  `db9b942`).
+
+  `sw.js` `CACHE_NAME` bumped `v61` -> `v62` (style.css changed again);
+  `test_pwa_shell.py`'s pin updated. Full suite re-run in the same
+  4-sequential-chunk pattern as the mobile entry below (background
+  processes don't survive across tool calls in this sandbox): 678 + 434
+  + 530 + 333 = 1975 passed, same total, no tests added/removed.
+
+  **Next slice:** none mandated, same as the mobile entry below -- this
+  was a direct request, not on `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- Calendar/Planner "fit the page" layout,
   mobile follow-up (direct report against a resized/narrow browser
   window, not a phone: the Calendar widget left a dead strip of blank
