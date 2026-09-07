@@ -17,6 +17,48 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 7, dead code cleanup
+  (`documentation/plans/audit-fixes-2.0.md`'s item 7). Deleted `db.py`'s
+  `find_contact_by_name` and `list_task_label_names` (zero call sites
+  anywhere, confirmed via repo-wide grep including tests/) and six
+  orphaned templates: `_labels_body.html`, `_widget_add_form.html`,
+  `_task_relations.html`, `_event_relations.html`, `label_edit_modal.html`,
+  `_task_heatmap.html`.
+
+  Per this file's own flag from the previous slice ("before deleting
+  `_task_heatmap.html`, confirm whether `task_detail.html` used to render
+  a recurring-task heatmap and silently lost it"), investigated via git
+  history before deleting: it was never wired up, even at the commit that
+  created it -- `task_detail.html` never included it, at any point in its
+  history. Not a regression. Habit-task detail pages render a heatmap via
+  a separate, still-live file (`_habit_heatmap.html`) -- unrelated to this
+  one. The other five templates were already confirmed dead/unreferenced
+  by comments left during the 2026-09-03 `.detail-identity-dot`/
+  `.relations-group` cleanup, and their retired CSS classes were already
+  removed in that prior work -- verified by grep before this slice, no
+  further CSS cleanup needed here (the audit doc's "closes two report
+  items at once" framing had already happened as a side effect of earlier
+  work, not left for this slice).
+
+  One test hardcoded a since-deleted filename:
+  `test_modal_uniformization.py::test_every_modal_template_includes_
+  shared_footer`'s modal-file sweep list included `label_edit_modal.html`
+  literally -- removed the entry (the test's purpose, every modal
+  template includes the shared footer partial, doesn't need a template
+  that no longer exists in the list). No other test referenced any of the
+  six deleted files (grepped `tests/` for each name first). No `sw.js`
+  bump needed -- none of the deleted files are in `SHELL_ASSETS` (server-
+  rendered templates, not static assets), same reasoning as the N+1 fix
+  in slice 3. Full suite: 1970 passed (same count as slice 6 -- pure
+  deletions, no new coverage needed), run as 84 parallel per-file
+  background processes in one call, `test_caldav_bridge_live.py` excluded
+  as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #8, settings-page
+  heading consistency -- wrap `settings_holidays.html`'s heading to match
+  the pattern other settings pages use (see the doc's item 8 for the
+  exact spec).
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 6, the touch-target +
   skip-link + contrast bundle (`documentation/reports/full-app-audit-
   2026-09-07.md`'s remaining low/medium accessibility findings not covered
