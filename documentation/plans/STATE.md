@@ -17,6 +17,58 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 13, the icon-button
+  Edit/Delete pair extraction (same shape as item 9's `.bulk-actions-bar`
+  extraction, not caught in that pass). `settings_holidays.html`,
+  `settings_time_blocks.html` (Sleep and Leisure -- two independent call
+  sites, same as item 9), `labels_manage.html`, and `_labels_table_body.html`
+  each repeated an identical `<div class="action-buttons">` block (an Edit
+  icon-link opening a modal + a Delete `<form>` with a confirm-sheet),
+  differing only in the edit/delete URLs, the `title` noun, and the
+  confirm-sheet message text.
+
+  New `_row_action_buttons.html` macro (`row_action_buttons(edit_url,
+  delete_url, noun, confirm_message)`), following the exact convention
+  `_bulk_actions_bar.html` established in item 9 (header comment explaining
+  what it replaces and why, imported via `{% from ... import ... %}` at
+  each call site, no `with context` needed -- `icon()` is a Jinja global,
+  same as the bulk-bar macro). `confirm_message` stays a full parameter
+  assembled by each caller (e.g. `'Delete "' ~ (h.label or '(untitled)') ~
+  '"? This removes...'`) rather than a template the macro fills in, per the
+  audit item's own note that the trailing wording varies enough per-caller
+  (labels' "clears usage, not a real delete" phrasing) that it can't be
+  generic.
+
+  One behavioral wrinkle, called out in the macro's own header comment:
+  the un-extracted markup had each confirm-sheet message written as literal
+  template text with a bare `"` char embedded mid-string (e.g.
+  `data-confirm-sheet="Delete "{{ h.label }}"? ..."`), which is invalid
+  HTML -- the browser's attribute parser ends at that first embedded quote.
+  Moving the message into a `{{ confirm_message }}` variable means Jinja's
+  normal autoescaping now converts those embedded `"` into `&quot;`, which
+  a browser decodes back to `"` when JS reads `dataset.confirmSheet` --
+  same string the confirm-sheet code sees either way, but now inside valid
+  HTML instead of a malformed attribute. Not treated as a fix in scope for
+  this item (nothing asked for it), just a side effect of the extraction
+  worth flagging in case it's ever cited as intentional elsewhere.
+
+  Grepped `tests/` for `action-buttons`/`data-confirm-sheet` plus each of
+  the 4 templates' own title text first (`test_settings_holidays.py`'s
+  `assert "Edit holiday" in body` is the only hit tied to this markup) --
+  survives unchanged since the macro renders the identical title strings.
+  No test hardcoded the old `<div class="action-buttons">` structure
+  itself. Pure template change, no CSS/JS touched, no new/removed static
+  asset -- no `sw.js` bump needed (same "templates-only" reasoning as
+  items 8/9). Full suite: 1970 passed (same count as item 12 -- pure
+  markup refactor, no row/behavior change), run as 12 parallel background
+  chunks in one bash call, `test_caldav_bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): item 14 (empty-state
+  table row, duplicated 5x -- `_labels_table_body.html`, `labels_manage.
+  html`, `settings_holidays.html`, `settings_time_blocks.html` twice) or
+  item 15, or item 11 (CSP `unsafe-inline` migration, still deliberately
+  skipped, largest/riskiest). No dependency chain between any of them.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 12, a shared z-index
   scale (skipped item 11, the CSP `unsafe-inline` migration, per direct
   request -- still open, see below). The item's own investigation had

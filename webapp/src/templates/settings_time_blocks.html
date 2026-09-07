@@ -3,6 +3,7 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
+{% from "_row_action_buttons.html" import row_action_buttons %}
 {{ page_header_narrow("Sleep & Leisure Time", "moon") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
@@ -59,12 +60,12 @@
                             <span class="settings-hint">{{ b.days_label }}</span>
                         </td>
                         <td>
-                            <div class="action-buttons">
-                                <a href="/settings/time-blocks/{{ b.uid }}/edit" class="icon-btn" data-modal title="Edit sleep time">{{ icon('edit', 'icon-sm') }}</a>
-                                <form method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-confirm-sheet="Delete "{{ b.label or 'sleep time block' }}"? This stops the Week/Day grid from hatching these hours.">
-                                    <button type="submit" class="icon-btn danger" title="Delete sleep time">{{ icon('trash', 'icon-sm') }}</button>
-                                </form>
-                            </div>
+                            {{ row_action_buttons(
+                                "/settings/time-blocks/" ~ b.uid ~ "/edit",
+                                "/settings/time-blocks/" ~ b.uid ~ "/delete",
+                                "sleep time",
+                                'Delete "' ~ (b.label or 'sleep time block') ~ '"? This stops the Week/Day grid from hatching these hours.'
+                            ) }}
                         </td>
                     </tr>
                     {% endfor %}
@@ -117,12 +118,12 @@
                             <span class="settings-hint">{{ b.days_label }}</span>
                         </td>
                         <td>
-                            <div class="action-buttons">
-                                <a href="/settings/time-blocks/{{ b.uid }}/edit" class="icon-btn" data-modal title="Edit leisure time">{{ icon('edit', 'icon-sm') }}</a>
-                                <form method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-confirm-sheet="Delete "{{ b.label or 'leisure time block' }}"? This stops the Week/Day grid from hatching these hours.">
-                                    <button type="submit" class="icon-btn danger" title="Delete leisure time">{{ icon('trash', 'icon-sm') }}</button>
-                                </form>
-                            </div>
+                            {{ row_action_buttons(
+                                "/settings/time-blocks/" ~ b.uid ~ "/edit",
+                                "/settings/time-blocks/" ~ b.uid ~ "/delete",
+                                "leisure time",
+                                'Delete "' ~ (b.label or 'leisure time block') ~ '"? This stops the Week/Day grid from hatching these hours.'
+                            ) }}
                         </td>
                     </tr>
                     {% endfor %}

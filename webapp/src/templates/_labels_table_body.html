@@ -1,4 +1,5 @@
 {# Labels table body fragment for async-CRUD region refresh #}
+{% from "_row_action_buttons.html" import row_action_buttons %}
 {% for l in labels %}
 <tr data-label-name="{{ l.name }}">
     <td>
@@ -22,12 +23,12 @@
         {% endif %}
     </td>
     <td>
-        <div class="action-buttons">
-            <a href="/settings/labels/{{ l.name }}/edit" class="icon-btn" data-modal title="Edit label">{{ icon('edit', 'icon-sm') }}</a>
-            <form method="post" action="/settings/labels/{{ l.name }}/delete" data-confirm-sheet="Remove "{{ l.name }}" from every object that carries it? This doesn't delete the label config, just clears its usage.">
-                <button type="submit" class="icon-btn danger" title="Delete label">{{ icon('trash', 'icon-sm') }}</button>
-            </form>
-        </div>
+        {{ row_action_buttons(
+            "/settings/labels/" ~ l.name ~ "/edit",
+            "/settings/labels/" ~ l.name ~ "/delete",
+            "label",
+            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
+        ) }}
     </td>
 </tr>
 {% endfor %}
