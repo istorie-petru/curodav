@@ -35,11 +35,11 @@
         <table id="sleep-block-table">
             <thead>
                 <tr>
-                    <th style="width:26px"></th>
+                    <th class="col-checkbox"></th>
                     <th>Block</th>
                     <th>Hours</th>
                     <th>Days</th>
-                    <th style="width: 100px;">Actions</th>
+                    <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
             <tbody id="sleep-block-body">
@@ -91,11 +91,11 @@
         <table id="leisure-block-table">
             <thead>
                 <tr>
-                    <th style="width:26px"></th>
+                    <th class="col-checkbox"></th>
                     <th>Block</th>
                     <th>Hours</th>
                     <th>Days</th>
-                    <th style="width: 100px;">Actions</th>
+                    <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
             <tbody id="leisure-block-body">
@@ -143,7 +143,7 @@
 {% endblock %}
 {% block extra_scripts %}
 <script defer src="{{ static_url('bulk_select.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.addEventListener("DOMContentLoaded", function () {
     window.CCBulkSelect.init({
         tableId: "sleep-block-table",

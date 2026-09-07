@@ -142,6 +142,33 @@ def _icon(name: str, cls: str = "") -> Markup:
 templates.env.globals["icon"] = _icon
 
 
+@pass_context
+def _csp_nonce(ctx) -> str:
+    """`{{ csp_nonce() }}` for every real inline `<script>`/`<style>` tag
+    left in the templates (audit-fixes-2.0.md item 11 -- CSP's script-src/
+    style-src moved off `'unsafe-inline'` onto nonces). Registered as a
+    Jinja global rather than templates reaching into `request.state`
+    directly, same reasoning as `icon`/`static_url` above: one place to
+    read from, and it stays usable from a child template that only
+    `{% extends %}` base.html. `SecurityHeadersMiddleware` (security_
+    headers.py) is what actually generates the nonce and stashes it on
+    `scope["state"]["csp_nonce"]` before this app even runs -- by the
+    time a template renders, `request.state.csp_nonce` is always already
+    set for every real HTTP request. Only falls back to `""` for the rare
+    context with no nonce at all (e.g. a template rendered directly in a
+    unit test with a hand-built request, no SecurityHeadersMiddleware in
+    the stack) rather than raising -- a missing nonce there just means
+    the rendered tag's `nonce=""` attribute won't match any real CSP
+    header, not a reason to fail the render."""
+    request = ctx.get("request")
+    if request is None:
+        return ""
+    return getattr(request.state, "csp_nonce", "")
+
+
+templates.env.globals["csp_nonce"] = _csp_nonce
+
+
 # Same 16 names as routers/labels.py's COLORS -- not imported directly,
 # since deps.py is imported by every router including labels.py itself
 # (importing back would be circular); duplicated here as a short, stable

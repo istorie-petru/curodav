@@ -40,9 +40,9 @@
 <!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
      Settings > Sleep & Leisure Time) -- loaded before calendar.js/
      project_calendar.js so both can call window.ccTimeBlocks. -->
-<script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
+<script type="application/json" id="cc-time-blocks" nonce="{{ csp_nonce() }}">{{ time_blocks_json | safe }}</script>
 <script defer src="{{ static_url('time_blocks.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
   // See this template's own top comment -- ordinary events keep calendar.js's
   // interactions; work-allocation blocks get project_calendar.js's, pointed
   // at this page's /calendar/week/allocations endpoints so create/move/

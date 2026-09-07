@@ -30,7 +30,7 @@
     </div>
     <div class="modal-body">
         {% if not all_labels %}
-        <div class="empty-state empty-state-rich" style="padding: var(--space-8) var(--space-5);">
+        <div class="empty-state empty-state-rich empty-state-rich-wide">
             <div class="empty-state-icon">{{ icon('tag', 'icon-lg') }}</div>
             <h2 class="empty-state-title">No labels available</h2>
             <p class="empty-state-text">You need to create a label first to build a filter.</p>
@@ -64,7 +64,7 @@
 
                 <div class="field field-wide">
                     <label>Filter by labels</label>
-                    <p class="settings-hint" style="margin: 0 0 8px;">Items matching any selected label will be included in this list.</p>
+                    <p class="settings-hint settings-hint-tight-bottom">Items matching any selected label will be included in this list.</p>
                     <div class="field-toggle-group" id="label-checkboxes">
                         {% for name in all_labels %}
                         <label class="field-toggle">
@@ -74,7 +74,7 @@
                         {% endfor %}
                     </div>
                 </div>
-                <p class="settings-hint field-wide" style="margin: 0;">You can change visibility any time from the list below, or archive a list to pause it without deleting it.</p>
+                <p class="settings-hint field-wide settings-hint-flush">You can change visibility any time from the list below, or archive a list to pause it without deleting it.</p>
             </div>
         </form>
         </div>

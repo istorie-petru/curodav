@@ -34,11 +34,11 @@
         <table id="labels-table">
             <thead>
                 <tr>
-                    <th style="width:26px"></th>
+                    <th class="col-checkbox"></th>
                     <th>Label</th>
                     <th>Group</th>
                     <th>Usage</th>
-                    <th style="width: 100px;">Actions</th>
+                    <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
             <tbody id="labels-body">
@@ -97,7 +97,7 @@
 {% block extra_scripts %}
 <script defer src="{{ static_url('bulk_select.js') }}"></script>
 <script defer src="{{ static_url('labels_manage.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.addEventListener("DOMContentLoaded", function () {
     window.CCBulkSelect.init({
         tableId: "labels-table",

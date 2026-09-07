@@ -12,7 +12,7 @@
          without its shell. -->
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var KEY = "commandCenterWeb.theme";
         var stored = localStorage.getItem(KEY);

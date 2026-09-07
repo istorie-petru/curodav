@@ -139,7 +139,7 @@
             </div>
         </div>
     </td>
-    <td style="text-align:right" class="task-row-actions">
+    <td class="task-row-actions">
         <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/delete" data-delete-undo="{{ t.title }}" data-cc-change="task">
             <button type="submit" class="icon-btn task-row-delete" title="Delete">{{ icon('trash') }}</button>
         </form>

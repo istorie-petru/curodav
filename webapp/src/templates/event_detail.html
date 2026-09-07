@@ -131,7 +131,7 @@
 {% if occurrence_date and event.recurrence %}
 <div class="detail-card detail-section-gap">
     <h2>{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
-    <p class="text-muted-secondary" style="font-size:var(--text-caption)">
+    <p class="text-muted-secondary text-caption">
         {{ occurrence_date | relative_date }} — changes here affect only this one
         occurrence, not the whole recurring series.
     </p>
@@ -152,9 +152,9 @@
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
             <button type="submit" class="btn ghost btn-sm">{{ icon('x-circle', 'icon-sm') }} Cancel this occurrence</button>
         </form>
-        <details style="margin-top:8px">
-            <summary class="btn ghost btn-sm" style="display:inline-block; cursor:pointer">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
-            <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid" style="margin-top:8px" data-cc-change="event" data-cc-action="move">
+        <details class="occurrence-move-details">
+            <summary class="btn ghost btn-sm occurrence-move-summary">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
+            <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid occurrence-move-form" data-cc-change="event" data-cc-action="move">
                 <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
                 {% from "_datetime_picker.html" import datetime_picker with context %}
                 <div class="field field-wide">

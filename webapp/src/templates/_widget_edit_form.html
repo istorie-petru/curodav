@@ -49,7 +49,7 @@
     {% if wc.selection.range %}<input type="hidden" name="range" value="{{ wc.selection.range }}">{% endif %}
     <div class="field">
         <label>Data source</label>
-        <div class="text-muted" style="font-size:var(--text-caption);">{{ spec.label if spec else widget.type }} -- no longer available in the builder, can't be changed here.</div>
+        <div class="text-muted text-caption">{{ spec.label if spec else widget.type }} -- no longer available in the builder, can't be changed here.</div>
     </div>
     {% endif %}
     <div class="field-grid">
@@ -86,7 +86,7 @@
         {% set ms_root_class = 'widget-range-select' %}
         {% include "_widget_list_multiselect.html" %}
         {% endif %}
-        <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list') %}style="display:none"{% endif %}>
+        <div class="field widget-limit-field" {% if widget.type not in ('agenda', 'contact_list') %}hidden{% endif %}>
             <!-- 2026-08-31 direct feedback: "add a way to set the limit to
                  0 (0 = unlimited)" -- see _widget_builder_fields.html's own
                  comment on this same field for why min changed from 1 to 0
@@ -164,7 +164,7 @@
              consolidation), pre-selected from this widget's own
              config.style (defaulting to "list", same as the render
              function's own fallback). -->
-        <div class="field widget-style-field" {% if widget.type != 'spaces_projects' %}style="display:none"{% endif %}>
+        <div class="field widget-style-field" {% if widget.type != 'spaces_projects' %}hidden{% endif %}>
             <label>Style</label>
             <div class="field-toggle-group">
                 <label class="field-toggle"><input type="radio" name="style" value="list" {% if (widget.config.style or 'list') == 'list' %}checked{% endif %}> List</label>
@@ -234,7 +234,7 @@
         {% include "_widget_list_multiselect.html" %}
         {% endif %}
     </div>
-    <div class="field widget-filters-save-row" style="margin-top:10px">
+    <div class="field widget-filters-save-row">
         <button type="submit" class="btn primary widget-save-filters-btn">Save filters</button>
         <span class="widget-save-status" aria-live="polite"></span>
     </div>

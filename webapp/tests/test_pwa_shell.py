@@ -466,8 +466,13 @@ class TestLocalWritePath:
         # v59 (2026-09-07, audit-fixes-2.0.md item 12): style.css only (raw
         # z-index numbers replaced with named custom properties) -- no new
         # SHELL_ASSETS files.
+        # v60 (2026-09-07, audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
+        # elimination): style.css changed extensively; new static/
+        # dynamic_styles.js added to SHELL_ASSETS (the generic `data-style`
+        # -> CSSOM applier, same "base.html script needed on every page"
+        # category as a11y_icon_labels.js).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v59"' in script
+        assert 'CACHE_NAME = "cc-shell-v60"' in script
 
 
 class TestOfflineToolbar:

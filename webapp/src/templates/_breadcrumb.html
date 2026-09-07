@@ -3,7 +3,7 @@
      undefined, falsy) on whichever page doesn't have one -- space_detail.html
      only ever sets `space`, project_detail.html sets both when the project
      has a group_uid. -->
-<p class="breadcrumb" style="margin:0 0 10px">
+<p class="breadcrumb">
     <a href="/">Home</a>
     {% if space %} &rsaquo; <a href="/labels/{{ space.uid }}">{{ space.name }}</a>{% endif %}
     {% if project %} &rsaquo; <a href="/labels/{{ project.uid }}">{{ project.name }}</a>{% endif %}

@@ -25,7 +25,7 @@
                      its bulk action clears label usage, not a real row
                      delete). #}
 {% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
-<div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar" style="display:none">
+<div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
     <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
     <div class="spacer"></div>
     <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>

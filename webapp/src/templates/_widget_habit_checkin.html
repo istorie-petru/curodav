@@ -34,7 +34,7 @@
             <input type="hidden" name="value" value="{{ row.next_value }}">
             <button type="submit" class="icon-btn" title="Log one more">{{ icon('plus', 'icon-sm') }}</button>
         </form>
-        <form method="post" action="/habits/{{ row.habit.uid }}/entries/{{ row.today }}/toggle" class="form-inline habit-checkin-reset" style="{% if not row.current_value %}display:none{% endif %}">
+        <form method="post" action="/habits/{{ row.habit.uid }}/entries/{{ row.today }}/toggle" class="form-inline habit-checkin-reset" {% if not row.current_value %}data-initially-hidden="1"{% endif %}>
             <button type="submit" class="icon-btn" title="Reset today">{{ icon('x', 'icon-sm') }}</button>
         </form>
         {% else %}

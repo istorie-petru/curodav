@@ -25,7 +25,7 @@ Headers added, and why:
     conventions), only cross-origin requests get trimmed to just the
     origin.
   - `Content-Security-Policy` -- see CSP_POLICY's own comment below for
-    the specific tradeoff this app makes.
+    how script-src/style-src are locked down.
   - `Strict-Transport-Security` (HSTS) -- only added when the request's
     own scheme is "https" (both deploys already pass uvicorn
     `--proxy-headers`, so this is accurate behind a TLS-terminating
@@ -35,24 +35,37 @@ Headers added, and why:
     this app's common LAN/Tailscale-over-HTTP deployment, so it's
     deliberately conditional rather than unconditional.
 
-CSP tradeoff, stated plainly: this app's templates use inline
-<script>/<style> and inline event-handler attributes throughout (see e.g.
-login.html's inline theme-detection script, or the many `onclick=...`
-attributes across templates) -- a strict, nonce-based CSP would need
-threading a per-request nonce through every template and rewriting every
-inline handler, a large refactor out of scope for this slice. CSP_POLICY
-below still meaningfully restricts what a successful XSS could do
-(no cross-origin script/object/frame loading, no arbitrary form
-submission target, no framing) via `'unsafe-inline'` on script-src/
-style-src rather than nonces -- a real gap versus a fully strict policy,
-called out explicitly rather than left implicit."""
+CSP nonces (2026-09-07, audit-fixes-2.0.md item 11 -- `'unsafe-inline'`
+fully eliminated from both script-src and style-src): every inline
+<script>/<style> tag left in this app's templates now carries a
+per-request nonce (`{{ csp_nonce() }}`, a Jinja global -- see
+deps.py::_csp_nonce), and every `onclick=`/`onchange=`/`style=`
+attribute that used to rely on `'unsafe-inline'` has been rewritten --
+event delegation in static JS for the handlers, CSSOM `.style` writes
+for server-computed values, plain CSS classes for fixed ones. Nothing in
+this app's markup needs `'unsafe-inline'` anymore.
+
+`CSP_POLICY` below is a template string (`{nonce}` placeholder), not a
+fixed value: `SecurityHeadersMiddleware.__call__` generates a fresh
+`secrets.token_urlsafe(16)` nonce per request, stashes it on
+`scope["state"]["csp_nonce"]` *before* calling `self.app` -- Starlette's
+`Request.state` property lazily reads `scope["state"]` (see
+`starlette/requests.py`), so any `Request` FastAPI builds off this same
+scope downstream -- including the one Jinja2Templates injects into every
+template context -- sees `request.state.csp_nonce`, matching the nonce
+this middleware puts in the response header -- and formats
+`CSP_POLICY.format(nonce=nonce)` into the actual header value, giving
+`script-src 'self' 'nonce-<value>'` / `style-src 'self'
+'nonce-<value>'` with no `'unsafe-inline'` anywhere in the policy."""
 
 from __future__ import annotations
 
+import secrets
+
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
-    "style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'nonce-{nonce}'; "
+    "style-src 'self' 'nonce-{nonce}'; "
     "img-src 'self' data:; "
     "font-src 'self'; "
     "connect-src 'self'; "
@@ -81,13 +94,25 @@ class SecurityHeadersMiddleware:
 
         is_https = scope.get("scheme") == "https"
 
+        # Per-request nonce, stashed on scope["state"] *before* calling
+        # self.app so that any Request FastAPI/Starlette builds off this
+        # scope downstream -- including the one Jinja2Templates injects
+        # into every template context -- sees the same value via
+        # `request.state.csp_nonce` (Request.state lazily reads
+        # scope["state"], see module docstring). token_urlsafe(16) gives
+        # 128 bits of randomness, base64url-encoded -- short enough for a
+        # header/attribute, long enough that guessing it is infeasible.
+        nonce = secrets.token_urlsafe(16)
+        scope.setdefault("state", {})["csp_nonce"] = nonce
+        csp_value = CSP_POLICY.format(nonce=nonce)
+
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = message.setdefault("headers", [])
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"x-frame-options", b"DENY"))
                 headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
-                headers.append((b"content-security-policy", CSP_POLICY.encode("ascii")))
+                headers.append((b"content-security-policy", csp_value.encode("ascii")))
                 if is_https:
                     headers.append((b"strict-transport-security", HSTS_VALUE.encode("ascii")))
             await send(message)

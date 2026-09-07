@@ -8,17 +8,17 @@
 <p class="settings-hint">Backups, database integrity, sync conflicts, export & import, and data lifecycle -- everything about your data's safety, in priority order.</p>
 
 {% if request.query_params.get('note') %}
-<div class="settings-hint" style="color:var(--md-primary,var(--accent))">{{ request.query_params.get('note') }}</div>
+<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
 {% endif %}
 {% if request.query_params.get('error') %}
-<div class="settings-hint" style="color:var(--md-error,#b3261e)">{{ request.query_params.get('error') }}</div>
+<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
 {% set needs_attention = conflicts or not integrity.ok or (latest_verified_backup and not latest_verified_backup.verification.ok) %}
 {% if needs_attention %}
 <div class="settings-group">
     <h2 class="section-label">{{ icon('x-circle', 'icon-sm') }} Needs attention
-        {% if conflicts %}<span class="pill-static pill-red" style="vertical-align:middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span>{% endif %}
+        {% if conflicts %}<span class="pill-static pill-red align-middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span>{% endif %}
     </h2>
     <div class="card card-danger">
         {% if conflicts %}
@@ -39,11 +39,11 @@
                     <td>{{ 'Project label' if c.field_name == 'project_label' else c.field_name }}</td>
                     <td>{{ c.losing_value if c.losing_value is not none else '(empty)' }}</td>
                     <td>{{ c.created_at | fmt_dt }}</td>
-                    <td style="text-align:right;white-space:nowrap">
-                        <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/restore" style="display:inline">
+                    <td class="text-right-nowrap">
+                        <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/restore">
                             <button type="submit" class="btn ghost btn-sm">{{ icon('repeat', 'icon-sm') }} Restore</button>
                         </form>
-                        <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/dismiss" style="display:inline">
+                        <form class="form-inline" method="post" action="/settings/sync-conflicts/{{ c.id }}/dismiss">
                             <button type="submit" class="btn danger subtle btn-sm">{{ icon('x', 'icon-sm') }} Dismiss</button>
                         </form>
                     </td>
@@ -77,21 +77,21 @@
                     <button type="button" class="action-menu-trigger" aria-label="Database actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
                     <div class="action-menu-panel" role="menu">
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/data-health/integrity-check" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/integrity-check">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('eye', 'icon-sm') }} Check integrity</button>
                             </form>
-                            <form method="post" action="/settings/data-health/verify" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/verify">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify latest backup</button>
                             </form>
-                            <form method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database." style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
                             </form>
                         </div>
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/data-health/sync-gc" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up sync data</button>
                             </form>
-                            <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
+                            <button type="button" class="action-menu-item" role="menuitem" data-action="force-sync">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
                         </div>
                         <div class="action-menu-section">
                             <!-- 2026-08-26 second pass: opens the
@@ -152,18 +152,18 @@
                     <button type="button" class="action-menu-trigger" aria-label="Backup actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
                     <div class="action-menu-panel" role="menu">
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/data-health/backup" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/backup">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('archive', 'icon-sm') }} Backup now</button>
                             </form>
                             <a class="action-menu-item" role="menuitem" href="/export/data.json">{{ icon('download', 'icon-sm') }} Download full backup</a>
                         </div>
                         {% if latest_backup %}
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/data-health/verify" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/verify">
                                 <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify integrity</button>
                             </form>
-                            <form method="post" action="/settings/data-health/restore" style="display:contents;" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
+                            <form class="form-contents" method="post" action="/settings/data-health/restore" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
                                 <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('repeat', 'icon-sm') }} Restore this backup</button>
                             </form>
@@ -214,10 +214,10 @@
                             <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
                         </div>
                         <div class="action-menu-section">
-                            <button type="button" class="action-menu-item" role="menuitem" onclick="forceSyncFromServer()">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
+                            <button type="button" class="action-menu-item" role="menuitem" data-action="force-sync">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
                         </div>
                         <div class="action-menu-section">
-                            <form method="post" action="/settings/data-health/sync-gc" style="display:contents;">
+                            <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up now</button>
                             </form>
                         </div>
@@ -261,17 +261,17 @@
             <div class="settings-field-row">
                 <span class="settings-field-label">Server URL</span>
                 <span class="spacer"></span>
-                <input type="text" name="radicale_url" value="{{ radicale_url }}" placeholder="http://127.0.0.1:5232/you/" autocomplete="off" style="max-width: 320px;">
+                <input type="text" name="radicale_url" value="{{ radicale_url }}" placeholder="http://127.0.0.1:5232/you/" autocomplete="off" class="field-narrow">
             </div>
             <div class="settings-field-row">
                 <span class="settings-field-label">Username</span>
                 <span class="spacer"></span>
-                <input type="text" name="radicale_username" value="{{ radicale_username }}" autocomplete="off" style="max-width: 320px;">
+                <input type="text" name="radicale_username" value="{{ radicale_username }}" autocomplete="off" class="field-narrow">
             </div>
             <div class="settings-field-row">
                 <span class="settings-field-label">Password</span>
                 <span class="spacer"></span>
-                <input type="password" name="radicale_password" autocomplete="off" style="max-width: 320px;">
+                <input type="password" name="radicale_password" autocomplete="off" class="field-narrow">
             </div>
             <div class="settings-field-row">
                 <span class="spacer"></span>
@@ -296,7 +296,7 @@
                 <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
             </span>
             <span class="spacer"></span>
-            <select name="days" onchange="this.form.requestSubmit()">
+            <select name="days" data-change-submit>
                 {% for value, label in days_choices %}
                 <option value="{{ value }}" {% if task_auto_archive_days == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
@@ -307,7 +307,7 @@
                 <span class="settings-field-hint">How long deleted items are kept around before being permanently removed</span>
             </span>
             <span class="spacer"></span>
-            <select name="days" onchange="this.form.requestSubmit()">
+            <select name="days" data-change-submit>
                 {% for value, label in sync_gc_days_choices %}
                 <option value="{{ value }}" {% if sync_gc.retention_days == (value | int) %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
@@ -333,32 +333,4 @@
 {% endblock %}
 {% block extra_scripts %}
 <script defer src="{{ static_url('data_maintenance.js') }}"></script>
-<script>
-  async function forceSyncFromServer() {
-    const btn = document.querySelector('[onclick="forceSyncFromServer()"]');
-    if (!window.CCOfflineSync) {
-      window.ccToast({ message: 'Sync engine not available', variant: 'error' });
-      return;
-    }
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = ' Syncing...';
-    }
-    try {
-      const ok = await window.CCOfflineSync.syncNow();
-      if (ok) {
-        window.ccToast({ title: 'Sync completed', message: 'All data synchronized successfully', variant: 'success' });
-      } else {
-        window.ccToast({ message: 'Sync completed with issues (check notifications)', variant: 'warning' });
-      }
-    } catch (err) {
-      window.ccToast({ message: 'Sync failed: ' + err.message, variant: 'error' });
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '{{ icon("download-cloud", "icon-sm") }} Force sync';
-      }
-    }
-  }
-</script>
 {% endblock %}

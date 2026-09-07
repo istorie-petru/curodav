@@ -484,6 +484,36 @@ document.addEventListener("submit", (event) => {
     return input.closest(".widget-list-multiselect") || (openPanel && openPanel.panel.contains(input) ? openPanel.anchor : null);
   }
 
+  // `data-change-submit` (2026-09-07, audit-fixes-2.0.md item 11 -- CSP
+  // `'unsafe-inline'` elimination) replaces every `onchange="this.form.
+  // requestSubmit()"`/`onchange="this.form.submit()"` inline handler this
+  // app used to sprinkle on auto-saving selects/radios/checkboxes
+  // (Settings > General/Appearance's segmented controls, the
+  // maintenance-page lifecycle <select>s, Published Lists' visibility
+  // <select>, the filter dropdown's multiselect checkboxes,
+  // _widget_list_multiselect.html's ms_autosubmit option) with one
+  // delegated listener -- inline event-handler attributes are exactly
+  // what `'unsafe-inline'` on script-src was covering, so every one of
+  // them has to go for the CSP to drop it. Deliberately a different
+  // attribute name from the existing form-level `data-autosubmit`
+  // (avatar_cropper.js/modal.js's "submit this whole form once a picker
+  // resolves" flag, checked via `hasAttribute` on the `<form>` itself) --
+  // this one lives on the individual input/select that changed, so
+  // reusing the same name for a different element/semantic would be
+  // confusing even though the two never collide in practice. `e.target.
+  // form` (not `.closest("form")`) matches what `this.form` on an inline
+  // handler already resolved to, including portalled controls that reach
+  // their form via the `form="..."` attribute rather than DOM nesting
+  // (_widget_list_multiselect.html's portalled panel, see that file's own
+  // header comment). Uses `requestSubmit()` uniformly (some inline
+  // handlers used the older `.submit()`, which skips the `submit` event
+  // and validation) -- no call site depended on skipping either.
+  document.addEventListener("change", (e) => {
+    if (e.target.matches && e.target.matches("[data-change-submit]") && e.target.form) {
+      e.target.form.requestSubmit();
+    }
+  });
+
   document.addEventListener("change", (e) => {
     const ms = wrapperFor(e.target);
     if (!ms) return;

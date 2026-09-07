@@ -152,7 +152,7 @@ class TestIdentityMark:
     def test_event_identity_badge_uses_calendar_color(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-cover-icon" style="color:var(--cal-accent-blue)"' in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-blue)"' in body
         assert '#icon-calendar' in body
         assert 'class="detail-title"' in body
 
@@ -166,13 +166,13 @@ class TestIdentityMark:
         db.upsert_label_config(conn, {"name": "Work", "color": "red"})
         db.set_object_labels(conn, "event", "e1", ["Work"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-cover-icon" style="color:var(--cal-accent-red)"' in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-red)"' in body
         assert 'class="color-dot cal-red"' in body
 
     def test_task_identity_badge_uses_status_color(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'class="detail-cover-icon" style="color:var(--cal-accent-orange)"' in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-orange)"' in body
         assert '#icon-check-square' in body
         assert 'class="detail-title"' in body
 

@@ -184,7 +184,10 @@ class TestSettingsGeneral:
         resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
         body = resp.body.decode()
         assert 'name="display_name"' in body
-        assert 'onchange="this.form.requestSubmit()"' in body
+        # 2026-09-07 (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
+        # elimination) -- the inline `onchange=` handler moved to a
+        # delegated `data-change-submit` listener (app.js).
+        assert 'data-change-submit' in body
         assert ">Save<" not in body
 
     def test_passes_display_name(self, conn):

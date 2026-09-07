@@ -15,7 +15,7 @@
      empty state through widget_empty (_widget_items.html). -->
 {% from "_widget_items.html" import widget_empty, widget_link_row %}
 {% if data.days %}
-<div class="weekly-schedule-grid" style="grid-template-columns: repeat({{ data.days|length }}, 1fr);">
+<div class="weekly-schedule-grid" data-cols="{{ data.days|length }}">
     {% for day in data.days %}
     <div class="weekly-schedule-col">
         <div class="weekly-schedule-day-label">{{ day.label }}</div>

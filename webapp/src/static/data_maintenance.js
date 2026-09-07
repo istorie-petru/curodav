@@ -221,4 +221,48 @@
     btn.disabled = !armed;
     phrase.classList.toggle("is-armed", armed);
   });
+
+  // ---- Force sync (moved off settings_data_maintenance.html's own inline
+  // <script> 2026-09-07, audit-fixes-2.0.md item 11 -- CSP `'unsafe-
+  // inline'` elimination) -- two independent "Force sync" buttons (the
+  // Database card's menu and the Sync card's menu) both carry
+  // `data-action="force-sync"`, so one delegated click listener handles
+  // both instead of two id-specific bindings. The icon markup restored on
+  // success/failure is a static copy of deps.py's icon('download-cloud',
+  // 'icon-sm') output -- this file can't call the Jinja global, and the
+  // sprite reference (#icon-download-cloud, _icons_sprite.html) is the
+  // same either way. -----------------------------------------------------
+
+  var FORCE_SYNC_ICON = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download-cloud"></use></svg>';
+
+  function forceSyncFromServer(btn) {
+    if (!window.CCOfflineSync) {
+      window.ccToast({ message: "Sync engine not available", variant: "error" });
+      return;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = " Syncing...";
+    }
+    window.CCOfflineSync.syncNow().then(function (ok) {
+      if (ok) {
+        window.ccToast({ title: "Sync completed", message: "All data synchronized successfully", variant: "success" });
+      } else {
+        window.ccToast({ message: "Sync completed with issues (check notifications)", variant: "warning" });
+      }
+    }).catch(function (err) {
+      window.ccToast({ message: "Sync failed: " + err.message, variant: "error" });
+    }).finally(function () {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = FORCE_SYNC_ICON + " Force sync";
+      }
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    var btn = closest(e.target, '[data-action="force-sync"]');
+    if (!btn) return;
+    forceSyncFromServer(btn);
+  });
 })();

@@ -1145,6 +1145,50 @@ label.seg-btn[hidden]{display:none;}
    color is needed instead of restating the variable every time. */
 .text-muted{color:var(--fg-tertiary);}
 .text-muted-secondary{color:var(--fg-secondary);}
+.text-caption{font-size:var(--text-caption);}
+/* _empty_state_row.html's text-muted empty-state cells (Labels/Holidays/
+   Sleep&Leisure's own "No X yet" row) -- every real call site passes the
+   macro's own default `style='font-size: var(--text-footnote);'`
+   unchanged (verified across every call site, 2026-09-07), so this
+   replaces that per-call inline `style=` parameter with one static rule
+   scoped to the row's own existing id + class hooks (audit-fixes-2.0.md
+   item 11, CSP `'unsafe-inline'` elimination). The one call site that
+   used the shared `.empty-state` class instead (_labels_table_body.html)
+   already gets its own font-size from that class, so it's unaffected --
+   this only matches the `.text-muted` variant. */
+#empty-state-row .text-muted{font-size:var(--text-footnote);}
+
+/* Bulk-select checkbox column / narrow Actions column -- identical
+   `style="width:26px"`/`style="width: 100px;"` `<th>`s hand-copied across
+   Labels/Holidays/Sleep&Leisure's own management tables (labels_manage.
+   html, settings_holidays.html, settings_time_blocks.html x2). Distinct
+   from `.lists-table .actions-col` (Published Lists, 60px) -- a
+   different table, a different width, not the same component. Added
+   2026-09-07, audit-fixes-2.0.md item 11 (CSP `'unsafe-inline'`
+   elimination). */
+.col-checkbox{width:26px;}
+.col-actions-narrow{width:100px;}
+
+/* _icons_sprite.html's wrapper -- was `style="display:none"` (this app's
+   local icon sprite is never meant to be visible itself, only referenced
+   via <use href="#icon-...">). 2026-09-07, audit-fixes-2.0.md item 11. */
+.svg-sprite{display:none;}
+
+/* `<form style="display:contents;">` wrappers around a single button in
+   an action-menu list (settings_data_maintenance.html's System Status
+   card menus) -- lets the button lay out as a direct flex/grid child of
+   `.action-menu-section` as if the `<form>` weren't there at all. Same
+   2026-09-07 CSP slice as the two rules above. */
+.form-contents{display:contents;}
+
+/* Compact empty-state padding (_calendar_week_grid.html's unscheduled-work
+   panel, _task_work_allocations.html) -- both were an identical one-off
+   `style="padding:10px 0"` alongside the shared `.empty-state` class.
+   Distinct from search.html's own looser `.empty-state-loose` (24px) --
+   a smaller/denser container, not the same spacing. 2026-09-07,
+   audit-fixes-2.0.md item 11. */
+.empty-state-compact{padding:10px 0;}
+.empty-state-loose{padding:24px 0;}
 
 /* Back-navigation link above page content ("< Back to X") -- task/contact/
    habit/label detail each hand-rolled `<p style="margin:0 0 10px">` for
@@ -1990,7 +2034,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
 tr.is-selected{background:var(--accent-neutral-subtle);}
 .bulk-actions-bar{
-  display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+  /* Starts hidden -- used to be each call site's own `style="display:
+     none"` (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
+     elimination removed the last `style=` attributes this component
+     needed). bulk_select.js's own `bar.style.display = "flex"/"none"`
+     toggle (a CSSOM write, not an HTML `style=` attribute -- unaffected
+     by style-src) still overrides this via inline-style precedence once
+     a row gets selected. */
+  display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
   background:var(--accent-neutral-subtle); border:1px solid var(--accent-neutral); border-radius:var(--radius-control);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
 }
@@ -2019,6 +2070,12 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
 .task-table-add-th{text-align:right; padding-top:6px; padding-bottom:6px;}
 .task-table-add-th .icon-btn{color:var(--fg-tertiary);}
 .task-table-add-th .icon-btn:hover{color:var(--fg-primary);}
+/* The trailing actions `<td>` (_task_row.html/_habit_row.html) used to
+   carry its own one-off `style="text-align:right"` -- .task-row-actions
+   is already the class both templates give that cell (see the comment
+   block below), just missing the rule itself until now (2026-09-07,
+   audit-fixes-2.0.md item 11, CSP `'unsafe-inline'` elimination). */
+.task-row-actions{text-align:right;}
 
 /* 2026-09-03 (direct design feedback, seven numbered points on the Tasks
    table's density/hierarchy -- "kill the giant empty space in every row",
@@ -2623,6 +2680,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    beats-bare-`[hidden]` reason .field.holiday-field's own comment above
    explains. */
 .field.widget-show-field[hidden]{display:none;}
+/* Widget Filters editor's Limit/Style fields (_widget_edit_form.html,
+   2026-09-07, audit-fixes-2.0.md item 11 -- CSP `'unsafe-inline'`
+   elimination converted their remaining inline `style="display:none"`
+   conditionals to the same `hidden`-attribute + override convention as
+   .field.widget-show-field right above, for the same
+   `.field{display:flex}`-beats-bare-`[hidden]` reason. */
+.field.widget-limit-field[hidden]{display:none;}
+.field.widget-style-field[hidden]{display:none;}
 /* Format field (2026-08-15, "Event format for simple events") --
    Location/Meeting URL (_event_form_fields.html) both start hidden;
    picking a Format radio reveals only its own field. Same
@@ -2718,6 +2783,34 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 .settings-grid{display:grid; grid-template-columns:repeat(3,minmax(150px,220px)); gap:0 var(--space-6);}
 .form-inline{display:inline;}
+/* Utility modifiers extracted from one-off `style=` attributes (2026-09-07,
+   audit-fixes-2.0.md item 11, CSP `'unsafe-inline'` elimination). */
+.text-right-nowrap{text-align:right; white-space:nowrap;}
+.align-middle{vertical-align:middle;}
+.field-narrow{max-width:320px;}
+.settings-hint-accent{color:var(--md-primary,var(--accent));}
+.settings-hint-error{color:var(--md-error,#b3261e);}
+
+/* event_detail.html's "Move this occurrence" disclosure -- three one-off
+   `style=` attributes (margin-top:8px x2, display:inline-block +
+   cursor:pointer on the <summary>), 2026-09-07 (audit-fixes-2.0.md item
+   11, CSP `'unsafe-inline'` elimination). */
+.occurrence-move-details{margin-top:8px;}
+.occurrence-move-summary{display:inline-block; cursor:pointer;}
+.occurrence-move-form{margin-top:8px;}
+
+/* Published Lists' own tight-margin hint text (2026-09-07, audit-fixes-
+   2.0.md item 11, CSP `'unsafe-inline'` elimination). */
+.settings-hint-tight-top{margin:4px 0 0;}
+.settings-hint-tight-bottom{margin:0 0 8px;}
+.settings-hint-flush{margin:0;}
+
+/* setup.html's (first-run) Radicale section -- four one-off `style=`
+   attributes on the divider/hint paragraphs (2026-09-07, audit-fixes-2.0.
+   md item 11, CSP `'unsafe-inline'` elimination). */
+.setup-radicale-divider{border:none; border-top:1px solid var(--border-color, #333); margin:var(--space-4, 16px) 0;}
+.setup-radicale-subtitle{margin-bottom:var(--space-2, 8px);}
+.setup-radicale-hint{margin:0 0 var(--space-3, 12px);}
 
 .empty-state{padding:var(--space-8) var(--space-5); text-align:center; color:var(--fg-tertiary);}
 /* Small in-pane empty state -- the widget builder's "Loading preview…"
@@ -2851,6 +2944,17 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
+/* --hr-h (pixels-per-hour) used to be templated into every grid's own
+   `.time-grid-body`/`.time-col` as `style="--hr-h:{{ px_per_hour }}px"` --
+   but `px_per_hour` is always `grid_layout.PX_PER_HOUR`, a hardcoded
+   Python constant (48), never a per-request/per-user value, so this is a
+   real static token, not an approximation of something that varies
+   (2026-09-07, audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
+   elimination). Per-event top/height/left/width stay genuinely dynamic
+   (grid_layout.layout_day/layout_week compute those per event) -- see
+   dynamic_styles.js's `data-style` for how those are still set, via
+   CSSOM instead of an inline attribute. */
+:root{--hr-h:48px;}
 .calendar-subnav{margin-bottom:0;}
 .time-grid-wrap{overflow-x:auto;}
 .time-grid-head{display:grid; padding-left:52px;}
@@ -2901,7 +3005,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   background:var(--bg-elevated); border-radius:4px;
 }
 .allday-col.drop-hover{background-color:var(--accent-neutral-subtle);}
-.time-grid-body{display:grid; grid-template-columns:52px 1fr; position:relative;}
+.time-grid-body{display:grid; grid-template-columns:52px 1fr; position:relative; height:calc(25 * var(--hr-h));}
 /* 2026-08-09 -- lock the hour grid into its own stacking context one
    layer BELOW the sticky top (z-index:1 vs .time-grid-top/.time-grid-head's
    z-index:2). The events inside it keep z-index:3 *locally* so they still
@@ -3239,6 +3343,26 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   border-right:1px solid var(--separator); min-width:0;
 }
 .month-day-cell:last-child{border-right:none;}
+/* Explicit grid-column per day (audit-fixes-2.0.md item 11, CSP
+   `'unsafe-inline'` elimination -- used to be each cell's own
+   `style="grid-column:{{ loop.index }};"` in _calendar_month_grid.html/
+   _calendar_fourweek_grid.html). Needed because `.month-day-cell` spans
+   both grid rows (`grid-row:1 / -1` above) -- without an explicit column,
+   the auto-placement algorithm's occupied-cell bookkeeping across a
+   multi-row span isn't guaranteed to land each of the week's 7 cells in
+   its correct column. `week.days` is always exactly 7 entries (a
+   calendar week), so this bounded 1-7 set is exhaustive, not an
+   approximation of a wider range -- a real static CSS rule, not a
+   workaround for a value that actually varies. Selector is a bare
+   `nth-child` (not scoped to `.month-week-grid >`) so it applies
+   regardless of which grid partial includes it. */
+.month-day-cell:nth-child(1){grid-column:1;}
+.month-day-cell:nth-child(2){grid-column:2;}
+.month-day-cell:nth-child(3){grid-column:3;}
+.month-day-cell:nth-child(4){grid-column:4;}
+.month-day-cell:nth-child(5){grid-column:5;}
+.month-day-cell:nth-child(6){grid-column:6;}
+.month-day-cell:nth-child(7){grid-column:7;}
 .month-day-cell.not-in-month{opacity:.4;}
 /* 2026-08-31 (direct request, "past events/tasks should show dim") -- a day
    already gone gets the same opacity-on-the-cell treatment as
@@ -3847,7 +3971,14 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .detail-cover-img{width:100%; height:100%; object-fit:cover; display:block;}
 .detail-cover-fill{
    width:100%; height:100%;
-   background:radial-gradient(120% 160% at 15% 15%, rgba(255,255,255,.22), transparent 55%), var(--cover-accent);
+   /* --cover-accent is now set via CSSOM (dynamic_styles.js's data-style,
+      audit-fixes-2.0.md item 11) instead of an inline `style=` attribute
+      -- the var(...,fallback) here is new alongside that change, purely
+      so a no-JS visitor still gets a reasonable neutral fill instead of
+      `background: transparent, var(--empty-property)`'s effective
+      "nothing painted" the old code had no fallback for either, but that
+      never mattered while the value arrived inline and unconditionally. */
+   background:radial-gradient(120% 160% at 15% 15%, rgba(255,255,255,.22), transparent 55%), var(--cover-accent, var(--accent-neutral));
 }
 /* Floating badge overlapping the cover's bottom edge -- an icon on a small
     white card (event/task/habit-task) or a ringed avatar (contact, see
@@ -3921,6 +4052,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    flex:none;
 }
 .modal-footer .spacer{flex:1;}
+/* _offline_quick_add.html's footer isn't inside a real modal.js overlay
+   (it's an inline form on the Offline page), so it needs its own top
+   spacing/divider on top of the shared `.modal-footer` look -- used to be
+   a one-off `style="margin-top: 16px; padding-top: 12px; border-top: 1px
+   solid var(--control-border);"` (2026-09-07, audit-fixes-2.0.md item 11,
+   CSP `'unsafe-inline'` elimination). */
+.offline-quick-add-footer{margin-top:16px; padding-top:12px; border-top:1px solid var(--control-border);}
 
 /* --------------------------------------------------------------------- */
 /* Universal command surface (1.2 side work, static/command_palette.js)  */
@@ -4390,6 +4528,10 @@ body.command-palette-open{overflow:hidden;}
 }
 .project-progress-bar{
   height:6px; border-radius:3px; background:var(--bg-secondary); overflow:hidden; margin:6px 0 2px;
+  /* flex:1 -- its only call site (_widget_spaces_projects.html) is
+     always a flex row (.project-preview-row); used to be that row's own
+     `style="flex:1"` (2026-09-07, audit-fixes-2.0.md item 11). */
+  flex:1;
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
 .project-scope-section{margin-top:16px;}
@@ -4547,6 +4689,16 @@ body.command-palette-open{overflow:hidden;}
 .habit-card-header{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
 .habit-streaks{display:flex; gap:14px; font-size:13px; color:var(--fg-tertiary); margin-top:6px;}
 .habit-streaks strong{color:var(--fg-primary);}
+/* Habit detail modal (_habit_detail_body.html), 2026-09-07 (audit-fixes-
+   2.0.md item 11, CSP `'unsafe-inline'` elimination) -- these used to be
+   each element's own one-off `style="margin-..."` attribute; a modifier
+   on the shared `.habit-streaks` class plus three small scoped classes
+   instead of touching the base rules above (which the Dashboard habit-
+   card grid also uses and shouldn't pick up detail-modal-only spacing). */
+.habit-streaks-detail{margin-bottom:12px;}
+.habit-log-card{margin-top:16px;}
+.habit-log-submit-field{align-self:flex-end;}
+.habit-archive-row{margin-top:20px;}
 .habit-entries-list{margin-top:8px;}
 .habit-entry-row{display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--separator);}
 .habit-entry-row:last-child{border-bottom:none;}
@@ -5077,7 +5229,7 @@ body.command-palette-open{overflow:hidden;}
    consolidation, same hide-via-class convention as .widget-limit-field/
    .widget-range-field above. */
 .widget-show-field.is-hidden, .widget-style-field.is-hidden, .widget-scope-field.is-hidden{display:none;}
-.widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2);}
+.widget-filters-save-row{display:flex; align-items:center; gap:var(--space-2); margin-top:10px;}
 .widget-save-filters-btn.is-hidden{display:none;}
 .widget-save-status{font-size:.85em; color:var(--fg-secondary); opacity:0; transition:opacity .2s ease;}
 .widget-save-status.is-visible{opacity:1;}
@@ -5121,6 +5273,21 @@ body.command-palette-open{overflow:hidden;}
    app's plain <table> widget convention (see _widget_agenda.html etc.),
    just with a leading weekday column. */
 .weekly-schedule-grid{display:grid; gap:14px; margin-bottom:14px;}
+/* Column count (_widget_weekly_schedule.html) -- used to be
+   `style="grid-template-columns: repeat({{ data.days|length }}, 1fr);"`.
+   `data.days` is at most one entry per weekday (only weekdays that
+   actually have a block become a column, per this partial's own header
+   comment) -- a genuinely bounded 1-7 set, not an approximation of a
+   wider range, so a real static rule per count rather than a CSSOM
+   workaround (2026-09-07, audit-fixes-2.0.md item 11, CSP
+   `'unsafe-inline'` elimination). */
+.weekly-schedule-grid[data-cols="1"]{grid-template-columns:repeat(1,1fr);}
+.weekly-schedule-grid[data-cols="2"]{grid-template-columns:repeat(2,1fr);}
+.weekly-schedule-grid[data-cols="3"]{grid-template-columns:repeat(3,1fr);}
+.weekly-schedule-grid[data-cols="4"]{grid-template-columns:repeat(4,1fr);}
+.weekly-schedule-grid[data-cols="5"]{grid-template-columns:repeat(5,1fr);}
+.weekly-schedule-grid[data-cols="6"]{grid-template-columns:repeat(6,1fr);}
+.weekly-schedule-grid[data-cols="7"]{grid-template-columns:repeat(7,1fr);}
 .weekly-schedule-col{display:flex; flex-direction:column; min-width:0;}
 .weekly-schedule-day-label{
   font-size:13px; font-weight:600; color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
@@ -6033,6 +6200,16 @@ button.btn.danger[data-purge-btn][disabled]{
 /* Empty state in modal */
 .modal-body .empty-state-rich {
     padding: var(--space-6) var(--space-4);
+}
+/* published_list_create_modal.html's "No labels available" empty state
+   used its own bigger padding (var(--space-8) var(--space-5)) than the
+   generic modal override right above -- was a one-off `style=` attribute
+   (which beat `.modal-body .empty-state-rich` on specificity); this
+   compound selector matches that same specificity relationship without
+   an inline attribute (2026-09-07, audit-fixes-2.0.md item 11, CSP
+   `'unsafe-inline'` elimination). */
+.modal-body .empty-state-rich.empty-state-rich-wide {
+    padding: var(--space-8) var(--space-5);
 }
 
 /* Mobile adjustments */

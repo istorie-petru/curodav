@@ -121,12 +121,15 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
     confirmed to already pin exact dependency versions — no action needed
     for that half.
 
-11. **CSP `unsafe-inline` migration.** `security_headers.py:52-62` — move to
-    a nonce-based CSP for script-src/style-src. Saved for last on purpose:
-    it's the largest and riskiest item (touches every inline script/style
-    across templates), and the current state is an already-documented,
-    accepted tradeoff rather than an active gap — worth doing before 2.0,
-    but not worth doing first.
+11. ~~**CSP `unsafe-inline` migration.**~~ **Shipped 2026-09-07** — see
+    `STATE.md`'s entry of the same date. Went further than the one-line
+    spec here: full elimination of `'unsafe-inline'` on both script-src
+    *and* style-src (nonces alone don't cover `style=`/`onclick=`/
+    `onchange=` attributes, so a narrower "nonce just the tags" reading
+    would have left style-src exposed regardless). Server-computed
+    per-row style values (calendar grid positioning, accent colors,
+    progress-bar widths) now apply via a `data-style` → CSSOM JS pass
+    (`static/dynamic_styles.js`) instead of `style="..."` attributes.
 
 Not included above: items the audit report explicitly called "not a
 finding" or "no action needed" (clean error handling, `detail_cover()`

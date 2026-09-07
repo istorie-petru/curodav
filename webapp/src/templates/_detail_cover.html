@@ -57,9 +57,9 @@
             <img class="detail-cover-img" src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
             {% endif %}
         {% else %}
-        <div class="detail-cover-fill" style="--cover-accent:{{ accent }}"></div>
+        <div class="detail-cover-fill" data-style="--cover-accent:{{ accent }}"></div>
         {% endif %}
     </div>
-    <div class="detail-cover-icon{% if avatar_mode %} detail-cover-icon-avatar{% endif %}"{% if not banner %} style="color:{{ accent }}"{% endif %}>{{ badge_html }}</div>
+    <div class="detail-cover-icon{% if avatar_mode %} detail-cover-icon-avatar{% endif %}"{% if not banner %} data-style="color:{{ accent }}"{% endif %}>{{ badge_html }}</div>
 </div>
 {% endmacro %}

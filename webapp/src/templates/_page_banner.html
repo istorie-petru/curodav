@@ -71,7 +71,7 @@
        decodes; with JS disabled that class never arrives, so this forces
        the img visible for no-JS visitors (the noscript style is inert when
        scripting is enabled). #}
-    <noscript><style>.page-banner img{opacity:1;}</style></noscript>
+    <noscript><style nonce="{{ csp_nonce() }}">.page-banner img{opacity:1;}</style></noscript>
 </div>
 <div class="page-banner-avatar-wrap">
     {# 2026-08-29 (direct request: "better cache these images") -- photo_url

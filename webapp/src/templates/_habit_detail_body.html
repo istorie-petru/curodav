@@ -17,7 +17,7 @@
 {% if project %}<p><span class="cell-tag cal-{{ project.color }}">{{ icon(project.icon or 'folder') }} {{ project.name }}</span></p>{% endif %}
 {% if habit.tags %}<p>{% for tag in habit.tags %}{{ label_pill(tag) }} {% endfor %}</p>{% endif %}
 
-<div class="habit-streaks" style="margin-bottom:12px">
+<div class="habit-streaks habit-streaks-detail">
     <span>{{ icon('repeat', 'icon-sm') }} Current streak: <strong>{{ current_streak }}</strong> day{{ 's' if current_streak != 1 }}</span>
     <span>Longest streak: <strong>{{ longest_streak }}</strong></span>
     <span>Total days logged: <strong>{{ total_logged }}</strong></span>
@@ -35,7 +35,7 @@
 {{ heatmap(habit.uid, weeks, extra_class='heatmap-wide', interactive=false) }}
 </div>
 
-<div class="card" style="margin-top:16px">
+<div class="card habit-log-card">
 <h2>Log past data</h2>
 <!-- The explicit "add past data" path, distinct from clicking a heatmap
      cell (which only ever toggles 0/1) -- lets you enter an exact value
@@ -59,13 +59,13 @@
         <label>Note (optional)</label>
         <input type="text" name="note" placeholder="e.g. what you did">
     </div>
-    <div class="field" style="align-self:flex-end">
+    <div class="field habit-log-submit-field">
         <button type="submit" class="btn primary">Log entry</button>
     </div>
 </form>
 </div>
 
-<div style="margin-top:20px">
+<div class="habit-archive-row">
 {% if habit.archived_at %}
 <form method="post" action="/habits/{{ habit.uid }}/unarchive" class="form-inline" data-cc-change="habit" data-cc-action="unarchive">
     <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Unarchive</button>

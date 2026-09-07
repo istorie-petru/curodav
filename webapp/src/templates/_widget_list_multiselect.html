@@ -150,9 +150,11 @@ ms_hidden    -- when true, the outer `.field` starts with the
                       needs its own `.field.<class>[hidden]{display:none;}`
                       override, same as `_event_form_fields.html`'s
                       `.holiday-field` via `ms_extra_class`).
-      ms_autosubmit -- when true, adds `onchange="this.form.requestSubmit()"`
-                      to checkbox/radio inputs so the form submits immediately
-                      on selection change (for settings that auto-save).
+      ms_autosubmit -- when true, adds `data-change-submit` (app.js's
+                      delegated change listener, audit-fixes-2.0.md item
+                      11) to checkbox/radio inputs so the form submits
+                      immediately on selection change (for settings that
+                      auto-save).
       ms_pill      -- (2026-09-02, direct request: "labels also as pills ...
                       that reflect the colors for that label, and also have
                       icons") when true, each option's `<span>{{ it.name }}
@@ -193,7 +195,7 @@ ms_hidden    -- when true, the outer `.field` starts with the
                        {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
                        {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}
-                       {% if _autosubmit %}onchange="this.form.requestSubmit()"{% endif %}>
+                       {% if _autosubmit %}data-change-submit{% endif %}>
                 {% if _pill and it.uid != '__no_label__' %}{{ label_pill(it.name) }}{% else %}<span>{{ it.name }}</span>{% endif %}
             </label>
             {% endfor %}

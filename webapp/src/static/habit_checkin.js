@@ -48,6 +48,24 @@
       });
     });
 
+    // Initial "reset today" visibility (2026-09-07, audit-fixes-2.0.md
+    // item 11, CSP `'unsafe-inline'` elimination) -- used to be a
+    // server-rendered `style="display:none"` on the form itself;
+    // `data-initially-hidden` (only present when the row starts with no
+    // value logged yet) carries that same fact into a CSSOM write here
+    // instead, since the plus/reset handlers below already toggle this
+    // same form's `.style.display` at runtime (a CSSOM write is unaffected
+    // by CSP's style-src either way -- only `<style>` tags and `style=`
+    // attributes are). No-JS fallback is unchanged either way: without
+    // this script running, the form stays visible whether or not
+    // anything's logged yet -- exactly the same as before this slice,
+    // since the old inline `style="display:none"` was itself only ever
+    // applied server-side, with no-JS visitors getting the same
+    // always-visible fallback either way.
+    list.querySelectorAll(".habit-checkin-reset[data-initially-hidden]").forEach((form) => {
+      form.style.display = "none";
+    });
+
     list.querySelectorAll(".habit-checkin-plus").forEach((form) => {
       form.addEventListener("submit", async (e) => {
         e.preventDefault();

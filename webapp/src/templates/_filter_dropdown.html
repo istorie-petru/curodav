@@ -59,7 +59,7 @@
         {% for it in fd_items %}
         <label class="multiselect-option">
             <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ fd_name }}" value="{{ it.value }}"
-                   form="{{ fd_form_id }}" onchange="this.form.requestSubmit()"
+                   form="{{ fd_form_id }}" data-change-submit
                    {% if it.value in _sel %}checked{% endif %}>
             <span>{{ it.name }}</span>
         </label>

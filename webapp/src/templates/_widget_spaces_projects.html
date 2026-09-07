@@ -46,7 +46,7 @@
     <a class="project-preview-row" href="{{ ('/projects/' ~ pv.project.name) if pv.project.is_project else ('/settings/labels/' ~ pv.project.name) }}">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
         {% if pv.progress is not none %}
-        <div class="project-progress-bar" style="flex:1"><div class="project-progress-fill" style="width:{{ pv.progress }}%"></div></div>
+        <div class="project-progress-bar"><div class="project-progress-fill" data-style="width:{{ pv.progress }}%"></div></div>
         <span class="tag-usage-count">{{ pv.tasks_done }}/{{ pv.tasks_total }}</span>
         {% else %}
         <span class="spacer"></span>

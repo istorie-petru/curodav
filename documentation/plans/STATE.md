@@ -17,6 +17,120 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 11, the CSP
+  `unsafe-inline` migration -- the last mandatory item on the pre-2.0 fix
+  list, saved for last on purpose as the largest/riskiest. Scoped as
+  **full elimination** (a direct choice, not the narrower "nonce just the
+  `<script>`/`<style>` tags, keep `unsafe-inline` on style-src for
+  attributes" reading the item's own one-line spec would also have
+  allowed) -- nonces don't cover `style="..."`/`onclick=`/`onchange=`
+  attributes at all, so a narrower scope would have left `'unsafe-inline'`
+  on style-src regardless.
+
+  `security_headers.py`'s `SecurityHeadersMiddleware` now generates a
+  fresh `secrets.token_urlsafe(16)` nonce per request, stashes it on
+  `scope["state"]["csp_nonce"]` *before* calling `self.app` (Starlette's
+  `Request.state` lazily reads `scope["state"]`, confirmed by reading
+  `starlette/requests.py` directly rather than assuming), and formats
+  `CSP_POLICY` (now a `{nonce}` template string) into the response header.
+  `deps.py` exposes the same value to templates as a `csp_nonce()` Jinja
+  global, same pattern as `icon`/`static_url`. `CSP_POLICY` is now:
+  `script-src 'self' 'nonce-<value>'` / `style-src 'self'
+  'nonce-<value>'` -- no `'unsafe-inline'` anywhere in the policy, on
+  either directive.
+
+  Three categories of markup needed elimination, each with a different
+  fix:
+  1. **Real inline `<script>`/`<style>` tags** (9 templates + `_page_
+     banner.html`) -- `nonce="{{ csp_nonce() }}"` added directly.
+  2. **`onclick=`/`onchange=` attributes** (24 occurrences once re-counted
+     against current markup, one more than the 23 originally surveyed --
+     `_widget_list_multiselect.html` had one the initial grep missed)
+     moved to delegated `addEventListener` listeners in static JS (a new
+     `data-change-submit` delegated listener in `app.js`; `settings_data_
+     maintenance.html`'s force-sync button moved from an inline `<script>`
+     into `data_maintenance.js` as a `data-action="force-sync"` delegated
+     click handler).
+  3. **`style="..."` attributes** (84 of the 85 surveyed turned out real
+     once inspected -- one grep hit was a `style="list"`/`style="cards"`
+     widget-variant doc comment, not a CSS attribute). Split by whether
+     the value is fixed or per-request/per-row computed:
+     - **Static** (~70 of 84): became CSS classes/utilities in style.css
+       (`.field-narrow`, `.text-caption`, `.form-contents`, `.col-
+       checkbox`/`.col-actions-narrow`, `.empty-state-compact`/`.empty-
+       state-loose`, `.text-right-nowrap`, `.align-middle`, `.settings-
+       hint-accent`/`.settings-hint-error`, plus several component-scoped
+       classes), or folded into bounded-range CSS (`nth-child`/`[data-
+       cols]`) for the Month/4-Week grid's 1-7 `grid-column` values and
+       the Weekly Schedule widget's 1-7 `grid-template-columns` values --
+       neither actually varies continuously, so a fixed CSS rule per
+       count covers every case without any JS. `--hr-h` (calendar
+       pixels-per-hour) turned out to be a hardcoded Python constant
+       (`grid_layout.PX_PER_HOUR = 48`) masquerading as a per-request
+       inline var -- moved to a `:root` token.
+     - **Dynamic** (14 of 84: calendar grid event/overlay positioning,
+       `_detail_cover.html`'s label/Space accent color, `_widget_spaces_
+       projects.html`'s progress-bar width) -- genuinely per-row computed,
+       can't be a nonced `<style>` tag (nonces don't cover attributes) or
+       a static class (value varies). Fixed via a new generic **`data-
+       style` -> CSSOM applier**, `static/dynamic_styles.js`: renders the
+       exact same `style="..."` syntax into `data-style="..."` instead (a
+       mechanical rename at each of the 4 call sites, no template-logic
+       change), then a global script applies it via `element.style.
+       setProperty(...)` on load + via the same `MutationObserver`-driven
+       convention `a11y_icon_labels.js` already established (async-CRUD
+       region refreshes, modal-injected content, quick_add/command-
+       palette inserts all covered automatically, no per-feature re-init
+       hook). CSSOM `.style` writes aren't restricted by `style-src` at
+       all -- only `<style>` elements and HTML `style=` attributes are --
+       the standard technique for CSP-strict dynamic styling. Tradeoff
+       noted in `dynamic_styles.js`'s own header comment: these values now
+       apply in a deferred JS pass rather than being present in the
+       initial HTML, so a no-JS visitor (or very slow JS load) briefly
+       sees unpositioned/uncolored elements first -- same class of
+       tradeoff `a11y_icon_labels.js` already accepted, not new to this
+       slice.
+
+  New tests in `test_security_headers.py`: nonce presence, two requests
+  get two different nonces, `'unsafe-inline'` absent from both script-src
+  and style-src, a real Jinja-rendered `<script nonce=...>` matches the
+  same request's response header. Two pre-existing tests had hardcoded
+  old markup and needed updating (grepped `tests/` for every touched
+  pattern first, same discipline as every prior slice in this file):
+  `test_detail_modals_rework.py`'s `style="color:..."` assertions ->
+  `data-style="color:..."`, `test_phase8_settings_hub.py`'s
+  `onchange="this.form.requestSubmit()"` assertion -> `data-change-
+  submit`. `sw.js` CACHE_NAME bumped v59 -> v60 (style.css changed
+  extensively; new `dynamic_styles.js` added to `SHELL_ASSETS`, same
+  "base.html script needed on every page" category as `a11y_icon_
+  labels.js`; app.js/data_maintenance.js/habit_checkin.js also changed),
+  `test_pwa_shell.py`'s pin updated. Full suite: 1975 passed (+5 net new
+  tests over the 1970 baseline), verified independently after the
+  implementing agent's own run -- both counts agreed, `test_caldav_
+  bridge_live.py` excluded as always. Also independently grepped the
+  whole `templates/`/`security_headers.py` tree afterward for
+  `unsafe-inline`/stray `style="`/`onclick=`/`onchange=` -- zero real
+  hits (the one remaining `style="` grep match was the doc-comment false
+  positive noted above).
+
+  Implemented via a dispatched agent (repo-wide mechanical scope across
+  25 templates, 4 new/changed JS files, and style.css -- not hand-edited
+  inline this session) given the size; verified independently afterward
+  (full test suite re-run from scratch in 12 parallel chunks, diff read
+  for `security_headers.py`/`deps.py`/`dynamic_styles.js`, grep sweep for
+  any residual `unsafe-inline`/`style=`/`onclick=`/`onchange=`) rather
+  than taking its own report at face value.
+
+  **Next slice:** none mandatory -- item 11 was the last item on the
+  original pre-2.0 list (`audit-fixes-2.0.md`'s items 1-11). Second-wave
+  items 12-15 (z-index scale, item 9's UI polish, item 13's icon-button
+  dedup, item 14's empty-state-row dedup, item 15's stale-roadmap-claim
+  fix) are **all already shipped** too, per this file's own entries above
+  -- `audit-fixes-2.0.md` has nothing left open. Check `roadmap.md`'s 2.0
+  section fresh next session to confirm 2.0 is actually ready to ship, or
+  whether anything else was scoped into that release beyond this fix
+  list.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 15, the stale
   `roadmap.md` claim about Tasks-table pagination. Confirmed via `git log`
   (per the audit item's own citation) that commit `2162403` shipped

@@ -50,8 +50,8 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="Show icons next to labels">
-            <label class="seg-btn"><input type="radio" name="show" value="1" class="seg-radio" {% if current_show_label_icons %}checked{% endif %} onchange="this.form.requestSubmit()"> On</label>
-            <label class="seg-btn"><input type="radio" name="show" value="" class="seg-radio" {% if not current_show_label_icons %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
+            <label class="seg-btn"><input type="radio" name="show" value="1" class="seg-radio" {% if current_show_label_icons %}checked{% endif %} data-change-submit> On</label>
+            <label class="seg-btn"><input type="radio" name="show" value="" class="seg-radio" {% if not current_show_label_icons %}checked{% endif %} data-change-submit> Off</label>
         </div>
     </form>
     <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the "Show the
@@ -74,8 +74,8 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="Edit mode">
-            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_edit_mode %}checked{% endif %} onchange="this.form.requestSubmit()"> On</label>
-            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_edit_mode %}checked{% endif %} onchange="this.form.requestSubmit()"> Off</label>
+            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_edit_mode %}checked{% endif %} data-change-submit> On</label>
+            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_edit_mode %}checked{% endif %} data-change-submit> Off</label>
         </div>
     </form>
     <!-- Page header banner (2026-08-29, sidebar redesign item 13e

@@ -25,7 +25,7 @@
 {% for week in weeks %}
 <div class="month-week-grid">
     {% for day in week.days %}
-    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}" style="grid-column:{{ loop.index }};">
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}">
         <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
         <div class="month-day-bottom">
             {% for item in day.rows %}

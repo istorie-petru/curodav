@@ -36,12 +36,15 @@
      css_class -- default 'text-muted' (the four text-muted sites); pass
                   'empty-state' for a site using the shared empty-state
                   look instead.
-     style     -- default 'font-size: var(--text-footnote);' (matches the
-                  text-muted sites' own inline style); pass '' to omit the
-                  attribute entirely (the `.empty-state` site already gets
-                  its font-size from that class). #}
-{% macro empty_state_row(colspan, message, css_class='text-muted', style='font-size: var(--text-footnote);') %}
+
+   2026-09-07 (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
+   elimination): the `style` param is gone -- every real call site passed
+   the macro's own default (`font-size: var(--text-footnote);`) unchanged,
+   so that's now a static style.css rule scoped to this row's own
+   `#empty-state-row`/`.text-muted` hooks instead of a per-call inline
+   `style=` attribute. #}
+{% macro empty_state_row(colspan, message, css_class='text-muted') %}
 <tr id="empty-state-row">
-    <td colspan="{{ colspan }}" class="{{ css_class }}"{% if style %} style="{{ style }}"{% endif %}>{{ message|safe }}</td>
+    <td colspan="{{ colspan }}" class="{{ css_class }}">{{ message|safe }}</td>
 </tr>
 {% endmacro %}

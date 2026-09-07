@@ -8,7 +8,7 @@
          signed-out (and, here, not-yet-configured) browser. -->
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var KEY = "commandCenterWeb.theme";
         var stored = localStorage.getItem(KEY);
@@ -40,9 +40,9 @@
                 </div>
 
                 {% if not radicale_env_configured %}
-                <hr style="border: none; border-top: 1px solid var(--border-color, #333); margin: var(--space-4, 16px) 0;">
-                <p class="auth-subtitle text-muted" style="margin-bottom: var(--space-2, 8px);">Connect to a CalDAV/CardDAV server (optional)</p>
-                <p class="settings-hint" style="margin: 0 0 var(--space-3, 12px);">Only needed if you want to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Leave blank to skip -- you can come back to this later in Settings, or run the installer with <code>--with-radicale</code> for a pre-configured one.</p>
+                <hr class="setup-radicale-divider">
+                <p class="auth-subtitle text-muted setup-radicale-subtitle">Connect to a CalDAV/CardDAV server (optional)</p>
+                <p class="settings-hint setup-radicale-hint">Only needed if you want to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Leave blank to skip -- you can come back to this later in Settings, or run the installer with <code>--with-radicale</code> for a pre-configured one.</p>
                 <div class="field">
                     <label for="radicale_url">Server URL</label>
                     <input id="radicale_url" type="text" name="radicale_url" placeholder="http://127.0.0.1:5232/you/" autocomplete="off">
@@ -55,7 +55,7 @@
                     <label for="radicale_password">Password</label>
                     <input id="radicale_password" type="password" name="radicale_password" autocomplete="off">
                 </div>
-                <p class="settings-hint" style="margin: 0 0 var(--space-3, 12px);">Takes effect after the app is restarted.</p>
+                <p class="settings-hint setup-radicale-hint">Takes effect after the app is restarted.</p>
                 {% endif %}
 
                 <button type="submit" class="btn primary auth-submit">Create account &amp; log in</button>

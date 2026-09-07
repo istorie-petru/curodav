@@ -35,11 +35,11 @@
         <table id="holidays-table">
             <thead>
                 <tr>
-                    <th style="width:26px"></th>
+                    <th class="col-checkbox"></th>
                     <th>Holiday</th>
                     <th>Calendar</th>
                     <th>Date Range</th>
-                    <th style="width: 100px;">Actions</th>
+                    <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
             <tbody id="holidays-body">
@@ -87,7 +87,7 @@
 {% endblock %}
 {% block extra_scripts %}
 <script defer src="{{ static_url('bulk_select.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.addEventListener("DOMContentLoaded", function () {
     window.CCBulkSelect.init({
         tableId: "holidays-table",

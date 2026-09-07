@@ -20,9 +20,9 @@
 </form>
 <div class="checklist search-page-results" data-command-palette-results>
     {% if not q %}
-    <div class="empty-state" style="padding:24px 0">Type to search across tasks, events, and contacts.</div>
+    <div class="empty-state empty-state-loose">Type to search across tasks, events, and contacts.</div>
     {% elif not results %}
-    <div class="empty-state" style="padding:24px 0">No results for "{{ q }}".</div>
+    <div class="empty-state empty-state-loose">No results for "{{ q }}".</div>
     {% else %}
     {% for r in results %}
     {% set _icon = {'task': 'check-square', 'event': 'calendar', 'contact': 'user', 'note': 'file-text'} %}

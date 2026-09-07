@@ -19,7 +19,7 @@
          paint. Falls back to the OS-level preference via
          prefers-color-scheme when the user has never toggled the switch
          here (localStorage empty), instead of always defaulting to light. -->
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var KEY = "commandCenterWeb.theme";
         var stored = localStorage.getItem(KEY);
@@ -518,6 +518,14 @@
      document via MutationObserver, so modal/region-refresh/quick-add
      content injected later is covered automatically. -->
 <script defer src="{{ static_url('a11y_icon_labels.js') }}"></script>
+<!-- Generic `data-style` -> CSSOM applier (audit-fixes-2.0.md item 11,
+     CSP `'unsafe-inline'` elimination) -- see dynamic_styles.js's own
+     header comment. Loaded globally right alongside a11y_icon_labels.js,
+     same MutationObserver-covers-everything reasoning: calendar grid
+     event positioning, a label/Space's accent color, and any future
+     per-request-computed style all route through this one file instead
+     of a `style="..."` attribute. -->
+<script defer src="{{ static_url('dynamic_styles.js') }}"></script>
 <script defer src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.

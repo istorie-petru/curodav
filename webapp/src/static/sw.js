@@ -245,7 +245,22 @@
 // again -- raw z-index numbers in the fixed/portal overlay and nav rules
 // replaced with named custom properties (--z-rail/--z-modal/--z-overlay-
 // panel/etc.), same numeric values throughout, no visual change intended.
-const CACHE_NAME = "cc-shell-v59";
+// v59 -> v60 (2026-09-07, audit-fixes-2.0.md item 11 -- CSP `'unsafe-
+// inline'` elimination): style.css changed extensively (nonce/CSP-driven
+// template rewrites needed a long list of new utility classes/component
+// rules, see that slice's own STATE.md entry). New static/
+// dynamic_styles.js added to SHELL_ASSETS below -- same "base.html script
+// needed on every page" category as a11y_icon_labels.js right above it
+// (the generic `data-style` -> CSSOM applier every calendar grid/detail-
+// cover/progress-bar now depends on). app.js/data_maintenance.js/
+// habit_checkin.js also changed (onclick/onchange elimination, force-sync
+// moved into data_maintenance.js, habit-checkin-reset's initial hide
+// moved into habit_checkin.js) -- app.js is already in SHELL_ASSETS below
+// so its own content is covered by this same bump; data_maintenance.js/
+// habit_checkin.js are page-specific (not base.html-loaded), same
+// "not itself a SHELL_ASSETS entry" category datetime_picker.js's own
+// v14 note already established, so neither is added here.
+const CACHE_NAME = "cc-shell-v60";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -256,6 +271,7 @@ const SHELL_ASSETS = [
   "/static/sidebar_tree.js",
   "/static/mobile_nav_drawer.js",
   "/static/a11y_icon_labels.js",
+  "/static/dynamic_styles.js",
   "/static/modal.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
