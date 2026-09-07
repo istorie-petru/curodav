@@ -17,6 +17,59 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- direct report (with a screenshot): "the
+  avatar and text for the big banner is a bit off... remake it Notion-
+  like." Root cause: `.page-banner-title` (Home's greeting / a label's
+  name) rendered as white overlay text pinned to the cover photo's own
+  bottom-left, immediately next to the avatar -- fine in the abstract, but
+  this pass's earlier "first-run default banners" slice means every page
+  now actually shows a real photo there by default, and the two crowded
+  together (title baseline sitting right at the avatar's top edge)
+  wherever the photo's own bottom-left happened to be busy, exactly what
+  the screenshot showed. Rebuilt on Notion's own page-cover convention:
+  the avatar still straddles the cover's bottom edge (half over the photo,
+  half below, unchanged), but the title now renders entirely below the
+  cover in the page's normal text color, on the same row as the avatar's
+  lower half -- never competing with the photo's own content, no
+  readability scrim needed for it anymore.
+
+  Converted `_page_banner.html` from a plain `{% include %}` into a
+  `{% call %}` macro (`page_banner(title_html)`, same pattern
+  `_page_header_narrow.html` already established) so the shared cover/
+  avatar/title layout lives in one file instead of being hand-duplicated
+  across `dashboard.html`/`label_detail.html`/`project_detail.html` --
+  each now does `{% set _title %}...{% endset %}` (plain greeting for
+  Home, `icon(...) ~ name` for a label/Space/Project page) and
+  `{% call page_banner(_title) %}...edit-mode action buttons...{% endcall %}`.
+  The edit-mode actions (New widget / Add-Change banner / Reset layout)
+  moved to a real DOM child of `.page-banner` (nested inside the cover,
+  still floating bottom-right over the photo) instead of a sibling
+  anchored to the whole `.page-banner-wrap` -- needed because the wrap's
+  own height now includes the new header row below the photo too, so the
+  old "anchor to the wrap's bottom edge" trick would've drifted the
+  buttons onto the header row instead of staying pinned to the photo's
+  own corner. New `.page-banner-header-row` (style.css) uses
+  `margin-top:-36px` (half the avatar's own 72px) to recreate the
+  straddle-the-edge overlap without needing to know the cover's actual
+  rendered height (responsive, aspect-ratio-driven) -- expressed relative
+  to the avatar's fixed size instead, so it holds at every viewport width.
+
+  `sw.js` `CACHE_NAME` bumped `v69` -> `v70`; `test_pwa_shell.py` updated.
+  4 new tests (`test_banners.py`'s `TestPageBannerNotionStyleHeaderRow`)
+  lock in the new DOM shape (title after the cover's own closing tag, not
+  inside it; actions still nested inside `.page-banner`; avatar before
+  title in the header row; same layout on a Project page too). Full
+  suite: 2015 collected (2011 + 4 net new), 2014 passed + the same 1
+  pre-existing unrelated failure noted in the entry below (untouched,
+  still not investigated).
+
+  **Next slice:** none mandated -- direct report, not on any roadmap list.
+  Worth a real visual pass once a browser is reachable (no live-render
+  verification this session either, same recurring constraint noted
+  throughout this file) -- everything above is verified structurally
+  (rendered HTML inspected directly via the router functions, full test
+  suite green) rather than an actual screenshot.
+
 - **Shipped:** 2026-09-07 -- direct request: fixed the three real gaps an
   earlier ad-hoc audit flagged in the banner/customization surfaces
   (documented in that audit's own summary, not a file in this repo).

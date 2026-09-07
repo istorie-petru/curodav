@@ -357,7 +357,7 @@
 // padding, reading as double the normal bottom space. Zeroed
 // margin-bottom on both, scoped to being main.main-calendar's own direct
 // child (`.card`'s margin-bottom is untouched everywhere else it's used).
-const CACHE_NAME = "cc-shell-v69";
+const CACHE_NAME = "cc-shell-v70";
 
 const SHELL_ASSETS = [
   "/offline",

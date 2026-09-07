@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_page_banner.html" import page_banner with context %}
 {% block title %}Dashboard{% endblock %}
 <!-- 2026-08-07: opt out of the default 1120px-max-width centered column
      (base.html's main_class block), same mechanism Calendar already uses
@@ -11,31 +12,25 @@
      change to the masonry math itself. -->
 {% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
-<!-- Header banner + one page-action bar (2026-08-10) -- the banner cover
-     (when set, routers/banners.py) and ALL of this page's actions live
-     together in one .page-banner-wrap: with a banner the buttons float
-     bottom-right over the photo (see style.css's .page-banner-actions
-     rules); without one they're a plain top bar with the greeting h1 left
-     of them. The old separate .toolbar row is gone. -->
+<!-- Header banner + one page-action bar (2026-08-10, reworked 2026-09-07
+     into the shared page_banner() macro -- see _page_banner.html's own
+     comment for why) -- the banner cover (when set, routers/banners.py)
+     and ALL of this page's actions live together: with a banner the
+     buttons float bottom-right over the photo (see style.css's
+     .page-banner-actions rules) and the greeting sits below the photo,
+     Notion-style, next to the avatar; without one it's a plain top bar
+     with the greeting h1 left of the buttons. -->
 <div class="page-banner-wrap">
-{% include "_page_banner.html" %}
-{% if banner %}
-<h1 class="page-banner-title">{{ greeting }}</h1>
-{% endif %}
-<div class="page-banner-actions">
-    {% if not banner %}
+{% call page_banner(greeting) %}
     <!-- Dynamic greeting (dashboard usability rework, 2026-08-07) --
          "Good morning/afternoon/evening[, name]" computed server-side in
          routers/dashboard.py's dashboard_view (_greeting_for_hour), local
          server time same as date.today() uses everywhere else in this
-         app. Replaces the old static "Dashboard" h1 -- this is Home's own
-         identity element specifically. Rendered here (left of the actions)
-         only when there's no banner -- with one the same greeting is the
-         overlay title above instead, so the page always has exactly one
-         h1. -->
-    <h1 class="page-banner-title-plain">{{ greeting }}</h1>
-    {% endif %}
-    <!-- Move/reorder/delete controls on each widget below are hidden
+         app -- passed to page_banner() above as the page's title either
+         way (overlay-below-the-cover with a banner, plain top-bar title
+         without one), so there's exactly one h1 regardless of which.
+
+         Move/reorder/delete controls on each widget below are hidden
          unless this is on. 2026-08-29 (sidebar redesign item 13d): edit
          mode is now a persistent, app-wide Settings > Appearance toggle
          (routers/dashboard.py's EDIT_MODE_KEY) instead of a per-page
@@ -69,7 +64,7 @@
          used to live here outside edit mode is gone -- obsolete now that
          the sidebar rail has its own global "+ New" (13c, base.html),
          reachable from every page including this one. -->
-</div>
+{% endcall %}
 </div>
 
 <!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim

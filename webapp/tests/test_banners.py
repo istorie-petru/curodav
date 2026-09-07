@@ -261,6 +261,56 @@ class TestPageBannerAvatar:
         assert 'class="page-banner-avatar-wrap"' in body
 
 
+class TestPageBannerNotionStyleHeaderRow:
+    """2026-09-07 rework (direct report: "the avatar and text for the big
+    banner is a bit off... remake it Notion-like") -- the title used to be
+    white overlay text pinned right next to the avatar on the cover photo
+    itself; it now renders below the cover in a normal-colored
+    `.page-banner-header-row`, and the edit-mode action buttons became a
+    real child of `.page-banner` (floating over the photo) instead of a
+    sibling anchored to the whole `.page-banner-wrap`. See
+    _page_banner.html's `page_banner()` macro and style.css's own
+    `.page-banner-header-row` comment for the full rationale."""
+
+    def test_title_renders_inside_the_header_row_below_the_cover_not_on_it(self, conn):
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert '<div class="page-banner-header-row">' in body
+        # The header row (avatar + title) comes after .page-banner's own
+        # closing tag, not nested inside it -- title is below the cover,
+        # not overlaid on it.
+        cover_end = body.index("</div>", body.index('class="page-banner"'))
+        row_start = body.index('class="page-banner-header-row"')
+        title_start = body.index('class="page-banner-title"')
+        assert cover_end < row_start < title_start
+
+    def test_avatar_still_comes_before_the_title_in_the_header_row(self, conn):
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        avatar_start = body.index('class="page-banner-avatar-wrap"')
+        title_start = body.index('class="page-banner-title"')
+        assert avatar_start < title_start
+
+    def test_edit_mode_actions_are_nested_inside_the_cover_not_the_header_row(self, conn):
+        _set_remote(conn, cached=True, scope="")
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        cover_start = body.index('class="page-banner"')
+        cover_end = body.index("</div>", body.index('class="page-banner-actions"'))
+        actions_start = body.index('class="page-banner-actions"')
+        header_row_start = body.index('class="page-banner-header-row"')
+        # Actions sit between the cover's own opening tag and the header
+        # row that follows -- i.e. still inside .page-banner, not moved
+        # down alongside the avatar/title.
+        assert cover_start < actions_start < header_row_start
+
+    def test_project_page_gets_the_same_header_row(self, conn):
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
+        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
+        body = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn).body.decode()
+        assert '<div class="page-banner-header-row">' in body
+
+
 class TestPageBannerDefaultFallback:
     """2026-08-29 (direct request): Home/Project/Space pages with no
     banner of their own now fall back to the single default set in

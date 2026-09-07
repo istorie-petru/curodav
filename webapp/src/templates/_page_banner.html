@@ -1,8 +1,8 @@
 {# Shared dashboard-page cover banner (2026-08-09, routers/banners.py).
    Home and every label/Space/Project page render this at the top of their
-   content. Variables supplied by routers/dashboard.py's
-   _page_banner_context (dashboard_view / label_detail / space_detail all
-   call it the same way):
+   content. Variables read from context (dashboard_view / label_detail /
+   space_detail / project_detail all set these the same way,
+   routers/dashboard.py's _page_banner_context):
      - banner: db.get_page_banner() dict, or None. 2026-08-29 direct
        request: this page's own banner if it has one, else the single
        default set in Settings > Appearance (deps.py's
@@ -19,26 +19,39 @@
      - profile_photo/display_name (2026-08-29 addition, see below):
        db.get_profile_photo()'s dict (or None) and the Settings > General
        display name, for the avatar overlap.
-   This partial renders the cover image (nothing when the page has no
-   banner) plus, since 2026-08-29 (sidebar redesign follow-up, direct
-   request, plans/sidebar-redesign.md § "The Standard Header" -- "Dashboard
-   Header (Expanded)... Large, circular avatar overlapping the bottom left
-   of the banner"), that avatar itself when a banner is set. Home and every
-   Space/Project page (dashboard.html/label_detail.html both include this
-   partial) count as "dashboard type" pages for this -- it's the same
-   user-wide avatar everywhere, not a per-page thing, reusing the exact
-   {photo_b64, photo_type, full_name} shape deps.py's avatar() global
-   already expects (same one Settings > General's own avatar row builds).
-   Bannerless pages are unchanged -- no avatar without a banner to overlap,
-   same reasoning `.page-banner-wrap:has(.page-banner)` styling elsewhere
-   already uses; the "no banner yet" case is this app's actual default, so
-   it isn't worth reworking that plain-top-bar layout for this. The page's
-   own action bar -- quick-add "New" / New widget / Add-Change banner /
-   Reset layout -- lives alongside it in the same .page-banner-wrap
-   (dashboard.html / label_detail.html, 2026-08-10); with a banner the
-   buttons float bottom-right over this image, without one they're a plain
-   top bar. The overlay title (greeting / label name) is also rendered by
-   the pages, since it's page-specific. #}
+
+   2026-09-07 rework (direct report: "the avatar and text for the big
+   banner is a bit off... remake it Notion-like") -- until now the page's
+   title (`.page-banner-title`) rendered as white overlay text pinned to
+   the bottom-left of the cover photo itself, right next to the avatar,
+   which crowded both together against whatever the photo's own bottom-
+   left content happened to be (only really visible once every page got a
+   real default banner image -- see this same day's earlier "first-run
+   defaults" slice; before that most pages were bannerless and used the
+   plain top-bar title instead, so this never got much real-image
+   scrutiny). Rebuilt on Notion's own page-cover convention instead: the
+   icon/avatar still straddles the cover's bottom edge (half over the
+   photo, half below it -- unchanged), but the title now sits entirely
+   BELOW the cover, in the page's normal text color, on the same row as
+   the avatar's own lower half -- never competing with the photo's own
+   content or needing a readability scrim to stay legible.
+
+   Converted to a `{% call %}` macro (same pattern _page_header_narrow.html
+   already established for "let the includer inject page-specific actions
+   into a shared shell") so this one file owns the whole cover/avatar/title
+   layout instead of three templates (dashboard.html/label_detail.html/
+   project_detail.html) each hand-duplicating the absolute-position math
+   that used to tie the title to the avatar. `title_html` is pre-rendered
+   Markup (a plain greeting string for Home, or an
+   `{% set %}...{% endset %}` capture of `icon(...) ~ name` for a label/
+   Space/Project page) -- captured via `{% set %}` rather than passed as
+   raw pieces so autoescaping still applies exactly once, the same
+   safety Jinja's own block-capture gives any other multi-piece title.
+   The action buttons (New widget / Add-Change banner / Reset layout,
+   page-specific and edit-mode-gated) are still each caller's own
+   responsibility, supplied via the `{% call %}` block -- this macro only
+   decides where that content is placed, never what's in it. #}
+{% macro page_banner(title_html) %}
 {% if banner %}
 <div class="page-banner">
     {# Any banner with a `version` (uploaded, or a legacy searched banner
@@ -53,13 +66,7 @@
        download existed) has no version and keeps using its remote image_url.
        fetchpriority="high" (2026-08-10) -- the banner is this page's hero,
        the first image in the document, so the browser should fetch it as
-       early as it does the CSS/JS rather than deprioritizing it. This is
-       what closes the remaining perceived-load gap: the ~13ms HTML arrives
-       fast, but a *lazy* hero image was then fetched only after other
-       resources and painted late, which read as the banner popping in over
-       an already-drawn page. Eager + high priority makes the image travel
-       with the page instead. Decode stays at the browser default (async on
-       modern engines) so a multi-MB upload never blocks first paint. #}
+       early as it does the CSS/JS rather than deprioritizing it. #}
     {% if banner.version %}
     <img src="/banners/image?scope={{ banner_image_scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}" fetchpriority="high">
     {% else %}
@@ -72,14 +79,35 @@
        the img visible for no-JS visitors (the noscript style is inert when
        scripting is enabled). #}
     <noscript><style nonce="{{ csp_nonce() }}">.page-banner img{opacity:1;}</style></noscript>
+    {# Page actions (New widget / Add-Change banner / Reset layout) are a
+       real child of .page-banner now (2026-09-07), not a sibling anchored
+       to the whole .page-banner-wrap -- .page-banner-wrap's own height now
+       includes the header row below the photo too, so anchoring to ITS
+       bottom edge would drift the buttons down onto the header row instead
+       of staying pinned to the photo's own bottom-right corner. #}
+    {% if caller %}
+    <div class="page-banner-actions">{{ caller() }}</div>
+    {% endif %}
 </div>
-<div class="page-banner-avatar-wrap">
+<div class="page-banner-header-row">
     {# 2026-08-29 (direct request: "better cache these images") -- photo_url
        (routers/settings.py's profile_photo_image) over inlining photo_b64 --
        see deps.py's avatar() own comment. This is the one avatar spot that
        used to matter most for this: it renders on every dashboard/label/
-       Space page, so the old inline data: URI repeated the full photo's
-       bytes in every one of those pages' HTML. #}
-    {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
+       Space/Project page, so the old inline data: URI repeated the full
+       photo's bytes in every one of those pages' HTML. #}
+    <div class="page-banner-avatar-wrap">
+        {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
+    </div>
+    <h1 class="page-banner-title">{{ title_html }}</h1>
+</div>
+{% else %}
+{# Bannerless page (only when even the Settings > Appearance default is
+   unset): the plain top-bar layout this app always had -- title flexed
+   left, actions right, no cover/avatar to make room for. #}
+<div class="page-banner-actions">
+    <h1 class="page-banner-title-plain">{{ title_html }}</h1>
+    {% if caller %}{{ caller() }}{% endif %}
 </div>
 {% endif %}
+{% endmacro %}

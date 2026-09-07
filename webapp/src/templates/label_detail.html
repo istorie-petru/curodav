@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
 <!-- 2026-08-08: opt out of the default 1120px-max-width centered column,
      same fix dashboard.html already applies (see that template's own
@@ -17,15 +18,9 @@
      a banner the buttons float bottom-right over the photo, without one
      they're a plain top bar with the label title left of them. The old
      separate .toolbar row is gone. -->
+{% set _title %}{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}{% endset %}
 <div class="page-banner-wrap">
-{% include "_page_banner.html" %}
-{% if banner %}
-<h1 class="page-banner-title">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
-{% endif %}
-<div class="page-banner-actions">
-    {% if not banner %}
-    <h1 class="page-banner-title-plain">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
-    {% endif %}
+{% call page_banner(_title) %}
     <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
          persistent, app-wide Settings > Appearance toggle instead of a
          per-page `?edit=1` query param with its own "Edit mode"/"Done"
@@ -56,7 +51,7 @@
          used to live here outside edit mode is gone -- obsolete now that
          the sidebar rail has its own global "+ New" (13c, base.html),
          reachable from every page including this one. -->
-</div>
+{% endcall %}
 </div>
 
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}

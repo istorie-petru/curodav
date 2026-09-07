@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 <!-- Project page (rebuilt 2026-08-30, replacing the 2026-08-15 redirect
@@ -26,19 +27,13 @@
      title. -->
 
 {% block content %}
+{% set _title %}{{ icon(project.icon or 'folder') }} {{ project.name }}{% endset %}
 <div class="page-banner-wrap">
-{% include "_page_banner.html" %}
-{% if banner %}
-<h1 class="page-banner-title">{{ icon(project.icon or 'folder') }} {{ project.name }}</h1>
-{% endif %}
-<div class="page-banner-actions">
-    {% if not banner %}
-    <h1 class="page-banner-title-plain">{{ icon(project.icon or 'folder') }} {{ project.name }}</h1>
-    {% endif %}
+{% call page_banner(_title) %}
     {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
-</div>
+{% endcall %}
 </div>
 
 <!-- Upcoming events card -- every future event tagged with this project's

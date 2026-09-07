@@ -511,8 +511,12 @@ class TestLocalWritePath:
         # .project-calendar-layout's inherited .card margin-bottom as
         # main.main-calendar's own direct children -- see sw.js's own
         # v69 comment.
+        # v70 (2026-09-07, direct report -- "the avatar and text for the
+        # big banner is a bit off... remake it Notion-like"): reworked
+        # .page-banner's title/avatar layout, see style.css's own
+        # .page-banner-header-row comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v69"' in script
+        assert 'CACHE_NAME = "cc-shell-v70"' in script
 
 
 class TestOfflineToolbar:

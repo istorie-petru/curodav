@@ -5686,7 +5686,7 @@ body.command-palette-open{overflow:hidden;}
    (dashboard.html / label_detail.html). */
 .page-banner{
   width:100%; aspect-ratio:3 / 1; overflow:hidden; position:relative;
-  border-radius:var(--radius-card); margin-bottom:var(--space-3);
+  border-radius:var(--radius-card);
   background:var(--bg-elevated); border:1px solid var(--border);
 }
 @media (min-width:721px){
@@ -5695,43 +5695,58 @@ body.command-palette-open{overflow:hidden;}
 .page-banner img{
   width:100%; height:100%; object-fit:cover; display:block;
 }
-/* Title overlay + readability scrim (2026-08-09) -- when a banner exists,
-   the page's h1 (Home's greeting / the label's name) sits at the banner's
-   bottom-left. Readability comes from a permanent bottom gradient scrim
-   plus a soft text shadow rather than per-image color analysis: the
-   banner feature hotlinks remote images, and reading pixels back from a
-   cross-origin <img> (canvas getImageData) throws a SecurityError unless
-   the host sends CORS headers -- most don't -- so a scrim is the only
-   reliably readable approach. `.page-banner-wrap` (dashboard.html /
-   label_detail.html) carries position:relative so the absolutely-
-   positioned title can pin to the banner box above it. */
 .page-banner-wrap{position:relative;}
+/* 2026-09-07 rework (direct report: "the avatar and text for the big
+   banner is a bit off... remake it Notion-like") -- the title used to be
+   white overlay text pinned to the cover's own bottom-left, right next to
+   the avatar, needing a permanent readability scrim (`.page-banner::after`
+   below) to stay legible over an arbitrary photo. Replaced with Notion's
+   own page-cover convention: the avatar still straddles the cover's
+   bottom edge (half over the photo, half below -- unchanged), but the
+   title now renders entirely below the cover in `.page-banner-header-row`,
+   in the page's normal text color, so it never has to compete with
+   whatever the photo's own bottom-left content happens to be. See
+   _page_banner.html's own comment for the full rationale and the
+   `page_banner()` macro this now renders through. */
+.page-banner-header-row{
+  display:flex; align-items:center; gap:var(--space-3);
+  /* Pulls the row up by half the avatar's own height (avatar-hero is
+     72px) so the avatar straddles the cover's bottom edge exactly the
+     way it did when it was absolutely positioned -- expressed relative to
+     the avatar's own size, not the (responsive, aspect-ratio-driven)
+     cover height, so this stays correct at every viewport width without
+     needing to know the image's actual rendered height. */
+  margin-top:-36px; margin-bottom:var(--space-4);
+  padding-left:var(--space-4); padding-right:var(--space-4);
+  position:relative; z-index:1;
+}
+.page-banner-avatar-wrap{flex:none;}
+.avatar-hero{
+  width:72px; height:72px; font-size:26px;
+  border:3px solid var(--bg-elevated);
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+}
 .page-banner-title{
-  /* left offset clears .page-banner-avatar-wrap below (avatar-hero's 72px
-     + a gap) -- the title only ever renders alongside the avatar (both
-     are inside the same {% if banner %} branch), so there's no
-     "avatar-less" case here to also account for. */
-  position:absolute; left:calc(var(--space-4) + 88px); bottom:var(--space-3); margin:0;
-  z-index:1; color:#fff; font-weight:700; letter-spacing:-0.3px;
-  font-size:clamp(1.15rem, 2.5vw, 1.6rem); line-height:1.15;
-  text-shadow:0 1px 4px rgba(0,0,0,.55), 0 1px 12px rgba(0,0,0,.3);
-  max-width:75%;
+  margin:0; min-width:0; color:var(--fg-primary); font-weight:700;
+  letter-spacing:-0.3px; line-height:1.2;
+  font-size:clamp(1.15rem, 2.5vw, 1.6rem);
 }
 .page-banner-title .icon{width:1.15em; height:1.15em; vertical-align:-0.2em;}
 /* Page action bar (2026-08-10) -- ALL of a dashboard/label page's actions
-   (New / Edit mode / Done / New widget / Add-Change banner / Reset
-   layout) live together in .page-banner-actions, inside the same
-   .page-banner-wrap as the cover banner; the old separate .toolbar row is
-   gone. With a banner the bar floats bottom-right over the photo, in the
-   same scrim band as the overlay title; without one it's a plain top bar
-   and the page's h1 title sits left of the buttons (as
-   .page-banner-title-plain), filling the toolbar's old role. */
+   (New widget / Add-Change banner / Reset layout) live together in
+   .page-banner-actions. With a banner it's a real child of .page-banner
+   now (2026-09-07 -- see _page_banner.html's own comment on why: anchoring
+   to .page-banner-wrap's bottom edge would drift onto the new header row
+   below the photo instead of staying pinned to the photo's own corner),
+   floating bottom-right over the image itself; without one it's a plain
+   top bar and the page's h1 title sits left of the buttons (as
+   .page-banner-title-plain), filling the old toolbar's role. */
 .page-banner-actions{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
-.page-banner-wrap:has(.page-banner) .page-banner-actions{
+.page-banner .page-banner-actions{
   position:absolute; right:var(--space-4); bottom:var(--space-3); z-index:1;
-  justify-content:flex-end; max-width:100%;
+  justify-content:flex-end; max-width:100%; margin-bottom:0;
 }
 .page-banner-wrap:not(:has(.page-banner)) .page-banner-actions{
   margin-bottom:var(--space-3);
@@ -5742,53 +5757,26 @@ body.command-palette-open{overflow:hidden;}
   flex:1; min-width:0; margin:0; font-weight:700; letter-spacing:-0.3px;
   font-size:var(--text-title2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-/* Title clearance -- with several actions in edit mode a banner can hold
-   a wide button row, so keep a long overlay title from sliding under it. */
-.page-banner-title{max-width:calc(100% - 300px);}
 /* Buttons pinned over a photo need to read against whatever image is
    behind them, not a page background -- the ghost buttons become
    translucent frosted chips; the primary Done button keeps its accent
    fill, which is already high-contrast on any photo. Bannerless pages
    skip this (their ghost buttons sit on the normal page background). */
-.page-banner-wrap:has(.page-banner) .page-banner-actions .btn.ghost{
+.page-banner .page-banner-actions .btn.ghost{
   background:rgba(0,0,0,.4); color:#fff;
   border:1px solid rgba(255,255,255,.35);
   backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
 }
-.page-banner-wrap:has(.page-banner) .page-banner-actions .btn.ghost:hover{background:rgba(0,0,0,.55); color:#fff;}
+.page-banner .page-banner-actions .btn.ghost:hover{background:rgba(0,0,0,.55); color:#fff;}
+/* Readability scrim -- now only needed for the action buttons floating
+   over the photo (the title moved off the image entirely, above), but a
+   bright/busy photo can still wash out the frosted chips' own contrast
+   without it. */
 .page-banner::after{
-  content:""; position:absolute; left:0; right:0; bottom:0; height:55%;
-  background:linear-gradient(to top, rgba(0,0,0,.6), transparent);
+  content:""; position:absolute; left:0; right:0; bottom:0; height:35%;
+  background:linear-gradient(to top, rgba(0,0,0,.5), transparent);
   pointer-events:none; z-index:0;
 }
-/* Dashboard Header (Expanded) avatar (2026-08-29, sidebar redesign
-   follow-up, direct request, plans/sidebar-redesign.md § "The Standard
-   Header") -- "a large, circular avatar overlapping the bottom left of
-   the banner." Positioned the same way .page-banner-title already is
-   (absolute within .page-banner-wrap, left-anchored), but pulled down by
-   half its own height (translateY(50%)) so it straddles the banner's
-   bottom edge -- top half over the photo, bottom half over the page
-   background below it, the classic cover-photo overlap. z-index:2 (above
-   both .page-banner-title/-actions' z-index:1) since it's meant to sit
-   visually in front of everything else in the header. */
-.page-banner-avatar-wrap{
-  position:absolute; left:var(--space-4); bottom:0; z-index:2;
-  transform:translateY(50%);
-}
-.avatar-hero{
-  width:72px; height:72px; font-size:26px;
-  border:3px solid var(--bg-elevated);
-  box-shadow:0 2px 10px rgba(0,0,0,.35);
-}
-/* The avatar's bottom half (36px, half of avatar-hero's 72px) protrudes
-   below .page-banner's own edge -- .page-banner's normal margin-bottom
-   (var(--space-3), well under 36px) isn't enough clearance on its own,
-   so whatever follows the wrap (widget grid, or the edit-mode action
-   row on a bannerless-to-banner toggle) would sit underneath it.
-   Overrides .page-banner-wrap's own margin (none by default) with enough
-   room specifically when there's an avatar to clear -- bannerless pages
-   are untouched. */
-.page-banner-wrap:has(.page-banner){margin-bottom:36px;}
 
 /* Standard Page Header, narrow variant (sidebar redesign item 13e,
    2026-08-29, _page_header_narrow.html) -- the "Standard Page Header
