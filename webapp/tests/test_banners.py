@@ -357,6 +357,104 @@ class TestBannerForTask:
         assert db.banner_for_task(conn, task) is None
 
 
+class TestBannerSeasonAndDefaultFallback:
+    """2026-09-07 (direct request: "all data (events and tasks) default to
+    their season") -- a task/event with no matching label/Project/Space
+    banner now falls back further than None: first to the seasonal banner
+    matching its own due/start date (db.SEASON_BANNER_SCOPES,
+    db.season_for_date), then to the single global default every page
+    already uses (db.PAGE_HEADER_BANNER_SCOPE). Contacts are untouched --
+    db._SEASON_DATE_FIELD has no "contact" entry, so
+    test_contact_detail_falls_back_to_a_stable_color_when_no_banner above
+    still passes unchanged."""
+
+    def test_season_for_date_covers_all_twelve_months(self):
+        assert db.season_for_date("2026-01-15") == "winter"
+        assert db.season_for_date("2026-02-01") == "winter"
+        assert db.season_for_date("2026-03-01") == "spring"
+        assert db.season_for_date("2026-04-01") == "spring"
+        assert db.season_for_date("2026-05-01") == "spring"
+        assert db.season_for_date("2026-06-01") == "summer"
+        assert db.season_for_date("2026-07-04T09:00:00") == "summer"
+        assert db.season_for_date("2026-08-01") == "summer"
+        assert db.season_for_date("2026-09-07") == "autumn"
+        assert db.season_for_date("2026-10-01") == "autumn"
+        assert db.season_for_date("2026-11-01") == "autumn"
+        assert db.season_for_date("2026-12-25") == "winter"
+
+    def test_season_for_date_none_for_missing_or_bad_input(self):
+        assert db.season_for_date(None) is None
+        assert db.season_for_date("") is None
+        assert db.season_for_date("not-a-date") is None
+
+    def test_task_with_no_label_falls_back_to_its_season_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["summer"], image_url="https://cdn.example.com/summer.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/summer.jpg"
+        assert banner["scope"] == db.SEASON_BANNER_SCOPES["summer"]
+
+    def test_a_labels_own_banner_still_beats_the_season_fallback(self, conn):
+        _make_label(conn, "Client call")
+        _set_remote(conn, cached=True, scope="Client call", image_url="https://cdn.example.com/label.jpg")
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["summer"], image_url="https://cdn.example.com/summer.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Client call"],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/label.jpg"
+
+    def test_task_falls_back_to_the_global_default_when_its_season_has_no_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/default.jpg"
+        assert banner["scope"] == db.PAGE_HEADER_BANNER_SCOPE
+
+    def test_undated_task_skips_season_straight_to_the_global_default(self, conn):
+        _set_remote(conn, cached=True, scope=db.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [], "created_at": _now()})
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/default.jpg"
+
+    def test_event_with_no_label_falls_back_to_its_season_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["winter"], image_url="https://cdn.example.com/winter.jpg")
+        db.upsert_event(
+            conn,
+            {
+                "uid": "e1", "title": "e1", "description": "", "start_at": "2026-01-10T09:00:00",
+                "status": "active", "all_day": False, "created_at": _now(), "updated_at": _now(),
+            },
+        )
+        event = db.get_event(conn, "e1")
+        banner = db.banner_for_object(conn, "event", event)
+        assert banner["image_url"] == "https://cdn.example.com/winter.jpg"
+
+    def test_contact_is_unaffected_by_season_or_default_fallback(self, conn):
+        # No due_at/start_at concept for a contact -- _SEASON_DATE_FIELD has
+        # no "contact" entry, so even with a global default set, a
+        # label-less contact still resolves to None (the gradient fallback),
+        # exactly as before this change.
+        _set_remote(conn, cached=True, scope=db.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada Lovelace", "created_at": _now(), "updated_at": _now()})
+        contact = db.get_contact(conn, "c1")
+        assert db.banner_for_object(conn, "contact", contact) is None
+
+
 class TestLabelSettingsBannerEntryPoint:
     """label_form_modal.html's Banner field (2026-08-30 direct request) --
     a label's banner used to be reachable only via a dashboard page's own

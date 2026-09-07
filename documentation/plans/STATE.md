@@ -17,6 +17,86 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- direct request: first-run default banners +
+  avatar, sourced from image files the user dropped in a new repo-root
+  `pictures/` directory (`banner_51.jpg`, `spring_51.jpg`/`summer_51.jpg`/
+  `autumn_51.jpg`/`winter_51.jpg`, `avatar.jpg` -- all `_51` files are the
+  5:1 banner aspect ratio; plain-named siblings in the same folder are
+  unused leftovers, not wired to anything). Two related but separate
+  pieces, per direct clarification (AskUserQuestion) before building:
+
+  1. **One-time seed, not a permanent fallback.** New `main._seed_default_
+     media(conn, pictures_dir)`, called once from `lifespan` (wrapped in
+     try/except -- a missing/broken `pictures/` dir must not refuse to
+     boot the app). Gated on an app_meta flag
+     (`default_media_seeded_v1`) checked/set unconditionally on first call
+     regardless of which individual files were found, so a database is
+     only ever seeded once, period -- a value the user edits or removes
+     afterward is never re-applied on a later restart, and a `pictures/`
+     directory that gains files later doesn't retroactively backfill them.
+     Writes through the exact same app_meta shape a real upload would
+     (`db.set_page_banner`/`db.set_profile_photo`, base64 + content-hash
+     `version`) -- indistinguishable from a user-set banner/avatar after
+     the fact, editable/removable as normal in Settings.
+
+  2. **New season tier in `db.banner_for_object`'s fallback chain**, for
+     tasks/events specifically (direct request: "all data... default to
+     their season"). Chain is now: own label(s) -> Project label -> parent
+     Space -> **season matching the object's own due/start date
+     (new `db.season_for_date`, meteorological Northern Hemisphere,
+     Dec-Feb/Mar-May/Jun-Aug/Sep-Nov) -> the single global default
+     (`db.PAGE_HEADER_BANNER_SCOPE`, same one every page already falls
+     back to)** -> None (the pre-existing flat-gradient fallback,
+     `_detail_cover.html`, now only reached by an object type not in the
+     new `_SEASON_DATE_FIELD` map, or a dated task/event when even the
+     global default is unset). Deliberately scoped to task (`due_at`) and
+     event (`start_at`) only, per explicit instruction not to change any
+     other object type's banner behaviour this pass -- contacts keep
+     resolving to None/gradient exactly as before (`_SEASON_DATE_FIELD`
+     has no "contact" key, confirmed by a new test). Habits are already
+     covered for free -- a habit is a labeled task under the hood, same
+     `db.banner_for_task` wrapper every other task uses.
+
+     `PAGE_HEADER_BANNER_SCOPE` moved from `deps.py` to `db.py` (deps.py
+     re-exports the same name) since `db.banner_for_object` needed it and
+     `db.py` can't import `deps.py` (circular -- deps.py already imports
+     db). Four new sentinel scopes alongside it, `db.SEASON_BANNER_SCOPES`
+     -- same "just another page_key" mechanism as the existing default, no
+     new storage or routes; a season banner is set/edited/removed through
+     the ordinary `/banners/editor?scope=__season_summer__` etc., though no
+     UI entry point links to that scope directly yet (only reachable by
+     hand-editing the URL, or automatically once seeded) -- flagged for a
+     future settings-surface follow-up, not required by this slice's own
+     ask.
+
+  No templates/CSS/JS touched -- `_detail_cover.html` already renders any
+  `banner` dict generically (version/scope or image_url), so the new
+  fallback tiers render through the exact same code path unchanged. No
+  `sw.js` bump needed (no static asset changed). 15 new tests (`test_
+  banners.py`'s new `TestBannerSeasonAndDefaultFallback`, 8; new file
+  `test_default_media_seed.py`, 7, testing `_seed_default_media` directly
+  against a temp `pictures_dir` rather than the real repo-root one).
+  Full suite: 1992 passed (1977 + 15 net new), run in 6 sequential chunks
+  (background processes don't survive across tool calls in this sandbox,
+  same constraint as every prior session).
+
+  **Next slice:** deferred by direct instruction, not built this pass --
+  letting contacts/habits have their **own** dedicated banner (like a
+  Project/Space page has), independent of any label, falling back to the
+  app default when unset. Would need: a banner scope keyed by contact
+  uid/habit uid rather than a label name (contacts/habits have no
+  generated dashboard page the way a label does, so `get_page_banner`'s
+  `page_key` convention extends but the *entry point* -- where "Add
+  banner" lives on `contact_detail.html`/`habit_task_detail.html` -- is
+  new UI, not just a new scope string), and deciding whether a contact/
+  habit's own banner should outrank or lose to its label-based resolution
+  in `banner_for_object`'s priority order (undecided, worth an
+  AskUserQuestion before building rather than guessing). Also worth
+  surfacing the four season scopes somewhere in Settings > Appearance
+  (currently only the global default has a UI entry point) as a small
+  follow-up, unless a future pass decides the automatic season resolution
+  alone is enough and no manual override UI is needed.
+
 - **Shipped:** 2026-09-07 -- direct report: Calendar/Planner had double
   the normal bottom space under the grid. `.calendar-viewport` (Month/
   4-Week/Day) and `.project-calendar-layout` (Week) both carry the plain

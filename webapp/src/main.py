@@ -5,7 +5,10 @@ is about full CRUD functionality first."""
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +27,84 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _BASE_DIR = Path(__file__).resolve().parent
+
+# 2026-09-07 (direct request) -- first-run defaults, sourced from image
+# files the user dropped in the repo-root `pictures/` directory (a sibling
+# of `webapp/`, hence the two `.parent`s off this file's own `src/`
+# directory). Seeded ONCE into app_meta (see _seed_default_media below);
+# after that they're indistinguishable from any other user-set banner/
+# avatar -- editable/removable as normal in Settings > Appearance/General,
+# never re-applied over a value the user has since changed.
+_PICTURES_DIR = _BASE_DIR.parent.parent / "pictures"
+_DEFAULT_MEDIA_SEEDED_KEY = "default_media_seeded_v1"
+_DEFAULT_PAGE_BANNER_FILE = "banner_51.jpg"
+_DEFAULT_AVATAR_FILE = "avatar.jpg"
+_DEFAULT_SEASON_FILES = {
+    "spring": "spring_51.jpg",
+    "summer": "summer_51.jpg",
+    "autumn": "autumn_51.jpg",
+    "winter": "winter_51.jpg",
+}
+
+
+def _seed_default_media(conn: sqlite3.Connection, pictures_dir: Path = _PICTURES_DIR) -> None:
+    """Pre-populates the global page banner (db.PAGE_HEADER_BANNER_SCOPE,
+    all pages' fallback), the four seasonal task/event banners
+    (db.SEASON_BANNER_SCOPES), and the app's own avatar (db.
+    set_profile_photo) from `pictures_dir` so a fresh install already looks
+    finished instead of showing bare gradients/initials everywhere.
+
+    Gated on a one-time app_meta flag, checked and set unconditionally
+    (even when some/all source files are missing) so this only ever
+    attempts the seed once per database -- a value the user has since
+    edited or removed in Settings is never re-applied or overwritten by a
+    later startup. Each file is read independently and a missing/unreadable
+    one is skipped with a warning rather than failing the others or
+    aborting startup -- a partial `pictures/` directory still boots the app
+    and seeds whatever it can.
+
+    Stores images the exact same way an upload through routers/banners.py
+    or routers/settings.py's profile-photo route would (base64 in app_meta,
+    content-hash `version` for cache-busting) -- these seeded defaults are
+    real, normal banners/avatar from every other code path's point of view,
+    not a separate mechanism."""
+    if db.get_app_meta(conn, _DEFAULT_MEDIA_SEEDED_KEY):
+        return
+
+    def _read(filename: str) -> bytes | None:
+        path = pictures_dir / filename
+        try:
+            return path.read_bytes()
+        except OSError:
+            logger.warning("Default media seed: could not read %s, skipping", path)
+            return None
+
+    def _upload_banner(scope: str, data: bytes) -> None:
+        db.set_page_banner(
+            conn,
+            scope,
+            {
+                "kind": "upload",
+                "image_b64": base64.b64encode(data).decode("ascii"),
+                "image_type": "jpeg",
+                "version": hashlib.md5(data).hexdigest()[:12],
+            },
+        )
+
+    banner_bytes = _read(_DEFAULT_PAGE_BANNER_FILE)
+    if banner_bytes:
+        _upload_banner(db.PAGE_HEADER_BANNER_SCOPE, banner_bytes)
+
+    for season, filename in _DEFAULT_SEASON_FILES.items():
+        season_bytes = _read(filename)
+        if season_bytes:
+            _upload_banner(db.SEASON_BANNER_SCOPES[season], season_bytes)
+
+    avatar_bytes = _read(_DEFAULT_AVATAR_FILE)
+    if avatar_bytes:
+        db.set_profile_photo(conn, base64.b64encode(avatar_bytes).decode("ascii"), "jpeg")
+
+    db.set_app_meta(conn, _DEFAULT_MEDIA_SEEDED_KEY, "1")
 
 
 class _VersionedStaticFiles(StaticFiles):
@@ -58,6 +139,14 @@ async def lifespan(app: FastAPI):
     # was ever saved.
     with db.connect(settings.db_path) as _conn:
         settings = apply_persisted_radicale_overrides(settings, _conn)
+        # First-run default banners/avatar (2026-09-07, direct request) --
+        # see _seed_default_media's own docstring. Must not be allowed to
+        # fail startup over e.g. a missing pictures/ directory on a deploy
+        # that never got one; that's just "nothing seeded," not fatal.
+        try:
+            _seed_default_media(_conn)
+        except Exception:
+            logger.exception("Default media seed failed; continuing without it")
     app.state.settings = settings
 
     # The bridge's constructor connects to Radicale (DAVClient -> principal,

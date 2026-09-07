@@ -4692,6 +4692,67 @@ PROFILE_PHOTO_TYPE_KEY = "profile_photo_type"
 PROFILE_PHOTO_VERSION_KEY = "profile_photo_version"
 _PAGE_BANNER_PREFIX = "page_banner_"
 
+# 2026-08-29 (sidebar redesign item 13e follow-up) -- the Standard Page
+# Header's own optional banner image (deps.py's page_header_banner()/
+# _page_header_narrow.html) and, since 2026-08-29, the single fallback
+# every Home/Project/Space page's own big banner uses when it has none of
+# its own (routers/dashboard.py's _page_banner_context). Just one more
+# `page_key` for get_page_banner/set_page_banner -- a fixed sentinel picked
+# to never collide with a real label name. Lives here (not deps.py, which
+# imports this module) so banner_for_object below can reference it without
+# a circular import; deps.py re-exports it under the same name so every
+# existing `from ..deps import PAGE_HEADER_BANNER_SCOPE` call site is
+# unaffected.
+PAGE_HEADER_BANNER_SCOPE = "__page_header__"
+
+# 2026-09-07 (direct request) -- four more sentinel page_key scopes, same
+# shape as PAGE_HEADER_BANNER_SCOPE above, one per meteorological season.
+# banner_for_object uses these as a tier between "no matching label/
+# Project/Space banner" and the global default above: a task/event with no
+# banner of its own shows whichever of these matches its own due/start
+# date's month, before falling all the way back to PAGE_HEADER_BANNER_SCOPE.
+# Set/edited/removed through the exact same /banners/editor machinery as
+# any other scope -- nothing new to build, just four more page_keys.
+SEASON_BANNER_SCOPES = {
+    "spring": "__season_spring__",
+    "summer": "__season_summer__",
+    "autumn": "__season_autumn__",
+    "winter": "__season_winter__",
+}
+
+# object_type -> the date field banner_for_object reads to pick a season,
+# for the two object types that get a seasonal fallback (2026-09-07, direct
+# request: "all data (events and tasks) default to their season"). A task's
+# own due date if it has one, an event's own start -- not creation date, so
+# rescheduling a task/event changes which season banner it shows.
+# Contacts (no due/start date at all) simply aren't in this map, so
+# banner_for_object's season/default fallback never applies to them --
+# unchanged behaviour there, per direct instruction not to touch it.
+_SEASON_DATE_FIELD = {"task": "due_at", "event": "start_at"}
+
+
+def season_for_date(value: Any) -> str | None:
+    """Meteorological Northern-Hemisphere season for a stored start_at/
+    due_at value ("2026-09-07" or a full "...T..." datetime string) --
+    Dec/Jan/Feb winter, Mar/Apr/May spring, Jun/Jul/Aug summer, Sep/Oct/Nov
+    autumn. None for anything missing or unparseable (a bare date's first
+    10 characters cover both shapes) -- callers treat that exactly like
+    "no season resolved" and fall through to the next tier rather than
+    guessing a season for a malformed value."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        month = date.fromisoformat(value[:10]).month
+    except ValueError:
+        return None
+    if month in (12, 1, 2):
+        return "winter"
+    if month in (3, 4, 5):
+        return "spring"
+    if month in (6, 7, 8):
+        return "summer"
+    return "autumn"
+
 
 def get_profile_photo(conn: sqlite3.Connection) -> dict[str, str] | None:
     """The app user's own profile picture -- {photo_b64, photo_type,
@@ -4822,6 +4883,30 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
             if banner:
                 banner["scope"] = space
                 return banner
+    # 2026-09-07 (direct request): a task/event with no matching label/
+    # Project/Space banner falls back further instead of stopping at None
+    # (a flat color gradient, _detail_cover.html) -- first to the seasonal
+    # banner matching its own due/start date (SEASON_BANNER_SCOPES,
+    # season_for_date), then to the same single global default every page
+    # already falls back to when it has no banner of its own
+    # (PAGE_HEADER_BANNER_SCOPE, routers/dashboard.py's
+    # _page_banner_context). Scoped to object types in _SEASON_DATE_FIELD
+    # only (task/event) -- contacts aren't in that map, so this whole block
+    # is a no-op for them and they keep resolving to None/the gradient
+    # fallback exactly as before.
+    date_field = _SEASON_DATE_FIELD.get(object_type)
+    if date_field:
+        season = season_for_date(obj.get(date_field))
+        if season:
+            season_scope = SEASON_BANNER_SCOPES[season]
+            banner = get_page_banner(conn, season_scope)
+            if banner:
+                banner["scope"] = season_scope
+                return banner
+        banner = get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
+        if banner:
+            banner["scope"] = PAGE_HEADER_BANNER_SCOPE
+            return banner
     return None
 
 

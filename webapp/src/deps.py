@@ -84,7 +84,14 @@ EDIT_MODE_KEY = "edit_mode_enabled"
 # banner editor/upload/remove machinery (routers/banners.py) unchanged --
 # `/banners/editor?scope=__page_header__&page_url=/settings/appearance`
 # is a real, working banner scope with no new routes needed.
-PAGE_HEADER_BANNER_SCOPE = "__page_header__"
+#
+# 2026-09-07: the literal now lives in db.py (db.PAGE_HEADER_BANNER_SCOPE)
+# instead of here -- db.banner_for_object needed it for the new task/event
+# season/default banner fallback, and db.py can't import deps.py (deps.py
+# already imports db, so the reverse would be circular). Re-exported under
+# the same name so every existing `from ..deps import
+# PAGE_HEADER_BANNER_SCOPE` call site is unaffected.
+PAGE_HEADER_BANNER_SCOPE = db.PAGE_HEADER_BANNER_SCOPE
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 
