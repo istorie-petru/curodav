@@ -13,8 +13,9 @@ project week calendar — shipped 2026-08-13; 1.5 — task management &
 grouping — shipped 2026-08-13; 1.6 — schedule & recurrence rework —
 shipped 2026-08-14; 1.7 — information architecture & view surfaces —
 shipped 2026-08-14; 1.8 — offline-first editing & synchronization —
-shipped 2026-08-14; 1.9 — Tasks table pagination — shipped 2026-08-15,
-versioned 1.9.0 2026-08-16). Minor releases are numbered
+shipped 2026-08-14; 1.9 — Tasks table pagination — shipped 2026-08-15
+(later superseded 2026-08-28, see 1.9 below), versioned 1.9.0 2026-08-16).
+Minor releases are numbered
 `1.1` … `1.9`; once everything on this roadmap is implemented, the next
 full release is **2.0**. See the versioning rules in
 [`abandoned.md`](abandoned.md).
@@ -292,9 +293,15 @@ collapsible sections weren't part of that slice's scope.
 ### 1.9 — Deployment & polish
 
 **Pagination (Tasks table)** — shipped 2026-08-15: `GET /tasks?page=&limit=`
-paginates the Table view's Open section (highest-traffic target), ungrouped
-view only. See `features/tasks.md` § Views. Collapsible sections and other
-lower-traffic surfaces remain open, not part of this slice.
+paginated the Table view's Open section (highest-traffic target), ungrouped
+view only. See `features/tasks.md` § Views. **Superseded 2026-08-28:** commit
+`d86a34d` ("Major rework session") made the Tasks table's grouping
+(Project → Habits → Unassigned → Completed) unconditional, retiring the
+ungrouped Open section this pagination applied to — the commit's own message
+says so explicitly ("pagination retired as a consequence"). Not a bug and not
+something to restore: the grouped-table design this app settled on has no
+"Open section" left to paginate. Collapsible sections and other lower-traffic
+surfaces remain open, not part of this slice.
 
 **DAVx5 mobile hosting** (`open.md` § Webapp usability + DAVx5 hosting) —
 CalDAV/CardDAV sync to a phone via a public HTTPS reverse proxy. Pure infra, no

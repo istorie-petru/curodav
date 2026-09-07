@@ -17,6 +17,38 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 15, the stale
+  `roadmap.md` claim about Tasks-table pagination. Confirmed via `git log`
+  (per the audit item's own citation) that commit `2162403` shipped
+  `GET /tasks?page=&limit=` pagination of the Table view's ungrouped Open
+  section 2026-08-15, then `d86a34d` ("Major rework session, 2026-08-28")
+  retired it as a side effect of making the Tasks table's Project ->
+  Habits -> Unassigned -> Completed grouping unconditional -- that
+  commit's own message says "pagination retired as a consequence." Not a
+  bug, nothing to restore: the grouped design has no ungrouped "Open
+  section" left to paginate.
+
+  Pure documentation fix, matching how this doc already marks other
+  superseded decisions (`~~strikethrough~~` + a "shipped ... as a slice"
+  note, e.g. the Phase B pagination/collapsible-sections line right above
+  the 1.9 section). Updated two spots in `roadmap.md`: the top-of-file
+  1.9 changelog parenthetical (added "later superseded 2026-08-28, see
+  1.9 below") and the 1.9 section's own pagination paragraph (past tense
+  + a new "**Superseded 2026-08-28:**" explanation, same shape). Left the
+  "Things that can slip past the map" section's own item-15 summary alone
+  -- it already correctly describes this as a stale claim to fix, no
+  update needed there.
+
+  No code touched, nothing in `tests/` references this roadmap text --
+  no test run needed (same reasoning as every other doc-only slice in
+  this file, e.g. the 2026-09-03 STATE.md trim).
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): item 11, the CSP
+  `unsafe-inline` migration -- the only item left in the list, deliberately
+  saved for last as the largest/riskiest (touches every inline
+  script/style across templates, move `security_headers.py:52-62` to a
+  nonce-based CSP for script-src/style-src).
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 14, the empty-state
   table row, duplicated 5x. `labels_manage.html`, `settings_holidays.html`,
   and `settings_time_blocks.html` (Sleep and Leisure -- two independent
