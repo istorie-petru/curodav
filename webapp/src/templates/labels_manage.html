@@ -2,6 +2,7 @@
 {% block title %}Labels{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {{ page_header_narrow("Labels", "tag") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
@@ -18,13 +19,10 @@
      it generically instead of a second hand-rolled selection JS. "Delete"
      here means the same thing the per-row Delete button already does
      (clear usage, not a real row delete -- label_config stays), so the
-     confirm wording matches that, not a generic "cannot be undone." -->
-<div class="bulk-actions-bar" id="labels-bulk-bar" style="display:none">
-    <span id="labels-bulk-count" class="bulk-count"></span>
-    <div class="spacer"></div>
-    <button type="button" id="labels-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Remove from everything</button>
-    <button type="button" id="labels-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-</div>
+     confirm wording matches that, not a generic "cannot be undone." Shared
+     markup -- see _bulk_actions_bar.html (2026-09-07, audit-fixes-2.0.md
+     item 9). -->
+{{ bulk_actions_bar("labels", delete_label="Remove from everything") }}
 
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div

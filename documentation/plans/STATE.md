@@ -17,6 +17,76 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 9, lower-priority UI
+  consistency polish, reached via a user-shared proposal to restructure
+  `templates/` into a layouts/components/widgets/pages folder split
+  (plus a `.ui-*` CSS prefix). Before adopting that wholesale, checked it
+  against the actual codebase: `templates/` already has 94 files, 13 of
+  which use `{% macro %}` for parameterized reusable pieces, and an
+  established underscore-prefix partial convention (`_widget_card.html`,
+  `_label_pill.html`, `_detail_cover.html`, `_modal_footer.html`, etc.) --
+  a lighter version of the proposed split, already working. Buttons
+  turned out to already be one consistent `.btn primary/ghost/danger/
+  tonal` + `.btn-sm` convention (grepped every `class="...btn..."` variant
+  across templates first), not the "twelve independent implementations"
+  the proposal's framing assumed. So a folder/prefix rename was judged
+  not worth the churn -- see `roadmap.md`'s 2.0 section for the full
+  verdict -- and the proposal's one piece of grep-confirmed real
+  duplication was folded into this already-planned item instead of
+  standing up a parallel track. All three of item 9's sub-items landed:
+
+  1. **`.bulk-actions-bar` extraction.** New `_bulk_actions_bar.html`
+     macro (`bulk_actions_bar(id_prefix, delete_label='Delete')`) replaces
+     four copies of the same `<div class="bulk-actions-bar">` +
+     `.bulk-count` span + spacer + Delete/Clear button block that had
+     drifted apart only in id prefix and the Delete label:
+     `settings_holidays.html`, `settings_time_blocks.html` (Sleep *and*
+     Leisure sections -- two separate macro calls, two independent
+     `CCBulkSelect` instances as before), `labels_manage.html` (Delete
+     label overridden to "Remove from everything", its own established
+     wording). `tasks_list.html`'s bar deliberately stayed out of scope --
+     confirmed via `static/bulk_select.js`'s own header comment that it's
+     driven by bespoke `tasks_table.js` (richer per-domain bulk actions,
+     async-CRUD region-swap reconciliation) with unprefixed ids
+     (`bulk-actions-bar`/`bulk-count`), not `CCBulkSelect` -- exactly what
+     the audit item's own wording already scoped to ("three-plus copies
+     across settings_holidays.html, settings_time_blocks.html,
+     labels_manage.html", no mention of tasks_list.html).
+  2. **`.card-danger` utility class** (style.css, next to `.card`) replaces
+     `settings_data_maintenance.html`'s one-off inline `style="background:
+     var(--tag-red-bg);border:1px solid var(--tag-red-fg)"` on the "Needs
+     attention" card. Named generically (not e.g. `.card-needs-attention`)
+     since a warning-tinted card isn't unique to that one page.
+  3. **`_filter_dropdown.html`'s wrapper question, confirmed still earning
+     its keep.** Investigated rather than assumed: it isn't actually a
+     wrapper over `_widget_list_multiselect.html` at all (no include/
+     extend relationship) -- it's a parallel template that deliberately
+     duplicates the `.multiselect`/`.multiselect-trigger`/`.multiselect-
+     panel` markup/CSS classes while sharing the same JS handler, per its
+     own header comment, because the semantics genuinely differ (GET-
+     navigate page filter vs. a `<form>`-bound field saved via a Save
+     button). No code change -- the audit item's "confirm" framing
+     already allowed for that as a valid outcome.
+
+  `sw.js` CACHE_NAME bumped v57 -> v58 (style.css changed again; new
+  `_bulk_actions_bar.html` template is not in `SHELL_ASSETS`, same
+  "server-rendered template, not a static asset" reasoning as every prior
+  templates-only addition), `test_pwa_shell.py`'s pin updated.
+  `test_data_health.py::test_needs_attention_section_appears_only_when_
+  something_is_wrong` updated for the new `class="card card-danger"`
+  marker (was asserting the old inline-style string). Grepped `tests/`
+  for the old `.bulk-actions-bar` ids/markup first -- no other test
+  hardcoded the pre-extraction structure, only that one inline-style
+  assertion needed updating. Full suite: 1970 passed (same count as item
+  8 -- pure markup refactor + one assertion-string update, no row/
+  behavior change), run as 84 parallel per-file background processes in
+  one call, `test_caldav_bridge_live.py` excluded as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #10, performance
+  housekeeping (`defer` on the 24 `<script>` tags) -- the last mandatory
+  item before the CSP `unsafe-inline` migration, sequenced last on
+  purpose for being the largest/riskiest.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 8, settings-page
   heading consistency (`audit-fixes-2.0.md`'s item 8). Wrapped
   `settings_holidays.html`'s and `settings_time_blocks.html`'s sections in

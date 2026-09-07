@@ -2,6 +2,7 @@
 {% block title %}Sleep & Leisure Time - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {{ page_header_narrow("Sleep & Leisure Time", "moon") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
@@ -22,13 +23,9 @@
      "bulk actions on tables"). Sleep and Leisure are two independent
      `CCBulkSelect` instances (own bar/table ids each) -- see that
      module's own comment for why one page can safely host more than one
-     instance. -->
-<div class="bulk-actions-bar" id="sleep-bulk-bar" style="display:none">
-    <span id="sleep-bulk-count" class="bulk-count"></span>
-    <div class="spacer"></div>
-    <button type="button" id="sleep-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
-    <button type="button" id="sleep-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-</div>
+     instance. Shared markup -- see _bulk_actions_bar.html (2026-09-07,
+     audit-fixes-2.0.md item 9). -->
+{{ bulk_actions_bar("sleep") }}
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels/Holidays tables. -->
@@ -89,12 +86,7 @@
 
 <div class="settings-group">
 <h2 class="section-label">{{ icon('sun', 'icon-sm') }} Leisure Time</h2>
-<div class="bulk-actions-bar" id="leisure-bulk-bar" style="display:none">
-    <span id="leisure-bulk-count" class="bulk-count"></span>
-    <div class="spacer"></div>
-    <button type="button" id="leisure-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
-    <button type="button" id="leisure-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-</div>
+{{ bulk_actions_bar("leisure") }}
 <div class="card table-scroll" id="leisure-block-table-wrapper">
         <table id="leisure-block-table">
             <thead>

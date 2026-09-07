@@ -97,15 +97,20 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    `settings_appearance.html`/`settings_data_maintenance.html` already use,
    instead of their current bare `<h1>`/inline-styled sub-headings.
 
-9. **Lower-priority UI consistency polish** (optional — doesn't block 2.0,
-   but bundle if doing a cleanup pass anyway): promote
+9. ~~**Lower-priority UI consistency polish.**~~ **Shipped 2026-09-07** —
+   see `STATE.md`'s entry of the same date. All three landed as sketched:
    `settings_data_maintenance.html`'s inline-styled "Needs attention" card
-   to a `.card-danger`/`.card-tinted` utility class; extract the
-   copy-pasted `.bulk-actions-bar` markup (three-plus copies across
-   `settings_holidays.html`, `settings_time_blocks.html`,
-   `labels_manage.html`) into one shared partial; confirm whether
-   `_filter_dropdown.html`'s class-renaming wrapper over
-   `_widget_list_multiselect.html` is still earning its keep.
+   now uses a new `.card-danger` utility class; the copy-pasted
+   `.bulk-actions-bar` markup across `settings_holidays.html`,
+   `settings_time_blocks.html` (Sleep + Leisure), and `labels_manage.html`
+   is now one shared `_bulk_actions_bar.html` macro. `_filter_dropdown.
+   html` turned out not to actually be a wrapper over `_widget_list_
+   multiselect.html` (no include/extend relationship — a parallel
+   template sharing CSS/JS by design, per its own header comment) — still
+   earning its keep, left unchanged. Reached via a user-shared proposal
+   to restructure `templates/` into a full layouts/components/widgets/
+   pages split, evaluated and mostly declined (the codebase already has
+   an equivalent, informally named) — see `roadmap.md`'s 2.0 section.
 
 10. **Performance housekeeping.** Add `defer` to the 24 `<script>` tags in
     `templates/base.html:503-604` that don't need to block; confirm a

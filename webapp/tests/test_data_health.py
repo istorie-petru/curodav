@@ -238,7 +238,7 @@ class TestSettingsDataMaintenancePage:
         # forms) only render when something is actually wrong; "Needs
         # attention" itself also appears in the template's own comment, so
         # assert on the rendered markers instead.
-        warning_card = 'style="background:var(--tag-red-bg);border:1px solid var(--tag-red-fg)"'
+        warning_card = 'class="card card-danger"'
         # Healthy database, no conflicts -> no "Needs attention" section.
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
         assert warning_card not in body

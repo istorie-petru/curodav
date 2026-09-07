@@ -20,7 +20,7 @@
     <h2 class="section-label">{{ icon('x-circle', 'icon-sm') }} Needs attention
         {% if conflicts %}<span class="pill-static pill-red" style="vertical-align:middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span>{% endif %}
     </h2>
-    <div class="card" style="background:var(--tag-red-bg);border:1px solid var(--tag-red-fg)">
+    <div class="card card-danger">
         {% if conflicts %}
         <table class="task-table">
             <thead>

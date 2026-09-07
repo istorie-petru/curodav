@@ -1,0 +1,34 @@
+{# Shared bulk-selection action bar -- the row-count pill + Delete/Clear
+   buttons that appear once a table row is checkbox-selected, driven by
+   static/bulk_select.js's `CCBulkSelect.init({barId, countId, clearId,
+   deleteButtonId, ...})`. Extracted 2026-09-07 (audit-fixes-2.0.md item 9)
+   from four copies (settings_holidays.html, settings_time_blocks.html's
+   Sleep and Leisure sections, labels_manage.html) that had drifted into
+   separate hand-rolled `<div class="bulk-actions-bar">` blocks differing
+   only in id prefix and the Delete button's label.
+
+   tasks_list.html's own bar is deliberately NOT this macro -- it's driven
+   by static/tasks_table.js instead of CCBulkSelect (richer per-domain bulk
+   actions: status-set, label multiselect, async-CRUD region-swap
+   reconciliation) and uses unprefixed ids (`bulk-actions-bar`/`bulk-count`)
+   that predate this extraction. bulk_select.js's own header comment
+   already documents that split; this macro doesn't change it.
+
+   Params:
+     id_prefix    -- e.g. "holidays" -> renders id="holidays-bulk-bar",
+                     "holidays-bulk-count", "holidays-bulk-delete",
+                     "holidays-bulk-clear". Must match the barId/countId/
+                     deleteButtonId/clearId passed to CCBulkSelect.init at
+                     the call site.
+     delete_label -- text on the Delete button (default "Delete"; e.g.
+                     labels_manage.html uses "Remove from everything" since
+                     its bulk action clears label usage, not a real row
+                     delete). #}
+{% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
+<div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar" style="display:none">
+    <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
+    <div class="spacer"></div>
+    <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
+    <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
+{% endmacro %}

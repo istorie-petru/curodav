@@ -1101,6 +1101,13 @@ label.seg-btn[hidden]{display:none;}
    transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
 .card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* Danger/warning-tinted card variant -- was a one-off `style="background:
+   var(--tag-red-bg);border:1px solid var(--tag-red-fg)"` on the Data
+   Maintenance page's "Needs attention" card (2026-09-07, audit-fixes-2.0.md
+   item 9); named generically since a card needing this treatment (sync
+   conflicts, integrity failures, other "something's wrong" surfaces) isn't
+   unique to that one page. */
+.card-danger{background:var(--tag-red-bg); border:1px solid var(--tag-red-fg);}
 /* First heading inside a card never wants the h2 top margin (section 2) --
    was `style="margin-top:0"` repeated per-instance (calendar_agenda,
    task_detail, habit_detail); one structural rule instead. */

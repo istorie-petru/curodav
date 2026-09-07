@@ -235,7 +235,13 @@
 // .stepper-btn, new .skip-link rule, darkened --fg-tertiary,
 // .week-overview-grid breakpoint) and base.html changed (skip-to-content
 // link + #main-content id). No new files added to SHELL_ASSETS.
-const CACHE_NAME = "cc-shell-v57";
+//
+// v58 (2026-09-07, audit-fixes-2.0.md item 9): style.css changed again
+// (new .card-danger utility). New template
+// src/templates/_bulk_actions_bar.html added -- not in SHELL_ASSETS
+// (server-rendered template, not a static asset, same reasoning as every
+// other templates-only change in this file's history).
+const CACHE_NAME = "cc-shell-v58";
 
 const SHELL_ASSETS = [
   "/offline",
