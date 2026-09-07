@@ -220,7 +220,7 @@ class TestFullAppModalSweep:
         templates_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
         modal_files = [
             "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
-            "habit_form.html", "habit_task_form.html", "label_edit_modal.html", "label_merge_modal.html",
+            "habit_form.html", "habit_task_form.html", "label_merge_modal.html",
             "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
             "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
         ]

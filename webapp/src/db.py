@@ -3496,12 +3496,6 @@ def list_contact_tag_names(conn: sqlite3.Connection) -> list[str]:
     return list_object_label_names(conn, "contact")
 
 
-def list_task_label_names(conn: sqlite3.Connection) -> list[str]:
-    """Distinct labels across all tasks -- Phase 9b toolbar rework's new
-    Tasks label filter (Table/Timeline/Board all share this)."""
-    return list_object_label_names(conn, "task")
-
-
 def list_event_label_names(conn: sqlite3.Connection) -> list[str]:
     """Distinct labels across all events -- Phase 9b toolbar rework's new
     Calendar label filter (Month/Week/Day/Agenda all share this)."""
@@ -3510,22 +3504,6 @@ def list_event_label_names(conn: sqlite3.Connection) -> list[str]:
 
 def all_contact_uids(conn: sqlite3.Connection) -> set[str]:
     return {r["uid"] for r in conn.execute("SELECT uid FROM contacts").fetchall()}
-
-
-def find_contact_by_name(conn: sqlite3.Connection, full_name: str) -> dict[str, Any] | None:
-    """Case-insensitive exact match on full_name. Exact-match rather than
-    fuzzy on purpose: silently linking to
-    the *wrong* same-ish-named contact would be a worse outcome than
-    occasionally creating a near-duplicate that the user can merge by
-    hand, and this app has no fuzzy-match/merge UI to clean that up
-    safely anyway. If more than one contact happens to share the exact
-    same name, this deterministically picks one (`LIMIT 1`) rather than
-    guessing further -- an edge case rare enough not to warrant a
-    disambiguation UI here."""
-    row = conn.execute(
-        "SELECT * FROM contacts WHERE full_name = ? COLLATE NOCASE LIMIT 1", (full_name,)
-    ).fetchone()
-    return _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS)) if row else None
 
 
 # --------------------------------------------------------------------- #
