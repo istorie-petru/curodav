@@ -348,7 +348,16 @@
 // (page-header-narrow-actions .segmented/.seg-btn) got a matching
 // compact override -- it was the one other actions-slot control tall
 // enough to get clipped by the new fixed height's overflow:hidden.
-const CACHE_NAME = "cc-shell-v68";
+// v69 (2026-09-07, direct report): style.css changed again -- Calendar/
+// Planner's .calendar-viewport (Month/4-Week/Day) and .project-calendar-
+// layout (Week) both carry the plain .card class, whose margin-bottom:
+// var(--space-4) sat at the very bottom of main.main-calendar's fixed-
+// height flex column -- since it's the last flex child, that margin ate
+// into the shell's own visible height on top of main's own bottom
+// padding, reading as double the normal bottom space. Zeroed
+// margin-bottom on both, scoped to being main.main-calendar's own direct
+// child (`.card`'s margin-bottom is untouched everywhere else it's used).
+const CACHE_NAME = "cc-shell-v69";
 
 const SHELL_ASSETS = [
   "/offline",

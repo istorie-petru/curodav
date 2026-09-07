@@ -17,6 +17,25 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- direct report: Calendar/Planner had double
+  the normal bottom space under the grid. `.calendar-viewport` (Month/
+  4-Week/Day) and `.project-calendar-layout` (Week) both carry the plain
+  `.card` class, whose `margin-bottom:var(--space-4)` sat at the very
+  bottom of `main.main-calendar`'s fixed-height flex column -- as the
+  last flex child, that inherited margin ate into the shell's own
+  visible height on top of main's own bottom padding, reading as roughly
+  double the gap every other page has. Zeroed `margin-bottom` on both,
+  scoped to being `main.main-calendar`'s own direct child -- `.card`'s
+  margin-bottom is untouched everywhere else it's used (same scoping
+  pattern as the earlier Planner Unscheduled-work/grid gap fix this
+  session, `.project-calendar-layout > .card{margin-bottom:0}`).
+
+  `sw.js` `CACHE_NAME` bumped `v68` -> `v69`; `test_pwa_shell.py`
+  updated. Full suite: 1977 passed, same total as before.
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- two direct reports, both about empty states
   showing content that isn't there:
 

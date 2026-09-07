@@ -507,8 +507,12 @@ class TestLocalWritePath:
         # v68 (2026-09-07, direct measurement): .page-header-narrow now
         # sets height:48px explicitly (was missing its own 1px border
         # from the earlier budget math) -- see sw.js's own v68 comment.
+        # v69 (2026-09-07, direct report): zeroed .calendar-viewport/
+        # .project-calendar-layout's inherited .card margin-bottom as
+        # main.main-calendar's own direct children -- see sw.js's own
+        # v69 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v68"' in script
+        assert 'CACHE_NAME = "cc-shell-v69"' in script
 
 
 class TestOfflineToolbar:
