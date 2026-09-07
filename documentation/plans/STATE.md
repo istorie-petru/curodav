@@ -17,6 +17,65 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 5, icon-only
+  accessible names (`documentation/reports/full-app-audit-2026-09-07.md`'s
+  "icon-only buttons relying on `title` alone with no `aria-label`" finding
+  -- `_task_row.html:144`/`_habit_row.html:115`'s row-delete buttons,
+  `labels_manage.html`/`_labels_table_body.html`/`settings_holidays.html`/
+  `settings_time_blocks.html`'s Edit/Delete icon links, and a longer tail
+  across widget/picker/relation-row templates).
+
+  The doc's own sketch asked for "ideally a shared macro/JS default keyed
+  off the existing title, not 30 hand-edited templates" -- landed as a
+  single new global script, **zero template edits**, rather than even the
+  macro option: `static/a11y_icon_labels.js` scans for the underlying
+  pattern (`[title]:not([aria-label]):not([aria-labelledby])` on a
+  `button`/`a`/`label`/`input` whose `textContent` is empty once whitespace
+  is stripped -- i.e. genuinely icon-only, nothing visible for the name to
+  already come from) and copies `title` onto `aria-label`. Elements that
+  *do* have visible text alongside an icon (e.g. `_calendar_week_grid.html`'s
+  all-day task links, icon + `{{ t.title }}`) are deliberately skipped --
+  their accessible name already comes from that visible text, and
+  overwriting it with just the bare `title` string would drop text a
+  sighted user can see (WCAG 2.5.3), not fix anything. Confirmed via
+  `deps.py::_icon`'s own docstring/output (`<svg class="icon" aria-hidden=
+  "true"><use ...></svg>`, no inner text ever) that every existing
+  icon-only control's `textContent` really is empty -- the heuristic isn't
+  guessing.
+
+  Runs once on `DOMContentLoaded` over the whole document, then a
+  `MutationObserver` on `document.documentElement` (childList+subtree)
+  covers everything added afterward -- modal.js's innerHTML content swap,
+  async_crud.js's region refreshes, quick_add/command-palette inserts --
+  with **no per-feature `wireContent()` hook needed**, unlike every other
+  modal-injected-content script in this app (label_role_picker.js,
+  event_format_toggle.js, etc., each needs its own `window.CCWhatever.
+  init(body)` call from modal.js). This one script's coverage is
+  unconditional and automatic, including for any future icon-only control
+  nobody remembers to hand-annotate.
+
+  Loaded globally in `base.html` right after `mobile_nav_drawer.js` (same
+  "base.html script needed on every page" category). `sw.js` CACHE_NAME
+  bumped v55 -> v56 (new script added to `SHELL_ASSETS`, same reasoning as
+  `mobile_nav_drawer.js`'s own v53 entry), `test_pwa_shell.py`'s pin
+  updated. No test harness for JS behavior in this suite (per this file's
+  own recurring note) -- verified by reading `deps.py::_icon`'s actual
+  output plus every touch-point template listed in the audit (all render
+  `title` with no accompanying visible text, confirmed by reading each
+  file directly, not assumed from the audit's own summary) rather than a
+  new test. Full suite: 1970 passed (same count as slice 4 -- no Python/
+  template change to add coverage for), run as 84 parallel per-file
+  background processes in one call, `test_caldav_bridge_live.py` excluded
+  as always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): #6, the touch-target +
+  skip-link + contrast bundle -- coarse-pointer size bumps for
+  `.color-swatch-current`/`.heatmap-cell`, fixing `.stepper-btn` (missing
+  coarse-pointer size AND `tabindex="-1"` removing it from tab order), a
+  skip-to-content link in `base.html`, darkening `--fg-tertiary` (light
+  theme) or restricting it to large/bold text, and aligning
+  `.week-overview-grid`'s `700px` breakpoint to the app's standard `720px`.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md slice 4, the modal keyboard
   focus trap (`documentation/reports/full-app-audit-2026-09-07.md` finding
   #2, the one accessibility finding rated high -- WCAG 2.1.2/2.4.3, a

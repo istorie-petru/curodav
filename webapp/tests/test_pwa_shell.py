@@ -455,8 +455,11 @@ class TestLocalWritePath:
         # @media (pointer:coarse) size bump, both style.css only.
         # v55 (2026-09-07, audit-fixes-2.0.md slice 4): static/modal.js
         # keyboard focus trap (Tab/Shift+Tab cycling within an open .modal).
+        # v56 (2026-09-07, audit-fixes-2.0.md slice 5): new static/
+        # a11y_icon_labels.js, sets aria-label from title on icon-only
+        # controls app-wide.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v55"' in script
+        assert 'CACHE_NAME = "cc-shell-v56"' in script
 
 
 class TestOfflineToolbar:

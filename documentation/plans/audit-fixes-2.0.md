@@ -62,13 +62,14 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    so verification was read-through + the full suite staying green (no
    markup assertions broken).
 
-5. **Icon-button accessible names.** Add an `aria-label` fallback (ideally
-   a shared macro/JS default keyed off the existing `title`, not 30
-   hand-edited templates) covering `_task_row.html:144`,
-   `_habit_row.html:115`, `labels_manage.html:75`,
-   `_labels_table_body.html:28`, `settings_holidays.html:61`,
-   `settings_time_blocks.html:63,125`, and the widget/picker/relation-row
-   templates listed in the audit. Mechanical, many touch points, low risk.
+5. ~~**Icon-button accessible names.**~~ **Shipped 2026-09-07** — see
+   `STATE.md`'s entry of the same date. Landed as a single global script
+   (`static/a11y_icon_labels.js`), not even the macro option sketched here
+   — it scans for `[title]` elements with no visible text and no existing
+   `aria-label`/`aria-labelledby` and copies `title` onto `aria-label`, so
+   zero templates needed hand-editing and any future icon-only control is
+   covered automatically. A `MutationObserver` re-applies it to
+   modal/region-refresh-injected content with no per-feature wiring.
 
 6. **Touch-target + skip-link + contrast bundle.** One CSS-mostly slice,
    same shape as the 2026-09-04 touch-target session: coarse-pointer size

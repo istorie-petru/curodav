@@ -511,6 +511,12 @@
      early return when its target elements aren't present (hide_tabbar
      pages). -->
 <script src="{{ static_url('mobile_nav_drawer.js') }}"></script>
+<!-- Icon-only accessible names (audit-fixes-2.0.md slice 5) -- sets
+     aria-label from title on any icon-only control app-wide. Loaded
+     globally and needs no wireContent() hook: it watches the whole
+     document via MutationObserver, so modal/region-refresh/quick-add
+     content injected later is covered automatically. -->
+<script src="{{ static_url('a11y_icon_labels.js') }}"></script>
 <script src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.

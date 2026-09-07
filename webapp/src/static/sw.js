@@ -226,7 +226,11 @@
 // finding #2) -- static/modal.js gained a keyboard focus trap (Tab/Shift+Tab
 // cycling within an open .modal, alongside the existing Escape handler) --
 // modal.js is in SHELL_ASSETS below, bumped per the v15/v16/v19 lesson.
-const CACHE_NAME = "cc-shell-v55";
+// v56 (2026-09-07, audit-fixes-2.0.md slice 5) -- new static/
+// a11y_icon_labels.js (added to SHELL_ASSETS below, same "base.html script
+// needed on every page" category as mobile_nav_drawer.js right above it),
+// sets aria-label from title on icon-only controls app-wide.
+const CACHE_NAME = "cc-shell-v56";
 
 const SHELL_ASSETS = [
   "/offline",
@@ -236,6 +240,7 @@ const SHELL_ASSETS = [
   "/static/app.js",
   "/static/sidebar_tree.js",
   "/static/mobile_nav_drawer.js",
+  "/static/a11y_icon_labels.js",
   "/static/modal.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
