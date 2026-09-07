@@ -463,8 +463,11 @@ class TestLocalWritePath:
         # alignment) -- no new SHELL_ASSETS files.
         # v58 (2026-09-07, audit-fixes-2.0.md item 9): style.css only (new
         # .card-danger utility) -- no new SHELL_ASSETS files.
+        # v59 (2026-09-07, audit-fixes-2.0.md item 12): style.css only (raw
+        # z-index numbers replaced with named custom properties) -- no new
+        # SHELL_ASSETS files.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v58"' in script
+        assert 'CACHE_NAME = "cc-shell-v59"' in script
 
 
 class TestOfflineToolbar:

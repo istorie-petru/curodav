@@ -147,7 +147,17 @@ no dependency chain, just the usual one-slice-per-session discipline.
 Each item below is written to be actionable cold, without needing the
 2026-09-07 conversation for context.
 
-12. **Z-index: no shared scale.** `static/style.css` has ~50 raw
+12. ~~**Z-index: no shared scale.**~~ **Shipped 2026-09-07** — see
+    `STATE.md`'s entry of the same date. Scoped to the fixed/portal-
+    positioned overlay and nav elements that actually compete for the
+    same stacking area (9 new tokens, 16 call sites) — the many small
+    single-component drag/lift values inside the Calendar/Timeline/Month
+    grids were deliberately left as raw numbers, each already explained
+    locally and never competing against the cross-component ladder.
+    Every value matches what was already hardcoded; this was a naming
+    pass, not a renumbering.
+
+    (Original scope, superseded by the above:) `static/style.css` has ~50 raw
     `z-index` declarations (values from -1 up to 1000, no CSS custom
     properties, no documented ladder — contrast Bootstrap's own explicit
     dropdown/sticky/fixed/modal/popover/tooltip scale). **This is not

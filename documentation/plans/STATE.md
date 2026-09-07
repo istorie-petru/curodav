@@ -17,6 +17,81 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 12, a shared z-index
+  scale (skipped item 11, the CSP `unsafe-inline` migration, per direct
+  request -- still open, see below). The item's own investigation had
+  already confirmed today's stacking is *correct*, just correct via a
+  dozen scattered comments cross-referencing each other instead of one
+  source of truth -- this was a naming/documentation refactor, not a
+  fix, with the item's own warning to heed: "don't just sort-and-
+  renumber... some orderings are load-bearing."
+
+  Scoped deliberately, after reading all 51 `z-index` grep hits in
+  `style.css` (39 live declarations, the rest inside comments) in full
+  context: only the **fixed/portal-positioned overlay and nav elements
+  that can end up stacked against each other at the same time** got
+  named tokens -- 9 new custom properties in the Tokens block
+  (`--z-rail`, `--z-fab`, `--z-modal`, `--z-nav-scrim`,
+  `--z-overlay-panel`, `--z-mobile-tabbar`, `--z-modal-stacked`,
+  `--z-toast`, `--z-top`), covering 16 call sites: `.tabbar` (both its
+  desktop-rail value and its separate mobile-bottom-sheet-drawer value),
+  `.fab`, `.modal-overlay`, `.mobile-nav-scrim`, `.mobile-tabbar`,
+  `.toast-stack`, `.command-palette-overlay`, `.cropper-overlay`,
+  `.multiselect-panel`, `.action-menu-panel`, `.color-popover`,
+  `.icon-popover`, `.dtp-panel`, `.skip-link`, `.drag-ghost`. Every
+  value matches exactly what was already hardcoded at that site --
+  confirmed mechanically afterward (grepped each new variable's own
+  name, counted occurrences against the expected definition + comment-
+  mention + usage-site count for every single one).
+
+  **Deliberately left as raw numbers:** the many single-component drag/
+  lift z-index values inside the Calendar/Timeline/Month grids
+  (`.time-event`/`.time-event.dragging`, `.schedule-ghost`,
+  `.allday-task.dragging`, `.month-event-item.dragging`,
+  `.timeline-gutter-sep`/`-row`, `.timeline-create-ghost`,
+  `.widget-card.is-dragging`/`.is-stack-target`), plus small single-use
+  resets (`.seg-btn`, `.tab-btn.active::before`, `.month-day-cell`,
+  `.modal-close`, page-banner/header layering). Each of these only ever
+  orders itself against its own siblings inside one local stacking
+  context that's already explained right where it's declared (some of
+  those very comments describe a *previously fixed* regression from
+  values leaking across contexts, e.g. the 2026-08-09 time-grid fix) --
+  they never compete against the cross-component overlay ladder, so
+  folding them into the same token set would document a relationship
+  that doesn't actually exist. New token block's own header comment
+  states this scoping explicitly for the next person who edits it.
+
+  Comments with an explicit bare-number callout got updated to point at
+  the new variable name instead (the skip-link's "z-index:1000 matches
+  the app's highest existing layer" comment, and `.multiselect-panel`'s
+  "z-index matches those two popovers (150) -- needs to sit above ...
+  (100)" comment) -- every other comment either had no literal number in
+  its prose or didn't need touching.
+
+  No CSS-rendering test harness in this suite (per this file's own
+  recurring note), and `grep`ping `tests/` for `z-index` first turned up
+  zero hits -- no test asserts any of these values today. Manual check
+  substituted for a screenshot pass (no browser available in this
+  session's sandbox, same constraint noted in earlier CSS-only slices):
+  traced every one of the 16 converted call sites back to its resolved
+  numeric value and confirmed each matches its pre-refactor number
+  exactly, so the actual stacking order (modal 100 < overlay-panel/
+  drawer 150 < mobile-tabbar 160 < modal-stacked/toast 200 < top 1000,
+  and nav-scrim 140 < overlay-panel 150 < mobile-tabbar 160 for the
+  mobile drawer specifically) is unchanged -- this is a refactor
+  verified by construction (every substitution grepped 1:1 against its
+  original raw number before commit), not by rendering the page.
+  `sw.js` CACHE_NAME bumped v58 -> v59 (`style.css` content changed),
+  `test_pwa_shell.py`'s pin updated. Full suite: 1970 passed (same count
+  as item 10 -- pure CSS token refactor, no row/behavior change).
+
+  **Next slice:** item 11 (CSP `unsafe-inline` migration, still
+  deliberately skipped, largest/riskiest item) or items 13-15 (icon-
+  button edit/delete pair dedup, and whatever items 14-15 turn out to
+  be per `audit-fixes-2.0.md`) -- no dependency chain between any of
+  them, pick whichever next per the usual one-slice-per-session
+  discipline.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 10, performance
   housekeeping (the last mandatory item before the CSP `unsafe-inline`
   migration). Two parts per the doc's own spec:

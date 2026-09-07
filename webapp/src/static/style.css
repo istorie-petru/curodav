@@ -179,6 +179,32 @@
 
   /* Card border-radius bumped to 12px (MD3 style) */
   --radius-card:16px;
+
+  /* Z-index scale (audit-fixes-2.0.md item 12) -- a shared ladder for the
+     fixed/portal-positioned overlay and nav elements that can end up
+     stacked against each other at the same time: an open modal, a
+     portaled dropdown escaping that modal's own clipping, a second
+     overlay rendered on top of the modal, a toast. Every value below
+     matches what was already hardcoded at each call site before this
+     pass -- this is a naming exercise, not a renumbering, so read each
+     consumer's own comment before ever changing one of these.
+     Deliberately does NOT cover the many small, single-component
+     z-index values scattered elsewhere (Calendar/Timeline/Month grid
+     drag-lift states, a tab's active-pill background sitting behind its
+     own icon, etc.) -- those only ever order themselves against their
+     own siblings inside one local stacking context, already explained
+     right where they're declared, and never compete against this
+     cross-component ladder. Folding them in here would imply a
+     relationship with dropdowns/modals/toasts that doesn't exist. */
+  --z-rail:20;           /* desktop .tabbar, the fixed sidebar rail */
+  --z-fab:90;            /* .fab, the floating action button */
+  --z-modal:100;         /* .modal-overlay */
+  --z-nav-scrim:140;     /* .mobile-nav-scrim -- the mobile drawer's backdrop */
+  --z-overlay-panel:150; /* portaled dropdown/popover panels that escape modal/overflow clipping (.multiselect-panel, .action-menu-panel, .color-popover, .icon-popover, .dtp-panel), and .tabbar's own bottom-sheet drawer mode below the mobile breakpoint */
+  --z-mobile-tabbar:160; /* .mobile-tabbar -- the persistent 3-button mobile bar, above the drawer/scrim so it stays reachable while the drawer is open */
+  --z-modal-stacked:200; /* a second overlay meant to render above an already-open modal (.command-palette-overlay, .cropper-overlay) */
+  --z-toast:200;         /* .toast-stack -- same tier as --z-modal-stacked today, kept as its own token since the two are conceptually different */
+  --z-top:1000;          /* the app's highest layer (.skip-link, .drag-ghost) */
 }
 [data-theme="dark"]{
   color-scheme:dark;
@@ -284,11 +310,11 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
    `.sr-only`'s clip-based hiding is deliberately not reused here: this
    needs to become visible on focus, and clip-rect(0,0,0,0) has no un-clip
    state to toggle, so it's off-screen via a large negative top instead
-   (moved on-screen with `top:0` on `:focus`). z-index:1000 matches the
-   app's highest existing layer (the drag-ghost tooltip) so it renders
+   (moved on-screen with `top:0` on `:focus`). z-index:var(--z-top) matches
+   the app's highest existing layer (the drag-ghost tooltip) so it renders
    above the sidebar/topbar it's meant to skip past. */
 .skip-link{
-  position:absolute; top:-40px; left:var(--space-3); z-index:1000;
+  position:absolute; top:-40px; left:var(--space-3); z-index:var(--z-top);
   background:var(--accent); color:var(--fg-on-accent); padding:8px 16px;
   border-radius:var(--radius-sm); text-decoration:none; font-weight:600;
   transition:top .15s ease;
@@ -660,7 +686,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   /* Desktop: fixed vertical rail on the left edge. Width 52px (see the
      2026-08-30 "narrow rail width" follow-ups further down -- was 80px,
      then 64px, then 56px, before those). */
-  position:fixed; top:0; left:0; bottom:0; z-index:20;
+  position:fixed; top:0; left:0; bottom:0; z-index:var(--z-rail);
   width:52px;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; padding:var(--space-4) var(--space-2);
@@ -1636,12 +1662,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    reason: .modal/.modal-body clip any descendant that visually overflows
    them regardless of its own position value, so a panel opened from inside
    a modal-rendered form was getting cut off/overlapped instead of
-   rendering in full. z-index matches those two popovers (150) -- needs to
-   sit above an open .modal-overlay (100). max-height/overflow so a long
-   option list (e.g. many labels) scrolls internally instead of running off
-   the bottom of the viewport. */
+   rendering in full. z-index matches those two popovers (var(--z-overlay-panel))
+   -- needs to sit above an open .modal-overlay (var(--z-modal)). max-height/
+   overflow so a long option list (e.g. many labels) scrolls internally
+   instead of running off the bottom of the viewport. */
 .multiselect-panel{
-  display:none; position:fixed; z-index:150; min-width:200px; max-height:min(360px, 70vh); overflow-y:auto;
+  display:none; position:fixed; z-index:var(--z-overlay-panel); min-width:200px; max-height:min(360px, 70vh); overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   box-shadow:var(--elevation-3); padding:6px;
 }
@@ -1734,7 +1760,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .action-menu-trigger .icon{width:16px; height:16px;}
 
 .action-menu-panel{
-  display:none; position:fixed; z-index:150; min-width:180px; max-width:260px;
+  display:none; position:fixed; z-index:var(--z-overlay-panel); min-width:180px; max-width:260px;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   box-shadow:var(--elevation-3); padding:var(--space-1); overflow:hidden;
 }
@@ -3051,7 +3077,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    for a drop. pointer-events:none keeps the pointermove stream flowing to
    the drag handlers on document. */
 .drag-ghost{
-  position:fixed; z-index:1000; pointer-events:none; opacity:.85; display:none;
+  position:fixed; z-index:var(--z-top); pointer-events:none; opacity:.85; display:none;
   width:220px; max-width:80vw;
   background:var(--bg-elevated); border:1px solid var(--accent); border-radius:8px;
   box-shadow:0 6px 16px rgba(0,0,0,.18);
@@ -3445,7 +3471,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     own button scrolls out of reach the moment a list is longer than one
     screen. MD3 FAB: circular, elevated, accent-colored. */
 .fab{
-   display:none; position:fixed; right:var(--space-4); z-index:90;
+   display:none; position:fixed; right:var(--space-4); z-index:var(--z-fab);
    bottom:calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
    width:56px; height:56px; border-radius:16px; background:var(--accent); color:var(--fg-on-accent);
    align-items:center; justify-content:center; box-shadow:var(--elevation-3);
@@ -3509,7 +3535,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     box-shadow:var(--elevation-3);
     padding:0 var(--space-3) var(--space-3);
     overflow-y:auto; overflow-x:hidden;
-    z-index:150;
+    z-index:var(--z-overlay-panel);
     transform:translateY(110%);
     transition:transform var(--dur-normal) var(--ease-standard);
   }
@@ -3561,7 +3587,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      block used to render via .tabbar itself. */
   .mobile-tabbar{
     display:flex; position:fixed; left:0; right:0; bottom:0;
-    height:64px; z-index:160;
+    height:64px; z-index:var(--z-mobile-tabbar);
     background:var(--bg-elevated); border-top:1px solid var(--separator);
     box-shadow:0 -2px 8px rgba(0,0,0,.08);
     padding:0 4px; padding-bottom:env(safe-area-inset-bottom, 0px);
@@ -3585,7 +3611,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
   .mobile-nav-scrim{
     display:block; position:fixed; left:0; right:0; top:0;
     bottom:calc(64px + env(safe-area-inset-bottom, 0px));
-    background:var(--overlay-scrim); z-index:140;
+    background:var(--overlay-scrim); z-index:var(--z-nav-scrim);
     opacity:0; visibility:hidden;
     transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
   }
@@ -3600,7 +3626,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 }
 
 .toast-stack{
-  position:fixed; left:0; right:0; bottom:var(--space-5); z-index:200;
+  position:fixed; left:0; right:0; bottom:var(--space-5); z-index:var(--z-toast);
   display:flex; flex-direction:column; align-items:center; gap:var(--space-2); pointer-events:none;
   padding:0 var(--space-4);
 }
@@ -3689,7 +3715,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
     top-app-bar + bottom-sheet footer pattern. */
 .modal-overlay{
    position:fixed; inset:0; background:var(--overlay-scrim); display:flex;
-   align-items:center; justify-content:center; opacity:0; visibility:hidden; z-index:100; padding:var(--space-5);
+   align-items:center; justify-content:center; opacity:0; visibility:hidden; z-index:var(--z-modal); padding:var(--space-5);
    transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
 }
 .modal-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
@@ -3906,7 +3932,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* render above an already-open modal, not inside it.                    */
 /* --------------------------------------------------------------------- */
 .command-palette-overlay{
-  position:fixed; inset:0; z-index:200; background:var(--overlay-scrim);
+  position:fixed; inset:0; z-index:var(--z-modal-stacked); background:var(--overlay-scrim);
   display:flex; align-items:flex-start; justify-content:center; padding:12vh var(--space-5) var(--space-5);
   opacity:0; visibility:hidden;
   transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
@@ -4002,7 +4028,7 @@ body.command-palette-open{overflow:hidden;}
 /* rather than an unrelated visual style.                                 */
 /* --------------------------------------------------------------------- */
 .cropper-overlay{
-  position:fixed; inset:0; z-index:200; background:var(--overlay-scrim);
+  position:fixed; inset:0; z-index:var(--z-modal-stacked); background:var(--overlay-scrim);
   display:flex; align-items:center; justify-content:center; padding:var(--space-5);
   opacity:0; visibility:hidden;
   transition:opacity var(--dur-normal) var(--ease-standard), visibility 0s linear var(--dur-normal);
@@ -4136,7 +4162,7 @@ body.command-palette-open{overflow:hidden;}
    it stays display:none so it never occupies layout space there. */
 .color-picker .color-dropdown{display:none;}
 .color-popover{
-  position:fixed; display:none; z-index:150; width:236px; max-height:280px; overflow-y:auto;
+  position:fixed; display:none; z-index:var(--z-overlay-panel); width:236px; max-height:280px; overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   padding:10px; box-shadow:var(--elevation-3);
 }
@@ -4181,7 +4207,7 @@ body.command-palette-open{overflow:hidden;}
 .icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral); border-color:transparent;}
 .icon-picker .icon-dropdown{display:none;}
 .icon-popover{
-  position:fixed; display:none; z-index:150; width:260px; max-height:320px; overflow-y:auto;
+  position:fixed; display:none; z-index:var(--z-overlay-panel); width:260px; max-height:320px; overflow-y:auto;
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   padding:8px; box-shadow:var(--elevation-3);
 }
@@ -5716,7 +5742,7 @@ body.command-palette-open{overflow:hidden;}
 .dtp--compact .dtp-trigger:hover{background:var(--bg-secondary); border-color:transparent;}
 .dtp--compact .dtp-trigger:focus-visible{border-color:transparent; box-shadow:0 0 0 2px var(--accent-neutral-subtle);}
 .dtp-panel{
-  display:none; position:fixed; z-index:150;
+  display:none; position:fixed; z-index:var(--z-overlay-panel);
   background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
   box-shadow:var(--elevation-3); padding:var(--space-3);
 }

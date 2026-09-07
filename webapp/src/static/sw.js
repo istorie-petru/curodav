@@ -241,7 +241,11 @@
 // src/templates/_bulk_actions_bar.html added -- not in SHELL_ASSETS
 // (server-rendered template, not a static asset, same reasoning as every
 // other templates-only change in this file's history).
-const CACHE_NAME = "cc-shell-v58";
+// v58 -> v59 (2026-09-07, audit-fixes-2.0.md item 12): style.css changed
+// again -- raw z-index numbers in the fixed/portal overlay and nav rules
+// replaced with named custom properties (--z-rail/--z-modal/--z-overlay-
+// panel/etc.), same numeric values throughout, no visual change intended.
+const CACHE_NAME = "cc-shell-v59";
 
 const SHELL_ASSETS = [
   "/offline",
