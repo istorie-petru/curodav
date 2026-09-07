@@ -504,8 +504,11 @@ class TestLocalWritePath:
         # v67 (2026-09-07, direct request): new generic main.main-shell
         # flex-shell modifier, applied to Tasks/Contacts/Notes/Labels
         # manage/Dashboard -- see sw.js's own v67 comment.
+        # v68 (2026-09-07, direct measurement): .page-header-narrow now
+        # sets height:48px explicitly (was missing its own 1px border
+        # from the earlier budget math) -- see sw.js's own v68 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v67"' in script
+        assert 'CACHE_NAME = "cc-shell-v68"' in script
 
 
 class TestOfflineToolbar:

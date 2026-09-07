@@ -335,7 +335,20 @@
 // #dashboard-grid) -- see style.css's own comment on main.main-shell for
 // the full reasoning, including why Dashboard's masonry grid (which sets
 // its own JS-computed style.height) composes safely with this.
-const CACHE_NAME = "cc-shell-v67";
+// v68 (2026-09-07, direct measurement: v66's fix still measured 50px on
+// pages with the filter button and 46px on plain pages, not 48 either
+// way): style.css changed again -- .page-header-narrow was missing its
+// own 1px border from the height budget math (48 padding-only target
+// needed 50px of auto-height to actually fit a 32px control once the
+// 2px border was added back in, and 46px to fit a 28px one) --
+// .page-header-narrow now sets height:48px explicitly instead of
+// relying on content to add up to it. .filter-dropdown-trigger dropped
+// 32px -> 30px to fit the real content budget (48 - 16 padding - 2
+// border), and calendar_month.html's Month|Day .segmented switch
+// (page-header-narrow-actions .segmented/.seg-btn) got a matching
+// compact override -- it was the one other actions-slot control tall
+// enough to get clipped by the new fixed height's overflow:hidden.
+const CACHE_NAME = "cc-shell-v68";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -17,6 +17,42 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- follow-up correction to the header-height
+  fix two entries below: direct measurement after that fix still showed
+  50px on pages with the filter-dropdown button and 46px on plain pages,
+  not 48 either way (symmetric ±2px, not just "still too tall"). Root
+  cause: that fix's math (8px padding top + 8px bottom = a 32px content
+  budget inside a 48px target) missed that `.page-header-narrow` *also*
+  has a 1px border on top of the padding -- with the header's height
+  still auto/content-driven at that point, a 32px-tall control actually
+  needed 32 + 16 (padding) + 2 (border) = 50px of auto-height to render
+  without clipping, and a 28px control (plain pages' tallest content,
+  `.icon-btn`) needed 46px -- both exactly matching the new measurement.
+
+  Fixed at the root this time instead of chasing individual controls'
+  heights again: `.page-header-narrow` now sets `height:48px` explicitly
+  (it already had `overflow:hidden`, for the optional banner image, so
+  anything that doesn't fit gets absorbed instead of pushing the row
+  taller) -- real content budget is `48 - 16 (padding) - 2 (border) =
+  30px`. `.filter-dropdown-trigger` adjusted `32px -> 30px` to fit it
+  without clipping. Also checked every other control that can render in
+  `.page-header-narrow-actions` for the same risk: `.icon-btn` (28px)
+  already fits; `calendar_month.html`'s Month|Day `.segmented` switch
+  (`.segmented`'s 3px padding + `.seg-btn`'s 6px, ~35px total) did not --
+  added a `.page-header-narrow-actions`-scoped compact override
+  (`.segmented{padding:2px}`, `.seg-btn{padding:3px 12px}`) so it fits
+  too, scoped to that one actions-slot context since `.segmented` is
+  reused at its normal size all over Settings/modals correctly.
+
+  `sw.js` `CACHE_NAME` bumped `v67` -> `v68`; `test_pwa_shell.py`
+  updated. Full suite: 1975 passed, same total as before.
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list. Still no live browser to actually confirm
+  48px against a ruler (see the entry two below's own verification-note
+  caveat, unchanged this pass) -- worth being the first thing checked
+  next session if Chrome or a sandbox browser becomes available.
+
 - **Shipped:** 2026-09-07 -- extended the flex-shell "page fits the
   viewport, body scrolls internally" model (built for Calendar/Planner
   earlier this session, `main.main-calendar`) to a new generic

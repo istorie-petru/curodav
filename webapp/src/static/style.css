@@ -1737,17 +1737,21 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   /* 2026-09-07 (direct report: Tasks' header bar measured 58px against
      48px everywhere else): this is the one control _page_header_narrow.
      html's actions slot renders that's taller than the icon-btn/h2-title
-     content that otherwise caps the header at 48px (8px+8px padding
-     around a 32px-tall content row) -- 40px forced the whole flex row
-     (align-items:center) taller wherever this button actually renders.
-     Latent on Calendar/Contacts too (their own filter dropdowns are
-     conditional on having any labels/tags to filter by, so an empty
-     account's headers happened to dodge it) -- Tasks' Date filter is
-     unconditional, so it's the one that surfaced this first. Shrunk to
-     32px to fit the same budget every other header control already
-     respects, so this button no longer changes the header's height
-     depending on whether it happens to render. */
-  height:32px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
+     content that otherwise let the header settle at 48px. Latent on
+     Calendar/Contacts too (their own filter dropdowns are conditional on
+     having any labels/tags to filter by, so an empty account's headers
+     happened to dodge it) -- Tasks' Date filter is unconditional, so
+     it's the one that surfaced this first.
+
+     Originally shrunk to 32px against a padding-only budget (8px top +
+     8px bottom inside .page-header-narrow's own 48px target) -- direct
+     follow-up measurement showed that still landed at 50px, not 48,
+     because .page-header-narrow *also* has a 1px border (2px total) this
+     first pass didn't account for. .page-header-narrow now sets its own
+     height:48px explicitly instead of relying on content to add up to
+     it (see that rule's own comment) -- its real content budget is
+     48 - 16(padding) - 2(border) = 30px, so this is 30px now, not 32. */
+  height:30px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
   background:var(--bg-secondary); color:var(--fg-secondary);
   font-family:inherit; font-size:var(--text-footnote); font-weight:600;
   cursor:pointer; white-space:nowrap;
@@ -5801,6 +5805,22 @@ body.command-palette-open{overflow:hidden;}
    .page-banner above, which is a different image per Home/label page). */
 .page-header-narrow{
   position:relative; overflow:hidden;
+  /* 2026-09-07 (direct measurement: height varied 46-50px depending on
+     which control happened to render in .page-header-narrow-actions --
+     a filter-dropdown-trigger's page measured 50px, a plain icon+title
+     page measured 46px, both off the 48px target in opposite
+     directions). Auto-sizing this row off whichever child happens to be
+     tallest turned out not to reliably land on 48px even after capping
+     every known control at a 32px content budget (8px padding either
+     side) -- some small, hard-to-fully-account-for difference in how
+     each control's own content naturally sizes (line-height rounding,
+     a competing border-width rule winning by specificity in one case,
+     etc.) kept nudging the *measured* height off the *intended* one.
+     Setting height:48px directly makes the header's own box authoritative
+     regardless of those differences -- overflow:hidden above (already
+     needed for the optional banner image) absorbs anything that doesn't
+     quite fit rather than pushing the row taller. */
+  height:48px;
   display:flex; align-items:center; gap:var(--space-2);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
   border-radius:var(--radius-card); border:1px solid var(--border);
@@ -5839,6 +5859,18 @@ body.command-palette-open{overflow:hidden;}
 .page-header-narrow-actions{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
+/* Month's Month|Day .segmented switch (calendar_month.html's own
+   `.calendar-subnav`) is the one other actions-slot control besides
+   .filter-dropdown-trigger tall enough to matter here -- `.segmented`'s
+   3px padding + `.seg-btn`'s own 6px padding adds up to ~35px, over the
+   header's 30px content budget (48px height minus 16px padding and 2px
+   border, see .page-header-narrow's own comment), which `overflow:hidden`
+   would otherwise silently clip a few px off the bottom of. Scoped to
+   this actions slot specifically -- .segmented is reused all over
+   Settings/modals at its normal size, which is correct there and
+   shouldn't shrink just because one context needs it compact. */
+.page-header-narrow-actions .segmented{padding:2px;}
+.page-header-narrow-actions .seg-btn{padding:3px 12px;}
 /* Buttons/dropdown triggers pinned over a photo need to read against
    whatever image is behind them, not the page background -- same
    frosted-chip treatment .page-banner-actions .btn.ghost gets. Bannerless
