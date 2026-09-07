@@ -1,5 +1,6 @@
 {# Labels table body fragment for async-CRUD region refresh #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
 {% for l in labels %}
 <tr data-label-name="{{ l.name }}">
     <td>
@@ -33,9 +34,5 @@
 </tr>
 {% endfor %}
 {% if not labels %}
-<tr id="empty-state-row">
-    <td colspan="4" class="empty-state">
-        No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.
-    </td>
-</tr>
+{{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state', style='') }}
 {% endif %}

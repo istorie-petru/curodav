@@ -4,6 +4,7 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
 {{ page_header_narrow("Holidays", "calendar") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
@@ -70,9 +71,7 @@
                     </tr>
                     {% endfor %}
                 {% else %}
-                    <tr id="empty-state-row">
-                        <td colspan="5" class="text-muted" style="font-size: var(--text-footnote);">No holidays configured yet</td>
-                    </tr>
+                    {{ empty_state_row(5, "No holidays configured yet") }}
                 {% endif %}
                 <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
                      "+ Add X" convention as _tasks_body.html's

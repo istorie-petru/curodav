@@ -17,6 +17,55 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 14, the empty-state
+  table row, duplicated 5x. `labels_manage.html`, `settings_holidays.html`,
+  and `settings_time_blocks.html` (Sleep and Leisure -- two independent
+  call sites, same pattern as items 9/13) each repeated an identical
+  `<tr id="empty-state-row"><td colspan="5" class="text-muted" style=
+  "font-size: var(--text-footnote);">No {X} yet</td></tr>`.
+  `_labels_table_body.html` repeated the same *id*, but -- read directly
+  rather than assumed from the audit item's own "differing only in
+  colspan and message" framing -- its actual markup is a materially
+  different shape: `colspan="4"`, the app's shared `.empty-state` class
+  instead of `text-muted` + inline style (that class already supplies its
+  own padding/color/font-size, so an inline style there would be
+  redundant), and a richer message with a call-to-action and literal
+  `&lsquo;`/`&rsquo;` entities.
+
+  New `_empty_state_row.html` macro (`empty_state_row(colspan, message,
+  css_class='text-muted', style='font-size: var(--text-footnote);')`),
+  its own file rather than folded into `_bulk_actions_bar.html`/
+  `_row_action_buttons.html` -- matching how `_label_pill.html` (a
+  similarly tiny one-line macro) is already scoped to its own file, per
+  the audit item's own suggestion to check that convention first.
+  `message` renders with `|safe` so `_labels_table_body.html`'s entity
+  markup renders as intended instead of being double-escaped -- every
+  call site's `message` is a static string authored in this codebase,
+  never user input, same trust boundary the un-extracted markup already
+  had. `settings_data_maintenance.html:191`'s "No backups yet" `<span>`
+  stayed out of scope, per the audit item's own explicit carve-out (a
+  plain list `<span>`, not a `<tr>`/`<td>`, a naming coincidence not real
+  duplication).
+
+  Grepped `tests/` for `empty-state-row`/`empty-state`/each of the 5 call
+  sites' own message text first: three tests assert the message text
+  itself (`test_settings_time_blocks.py`'s Sleep/Leisure strings,
+  `test_settings_holidays.py`'s Holidays string) and survive unchanged
+  since the macro renders identical text; nothing hardcoded the old
+  `class`/`colspan`/inline-style markup directly, so no test changes
+  needed. Pure template change, no CSS/JS touched, no new/removed static
+  asset -- no `sw.js` bump needed (same "templates-only" reasoning as
+  items 8/9/13). Full suite: 1970 passed (same count as item 13 -- pure
+  markup refactor, no row/behavior change), run as 12 parallel background
+  chunks in one bash call, `test_caldav_bridge_live.py` excluded as
+  always.
+
+  **Next slice** (per `audit-fixes-2.0.md`'s order): item 15 (stale
+  roadmap claim about Tasks-table pagination -- a two-minute doc fix), or
+  item 11 (CSP `unsafe-inline` migration, still deliberately skipped,
+  largest/riskiest -- the only remaining item after 15). No dependency
+  chain between 15 and 11.
+
 - **Shipped:** 2026-09-07 -- audit-fixes-2.0.md item 13, the icon-button
   Edit/Delete pair extraction (same shape as item 9's `.bulk-actions-bar`
   extraction, not caught in that pass). `settings_holidays.html`,

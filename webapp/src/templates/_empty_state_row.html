@@ -1,0 +1,47 @@
+{# Shared empty-state table row -- the single `<tr id="empty-state-row">`
+   rendered in place of a settings/manage table's rows when there's nothing
+   to show. Extracted 2026-09-07 (audit-fixes-2.0.md item 14) from five
+   near-identical copies (labels_manage.html, settings_holidays.html,
+   settings_time_blocks.html's Sleep and Leisure sections, and
+   _labels_table_body.html) -- same shape as item 9's `_bulk_actions_bar.
+   html`/item 13's `_row_action_buttons.html` extractions, just not caught
+   in either pass.
+
+   The five call sites actually differ on more than colspan/message, once
+   read directly rather than assumed from the audit doc's own one-shape
+   sketch: four (labels_manage.html, settings_holidays.html,
+   settings_time_blocks.html x2) use `colspan="5"` with a `text-muted` +
+   inline `font-size` style; `_labels_table_body.html` uses `colspan="4"`
+   with the app's shared `.empty-state` class instead (already padded/
+   colored/sized by that class in style.css -- an inline style there would
+   just be redundant) and a richer message with a call-to-action link and
+   literal `&lsquo;`/`&rsquo;` entities. So `css_class`/`style` are real
+   parameters, not hardcoded, and `message` is rendered with `|safe` so
+   entity markup already written by the caller (e.g. `_labels_table_body.
+   html`'s `&lsquo;+ New Label&rsquo;`) renders as intended instead of
+   being double-escaped -- every call site here is a static string
+   authored in this codebase, never user input, so this is the same
+   trust boundary the un-extracted markup already had.
+
+   `settings_data_maintenance.html:191`'s "No backups yet" text is
+   deliberately NOT this macro -- it's a `<span>` in a plain list, not a
+   `<tr>`/`<td>` in a table, a different shape the audit item itself
+   called out as a naming coincidence rather than real duplication.
+
+   Params:
+     colspan   -- the `<td colspan>` value (5 for four of the five sites,
+                  4 for _labels_table_body.html -- check each call site,
+                  don't assume 5).
+     message   -- the empty-state text, rendered with `|safe` (see above).
+     css_class -- default 'text-muted' (the four text-muted sites); pass
+                  'empty-state' for a site using the shared empty-state
+                  look instead.
+     style     -- default 'font-size: var(--text-footnote);' (matches the
+                  text-muted sites' own inline style); pass '' to omit the
+                  attribute entirely (the `.empty-state` site already gets
+                  its font-size from that class). #}
+{% macro empty_state_row(colspan, message, css_class='text-muted', style='font-size: var(--text-footnote);') %}
+<tr id="empty-state-row">
+    <td colspan="{{ colspan }}" class="{{ css_class }}"{% if style %} style="{{ style }}"{% endif %}>{{ message|safe }}</td>
+</tr>
+{% endmacro %}
