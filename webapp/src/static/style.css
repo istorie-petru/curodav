@@ -1008,10 +1008,14 @@ main{
    {% block main_class %}) -- Calendar (Month/Week/Day/Agenda) uses this
    per direct feedback that the grid should use the full width available
    next to the sidebar rail, not be boxed into the same column width a
-   text-heavy page like Settings uses. Only removes the max-width/
-   right-margin cap; the rail clearance (margin-left) and padding stay
-   exactly the same as every other page. */
-main.main-full-width{max-width:none; margin-right:var(--space-5);}
+   text-heavy page like Settings uses. Only removes the max-width cap;
+   the rail clearance (margin-left) and padding stay exactly the same as
+   every other page. 2026-09-07 (direct request): dropped the extra
+   margin-right:var(--space-5) this rule used to add on top of main's own
+   right padding -- it left an unnecessary strip of unused width on the
+   right edge of exactly the pages (Calendar/Planner) this class exists
+   to make use the full width available. */
+main.main-full-width{max-width:none;}
 
 .toolbar{display:flex; gap:var(--space-2); margin-bottom:var(--space-3); flex-wrap:wrap; align-items:center;}
 /* A page-title h1 sitting inline in any toolbar-shaped row (this plain
@@ -2863,78 +2867,100 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 /* Calendar "fit the page" layout (2026-08-08, direct feedback: "make the
    calendar month view fit the page, with a slight resize... week view to
    fit the page and be scrollable... merge the day and agenda view in a
-   side by side manner, both independently scrollable") -- desktop only
-   (mobile already spends screen height on the bottom tab bar/FAB, and a
-   shrink-to-fit calendar grid on top of that is a separate problem this
-   pass doesn't attempt to solve blind). `--calendar-chrome-h` is a fixed
-   estimate of everything vertically surrounding the grid on these pages
-   -- main's own top/bottom padding plus the two-row toolbar -- not a
-   measured value; the toolbar's real height shifts a few px depending on
-   whether its filter row is expanded, and the request was a "slight"
-   resize, not pixel-perfect math, so a generous fixed estimate (rather
-   than JS measuring the toolbar every render) is the right amount of
-   precision here. */
+   side by side manner, both independently scrollable"). Originally two
+   separate passes (a desktop-only one here, a mobile-only one further
+   down) that each redefined nearly the same rules under their own
+   breakpoint -- folded into one breakpoint-independent ruleset
+   2026-09-07, after a direct report that the desktop version's fixed
+   `--calendar-chrome-h` px estimate (main's own padding plus the header
+   strip) was still leaving a page-level scrollbar: a magic number tuned
+   against one header height is wrong the moment that header wraps (a
+   narrow window, a long label filter) or anything around it changes
+   size, and there's no way to "calculate" your way out of that other
+   than measuring the real DOM with JS on every resize.
+
+   Real apps solve "this should exactly fill the viewport" with a flex
+   shell instead of arithmetic: lock ONE outer container's height to the
+   viewport, then let flexbox distribute whatever's left between a
+   fixed-size header (`flex:none`) and a flex:1 body -- the browser does
+   the subtraction, so there's nothing left to get out of sync.
+   `main.main-calendar` (calendar_day/week/month/fourweek.html's own
+   `main_class` modifier -- not applied to dashboard.html/
+   label_detail.html/project_detail.html, which also use
+   `main-full-width` but whose widget-grid/Kanban content isn't this "one
+   scrollable grid card" shape and should keep ordinary page scroll) is
+   that shell now, unconditionally. Only the number subtracted from the
+   viewport differs by breakpoint (nothing on desktop; the mobile bottom
+   nav bar's 64px below) -- see the two small media blocks right after
+   this one for just that; everything else here applies at every width. */
+main.main-calendar{
+  display:flex; flex-direction:column; overflow:hidden;
+}
+main.main-calendar > h1.sr-only{flex:none;}
+main.main-calendar > .page-header-narrow{flex:none;}
+/* The direct main child that IS the widget -- .calendar-viewport for
+   Month/4-Week/Day, .project-calendar-layout for Planner/Week (whose own
+   .calendar-viewport is one level deeper, next to the Unscheduled work
+   aside -- that aside stays flex:none below, the grid card claims the
+   remainder). */
+main.main-calendar > .calendar-viewport,
+main.main-calendar > .project-calendar-layout{flex:1 1 auto; min-height:0;}
+/* The widget itself: a flex column so a Week/Day time grid can pin its
+   header (below) while scrolling the hours, and a scroll container in
+   its own right so Month/4-Week (no further internal flex target) also
+   scrolls instead of overflowing this box -- the fallback for whatever
+   the flex-grow rules below can't fit. Deliberately no min-height floor
+   here (this rule used to carry min-height:320px): a fixed floor is
+   exactly the kind of number that can force this box, and therefore
+   main.main-calendar above it, taller than a genuinely short viewport --
+   the same class of bug as --calendar-chrome-h, just smaller. Letting it
+   shrink all the way and rely on its own overflow-y:auto is what
+   actually guarantees no page-level scrollbar at any window size. */
+main.main-calendar .calendar-viewport{
+  display:flex; flex-direction:column; overflow-y:auto;
+}
+main.main-calendar .project-calendar-unscheduled{flex:none;}
+/* Week/Day: the time grid is a real fixed height (24 * one hour's own
+   pixel height, the same spacing every other time-grid view in the app
+   uses) -- almost always taller than the viewport budget, so this
+   scrolls internally instead of resizing. Squashing an hour to be
+   shorter here than everywhere else it appears would make the one piece
+   of the UI that's supposed to be a consistent ruler inconsistent.
+   `.time-grid-wrap` is the one that grows to fill whatever's left and
+   scrolls internally; `.time-grid-head` (the day-of-week header row on
+   Week, single date on Day) sticks to the top of that scroll so it stays
+   visible while you scroll through the hours below it. On Week/Day the
+   header and the all-day strip below it are wrapped in `.time-grid-top`
+   (2026-08-09), so the whole thing -- day-of-week labels AND the all-day
+   events/tasks strip -- stays put together while the hour grid scrolls;
+   `.time-grid-head` keeps its own sticky rule for schedule_classes.html,
+   which has no strip. `.month-weekday-row` gets the same sticky
+   treatment on Month/4-Week, for the same reason. */
+main.main-calendar .time-grid-wrap{flex:1 1 auto; min-height:0; overflow-y:auto;}
+main.main-calendar .time-grid-top, main.main-calendar .time-grid-head,
+main.main-calendar .month-weekday-row{
+  position:sticky; top:0; z-index:2; background:var(--bg-elevated);
+}
+/* Month/4-Week: `overflow-y:auto` above only covers content TALLER than
+   the box -- these rows also need to grow and fill leftover space when
+   the box is SHORTER than their content, or the "dead space" just moves
+   from "below the widget" to "inside the widget," unchanged to look at.
+   `flex:1 1 0` grows each week row to fill whatever's left;
+   `.month-day-cell`'s own unmodified base min-height:90px still acts as
+   each row's floor via the grid it sits in, so rows never shrink below
+   legible -- if 90px * (row count) ever exceeds the box's own height (a
+   great many rows, or a very short window), the overflow-y:auto above is
+   the fallback. */
+main.main-calendar .month-weekday-row{flex:none;}
+main.main-calendar .month-week-grid{flex:1 1 0;}
+
 @media (min-width:721px){
-  :root{--calendar-chrome-h:172px;}
-  /* 2026-09-07 (direct follow-up, same day as the mobile pass below):
-     Month/4-Week used to shrink their rows to fit a fixed vh budget
-     instead of scrolling ("a slight resize", 2026-08-08 -- see git
-     history for that version if the shrink-to-fit look is ever wanted
-     back). Direct feedback since then asked for the same "widget gets an
-     internal scrollbar, page doesn't" treatment Week/Day already had --
-     dropped the shrink math (the 128vh/100vh budget tuning,
-     `.month-viewport`'s `overflow:hidden`, and the `.month-week-grid`/
-     `.month-day-cell` flex-shrink overrides) so all four calendar views
-     now share one model: `.calendar-viewport` is a height-locked flex
-     column that scrolls internally the moment its content is taller
-     than the budget, full stop. `.month-weekday-row` picks up the same
-     sticky-header treatment `.time-grid-top`/`.time-grid-head` already
-     had on Week/Day (below), so it stays visible while the week rows
-     scroll underneath it instead of scrolling away with them. */
-  .calendar-viewport{
-    height:calc(100vh - var(--calendar-chrome-h));
-    min-height:320px;
-    display:flex; flex-direction:column;
-    overflow-y:auto;
-  }
-  /* 2026-09-07 (same-day correction): `overflow-y:auto` alone only
-     covers content TALLER than the box -- Month/4-Week's rows have no
-     stake in the leftover space when the box is TALLER than their
-     content (the box's own height:calc(...) above still reserves the
-     full budget, but a flex column doesn't stretch its children to fill
-     it unless told to), which is exactly the "dead space inside/below
-     the widget" the direct report was about. `flex:1 1 0` on each week
-     row grows them to fill whatever's left; `.month-day-cell`'s own
-     min-height:90px (its plain, non-media base rule) still acts as each
-     row's floor via the grid it sits in, so rows never shrink below
-     legible -- if 90px * (row count) ever exceeds the box's own height
-     (a great many rows, or a very short window), `.calendar-viewport`'s
-     overflow-y:auto above is the fallback, same as before. */
-  .month-weekday-row{flex:none; position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
-  .month-week-grid{flex:1 1 0;}
-
-  /* Week/Day: the time grid is a real fixed height (24 * one hour's own
-     pixel height, the same spacing every other time-grid view in the app
-     uses) -- almost always taller than the viewport budget, so these
-     scroll internally instead of resizing. Squashing an hour to be
-     shorter here than everywhere else it appears would make the one
-     piece of the UI that's supposed to be a consistent ruler
-     inconsistent, which "slight resize" was never asked for on these
-     two views specifically (only Month was).
-
-     `.card.calendar-viewport` (Week and Day, 2026-08-08) is a flex
-     column -- `.time-grid-wrap` (the actual hour-by-hour grid) is the
-     one that grows to fill whatever's left and scrolls internally.
-     `.time-grid-head` (the day-of-week header row on Week, single date
-     on Day) sticks to the top of that scroll so it stays visible while
-     you scroll through the hours below it, instead of scrolling away
-     with them. On Week/Day the header and the all-day strip below it
-     are wrapped in `.time-grid-top` (2026-08-09), so the whole thing --
-     day-of-week labels AND the all-day events/tasks strip -- stays put
-     together while the hour grid scrolls; `.time-grid-head` keeps its
-     own sticky rule for schedule_classes.html, which has no strip. */
-  .time-grid-wrap{flex:1 1 auto; min-height:0; overflow-y:auto;}
-  .time-grid-top, .time-grid-head{position:sticky; top:0; z-index:2; background:var(--bg-elevated);}
+  /* No bottom bar to reserve on desktop -- the viewport itself is the
+     whole budget. `100dvh` (dynamic viewport height, with a plain
+     `100vh` fallback declared first for browsers without dvh support) --
+     tracks the real, current visual viewport rather than the largest
+     possible one, same reasoning as the mobile block below. */
+  main.main-calendar{height:100vh; height:100dvh;}
 }
 
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
@@ -3742,90 +3768,39 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
      was, so the reserved space main already had is still correct). */
   main{margin-left:0; padding-bottom:80px;}
 
-  /* Calendar "fit the page" layout, mobile follow-up (2026-09-07, direct
-     report against a resized/narrow browser window: the Calendar/Planner
-     widget left a dead strip of blank page below it instead of filling
-     the screen, and Planner's 24-hour grid scrolled the whole page
-     instead of scrolling internally). The desktop-only pass above
-     (`.calendar-viewport`'s own comment, 2026-08-08) explicitly punted on
-     mobile ("a shrink-to-fit calendar grid on top of that is a separate
-     problem this pass doesn't attempt to solve blind") -- rather than
-     porting its fixed `--calendar-chrome-h` estimate (tuned for a
-     two-row desktop toolbar that doesn't exist at this width, and here
-     the header's filter row can wrap onto a second line, which would
-     make any fixed guess wrong on some pages/label sets), main.main-
-     calendar makes `main` itself the height-locked flex column instead:
-     its height is exactly "viewport minus the fixed mobile bottom bar",
-     the page header sizes itself normally (flex:none), and whatever's
-     left goes to the actual view widget (`.calendar-viewport` directly,
-     or `.project-calendar-layout` on Planner/Week -- the Unscheduled-work
-     aside stays flex:none, the grid card claims the remainder). No magic
-     number to keep in sync with header content, and it degrades the same
-     way regardless of which calendar view is loaded.
+  /* Calendar "fit the page" layout, mobile's share of the shell (see the
+     main, breakpoint-independent `main.main-calendar` ruleset earlier in
+     this file for the flex/scroll/sticky/grow-fill mechanics themselves
+     -- this block only supplies the one thing that's actually different
+     on mobile: how much of the viewport is reserved for the fixed
+     bottom nav bar, per that ruleset's own "one flex shell, two numbers"
+     design.
 
-     `main-calendar` is a new modifier alongside `main-full-width` (only
-     applied to calendar_day/week/month/fourweek.html) rather than
-     targeting `main.main-full-width` directly -- that class is also used
-     by dashboard.html/label_detail.html/project_detail.html, whose
-     widget-grid/Kanban content isn't this "one scrollable grid card"
-     shape and should keep ordinary page scroll. */
+     .mobile-tabbar (above) is a fixed height:64px box -- its own
+     safe-area-inset-bottom padding is baked INSIDE that 64px
+     (border-box), not added past it, so the space it actually reserves
+     at the bottom of the screen is exactly 64px, not 64px + the inset;
+     an earlier version of this rule subtracted the inset a second time
+     here too, leaving an unwanted gap above the bar instead of the
+     overflow-behind-it bug it was meant to prevent.
+
+     `100vh` -> `100dvh` (2026-09-07, direct report: widget content was
+     overflowing behind the bottom nav bar on mobile) -- `100vh` on
+     mobile Safari/Chrome measures the *largest* possible viewport
+     (address bar hidden), which can be taller than what's actually
+     visible when the address bar is showing, so a height:100vh-based box
+     can run past the real bottom of the screen and under a
+     position:fixed element anchored to the true visual viewport -- the
+     textbook mobile "100vh bug." `100dvh` (dynamic viewport height)
+     tracks the real, current visual viewport instead. Kept as a second
+     declaration (not a replacement) so browsers without dvh support fall
+     back to the vh value instead of the property being dropped
+     entirely. */
   main.main-calendar{
-    display:flex; flex-direction:column;
-    /* .mobile-tabbar (above) is a fixed height:64px box -- its own
-       safe-area-inset-bottom padding is baked INSIDE that 64px (border-
-       box), not added past it, so the space it actually reserves at the
-       bottom of the screen is exactly 64px, not 64px + the inset. The
-       first version of this rule subtracted the inset a second time here
-       too, leaving an unwanted gap above the bar rather than the
-       overflow-behind-it bug it was meant to prevent.
-       `100vh` -> `100dvh` (2026-09-07, direct report: widget content was
-       overflowing behind the bottom nav bar on mobile) -- `100vh` on
-       mobile Safari/Chrome measures the *largest* possible viewport
-       (address bar hidden), which can be taller than what's actually
-       visible when the address bar is showing, so a height:100vh-based
-       box can run past the real bottom of the screen and under a
-       position:fixed element anchored to the true visual viewport --
-       the textbook mobile "100vh bug." `100dvh` (dynamic viewport
-       height) tracks the real, current visual viewport instead. Kept as
-       a second declaration (not a replacement) so browsers without dvh
-       support fall back to the vh value instead of the property being
-       dropped entirely. */
     height:calc(100vh - 64px);
     height:calc(100dvh - 64px);
     padding-bottom:var(--space-3);
-    overflow:hidden;
   }
-  main.main-calendar > h1.sr-only{flex:none;}
-  main.main-calendar > .page-header-narrow{flex:none;}
-  /* The direct main child that IS the widget -- .calendar-viewport for
-     Month/4-Week/Day, .project-calendar-layout for Planner/Week (whose
-     own .calendar-viewport is one level deeper, next to the Unscheduled
-     work aside, same as the desktop rule's own comment on that nesting). */
-  main.main-calendar > .calendar-viewport,
-  main.main-calendar > .project-calendar-layout{flex:1 1 auto; min-height:0;}
-  /* The widget itself: a flex column so a Week/Day time grid can pin its
-     header (below) while scrolling the hours, and a scroll container in
-     its own right so Month/4-Week (no further internal flex target) also
-     scrolls instead of overflowing this box. Harmless no-op on Week/Day,
-     where `.time-grid-wrap` below is the one that actually overflows. */
-  main.main-calendar .calendar-viewport{
-    display:flex; flex-direction:column; overflow-y:auto;
-  }
-  main.main-calendar .project-calendar-unscheduled{flex:none;}
-  main.main-calendar .time-grid-wrap{flex:1 1 auto; min-height:0; overflow-y:auto;}
-  main.main-calendar .time-grid-top, main.main-calendar .time-grid-head,
-  main.main-calendar .month-weekday-row{
-    position:sticky; top:0; z-index:2; background:var(--bg-elevated);
-  }
-  /* Same correction as the desktop block above (see its own comment):
-     overflow-y:auto only helps when content is TALLER than the box --
-     Month/4-Week's rows still need flex:1 1 0 to grow and fill leftover
-     space when it's SHORTER, or the "dead space" complaint just moves
-     from "below the widget" to "inside the widget," unchanged to look
-     at. .month-day-cell's own min-height:90px (unmodified base rule)
-     is still the floor before overflow-y:auto takes over. */
-  main.main-calendar .month-weekday-row{flex:none;}
-  main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 
 .toast-stack{

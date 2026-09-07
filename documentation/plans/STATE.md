@@ -17,6 +17,64 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, structural
+  cleanup pass on top of the three entries below. Two direct asks, both
+  in `style.css`:
+
+  1. **`main-full-width{margin-right:var(--space-5)}` removed.** It was
+     stacked on top of main's own right padding, leaving an unused strip
+     on the right edge of exactly the pages (Calendar/Planner/Dashboard/
+     labels/projects) this class exists to make use the full width
+     available. Now just `max-width:none`.
+
+  2. **The desktop-only and mobile-only "Calendar fit the page" passes
+     (the three entries below, `v61`-`v63`) folded into one
+     breakpoint-independent `main.main-calendar` ruleset**, per a direct
+     suggestion to look at how real apps avoid the `100vh`-causes-a-
+     scrollbar problem instead of tuning yet another magic-number
+     estimate (`--calendar-chrome-h`, the desktop pass's fixed 172px
+     guess for "everything around the grid," was still leaving a
+     page-level scrollbar because a fixed estimate is wrong the moment
+     the real header height differs from it). The fix real apps use:
+     a flex shell, not arithmetic -- lock ONE outer container's height to
+     the viewport, let flexbox distribute the remainder between a
+     `flex:none` header and a `flex:1` body, and the browser does the
+     subtraction instead of a hardcoded number. `main.main-calendar` is
+     that shell now, unconditionally (same flex/scroll/sticky/grow-fill
+     rules at every width) -- the ONLY thing that still differs by
+     breakpoint is how much of the viewport gets subtracted for the
+     shell's own height (`100dvh` on desktop with nothing to reserve,
+     `100dvh - 64px` on mobile for the fixed bottom nav bar), each in its
+     own tiny media query. `--calendar-chrome-h` is gone entirely -- see
+     the ruleset's own comment (style.css, right after `.week-event`) for
+     the full writeup, sources: [dvh explainer](https://savvy.co.il/en/blog/css/css-dynamic-viewport-height-dvh/),
+     [Smashing Magazine on the 100vh scrollbar problem](https://www.smashingmagazine.com/2023/12/new-css-viewport-units-not-solve-classic-scrollbar-problem/).
+     Also dropped the old `.calendar-viewport`'s `min-height:320px` floor
+     while consolidating -- a fixed floor is the same class of bug as
+     `--calendar-chrome-h`, just smaller (it can force the shell taller
+     than a genuinely short viewport); relying on the widget's own
+     `overflow-y:auto` instead is what actually guarantees no page-level
+     scrollbar at any window size.
+
+  Tried Claude in Chrome again this pass for real visual verification
+  (not just reasoning from CSS/screenshots) -- extension still not
+  reachable. Verified instead via: braces-balanced check, `curl` against
+  this sandbox's own running `webapp` instance confirming the served
+  `/static/style.css` has no leftover `--calendar-chrome-h` references
+  and the new `main.main-calendar` rules are present, and the full test
+  suite. A real live-browser pass (resize to actual desktop/mobile
+  widths, screenshot, check DevTools computed height) is still worth
+  doing next session once Chrome is reachable, given how much the two
+  "fixed but wasn't" rounds before this one turned on things that only a
+  real render would have caught immediately.
+
+  `sw.js` `CACHE_NAME` bumped `v63` -> `v64`; `test_pwa_shell.py`
+  updated. Full suite re-run in the same 4-chunk pattern: 678 + 434 + 530
+  + 333 = 1975 passed, same total, no tests added/removed.
+
+  **Next slice:** none mandated -- direct request, not on
+  `audit-fixes-2.0.md`'s list.
+
 - **Shipped:** 2026-09-07 -- Calendar "fit the page" layout, two
   same-day correction passes on top of the two entries below (screenshots
   showing the Month/4-Week card still ending after 4 rows with blank

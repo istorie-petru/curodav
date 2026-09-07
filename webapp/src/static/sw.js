@@ -296,7 +296,20 @@
 // browser might still be showing a stale layout today. A plain browser
 // HTTP cache (or an un-restarted dev server) is the more likely culprit
 // until pwa.js is back in base.html.
-const CACHE_NAME = "cc-shell-v63";
+// v64 (2026-09-07, direct request + suggestion): style.css changed again
+// -- dropped main-full-width's extra margin-right:var(--space-5) (direct
+// request, it left an unused strip on the right of exactly the
+// full-width pages that class exists for), and folded the desktop-only
+// and mobile-only "Calendar fit the page" passes (v61-v63 above) into
+// one breakpoint-independent main.main-calendar ruleset, per a direct
+// suggestion to look at how real apps avoid the 100vh-scrollbar problem
+// instead of tuning another magic-number estimate. Removed the
+// `--calendar-chrome-h` custom property entirely -- the flex-shell
+// approach (lock main's own height to the viewport, let flexbox
+// distribute the rest between the header and the widget) needs no
+// number to estimate. See style.css's own comment on that ruleset for
+// the full reasoning and a sources list.
+const CACHE_NAME = "cc-shell-v64";
 
 const SHELL_ASSETS = [
   "/offline",

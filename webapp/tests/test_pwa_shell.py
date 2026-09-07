@@ -488,8 +488,14 @@ class TestLocalWritePath:
         # Also 100vh -> 100dvh for main.main-calendar's mobile height
         # (direct report: widget overflowing behind the bottom nav bar).
         # See sw.js's own v63 comment.
+        # v64 (2026-09-07, direct request + suggestion): dropped
+        # main-full-width's extra margin-right, and folded the
+        # desktop/mobile "Calendar fit the page" passes into one
+        # breakpoint-independent main.main-calendar ruleset (no more
+        # --calendar-chrome-h magic number) -- see sw.js's own v64
+        # comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v63"' in script
+        assert 'CACHE_NAME = "cc-shell-v64"' in script
 
 
 class TestOfflineToolbar:
