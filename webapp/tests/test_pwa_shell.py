@@ -269,5 +269,10 @@ class TestShellCacheVersion:
         # rows) to 26px (1 row), still fixed either way. Also fixed the
         # collapse toggle jumping from the right edge to the left when the
         # panel's h2 title hides (style.css only).
+        # v94 (direct follow-up, same day): the v93 one-row panel now hits
+        # its own overflow-y:auto scrollbar far more often, which read as
+        # an unwanted "sidebar" strip on the card -- track hidden via
+        # scrollbar-width:none + -webkit-scrollbar (style.css only, same
+        # pattern .tabbar already uses).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v93"' in script
+        assert 'CACHE_NAME = "cc-shell-v94"' in script

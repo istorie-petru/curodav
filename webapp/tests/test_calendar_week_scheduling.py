@@ -464,11 +464,17 @@ class TestUnscheduledPanelFixedHeight:
     first pass fixed it at ~3 rows (84px) -- a direct follow-up report
     ("the Unscheduled work div got bigger") caught that this read as a
     size regression for the common one-or-two-item case, so it's now
-    sized to exactly one row (26px) instead, still fixed either way."""
+    sized to exactly one row (26px) instead, still fixed either way. A
+    second follow-up ("it shouldn't have a sidebar") caught that a one-row
+    box hits its own scrollbar far more often than the 3-row one did, so
+    the track is now hidden (scrollbar-width:none + the -webkit- override,
+    same pattern .tabbar already uses) -- still scrollable, just no
+    visible track."""
 
     def test_panel_body_has_a_fixed_height_with_its_own_scroll(self):
         css = (_STATIC_DIR / "style.css").read_text()
-        assert "#unscheduled-panel-body{height:26px; overflow-y:auto;}" in css
+        assert "#unscheduled-panel-body{height:26px; overflow-y:auto; scrollbar-width:none;}" in css
+        assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" in css
         # A max-height (not a fixed height) would still shrink/grow with
         # content and reintroduce the exact reflow this fix removes.
         assert "#unscheduled-panel-body{max-height:" not in css

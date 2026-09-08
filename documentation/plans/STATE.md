@@ -17,6 +17,31 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- third direct follow-up, same session as the two
+  entries below: "in the unscheduled work card it shouldn't have a
+  sidebar." Root cause: shrinking `#unscheduled-panel-body` to a fixed
+  one-row height (the entry right below) means it now hits its own
+  `overflow-y:auto` scrollbar far more readily than the previous 3-row
+  version did -- the browser's default scrollbar track was reading as an
+  unwanted vertical strip stuck to this small card's right edge (hence
+  "sidebar"). Fixed by hiding the track -- `scrollbar-width:none` +
+  `#unscheduled-panel-body::-webkit-scrollbar{display:none;}` -- the exact
+  same pattern `.tabbar` (this app's other overflow-y:auto-but-no-visible-
+  track element) already uses elsewhere in style.css. The row still
+  scrolls (wheel/touch/drag auto-scroll), just with no visible track.
+
+  **Tests:** `TestUnscheduledPanelFixedHeight`'s test updated to assert
+  both new rules. `sw.js` `CACHE_NAME` bumped `v93` -> `v94`; `test_pwa_
+  shell.py`'s pin updated. Full suite re-run in 3 chunks: 976 + 646 + 425 =
+  2047 passed, 0 failed (same total as the entry below -- one test's
+  assertion got stricter, no test added/removed).
+
+  **No live browser reachable in this sandbox** -- same recurring caveat.
+  This is now the third same-day round on this one card (hard-reload fix,
+  then height, then toggle side, then this) without ever seeing it
+  rendered -- worth prioritizing a real look at this specific panel first
+  if a browser becomes reachable next session.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same day/session as the entry
   right below ("acceptable, however..."): two more Planner "Unscheduled
   work" panel reports against that fix.

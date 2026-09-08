@@ -3220,8 +3220,18 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    schedule/unschedule drop past a full row to reach the internal scrollbar
    rather than 3, but the box's OWN height is still constant regardless of
    item count either way, which is what actually stops the reflow; a longer
-   list scrolls inside this fixed box instead of growing it. */
-#unscheduled-panel-body{height:26px; overflow-y:auto;}
+   list scrolls inside this fixed box instead of growing it.
+   2026-09-08 further follow-up ("it shouldn't have a sidebar"): a one-row
+   box hits its own scroll far more often than the old 3-row one did, and
+   the browser's default scrollbar track read as an unwanted vertical strip
+   stuck to this small card's right edge. Hidden the same way `.tabbar`
+   (this app's other overflow-y:auto-but-no-visible-track surface, above)
+   already does -- `scrollbar-width:none` + the `::-webkit-scrollbar`
+   override below -- the row still scrolls (wheel/touch/the drag auto-
+   scroll a work-allocation drag can trigger), just with no visible track
+   cluttering the card. */
+#unscheduled-panel-body{height:26px; overflow-y:auto; scrollbar-width:none;}
+#unscheduled-panel-body::-webkit-scrollbar{display:none;}
 /* 2026-09-02 redesign (direct feedback: "smaller, minimalist and be able
    to fit inline, and to have more rows"): a wrapping grid, not a
    horizontal scroll strip -- flex-wrap:wrap instead of nowrap+
