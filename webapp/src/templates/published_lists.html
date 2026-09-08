@@ -35,7 +35,7 @@
                     <th>Name</th>
                     <th>Type</th>
                     <th>Filter</th>
-                    <th>Visibility</th>
+                    <th>Sharing</th>
                     <th class="link-col">Link</th>
                     <th class="col-actions-narrow">Actions</th>
                 </tr>
@@ -61,7 +61,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <span class="pill-static pill-{{ 'blue' if l.visibility == 'public' else ('gray' if l.visibility == 'archived' else 'green') }}">{{ 'Paused' if l.visibility == 'archived' else (l.visibility | capitalize) }}</span>
+                        <span class="pill-static pill-{{ 'blue' if l.visibility == 'public' else ('gray' if l.visibility == 'archived' else 'green') }}">{{ 'Paused' if l.visibility == 'archived' else ('Private Radicale' if l.visibility == 'private' else 'Public') }}</span>
                     </td>
                     <td class="link-col">
                         {% if l.public_url %}

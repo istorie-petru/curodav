@@ -17,6 +17,33 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session as the table-
+  rework entry right below: "also remove 'Matches any checked label.
+  Leave blank for everything.' and 'Private syncs to your Radicale
+  account.'. Rename the Visibility to better match the options: Private
+  should become Private Radicale and Public should become Public; and
+  the Visibility should become Linkage (or other more normal or
+  intuitive names)." All in published_list_create_modal.html/
+  published_lists.html:
+  - Both remaining settings-hints deleted outright, no replacement copy.
+  - Visibility field/label renamed "Sharing" (picked over the user's own
+    suggestion "Linkage" as the more ordinary word for what it controls)
+    -- `ms_label`/`data-ms-label` and the table's own column header both
+    changed; the submitted form field name (`name="visibility"`) and the
+    `visibility` DB column/route params are untouched, this is a display
+    rename only.
+  - Option copy: "Private" -> "Private Radicale", "Public (shareable
+    link)" -> "Public" -- both fields now name themselves without
+    leaning on the hint that used to sit underneath (now deleted). Table
+    pill text (published_lists.html) updated to match ("Private" ->
+    "Private Radicale"). "Paused" (archived, edit-mode only) unchanged.
+  - `TestCreateModalDropdownsAreCustomStyled::test_entity_type_and_
+    visibility_render_as_single_mode_multiselects` updated for the new
+    `data-ms-label="sharing"` and `<span class="ms-summary">Private
+    Radicale</span>` strings -- a real behavior change, not test rot.
+  - Full suite re-run in 6 chunks: 403+495+662+498 = 2058 passed, 0
+    failed (same total as the table-rework entry below).
+
 - **Shipped:** 2026-09-08 -- direct request, new session: "rework the
   [Published Lists] table in the spirit of any other table in the app.
   Also it should have an edit button. No inline editing. In the modal

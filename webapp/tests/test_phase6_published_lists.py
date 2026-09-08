@@ -422,14 +422,23 @@ class TestCreateModalDropdownsAreCustomStyled:
         resp = router.new_list_modal(request, conn=conn)
         body = resp.body.decode()
         assert 'data-ms-mode="single" data-ms-label="type"' in body
-        assert 'data-ms-mode="single" data-ms-label="visibility"' in body
+        # 2026-09-08 (direct follow-up, same session as the table rework):
+        # the Visibility field/label was renamed "Sharing" (direct
+        # request: "the Visibility should become Linkage (or other more
+        # normal or intuitive names)") -- data-ms-label is ms_label
+        # lowercased, so this tracks that rename; the field name submitted
+        # to the server (`name="visibility"`) is unchanged.
+        assert 'data-ms-mode="single" data-ms-label="sharing"' in body
         assert 'type="radio" name="entity_type" value="task"' in body
         assert 'type="radio" name="visibility" value="private"' in body
         # entity_type defaults to the first configured type, same default
         # a native <select> with no explicit `selected` option would have
         # picked, matching this fix's own "no behavior change" intent.
         assert '<span class="ms-summary">Tasks</span>' in body
-        assert '<span class="ms-summary">Private</span>' in body
+        # "Private" -> "Private Radicale" (same session, same direct
+        # request) -- the option now names the mechanism directly instead
+        # of relying on a settings-hint underneath it (that hint is gone).
+        assert '<span class="ms-summary">Private Radicale</span>' in body
 
 
 class _FakeSettings:

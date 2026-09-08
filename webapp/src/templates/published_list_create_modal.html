@@ -73,7 +73,26 @@
           anytime is what the row's own new Edit button is for, doesn't
           need a hint to explain it. The other two hints (labels-filter
           "matches any", no-labels-yet empty state) stay -- both carry
-          real, non-obvious information nothing else on the page says. -->
+          real, non-obvious information nothing else on the page says.
+
+     2026-09-08 (direct follow-up, same session): both remaining hints
+     ("Private syncs to your Radicale account.", "Matches any checked
+     label. Leave blank for everything.") are gone too -- direct request,
+     no replacement copy. And the field itself is renamed "Visibility" ->
+     "Sharing" (direct request: "the Visibility should become Linkage (or
+     other more normal or intuitive names)" -- "Sharing" was picked over
+     "Linkage" as the more ordinary word for what the field actually
+     controls) with its two real options relabeled to say what they are
+     rather than lean on the now-deleted hint to explain it: "Private" ->
+     "Private Radicale" (syncs to your Radicale/CalDAV account only) and
+     "Public (shareable link)" -> "Public" (the parenthetical moved into
+     the label's own wording being unnecessary once "Private Radicale"
+     already names the mechanism by contrast). "Paused" (edit-mode-only
+     archived option) is unchanged -- already self-explanatory. The
+     table's own Visibility column header and its read-only pill values
+     (published_lists.html) are renamed the same way, so the column
+     heading and the modal field describing the same thing don't drift
+     into two different names for one concept. -->
 {% set _editing = editing | default(none) %}
 {% set _form_id = 'edit-list-form' if _editing else 'create-list-form' %}
 <div id="modal-target" class="modal-height-md">
@@ -108,17 +127,16 @@
 
                 {% set ms_name = 'visibility' %}
                 {% set ms_mode = 'single' %}
-                {% set ms_label = 'Visibility' %}
+                {% set ms_label = 'Sharing' %}
                 {% set ms_items = [
-                    {'uid': 'private', 'name': 'Private'},
-                    {'uid': 'public', 'name': 'Public (shareable link)'},
+                    {'uid': 'private', 'name': 'Private Radicale'},
+                    {'uid': 'public', 'name': 'Public'},
                 ] %}
                 {% if _editing %}{% set _ = ms_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}
                 {% set ms_selected = _editing.visibility if _editing else 'private' %}
                 {% set ms_wide = false %}
                 {% set ms_form_id = _form_id %}
                 {% include "_widget_list_multiselect.html" %}
-                <p class="settings-hint field-wide settings-hint-tight-top">Private syncs to your Radicale account.</p>
 
                 {% if all_labels %}
                 {% set ms_name = 'labels' %}
@@ -131,7 +149,6 @@
                 {% set ms_pill = true %}
                 {% set ms_form_id = _form_id %}
                 {% include "_widget_list_multiselect.html" %}
-                <p class="settings-hint field-wide settings-hint-tight-top">Matches any checked label. Leave blank for everything.</p>
                 {% else %}
                 <div class="field field-wide">
                     <label>Filter by labels <span class="text-muted">(optional)</span></label>
