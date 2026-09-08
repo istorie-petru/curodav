@@ -132,6 +132,12 @@
       startX = e.clientX;
       startY = e.clientY;
       originCell = el.closest(".month-day-cell");
+      // 2026-09-08 same-day bug fix, round 2: belt-and-suspenders against a
+      // fast drag losing pointer events mid-gesture (same practice
+      // FullCalendar's own PointerDragging follows) -- the move/end
+      // listeners are already on `document` so this isn't the primary fix
+      // for anything reported, but there's no reason not to have it.
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", end);
     }
@@ -307,6 +313,8 @@
       mode = which;
       startX = e.clientX;
       startY = e.clientY;
+      // See setupItem's begin() for why -- same defensive capture.
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", end);
     }
@@ -393,15 +401,26 @@
       const target = cellAtPoint(e.clientX, barRect.top + barRect.height / 2);
       if (!target || !target.dataset.date) return;
       const newDate = target.dataset.date;
+      // 2026-09-08 same-day bug fix, round 2: these two guards used to be a
+      // bare `return` -- a correctly-detected resize past the event's own
+      // other edge just silently did nothing, indistinguishable from a
+      // missed/failed drag. Now says so, so "I dragged it and nothing
+      // happened" has an answer instead of looking like a bug.
       if (finishedMode === "resize-left") {
         const newStart = newDate + el.dataset.start.slice(10);
         const endDate = (el.dataset.end || el.dataset.start).slice(0, 10);
-        if (newDate > endDate) return; // can't drag the start past the event's own end
+        if (newDate > endDate) {
+          window.ccToast({ message: "Can't drag the start past the event's own end.", variant: "error" });
+          return;
+        }
         postReschedule(uid, newStart, el.dataset.end || null);
       } else {
         const newEnd = newDate + (el.dataset.end ? el.dataset.end.slice(10) : "T23:59:00");
         const startDate = el.dataset.start.slice(0, 10);
-        if (newDate < startDate) return; // can't drag the end before the event's own start
+        if (newDate < startDate) {
+          window.ccToast({ message: "Can't drag the end before the event's own start.", variant: "error" });
+          return;
+        }
         postReschedule(uid, el.dataset.start, newEnd);
       }
     }

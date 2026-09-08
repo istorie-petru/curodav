@@ -245,5 +245,9 @@ class TestShellCacheVersion:
         # v88 (2026-09-09, FullCalendar-parity slice 6): 4-Week/Week prev/
         # next navigate via AJAX (async_calendar.js's bindCalNav) with a
         # live date-range label instead of a full page reload.
+        # v89 (same-day bug fix, round 2): month-bar resize handle hit-area
+        # widened, drop-hover ring strengthened, resize-guard rejections now
+        # toast instead of silently no-op'ing (calendar_month_drag.js,
+        # style.css).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v88"' in script
+        assert 'CACHE_NAME = "cc-shell-v89"' in script

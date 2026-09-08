@@ -17,6 +17,82 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- same-day bug fix, round 2, direct live-browser
+  report against the round-1 fix further below (2026-09-08 "same-day bug
+  fix" entry): Month/4-Week bar resize was *still* unreliable after that
+  fix ("resize down is buggy, most of the times it doesn't work" / "resize
+  more sometimes needs to do N+1 to do N"), and a related complaint not
+  previously reported: drag-to-move landing in the wrong cell -- for plain
+  event/task chips too, not just bars.
+
+  **No live browser reachable in this sandbox (same recurring gap every
+  entry in this file notes), so this is a second round of reasoning from
+  the code rather than a confirmed repro** -- flagged here explicitly
+  rather than claiming certainty the round-1 report's own preceding entry
+  didn't have either. Re-audited `calendar_month_drag.js` end to end and
+  compared against how FullCalendar's own interaction plugin does hit-
+  testing (coordinate-to-date math on every pointermove, no DOM traversal)
+  -- confirmed the round-1 `cellAtPoint` geometry rewrite is the right
+  architecture, so this pass didn't touch it again. Found three concrete,
+  defensible defects instead:
+
+  1. `.month-bar-resize-handle` was `width:8px` on a 16px-tall bar -- an
+     8x16px pointer target, under normal touch/pointer-target sizing
+     guidance. Missing it doesn't error: `setupBar`'s pointerdown mode
+     detection (`e.target === handleLeft`) silently falls through to
+     `mode:"move"` instead, so a missed resize-grab becomes a whole-bar
+     move that, dropped back near the origin cell, is a silent 0-delta
+     no-op -- indistinguishable from "nothing happened." This is the
+     best-supported explanation for "resize down mostly doesn't work."
+  2. Both resize guards (crossing the event's own other edge) were a bare
+     `return` -- a correctly-detected, correctly-rejected resize gave zero
+     feedback, same "looks broken" shape.
+  3. `.month-day-cell.drop-hover` was a faint background tint only, no
+     visible boundary -- best (unconfirmed) hypothesis for "grow needs
+     N+1": the exact target-cell edge wasn't obvious enough to trust
+     without a hard line, framed here as a hypothesis rather than a
+     finding since it couldn't be verified against a real repro either.
+
+  **Fixes, `calendar_month_drag.js` + `style.css`:** resize handles gained
+  an invisible `::before` enlarging the actual hit box (top/bottom -2px,
+  left/right -8px) without changing the handle's own thin visual line --
+  pointer events on generated content still dispatch to the host element,
+  so `e.target === handleLeft` still holds. Both resize guards now call
+  `window.ccToast(...)` instead of silently returning. `.month-day-cell.
+  drop-hover` gained `box-shadow:inset 0 0 0 2px var(--accent-neutral)`
+  (same "solid fill + accent ring" vocabulary `.is-selecting` already
+  uses) alongside its existing background tint. `setupItem`/`setupBar`'s
+  `begin()` both now call `el.setPointerCapture(e.pointerId)` (try/caught,
+  non-critical) -- defensive belt-and-suspenders matching FullCalendar's
+  own `PointerDragging`, not the primary fix for anything reported since
+  the move/end listeners were already on `document`. All four changes are
+  shared by `setupItem` (plain event/task chips) and `setupBar` (bars) --
+  both call the same `cellAtPoint`/use the same `.drop-hover` class, so
+  the chip-drag "wrong cell" complaint is covered by the same fixes
+  without a separate code path.
+
+  **Tests:** new `TestDragResizeRound2Structural` in
+  `test_calendar_month_bars.py` -- same "no JS unit-test harness for
+  `static/*.js` in this repo" gap every prior JS-only calendar slice's own
+  entry notes, so covered via `node --check` (syntax) plus source/CSS
+  greps pinning the pointer-capture calls, the two toast calls, the
+  widened resize-handle pseudo-element, and the strengthened drop-hover
+  ring. `sw.js` `CACHE_NAME` bumped `v88` -> `v89`; `test_pwa_shell.py`'s
+  pin updated. Full suite re-run across all 88 non-live test files (`test_
+  caldav_bridge_live.py` excluded as always) in 7 batches (background
+  processes don't survive across tool calls in this sandbox, same
+  constraint every entry in this file already notes) -- all green, 0
+  failures.
+
+  **Next slice:** none mandated -- direct bug report, addressed as best as
+  static reasoning allows. This is the SECOND round of "fixed, but never
+  confirmed against a real repro" for this exact feature -- if it's
+  reported broken a third time, stop reasoning from the code alone and
+  either get a live browser into this sandbox or ask the user to open dev
+  tools and report the actual `cellAtPoint`/mode values during a failing
+  drag, rather than repeating the same "read the code, form a hypothesis,
+  ship it" cycle a third time.
+
 - **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 6 of
   6 (final slice of the arc; see `plans/open.md` § "Calendar:
   FullCalendar-parity interactions"): live month/week label + AJAX

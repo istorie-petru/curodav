@@ -3550,6 +3550,30 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-bar-resize-left{left:0;}
 .month-bar-resize-right{right:0;}
 .month-bar-resize-handle:hover{background:rgba(255,255,255,.3);}
+/* 2026-09-08 same-day bug fix, round 2 (direct live-browser report: the
+   previous cellAtPoint geometry fix didn't actually resolve "shrink mostly
+   doesn't work" -- see documentation/plans/STATE.md). Root cause found on
+   re-review: the 8px-wide handle above is the real, exact pointerdown
+   target `calendar_month_drag.js` checks (`e.target === handleLeft`) --
+   an 8x16px hit box is well under normal pointer-target sizing (WCAG 2.5.5
+   suggests >=24px), and on a crowded month row it's easy to miss. Missing
+   it doesn't error -- setupBar's pointerdown silently falls through to
+   `mode:"move"` instead, so a missed resize-grab becomes a whole-bar move
+   that (if it lands back near the origin cell) is a silent 0-delta no-op:
+   indistinguishable from "nothing happened."
+
+   This invisible `::before` enlarges the actual clickable/draggable area
+   without changing the handle's own thin visual footprint -- pointer
+   events landing on generated content still target the host element for
+   dispatch purposes, so `e.target === handleLeft` still holds anywhere
+   inside this expanded box. Extended further left/right (into the ~4px
+   dead zone `.month-bar-span-N`'s own `- 4px` width already reserves
+   between adjacent bars, plus a little into the day cell itself) than
+   up/down (kept small to avoid bleeding into an adjacent lane's own bar,
+   only --month-bar-gap:2px away). */
+.month-bar-resize-handle::before{
+  content:""; position:absolute; top:-2px; bottom:-2px; left:-8px; right:-8px;
+}
 /* The real bar fades toward invisible while its ghost (below) is the thing
    actually tracking the pointer -- same "source disappears, ghost is the
    visible representation" split Week/Day's own `.time-event.dragging` does
@@ -3617,7 +3641,14 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    (static/calendar_month_drag.js) -- same visual vocabulary as the
    Week/Day grid's own .time-col.drop-hover, so "this cell is the drop
    target" reads consistently across every calendar view. */
-.month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle);}
+/* 2026-09-08 same-day bug fix, round 2: background tint alone was subtle
+   enough that direct reports described drag/resize drops landing on the
+   "wrong cell" and grow-resize needing to overshoot by a day to register --
+   plausibly because the exact drop boundary wasn't obvious enough to trust
+   without a visible edge. Added inset ring (same "solid highlight + accent
+   ring" vocabulary .is-selecting above already uses) so the target cell's
+   actual boundary is unambiguous during a drag, not just a faint fill. */
+.month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle); box-shadow:inset 0 0 0 2px var(--accent-neutral);}
 /* The dragged chip itself, previously just opacity:.5 -- direct feedback
    (2026-09-03), "the events are not shown as dragged": fading toward
    invisible reads as the chip disappearing, not as picked up. Now matches

@@ -16,9 +16,13 @@ router in test_calendar_month_quickcreate.py."""
 
 from __future__ import annotations
 
+import subprocess
 from datetime import date
+from pathlib import Path
 
 from src.routers import calendar as calendar_router
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
 
 MONDAY = date(2026, 8, 3)  # 2026-08-03 is a Monday
 
@@ -378,3 +382,45 @@ class TestBarWorthySplit:
             assert _day(weeks, iso)["rows"] == []
         week = _week_of(weeks, "2026-08-04")
         assert _bar_uids(week) == ["e1"]
+
+
+class TestDragResizeRound2Structural:
+    """2026-09-08 same-day bug fix, round 2 -- direct live-browser report
+    that the FIRST round's cellAtPoint geometry fix (see
+    documentation/plans/STATE.md) didn't actually resolve "resize down
+    mostly doesn't work" / "resize up sometimes needs N+1 to do N" / "drag
+    doesn't drop into the correct cell" for Month/4-Week's bars AND plain
+    event/task chips (setupItem, setupBar -- both in
+    static/calendar_month_drag.js, both driven by the same cellAtPoint).
+
+    No JS unit-test harness for static/*.js in this repo (same recurring
+    gap every prior JS-only calendar slice's own test file notes) -- covered
+    structurally: `node --check` for syntax, source greps pinning the
+    specific fixes (pointer capture, the two silent-return-turned-toast
+    resize guards) so a future refactor can't silently drop them, plus a
+    CSS grep pinning the widened resize-handle hit area and the stronger
+    drop-hover ring."""
+
+    def test_calendar_month_drag_js_syntax_is_valid(self):
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_month_drag.js")], check=True)
+
+    def test_both_drag_setups_capture_the_pointer(self):
+        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
+        assert script.count("setPointerCapture") == 2
+
+    def test_resize_guards_toast_instead_of_silently_returning(self):
+        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
+        assert "Can't drag the start past the event's own end." in script
+        assert "Can't drag the end before the event's own start." in script
+
+    def test_resize_handle_hit_area_is_widened_via_pseudo_element(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert ".month-bar-resize-handle::before{" in css
+        # The visible handle itself must stay unchanged (thin edge grab
+        # zone, not a chunky visible bar) -- only the invisible hit area
+        # grows.
+        assert ".month-bar-resize-handle{\n  position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize;\n}" in css
+
+    def test_drop_hover_has_a_visible_boundary_ring(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert ".month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle); box-shadow:inset 0 0 0 2px var(--accent-neutral);}" in css
