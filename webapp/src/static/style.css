@@ -6180,7 +6180,7 @@ body.command-palette-open{overflow:hidden;}
    Upload buttons are gone; those two actions now live in the modal
    footer instead, see .banner-upload-btn below). */
 .banner-preview-img{
-  display:block; width:240px; max-width:100%; aspect-ratio:5 / 1;
+  display:block; max-width:100%; aspect-ratio:5 / 1;
   object-fit:cover; border-radius:var(--radius-card); border:1px solid var(--border);
 }
 .banner-editor-empty{color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0;}
