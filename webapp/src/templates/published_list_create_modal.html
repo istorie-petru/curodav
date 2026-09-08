@@ -129,7 +129,7 @@
                 {% set ms_mode = 'single' %}
                 {% set ms_label = 'Sharing' %}
                 {% set ms_items = [
-                    {'uid': 'private', 'name': 'Private Radicale'},
+                    {'uid': 'private', 'name': 'Private'},
                     {'uid': 'public', 'name': 'Public'},
                 ] %}
                 {% if _editing %}{% set _ = ms_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}

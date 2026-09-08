@@ -17,6 +17,22 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session as the three
+  entries below: "also rename the Private Radicale and Public Link to
+  Private and Public. Also when no Filter just say All items."
+  published_lists.html/published_list_create_modal.html only:
+  - "Private Radicale" (the Sharing field's option label, added the
+    entry two below) reverted to plain "Private" -- in the Sharing
+    single-select's own panel, table pill text, and the test asserting
+    the rendered summary (`test_entity_type_and_visibility_render_as_
+    single_mode_multiselects`, updated to match). "Public" was already
+    unchanged from the earlier rename, nothing to touch there.
+  - The Filter column's empty state "All items (no filter)" -> "All
+    items" -- the parenthetical was redundant once you're looking at an
+    empty Filter cell in a table row that already has its own column
+    header saying "Filter".
+  - Full suite re-run in 6 chunks: 898+662+498 = 2058 passed, 0 failed.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session as the two
   entries below: "in the table, could you remove the 'Private -- needs
   your Radicale/CalDAV account.' text. Also trim all text from that

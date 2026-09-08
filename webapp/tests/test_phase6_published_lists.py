@@ -435,10 +435,11 @@ class TestCreateModalDropdownsAreCustomStyled:
         # a native <select> with no explicit `selected` option would have
         # picked, matching this fix's own "no behavior change" intent.
         assert '<span class="ms-summary">Tasks</span>' in body
-        # "Private" -> "Private Radicale" (same session, same direct
-        # request) -- the option now names the mechanism directly instead
-        # of relying on a settings-hint underneath it (that hint is gone).
-        assert '<span class="ms-summary">Private Radicale</span>' in body
+        # 2026-09-08 further follow-up, same session: "Private" briefly
+        # read "Private Radicale" (previous entry's comment above), then
+        # reverted to plain "Private" by direct request ("rename the
+        # Private Radicale and Public Link to Private and Public").
+        assert '<span class="ms-summary">Private</span>' in body
 
 
 class _FakeSettings:

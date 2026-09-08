@@ -57,11 +57,11 @@
                                 {% endfor %}
                             </span>
                         {% else %}
-                            <span class="text-muted">All items (no filter)</span>
+                            <span class="text-muted">All items</span>
                         {% endif %}
                     </td>
                     <td>
-                        <span class="pill-static pill-{{ 'blue' if l.visibility == 'public' else ('gray' if l.visibility == 'archived' else 'green') }}">{{ 'Paused' if l.visibility == 'archived' else ('Private Radicale' if l.visibility == 'private' else 'Public') }}</span>
+                        <span class="pill-static pill-{{ 'blue' if l.visibility == 'public' else ('gray' if l.visibility == 'archived' else 'green') }}">{{ 'Paused' if l.visibility == 'archived' else ('Private' if l.visibility == 'private' else 'Public') }}</span>
                     </td>
                     <td class="link-col">
                         {% if l.public_url %}
