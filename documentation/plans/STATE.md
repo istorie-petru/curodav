@@ -17,6 +17,53 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct pre-release cleanup on the Published
+  Lists page (`/published-lists`): "we also need to fix the published list
+  before release. move the new list button to the header, while not having
+  too big of height. also remove the page-description."
+
+  **`published_lists.html`:** the "New List" `<a class="btn primary"
+  data-modal>` -- previously its own `.lists-toolbar` row below the header
+  -- now renders inside `page_header_narrow`'s `{% call %}` actions slot
+  (same pattern Tasks/Calendar already use), alongside the existing
+  `crumbs`-driven "Back to Settings" icon-btn. The `<p class="page-
+  description">` (the "Share a live, read-only snapshot..." blurb) is
+  deleted outright, per direct request.
+
+  **`style.css`:** added a scoped `.page-header-narrow-actions .btn.primary
+  {height:30px; padding:0 var(--space-4);}` -- a default `.btn.primary`'s
+  own padding (`--space-2` top/bottom) runs taller than the header's fixed
+  48px box actually has room for (30px content budget: 48 - 16 padding - 2
+  border, same math `.filter-dropdown-trigger`'s own comment already
+  derived), so it's pinned to a fixed height here rather than left to
+  overflow:hidden to silently clip it -- this is the "not too big of a
+  height" half of the request. Also deleted `.page-description` (now
+  unused, confirmed by grep) and two further dead rules in this page's own
+  CSS block, `.page-header`/`.page-header h1` -- leftover from before this
+  page adopted the shared `.page-header-narrow` partial, never referenced
+  by any template (confirmed by grep) and easy to confuse with the real
+  `.page-header-narrow` class name.
+
+  **Verified rendered** (not just reasoned about): a direct `list_index()`
+  router call, real Jinja output -- confirms the button and the back-arrow
+  both land inside `.page-header-narrow-actions`, and that `page-
+  description`/`lists-toolbar` no longer appear anywhere in the output.
+
+  **Tests:** no dedicated test previously asserted the old `.lists-
+  toolbar`/`.page-description` markup or the button's exact location
+  (confirmed by grep across `webapp/tests`), so nothing needed updating
+  beyond the routine `sw.js` bump. `CACHE_NAME` `v95` -> `v96`; `test_pwa_
+  shell.py`'s pin updated. Full suite re-run in 6 chunks of ~15 files each:
+  413 + 563 + 290 + 356 + 237 + 188 = 2047 passed, 0 failed (same total, no
+  tests added/removed here).
+
+  **No live browser reachable in this sandbox** -- same recurring gap
+  every entry in this file already notes. The 30px fixed-height button was
+  verified by the same padding/border arithmetic `.filter-dropdown-
+  trigger`'s own comment already established for this exact header (not a
+  fresh guess), but the actual on-screen fit (does it look centered/not
+  clipped next to the back-arrow) has not been seen rendered.
+
 - **Shipped:** 2026-09-08 -- fourth direct follow-up, same session as the
   three entries below: "I would like to have it have the min height a bit
   bigger." `#unscheduled-panel-body`'s fixed height was 26px -- computed as

@@ -277,4 +277,4 @@ class TestShellCacheVersion:
         # v95 (direct follow-up, same day): the v93 26px height (one row,
         # no slack) read as cramped -- bumped to 36px (style.css only).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v95"' in script
+        assert 'CACHE_NAME = "cc-shell-v96"' in script

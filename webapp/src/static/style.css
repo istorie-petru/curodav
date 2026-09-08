@@ -6431,29 +6431,15 @@ body.command-palette-open{overflow:hidden;}
     max-width: 100%;
 }
 
-.page-header {
-    margin-bottom: var(--space-6);
-}
-
-.page-header h1 {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-title1);
-    margin-bottom: var(--space-2);
-}
-
-.page-description {
-    color: var(--fg-secondary);
-    font-size: var(--text-body);
-    margin: 0;
-    max-width: 600px;
-}
-
-.lists-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: var(--space-4);
+/* "New List" now renders in .page-header-narrow-actions instead of its own
+   .lists-toolbar row below the header -- same fixed-height-budget reasoning
+   as .filter-dropdown-trigger above (_page_header_narrow.html's own
+   height:48px comment): a default .btn.primary runs taller than the
+   header's 30px content budget, so it's pinned to that height here rather
+   than left to its own padding. */
+.page-header-narrow-actions .btn.primary {
+    height: 30px;
+    padding: 0 var(--space-4);
 }
 
 .lists-table-container {

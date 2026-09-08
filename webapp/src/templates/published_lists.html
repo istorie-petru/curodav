@@ -2,17 +2,13 @@
 {% block title %}Published Lists{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Published Lists", "share-2") }}
+{% call page_header_narrow("Published Lists", "share-2") %}
+<a href="/published-lists/new" class="btn primary" data-modal>
+    {{ icon('plus', 'icon-sm') }} New List
+</a>
+{% endcall %}
 
 <div class="published-lists-page">
-    <p class="page-description">Share a live, read-only snapshot of your data. <strong>Private</strong> lists sync to your own Radicale/CalDAV account; <strong>public</strong> lists also get a link anyone can open with no account at all; <strong>archived</strong> lists are paused (kept, not synced or shared) until you reactivate them.</p>
-
-    <div class="lists-toolbar">
-        <a href="/published-lists/new" class="btn primary" data-modal>
-            {{ icon('plus', 'icon-sm') }} New List
-        </a>
-    </div>
-
     {% if lists %}
     <div class="lists-table-container">
         <table class="lists-table">
