@@ -13,10 +13,11 @@
           none; padding-top: 0; ..."` overrides -- see that partial's own
           docstring for the shared contract. `footer_primary_id` keeps the
           "publish-btn" id static/published_lists.js's form-validation
-          JS already looks up by id (disables the button until a name and
-          at least one label are picked); no `disabled` attribute needed
-          in the markup since that same JS runs an initial checkValidity()
-          on load regardless.
+          JS already looks up by id (disables the button until a name is
+          typed -- 2026-09-08: no longer also requires a label checkbox,
+          see that file's own comment: the server never required one); no
+          `disabled` attribute needed in the markup since that same JS runs
+          an initial checkValidity() on load regardless.
        3. `.modal-stable-height` removed -- that class is for a modal
           whose own content changes shape post-open without a full
           re-navigation (the event/task/contact view<->edit cross-fade,

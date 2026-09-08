@@ -17,6 +17,64 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct bug report, same day as the header
+  cleanup entry right below: "published list doesn't work to create even
+  if labels exists. though this should not be a condition."
+
+  **Root cause:** `published_lists.js`'s `checkValidity()` disabled the
+  "Publish List" button unless BOTH a name was typed AND at least one
+  label checkbox was ticked -- a client-side rule the server never
+  actually enforced. `routers/published_lists.py`'s `create_list()` has
+  `labels: list[str] = Form([])` (defaults to empty), and both
+  `_filter_from_form()` and `src/published_lists.py`'s
+  `evaluate_label_filter()` handle an empty filter without error --
+  already covered by `test_phase6_published_lists.py`'s
+  `test_create_slugifies_name_and_dedupes_collection_path`, which calls
+  `create_list(..., labels=[], ...)` directly and asserts success. So the
+  report's exact framing was right: labels existed in the account (the
+  form wasn't in the "no labels" empty-state branch), but the submit
+  button silently never enabled unless the user happened to tick a
+  checkbox -- no error shown anywhere, since this was a disabled-button UI
+  gate, not a validation message.
+
+  **Fix, `published_lists.js` only:** `checkValidity()` now gates purely
+  on `hasName` -- matches the server's real requirement (`name: str =
+  Form(...)`, no default, so an empty name is a genuine 422). Stale
+  comment in `published_list_create_modal.html` (documented the old
+  "name + label" gate as intentional) corrected to match.
+
+  **Also investigated, not a bug -- DAVx5/Radicale exposure:** the
+  roadmap (`open.md`/`roadmap.md`) already scopes this as infra-blocked,
+  not app code: `config.py` defaults to a localhost-only dev Radicale
+  with plaintext dev creds (`.dev/radicale/config`'s own comment: "NOT for
+  real deployment... never for anything reachable off localhost"), and no
+  `deploy/` directory (Caddyfile, firewall rules, production Radicale
+  config) exists yet. A private published list already materializes fine
+  into the local dev Radicale; making DAVx5 on a real phone sync against
+  it needs a real domain + server + TLS + production Radicale auth, none
+  of which this repo can provide on its own. Explained to the user rather
+  than attempted -- no infra decision made yet.
+
+  **Tests:** new `test_published_lists_create_button.py`
+  (`TestCreateButtonNotGatedOnLabels`, 2 tests) -- same "no JS unit-test
+  harness for `static/*.js` in this repo" gap every prior JS-only slice's
+  own entry notes, covered via `node --check` (syntax) plus a source grep
+  pinning that `hasLabel` is gone from the file, not just shadowed. No
+  `sw.js` bump needed -- `published_lists.js` isn't in `SHELL_ASSETS`
+  (not shell-critical, same category `heatmap_scroll.js` used to be per
+  an earlier entry in this file) and `static_url()`'s own mtime-based
+  cache-busting query string means a normal reload always fetches the new
+  copy regardless of the service worker's precache. Full suite re-run in
+  the same 6-chunk pattern as the entry below: 413 + 563 + 290 + 328 + 260
+  + 195 = 2049 passed, 0 failed (2047 + 2 net new).
+
+  **No live browser reachable in this sandbox** -- same recurring gap
+  every entry in this file already notes. The fix was verified by
+  re-reading the server's own actual requirements (not a guess) and a
+  direct source-grep test, but the real "type a name, no labels ticked,
+  does the button actually enable and does submitting actually create the
+  list" click-through has not been seen rendered.
+
 - **Shipped:** 2026-09-08 -- direct pre-release cleanup on the Published
   Lists page (`/published-lists`): "we also need to fix the published list
   before release. move the new list button to the header, while not having
