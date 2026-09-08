@@ -460,14 +460,35 @@ class TestUnscheduledPanelFixedHeight:
     panel's item count, which is why the report was scoped to exactly the
     two unscheduled<->planner drag directions. Fix: a fixed (not max-)
     height + its own overflow-y:auto on style.css's `#unscheduled-panel-body`
-    so the aside's own footprint can no longer change with item count."""
+    so the aside's own footprint can no longer change with item count. A
+    first pass fixed it at ~3 rows (84px) -- a direct follow-up report
+    ("the Unscheduled work div got bigger") caught that this read as a
+    size regression for the common one-or-two-item case, so it's now
+    sized to exactly one row (26px) instead, still fixed either way."""
 
     def test_panel_body_has_a_fixed_height_with_its_own_scroll(self):
         css = (_STATIC_DIR / "style.css").read_text()
-        assert "#unscheduled-panel-body{height:84px; overflow-y:auto;}" in css
+        assert "#unscheduled-panel-body{height:26px; overflow-y:auto;}" in css
         # A max-height (not a fixed height) would still shrink/grow with
         # content and reintroduce the exact reflow this fix removes.
         assert "#unscheduled-panel-body{max-height:" not in css
+
+
+class TestUnscheduledPanelToggleStaysOnTheRight:
+    """Direct follow-up report (2026-09-08), same session as the two classes
+    above: collapsing the "Unscheduled work" panel moved its toggle button
+    from the right edge of the header to the left. Root cause:
+    `.unscheduled-panel-head` is `justify-content:space-between` with two
+    children (the h2 title + the toggle button) -- collapsing hides the h2
+    (`display:none`), leaving the toggle as the row's ONLY flex item, and
+    `space-between` puts a lone flex item at flex-start (left), not
+    flex-end. Fix: `#unscheduled-panel-toggle{margin-left:auto;}` pins it to
+    the row's own right edge regardless of whether its sibling is present in
+    layout."""
+
+    def test_toggle_has_margin_left_auto(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#unscheduled-panel-toggle{margin-left:auto;}" in css
 
 
 class TestGridDragConflictFix:

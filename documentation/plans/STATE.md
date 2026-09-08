@@ -17,6 +17,43 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same day/session as the entry
+  right below ("acceptable, however..."): two more Planner "Unscheduled
+  work" panel reports against that fix.
+
+  1. **"The Unscheduled work div got bigger."** The prior fix's `#
+     unscheduled-panel-body{height:84px}` (~3 rows, sized generously so
+     more items wouldn't scroll right away) read as a size regression for
+     the common one-or-two-item case, where the box now always reserved
+     3 rows of mostly-empty space. Shrunk to `height:26px` -- exactly one
+     row (the tallest child in a row is `.unscheduled-step-btn` at 16px,
+     plus the item's own 3px/3px padding and 1px/1px border) -- matching
+     the panel's own everyday pre-fix size. Still a FIXED (not max-)
+     height, so the reflow-on-drag fix itself is unaffected; a list past
+     one row now reaches its own internal scrollbar sooner than before,
+     which is the accepted trade.
+  2. **"When hiding the unscheduled work card, the sidebar icon goes from
+     right to left. It should remain on the right."** Root cause: `.
+     unscheduled-panel-head{justify-content:space-between}` positions its
+     two children (h2 title + toggle button) relative to each other --
+     collapsing hides the h2 (`display:none`), leaving the toggle as the
+     row's ONLY flex item, and `space-between` puts a lone item at
+     flex-start (left) instead of flex-end. Fixed with `#unscheduled-
+     panel-toggle{margin-left:auto}`, pinning it to the row's own right
+     edge regardless of whether the h2 is present in layout.
+
+  **Tests:** `test_calendar_week_scheduling.py`'s `TestUnscheduledPanel
+  FixedHeight` test updated for the new 26px value; new `TestUnscheduled
+  PanelToggleStaysOnTheRight` (1 test) locks in the `margin-left:auto`
+  rule. `sw.js` `CACHE_NAME` bumped `v92` -> `v93`; `test_pwa_shell.py`'s
+  pin updated. Full suite re-run in 3 chunks across all 88 non-live test
+  files: 976 + 646 + 425 = 2047 passed, 0 failed.
+
+  **No live browser reachable in this sandbox** (same recurring gap this
+  file already notes) -- both fixes verified by source/CSS reasoning and
+  the test suite, not seen rendered. Worth confirming on-screen next
+  session if a browser becomes reachable, same note as the entry below.
+
 - **Shipped:** 2026-09-08 -- direct report against the Planner (`/calendar/
   week`) page, two bundled fixes, both scoped to the "Unscheduled work"
   panel specifically (not the grid itself):

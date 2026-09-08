@@ -264,5 +264,10 @@ class TestShellCacheVersion:
         # POST -- no more hard reload -- and the panel body's height is
         # fixed (style.css) so a schedule/unschedule drag no longer reflows
         # the grid card below it.
+        # v93 (direct follow-up, same day): the v92 fixed-height panel read
+        # as "got bigger" for the common few-item case -- shrunk 84px (~3
+        # rows) to 26px (1 row), still fixed either way. Also fixed the
+        # collapse toggle jumping from the right edge to the left when the
+        # panel's h2 title hides (style.css only).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v92"' in script
+        assert 'CACHE_NAME = "cc-shell-v93"' in script
