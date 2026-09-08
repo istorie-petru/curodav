@@ -34,7 +34,9 @@
          page with no override of its own still renders `banner` truthy
          now, via the Settings > Appearance default,
          routers/dashboard.py's _page_banner_context). -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
+       own trigger for why. #}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (item #1, dashboard usability rework,
          2026-08-07) -- Settings has no per-space subpage to host this
          (it's a single hub page, see routers/settings.py's module

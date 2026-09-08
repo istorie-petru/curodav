@@ -31,7 +31,9 @@
 <div class="page-banner-wrap">
 {% call page_banner(_title) %}
     {% if edit_mode %}
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
+       own trigger for why. #}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
 {% endcall %}
 </div>

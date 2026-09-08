@@ -4661,7 +4661,22 @@ body.command-palette-open{overflow:hidden;}
     .detail-cover-icon{left:var(--space-4); bottom:-16px; width:40px; height:40px;}
     .detail-heading-row{padding:22px var(--space-4) var(--space-2); padding-right:44px;}
    .modal-body{padding:var(--space-3) var(--space-4);}
-   .modal-footer{padding:var(--space-2) var(--space-4) var(--space-3);}
+   .modal-footer{padding:var(--space-2) var(--space-4) var(--space-3); flex-wrap:wrap; row-gap:var(--space-2);}
+   /* 2026-09-08 bugfix (direct report: banner editor "full screen,
+      overflows, buttons not visible" on mobile): .modal.is-wide's own
+      min-width:700px was never reset down here, so on any phone narrower
+      than 700px CSS min-width won -- per spec, an explicit min-width
+      wider than max-width overrides max-width -- and the bottom sheet
+      rendered at a fixed 700px, spilling off the right edge of the
+      viewport with .modal's own overflow:hidden clipping whatever fell
+      outside (the footer's Done/Remove/Upload buttons, in the banner
+      editor's case). The comment on .modal.is-wide itself already
+      claimed "the mobile breakpoint... ignores this entirely" -- true for
+      width (100% above already wins over is-wide's 1040px) but false for
+      min-width until now. Affects every data-modal-size="wide" dialog on
+      mobile, not just the banner editor (Schedule's Blocks table modal
+      also carries it). */
+   .modal.is-wide{min-width:0; width:100%;}
 }
 
 /* Manage-calendars/task-lists/addressbooks modal (routers/calendars.py,

@@ -89,7 +89,9 @@
             <span class="settings-field-hint">Background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</span>
         </span>
         <span class="spacer"></span>
-        <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if current_page_header_banner %} Change banner{% else %} Add banner{% endif %}</a>
+        {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
+           own trigger for why. #}
+        <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if current_page_header_banner %} Change banner{% else %} Add banner{% endif %}</a>
     </div>
 </div>
 {% endblock %}
