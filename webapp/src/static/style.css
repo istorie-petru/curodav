@@ -3947,7 +3947,23 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
     padding:0 var(--space-3) var(--space-3);
     overflow-y:auto; overflow-x:hidden;
     z-index:var(--z-overlay-panel);
-    transform:translateY(110%);
+    /* 2026-09-08 bugfix (direct report + pasted DOM, confirmed live: the
+       drawer's own .mobile-nav-handle -- its first child -- was peeking
+       up from the very bottom of the screen, overlapping/obstructing an
+       open modal's footer buttons). translateY(110%) moves the drawer
+       down by 110% of ITS OWN rendered height, not a fixed distance --
+       this drawer is anchored `bottom:64px` above its resting position
+       (right on top of .mobile-tabbar), so fully clearing the viewport
+       needs a displacement of at least (own height + that 64px gap), not
+       just 10% extra height on top of itself. That's indistinguishable
+       from correct when the drawer's content is tall enough to fill most
+       of its 75vh cap (110% of a big number comfortably covers 64px too)
+       -- which is why this went unnoticed until the shrunk banner-editor
+       modal made the resulting few-pixel overlap obvious. `calc(100% +
+       84px)` (64px gap + safe-area + 20px of slack for the box-shadow's
+       own bleed) guarantees the whole box clears the viewport bottom
+       regardless of how short its content is. */
+    transform:translateY(calc(100% + 64px + env(safe-area-inset-bottom, 0px) + 20px));
     transition:transform var(--dur-normal) var(--ease-standard);
   }
   html[data-mobile-nav-open] .tabbar{transform:translateY(0);}
