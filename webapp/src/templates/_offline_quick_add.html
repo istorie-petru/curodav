@@ -1,7 +1,6 @@
 {# Offline Quick Add Builder (2026-08-19 expansion) -- visual builder
    replacing the single-field capture input. Includes:
    - Entity type dropdown (task/event/contact/note)
-   - Label picker (for tasks/events, populated from local mirror)
    - Date/time inputs (due date for tasks, start/end for events)
    - Creates entities via CCOfflineWrite
 
@@ -9,10 +8,25 @@
    used to sit below these fields. It rendered a generated capture string
    for display only -- submit always read the visual fields directly, so
    the box was never actually parsed back in, just a confusing extra
-   surface with no real function. #}
+   surface with no real function.
 
-<div class="offline-quick-add-builder" data-offline-quick-add>
-    <h3 class="offline-quick-add-title">{{ icon('plus', 'icon-sm') }} Quick Add</h3>
+   2026-09-09 follow-up -- direct report against a screenshot flagged the
+   Labels picker as "doesn't work": it wasn't broken, it was honest -- a
+   selection here was already silently non-functional (labels never flow
+   through the field-HLC pull/write path, so a selected label never made
+   it into the created entity; the old code only reported that fact in the
+   result line *after* submit, via "(labels can't be added offline)"). A
+   control whose selection does nothing is a real UX bug, not a styling
+   one -- removed the Labels field from both the task and event fieldsets
+   rather than trying to cosmetically fix a picker that can't do its job
+   offline. Also: wrapped the builder in the same `.card` class every
+   other widget in the app uses (was a bespoke lookalike box before), and
+   demoted its own title to a quiet card-header label (`.widget-header`'s
+   convention) instead of a second page-level heading competing with
+   "Offline Mode" above it. #}
+
+<div class="card offline-quick-add-builder" data-offline-quick-add>
+    <div class="widget-header"><h2>{{ icon('plus', 'icon-sm') }} Quick Add</h2></div>
 
     <form id="offline-quick-add-form" class="offline-quick-add-form" autocomplete="off">
         <!-- Entity Type Selector -->
@@ -36,11 +50,6 @@
                 <label for="offline-task-due">{{ icon('calendar', 'icon-sm') }} Due Date</label>
                 <input type="date" id="offline-task-due" name="due_date">
             </div>
-            <div class="field">
-                <label for="offline-task-labels">{{ icon('label', 'icon-sm') }} Labels</label>
-                <select id="offline-task-labels" name="labels" multiple class="offline-label-multiselect" size="4"></select>
-                <small class="field-hint">Hold Ctrl/Cmd to select multiple</small>
-            </div>
         </fieldset>
 
         <!-- Event-specific fields -->
@@ -59,14 +68,9 @@
                     <input type="datetime-local" id="offline-event-end" name="end_at">
                 </div>
             </div>
-            <div class="field">
-                <label for="offline-event-all-day">{{ icon('sun', 'icon-sm') }} All day</label>
+            <div class="field field-toggle">
                 <input type="checkbox" id="offline-event-all-day" name="all_day">
-            </div>
-            <div class="field">
-                <label for="offline-event-labels">{{ icon('label', 'icon-sm') }} Labels</label>
-                <select id="offline-event-labels" name="labels" multiple class="offline-label-multiselect" size="4"></select>
-                <small class="field-hint">Hold Ctrl/Cmd to select multiple</small>
+                <label for="offline-event-all-day">{{ icon('sun', 'icon-sm') }} All day</label>
             </div>
         </fieldset>
 
@@ -96,6 +100,7 @@
 
         <div class="modal-footer offline-quick-add-footer">
             <button type="button" class="btn ghost" id="offline-quick-add-cancel">{{ icon('x') }} Cancel</button>
+            <span class="spacer"></span>
             <button type="submit" class="btn primary">{{ icon('plus') }} Add</button>
         </div>
     </form>

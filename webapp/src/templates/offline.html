@@ -24,21 +24,38 @@
    Add form plus a one-line sync summary. The five-panel mirror-reading
    view (offline_shell.js's old render()) is gone; re-adding a real offline
    read surface is a separate, larger piece of future work, not bundled
-   into this UI fix. #}
+   into this UI fix.
+
+   2026-09-09 follow-up -- direct report against a second screenshot of the
+   collapsed page: it still didn't match the rest of the app. Fixes:
+   - The page said "you're offline" twice (the header title AND a separate
+     ".offline-indicator" badge beside it) and had two competing headings
+     ("Offline Mode" then "+ Quick Add" right below it, both reading as
+     page-level titles). The badge is gone; its message merged into one
+     hint banner below the header, and the Quick Add card's own title is
+     now styled as a quiet card-header label (.widget-header's convention),
+     not a second page heading.
+   - The Quick Add form now sits in a real `.card` (like every other
+     widget in the app) instead of a bespoke lookalike box, and adopted
+     `main-shell`/`main-shell-body` (the same "fits the viewport, scrolls
+     internally" shell Tasks/Contacts/Notes/Dashboard already use) instead
+     of relying on whole-page scroll. #}
 
 {% extends "base.html" %}
 {% block title %}Offline Mode{% endblock %}
 {% set hide_tabbar = true %}
+{% block main_class %}main-shell{% endblock %}
 {% block content %}
 <div class="toolbar top-app-bar">
     <h1>{{ icon('wifi-off', 'icon-sm') }} Offline Mode</h1>
-    <span class="offline-indicator" aria-live="polite">{{ icon('wifi-off', 'icon-sm') }} You're offline</span>
 </div>
 
+<div class="main-shell-body">
 <div class="offline-page">
-    <p class="offline-page-hint">Anything you add here is saved on this device and syncs automatically once you're back online.</p>
+    <div class="offline-page-hint">{{ icon('wifi-off', 'icon-sm') }} You're offline &mdash; anything you add below is saved on this device and syncs automatically once you're back online.</div>
     <div id="offline-sync-summary" class="offline-synced-at"></div>
     {% include "_offline_quick_add.html" with context %}
+</div>
 </div>
 {% endblock %}
 {% block extra_scripts %}

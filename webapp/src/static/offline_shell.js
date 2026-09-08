@@ -12,9 +12,18 @@
 // to a single screen: no tabs, no per-entity mirror lists, just a one-line
 // sync summary and the Quick Add form. Re-adding a real offline *read*
 // surface (the old mirror lists) is left for a future, separately-scoped
-// pass -- this file now only reads the mirror to (a) show "last synced" /
-// "N changes waiting to sync" and (b) populate the label picker, both of
-// which the old render() also did as a side effect.
+// pass -- this file now only reads the mirror to show "last synced" /
+// "N changes waiting to sync".
+//
+// 2026-09-09 follow-up -- direct report against a second screenshot: the
+// Labels multiselect (populated here from the mirror's tag set) "doesn't
+// work" -- correctly so, it was never wired to actually apply a label to
+// the created entity (object_label ops never flow through the field-HLC
+// pull/write path offline); the old code only admitted that *after*
+// submit, via an "(labels can't be added offline)" footnote. Removed the
+// Labels field from the template entirely rather than cosmetically fixing
+// a picker that can't do its job -- this file no longer needs to read
+// tasks/events for their tags at all, only the two sync-summary numbers.
 (function () {
   function fmtWhen(iso) {
     if (!iso) return "";
@@ -23,53 +32,19 @@
     return d.toLocaleString();
   }
 
-  const quickAddState = { labels: [] };
-
-  // Reads just enough of the mirror to (1) report sync status honestly and
-  // (2) know which labels exist for the Quick Add label picker -- not a
-  // full list render. Labels themselves still can't be *applied* to a
-  // freshly created entity offline (object_label ops are commutative and
-  // never flow through the field-HLC pull/write path); this only lets the
-  // picker show real label names instead of an empty box.
   async function renderSummary() {
-    const [tasks, events, lastSynced, outboxCount] = await Promise.all([
-      window.CCOfflineDB.getAllTasks ? window.CCOfflineDB.getAllTasks() : Promise.resolve([]),
-      window.CCOfflineDB.getAllEvents ? window.CCOfflineDB.getAllEvents() : Promise.resolve([]),
+    const summaryEl = document.getElementById("offline-sync-summary");
+    if (!summaryEl) return;
+    const [lastSynced, outboxCount] = await Promise.all([
       window.CCOfflineDB.getLastSyncedAt ? window.CCOfflineDB.getLastSyncedAt() : Promise.resolve(null),
       window.CCOfflineDB.getOutboxCount ? window.CCOfflineDB.getOutboxCount() : Promise.resolve(0),
     ]);
 
-    const allLabels = new Set();
-    for (const t of tasks) {
-      if (t.tags) t.tags.forEach((l) => allLabels.add(l));
-    }
-    for (const e of events) {
-      if (e.tags) e.tags.forEach((l) => allLabels.add(l));
-    }
-    quickAddState.labels = Array.from(allLabels).sort();
-    populateLabelSelect(document.getElementById("offline-task-labels"));
-    populateLabelSelect(document.getElementById("offline-event-labels"));
-
-    const summaryEl = document.getElementById("offline-sync-summary");
-    if (!summaryEl) return;
     const syncedText = "Last synced from this device: " + (lastSynced ? fmtWhen(lastSynced) : "never");
     const pendingText = outboxCount > 0
       ? outboxCount + (outboxCount === 1 ? " local change" : " local changes") + " waiting to sync"
       : null;
     summaryEl.textContent = pendingText ? syncedText + " — " + pendingText : syncedText;
-  }
-
-  function populateLabelSelect(select) {
-    if (!select) return;
-    const previouslySelected = new Set(Array.from(select.selectedOptions || []).map((o) => o.value));
-    select.innerHTML = "";
-    for (const label of quickAddState.labels) {
-      const opt = document.createElement("option");
-      opt.value = label;
-      opt.textContent = label;
-      opt.selected = previouslySelected.has(label);
-      select.appendChild(opt);
-    }
   }
 
   function initializeQuickAddBuilder() {
@@ -120,19 +95,16 @@
       if (type === "task") {
         const title = builder.querySelector("#offline-task-title")?.value?.trim();
         const due = builder.querySelector("#offline-task-due")?.value;
-        const labels = Array.from(builder.querySelector("#offline-task-labels")?.selectedOptions || []).map((o) => o.value);
         if (!title) throw new Error("Task title is required");
         const fields = { title };
         if (due) fields.due_at = due + "T00:00:00";
         await window.CCOfflineWrite.createTask(fields);
         summary = "Task added: " + title;
-        if (labels.length > 0) summary += " (labels can't be added offline)";
       } else if (type === "event") {
         const title = builder.querySelector("#offline-event-title")?.value?.trim();
         const start = builder.querySelector("#offline-event-start")?.value;
         const end = builder.querySelector("#offline-event-end")?.value;
         const allDay = builder.querySelector("#offline-event-all-day")?.checked;
-        const labels = Array.from(builder.querySelector("#offline-event-labels")?.selectedOptions || []).map((o) => o.value);
         if (!title) throw new Error("Event title is required");
         if (!start) throw new Error("Event start date/time is required");
         await window.CCOfflineWrite.createEvent({
@@ -142,7 +114,6 @@
           all_day: allDay ? 1 : 0,
         });
         summary = "Event added: " + title;
-        if (labels.length > 0) summary += " (labels can't be added offline)";
       } else if (type === "contact") {
         const name = builder.querySelector("#offline-contact-name")?.value?.trim();
         const email = builder.querySelector("#offline-contact-email")?.value?.trim();
@@ -181,8 +152,8 @@
 
   // A pull that lands *while* /offline happens to be open (e.g. the
   // network came back mid-visit), or a local write this page's own form
-  // just queued, should refresh the sync summary/labels immediately rather
-  // than requiring a reload -- both fire this same event (offline_write.js
-  // / offline_sync_client.js).
+  // just queued, should refresh the sync summary immediately rather than
+  // requiring a reload -- both fire this same event (offline_write.js /
+  // offline_sync_client.js).
   document.addEventListener("cc-offline-sync-complete", renderSummary);
 })();

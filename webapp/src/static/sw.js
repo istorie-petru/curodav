@@ -389,7 +389,7 @@
 // relabeled "Permanently Delete Everything" -> "Delete Everything" ->
 // just "Delete" (ccConfirmSheet's own default) -- static/
 // data_maintenance.js.
-const CACHE_NAME = "cc-shell-v79";
+const CACHE_NAME = "cc-shell-v80";
 
 const SHELL_ASSETS = [
   "/offline",

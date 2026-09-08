@@ -17,6 +17,75 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- fifth same-day follow-up, direct report against
+  a second screenshot of the just-collapsed Offline Mode page: still didn't
+  match the rest of the app, six concrete complaints. Fixed all six:
+
+  1. **Told the user it's offline twice** ("Offline Mode" title + a separate
+     `.offline-indicator` badge beside it, same fact). Badge removed
+     outright (`.offline-indicator` CSS deleted too, confirmed unused
+     elsewhere via grep); its message merged into the one hint line below
+     the header, which is now the page's only "you're offline" statement
+     (`TestOfflineToolbar::test_offline_page_says_youre_offline_exactly_
+     once` locks this in against the *rendered* body, not raw template
+     source, since the source's own header comment mentions the old class
+     name in prose).
+  2. **Two competing headings** ("Offline Mode" then a bold "+ Quick Add"
+     right below it). The Quick Add card's title now uses `.widget-header`'s
+     existing "quiet card-header label" convention (15px, weight 600,
+     hairline border-bottom) instead of `text-title2` -- same fix the
+     2026-08-30 widget-header design pass already applied everywhere else,
+     just never carried over to this page.
+  3. **"The rest should be card widgets too."** `_offline_quick_add.html`'s
+     builder now renders inside a real `.card` (`class="card offline-
+     quick-add-builder"`) instead of a bespoke lookalike box with its own
+     background/border/radius -- same surface every dashboard widget and
+     Settings status-card already uses.
+  4. **Buttons not "appearing correctly like on modal windows."** Root
+     cause: the footer was missing the `<span class="spacer">` every real
+     `_modal_footer.html` puts between its back/cancel and primary buttons
+     to split them left/right -- Cancel and Add were reading as stuck
+     together on the left. Added the spacer; `.modal-footer .spacer{flex:1}`
+     already existed and just had nothing using it here.
+  5. **"The labels dropdown doesn't work."** Root-caused, not just
+     restyled: a Labels selection in this builder never actually applied to
+     the created entity (label ops don't flow through the offline field-HLC
+     write path at all) -- the old code only admitted this *after* submit,
+     via an "(labels can't be added offline)" footnote. A control whose
+     selection silently does nothing is a real bug, not a look-and-feel
+     one. Removed the Labels field from both the task and event fieldsets
+     entirely (`offline_shell.js` no longer fetches `getAllTasks`/
+     `getAllEvents` either, since that was the only reason it read them);
+     left the task/event/contact/note forms otherwise unchanged. Also fixed
+     while in the same markup: `<fieldset>`'s default browser border/
+     padding (never reset before) was drawing an unrelated second box
+     around the Title/Due Date group inside the already-bordered card --
+     `.offline-entity-fields{border:none; padding:0; margin:0;}` now.
+  6. **"No scrollbar - flex."** `offline.html` adopted `main-shell`/
+     `main-shell-body` -- the same "fits the viewport, scrolls internally"
+     shell Tasks/Contacts/Notes/Dashboard already use (2026-09-07 pass)
+     -- instead of relying on whole-page scroll, which this page had never
+     opted into.
+
+  `sw.js` `CACHE_NAME` bumped `v79` -> `v80` (`offline.html`, `_offline_
+  quick_add.html`, `offline_shell.js`, `style.css` all changed again).
+  `test_pwa_shell.py` gained 4 tests locking in items 1/2/4/5/6 above
+  (`test_offline_page_says_youre_offline_exactly_once`,
+  `test_offline_page_uses_the_shared_flex_shell`,
+  `test_offline_quick_add_footer_splits_buttons_like_a_real_modal`,
+  `test_offline_quick_add_has_no_labels_field`), plus two existing tests
+  updated for the removed `getAllTasks`/`getAllEvents` reads and the new
+  `.card`/`.widget-header` markup. Net test count 2019 -> 2023 (+4). Full
+  suite re-run in the same 8-chunk pattern as the entry below: 301 + 392 +
+  271 + 163 + 260 + 266 + 160 + 210 = 2023 passed.
+
+  **Next slice:** same as the entry below's -- a real offline *read*
+  surface, still deliberately not started. No live-browser check yet
+  either; this is now two rounds of direct UI complaints against
+  screenshots that were only fixed by reasoning about markup/CSS, never
+  seen rendered -- worth being the first thing done next session if Chrome
+  or a sandbox browser becomes reachable.
+
 - **Shipped:** 2026-09-09 -- fourth same-day follow-up, direct request
   (with a screenshot): the Offline Mode page's UI was "wrong," specifically
   called out as the reason offline support had been effectively shelved

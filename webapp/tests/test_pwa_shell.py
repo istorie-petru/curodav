@@ -229,9 +229,14 @@ class TestLocalReadPath:
         assert "window.CCOfflineSync" in script
 
     def test_offline_shell_reads_from_the_mirror_not_the_network(self):
+        # 2026-09-09: no longer reads getAllTasks/getAllEvents -- those were
+        # only ever fetched to populate the Labels picker, which was removed
+        # (a selection there never actually applied to the created entity,
+        # a real "doesn't work" bug, not a styling one). The sync summary
+        # itself still reads the mirror, never the network.
         script = (_STATIC_DIR / "offline_shell.js").read_text()
-        assert "CCOfflineDB.getAllTasks" in script
-        assert "CCOfflineDB.getAllEvents" in script
+        assert "CCOfflineDB.getLastSyncedAt" in script
+        assert "CCOfflineDB.getOutboxCount" in script
         assert "fetch(" not in script
 
     def test_base_html_loads_the_mirror_and_pull_loop_globally(self):
@@ -549,7 +554,7 @@ class TestLocalWritePath:
         # v78 (2026-09-09, same-day follow-up 3): purge confirm button
         # relabeled down to just "Delete" -- see sw.js's own v78 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v79"' in script
+        assert 'CACHE_NAME = "cc-shell-v80"' in script
 
 
 class TestOfflineToolbar:
@@ -561,13 +566,46 @@ class TestOfflineToolbar:
     focused screen (no tabs, no per-entity mirror lists) plus a Quick Add
     form with its confusing "Quick Capture Syntax" preview textarea removed
     (it was display-only -- submit always read the visual fields directly,
-    never that box). Same "read the JS/template source, assert the shape"
-    level of confidence as every other class here."""
+    never that box).
+
+    2026-09-09 follow-up -- direct report against a second screenshot of
+    that collapsed page: still didn't match the rest of the app. Fixed:
+    the page said "you're offline" twice (header title + a separate
+    `.offline-indicator` badge, now gone -- merged into one `.offline-
+    page-hint` banner) and had two competing headings ("Offline Mode" then
+    a bold "+ Quick Add" right under it, now a quiet `.widget-header`-style
+    card title); the Quick Add form moved into a real `.card` instead of a
+    bespoke lookalike box; the footer's Cancel/Add buttons were missing the
+    `.spacer` every real modal footer uses to split them left/right, so
+    they read as stuck together; the Labels multiselect was removed
+    outright -- a selection there never actually applied to the created
+    entity (labels can't sync through the offline write path), so "the
+    dropdown doesn't work" was a correct bug report, not a styling one.
+    Same "read the JS/template source, assert the shape" level of
+    confidence as every other class here."""
 
     def test_offline_page_has_no_tabs(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
         assert "data-offline-main-tab" not in html
         assert "offline-main-tabs" not in html
+
+    def test_offline_page_says_youre_offline_exactly_once(self):
+        # 2026-09-09 follow-up: used to say it twice (page title +
+        # .offline-indicator badge) -- now only the hint banner says it.
+        # Rendered body, not raw template source -- the source's own
+        # historical header comment mentions the old badge's class name in
+        # prose, which isn't a real occurrence on the page.
+        body = pwa_router.offline_shell(_request("/offline")).body.decode()
+        assert 'class="offline-indicator"' not in body
+        assert body.count("You're offline") == 1
+
+    def test_offline_page_uses_the_shared_flex_shell(self):
+        # Same "fits the viewport, scrolls internally" shell Tasks/
+        # Contacts/Notes/Dashboard already use, instead of whole-page
+        # scroll (direct report: "no scrollbar - flex").
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
+        assert "{% block main_class %}main-shell{% endblock %}" in html
+        assert "main-shell-body" in html
 
     def test_offline_html_has_the_quick_add_builder(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
@@ -584,6 +622,28 @@ class TestOfflineToolbar:
         assert 'id="offline-quick-add-result"' in partial_html
         # The generated-but-never-parsed capture-syntax preview box is gone.
         assert 'id="offline-capture-text"' not in partial_html
+        # The builder is a real `.card`, like every other widget in the app.
+        assert 'class="card offline-quick-add-builder"' in partial_html
+        # Its title is a quiet card-header label, not a second page heading.
+        assert 'class="widget-header"' in partial_html
+
+    def test_offline_quick_add_footer_splits_buttons_like_a_real_modal(self):
+        # Direct report: Cancel/Add read as stuck together -- the shared
+        # `.modal-footer` look needs its own `.spacer` between the two
+        # buttons (same as _modal_footer.html's real back/primary split)
+        # to push Cancel left and Add right; it was missing here.
+        partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
+        footer = partial_html[partial_html.index('class="modal-footer'):]
+        assert footer.index('offline-quick-add-cancel') < footer.index('class="spacer"') < footer.index('type="submit"')
+
+    def test_offline_quick_add_has_no_labels_field(self):
+        # Direct report: "the labels dropdown doesn't work" -- correctly
+        # so, a selection there never applied to the created entity.
+        # Removed rather than cosmetically patched.
+        partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
+        assert "offline-task-labels" not in partial_html
+        assert "offline-event-labels" not in partial_html
+        assert "offline-label-multiselect" not in partial_html
 
     def test_offline_html_loads_the_quick_add_scripts(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
@@ -613,7 +673,9 @@ class TestOfflineToolbar:
     def test_offline_shell_renders_a_sync_summary_not_panels(self):
         # 2026-09-09: the five-panel mirror render (Tasks/Upcoming Events/
         # Timetabled events/Contacts/Notes) is gone -- offline_shell.js now
-        # only renders a one-line sync summary plus the label picker.
+        # only renders a one-line sync summary (the Labels picker it used to
+        # also populate from the mirror was removed outright, see
+        # TestOfflineToolbar's own docstring).
         script = (_STATIC_DIR / "offline_shell.js").read_text()
         assert "offline-sync-summary" in script
         assert "getLastSyncedAt" in script
