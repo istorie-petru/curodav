@@ -3677,17 +3677,31 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle); box-shadow:inset 0 0 0 2px var(--accent-neutral);}
 /* The dragged chip itself, previously just opacity:.5 -- direct feedback
    (2026-09-03), "the events are not shown as dragged": fading toward
-   invisible reads as the chip disappearing, not as picked up. Now matches
+   invisible reads as the chip disappearing, not as picked up. Then matched
    .time-event.dragging's "lifted" treatment exactly (ring outline, elevated
    shadow, higher z-index, opacity .95 not .5) so a chip grabbed on Month/
-   4-Week looks and behaves the same as one grabbed on Week. z-index:5 is
-   enough to clear a day cell's own siblings/overflow link without needing
-   Week's z-index:30 (Month chips aren't absolutely positioned over a tall
-   shared canvas the way timed events are, so there's no equivalent stack
-   of other absolutely-positioned siblings to clear). */
-.month-event-item.dragging, .month-due-task-item.dragging{
-  opacity:.95; cursor:grabbing; position:relative; z-index:5;
-  box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent-neutral), 0 6px 14px rgba(0,0,0,.22);
+   4-Week looked and behaved the same as one grabbed on Week.
+
+   Direct follow-up (same day as the round-3 fix above): "doesn't show the
+   drag and drop shadow like in all day events" -- a chip had no visual
+   actually following the pointer, unlike a `.month-bar`'s own ghost clone
+   (calendar_month_drag.js). setupItem now spawns the same kind of
+   pointer-follow ghost (`.month-item-ghost` below) a bar drag already has,
+   so the source chip fades toward its origin spot (same "source
+   disappears, ghost is the visible representation" split `.month-bar.
+   dragging`'s own comment describes) instead of staying lifted in place --
+   the ring-outline "lifted" look above is dropped since the ghost now
+   carries that "this is being dragged" signal on its own. */
+.month-event-item.dragging, .month-due-task-item.dragging{opacity:.3;}
+/* The floating chip clone -- position:fixed + pointer-events:none also set
+   inline by calendar_month_drag.js (belt-and-suspenders, same reasoning
+   `.month-bar-ghost`'s own comment gives). No z-index override needed
+   here the way the bar ghost needs one: a chip's own `.month-task-item`
+   base rule carries no z-index of its own to clear. */
+.month-item-ghost{
+  position:fixed; pointer-events:none; z-index:50; opacity:.95;
+  background:var(--bg-elevated); border-radius:6px; padding:2px 6px;
+  box-shadow:0 6px 14px rgba(0,0,0,.28);
 }
 
 /* Timeline (Gantt) view -- templates/tasks_timeline.html,

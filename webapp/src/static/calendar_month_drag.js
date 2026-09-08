@@ -119,12 +119,44 @@
     return d.toISOString().slice(0, 10) + rest;
   }
 
+  // Direct follow-up request: plain event/task chips didn't get the
+  // pointer-follow drag "shadow" `.month-bar`s already have (setupBar's
+  // ghost, above) -- a chip just sat lifted in place (`.dragging`'s ring
+  // outline) with no visual actually tracking the cursor, so a drag read
+  // as "nothing is following my pointer" next to bars, which clearly do.
+  // Mirrors setupBar's ghost mechanics (position:fixed clone, pointer-
+  // events:none, removed on drop) rather than bar's own "can't move
+  // itself" reasoning -- a chip COULD reparent itself into the hovered
+  // cell like Week/Day's timed events do, but that would fight the
+  // existing "re-render the whole region on drop" pattern (overflow
+  // counts/"+N more" need a server recompute either way, see end()'s own
+  // comment below) for no benefit over a simple clone.
   function setupItem(el) {
     let dragging = false;
     let started = false;
     let startX = 0;
     let startY = 0;
     let originCell = null;
+    let itemRect = null; // the real chip's own getBoundingClientRect(), captured once at drag start
+    let grabDX = 0;
+    let grabDY = 0;
+    let ghost = null;
+
+    function makeGhost() {
+      // A deep clone (not a manual reconstruction like setupBar's -- a
+      // chip's own markup already varies by kind: color-dot + optional
+      // time + title for an event/task row) keeps whatever's actually
+      // inside this one without special-casing it here.
+      const g = el.cloneNode(true);
+      g.classList.add("month-item-ghost");
+      g.style.position = "fixed";
+      g.style.left = itemRect.left + "px";
+      g.style.top = itemRect.top + "px";
+      g.style.width = itemRect.width + "px";
+      g.style.pointerEvents = "none"; // belt-and-suspenders, same reasoning as the bar ghost's own inline copy
+      document.body.appendChild(g);
+      return g;
+    }
 
     function begin(e) {
       started = true;
@@ -149,8 +181,14 @@
       if (!dragging && (Math.abs(dx) > CLICK_THRESHOLD_PX || Math.abs(dy) > CLICK_THRESHOLD_PX)) {
         dragging = true;
         el.classList.add("dragging");
+        itemRect = el.getBoundingClientRect();
+        ghost = makeGhost();
+        grabDX = startX - itemRect.left;
+        grabDY = startY - itemRect.top;
       }
       if (!dragging) return;
+      ghost.style.left = e.clientX - grabDX + "px";
+      ghost.style.top = e.clientY - grabDY + "px";
       const hovered = cellAtPoint(e.clientX, e.clientY);
       clearDropHover();
       if (hovered && hovered !== originCell) hovered.classList.add("drop-hover");
@@ -162,6 +200,10 @@
       started = false;
       el.classList.remove("dragging");
       clearDropHover();
+      if (ghost) {
+        ghost.remove();
+        ghost = null;
+      }
       if (!dragging) return; // was a click -- let the href navigate normally
 
       const target = cellAtPoint(e.clientX, e.clientY);

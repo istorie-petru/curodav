@@ -17,6 +17,41 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same day as round 3 above:
+  "fix the drag and drop for tasks and events... it doesn't show the drag
+  and drop shadow like in all day events." Plain event/task chips (Month/
+  4-Week, `setupItem` in `calendar_month_drag.js`) never got a pointer-
+  follow drag ghost the way `.month-bar`s already do (`setupBar`) -- a chip
+  just sat lifted in place (`.dragging`'s ring outline, 2026-09-03) with
+  nothing actually tracking the cursor.
+
+  **Fix:** `setupItem` now spawns a `.month-item-ghost` on drag start --
+  a deep `cloneNode(true)` of the chip itself (its markup varies by kind:
+  color-dot + optional time + title, so cloning wholesale sidesteps
+  special-casing that setupBar's manual ghost reconstruction needed),
+  `position:fixed`, follows the pointer (offset by the original grab
+  point, same math as the bar ghost), removed on drop. The source chip now
+  fades (`opacity:.3`) instead of the ring-outline "lifted" treatment --
+  the ghost carries the "picked up" signal now, so keeping both would be
+  redundant, matching `.month-bar.dragging`'s own "source fades, ghost is
+  what's visible" split.
+
+  **Verified live** (not just reasoned about, per round 3's own process
+  note above): dispatched synthetic pointerdown/pointermove against a real
+  chip in the running instance -- ghost appeared, tracked the pointer,
+  origin chip faded; pointerup landed the reschedule on the exact date
+  released over, and the ghost was removed from the DOM afterward.
+
+  **Tests:** new `TestItemDragGhostStructural` in `test_calendar_month_
+  bars.py` -- `node --check` plus source/CSS greps for the clone/ghost/
+  fade wiring, same pattern every prior JS-only calendar slice's own test
+  file uses. `sw.js` `CACHE_NAME` bumped `v90` -> `v91`; `test_pwa_shell.
+  py`'s pin updated. Full suite re-run across all 88 non-live test files in
+  4 batches -- all green, 0 failures.
+
+  **Next slice:** none mandated -- direct request, fully shipped and
+  verified live.
+
 - **Shipped:** 2026-09-08 -- same-day bug fix, round 3, the ACTUAL root
   cause, found by connecting a live browser to this sandbox after round 2
   (further below) was reported still broken. Rounds 1 and 2 both reasoned

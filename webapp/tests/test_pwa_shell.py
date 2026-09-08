@@ -254,5 +254,9 @@ class TestShellCacheVersion:
         # rules now scoped with ":nth-child(N of .month-day-cell)" so the
         # conditional .month-week-bars sibling can't shift every day cell's
         # grid column in a week that has a bar (style.css only).
+        # v91 (direct follow-up, same day): plain event/task chips (Month/
+        # 4-Week) now get a pointer-follow drag ghost (.month-item-ghost)
+        # matching .month-bar's own, instead of just sitting lifted in
+        # place (calendar_month_drag.js, style.css).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v90"' in script
+        assert 'CACHE_NAME = "cc-shell-v91"' in script

@@ -490,3 +490,45 @@ class TestDragRound3DayCellColumnAlignment:
             first_cell_idx = html.index('class="month-day-cell ')
             assert bars_idx < first_cell_idx
             assert "{% if week.bars %}" in html
+
+
+class TestItemDragGhostStructural:
+    """Direct follow-up request, same day: plain event/task chips (Month/
+    4-Week) didn't show a pointer-follow drag "shadow" the way `.month-bar`s
+    already do -- setupItem left the chip lifted in place (`.dragging`'s
+    ring outline) with nothing actually tracking the cursor. setupItem now
+    spawns a `.month-item-ghost` clone mirroring setupBar's own ghost
+    mechanics (position:fixed, pointer-events:none, removed on drop), and
+    the source chip fades (opacity:.3) instead of staying ring-outlined,
+    matching `.month-bar.dragging`'s "source fades, ghost is what's
+    visible" split.
+
+    Same "no JS unit-test harness for static/*.js in this repo" gap every
+    prior JS-only calendar slice's own test file notes -- covered via
+    `node --check` plus source/CSS greps. Verified live (not just reasoned
+    about): dispatched synthetic pointerdown/pointermove/pointerup at a
+    real chip in a running instance -- the ghost appeared and tracked the
+    synthetic pointer position, the origin chip faded, the drop landed on
+    the exact date the pointer was released over, and the ghost element
+    was removed from the DOM afterward."""
+
+    def test_calendar_month_drag_js_syntax_is_valid(self):
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_month_drag.js")], check=True)
+
+    def test_setup_item_creates_and_removes_a_ghost(self):
+        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
+        assert "month-item-ghost" in script
+        assert "cloneNode(true)" in script
+        assert "ghost.remove();" in script
+
+    def test_dragging_chip_fades_instead_of_ring_outlining(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert ".month-event-item.dragging, .month-due-task-item.dragging{opacity:.3;}" in css
+
+    def test_ghost_css_class_exists_and_is_non_interactive(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert ".month-item-ghost{" in css
+        idx = css.index(".month-item-ghost{")
+        block = css[idx:idx + 250]
+        assert "pointer-events:none" in block
+        assert "position:fixed" in block
