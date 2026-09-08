@@ -38,30 +38,51 @@
     <div class="modal-header">
         {# 2026-08-15 modal uniformization rule 3: plain title, no icon
            prefix, to match every other utility modal (label_edit_modal,
-           note_form, _modal_widget_customize, ...). #}
+           note_form, _modal_widget_customize, ...).
+           2026-09-09 (direct follow-up, "the mobile handle should sit on
+           top of the banner"): when a banner is set, this reuses the
+           exact same cover treatment the event/task/contact detail
+           modals already carry (.detail-cover-wrap/.detail-header-inner/
+           .detail-heading-row -- "Variant B baseline... for all view
+           modal windows", 2026-09-03) instead of a one-off bleed just for
+           this template. .modal-handle is now position:absolute (style.
+           css, mobile breakpoint) rather than its own row above
+           modal-header, so it floats on top of whichever of these two
+           renders -- the cover image here, or a plain header elsewhere --
+           the same way a native bottom sheet's handle overlays its own
+           content instead of pushing it down. The small preview thumbnail
+           that used to sit in modal-body (2026-09-08's "small,
+           preview-only thumbnail" pass) is retired in favor of this --
+           showing the same image twice would be redundant now that it
+           renders here. #}
+        {% if banner %}
+        <div class="detail-header-inner">
+            <div class="detail-cover-wrap">
+                <div class="detail-cover">
+                    {# Same served /banners/image URL as _page_banner.html when
+                       the banner has local bytes (version) -- never embed the
+                       base64 blob inline, that was the page-size leak. Only a
+                       legacy hotlink-only searched banner (set before the
+                       web-search feature was removed) falls back to its
+                       remote URL. #}
+                    {% if banner.version %}
+                    <img class="detail-cover-img" src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
+                    {% else %}
+                    <img class="detail-cover-img" src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-heading-row">
+                <h1>Page banner</h1>
+            </div>
+        </div>
+        {% else %}
         <h1>Page banner</h1>
+        {% endif %}
     </div>
     <div class="modal-body">
         <div class="banner-editor">
-            {# 2026-09-08 (direct request, "fix the banner UI"): the old
-               copy explaining the 5:1/2400x480 preferred size, the
-               full-width 3:1 hero preview, and the Remove/Upload buttons
-               sitting in the body are gone. What's left is just a small,
-               preview-only thumbnail of the current banner (or nothing, if
-               there isn't one) -- no label, no hint text, no in-body
-               actions. Every action lives in the footer now, see below. #}
-            {% if banner %}
-            {# Same served /banners/image URL as _page_banner.html when the
-               banner has local bytes (version) -- never embed the base64
-               blob inline, that was the page-size leak. Only a legacy
-               hotlink-only searched banner (set before the web-search
-               feature was removed) falls back to its remote URL. #}
-            {% if banner.version %}
-            <img class="banner-preview-img" src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
-            {% else %}
-            <img class="banner-preview-img" src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
-            {% endif %}
-            {% else %}
+            {% if not banner %}
             <p class="banner-editor-empty">No banner set yet.</p>
             {% endif %}
         </div>

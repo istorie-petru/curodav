@@ -266,6 +266,7 @@
      wireContent();
      stabilizeHeight(fragment);
      applyHeightTier(fragment);
+     applyCoverHandle();
      animateContentSwap();
    }
 
@@ -452,6 +453,21 @@
     dialog.classList.toggle("is-height-md", !!isMd && !isLg);
     dialog.classList.toggle("is-height-lg", !!isLg);
   }
+  // 2026-09-09 (direct follow-up, "the mobile handle should sit on top
+  // of the banner") -- style.css's `.modal.has-cover .modal-handle` rule
+  // floats the drag handle over a cover image instead of its own row
+  // above a plain header; this is what decides whether that rule is
+  // live. Same "fragment states its own shape, JS mirrors the marker
+  // onto the persistent dialog" pattern stabilizeHeight/applyHeightTier
+  // above use, just detected by content (`.detail-cover-wrap` inside the
+  // now-populated #modal-header) rather than a marker class on
+  // #modal-target itself -- the cover only sometimes renders even within
+  // one template (banner_editor.html's `{% if banner %}`), so a static
+  // class on the outer fragment wouldn't track that.
+  function applyCoverHandle() {
+    if (!dialog || !header) return;
+    dialog.classList.toggle("has-cover", !!header.querySelector(".detail-cover-wrap"));
+  }
   function animateContentSwap() {
     if (!dialog) return;
     dialog.classList.remove("is-swapped");
@@ -508,6 +524,7 @@
      wireContent();
      stabilizeHeight(fragment);
      applyHeightTier(fragment);
+     applyCoverHandle();
      if (wasOpen) animateContentSwap();
      const firstInput = body.querySelector("input, select, textarea");
      if (firstInput) firstInput.focus();

@@ -4308,7 +4308,7 @@ main.main-shell > .bulk-actions-bar{
 }
 .modal-overlay.is-open{opacity:1; visibility:visible; transition:opacity var(--dur-normal) var(--ease-standard);}
 .modal{
-   width:700px; min-width:500px; max-width:100%; background:var(--surface-container-high); border-radius:28px;
+   position:relative; width:700px; min-width:500px; max-width:100%; background:var(--surface-container-high); border-radius:28px;
    box-shadow:var(--elevation-3); transform:translateY(10px) scale(.97);
    transition:transform var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard), min-height var(--dur-normal) var(--ease-standard);
    border:none;
@@ -4714,6 +4714,30 @@ body.command-palette-open{overflow:hidden;}
    .modal-handle{
      display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
      margin:var(--space-2) auto 0; flex:none; touch-action:none;
+   }
+   /* 2026-09-09 (direct follow-up, "the mobile handle should sit on top
+      of the banner"): only for a modal whose header carries a cover
+      image (.detail-cover-wrap/.detail-header-inner -- the event/task/
+      contact detail modals, and now banner_editor.html's own header when
+      a banner is set, see that template's comment) -- everywhere else,
+      the handle keeps its normal dedicated row above a plain-text
+      header, unchanged, since floating it there would just crowd the
+      title with no image underneath to justify it. modal.js's
+      applyCoverHandle() toggles `.modal.has-cover` by checking for
+      `.detail-cover-wrap` in the freshly-injected header, same
+      "fragment states its own shape, JS mirrors the marker onto the
+      persistent dialog" pattern stabilizeHeight/applyHeightTier already
+      use for is-stable-height/is-height-md/lg.
+      position:absolute takes the handle out of flex flow entirely so
+      modal-header/the cover starts flush at the dialog's real top edge
+      instead of being pushed down by the handle's own row -- .modal
+      above carries position:relative for exactly this anchor. The soft
+      drop shadow (unnecessary on a plain background, which is why the
+      base rule above doesn't have one) keeps the pale pill legible over
+      a busy photo instead of just a solid color. */
+   .modal.has-cover .modal-handle{
+     position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:2;
+     margin:0; background:var(--border-strong); box-shadow:0 1px 3px rgba(0,0,0,.35);
    }
     .modal-header{padding:var(--space-3) var(--space-4) var(--space-2); padding-right:44px;}
     /* Mobile's .modal-header padding differs from desktop's -- .detail-
@@ -6255,14 +6279,14 @@ body.command-palette-open{overflow:hidden;}
 }
 
 /* Banner editor modal (banner_editor.html, 2026-08-09; cut down to a
-   small preview-only thumbnail 2026-09-08 -- the old copy explaining the
-   5:1 aspect ratio, the full-width 3:1 hero, and the in-body Remove/
-   Upload buttons are gone; those two actions now live in the modal
-   footer instead, see .banner-upload-btn below). */
-.banner-preview-img{
-  display:block; max-width:100%; aspect-ratio:5 / 1;
-  object-fit:cover; border-radius:var(--radius-card); border:1px solid var(--border);
-}
+   small preview-only thumbnail 2026-09-08, then that thumbnail retired
+   2026-09-09 in favor of rendering the banner as the modal's own cover
+   (.detail-cover-wrap/-img, same partial the event/task/contact detail
+   modals use -- see that template's own comment) so the mobile drag
+   handle has something to float on top of. The old copy explaining the
+   5:1 aspect ratio and the in-body Remove/Upload buttons are gone; those
+   two actions live in the modal footer instead, see .banner-upload-btn
+   below). */
 .banner-editor-empty{color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0;}
 /* Upload button now sits in .modal-footer, styled like any other
    primary/ghost footer button -- .banner-upload-btn only adds the
