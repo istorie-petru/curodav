@@ -4642,9 +4642,34 @@ body.command-palette-open{overflow:hidden;}
    .modal-overlay{align-items:flex-end; padding:0;}
    .modal{
      width:100%; max-width:100%; border-radius:28px 28px 0 0;
-     max-height:90vh; transform:translateY(100%);
+     max-height:90vh; min-height:0; transform:translateY(100%);
      padding-bottom:env(safe-area-inset-bottom, 0px);
    }
+   /* 2026-09-08 follow-up (direct report: even after the two fixes above,
+      "the flex:1 moves the buttons too low to be pressed"): the base
+      .modal rule's min-height:300px (a deliberate desktop floor -- "a
+      floating centered dialog that's too short looks like a sliver," see
+      that rule's own comment) was never reset for the mobile bottom
+      sheet, which doesn't have that problem (it's anchored to the
+      screen's bottom edge, not floating). With min-height:300px still
+      active, .modal-body's flex:1/flex-grow forced ANY short-content
+      sheet (the banner editor's small thumbnail + short footer, this
+      same day's earlier shrink) to stretch down to fill that 300px
+      floor, dragging the footer's buttons down with it -- not literally
+      off-screen this time (the earlier 100vh/is-wide bugs already
+      covered that), but well past where the actual content ended, into
+      dead padded space that reads as "too low to reach comfortably."
+      min-height:0 here removes the floor on mobile only -- a sheet with
+      real content still grows to fit it (nothing here caps that), and
+      the fixed-height view/edit-merge pair (.modal.is-stable-height's
+      own explicit height:min(78vh,720px) below) is a *height*, not a
+      min-height, so it's untouched by this and still fills/pins its
+      footer to the bottom exactly as before. flex:1 on .modal-body
+      itself is left alone -- it's what makes body scrolling AND
+      footer-pinned-to-bottom work correctly for every modal that
+      genuinely has (or is given) more height than its content, this
+      floor was the only thing forcing that behavior onto content that
+      didn't have any extra height to begin with. */
    .modal-overlay.is-open .modal{transform:translateY(0);}
    .modal-handle{
      display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
