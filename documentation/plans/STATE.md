@@ -17,6 +17,88 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct request, new session: "rework the
+  [Published Lists] table in the spirit of any other table in the app.
+  Also it should have an edit button. No inline editing. In the modal
+  window for creating or editing a published list, choosing a label
+  should be a checkbox drop down menu, and please delete any settings
+  hint that are unnecessary." Four changes, all in the Published Lists
+  feature (webapp/src/templates/published_lists.html, published_list_
+  create_modal.html, routers/published_lists.py, static/published_lists.js,
+  static/style.css):
+
+  1. **Table rework.** The page's own hand-rolled `.lists-table-container`/
+     `.lists-table` chrome (flat border, tinted thead, roomier padding, a
+     bespoke mobile stacked-row `@media` block) predated the `.card.
+     table-scroll` + plain `<table>` convention the rest of the app
+     settled on (_tasks_body.html, settings_holidays.html, settings_data_
+     maintenance.html's conflicts table) -- swapped onto that convention;
+     style.css's generic `table`/`thead th`/`tbody td` rules (section 6)
+     now supply the chrome, and the old `.lists-table*` CSS block
+     (~190 lines, mobile stack included) and the now-dead `#create-list-
+     form .field-toggle*` rules (labels moved off that markup, see #3
+     below) are deleted rather than left dead.
+  2. **No inline editing.** Visibility's auto-submitting `<select>` (a
+     live write on every change, no confirmation -- the one inline-edit
+     control this table had) is gone, replaced by a plain read-only
+     `.pill-static` badge. Every editable field (Name, Visibility, Labels)
+     now lives behind a new per-row Edit icon-btn (`.action-buttons`, same
+     shape `_row_action_buttons.html` callers use elsewhere, hand-rolled
+     here rather than that shared macro so the Delete button could keep
+     its domain-specific "Unpublish" wording) that opens `GET /published-
+     lists/{id}/edit` -- new route, backed by a new `POST /published-
+     lists/{id}/update` that reuses `_unique_collection_path`/
+     `_try_teardown`/`_try_materialize` (rename-safe, best-effort on
+     Radicale, skips Radicale side effects entirely for an already-
+     archived List) and delegates the actual visibility transition to the
+     existing, already-tested `set_visibility` function rather than
+     duplicating its token/teardown/rematerialize logic. Type is NOT
+     editable post-creation (shown as a read-only `.cell-tag` pill in the
+     edit modal instead) -- changing entity_type after a List has
+     materialized would orphan its Radicale collection; out of scope here.
+     Visibility's edit-mode picker gains a third option ("Paused" =
+     archived) since that state is no longer reachable from the table.
+  3. **Labels filter -> checkbox dropdown.** The hand-rolled `.field-
+     toggle-group` of always-visible plain checkboxes is now `_widget_
+     list_multiselect.html`'s `ms_mode="filter"` (not `"select"` --
+     filter mode's "empty = All" reading matches this field's own "leave
+     blank for everything" semantics; select mode's "empty = no labels,
+     never collapses to All" is for a record's actual tag set, wrong
+     here) with `ms_pill=true`, same colored/iconed pills every other
+     Labels picker in the app renders. One template now serves both
+     create and edit (`editing` in context switches the header/action/
+     button copy and pre-fills Name/Visibility/Labels); form id is
+     `create-list-form` or `edit-list-form` depending, so static/
+     published_lists.js's validation now looks up whichever is present
+     instead of a single hardcoded id (the old `#label-checkboxes`
+     checkbox-count logic was dead weight -- never actually gated
+     anything, see that file's own comment -- and is gone, not ported).
+  4. **Settings-hint cleanup.** Visibility's hint dropped its "Public also
+     adds a shareable link" clause (redundant -- the option itself is
+     already labeled "Public (shareable link)"). The trailing "Change
+     visibility or archive anytime from the list below" hint is deleted
+     outright, not shortened -- it described the now-removed inline
+     `<select>`; there's nothing "below" to point at any more, the Edit
+     button doesn't need a hint to explain itself. The labels-filter
+     "matches any checked label" hint and the no-labels-yet empty-state
+     copy both stay -- real, non-obvious information nothing else on the
+     page says.
+
+  **Tests:** full suite re-run in 6 chunks (file-list split, largest
+  suite yet at 2058 tests total across 90 files) -- 403 + 495 + 286 + 376
+  + 275 + 223 = 2058 passed, 0 failed. No new test file added this
+  session (existing `TestPublishedListsRouterCrud`'s "Edit not supported
+  in new simplified API" comment is now stale -- edit_list_modal/
+  update_list exist -- but no test asserts the old absence either, so
+  nothing broke; a follow-up session should add explicit edit-route
+  coverage rather than relying on the manual round-trip reasoning above).
+
+  **No live browser reachable in this sandbox** -- same recurring gap
+  every entry in this file already notes; verified via template-syntax-
+  clean Jinja renders (a stray literal `{{ }}` in this template's own
+  header comment briefly broke `TemplateSyntaxError` until caught by the
+  first test run) and the full test suite, not an actual click-through.
+
 - **Noted, not shipped:** 2026-09-08 -- direct request, same session as
   the `deploy/`/Cloudflare Tunnel entries below: the user wants "something
   like this, or at least a good or easy way to deploy all." Right now

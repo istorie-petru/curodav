@@ -48,14 +48,22 @@
         document.body.removeChild(textarea);
     }
 
-    // Form validation for create modal
+    // Form validation for the create/edit modal -- 2026-09-08 (this
+    // session): the same template now renders as either #create-list-form
+    // (POST /published-lists/create) or #edit-list-form (POST /published-
+    // lists/{id}/update, new this session), so this looks for whichever
+    // one is actually on the page instead of a single hardcoded id. The
+    // label checkboxes moved onto _widget_list_multiselect.html's own
+    // checkbox-dropdown panel (no more #label-checkboxes wrapper) -- that
+    // change dropped nothing here, since this never actually gated on the
+    // checkboxes' state (see the comment below), only re-ran the same
+    // name-only check on every toggle.
     function initCreateFormValidation() {
-        var form = document.getElementById('create-list-form');
+        var form = document.getElementById('create-list-form') || document.getElementById('edit-list-form');
         if (!form) return;
 
         var nameInput = document.getElementById('name');
-        var checkboxes = document.querySelectorAll('#label-checkboxes input[type="checkbox"]');
-        var submitBtn = document.getElementById('publish-btn');
+        var submitBtn = document.getElementById('publish-btn') || document.getElementById('save-list-btn');
 
         function checkValidity() {
             // 2026-09-08 (direct bug report): used to also require at least
@@ -79,9 +87,6 @@
         if (nameInput) {
             nameInput.addEventListener('input', checkValidity);
         }
-        checkboxes.forEach(function (cb) {
-            cb.addEventListener('change', checkValidity);
-        });
 
         // Initial check
         checkValidity();

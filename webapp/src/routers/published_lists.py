@@ -205,6 +205,94 @@ def create_list(
     return RedirectResponse(url="/published-lists", status_code=303)
 
 
+@router.get("/{list_id}/edit")
+def edit_list_modal(list_id: str, request: Request, conn=Depends(get_db)):
+    """Modal entry point for editing an existing List -- reuses the create
+    modal template (`editing` in context switches its Name/Visibility/
+    Labels fields to pre-filled and its form action to `update_list`
+    below). Type is not editable here -- see that template's own header
+    comment for why -- so entity_types/entity_labels are still passed
+    only for the read-only pill it renders instead of a picker."""
+    existing = db.get_published_list(conn, list_id)
+    if existing is None:
+        return RedirectResponse(url="/published-lists", status_code=303)
+    label_filter = existing.get("label_filter")
+    selected_labels = label_filter.get("any", []) if isinstance(label_filter, dict) else []
+    return templates.TemplateResponse(
+        "published_list_create_modal.html",
+        {
+            "request": request,
+            "all_labels": db.list_all_label_names(conn),
+            "entity_types": ENTITY_TYPES,
+            "entity_labels": ENTITY_LABELS,
+            "editing": existing,
+            "selected_labels": selected_labels,
+        },
+    )
+
+
+@router.post("/{list_id}/update")
+def update_list(
+    list_id: str,
+    name: str = Form(...),
+    labels: list[str] = Form([]),
+    visibility: str = Form("private"),
+    conn=Depends(get_db),
+    bridge=Depends(get_bridge),
+):
+    """Save edits to an existing List -- Name, label filter, and
+    Visibility (Type is immutable post-creation, see edit_list_modal's
+    comment: changing entity_type would orphan the already-materialized
+    Radicale collection, so the edit form never submits one and this
+    route never reads one).
+
+    Name changes can change the derived Radicale collection slug (same
+    `published-{slug}` derivation create_list uses, `existing_id=list_id`
+    so the List doesn't collide with its own current slug) -- the old
+    collection is torn down and the new one (re)materialized, best-effort,
+    same as every other Radicale-touching route in this module. Both
+    steps are skipped for an already-archived List: its collection was
+    already torn down when it was archived (module docstring), nothing
+    live to rename; the path change alone is persisted, and the next
+    un-archive materializes fresh at the new path, same as a brand-new
+    List.
+
+    Visibility changes are delegated to `set_visibility` (unchanged
+    below) so a rename-and-repause in the same submit gets the exact
+    same tested token/teardown/rematerialize transition logic as the
+    dedicated route, not a second copy of it."""
+    existing = db.get_published_list(conn, list_id)
+    if existing is None:
+        return RedirectResponse(url="/published-lists", status_code=303)
+
+    name = (name or "").strip()
+    if not name:
+        return RedirectResponse(url="/published-lists", status_code=303)
+    if visibility not in VISIBILITIES:
+        visibility = "private"
+
+    entity_type = existing["entity_type"]
+    old_collection_path = existing["radicale_collection_path"]
+    new_collection_path = _unique_collection_path(conn, name, existing_id=list_id)
+    was_archived = (existing.get("visibility") or "private") == "archived"
+
+    row = dict(existing)
+    row["name"] = name
+    row["label_filter"] = _filter_from_form(labels)
+    row["radicale_collection_path"] = new_collection_path
+    db.upsert_published_list(conn, row)
+
+    if not was_archived:
+        if new_collection_path != old_collection_path:
+            _try_teardown(bridge, entity_type, old_collection_path)
+        _try_materialize(conn, bridge, list_id)
+
+    if visibility != (existing.get("visibility") or "private"):
+        set_visibility(list_id, visibility=visibility, conn=conn, bridge=bridge)
+
+    return RedirectResponse(url="/published-lists", status_code=303)
+
+
 @router.post("/{list_id}/visibility")
 def set_visibility(list_id: str, visibility: str = Form(...), conn=Depends(get_db), bridge=Depends(get_bridge)):
     """Change a List's visibility (private/public/archived, see the

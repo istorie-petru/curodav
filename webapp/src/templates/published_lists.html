@@ -10,28 +10,46 @@
 
 <div class="published-lists-page">
     {% if lists %}
-    <div class="lists-table-container">
-        <table class="lists-table">
+    <!-- 2026-09-08 (direct request: "rework the table in the spirit of any
+         other table in the app... it should have an edit button. No
+         inline editing."): was its own hand-rolled `.lists-table-
+         container`/`.lists-table` chrome (flat border, tinted thead,
+         roomier padding, a bespoke mobile stacked-row layout) predating
+         the `.card.table-scroll` + plain `<table>` convention every other
+         table in the app settled on (_tasks_body.html, settings_holidays.
+         html, settings_data_maintenance.html's conflicts table) --
+         swapped onto that same convention here; the generic `table`/
+         `thead th`/`tbody td` rules in style.css now do the chrome, no
+         table-specific overrides needed (style.css's old `.lists-table*`
+         block, mobile-stack media query included, is gone with this).
+         Visibility's inline auto-submitting `<select>` (a live write on
+         every change, no confirmation) is also gone -- it was the one
+         piece of inline editing left on this page, and the request was
+         explicit: no inline editing. It's now a plain read-only pill
+         (below), and both Visibility and every other editable field live
+         behind the new Edit button instead. -->
+    <div class="card table-scroll">
+        <table>
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Type</th>
                     <th>Filter</th>
                     <th>Visibility</th>
-                    <th>Link</th>
-                    <th class="actions-col">Actions</th>
+                    <th class="link-col">Link</th>
+                    <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for l in lists %}
                 <tr>
-                    <td data-label="Name">
+                    <td>
                         <strong>{{ l.name }}</strong>
                     </td>
-                    <td data-label="Type">
+                    <td>
                         <span class="cell-tag tag-{{ l.entity_type }}">{{ entity_labels[l.entity_type] }}</span>
                     </td>
-                    <td data-label="Filter">
+                    <td>
                         {% if l.filter_labels %}
                             <span class="filter-labels">
                                 {% for label in l.filter_labels %}
@@ -42,16 +60,10 @@
                             <span class="text-muted">All items (no filter)</span>
                         {% endif %}
                     </td>
-                    <td data-label="Visibility">
-                        <form method="post" action="/published-lists/{{ l.id }}/visibility">
-                            <select name="visibility" class="visibility-select" data-change-submit aria-label="Visibility for {{ l.name }}">
-                                {% for v in visibilities %}
-                                <option value="{{ v }}" {% if l.visibility == v %}selected{% endif %}>{{ v | capitalize }}</option>
-                                {% endfor %}
-                            </select>
-                        </form>
+                    <td>
+                        <span class="pill-static pill-{{ 'blue' if l.visibility == 'public' else ('gray' if l.visibility == 'archived' else 'green') }}">{{ 'Paused' if l.visibility == 'archived' else (l.visibility | capitalize) }}</span>
                     </td>
-                    <td class="link-col" data-label="Link">
+                    <td class="link-col">
                         {% if l.public_url %}
                         <div class="link-wrapper">
                             <code class="truncated-url" data-full-url="{{ l.public_url }}">{{ l.public_url | truncate(45, true, '…') }}</code>
@@ -72,12 +84,17 @@
                         <p class="settings-hint settings-hint-tight-top">Private -- needs your Radicale/CalDAV account.</p>
                         {% endif %}
                     </td>
-                    <td class="actions-col" data-label="Actions">
-                        <form method="post" action="/published-lists/{{ l.id }}/delete" data-confirm-sheet='Unpublish "{{ l.name }}"? This removes the shared list -- anyone with the link will lose access.'>
-                            <button type="submit" class="icon-btn danger" aria-label="Unpublish {{ l.name }}" title="Unpublish">
-                                {{ icon('trash', 'icon-sm') }}
-                            </button>
-                        </form>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="/published-lists/{{ l.id }}/edit" class="icon-btn" data-modal aria-label="Edit {{ l.name }}" title="Edit">
+                                {{ icon('edit', 'icon-sm') }}
+                            </a>
+                            <form method="post" action="/published-lists/{{ l.id }}/delete" data-confirm-sheet='Unpublish "{{ l.name }}"? This removes the shared list -- anyone with the link will lose access.'>
+                                <button type="submit" class="icon-btn danger" aria-label="Unpublish {{ l.name }}" title="Unpublish">
+                                    {{ icon('trash', 'icon-sm') }}
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

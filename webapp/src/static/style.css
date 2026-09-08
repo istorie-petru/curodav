@@ -6442,57 +6442,25 @@ body.command-palette-open{overflow:hidden;}
     padding: 0 var(--space-4);
 }
 
-.lists-table-container {
-    overflow-x: auto;
-    border-radius: var(--radius-card);
-    border: 1px solid var(--separator);
-    background: var(--bg-elevated);
-}
-
-.lists-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--text-callout);
-}
-
-.lists-table thead th {
-    text-align: left;
-    font-weight: 600;
-    color: var(--fg-secondary);
-    font-size: var(--text-caption);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 2px solid var(--separator);
-    white-space: nowrap;
-    background: var(--surface-container);
-}
-
-.lists-table tbody tr {
-    border-bottom: 1px solid var(--separator);
-    transition: background var(--dur-fast) var(--ease-standard);
-}
-
-.lists-table tbody tr:last-child {
-    border-bottom: none;
-}
-
-.lists-table tbody tr:hover {
-    background: var(--row-alt);
-}
-
-.lists-table tbody td {
-    padding: var(--space-3) var(--space-4);
-    vertical-align: middle;
-}
-
-.lists-table .link-col {
+/* 2026-09-08 (direct request: "rework the table in the spirit of any
+   other table in the app"): this used to be its own hand-rolled table
+   chrome (border/background/tinted-thead/hover/padding) predating the
+   `.card.table-scroll` + plain `<table>` convention the rest of the app
+   settled on (_tasks_body.html, settings_holidays.html, settings_data_
+   maintenance.html's conflicts table) -- published_lists.html now uses
+   that same wrapper+bare-table markup, so the generic `table`/`thead th`/
+   `tbody td` rules already in this file (section 6, above) supply all of
+   that instead of a second, near-duplicate copy here. The old mobile
+   stacked-row @media block is gone with the rest -- horizontal scroll
+   (`.table-scroll`, same section 6 rule) is how every other table in the
+   app handles narrow viewports, this one included now. The Actions
+   column now uses the shared `.col-actions-narrow` (settings_holidays.
+   html/_labels_table_body.html convention, section 1 above) now that it
+   holds two icon buttons (Edit + Unpublish) instead of one -- the old
+   `.actions-col{width:60px}` was sized for the single Delete button this
+   page used to have. */
+.link-col {
     min-width: 280px;
-}
-
-.lists-table .actions-col {
-    width: 60px;
-    text-align: right;
 }
 
 .link-wrapper {
@@ -6549,22 +6517,6 @@ body.command-palette-open{overflow:hidden;}
 .tag-event { background: var(--tag-green-bg); color: var(--tag-green-fg); }
 .tag-contact { background: var(--tag-purple-bg); color: var(--tag-purple-fg); }
 
-/* Create modal form */
-#create-list-form .field-wide .field-toggle-group {
-    max-height: 200px;
-    overflow-y: auto;
-    padding-right: var(--space-2);
-}
-
-#create-list-form .field-toggle {
-    font-size: var(--text-body);
-}
-
-#create-list-form .field-toggle input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-}
-
 /* Empty state in modal */
 .modal-body .empty-state-rich {
     padding: var(--space-6) var(--space-4);
@@ -6578,62 +6530,6 @@ body.command-palette-open{overflow:hidden;}
    `'unsafe-inline'` elimination). */
 .modal-body .empty-state-rich.empty-state-rich-wide {
     padding: var(--space-8) var(--space-5);
-}
-
-/* Mobile adjustments */
-@media (max-width: 720px) {
-    .lists-table thead {
-        display: none;
-    }
-
-    .lists-table tbody tr {
-        display: block;
-        padding: var(--space-4);
-        border-bottom: 1px solid var(--separator);
-    }
-
-    .lists-table tbody td {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: var(--space-2) 0;
-        border: none;
-    }
-
-    .lists-table tbody td::before {
-        content: attr(data-label);
-        font-weight: 600;
-        color: var(--fg-tertiary);
-        font-size: var(--text-caption);
-        text-transform: uppercase;
-        letter-spacing: .04em;
-    }
-
-    .lists-table .link-col {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--space-2);
-    }
-
-    .lists-table .link-col::before {
-        display: none;
-    }
-
-    .link-wrapper {
-        width: 100%;
-    }
-
-    .truncated-url {
-        width: 100%;
-    }
-
-    .lists-table .actions-col {
-        justify-content: flex-end;
-    }
-
-    .lists-table .actions-col::before {
-        display: none;
-    }
 }
 
 /* Create modal adjustments */

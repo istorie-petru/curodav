@@ -11,63 +11,90 @@
        2. Footer is `{% include "_modal_footer.html" %}` now, not a
           hand-rolled `.modal-footer` div with inline `style="border-top:
           none; padding-top: 0; ..."` overrides -- see that partial's own
-          docstring for the shared contract. `footer_primary_id` keeps the
-          "publish-btn" id static/published_lists.js's form-validation
-          JS already looks up by id (disables the button until a name is
-          typed -- 2026-09-08: no longer also requires a label checkbox,
-          see that file's own comment: the server never required one); no
-          `disabled` attribute needed in the markup since that same JS runs
-          an initial checkValidity() on load regardless.
+          docstring for the shared contract.
        3. `.modal-stable-height` removed -- that class is for a modal
           whose own content changes shape post-open without a full
-          re-navigation (the event/task/contact view<->edit cross-fade,
-          quick_add.html's tab switch); this modal's own content doesn't
-          change shape post-open either (2026-09-08: the label-count-
-          dependent empty-state-vs-form branch this comment used to
-          describe is gone, see below), so it stays the one non-cross-fade
-          template not carrying the class.
+          re-navigation; this modal's own content doesn't change shape
+          post-open either, so it stays the one non-cross-fade template
+          not carrying the class.
 
      2026-09-08 (direct request, "make published lists more permissive
-     and easier to set up even if no labels present"): the modal used to
-     hard-block here -- zero labels in the account meant an empty-state
-     ("go create a label first") instead of the form at all, and even
-     with labels present the JS wouldn't enable Publish until one was
-     checked (fixed same day, see published_lists.js's own comment).
-     Both blockers assumed a List needs a label filter to be useful;
-     src/published_lists.py's evaluate_label_filter now treats "no labels
-     selected" as "include everything of this type" instead of "include
-     nothing," so an unfiltered List is a real, useful thing to create --
-     the form always renders now, and the label section itself is framed
-     as optional narrowing, not a required step.
+     and easier to set up even if no labels present"): the form always
+     renders now, no zero-labels hard block -- the label section is
+     framed as optional narrowing, not a required step.
 
      2026-09-08 follow-up (direct request, "the drop down menus are not
-     our own design, they are defaults"): Type and Visibility were plain
-     `<select>`s -- style.css's site-wide `select{}` rule reskins the
-     CLOSED box (chevron, border-radius, padding) but a native select's
-     OPEN dropdown list is drawn by the OS/browser, not this stylesheet --
-     no CSS can touch it. This is the exact reason task_form.html's
-     Status/Priority/Recurrence and the widget builder's View/Range
-     already moved to `_widget_list_multiselect.html`'s `ms_mode="single"`
-     variant instead (see that partial's own header comment) -- reused
-     here for the same reason, so both fields now open the app's own
-     styled panel instead of native OS chrome. Also shortened every
-     `.settings-hint` in this modal (direct request, "make way short the
-     settings-hint") -- the long per-option sentences that used to live
-     inside the Visibility `<option>` text collapsed into one short hint
-     below both fields instead. -->
+     our own design, they are defaults"): Type and Visibility moved onto
+     `_widget_list_multiselect.html`'s `ms_mode="single"` variant instead
+     of native `<select>`s, same reasoning as task_form.html's Status/
+     Priority/Recurrence.
+
+     2026-09-08 (this session, direct request: "rework the table... it
+     should have an edit button. No inline editing. ... choosing a label
+     should be a checkbox drop down menu, and please delete any settings
+     hint that are unnecessary"): three changes bundled here --
+
+       1. This template now serves BOTH `GET /published-lists/new`
+          (`editing` absent from context) and the new `GET /published-
+          lists/{id}/edit` (`editing` = the existing row dict,
+          `selected_labels` = its current label filter's `any` list).
+          Name/Visibility/Labels are editable either way; Type is fixed
+          once a List exists (changing entity_type post-creation would
+          orphan the already-materialized Radicale collection -- routers/
+          published_lists.py's `update_list` never reads an `entity_type`
+          field from the edit form at all) -- shown as the same read-only
+          `.cell-tag tag-<entity_type>` pill the table's own Type column
+          uses, not an editable control, when `editing` is set. Visibility
+          gains a third option ("Paused") only in edit mode -- creating a
+          List already-paused isn't a real use case (create_list forces
+          `archived` back to `private`, unchanged), but archiving/
+          resuming an existing one now happens here instead of the
+          table's old inline auto-submitting `<select>` (see
+          published_lists.html's own comment on why that was removed).
+       2. Labels filter swapped from a hand-rolled `.field-toggle-group`
+          of plain checkboxes onto this same `_widget_list_multiselect.
+          html` partial, `ms_mode="filter"` (the default -- an empty
+          selection reads "All", matching this field's own "leave blank
+          for everything" semantics exactly, unlike "select" mode's
+          "no labels"/never-collapses-to-All reading, which is right for
+          a record's actual tag set but wrong for a filter) with
+          `ms_pill=true` so each option renders as the same colored/
+          iconed label pill every other Labels picker in the app uses,
+          not plain text. One dropdown-with-checkboxes trigger+panel
+          instead of an always-open, unbounded-height checkbox grid.
+       3. Settings-hint cleanup: the Visibility hint's "Public also adds
+          a shareable link" clause is gone -- redundant now that the
+          option itself is labeled "Public (shareable link)" (2026-09-08
+          fix above), so only the genuinely non-obvious half ("Private
+          syncs to your Radicale account") survives. The trailing
+          "Change visibility or archive anytime from the list below"
+          hint is deleted outright -- false now that the table has no
+          inline visibility control at all (item 1 above); editing
+          anytime is what the row's own new Edit button is for, doesn't
+          need a hint to explain it. The other two hints (labels-filter
+          "matches any", no-labels-yet empty state) stay -- both carry
+          real, non-obvious information nothing else on the page says. -->
+{% set _editing = editing | default(none) %}
+{% set _form_id = 'edit-list-form' if _editing else 'create-list-form' %}
 <div id="modal-target" class="modal-height-md">
     <div class="modal-header">
-        <h1>Create a published list</h1>
+        <h1>{{ 'Edit published list' if _editing else 'Create a published list' }}</h1>
     </div>
     <div class="modal-body">
         <div class="card">
-        <form method="post" action="/published-lists/create" id="create-list-form">
+        <form method="post" action="{{ ('/published-lists/' ~ _editing.id ~ '/update') if _editing else '/published-lists/create' }}" id="{{ _form_id }}">
             <div class="field-grid">
                 <div class="field field-wide">
                     <label for="name">Name</label>
-                    <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" required autocomplete="off">
+                    <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" value="{{ _editing.name if _editing else '' }}" required autocomplete="off">
                 </div>
 
+                {% if _editing %}
+                <div class="field">
+                    <label>Type</label>
+                    <span class="cell-tag tag-{{ _editing.entity_type }}">{{ entity_labels[_editing.entity_type] }}</span>
+                </div>
+                {% else %}
                 {% set ms_name = 'entity_type' %}
                 {% set ms_mode = 'single' %}
                 {% set ms_label = 'Type' %}
@@ -75,8 +102,9 @@
                 {% for et in entity_types %}{% set _ = ms_items.append({'uid': et, 'name': entity_labels[et]}) %}{% endfor %}
                 {% set ms_selected = entity_types[0] %}
                 {% set ms_wide = false %}
-                {% set ms_form_id = 'create-list-form' %}
+                {% set ms_form_id = _form_id %}
                 {% include "_widget_list_multiselect.html" %}
+                {% endif %}
 
                 {% set ms_name = 'visibility' %}
                 {% set ms_mode = 'single' %}
@@ -85,38 +113,40 @@
                     {'uid': 'private', 'name': 'Private'},
                     {'uid': 'public', 'name': 'Public (shareable link)'},
                 ] %}
-                {% set ms_selected = 'private' %}
+                {% if _editing %}{% set _ = ms_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}
+                {% set ms_selected = _editing.visibility if _editing else 'private' %}
                 {% set ms_wide = false %}
-                {% set ms_form_id = 'create-list-form' %}
+                {% set ms_form_id = _form_id %}
                 {% include "_widget_list_multiselect.html" %}
-                <p class="settings-hint field-wide settings-hint-tight-top">Private syncs to your Radicale account; Public also adds a shareable link.</p>
+                <p class="settings-hint field-wide settings-hint-tight-top">Private syncs to your Radicale account.</p>
 
+                {% if all_labels %}
+                {% set ms_name = 'labels' %}
+                {% set ms_mode = 'filter' %}
+                {% set ms_label = 'Filter by labels (optional)' %}
+                {% set ms_items = [] %}
+                {% for name in all_labels %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+                {% set ms_selected = selected_labels | default([]) %}
+                {% set ms_wide = true %}
+                {% set ms_pill = true %}
+                {% set ms_form_id = _form_id %}
+                {% include "_widget_list_multiselect.html" %}
+                <p class="settings-hint field-wide settings-hint-tight-top">Matches any checked label. Leave blank for everything.</p>
+                {% else %}
                 <div class="field field-wide">
                     <label>Filter by labels <span class="text-muted">(optional)</span></label>
-                    {% if all_labels %}
-                    <p class="settings-hint settings-hint-tight-bottom">Matches any checked label. Leave blank for everything.</p>
-                    <div class="field-toggle-group" id="label-checkboxes">
-                        {% for name in all_labels %}
-                        <label class="field-toggle">
-                            <input type="checkbox" name="labels" value="{{ name }}">
-                            {{ name }}
-                        </label>
-                        {% endfor %}
-                    </div>
-                    {% else %}
                     <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
-                    {% endif %}
                 </div>
-                <p class="settings-hint field-wide settings-hint-flush">Change visibility or archive anytime from the list below.</p>
+                {% endif %}
             </div>
         </form>
         </div>
     </div>
 {% set footer_back_url = '/published-lists' %}
 {% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'create-list-form' %}
-{% set footer_primary_label = 'Publish List' %}
-{% set footer_primary_icon = 'share-2' %}
-{% set footer_primary_id = 'publish-btn' %}
+{% set footer_primary_form = _form_id %}
+{% set footer_primary_label = 'Save Changes' if _editing else 'Publish List' %}
+{% set footer_primary_icon = 'check-square' if _editing else 'share-2' %}
+{% set footer_primary_id = 'save-list-btn' if _editing else 'publish-btn' %}
 {% include "_modal_footer.html" %}
 </div>
