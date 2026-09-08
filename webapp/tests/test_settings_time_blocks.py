@@ -12,7 +12,17 @@ opening time_block_edit_modal.html (delete lives in that modal's footer),
 and a per-section "+ Add" toolbar button opening the same modal empty. The
 old per-field inline edit (update_time_block_field +
 static/settings_time_blocks.js) is gone, replaced by one whole-form
-update_time_block endpoint."""
+update_time_block endpoint.
+
+2026-09-08 (direct request): Sleep and Leisure merged from two separate
+tables into one -- `kind` is now a per-row "Type" column/pill and a real
+chooser field in the add/edit modal, not fixed by which table a row lived
+in. `TestSettingsTimeBlocksPage`'s table-shape assertions and
+`TestUpdateTimeBlock`'s old "kind is fixed by the row" test were updated
+for the merge; `TestCreateTimeBlock`/`TestWeekDayOverlays`/
+`TestClientWarningPayload` were unaffected -- `db.upsert_time_block`,
+`create_time_block`, and the calendar-overlay code never depended on the
+two-table split in the first place."""
 
 from __future__ import annotations
 
@@ -53,25 +63,25 @@ class TestSettingsTimeBlocksPage:
 
     def test_empty_state_when_no_blocks(self, conn):
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert "No sleep time configured yet" in body
-        assert "No leisure time configured yet" in body
-        assert 'id="sleep-block-table"' in body
-        assert 'id="leisure-block-table"' in body
-        assert 'href="/settings/time-blocks/new?kind=sleep"' in body
-        assert 'href="/settings/time-blocks/new?kind=leisure"' in body
+        assert "No time blocks configured yet" in body
+        assert 'id="time-block-table"' in body
+        assert 'href="/settings/time-blocks/new"' in body
 
-    def test_lists_existing_blocks_in_their_own_list(self, conn):
+    def test_lists_existing_blocks_in_one_merged_table(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
         db.upsert_time_block(conn, {"uid": "l1", "kind": "leisure", "label": "Evening", "start_time": "21:00", "end_time": "21:59", "days": "Monday"})
         body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert 'id="sleep-block-table"' in body
-        assert 'id="leisure-block-table"' in body
+        assert 'id="time-block-table"' in body
+        assert body.count('id="time-block-table"') == 1  # one merged table, not two
         assert "Night" in body
         assert "Evening" in body
         assert "00:00&ndash;05:59" in body
         assert "Mon Tue" in body
         assert 'href="/settings/time-blocks/s1/edit"' in body
         assert 'href="/settings/time-blocks/l1/edit"' in body
+        # Per-row Type pill stands in for the old two-table split.
+        assert 'class="pill-static pill-red"' in body
+        assert 'class="pill-static pill-green"' in body
         assert 'class="inline-text"' not in body
 
     def test_hub_links_to_time_blocks(self, conn):
@@ -129,18 +139,24 @@ class TestTimeBlockEditModal:
         resp = settings_router.new_time_block_modal(_request("/settings/time-blocks/new"), kind="sleep", conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
-        assert "Add sleep time block" in body
+        assert "Add time block" in body
         assert 'action="/settings/time-blocks"' in body
         assert 'id="time-block-form"' in body
-        assert 'value="sleep"' in body
+        # Both chooser options always render (it's a real Sleep/Leisure
+        # radio pair now, not a hidden field echoing a fixed value) --
+        # "sleep" is the one pre-checked when opened with no existing row.
+        assert 'value="sleep" class="seg-radio" checked' in body
+        assert 'value="leisure" class="seg-radio"' in body
+        assert 'value="leisure" class="seg-radio" checked' not in body
         assert 'name="days"' in body
         assert 'value="00:00"' not in body
 
     def test_new_modal_kind_flows_into_the_form(self, conn):
         resp = settings_router.new_time_block_modal(_request("/settings/time-blocks/new"), kind="leisure", conn=conn)
         body = resp.body.decode()
-        assert "Add leisure time block" in body
-        assert 'value="leisure"' in body
+        assert "Add time block" in body
+        assert 'value="leisure" class="seg-radio" checked' in body
+        assert 'value="sleep" class="seg-radio" checked' not in body
 
     def test_edit_modal_prefills_values_and_posts_to_update(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
@@ -149,6 +165,7 @@ class TestTimeBlockEditModal:
         body = resp.body.decode()
         assert "Edit time block" in body
         assert 'action="/settings/time-blocks/s1/update"' in body
+        assert 'value="sleep" class="seg-radio" checked' in body
         assert 'value="Night"' in body
         assert 'value="00:00"' in body
         assert 'value="05:59"' in body
@@ -190,9 +207,26 @@ class TestUpdateTimeBlock:
         settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="05:00", days=["Monday", "Someday"], conn=conn)
         assert db.get_time_block(conn, "s1")["days"] == "Monday"
 
-    def test_kind_is_fixed_by_the_row_not_the_form(self, conn):
+    def test_kind_defaults_to_the_existing_row_when_omitted(self, conn):
+        # A caller that doesn't send `kind` at all (e.g. an old client) --
+        # `kind: str = Form("")`'s default falls through the same
+        # not-a-real-kind fallback as a garbled value, below.
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
         settings_router.update_time_block("s1", label="Night", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
+        assert db.get_time_block(conn, "s1")["kind"] == "sleep"
+
+    def test_kind_can_be_reassigned_via_the_form(self, conn):
+        # 2026-09-08 (direct request): Sleep and Leisure merged into one
+        # table with a real Type chooser in the modal -- a row's kind is
+        # just another editable field now, not fixed by which of two
+        # tables it lived in.
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
+        settings_router.update_time_block("s1", kind="leisure", label="Night", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
+        assert db.get_time_block(conn, "s1")["kind"] == "leisure"
+
+    def test_unknown_kind_falls_back_to_the_existing_row(self, conn):
+        db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
+        settings_router.update_time_block("s1", kind="nap", label="Night", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
         assert db.get_time_block(conn, "s1")["kind"] == "sleep"
 
     def test_404s_for_unknown_uid(self, conn):

@@ -39,7 +39,32 @@
    both see the page's real render context), then either
    `{{ page_header_narrow("Tasks", "check-square") }}` (no actions) or
    `{% call page_header_narrow("Calendar", "calendar") %}...page-specific
-   controls...{% endcall %}`. #}
+   controls...{% endcall %}`.
+
+   2026-09-08 follow-up (direct request): absorbed the Settings area's
+   own `<h1>` + `_settings_breadcrumb.html` instead of stacking a second,
+   redundant title strip under this one -- every Settings child page
+   (General/Appearance/Holidays/Sleep & Leisure/Data & Maintenance/
+   Labels/Published Lists) already passes this macro the exact same
+   title text the old `<h1>` repeated, and `_settings_breadcrumb.html`
+   only ever rendered a single "< Settings" link (every page's `crumbs`
+   context is one level deep -- see routers/settings.py's `_ROOT_CRUMB`),
+   never a real multi-level trail, so there was nothing that survives as
+   visible trail text worth keeping. Rather than change every call site,
+   this macro reads `crumbs` straight from the render context (available
+   because `with context` was already required) and, when present, draws
+   a small left-arrow `.icon-btn` at the *start* of the actions slot --
+   still the header's right side (after the spacer, before any real
+   page-specific actions), just a back button instead of a breadcrumb
+   trail. `crumbs[-1]` (the immediate parent, not necessarily
+   `crumbs[0]`) is what it links to, so this still does the right thing
+   if a page ever grows a real multi-level crumbs list later. The trail
+   text itself doesn't disappear entirely -- it survives as the arrow's
+   `aria-label`/`title` ("Back to Settings") for screen readers and
+   mouse-hover, per direct request. Pages with no `crumbs` in context
+   (Tasks/Contacts/Calendar/Notes/Search/etc., which never included
+   `_settings_breadcrumb.html` to begin with) render exactly as before --
+   `crumbs is defined` guards this so it's a no-op there. #}
 {% macro page_header_narrow(title, icon_name) %}
 {% set _banner = page_header_banner(request) %}
 <div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
@@ -53,8 +78,13 @@
     <span class="page-header-narrow-icon">{{ icon(icon_name|default('layout')) }}</span>
     <h2 class="page-header-narrow-title">{{ title }}</h2>
     <div class="spacer"></div>
-    {% if caller %}
-    <div class="page-header-narrow-actions">{{ caller() }}</div>
+    {% if (crumbs is defined and crumbs) or caller %}
+    <div class="page-header-narrow-actions">
+        {% if crumbs is defined and crumbs %}
+        <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
+        {% endif %}
+        {% if caller %}{{ caller() }}{% endif %}
+    </div>
     {% endif %}
 </div>
 {% endmacro %}

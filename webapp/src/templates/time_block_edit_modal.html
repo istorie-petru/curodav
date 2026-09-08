@@ -5,16 +5,26 @@
      SETTINGS_UI_GUIDE.md pattern B) -- replaces the Sleep/Leisure tables'
      old inline-editable cells (per-field PATCH via
      static/settings_time_blocks.js). Same shape as label_edit_modal.html:
-     opened empty from a section's "+ Add" toolbar button
+     opened empty from the list's "+ Add time block" toolbar button
      (routers/settings.py::new_time_block_modal, posts to create_time_block)
      or prefilled from a row's Edit button (edit_time_block_modal, posts to
-     update_time_block). `kind` rides along as a hidden input so a block
-     never silently moves between the Sleep and Leisure tables; the day set
-     uses the same filter-mode multiselect as the old table cells
-     (_widget_list_multiselect.html). Delete lives in the shared modal
-     footer as a confirm-only action (time-block deletion is irreversible --
-     no undo), pointing at the unchanged
-     /settings/time-blocks/{uid}/delete endpoint. -->
+     update_time_block). The day set uses the same filter-mode multiselect
+     as the old table cells (_widget_list_multiselect.html). Delete lives
+     in the shared modal footer as a confirm-only action (time-block
+     deletion is irreversible -- no undo), pointing at the unchanged
+     /settings/time-blocks/{uid}/delete endpoint.
+
+     2026-09-08 follow-up (direct request): `kind` used to ride along as a
+     hidden input -- a block's Sleep/Leisure was fixed by which of the two
+     separate tables its row lived in, so the form only ever needed to
+     echo it back unchanged. Now that Sleep and Leisure are one merged
+     table (settings_time_blocks.html's own comment), a row's type is a
+     real editable field -- a two-option `.segmented` chooser, same
+     control shape settings_appearance.html's Theme picker uses, radio
+     inputs instead of a hidden one so Save actually posts whichever
+     option the person picked. `kind` (the context var, not the field
+     name) still supplies the chooser's *initial* selection either way --
+     the row's current type when editing, "sleep" by default when adding. -->
 <div id="modal-target" class="modal-height-md">
 <div class="modal-header">
 <h1>{{ form_title }}</h1>
@@ -22,8 +32,14 @@
 <div class="modal-body">
 <div class="card">
 <form method="post" id="time-block-form" action="{{ form_action }}">
-    <input type="hidden" name="kind" value="{{ kind }}">
     <div class="field-grid">
+        <div class="field">
+            <label>Type</label>
+            <div class="segmented" role="radiogroup" aria-label="Type">
+                <label class="seg-btn"><input type="radio" name="kind" value="sleep" class="seg-radio" {% if kind == 'sleep' %}checked{% endif %}> {{ icon('moon', 'icon-sm') }} Sleep</label>
+                <label class="seg-btn"><input type="radio" name="kind" value="leisure" class="seg-radio" {% if kind == 'leisure' %}checked{% endif %}> {{ icon('sun', 'icon-sm') }} Leisure</label>
+            </div>
+        </div>
         <div class="field">
             <label>Title</label>
             <input type="text" name="label" value="{{ b.label if b else '' }}" placeholder="(optional)">

@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Labels{% endblock %}
-{% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
@@ -8,12 +7,18 @@
 {% from "_empty_state_row.html" import empty_state_row %}
 {{ page_header_narrow("Labels", "tag") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
-<div id="modal-target" class="main-shell-body">
-{% include "_settings_breadcrumb.html" with context %}
-
-<h1>Labels</h1>
-
-<p class="settings-hint">Organize your data. Create labels and apply them to tasks, events, or contacts.</p>
+<!-- 2026-09-08 (direct request, "check up ... it looks different
+     compared to the others"): dropped `main-shell`/`.main-shell-body`
+     (2026-09-07's flex-shell pass, style.css's own comment on that rule)
+     -- Labels was the one Settings-family page opted into Tasks/
+     Contacts/Notes' fixed-viewport-height + internal-scroll shell, while
+     every other Settings page (Holidays, Time Blocks, Data &
+     Maintenance, ...) scrolls the whole page normally. Labels is
+     reached from the Settings hub and behaves like a Settings page in
+     every other respect (this page-header-narrow's own back arrow,
+     the .settings-group/table-scroll conventions) -- there was no
+     remaining reason for it alone to scroll differently. -->
+<div id="modal-target">
 
 <!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
      "bulk actions on tables... then Habits, Contacts, Labels, Holidays,

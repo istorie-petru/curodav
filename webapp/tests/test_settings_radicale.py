@@ -79,5 +79,8 @@ class TestSettingsRadicale:
         # defaults (routers/settings.py::settings_data_maintenance) don't
         # crash against it.
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        assert "CalDAV / Radicale sync" in body
+        # 2026-09-08 (direct request): the "CalDAV / Radicale sync"
+        # h2.section-label is gone (every Settings section-label was
+        # removed) -- the editable form's own action attribute is what
+        # this test actually needs to confirm.
         assert 'action="/settings/radicale"' in body  # falls back to the editable form

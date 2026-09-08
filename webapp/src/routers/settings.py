@@ -788,14 +788,25 @@ async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
 # option in the settings to set-up Leisure Time and Sleep Time... similar
 # to the holiday settings, but just adding the hours... and days"). Same
 # grouped-list-plus-modal shape as Holidays directly above (2026-08-17
-# settings HTML uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- two
-# lists (Sleep, Leisure), each row read-only with an Edit button opening
-# time_block_edit_modal.html. Unlike Holidays, `kind` is fixed per
-# table (no free-form calendar name) and there's no date range, just a
-# time-of-day start/end plus a day-of-week set
-# (`_widget_list_multiselect.html`, filter mode -- see db.TIME_BLOCK_DAYS).
-# See routers/calendar.py's `_time_block_overlays` for where these rows
-# turn into the Week/Day grid's soft hatching + scheduling warning.
+# settings HTML uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- a
+# read-only row per block, Edit button opening time_block_edit_modal.html.
+# There's no date range, just a time-of-day start/end plus a day-of-week
+# set (`_widget_list_multiselect.html`, filter mode -- see
+# db.TIME_BLOCK_DAYS). See routers/calendar.py's `_time_block_overlays`
+# for where these rows turn into the Week/Day grid's soft hatching +
+# scheduling warning.
+#
+# 2026-09-08 follow-up (direct request): Sleep and Leisure used to be two
+# separate tables (own bulk-select instance, own "+ Add" row, `kind`
+# fixed by which table a row's Edit button lived in). They're one merged
+# table now -- `kind` is a per-row "Type" column (a pill, red for Sleep/
+# green for Leisure, matching the Week/Day grid's own hatching colors)
+# instead of which table a row happens to sit in, and the add/edit modal
+# grew a real Sleep/Leisure chooser (time_block_edit_modal.html's own
+# comment) so a row's type is just another editable field now, not fixed
+# at creation. `db.list_time_blocks` already stored both kinds in one
+# `time_blocks` table with a `kind` column -- this was a template/route
+# change, not a schema change.
 # --------------------------------------------------------------------- #
 
 _TIME_BLOCKS_CRUMB = _ROOT_CRUMB
@@ -823,9 +834,16 @@ def _time_block_days_label(days_csv: str) -> str:
 
 @router.get("/settings/time-blocks")
 def settings_time_blocks(request: Request, conn=Depends(get_db)):
+    # 2026-09-08 (direct request): one merged, chronologically-sorted list
+    # instead of two separate per-kind tables -- sleep_blocks/leisure_blocks
+    # are still fetched separately (each already ordered by start_time) so
+    # the merge is a simple concatenation, Sleep rows first then Leisure,
+    # rather than an alphabetical-by-kind sort that would otherwise
+    # interleave/reorder them in a less predictable way.
     sleep_blocks = db.list_time_blocks(conn, "sleep")
     leisure_blocks = db.list_time_blocks(conn, "leisure")
-    for block in sleep_blocks + leisure_blocks:
+    time_blocks = sleep_blocks + leisure_blocks
+    for block in time_blocks:
         block["days_label"] = _time_block_days_label(block.get("days") or "")
     return templates.TemplateResponse(
         "settings_time_blocks.html",
@@ -834,8 +852,7 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_time_blocks",
             "crumbs": _TIME_BLOCKS_CRUMB,
             "title": "Sleep & Leisure Time",
-            "sleep_blocks": sleep_blocks,
-            "leisure_blocks": leisure_blocks,
+            "time_blocks": time_blocks,
             "time_block_days": db.TIME_BLOCK_DAYS,
         },
     )
@@ -843,17 +860,23 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
 
 @router.get("/settings/time-blocks/new")
 def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depends(get_db)):
-    """The per-table "+ Add ..." entry point (2026-08-17 settings HTML
+    """The "+ Add time block" entry point (2026-08-17 settings HTML
     uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
     time_block_edit_modal.html the Edit buttons open, empty. Opens via
-    data-modal from the Sleep/Leisure list toolbar and posts to
-    create_time_block below."""
+    data-modal from the list toolbar and posts to create_time_block below.
+    `kind` is just this modal's initial chooser selection now (2026-09-08,
+    direct request) -- Sleep/Leisure is a real field in the form
+    (time_block_edit_modal.html's own comment), not fixed by the entry
+    point; the `?kind=` query param survives only as a convenience default,
+    unused by the current single "+ Add time block" row (always opens to
+    the "sleep" default) but left in place in case a future caller wants
+    to pre-select Leisure."""
     return templates.TemplateResponse(
         "time_block_edit_modal.html",
         {
             "request": request,
             "b": None,
-            "form_title": f"Add {kind} time block",
+            "form_title": "Add time block",
             "form_action": "/settings/time-blocks",
             "kind": kind,
             "time_block_days": db.TIME_BLOCK_DAYS,
@@ -863,10 +886,13 @@ def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depe
 
 @router.get("/settings/time-blocks/{uid}/edit")
 def edit_time_block_modal(uid: str, request: Request, conn=Depends(get_db)):
-    """The Sleep/Leisure Edit button's modal (pattern B) -- one form for
-    every field, replacing the old inline-editable table cells
+    """The time-blocks table's Edit button modal (pattern B) -- one form
+    for every field, replacing the old inline-editable table cells
     (static/settings_time_blocks.js's per-field PATCH). Opens via
-    data-modal from the list row; posts to update_time_block below."""
+    data-modal from the list row; posts to update_time_block below. `kind`
+    (the row's current Sleep/Leisure) flows in as the chooser's initial
+    selection, same as new_time_block_modal -- it's an editable field now
+    (2026-09-08, direct request), not fixed by which row this is."""
     block = db.get_time_block(conn, uid)
     if block is None:
         raise HTTPException(404, "Time block not found")
@@ -907,6 +933,7 @@ def create_time_block(
 @router.post("/settings/time-blocks/{uid}/update")
 def update_time_block(
     uid: str,
+    kind: str = Form(""),
     label: str = Form(""),
     start_time: str = Form(...),
     end_time: str = Form(...),
@@ -915,21 +942,25 @@ def update_time_block(
 ):
     """The time block edit modal's single Save button (pattern B) -- one
     endpoint for every field the inline edit used to PATCH separately.
-    `kind` deliberately does NOT come from the form: a block's kind is
-    fixed by the table its row lives in (Sleep vs Leisure), so it's always
-    whatever the row already was -- a crafted form can't silently move a
-    block between tables. Same end-time-after-start-time guard as
-    create_time_block: a malformed edit is dropped (kept on screen via the
-    existing value) rather than stored."""
+    2026-09-08 (direct request): `kind` now DOES come from the form -- the
+    Sleep/Leisure tables merged into one, so a row's type is just another
+    editable field (the modal's chooser, time_block_edit_modal.html's own
+    comment), not fixed by which table it used to live in. An unrecognized
+    `kind` (a crafted/stale request) falls back to the block's existing
+    kind rather than storing garbage -- same "drop the malformed edit,
+    keep what's on screen" reasoning the end-time-after-start-time guard
+    below already uses, just applied to this field too."""
     block = db.get_time_block(conn, uid)
     if block is None:
         raise HTTPException(404, "Time block not found")
     valid_days = [d for d in days if d in db.TIME_BLOCK_DAYS]
+    valid_kind = kind if kind in db.TIME_BLOCK_KINDS else block["kind"]
     if start_time and end_time and end_time > start_time:
         db.upsert_time_block(
             conn,
             {
                 **block,
+                "kind": valid_kind,
                 "label": label,
                 "start_time": start_time,
                 "end_time": end_time,
@@ -948,11 +979,11 @@ def delete_time_block(uid: str, conn=Depends(get_db)):
 @router.post("/settings/time-blocks/bulk-delete")
 async def bulk_delete_time_blocks(request: Request, conn=Depends(get_db)):
     """2026-08-29 (STATE.md backlog item 1) -- same shape as
-    bulk_delete_holidays above; one endpoint covers both the Sleep Time
-    and Leisure Time tables (settings_time_blocks.html's two independent
-    `CCBulkSelect` instances both point at this same URL) since a time
-    block's uid alone -- not its kind -- is all `db.delete_time_block`
-    needs."""
+    bulk_delete_holidays above. Sleep and Leisure share one merged table
+    (and one `CCBulkSelect` instance) since 2026-09-08, but this endpoint
+    never needed to know which kind a uid belonged to in the first place --
+    a time block's uid alone is all `db.delete_time_block` needs -- so it's
+    unchanged by that merge."""
     payload = await request.json()
     uids = payload.get("uids") or []
     if not uids:

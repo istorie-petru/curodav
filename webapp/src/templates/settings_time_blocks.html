@@ -8,51 +8,59 @@
 {{ page_header_narrow("Sleep & Leisure Time", "moon") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
-{% include "_settings_breadcrumb.html" with context %}
 
-<h1>Sleep & Leisure Time</h1>
+<!-- 2026-09-07 (audit-fixes-2.0.md item 8) / 2026-09-08 (direct request):
+     the per-group h2.section-label this .settings-group wrapper used to
+     carry is gone, along with every other Settings section-label.
 
-<p class="settings-hint">Weekly recurring hours -- no dates, just a time-of-day range and which days it applies to (e.g. 00:00&ndash;05:59 Monday-Sunday). The Week and Day calendar views hatch these hours (red for Sleep, green for Leisure) and warn -- but never block -- when an event or scheduled work session is placed inside one.</p>
-
-<!-- 2026-09-07 (audit-fixes-2.0.md item 8): Sleep Time and Leisure Time
-     wrapped in the same .settings-group + h2.section-label pattern
-     settings_general.html/settings_appearance.html/settings_data_
-     maintenance.html already use, instead of the old inline-styled bare
-     <h2>. -->
+     2026-09-08 follow-up (direct request): Sleep and Leisure used to be
+     two separate tables/bulk-select instances/"+ Add" rows here -- one
+     merged table now, with a per-row "Type" pill (red for Sleep, green
+     for Leisure, matching the Week/Day grid's own hatching colors --
+     routers/calendar.py's `_time_block_overlays`) standing in for what
+     table a row used to live in. routers/settings.py::settings_time_blocks
+     concatenates sleep_blocks + leisure_blocks (each already ordered by
+     start_time) into one `time_blocks` list, Sleep rows first -- see that
+     function's own comment for why concatenation rather than a single
+     alphabetical-by-kind query. -->
 <div class="settings-group">
-<h2 class="section-label">{{ icon('moon', 'icon-sm') }} Sleep Time</h2>
 <!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
-     "bulk actions on tables"). Sleep and Leisure are two independent
-     `CCBulkSelect` instances (own bar/table ids each) -- see that
-     module's own comment for why one page can safely host more than one
-     instance. Shared markup -- see _bulk_actions_bar.html (2026-09-07,
-     audit-fixes-2.0.md item 9). -->
-{{ bulk_actions_bar("sleep") }}
+     "bulk actions on tables"). Shared markup -- see _bulk_actions_bar.html
+     (2026-09-07, audit-fixes-2.0.md item 9). -->
+{{ bulk_actions_bar("time-blocks") }}
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels/Holidays tables. -->
-<div class="card table-scroll" id="sleep-block-table-wrapper">
-        <table id="sleep-block-table">
+<div class="card table-scroll" id="time-block-table-wrapper">
+        <table id="time-block-table">
             <thead>
                 <tr>
                     <th class="col-checkbox"></th>
                     <th>Block</th>
+                    <th>Type</th>
                     <th>Hours</th>
                     <th>Days</th>
                     <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
-            <tbody id="sleep-block-body">
-                {% if sleep_blocks %}
-                    {% for b in sleep_blocks %}
+            <tbody id="time-block-body">
+                {% if time_blocks %}
+                    {% for b in time_blocks %}
                     <tr data-uid="{{ b.uid }}">
                         <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or 'sleep time block' }}">
+                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or (b.kind ~ ' time block') }}">
                         </td>
                         <td>
                             <div class="label-cell">
                                 <span class="label-name">{{ b.label or '(untitled)' }}</span>
                             </div>
+                        </td>
+                        <td>
+                            {% if b.kind == 'sleep' %}
+                            <span class="pill-static pill-red">{{ icon('moon', 'icon-sm') }} Sleep</span>
+                            {% else %}
+                            <span class="pill-static pill-green">{{ icon('sun', 'icon-sm') }} Leisure</span>
+                            {% endif %}
                         </td>
                         <td>
                             <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
@@ -64,76 +72,20 @@
                             {{ row_action_buttons(
                                 "/settings/time-blocks/" ~ b.uid ~ "/edit",
                                 "/settings/time-blocks/" ~ b.uid ~ "/delete",
-                                "sleep time",
-                                'Delete "' ~ (b.label or 'sleep time block') ~ '"? This stops the Week/Day grid from hatching these hours.'
+                                b.kind ~ " time",
+                                'Delete "' ~ (b.label or (b.kind ~ ' time block')) ~ '"? This stops the Week/Day grid from hatching these hours.'
                             ) }}
                         </td>
                     </tr>
                     {% endfor %}
                 {% else %}
-                    {{ empty_state_row(5, "No sleep time configured yet") }}
+                    {{ empty_state_row(6, "No time blocks configured yet") }}
                 {% endif %}
                 <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
                      "+ Add X" convention as _tasks_body.html's
                      .task-add-row. -->
                 <tr class="task-add-row">
-                    <td colspan="5"><a href="/settings/time-blocks/new?kind=sleep" data-modal>{{ icon('plus', 'icon-sm') }} Add sleep time</a></td>
-                </tr>
-            </tbody>
-        </table>
-</div>
-</div>
-
-<div class="settings-group">
-<h2 class="section-label">{{ icon('sun', 'icon-sm') }} Leisure Time</h2>
-{{ bulk_actions_bar("leisure") }}
-<div class="card table-scroll" id="leisure-block-table-wrapper">
-        <table id="leisure-block-table">
-            <thead>
-                <tr>
-                    <th class="col-checkbox"></th>
-                    <th>Block</th>
-                    <th>Hours</th>
-                    <th>Days</th>
-                    <th class="col-actions-narrow">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="leisure-block-body">
-                {% if leisure_blocks %}
-                    {% for b in leisure_blocks %}
-                    <tr data-uid="{{ b.uid }}">
-                        <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or 'leisure time block' }}">
-                        </td>
-                        <td>
-                            <div class="label-cell">
-                                <span class="label-name">{{ b.label or '(untitled)' }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
-                        </td>
-                        <td>
-                            <span class="settings-hint">{{ b.days_label }}</span>
-                        </td>
-                        <td>
-                            {{ row_action_buttons(
-                                "/settings/time-blocks/" ~ b.uid ~ "/edit",
-                                "/settings/time-blocks/" ~ b.uid ~ "/delete",
-                                "leisure time",
-                                'Delete "' ~ (b.label or 'leisure time block') ~ '"? This stops the Week/Day grid from hatching these hours.'
-                            ) }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    {{ empty_state_row(5, "No leisure time configured yet") }}
-                {% endif %}
-                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
-                     "+ Add X" convention as _tasks_body.html's
-                     .task-add-row. -->
-                <tr class="task-add-row">
-                    <td colspan="5"><a href="/settings/time-blocks/new?kind=leisure" data-modal>{{ icon('plus', 'icon-sm') }} Add leisure time</a></td>
+                    <td colspan="6"><a href="/settings/time-blocks/new" data-modal>{{ icon('plus', 'icon-sm') }} Add time block</a></td>
                 </tr>
             </tbody>
         </table>
@@ -146,22 +98,13 @@
 <script nonce="{{ csp_nonce() }}">
 document.addEventListener("DOMContentLoaded", function () {
     window.CCBulkSelect.init({
-        tableId: "sleep-block-table",
-        barId: "sleep-bulk-bar",
-        countId: "sleep-bulk-count",
-        clearId: "sleep-bulk-clear",
-        deleteButtonId: "sleep-bulk-delete",
+        tableId: "time-block-table",
+        barId: "time-blocks-bulk-bar",
+        countId: "time-blocks-bulk-count",
+        clearId: "time-blocks-bulk-clear",
+        deleteButtonId: "time-blocks-bulk-delete",
         deleteUrl: "/settings/time-blocks/bulk-delete",
-        itemLabel: "sleep time block",
-    });
-    window.CCBulkSelect.init({
-        tableId: "leisure-block-table",
-        barId: "leisure-bulk-bar",
-        countId: "leisure-bulk-count",
-        clearId: "leisure-bulk-clear",
-        deleteButtonId: "leisure-bulk-delete",
-        deleteUrl: "/settings/time-blocks/bulk-delete",
-        itemLabel: "leisure time block",
+        itemLabel: "time block",
     });
 });
 </script>

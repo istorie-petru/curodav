@@ -3,8 +3,6 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("General", "user") }}
-{% include "_settings_breadcrumb.html" with context %}
-<h1>General</h1>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -152,14 +150,13 @@
      no inputs) when the corresponding value is env-configured -- same
      pattern /settings/radicale (Data & Maintenance) already uses. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('lock', 'icon-sm') }} Login & security</h2>
     <div class="card">
         {% if auth_env_configured %}
         <p class="settings-hint">Login is set via environment variables (<code>CC_AUTH_USERNAME</code>/<code>CC_AUTH_PASSWORD</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
         {% else %}
         <p class="settings-hint">
             {% if has_login_account %}Signed in as <strong>{{ login_username }}</strong>. Enter your current password to change it.
-            {% else %}No login is set up yet -- setting a password here turns login on for this install (username: <code>admin</code>).{% endif %}
+            {% else %}No login is set up yet.{% endif %}
         </p>
         <form method="post" action="/settings/change-password">
             {% if has_login_account %}
@@ -190,7 +187,7 @@
         {% if radicale_env_configured %}
         <p class="settings-hint">Radicale connection is set via environment variables (<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
         {% else %}
-        <p class="settings-hint">Radicale sync password{% if radicale_username %} for <strong>{{ radicale_username }}</strong>{% endif %}. Updates this app's stored copy of the credential (not the Radicale server's own account) -- takes effect after a restart. Use <a href="/settings/data-maintenance">Data & Maintenance</a> to change the URL or username.</p>
+        <p class="settings-hint">Radicale sync password{% if radicale_username %} for <strong>{{ radicale_username }}</strong>{% endif %}.</p>
         <form method="post" action="/settings/radicale-password">
             <div class="settings-field-row">
                 <span class="settings-field-label">Current password</span>

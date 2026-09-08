@@ -8,18 +8,12 @@
 {{ page_header_narrow("Holidays", "calendar") }}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
-{% include "_settings_breadcrumb.html" with context %}
 
-<h1>Holidays</h1>
-
-<p class="settings-hint">Named holiday calendars any recurring Calendar event or Schedule block can respect (Schedule's own "which calendar do my classes respect" pick is still on the Schedule page's Settings panel).</p>
-
-<!-- 2026-09-07 (audit-fixes-2.0.md item 8): wrapped in the same
-     .settings-group + h2.section-label pattern settings_general.html/
-     settings_appearance.html/settings_data_maintenance.html already use,
-     instead of leaving the table bare under the page's own <h1>. -->
+<!-- 2026-09-08 (direct request): the h2.section-label ("Holidays") this
+     .settings-group wrapper used to carry is gone, along with every other
+     Settings section-label -- redundant with the page's own title in
+     .page-header-narrow now that this is the page's only group. -->
 <div class="settings-group">
-<h2 class="section-label">{{ icon('calendar', 'icon-sm') }} Holidays</h2>
 
 <!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
      "bulk actions on tables"). Same pattern as labels_manage.html's own
