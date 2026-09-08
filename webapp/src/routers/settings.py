@@ -1239,22 +1239,6 @@ def purge_completed(conn=Depends(get_db)):
     return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
-@router.get("/settings/purge-confirm")
-def purge_confirm_page(request: Request):
-    """The reset-database confirmation dialog (2026-08-26 second-pass
-    redesign: the standalone Danger zone section is gone; the Database
-    status card's own "Reset database (purge all)" menu item opens THIS
-    modal, which carries the typed-DELETE-ALL check the section used to
-    provide -- check first, then delete). The submit button renders
-    disabled straight from the server so the gate never depends on
-    JavaScript having run; data_maintenance.js only arms it. Posts to the
-    unchanged /settings/purge-all."""
-    return templates.TemplateResponse(
-        "purge_modal.html",
-        {"request": request, "active_tab": "settings_data_maintenance"},
-    )
-
-
 @router.post("/settings/purge-all")
 def purge_all(request: Request, conn=Depends(get_db)):
     db.purge_all_data(conn)

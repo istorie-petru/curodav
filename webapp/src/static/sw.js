@@ -374,7 +374,13 @@
 // ?error= banner on Data & Maintenance now converts to a ccToast on load
 // (and strips the query params) instead of just sitting there as static
 // page text.
-const CACHE_NAME = "cc-shell-v75";
+// v76 (2026-09-09, same-day follow-up): "Reset database (purge all)" moved
+// from a standalone modal dialog to a confirm toast with a typed-phrase
+// gate -- static/toast.js (ccConfirmSheet's new typedConfirm option) and
+// static/data_maintenance.js (the trigger + fetch) both changed;
+// static/style.css lost the old .dm-danger-* rules and gained
+// .toast-confirm-typed/.toast-typed-input.
+const CACHE_NAME = "cc-shell-v76";
 
 const SHELL_ASSETS = [
   "/offline",

@@ -1,19 +1,28 @@
-/* Data & Maintenance page + its three dialogs (2026-08-26 redesign).
+/* Data & Maintenance page + its two remaining dialogs (2026-08-26 redesign;
+ * 2026-09-09: the reset-database dialog was replaced by a confirm toast,
+ * see below).
  *
- * Progressive enhancement only -- every surface works without this script:
- * the reset-database dialog's submit button ships disabled from the server
- * and only this script can arm it; the export dialog's Download submits a
- * plain GET form (data-modal-get keeps modal.js's POST interceptor out of
- * the way); the import dialog is a plain multipart form. What JS adds is
- * the live "Includes: ..." export preview, the drag-and-drop affordance
- * with a "Detected: ..." preview before anything is uploaded, gating
- * Import on a recognizable file, and the DELETE ALL typed-phrase gate.
+ * Progressive enhancement for the export/import dialogs -- both work
+ * without this script: the export dialog's Download submits a plain GET
+ * form (data-modal-get keeps modal.js's POST interceptor out of the way);
+ * the import dialog is a plain multipart form. What JS adds there is the
+ * live "Includes: ..." export preview, the drag-and-drop affordance with a
+ * "Detected: ..." preview before anything is uploaded, and gating Import on
+ * a recognizable file.
  *
- * Page-local: only settings_data_maintenance.html loads it -- but ALL
- * three dialogs' markup (purge_modal.html / export_modal.html /
- * import_modal.html) is injected into the modal overlay AFTER this script
- * has long since run, so every listener binds by event delegation at the
- * document level and works no matter when the markup appears.
+ * "Reset database (purge all)" is the one exception, JS-only end to end:
+ * it's a plain <button>, not a link to a real page, and opens a
+ * ccConfirmSheet (static/toast.js) carrying the DELETE ALL typed-phrase
+ * gate -- with no JS there's nothing to click through to at all. Same
+ * tradeoff the old modal already had in practice (its submit button shipped
+ * server-disabled and only this script could ever arm it), just made
+ * explicit now that there's no page underneath it either.
+ *
+ * Page-local: only settings_data_maintenance.html loads it -- but the two
+ * dialogs' markup (export_modal.html / import_modal.html) is injected into
+ * the modal overlay AFTER this script has long since run, so every listener
+ * binds by event delegation at the document level and works no matter when
+ * the markup appears.
  */
 (function () {
   "use strict";
@@ -233,28 +242,38 @@
     previewFile(input);
   });
 
-  // ---- Reset-database dialog: the DELETE ALL gate -------------------------
+  // ---- Reset database (purge all): confirm-toast + typed DELETE ALL gate --
   //
-  // The submit button renders disabled straight from the server; typing the
-  // exact phrase arms it (and typing anything else disarms it again). That
-  // typed phrase IS the check -- there is no second confirm popover on top.
-
-  document.addEventListener("input", function (e) {
-    var phrase = e.target;
-    if (!phrase.matches || !phrase.matches("[data-purge-phrase]")) return;
-    var form = phrase.closest("form");
-    if (!form) return;
-    // 2026-08-30 (modal-footer-consistency fix): same reasoning as
-    // previewFile() above -- the Permanently Delete button now lives in
-    // the shared modal footer, a sibling of this <form>, not a
-    // descendant of it, so form.querySelector can't find it any more.
-    // Only one purge dialog is ever open at a time, so a plain
-    // document-wide lookup is enough.
-    var btn = document.querySelector("[data-purge-btn]");
+  // 2026-09-09 direct request: the standalone confirmation modal
+  // (purge_modal.html) is gone -- "Reset database (purge all)" in the
+  // Database card's menu now opens a persistent confirm toast
+  // (ccConfirmSheet's `typedConfirm` option, static/toast.js) instead of
+  // navigating to a page. Same bar as the old modal: the Permanently
+  // Delete button starts disabled and only arms once the input reads
+  // exactly "DELETE ALL" -- see toast.js for the arm/disarm wiring itself,
+  // this just supplies the message/phrase and does the actual POST once
+  // confirmed. Backups are never touched by this -- purge_all_data (db.py)
+  // only clears this app's own SQLite tables; backup-*.json files live on
+  // disk in a separate directory purge-all never reads from.
+  document.addEventListener("click", function (e) {
+    var btn = closest(e.target, '[data-action="purge-all"]');
     if (!btn) return;
-    var armed = phrase.value === "DELETE ALL";
-    btn.disabled = !armed;
-    phrase.classList.toggle("is-armed", armed);
+    window.ccConfirmSheet({
+      anchor: btn,
+      message: "This deletes every task, event, contact, label, habit, and published list. Backups already saved to the server (Backup card) are kept -- everything else is gone for good.",
+      confirmLabel: "Permanently Delete Everything",
+      typedConfirm: { matchValue: "DELETE ALL" },
+      onConfirm: function () {
+        fetch("/settings/purge-all", { method: "POST", headers: { "X-Requested-With": "fetch" } })
+          .then(function (resp) {
+            if (!resp.ok) throw new Error("purge failed");
+            window.location.reload(); // also carries a forced re-login if auth is enabled
+          })
+          .catch(function () {
+            window.ccToast({ message: "Could not reset the database. Try again.", variant: "error" });
+          });
+      },
+    });
   });
 
   // ---- Force sync (moved off settings_data_maintenance.html's own inline

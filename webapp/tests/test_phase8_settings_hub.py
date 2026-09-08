@@ -329,30 +329,22 @@ class TestSettingsAdvanced:
     entirely: "Purge completed" is routine housekeeping now (a grey button
     in the Maintenance & cleanup card), and purge-all lives behind the
     Database status card's own "Reset database (purge all)" menu item,
-    which opens a confirmation dialog carrying the typed-DELETE-ALL check
-    (check first, then delete)."""
+    which opens a confirm toast carrying the typed-DELETE-ALL check (check
+    first, then delete) -- 2026-09-09: was a standalone confirmation
+    dialog/page, see test_data_health.py's TestPurgeAllConfirmToast for the
+    current version."""
 
-    def test_purge_completed_on_page_and_purge_all_behind_the_modal(self, conn, tmp_path):
+    def test_purge_completed_on_page_and_purge_all_behind_the_confirm_toast(self, conn, tmp_path):
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
         # Housekeeping purge is a plain form on the page...
         assert 'action="/settings/purge-completed"' in body
         # ...while the full wipe is NOT on the page at all anymore -- it's
-        # reachable only through the Database card's modal trigger.
+        # reachable only through the Database card's confirm-toast trigger
+        # (a plain button, not a link to a modal page).
         assert 'action="/settings/purge-all"' not in body
-        assert 'href="/settings/purge-confirm" data-modal' in body
-
-    def test_purge_confirm_modal_carries_the_typed_phrase_gate(self, conn):
-        resp = settings_router.purge_confirm_page(_request_with_radicale("/settings/purge-confirm"))
-        assert resp.status_code == 200
-        body = resp.body.decode()
-        assert 'action="/settings/purge-all"' in body
-        assert "data-purge-phrase" in body
-        assert 'placeholder="DELETE ALL"' in body
-        # The gate doesn't depend on JS: the button ships disabled.
-        assert "data-purge-btn disabled" in body
-        assert "Permanently Delete Everything" in body
+        assert 'data-action="purge-all"' in body
 
     def test_also_has_reset_layout_now_that_widgets_folded_in(self, conn, tmp_path):
         # 2026-08-08: "Widgets" (Custom widgets toggle + reset layout) was

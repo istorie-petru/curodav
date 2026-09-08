@@ -101,13 +101,15 @@
                              specific filename), sync cleanup and Force sync
                              both live in the Sync card. -->
                         <div class="action-menu-section">
-                            <!-- 2026-08-26 second pass: opens the
-                                 confirmation dialog (typed DELETE ALL check,
-                                 then delete) instead of jumping straight to
-                                 a confirm popover -- the old standalone
-                                 danger section is gone, this IS the purge
-                                 path now. -->
-                            <a class="action-menu-item danger" role="menuitem" href="/settings/purge-confirm" data-modal>{{ icon('shield', 'icon-sm') }} Reset database (purge all)</a>
+                            <!-- 2026-09-09 direct request: the standalone
+                                 confirmation modal template this used to open
+                                 is gone -- this now opens a persistent
+                                 confirm toast (data_maintenance.js's
+                                 data-action="purge-all" handler) with the
+                                 same typed "DELETE ALL" gate the modal used
+                                 to carry, just rendered as a toast instead
+                                 of a page. -->
+                            <button type="button" class="action-menu-item danger" role="menuitem" data-action="purge-all">{{ icon('shield', 'icon-sm') }} Reset database (purge all)</button>
                         </div>
                     </div>
                 </div>

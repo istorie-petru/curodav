@@ -17,6 +17,93 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- same-day follow-up direct request: "Reset
+  database (purge all)" converted from a standalone modal dialog to a
+  floating confirm toast, plus a direct question about whether purge
+  deletes backups (it never did -- see below).
+
+  **Backups were already safe.** Read `db.purge_all_data` (db.py) and
+  `data_health.py` end to end before changing anything: the purge only
+  runs `DELETE FROM` against this app's own SQLite tables (tasks, events,
+  contacts, labels, habits, etc.); backups are `backup-*.json` files on
+  disk in a separate directory, discovered by globbing
+  (`data_health.list_backups`), with verification results cached in a
+  sidecar file next to each one -- nothing in the purge path opens,
+  globs, or touches that directory. No logic changed here; the new
+  confirm toast's own copy now says this explicitly instead of the old
+  modal's vaguer "there is no backup unless you made one yourself."
+
+  **Modal -> toast**, keeping the typed "DELETE ALL" gate (direct choice
+  over simplifying to the plain Cancel/Delete confirm every other
+  destructive action uses -- this is the one truly irreversible,
+  everything-in-the-app action on the page, worth the extra step). New
+  `typedConfirm` option on `ccToast`/`ccConfirmSheet` (`static/toast.js`):
+  renders an inline text input in the persistent confirm toast, any
+  action marked `gated: true` starts disabled, and only the exact
+  `matchValue` re-arms it -- the same arm/disarm behavior the old modal's
+  server-disabled-button + delegated-input-listener pair had, just owned
+  by the reusable toast component now instead of one page's own script.
+  Enter-to-submit while armed included for parity with the old form.
+
+  The "Reset database" menu item is now a plain `<button
+  data-action="purge-all">` (`data_maintenance.js`), not a link to a
+  modal page -- opens the confirm toast, and on confirm does a plain
+  `fetch` POST to the unchanged `/settings/purge-all` (session/cookie
+  invalidation logic untouched) followed by `window.location.reload()`
+  (still carries the forced re-login redirect when auth is enabled, since
+  the reload re-requests the current URL without the now-invalid
+  cookie). `purge_modal.html` deleted outright; its GET
+  `/settings/purge-confirm` route removed from `routers/settings.py` --
+  it was only ever reachable from this one in-page trigger, nothing
+  external ever linked to it, so no redirect-for-old-bookmarks was kept
+  (contrast the `/settings/data-health` style redirects elsewhere in this
+  file, which stay because those WERE real prior URLs).
+
+  **Progressive-enhancement note, stated plainly rather than glossed
+  over:** this action is now 100% JS-dependent end to end -- with no JS
+  there's no page to fall back to at all, just an inert button. Same
+  practical outcome the old modal already had (its submit button shipped
+  server-disabled and only JS could ever arm it, so completing a purge
+  already required JS), but previously at least the warning text was
+  reachable as a real page; now it isn't. `data_maintenance.js`'s own
+  header comment was rewritten to say this outright instead of the
+  now-inaccurate "every surface works without this script" it used to
+  claim for all three dialogs.
+
+  `_modal_footer.html`'s `footer_primary_disabled`/
+  `footer_primary_extra_attr` params (added 2026-08-30 specifically for
+  this modal) have no caller left anywhere in the templates tree --
+  confirmed by grep before deciding what to do with them. Left the
+  mechanism itself in place (generic, harmless, and this shared partial
+  is used by many other modals) but rewrote its docstring so it no longer
+  points at a deleted file as a live example.
+
+  `sw.js` `CACHE_NAME` bumped `v75` -> `v76` (`toast.js`,
+  `data_maintenance.js`, `style.css` all changed); `test_pwa_shell.py`'s
+  pin updated. Test changes: removed the one test that called the now-gone
+  `purge_confirm_page` route directly and the one asserting the old
+  document-level `input` listener (that gate moved into `toast.js`, no
+  longer delegated at the page level); added a new `TestPurgeAllConfirm
+  Toast` class in `test_data_health.py` (4 tests: trigger markup, the
+  confirm/fetch wiring, the arm/disarm gate in `toast.js`, and a direct
+  grep-the-source check that `purge_all_data` never references
+  `backups_dir`/`glob`/`unlink`/`rmtree` -- the safety property behind
+  the toast's own copy, pinned so a future edit can't silently reintroduce
+  backup deletion without a test catching it). Net +2 tests across the
+  suite (-1 removed test in `test_phase8_settings_hub.py`, +3 net in
+  `test_data_health.py`).
+
+  Full suite re-run in the same 6-chunk pattern: 434 + 485 + 282 + 360 +
+  248 + 210 = 2019 passed (2017 + 2 net new), no failures.
+
+  **Next slice:** none mandated -- direct request, fully shipped. Worth a
+  real live-browser check once one is reachable (type the phrase, confirm
+  the button arms/disarms, confirm the purge actually runs and reloads)
+  -- same recurring verification gap every entry in this file already
+  notes. The repo-housekeeping note from two entries below (unrelated
+  uncommitted breadcrumb refactor sitting in the working tree) is still
+  unresolved, still untouched by this slice.
+
 - **Shipped:** 2026-09-09 -- direct request, second of the two agreed
   Data & Maintenance slices from the entry below: the `?note=`/`?error=`
   redirect banner now shows as a `ccToast` instead of static page text,

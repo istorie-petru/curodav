@@ -56,10 +56,9 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
                                re-points the Save button's `form` attribute
                                via getElementById -- 2026-08-15 modal
                                uniformization)
-     footer_primary_variant -- "primary" (default) or "danger" -- the one
-                               sanctioned exception: a modal whose entire
-                               purpose IS the destructive action (Reset
-                               database) has no separate Edit/Delete split
+     footer_primary_variant -- "primary" (default) or "danger" -- for a
+                               modal whose entire purpose IS a destructive
+                               action, with no separate Edit/Delete split
                                to demote the delete into footer_delete_url's
                                usual text-link, so its one primary button
                                needs .btn danger's red fill instead of
@@ -68,20 +67,25 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
                                important" cuts the other way here -- this
                                genuinely is a delete, not a Save wearing red
                                for emphasis)
-     footer_primary_disabled -- render the button server-disabled (the
-                               purge dialog's typed-confirmation gate --
-                               static/data_maintenance.js arms it once the
-                               phrase matches)
+     footer_primary_disabled -- render the button server-disabled, for a
+                               modal whose own JS only arms it once some
+                               extra gate (e.g. a typed confirmation phrase)
+                               is satisfied
      footer_primary_extra_attr -- one raw attribute string spliced onto the
-                               button verbatim (e.g. "data-purge-btn"),
-                               for a script that already keys off a
-                               feature-specific data-attribute rather than
-                               an id -- prefer footer_primary_id for new
-                               code, this exists so an existing script
-                               didn't need to change when its button moved
-                               from the body into this shared footer
-                               (2026-08-30, export/import/purge modal-
-                               footer-consistency fix) #}
+                               button verbatim, for a script that already
+                               keys off a feature-specific data-attribute
+                               rather than an id -- prefer footer_primary_id
+                               for new code
+                               -- 2026-09-09: footer_primary_disabled/
+                               footer_primary_extra_attr have no current
+                               caller (the reset-database dialog that
+                               introduced them, 2026-08-30, was replaced by
+                               a confirm-toast with its own typed-phrase
+                               gate -- static/toast.js's ccConfirmSheet
+                               `typedConfirm` option -- instead of a modal).
+                               Left in place as general-purpose machinery for
+                               the next modal that needs a server-disabled
+                               primary button. #}
 <div class="modal-footer">
 {% if footer_back_url %}
 {% if footer_back_mode == 'modal' %}

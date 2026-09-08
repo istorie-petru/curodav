@@ -53,7 +53,7 @@
     return [variant, title, message].join("|");
   }
 
-  function ccToast({ message, title, icon, className, actions, actionLabel, onAction, duration = 4500, variant = "default", persistent = false }) {
+  function ccToast({ message, title, icon, className, actions, actionLabel, onAction, duration = 4500, variant = "default", persistent = false, typedConfirm }) {
     const config = VARIANT_CONFIG[variant] || VARIANT_CONFIG.default;
     const titleText = title || config.title;
     const key = dedupeKey({ variant, title: titleText, message });
@@ -83,6 +83,33 @@
     bodyEl.hidden = !message;
     bodyEl.textContent = message || "";
     content.appendChild(bodyEl);
+
+    // Typed-phrase gate (2026-09-09, ported from the old reset-database
+    // modal's data-purge-phrase input): an optional extra safety step for
+    // the one confirm that isn't just "undo a delete" -- wiping every live
+    // record in the app. Any action whose own `gated: true` starts
+    // disabled and only arms once this input's value matches
+    // `typedConfirm.matchValue` exactly, same "type the phrase, not just
+    // click twice" bar the old modal held.
+    let typedInput = null;
+    if (typedConfirm) {
+      const typedWrap = document.createElement("span");
+      typedWrap.className = "toast-typed-confirm";
+      typedInput = document.createElement("input");
+      typedInput.type = "text";
+      typedInput.className = "toast-typed-input";
+      typedInput.autocomplete = "off";
+      typedInput.spellcheck = false;
+      typedInput.placeholder = typedConfirm.placeholder || typedConfirm.matchValue;
+      typedInput.setAttribute(
+        "aria-label",
+        typedConfirm.ariaLabel || ('Type "' + typedConfirm.matchValue + '" to confirm')
+      );
+      typedWrap.appendChild(typedInput);
+      content.appendChild(typedWrap);
+    }
+
+    let gatedButtons = [];
     if (actions && actions.length) {
       const row = document.createElement("span");
       row.className = "toast-actions";
@@ -91,7 +118,12 @@
         btn.type = "button";
         btn.className = "toast-action" + (a.className ? " " + a.className : "");
         btn.textContent = a.label;
+        if (a.gated) {
+          btn.disabled = true;
+          gatedButtons.push(btn);
+        }
         btn.addEventListener("click", () => {
+          if (btn.disabled) return;
           if (a.onAction) a.onAction();
           dismiss();
         });
@@ -100,6 +132,21 @@
       content.appendChild(row);
     }
     el.appendChild(content);
+
+    if (typedConfirm && typedInput) {
+      typedInput.addEventListener("input", () => {
+        const armed = typedInput.value === typedConfirm.matchValue;
+        gatedButtons.forEach((btn) => { btn.disabled = !armed; });
+        typedInput.classList.toggle("is-armed", armed);
+      });
+      typedInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const armedBtn = gatedButtons.find((btn) => !btn.disabled);
+        if (armedBtn) armedBtn.click();
+      });
+      requestAnimationFrame(() => typedInput.focus());
+    }
 
     let dismissed = false;
     let timer = null;
@@ -243,17 +290,18 @@
     if (e.key === "Escape" && openConfirm) closeConfirm();
   });
 
-  function ccConfirmSheet({ anchor, message, confirmLabel = "Delete", onConfirm }) {
+  function ccConfirmSheet({ anchor, message, confirmLabel = "Delete", onConfirm, typedConfirm }) {
     closeConfirm();
     openConfirm = ccToast({
       title: "Please confirm",
       message,
       variant: "error",
       persistent: true,
-      className: "toast-confirm",
+      className: "toast-confirm" + (typedConfirm ? " toast-confirm-typed" : ""),
+      typedConfirm,
       actions: [
         { label: "Cancel", className: "toast-confirm-cancel", onAction: () => {} },
-        { label: confirmLabel, className: "toast-confirm-ok", onAction: onConfirm },
+        { label: confirmLabel, className: "toast-confirm-ok", onAction: onConfirm, gated: !!typedConfirm },
       ],
     });
     if (!openConfirm || !openConfirm.isAlive()) openConfirm = null;

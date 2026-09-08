@@ -3967,6 +3967,19 @@ main.main-shell > .bulk-actions-bar{
 }
 .toast-confirm .toast-action.toast-confirm-ok:hover{background:#d92c22;}
 [data-theme="dark"] .toast-confirm .toast-action.toast-confirm-ok:hover{background:#ff6259;}
+.toast-confirm .toast-action.toast-confirm-ok:disabled{opacity:.45; cursor:not-allowed; background:var(--danger); border-color:var(--danger);}
+
+/* Typed-phrase gate (2026-09-09, ported from the old reset-database
+   modal's .dm-danger-phrase input) -- the confirm-toast variant used only
+   for wiping every live record in the app, where a plain Cancel/Delete
+   toast isn't enough of a speed bump. */
+.toast-confirm-typed{max-width:400px;}
+.toast-typed-confirm{display:block; margin-top:var(--space-2);}
+.toast-typed-input{
+  width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing:.08em; font-size:var(--text-caption);
+}
+.toast-typed-input.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */
@@ -6171,10 +6184,12 @@ body.command-palette-open{overflow:hidden;}
 /* The page itself is just the Maintenance card below the (untouched)     */
 /* System Status cards -- backup actions live in the Backup card's menu,  */
 /* export/import in the Sync card's menu, each opening a dialog           */
-/* (export_modal.html / import_modal.html / purge_modal.html). The styles */
-/* here are those dialogs' shared pieces: the export form's dropdown      */
-/* fields + "Includes:" preview line and the import drop zone. Everything */
-/* reads off the shared tokens so both themes follow.                     */
+/* (export_modal.html / import_modal.html). Reset database (purge all)    */
+/* opens a confirm toast instead of a dialog now (2026-09-09), see        */
+/* .toast-confirm-typed further down. The styles here are the two         */
+/* dialogs' shared pieces: the export form's dropdown fields +            */
+/* "Includes:" preview line and the import drop zone. Everything reads    */
+/* off the shared tokens so both themes follow.                           */
 /* --------------------------------------------------------------------- */
 
 /* Export dialog: two dropdowns + live "Includes: ..." preview (the
@@ -6204,23 +6219,11 @@ body.command-palette-open{overflow:hidden;}
 .dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-footnote); color:var(--fg-primary); cursor:pointer;}
 .dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-caption); color:var(--fg-tertiary);}
 
-/* Reset-database confirmation dialog (opened from the Database status
-   card's own menu): the typed-phrase gate. The submit button ships
-   disabled from the server, so the protection doesn't depend on
-   JavaScript being fast or present; the delegated input listener in
-   data_maintenance.js arms it only on the exact phrase. */
-.dm-danger-form{display:flex; flex-direction:column; gap:var(--space-3); margin:var(--space-3) 0 var(--space-4);}
-.dm-danger-typein{display:flex; flex-direction:column; gap:6px; font-size:var(--text-caption); color:var(--fg-secondary);}
-.dm-danger-phrase{
-  width:220px; max-width:100%;
-  font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing:.08em;
-}
-.dm-danger-phrase.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
-button.btn.danger[data-purge-btn][disabled]{
-  opacity:.45; cursor:not-allowed;
-  transform:none; box-shadow:none;
-}
+/* Reset-database confirmation used to be a modal dialog with its own
+   .dm-danger-* typed-phrase input here -- 2026-09-09: replaced by a confirm
+   toast, see .toast-confirm-typed/.toast-typed-input (static/style.css's
+   toast section, near .toast-confirm) for the current version of this same
+   gate. */
 
 /* ============ Published Lists (minimalist sharing page) ============ */
 

@@ -319,8 +319,9 @@ class TestDataMaintenanceRedesign2026_08_26:
     surface anymore -- backup actions live in the Backup status card's own
     menu (its meta line is the only place naming a last-backup timestamp or
     size), restore-a-file goes through the unified Export & import drop
-    zone, and reset-database opens a confirmation dialog carrying the typed
-    DELETE ALL check."""
+    zone, and reset-database opens a confirm toast carrying the typed
+    DELETE ALL check (2026-09-09: was a standalone modal dialog, see
+    TestPurgeAllConfirmToast below)."""
 
     def _page(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
@@ -335,10 +336,12 @@ class TestDataMaintenanceRedesign2026_08_26:
         assert 'action="/settings/purge-completed"' in body
         assert "Purge completed tasks (1 right now)" in body
         # ...and no Danger zone anywhere: the full wipe moved behind the
-        # Database card's own confirmation-dialog trigger.
+        # Database card's own confirm-toast trigger (2026-09-09: a plain
+        # button that opens a ccConfirmSheet, not a link to a modal page --
+        # see data_maintenance.js).
         assert "Danger zone" not in body
         assert 'action="/settings/purge-all"' not in body
-        assert 'href="/settings/purge-confirm" data-modal' in body
+        assert 'data-action="purge-all"' in body
 
     def test_backup_actions_live_in_the_backup_cards_menu(self, conn, tmp_path):
         settings_router.data_health_backup(
@@ -464,33 +467,29 @@ class TestSyncGcRoutes:
 
 
 class TestDataMaintenanceScriptGate:
-    """Structural checks over static/data_maintenance.js and the three
-    dialog templates (2026-08-26 redesign, third pass) -- same
-    grep-the-source style as the app's other page-local scripts; no browser
-    in this environment to drive the real DOM."""
+    """Structural checks over static/data_maintenance.js and its two
+    remaining dialog templates (2026-08-26 redesign, third pass; 2026-09-09:
+    the third dialog, reset-database, became a confirm toast instead of a
+    template, see TestPurgeAllConfirmToast below) -- same grep-the-source
+    style as the app's other page-local scripts; no browser in this
+    environment to drive the real DOM."""
 
     JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "data_maintenance.js").read_text()
     PAGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
-    PURGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "purge_modal.html").read_text()
     EXPORT = (Path(__file__).resolve().parent.parent / "src" / "templates" / "export_modal.html").read_text()
     IMPORT = (Path(__file__).resolve().parent.parent / "src" / "templates" / "import_modal.html").read_text()
-
-    def test_delete_all_gate_is_exact_and_server_default_is_disabled(self):
-        # The client-side half of the check-then-delete flow: only the
-        # exact phrase arms the button, anything else disarms it again --
-        # and every binding is document-level delegation, because all three
-        # dialogs' markup is injected into the modal overlay after this
-        # script has run.
-        assert 'phrase.value === "DELETE ALL"' in self.JS
-        assert "btn.disabled = !armed" in self.JS
-        assert 'document.addEventListener("input"' in self.JS
 
     def test_all_dialog_bindings_are_delegated_not_load_time_bound(self):
         # The dropzone's drag pair, the file/change previews and the export
         # preview must all attach at the document level -- nothing may query
         # for dialog elements at load time. (The four drag events ride two
         # forEach loops over event-name arrays.)
-        for evt in ("change", "drop", "input"):
+        # "input" dropped from this list 2026-09-09: the one delegated
+        # input listener here was the old reset-database phrase gate,
+        # which moved into toast.js (a direct listener on the toast's own
+        # freshly-created input -- no delegation needed there, the element
+        # is never present at load time to begin with).
+        for evt in ("change", "drop"):
             assert f'document.addEventListener("{evt}"' in self.JS
         for evt in ("dragenter", "dragover", "dragleave", "drop"):
             assert f'"{evt}"' in self.JS
@@ -508,27 +507,64 @@ class TestDataMaintenanceScriptGate:
         assert "font-weight:400" in block
 
     def test_templates_carry_the_data_attributes_the_script_reads(self):
-        # The page itself hosts no dialog markup -- the Sync card's menu
-        # items are data-modal triggers; the attributes live in the three
-        # dialog templates. 2026-09-08 direct request: the Backup card's own
-        # "Restore a file…" (a verbatim duplicate of the Sync card's
-        # "Import data…", same URL) was removed -- one home per action now,
-        # so this link renders exactly once, not twice.
+        # The page itself hosts no export/import dialog markup -- the Sync
+        # card's menu items are data-modal triggers; the attributes live in
+        # the two dialog templates. 2026-09-08 direct request: the Backup
+        # card's own "Restore a file…" (a verbatim duplicate of the Sync
+        # card's "Import data…", same URL) was removed -- one home per
+        # action now, so this link renders exactly once, not twice.
+        # 2026-09-09: "Reset database" is a plain data-action button now,
+        # not a data-modal link -- see TestPurgeAllConfirmToast.
         assert 'href="/export/modal" data-modal' in self.PAGE
         assert self.PAGE.count('href="/export/import-modal" data-modal') == 1  # Sync card only
-        assert 'href="/settings/purge-confirm" data-modal' in self.PAGE
+        assert 'href="/settings/purge-confirm"' not in self.PAGE
         for marker in ("data-dm-preview=", "data-dm-export-root", "data-modal-get", 'action="/export/download"'):
             assert marker in self.EXPORT
         for marker in ("data-dm-dropzone", "data-dm-file", 'name="merge"', 'action="/export/import/auto"'):
             assert marker in self.IMPORT
-        # 2026-08-30 (modal-footer-consistency fix): the Permanently Delete
-        # button moved out of inline body markup into the shared
-        # _modal_footer.html include -- data-purge-btn/disabled are no
-        # longer adjacent literal HTML attributes, they're the two Jinja
-        # vars that make the partial render them (see _modal_footer.html's
-        # own footer_primary_extra_attr/footer_primary_disabled docs).
-        for marker in ("data-purge-gate", "data-purge-phrase",
-                       "footer_primary_extra_attr = 'data-purge-btn'",
-                       "footer_primary_disabled = true",
-                       'action="/settings/purge-all"', "_modal_footer.html"):
-            assert marker in self.PURGE
+
+
+class TestPurgeAllConfirmToast:
+    """2026-09-09 direct request: "Reset database (purge all)" opens a
+    persistent confirm toast (ccConfirmSheet's typedConfirm option,
+    static/toast.js) instead of a standalone modal page -- same typed
+    "DELETE ALL" gate, just rendered as a toast. Structural (grep-the-
+    source) checks only, same reasoning as TestDataMaintenanceScriptGate --
+    no browser in this environment to drive the real DOM."""
+
+    PAGE = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
+    DM_JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "data_maintenance.js").read_text()
+    TOAST_JS = (Path(__file__).resolve().parent.parent / "src" / "static" / "toast.js").read_text()
+
+    def test_page_has_a_trigger_button_not_a_modal_link(self):
+        assert 'data-action="purge-all"' in self.PAGE
+        assert 'href="/settings/purge-confirm"' not in self.PAGE
+        assert "purge_modal.html" not in self.PAGE
+
+    def test_trigger_opens_a_confirm_sheet_with_the_typed_gate_and_posts(self):
+        assert 'closest(e.target, \'[data-action="purge-all"]\')' in self.DM_JS
+        assert "window.ccConfirmSheet(" in self.DM_JS
+        assert 'typedConfirm: { matchValue: "DELETE ALL" }' in self.DM_JS
+        assert 'fetch("/settings/purge-all"' in self.DM_JS
+        assert "window.location.reload()" in self.DM_JS
+
+    def test_toast_gate_starts_disabled_and_only_arms_on_exact_match(self):
+        # Ported from the old modal's server-disabled-button + input-listener
+        # pair: a `gated` action starts disabled, and only the exact
+        # matchValue re-enables it -- typing anything else keeps it (or puts
+        # it back) disabled.
+        assert "btn.disabled = true" in self.TOAST_JS
+        assert "gatedButtons.push(btn)" in self.TOAST_JS
+        assert "typedInput.value === typedConfirm.matchValue" in self.TOAST_JS
+        assert "btn.disabled = !armed" in self.TOAST_JS
+
+    def test_purge_endpoint_never_touches_the_backups_directory(self):
+        # The safety property behind the toast's own reassurance copy:
+        # purge_all_data (db.py) only DELETEs rows from this app's own
+        # SQLite tables. Backups are backup-*.json files discovered by
+        # globbing a separate directory (data_health.list_backups) --
+        # nothing in the purge path opens, globs, or unlinks that directory.
+        db_source = (Path(__file__).resolve().parent.parent / "src" / "db.py").read_text()
+        purge_fn = db_source.split("def purge_all_data(", 1)[1].split("\ndef ", 1)[0]
+        for marker in ("backups_dir", "backup-", "unlink", "rmtree", "glob"):
+            assert marker not in purge_fn
