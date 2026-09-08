@@ -336,17 +336,18 @@ and touches all three view headers):
    `actions` array) settled via direct AskUserQuestion answer: `actions`,
    keeping per-item click-through. See `plans/STATE.md`'s own entry for
    this slice for the full detail.
-4. **Week view: drag an event between the "All day" row and the timed
-   grid, both directions** (FullCalendar's `allDayMaintainDuration`
-   equivalent). Today `calendar_week_allday_drag.js` only moves all-day
-   items between days in the same row, and `calendar.js`'s timed-event
-   drag stays within the time grid — neither crosses the boundary, by
-   design (the all-day script's own header comment says so). Needs a real
-   cross-boundary drop zone: dropping into the all-day row sets
-   `all_day: true` with no time-of-day; dropping into a time slot sets a
-   start time from the drop position and clears `all_day`. Both already
-   point at the same reschedule endpoint — this is a drag-handler merge,
-   not new backend work.
+4. **Shipped 2026-09-09.** Week view: drag an event between the "All day"
+   row and the timed grid, both directions (FullCalendar's
+   `allDayMaintainDuration` equivalent). `calendar_week_allday_drag.js`'s
+   `setupItem` and `calendar.js`'s `setupEvent` each gained the other's
+   drop-target type (`.time-col` / `.allday-col` respectively); both still
+   POST the same `/events/{uid}/reschedule`, which gained one new optional
+   field (`all_day`) rather than a new endpoint, exactly as scoped below.
+   See `plans/STATE.md`'s own entry for this slice for the full detail,
+   including the Day-view side effect (the same timed→all-day code path
+   incidentally also works there, since Day loads calendar.js and has its
+   own `.allday-col`) and the task-chip exclusion (no time-of-day due-date
+   concept in this app, so a task dropped on the timed grid is a no-op).
 5. **Week view: stop resetting scroll position on add/move.** Root cause
    confirmed: `async_crud.js`'s `refreshRegion()` does
    `current.replaceWith(fragment)`, replacing `#week-grid` wholesale —

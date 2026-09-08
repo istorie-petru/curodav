@@ -234,5 +234,9 @@ class TestShellCacheVersion:
         # bar resize was unreliable -- `cellAtPoint` rewritten from an
         # `elementsFromPoint` DOM hit-test to plain rectangle-containment
         # against the day cells' own bounding rects.
+        # v86 (2026-09-09, FullCalendar-parity slice 4): Week view drag
+        # between the "All day" row and the timed grid, both directions
+        # (calendar.js gained a drop-onto-.allday-col branch, calendar_
+        # week_allday_drag.js gained a drop-onto-.time-col branch).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v85"' in script
+        assert 'CACHE_NAME = "cc-shell-v86"' in script

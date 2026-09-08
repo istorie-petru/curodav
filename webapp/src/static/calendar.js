@@ -40,6 +40,22 @@
 //
 // A short drag (a few px, effectively a click) is treated as a click and
 // left alone, so the event's normal href (open its edit form) still works.
+//
+// FullCalendar-parity slice 4 (2026-09-09): a move-mode drag (not resize --
+// crossing rows mid-resize makes no sense) can now also be dropped onto
+// Week's "All day" row (`.allday-col`, templates/_calendar_week_grid.html),
+// the other half of the cross-boundary move calendar_week_allday_drag.js's
+// own setupItem() implements for the reverse direction. Deliberately does
+// NOT reparent the dragged element into the all-day row's normal-flow DOM
+// mid-drag (it's an absolutely-positioned `.time-event`, the all-day row is
+// plain flow -- reprojecting it correctly there is exactly what the full
+// #week-grid region refresh on a successful drop already does server-side,
+// same "let the server re-render" reasoning every other calendar drag path
+// in this app already follows for lane/lay-out-affecting moves). While
+// hovering the all-day row this handler skips its own top/column-tracking
+// logic entirely -- the element's on-screen top/height stay wherever they
+// last were, which is fine since a successful drop replaces the whole
+// region a moment later anyway.
 
 (function () {
   const grid = document.querySelector(".time-col");
@@ -72,10 +88,12 @@
     let currentCol = el.closest(".time-col");
     let startCol = currentCol; // the column to revert to if the save fails
     let dragged = false;
+    let dropAllDayCol = null; // set while hovering an .allday-col mid-move (slice 4)
 
     function begin(e, isResize) {
       mode = isResize ? "resize" : "move";
       dragged = false;
+      dropAllDayCol = null;
       startX = e.clientX;
       startY = e.clientY;
       origTop = parseFloat(el.style.top) || 0;
@@ -97,6 +115,30 @@
       if (!dragged) return;
 
       if (mode === "move") {
+        // Slice 4: check the all-day row FIRST -- if the pointer (not the
+        // dragged element's own clamped-to-column box, which can never
+        // reach up there) is over an `.allday-col`, this drag is a
+        // cross-boundary move-to-all-day candidate. Skip the normal
+        // top/column tracking entirely while hovering it (see this file's
+        // own header comment for why) and just track which column would
+        // receive the drop.
+        const alldayCols = Array.from(document.querySelectorAll(".allday-col"));
+        let hoverAllDay = null;
+        for (const c of alldayCols) {
+          const r = c.getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+            hoverAllDay = c;
+            break;
+          }
+        }
+        alldayCols.forEach((c) => c.classList.toggle("drop-hover", c === hoverAllDay));
+        if (hoverAllDay) {
+          dropAllDayCol = hoverAllDay;
+          document.querySelectorAll(".time-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
+          return;
+        }
+        dropAllDayCol = null;
+
         let newTop = snap(origTop + dy);
         newTop = Math.max(0, Math.min(DAY_HEIGHT_PX - origHeight, newTop));
         el.style.top = newTop + "px";
@@ -136,10 +178,47 @@
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", end);
       if (!mode) return;
+      const wasResize = mode === "resize";
       mode = null;
       el.classList.remove("dragging");
       document.querySelectorAll(".time-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
+      document.querySelectorAll(".allday-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
       if (!dragged) return; // was a click -- let the href navigate normally
+
+      // Slice 4: dropped on the all-day row instead of a time slot -- flip
+      // to all_day, drop the time-of-day, reuse the same reschedule
+      // endpoint (its own comment covers the new optional `all_day` field).
+      // Never reached for a resize (dropAllDayCol is only ever set inside
+      // the mode === "move" branch of move() above).
+      if (!wasResize && dropAllDayCol) {
+        // Week's `.allday-col` carries its own `data-date`; Day's doesn't
+        // (there's only ever one column, so no per-column date to disambiguate)
+        // -- fall back to the time-col the event started in, which is
+        // necessarily the same day on a single-day Day view.
+        const day = dropAllDayCol.dataset.date || (startCol && startCol.dataset.date);
+        dropAllDayCol = null;
+        if (day) {
+          const uid = el.dataset.uid;
+          fetch(`/events/${uid}/reschedule`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ start_at: `${day}T00:00:00`, end_at: null, all_day: true }),
+          }).then((resp) => {
+            if (!resp.ok) throw new Error("reschedule failed");
+            window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
+          }).catch(() => {
+            el.style.top = origTop + "px";
+            el.style.height = origHeight + "px";
+            window.ccToast({ message: "Could not save that move. Reverted.", variant: "error" });
+          });
+          return;
+        }
+        // No date to attribute the drop to (shouldn't happen given the
+        // startCol fallback above, but fall through to the normal timed
+        // reschedule below rather than silently drop the move) --
+        // `top`/`height`/`currentCol` are still whatever they last were
+        // before the all-day-row hover branch in move() took over.
+      }
 
       const top = parseFloat(el.style.top) || 0;
       const height = parseFloat(el.style.height) || SNAP_PX;

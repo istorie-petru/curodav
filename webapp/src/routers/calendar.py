@@ -1408,10 +1408,19 @@ def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_w
 @events_router.post("/events/{uid}/reschedule")
 async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     """JSON endpoint for the Week/Day grid's drag-to-move / drag-to-resize
-    (see static/calendar.js) -- only touches start_at/end_at, leaves every
-    other field alone. A plain form POST to /events/{uid} would also work
-    but means round-tripping every field through JS for no reason; this is
-    the minimal surface the drag interaction actually needs."""
+    (see static/calendar.js), Month/4-Week's bar drag (calendar_month_drag.js)
+    and Week's all-day-row drag (calendar_week_allday_drag.js) -- touches
+    start_at/end_at and, optionally, all_day; leaves every other field alone.
+    A plain form POST to /events/{uid} would also work but means
+    round-tripping every field through JS for no reason; this is the minimal
+    surface the drag interactions actually need.
+
+    `all_day` is optional and only sent by FullCalendar-parity slice 4 (Week:
+    drag an event between the "All day" row and the timed grid, both
+    directions) -- every earlier caller only ever reschedules within the same
+    row/grid, so it never needed to flip this flag and omitting it here must
+    leave the existing value untouched (`row = dict(existing)` already
+    carries it forward)."""
     payload = await request.json()
     existing = db.get_event(conn, uid)
     if existing is None:
@@ -1419,6 +1428,10 @@ async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     row = dict(existing)
     row["start_at"] = payload["start_at"]
     row["end_at"] = payload.get("end_at")
+    if "all_day" in payload:
+        row["all_day"] = bool(payload["all_day"])
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
     db.upsert_event(conn, row)
-    return JSONResponse({"ok": True, "start_at": row.get("start_at"), "end_at": row.get("end_at")})
+    return JSONResponse(
+        {"ok": True, "start_at": row.get("start_at"), "end_at": row.get("end_at"), "all_day": bool(row.get("all_day"))}
+    )

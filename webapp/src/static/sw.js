@@ -428,7 +428,15 @@
 // changes size during a resize) -- not reliable enough in practice.
 // Replaced with plain rectangle-containment against the known day cells'
 // own `getBoundingClientRect()`s, no DOM stacking involved.
-const CACHE_NAME = "cc-shell-v85";
+// v86 (2026-09-09, FullCalendar-parity interactions slice 4): Week view drag
+// between the "All day" row and the timed grid, both directions.
+// calendar.js's setupEvent() gained an .allday-col hover/drop branch (move
+// mode only); calendar_week_allday_drag.js's setupItem() gained a .time-col
+// hover/drop branch (events only, not task chips). Both still POST
+// /events/{uid}/reschedule, which gained an optional `all_day` field
+// (routers/calendar.py) to flip the flag on a cross-boundary move -- no new
+// endpoint.
+const CACHE_NAME = "cc-shell-v86";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

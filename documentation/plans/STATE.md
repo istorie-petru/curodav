@@ -17,6 +17,88 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 4 of
+  6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
+  Week view drag between the "All day" row and the timed grid, both
+  directions -- FullCalendar's `allDayMaintainDuration` equivalent. Until
+  now `calendar_week_allday_drag.js` only moved all-day items between days
+  in the same row, and `calendar.js`'s timed-event drag stayed within the
+  time grid; neither crossed the boundary, by design (the all-day script's
+  own header comment said so).
+
+  **Backend (`routers/calendar.py`), the one piece both directions share:**
+  `POST /events/{uid}/reschedule` gained an optional `all_day` field --
+  every earlier caller (this same endpoint, plus Month/4-Week's bar drag)
+  only ever reschedules within one row/grid, so it never needed to flip the
+  flag; omitting the field leaves the existing value untouched (`row =
+  dict(existing)` already carries it forward). No new endpoint, per
+  open.md's own scoping note.
+
+  **`calendar_week_allday_drag.js` (all-day row -> timed grid):** `setupItem`
+  now checks `.time-col` as a second valid drop-target type alongside
+  `.allday-col` (`dropTargetAtPoint`, replacing the old allday-only
+  `colAtPoint`). Only events are eligible -- a task chip (`data-due`) has no
+  time-of-day due-date concept in this app, so a task dropped on the timed
+  grid is a no-op, same as dropping on its own origin column already was.
+  Dropping an event picks a start time from the drop's Y position within
+  the target column (same PX_PER_HOUR/15-minute-snap model `calendar.js`
+  already uses), preserves the event's own original duration when it has a
+  real one (`data-start`/`data-end` diff, default 60 minutes otherwise),
+  and sends `all_day: false`.
+
+  **`calendar.js` (timed grid -> all-day row):** `setupEvent`'s move-mode
+  `move()` now checks `.allday-col` hover FIRST, before its existing
+  top/column tracking -- while hovering the all-day row it skips that
+  tracking entirely (the element's on-screen top/height just stay wherever
+  they last were) rather than trying to reparent an absolutely-positioned
+  `.time-event` into the all-day row's normal-flow DOM mid-drag; a
+  successful drop's full `#week-grid` region refresh re-renders it correctly
+  server-side anyway, same "let the server re-render" reasoning every other
+  lane/layout-affecting calendar drag in this app already follows. On drop,
+  sends `all_day: true` with a time-stripped `start_at` (`${day}T00:00:00`)
+  and `end_at: null`. Guarded to never fire mid-resize (`wasResize` check --
+  crossing rows during a resize makes no sense). Day view's own `.allday-col`
+  has no `data-date` (only one column exists there, no per-column date to
+  disambiguate) -- falls back to the drag's own start column's date, so the
+  same code incidentally also works on Day (calendar.js is loaded there
+  too), a bonus not required by this slice's Week-only acceptance line.
+
+  Both directions reuse the CSS this app already had --
+  `.allday-col.drop-hover`/`.time-col.drop-hover` (style.css) predate this
+  slice, no new rules needed.
+
+  **Tests:** new `test_calendar_week_allday_boundary_drag.py`.
+  `TestRescheduleEndpointAllDayField` (4 tests, direct router calls with a
+  crafted `Request`/`receive`, same pattern `test_quick_capture.py` already
+  uses for async JSON endpoints) locks in the new `all_day` field's
+  omit/true/false behavior and the existing 404 path. No JS unit-test
+  harness for `static/*.js` in this repo (same recurring gap every prior
+  JS-only calendar slice's own entry notes) -- `TestDragScriptsStructural`
+  (7 tests) covers both changed files via `node --check` (syntax) plus
+  source greps pinning the specific new branches (`dropAllDayCol`,
+  `wasResize` guard, `endDropOnTimedGrid`, the task no-op guard) so a future
+  refactor can't silently drop one side of the merge unnoticed.
+
+  `sw.js` `CACHE_NAME` bumped `v85` -> `v86`; `test_pwa_shell.py`'s pin
+  updated. Full suite re-run in 9 sequential chunks (background processes
+  don't survive across tool calls in this sandbox, same constraint every
+  entry in this file already notes; `test_caldav_bridge_live.py` excluded as
+  always): 313 + 391 + 273 + 163 + 266 + 226 + 153 + 123 + 100 = 2008
+  passed, 0 failed (1997 + 11 net new).
+
+  **Next slice:** open.md slice 5 -- Week view: stop resetting scroll
+  position on add/move (`async_calendar.js`'s `refreshWeek()` needs to
+  capture/restore `.time-grid-wrap`'s `scrollTop` around the region swap).
+  Small and self-contained per open.md's own note ("could ride along with
+  slice 4 if convenient" -- deliberately not bundled in here, kept as its
+  own slice/commit instead). No live-browser check yet either (same
+  recurring gap every entry in this file already notes) -- this slice's
+  cross-boundary drag/drop was verified structurally (JS reasoned about
+  directly, the shared endpoint's new field covered by direct router-call
+  tests, full test suite green) but the actual pointer-drag feel, especially
+  the "hover the sticky all-day header while the timed grid below it is
+  mid-scroll" case, has never been seen rendered.
+
 - **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 3 of
   6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
   Month/4-Week's "+N more" overflow no longer navigates to Day view --
