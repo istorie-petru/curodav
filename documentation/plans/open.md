@@ -261,15 +261,19 @@ removal) are deliberately deferred — not part of this slice. One genuinely
 open piece remains:
 
 - **DAVx5 mobile access** (Phase C): a phone running DAVx5 syncs CalDAV/CardDAV
-  against Radicale through a public HTTPS reverse proxy (Caddy) with real bcrypt
-  auth — pure infra (a `deploy/` directory: Caddyfile, firewall rules, prod
-  Radicale config), no app code. Requires a domain + server before this can be
-  acted on. **2026-09-08: the `deploy/` directory itself is now scaffolded**
-  (Caddyfile template, firewall.sh, radicale/config.template +
-  radicale.service + install-radicale.sh, all with a walkthrough in
-  `deploy/README.md`) — still blocked on the user actually owning a domain
-  and pointing DNS at a real server; nothing in `deploy/` has been run
-  against a live public host yet.
+  against Radicale, reachable over the public internet, with real bcrypt
+  auth — pure infra (a `deploy/` directory), no app code. Requires a domain
+  + server before this can be acted on. **2026-09-08: the `deploy/`
+  directory itself is now scaffolded** — first as a Caddy + Let's Encrypt
+  reverse proxy, then same-day switched to Cloudflare Tunnel (direct
+  request: "we are going online via cloudflare tunnels") — `cloudflared/`
+  (install-cloudflared.sh, config.yml.template, cloudflared.service),
+  firewall.sh (now ssh-only — no inbound port needed at all, the tunnel is
+  fully outbound), radicale/config.template + radicale.service +
+  install-radicale.sh (unchanged by the Caddy->tunnel swap), all with a
+  walkthrough in `deploy/README.md`. Still blocked on the user actually
+  owning a domain onboarded to Cloudflare and running this against a real
+  server; nothing in `deploy/` has been run against a live public host yet.
 
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)

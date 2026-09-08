@@ -1,0 +1,28 @@
+# Installed to /etc/systemd/system/cloudflared.service by
+# install-cloudflared.sh. Runs as its own dedicated 'cloudflared' system
+# user (read-only access to /etc/cloudflared) -- the tunnel process only
+# ever makes OUTBOUND connections to Cloudflare's edge, it never binds a
+# listening socket of its own, so it needs no elevated privileges at all.
+[Unit]
+Description=Cloudflare Tunnel -- exposes curodav + radicale without opening any inbound port
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudflared
+Group=cloudflared
+ExecStart=/usr/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
+Restart=on-failure
+RestartSec=3
+
+# Hardening -- same shape as curodav.service/radicale.service's own.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/cloudflared
+
+[Install]
+WantedBy=multi-user.target

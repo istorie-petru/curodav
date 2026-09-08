@@ -17,6 +17,61 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session as the
+  `deploy/` scaffolding entry right below: "we are going online via
+  cloudflare tunnels." Swapped the whole reverse-proxy layer from
+  Caddy + Let's Encrypt to a Cloudflare Tunnel -- this is a real
+  simplification, not just a substitution: a tunnel is fully outbound
+  (cloudflared connects OUT to Cloudflare's edge), so there's no inbound
+  port to open, no cert to issue/renew, and no local reverse-proxy process
+  needed on the host at all. `Caddyfile.template`/`install-caddy.sh`
+  deleted outright, replaced by `deploy/cloudflared/` (`config.yml.
+  template`, `cloudflared.service`, `install-cloudflared.sh`).
+
+  **`install-cloudflared.sh`:** installs `cloudflared` from Cloudflare's
+  own apt repo; runs `cloudflared tunnel login` (interactive -- prints a
+  URL, blocks until the operator authorizes it in a browser) only if
+  `/root/.cloudflared/cert.pem` doesn't already exist; finds-or-creates a
+  named tunnel (`cloudflared tunnel list -o json` piped through a small
+  `python3 -c` filter for the non-deleted entry matching `TUNNEL_NAME` --
+  verified standalone against a fake JSON list with both a live and a
+  `deleted_at`-set entry sharing the same name, confirmed it picks the
+  live one); routes DNS for both `DOMAIN_APP`/`DOMAIN_DAV` at the tunnel
+  (`cloudflared tunnel route dns`, Cloudflare's own CNAME automation --
+  unlike the Caddy version, the user never manually creates an A/AAAA
+  record); copies the tunnel's credentials JSON + rendered `config.yml`
+  into `/etc/cloudflared`, owned by a new dedicated `cloudflared` system
+  user (no special privileges needed -- the process only ever makes
+  outbound connections, never binds a listening socket); installs +
+  starts `cloudflared.service`.
+
+  **`firewall.sh`** simplified to ssh-only (was ssh+80+443) -- 80/443
+  aren't needed anywhere in this design anymore. The explicit
+  `ufw deny 8000/5232` defense-in-depth lines are unchanged (still true
+  that `curodav.service` binds `0.0.0.0:8000`, not loopback).
+  `radicale/*` (config/service/install script) is entirely unaffected by
+  this swap -- Radicale still binds loopback and gets bcrypt auth exactly
+  as before; only what fronts it publicly changed.
+
+  **`deploy/README.md`** rewritten around the tunnel flow: prerequisite is
+  now "domain onboarded to Cloudflare" (nameservers pointed there) rather
+  than "DNS A/AAAA records pointing at this server's IP"; added a
+  troubleshooting note (unverified) that Cloudflare's Bot Fight Mode/WAF
+  can occasionally flag DAVx5's `PROPFIND`/`REPORT` requests on the DAV
+  subdomain, with the fix being a WAF skip rule scoped to `DOMAIN_DAV` --
+  flagged explicitly as unverified since there's no live tunnel to test
+  against from this sandbox.
+
+  **Verified:** `bash -n` on all three scripts; the tunnel-lookup Python
+  filter tested standalone (see above) against a crafted two-entry JSON
+  list. **Not verified, same as the entry below:** no live Cloudflare
+  account/tunnel/domain to actually run this against from this sandbox --
+  `cloudflared tunnel login`'s interactive browser-auth step in particular
+  has never been exercised for real. `open.md`'s DAVx5 section updated to
+  describe the Caddy->tunnel swap. No app code touched; full suite not
+  re-run for this entry specifically (nothing in `webapp/` changed since
+  the prior entry's own full run).
+
 - **Shipped:** 2026-09-08 -- scaffolded `deploy/` (repo root, new
   directory) for `open.md`'s "DAVx5 mobile access (Phase C)": direct
   request, "the app is going to run on a machine reachable from the public
