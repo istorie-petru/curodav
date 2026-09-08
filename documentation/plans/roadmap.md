@@ -354,6 +354,18 @@ became unconditional, roadmap never updated to say so — item 15). See
 each item in `audit-fixes-2.0.md` for full detail; each is written to be
 actionable without this conversation's context.
 
+**Calendar: FullCalendar-parity interactions (scoped 2026-09-08):** a second,
+separate queue alongside `audit-fixes-2.0.md` — direct request to bring the
+Month/4-Week/Week calendar's mouse interactions closer to fullcalendar.io
+(continuous multi-day bars with drag-move/resize instead of today's repeated
+per-day chips, a pointer-following drag ghost, an info surface for "+N more"
+instead of navigating away, cross-boundary drag between Week's all-day row
+and its timed grid, no scroll-reset on Week's async refresh, and a live
+month/week label with AJAX prev/next nav). Six ordered slices, see `open.md`
+§ "Calendar: FullCalendar-parity interactions" for the full scoping —
+independent of `audit-fixes-2.0.md`, run in whichever order/interleaving a
+session prefers.
+
 ## Things that can slip past the map
 
 - **DAVx5 hosting** is blocked on infrastructure the repo can't provide

@@ -17,6 +17,21 @@ session start.
 
 ## Right now
 
+- **Scoped, not started:** 2026-09-08 -- direct request to bring Month/
+  4-Week/Week calendar's mouse interactions closer to fullcalendar.io
+  (continuous multi-day bars with drag-move/resize, a pointer-following
+  drag ghost, an info surface for "+N more", cross-boundary drag between
+  Week's all-day row and its timed grid, no scroll-reset on Week's async
+  refresh, live month/week header label with AJAX prev/next nav). Six
+  ordered slices, plus two open decisions to settle before slices 3 and 6
+  respectively (toast style for the overflow list; week-number vs.
+  date-range header wording) -- see `plans/open.md` § "Calendar:
+  FullCalendar-parity interactions" for the full scoping and
+  `plans/roadmap.md`'s 2.0 section for the one-paragraph pointer. This is
+  a second queue alongside `audit-fixes-2.0.md`, independent of it. No
+  code touched yet -- next session picking this up should start at open.md
+  slice 1 (backend lane-packing + spanning-bar rendering, Month + 4-Week).
+
 - **Shipped:** 2026-09-09 -- sixth same-day follow-up, direct request:
   "let's just remove offline mode. please. purge it." After two rounds of
   UI fixes against direct screenshot reports (the two entries below), the

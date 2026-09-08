@@ -269,21 +269,117 @@ open piece remains:
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)
 
-## Event banners (not yet scoped)
+## Calendar: FullCalendar-parity interactions (scoped 2026-09-08)
 
-**Status:** captured 2026-09-03, direct request ("let's not forget") made
-alongside a view-modal mockup pass — not yet designed or slice-sized. Two
-distinct things could be meant, need a decision before this becomes a real
-slice (see `view_modal_mockups.html`, shared with the user the same day, for
-a rough visual of both):
+**Status:** scoped 2026-09-08, direct request ("check out fullcalendar.io,
+implement some of their fixes") — supersedes item 1 of the old "Event
+banners (not yet scoped)" section below (2026-09-03's "multi-day event bars
+spanning cells" note), now expanded into concrete slices instead of a
+one-line placeholder. Confirmed against the actual current code before
+scoping: Month, 4-Week, and Week's all-day row all render a multi-day event
+as a repeated per-day chip today, not a spanning bar — a deliberate choice
+made 2026-08-08 (`_month_grid` dropped the old lane-packed bar layout) and
+narrowed further 2026-08-07 (`_is_bar_worthy`, all-day only). This work
+explicitly reverses both of those decisions. Also confirmed: Month/4-Week
+drag already exists (`calendar_month_drag.js`) but only shifts a whole item
+to a different day with no resize, and the dragged chip doesn't visually
+follow the pointer (`.month-event-item.dragging` is a static "lifted" style
+in place, unlike Week/Day's `.time-event` which is already absolutely
+positioned and does track the cursor) — direct follow-up report, 2026-09-08.
 
-1. **Multi-day event bars spanning cells** in `calendar_month`/`week`/`day`
-   — Google/Outlook-style continuous bar instead of (presumably) a repeated
-   per-day chip. Needs confirming how multi-day events actually render today
-   before scoping the fix.
-2. **"Starting soon" notice banner** — a dismissible strip surfacing the next
-   imminent event wherever the user currently is, closer to a notification
-   than a calendar-rendering change.
+**Acceptance:** Month/4-Week render multi-day all-day events as one
+continuous bar spanning the cells it covers (wrapping at week boundaries),
+draggable to move and resize from either edge, with the dragged bar
+visually following the pointer during the drag. The "+N more" overflow
+shows an info surface instead of navigating to Day view. Week view supports
+dragging an event between the "All day" row and the timed grid in both
+directions. Week's async region refresh no longer resets scroll position.
+Month/4-Week/Week header navigation (prev/next) updates the grid and a
+visible month-name/week-range label via AJAX, no full page reload.
+
+**Slices** (dependency order; 1→2→3 touch the same Month/4-Week templates
+so are worth running back-to-back, 4→5 are Week-specific, 6 is independent
+and touches all three view headers):
+
+1. **Backend lane-packing + spanning-bar rendering, Month + 4-Week, no
+   drag/resize yet.** Reverses `_is_bar_worthy`/the flat-per-day-list
+   design in `routers/calendar.py` (`_bucket_month_items`, `_month_grid`,
+   `_month_day_cells`): a new per-week-row lane-packing pass (closest
+   precedent is the pre-2026-08-08 bar-lane system, worth checking
+   `git log -p` on that commit rather than writing lane-packing from
+   scratch) that clips each bar to the week it's rendered in and assigns
+   non-overlapping lane indices for simultaneous multi-day events. New bar
+   layer in `_calendar_month_grid.html`/`_calendar_fourweek_grid.html` +
+   CSS (absolutely-positioned bars spanning grid columns within a week
+   row, non-bar items — timed events, tasks — keep rendering as the
+   existing per-day text list beneath the bars). `test_calendar_month_bars.py`
+   needs substantial rewriting: most of its current assertions lock in the
+   *absence* of bars, which this slice reverses.
+2. **Drag-move + edge-resize for bars, plus the pointer-follow drag
+   ghost.** Move reuses `calendar_month_drag.js`'s whole-day-shift delta
+   logic, retargeted at a bar element. Resize is new: left/right edge
+   handles that change `start_at`/`end_at`'s date, POSTed to the existing
+   `/events/{uid}/reschedule` (no backend endpoint work needed — it
+   already accepts both fields) — same move-vs-resize branch pattern
+   `calendar.js` already uses for Week/Day's `.te-resize-handle`, ported
+   from a bottom edge to horizontal edges. The drag ghost: a floating
+   clone (`position: fixed`, `pointer-events: none` so `elementFromPoint`
+   still resolves to the day cell underneath it, not the clone) tracking
+   the pointer, spawned on drag start and removed on drop — build once
+   here for both move and resize rather than patching today's soon-to-be-
+   replaced chip drag first.
+3. **"+N more" overflow → info toast instead of a Day-view link.** Open
+   decision to settle at the start of this slice: `ccToast` (`static/
+   toast.js`) renders `message` as plain `textContent`, no per-item links
+   — a straight port of "list the day's events in a toast" loses the
+   click-through the current Day-view link gives you. Either accept that
+   (plain info toast, matches the literal ask) or build the list on
+   `ccToast`'s existing `actions` array (small buttons, one per event,
+   keeps click-through) — untested territory for that component at
+   4-6 items, may need its own styling. Pick one before writing code.
+4. **Week view: drag an event between the "All day" row and the timed
+   grid, both directions** (FullCalendar's `allDayMaintainDuration`
+   equivalent). Today `calendar_week_allday_drag.js` only moves all-day
+   items between days in the same row, and `calendar.js`'s timed-event
+   drag stays within the time grid — neither crosses the boundary, by
+   design (the all-day script's own header comment says so). Needs a real
+   cross-boundary drop zone: dropping into the all-day row sets
+   `all_day: true` with no time-of-day; dropping into a time slot sets a
+   start time from the drop position and clears `all_day`. Both already
+   point at the same reschedule endpoint — this is a drag-handler merge,
+   not new backend work.
+5. **Week view: stop resetting scroll position on add/move.** Root cause
+   confirmed: `async_crud.js`'s `refreshRegion()` does
+   `current.replaceWith(fragment)`, replacing `#week-grid` wholesale —
+   `.time-grid-wrap` (the actual `overflow-y:auto` scroll container,
+   style.css) is a child of that swapped element, so a fresh node with
+   `scrollTop: 0` replaces the one the user had scrolled. Fix: in
+   `async_calendar.js`'s `refreshWeek()`, capture `.time-grid-wrap`'s
+   `scrollTop` before calling `refreshRegion`, restore it on the new node
+   after. Small, contained, no backend change — could ride along with
+   slice 4 if convenient.
+6. **Live month/week label + AJAX prev/next nav, no full page reload.**
+   Today the visible header is a fixed `<h2>"Calendar"`/`"Planner"`
+   (`_page_header_narrow.html`); the actual "September 2026" / date-range
+   text only exists in a screen-reader-only `<h1 class="sr-only">`, and
+   prev/next are plain `<a href>` links causing full page loads — no AJAX
+   navigation exists today, only AJAX *refresh-after-mutation*
+   (`async_calendar.js`'s change-event listener). This slice adds a
+   separate fetch-and-swap navigation path for prev/next (also updating a
+   new visible label element and pushing the URL via `history.pushState`
+   so back/forward and bookmarks keep working) across Month, 4-Week, and
+   Week. Open decision: for Week, an actual ISO week number ("Week 37") or
+   a date range ("Sep 7 – 13")? FullCalendar itself defaults to a date
+   range, not a week number — confirm before building.
+
+## Event banners — "starting soon" notice (not yet scoped)
+
+**Status:** captured 2026-09-03, direct request ("let's not forget") —
+still just a placeholder, not designed or slice-sized. A dismissible strip
+surfacing the next imminent event wherever the user currently is, closer to
+a notification than a calendar-rendering change. Unrelated to the
+multi-day-bar work above (that item was originally bundled with this one in
+the same 2026-09-03 note; split apart now that the bar work is scoped).
 
 ## Known open risks
 
