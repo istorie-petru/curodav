@@ -264,7 +264,12 @@ open piece remains:
   against Radicale through a public HTTPS reverse proxy (Caddy) with real bcrypt
   auth — pure infra (a `deploy/` directory: Caddyfile, firewall rules, prod
   Radicale config), no app code. Requires a domain + server before this can be
-  acted on.
+  acted on. **2026-09-08: the `deploy/` directory itself is now scaffolded**
+  (Caddyfile template, firewall.sh, radicale/config.template +
+  radicale.service + install-radicale.sh, all with a walkthrough in
+  `deploy/README.md`) — still blocked on the user actually owning a domain
+  and pointing DNS at a real server; nothing in `deploy/` has been run
+  against a live public host yet.
 
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)

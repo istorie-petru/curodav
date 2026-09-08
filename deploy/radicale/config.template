@@ -1,0 +1,34 @@
+; Production Radicale config, installed to /srv/radicale/config by
+; install-radicale.sh. Unlike webapp/.dev/radicale/config (plain-text
+; htpasswd, loopback dev-only by its own header comment, never meant to be
+; reachable off localhost) -- this one IS meant to be reached from the
+; public internet, but only ever THROUGH Caddy's reverse proxy: `hosts`
+; below binds loopback only, so the one and only way in from outside is
+; ../Caddyfile.template's {{DOMAIN_DAV}} block. firewall.sh never opens
+; port 5232 externally either way -- this is belt and suspenders, not the
+; only thing standing between this file and the internet.
+
+[server]
+hosts = 127.0.0.1:5232
+
+[auth]
+type = htpasswd
+htpasswd_filename = /srv/radicale/users
+; bcrypt, not plain -- install-radicale.sh writes /srv/radicale/users with
+; bcrypt-hashed lines (python's `bcrypt` package, installed into this
+; service's own venv). Requires the `bcrypt` package to be importable from
+; wherever radicale itself runs, which is why install-radicale.sh installs
+; it into the SAME venv as radicale, not just ad hoc on the system Python.
+htpasswd_encryption = bcrypt
+
+[storage]
+filesystem_folder = /srv/radicale/collections
+
+[rights]
+; Each authenticated user only ever sees their own collections
+; (/<user>/...) -- correct for this single-user app; nothing here assumes
+; multi-tenant sharing.
+type = owner_only
+
+[logging]
+level = warning

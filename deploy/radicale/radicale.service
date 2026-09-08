@@ -1,0 +1,30 @@
+# Installed to /etc/systemd/system/radicale.service by install-radicale.sh.
+# Runs Radicale as its own dedicated system user, independent of curodav's
+# own release/rollback lifecycle (scripts/curodav-ctl) -- Radicale isn't a
+# Python dependency of the webapp in production (it's dev-only in
+# webapp/pyproject.toml's [dependency-groups], excluded by `uv sync
+# --no-dev`), so it gets its own venv and its own service here instead.
+[Unit]
+Description=Radicale (CalDAV/CardDAV) -- backs curodav's Published Lists + DAVx5 sync
+Documentation=https://radicale.org/v3.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radicale
+Group=radicale
+WorkingDirectory=/srv/radicale
+ExecStart=/srv/radicale/venv/bin/python -m radicale --config /srv/radicale/config
+Restart=on-failure
+RestartSec=3
+
+# Hardening -- same shape as curodav.service's own (scripts/curodav-ctl).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/radicale
+
+[Install]
+WantedBy=multi-user.target

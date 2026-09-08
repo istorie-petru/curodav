@@ -17,6 +17,64 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- scaffolded `deploy/` (repo root, new
+  directory) for `open.md`'s "DAVx5 mobile access (Phase C)": direct
+  request, "the app is going to run on a machine reachable from the public
+  internet" (answered via AskUserQuestion: no domain yet, subdomain split
+  -- app on one subdomain, DAV on another -- and same host `curodav-ctl`
+  already manages). Pure infra, no `webapp/` app code touched -- confirmed
+  by running the existing full suite unchanged after this slice (see
+  below), nothing here is Python/template/JS that pytest would exercise.
+
+  **Layout, all under new `deploy/`:** `deploy.env.example` (copy to
+  `deploy.env`, gitignored, holds `DOMAIN_APP`/`DOMAIN_DAV`/`LE_EMAIL`/
+  `RADICALE_USER`) + `firewall.sh` (ufw: only 22/80/443 open externally --
+  explicitly denies 8000/5232 too, defense in depth, since `curodav.
+  service`'s own `ExecStart` binds `0.0.0.0:8000` not loopback) +
+  `Caddyfile.template`/`install-caddy.sh` (installs Caddy from its official
+  apt repo, sed-renders the template, automatic Let's Encrypt TLS for both
+  domains) + `radicale/config.template` + `radicale/radicale.service` +
+  `radicale/install-radicale.sh` (dedicated `radicale` system user/venv/
+  service -- independent of `curodav`'s own release lifecycle, since
+  Radicale is a dev-only pip dependency in `webapp/pyproject.toml`,
+  excluded from `uv sync --no-dev`; interactively prompts for a password,
+  bcrypt-hashes it into `/srv/radicale/users` via the same venv's own
+  `bcrypt` package, never writes the plaintext anywhere). `deploy/README.md`
+  ties it together: prerequisites (DNS must already resolve before
+  `install-caddy.sh`, ACME needs it), exact run order, the exact
+  `CC_RADICALE_URL/USER/PASSWORD` lines to add to `/srv/curodav/shared/.env`
+  afterward (the app keeps talking to Radicale over loopback directly, same
+  as today -- only DAVx5 goes through the new public `DOMAIN_DAV`), DAVx5's
+  own account fields, an end-to-end verification checklist, and a
+  `--reset-password` rotation path.
+
+  **Design choices worth remembering:** DAV gets its own subdomain, not a
+  path under the app's domain -- Radicale's `/‹user›/‹collection›/` URL
+  shape would otherwise collide with the webapp's own routes if they
+  shared one hostname (this was an explicit answered question, not
+  assumed). Radicale's own `hosts=127.0.0.1:5232` plus `firewall.sh`'s
+  explicit deny is two independent layers keeping it off the public
+  internet directly -- only Caddy's reverse proxy is ever allowed through.
+
+  **Verified:** `bash -n` on all three new scripts (syntax only, no
+  `shellcheck` available in this sandbox); the bcrypt-hashing snippet
+  `install-radicale.sh` runs was extracted and run standalone against a
+  test string, confirmed it produces a real `$2b$...` hash. No `caddy`
+  binary available in this sandbox to `caddy validate` the Caddyfile
+  template -- syntax follows Caddy's documented reverse_proxy/header/
+  request_body directive shapes but has not been validated by the real
+  binary. **Nothing in this slice has been run against a live public
+  server** -- no domain exists yet (direct answer to the clarifying
+  question), so this is unexecuted scaffolding, not a confirmed-working
+  deployment. `open.md`'s own DAVx5 section updated to note the
+  scaffolding exists but is still blocked on a real domain/server.
+
+  **Next step, not this session's to take:** once the user has a domain
+  and DNS pointing at the server, walk `deploy/README.md`'s setup order
+  for real and fix whatever the live run surfaces that couldn't be caught
+  by static review alone (same "verified structurally, never run for
+  real" caveat every entry in this file already carries for the app side).
+
 - **Shipped:** 2026-09-08 -- direct bug report, same day as the header
   cleanup entry right below: "published list doesn't work to create even
   if labels exists. though this should not be a condition."
