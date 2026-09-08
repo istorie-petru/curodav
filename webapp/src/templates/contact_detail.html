@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html/task_detail.html for why this is wrapped -- opens
@@ -11,9 +13,24 @@
      layout) is gone -- contacts now use the exact same header/body/footer
      language as event/task detail: header = identity (the contact's
      avatar + large bold title + org subtitle), body = the meta fields in
-     the same 2-column grid and elevated tonal .detail-card, footer = a
-     quiet "Done" back-link, a demoted Delete text-link, and the primary
-     Edit action taking center stage.
+     the same 2-column grid, footer = a quiet "Done" back-link, a demoted
+     Delete text-link, and the primary Edit action taking center stage.
+
+     2026-09-03 direct feedback ("restyle the view modal to not use the
+     colored bg card div to view the meta"): the meta grid's wrapper is now
+     the plain .detail-meta-panel (style.css), not the elevated tonal
+     .detail-card the paragraph above originally described.
+
+     2026-09-03 direct request, same day ("I like variant B so much I want
+     it to be the baseline for all view modal windows") -- the avatar moved
+     out of the title row and into the shared _detail_cover.html cover
+     banner's floating badge slot (avatar_mode=true -- a ringed photo/
+     initials circle instead of an icon on a white card). Cover fill is the
+     contact's resolved label/Project/Space banner image
+     (db.banner_for_object) when set, else a flat gradient in a color
+     derived from the contact's own uid (deps.py's stable_color) -- contacts
+     have no color field of their own the way events/tasks do, and a flat
+     neutral cover for every contact would have looked undesigned.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -24,20 +41,29 @@
 <div id="modal-target" class="modal-stable-height">
 {% if contact %}
 <div class="modal-header">
-    {{ avatar(contact, 'avatar-large') }}
-    <div class="detail-heading-text">
-        <h1 class="detail-title">{{ contact.full_name }}</h1>
-        {% if contact.title or contact.org %}
-        <div class="detail-heading-sub">
-            {%- if contact.title and contact.org -%}
-            {{ contact.title }} at {{ contact.org }}
-            {%- elif contact.title -%}
-            {{ contact.title }}
-            {%- else -%}
-            {{ contact.org }}
-            {%- endif -%}
+    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
+         (margins)") -- .detail-header-inner (style.css) wraps the
+         cover+title, escaping .modal-header's own padding via negative
+         margins so that padding could stay intact for every plain
+         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, avatar(contact, 'avatar-large'), avatar_mode=true) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ contact.full_name }}</h1>
+                {% if contact.title or contact.org %}
+                <div class="detail-heading-sub">
+                    {%- if contact.title and contact.org -%}
+                    {{ contact.title }} at {{ contact.org }}
+                    {%- elif contact.title -%}
+                    {{ contact.title }}
+                    {%- else -%}
+                    {{ contact.org }}
+                    {%- endif -%}
+                </div>
+                {% endif %}
+            </div>
         </div>
-        {% endif %}
     </div>
 </div>
 
@@ -55,7 +81,7 @@
 </div>
 {% endif %}
 
-<div class="detail-card">
+<div class="detail-meta-panel">
     <div class="detail-meta-grid">
         {% for p in contact.phones %}
         <div class="detail-meta-item">
@@ -128,7 +154,7 @@
         {% if contact.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in contact.tags %}<span class="cell-tag tag-blue">{{ tag }}</span> {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in contact.tags %}{{ label_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>
@@ -150,6 +176,7 @@
 {% set footer_delete_mode = 'undo' %}
 {% set footer_delete_label = contact.full_name %}
 {% set footer_delete_redirect = '/contacts' %}
+{% set footer_delete_cc_change = 'contact' %}
 {% set footer_primary_href = '/contacts/' ~ contact.uid ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}

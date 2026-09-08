@@ -31,13 +31,34 @@
     return fetch(url, { method: method, headers: FETCH_HEADER, body: body });
   }
 
+  // Dispatch the cross-surface change event synchronously and report whether
+  // any surface listener claimed it (i.e. actually owns a region on THIS page
+  // that it will refresh). Surfaces set detail.claimed = true when they are
+  // about to refresh a region they found on the page. modal.js uses the
+  // return value as its fallback: an unclaimed change means no live region
+  // exists here, so the page falls back to a full reload instead of going
+  // stale (progressive enhancement is preserved either way).
+  function dispatchChange(change) {
+    var detail = {
+      type: change.type,
+      action: change.action || "edit",
+      uid: change.uid !== undefined ? change.uid : undefined,
+    };
+    detail.claimed = false;
+    document.dispatchEvent(new CustomEvent("cc-entity-changed", { detail: detail }));
+    return detail.claimed;
+  }
+
   // POST a form to a mutation endpoint. Resolves with the parsed JSON body
   // on success; rejects with {message, status} on server/network errors so
   // callers can surface a ccToast and leave the form in place. Opt in to the
   // change event with opts.change = {type, action, uid}.
   function post(url, form, opts) {
     var o = opts || {};
-    var body = form instanceof HTMLFormElement ? new FormData(form) : new FormData();
+    // Accept a FormData body directly as well as an <form> element (the
+    // calendar drag paths -- work-allocation create/move/delete -- build
+    // their payloads from JS, no form in the DOM to submit).
+    var body = form instanceof FormData ? form : form instanceof HTMLFormElement ? new FormData(form) : new FormData();
     var resp;
     return _send(url, "POST", body)
       .then(function (r) {
@@ -54,15 +75,8 @@
         }
         if (o.change) {
           var change = typeof o.change === "string" ? { type: o.change } : o.change;
-          document.dispatchEvent(
-            new CustomEvent("cc-entity-changed", {
-              detail: {
-                type: change.type,
-                action: change.action || "edit",
-                uid: change.uid !== undefined ? change.uid : uidFromUrl(url),
-              },
-            })
-          );
+          if (change.uid === undefined) change.uid = uidFromUrl(url);
+          dispatchChange(change);
         }
         return body;
       })
@@ -99,13 +113,13 @@
       });
   }
 
-  // Generic "mark this done" handler for forms with `data-cc-complete`
-  // (dashboard widget check-offs, currently the agenda widget's rows).
-  // Posts to the form's own action (POST /tasks/{uid}/complete) with the
-  // fetch header and dispatches the change event; the dashboard listener
-  // below (cc-entity-changed -> task widgets) owns the card refresh, so
-  // there's exactly one refresh path per surface.
-  document.addEventListener("submit", function (e) {
+// Generic "mark this done" handler for forms with `data-cc-complete`
+// (dashboard widget check-offs, currently the agenda widget's rows).
+// Posts to the form's own action (POST /tasks/{uid}/complete) with the
+// fetch header and dispatches the change event; the dashboard listener
+// below (cc-entity-changed -> task widgets) owns the card refresh, so
+// there's exactly one refresh path per surface.
+document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!form || !form.matches || !form.matches("[data-cc-complete]")) return;
     e.preventDefault();
@@ -126,6 +140,36 @@
       });
   });
 
+  // Generic handler for page forms with data-cc-change (not in modals).
+  // These are progressive-enhancement: async submit + region refresh on success,
+  // fallback to reload on failure/no region. Matches modal.js's behavior.
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.matches || !form.matches("[data-cc-change]") || form.matches("[data-cc-complete]")) return;
+    // Skip GET forms (handled elsewhere) and forms already handled by modal.js
+    // (modal.js handles forms inside #modal-body, which this listener won't see
+    // because modal content is injected into #modal-body after this listener runs).
+    if (form.hasAttribute("data-modal-get")) return;
+    var modalOverlay = document.getElementById("modal-overlay");
+    if (modalOverlay && modalOverlay.classList.contains("is-open") && modalOverlay.contains(form)) return;
+    e.preventDefault();
+    var btn = form.querySelector("button[type='submit']");
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+    }
+    var changeType = form.getAttribute("data-cc-change");
+    var changeAction = form.getAttribute("data-cc-action") || "edit";
+    post(form.action, form, { change: { type: changeType, action: changeAction, uid: uidFromUrl(form.action) } })
+      .catch(function (err) {
+        window.ccToast({ message: err.message || "Could not save.", variant: "error" });
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove("is-loading");
+        }
+      });
+  });
+
   // Dashboard / Space / Project / label pages -- the one surface-level
   // listener for task changes (design §5): re-render every task-affecting
   // widget card (data-widget-uses="tasks") from the server. Skipped in
@@ -137,11 +181,13 @@
     var grid = document.getElementById("dashboard-grid");
     if (!grid || grid.classList.contains("is-editing")) return;
     var cards = Array.from(grid.querySelectorAll('.widget-card[data-widget-uses*="tasks"]'));
+    if (!cards.length) return;
+    detail.claimed = true;
     cards.forEach(function (card) {
       if (!card.id || !card.dataset.uid) return;
       window.ccApi.refreshRegion("/dashboard/widgets/" + card.dataset.uid, card.id).catch(function () {});
     });
   });
 
-  window.ccApi = { post: post, refreshRegion: refreshRegion };
+  window.ccApi = { post: post, dispatchChange: dispatchChange, refreshRegion: refreshRegion };
 })();

@@ -1,157 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Week of {{ monday.isoformat() }} - Calendar{% endblock %}
-{% block main_class %}main-full-width{% endblock %}
+{% block main_class %}main-full-width main-calendar{% endblock %}
 {% block content %}
+{# Planner (Week view) -- own title/icon matching its own tabbar identity
+   (base.html: icon('clock'), label "Planner"), not "Calendar"/'calendar' --
+   4-Week/Month/Day are the "Calendar" family, Week is its own destination. #}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% import "_calendar_filters.html" as cf %}
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar/week?date_=' ~ monday.isoformat() %}
-<div class="toolbar top-app-bar toolbar-2row">
-    <div class="toolbar-row">
-        <h1 class="sr-only">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }}</h1>
-        <div class="segmented calendar-subnav">
-            <a class="seg-btn" href="/calendar{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Month</a>
-            <a class="seg-btn" href="/calendar/fourweek{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">4-Week</a>
-            <a class="seg-btn active" href="/calendar/week?date_={{ monday.isoformat() }}{{ _lq }}">Week</a>
-            <a class="seg-btn" href="/calendar/day/{{ today_iso }}{% if _lbl %}?label={{ _lbl|urlencode }}{% endif %}">Day</a>
-        </div>
-        <div class="spacer"></div>
-        <a class="icon-btn" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <a class="icon-btn" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
-        {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
-        <a class="btn primary" href="/events/new" data-modal data-fab title="New event">{{ icon('plus') }} New</a>
-    </div>
-</div>
-<!-- 1.9 side work: Week merged with the former "Timetable" sub-view (direct
-     feedback -- "merge the calendar's week view with the timetable view").
-     One grid, both capabilities: ordinary events stay fully interactive
-     (static/calendar.js -- drag-to-move/resize, click to open, drag empty
-     space to create), and every work-allocation event renders prominently
-     as a draggable `.work-allocation` block (static/project_calendar.js)
-     alongside the "Unscheduled work" sidebar that drags a task onto the
-     grid to schedule it. Grid columns carry BOTH `.calendar-create-col`
-     (calendar.js) and `.project-calendar-col` (project_calendar.js) --
-     see style.css's own comment on why the old "planning surface -> cursor:
-     default" override no longer applies here. The sidebar is collapsible
-     (static/unscheduled_panel_toggle.js, per-device localStorage). -->
-<div class="project-calendar-layout">
-    <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
-        <div class="unscheduled-panel-head">
-            <h2>Unscheduled work</h2>
-            <button type="button" class="icon-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('sidebar', 'icon-sm') }}</button>
-        </div>
-        <div id="unscheduled-panel-body">
-        {% if unscheduled_tasks %}
-        <div class="unscheduled-task-list">
-            {% for item in unscheduled_tasks %}
-            {{ unscheduled_task_item(item, unscheduled_next) }}
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="empty-state" style="padding:10px 0">No unscheduled work -- every open task already has scheduled work.</div>
-        {% endif %}
-        </div>
-    </aside>
-
-    <div class="card calendar-viewport project-calendar-grid">
-    <div class="time-grid-wrap">
-    <div class="time-grid-top">
-    <div class="time-grid-head week">
-        {% for day in days %}
-        <div class="thd {% if day.is_today %}is-today{% endif %}">{{ day.date.strftime('%a %d') }}</div>
-        {% endfor %}
-    </div>
-    <div class="time-grid-allday week">
-        <div class="allday-gutter">All day</div>
-        <div class="allday-cols week">
-            {% for day in days %}
-            <div class="allday-col">
-                {% for e in day.all_day %}
-                <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
-                    <span class="color-dot cal-{{ e.calendar_color }}"></span>
-                    {{ e.title }}
-                </a>
-                {% endfor %}
-                {% for t in day.tasks %}
-                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    </div>
-    <div class="time-grid-body" style="--hr-h:{{ px_per_hour }}px; height:calc(25 * var(--hr-h));">
-        <div class="time-gutter">
-            {% for h in hours %}
-            <div class="hr-label" style="top:{{ h * px_per_hour }}px">{{ h | fmt_hour }}</div>
-            {% endfor %}
-        </div>
-        <div class="time-cols week">
-            {% for day in days %}
-            <div class="time-col calendar-create-col project-calendar-col" style="--hr-h:{{ px_per_hour }}px" data-date="{{ day.iso }}">
-                {% for ov in day.time_block_overlays %}
-                <div class="time-block-overlay time-block-{{ ov.kind }}" style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
-                {% endfor %}
-                {% for e in day.timed %}
-                {% if e.is_allocation %}
-                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
-                     style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%; --wa-border:var(--cal-bg-{{ e.calendar_color }});">
-                    {# Plain span, not a link -- direct feedback: "why can't
-                       it function like any other event so that the whole
-                       div is a link and can be moved at the same time?"
-                       The title used to be a real nested <a>, which
-                       project_calendar.js's pointerdown handler had to
-                       explicitly exclude from drag-start (so its native
-                       click could navigate) -- meaning you couldn't move a
-                       block by grabbing its title text, unlike an ordinary
-                       .time-event (a single <a>, draggable everywhere on
-                       itself). The whole block can't itself be a real <a>
-                       (it has a nested delete <form>/<button> -- invalid
-                       HTML inside <a>), so instead the title drops link
-                       semantics and the whole block drags/opens uniformly
-                       via JS (interaction 4 below opens the task view on
-                       any non-drag click, anywhere on the block). #}
-                    <span class="te-name">{{ e.title }}</span>
-                    <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
-                    {# data-confirmed: this no longer deletes the session (see
-                       routers/calendar.py::delete_week_allocation) -- it
-                       unschedules it back to an undated placeholder, which
-                       isn't destructive, so it skips app.js's generic
-                       "action contains /delete -> confirm sheet" fallback
-                       and submits immediately, same as the drag-onto-panel
-                       gesture already does. #}
-                    <form class="work-allocation-delete" method="post" action="/calendar/week/allocations/{{ e.uid }}/delete" data-confirmed="1">
-                        <input type="hidden" name="date_" value="{{ monday.isoformat() }}">
-                        <button type="submit" class="icon-btn" title="Unschedule this session (it stays on the task, unplaced, on Unscheduled work)">{{ icon('x', 'icon-sm') }}</button>
-                    </form>
-                    <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
-                </div>
-                {% else %}
-                <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
-                   href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
-                   style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
-                    <span class="te-name">{{ e.title }}</span>
-                    <span class="te-time">{{ e.start_at | fmt_time }}{% if e.end_at %}&ndash;{{ e.end_at | fmt_time }}{% endif %}</span>
-                    <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
-                </a>
-                {% endif %}
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    </div>
-    </div>
-</div>
+<!-- 2026-08-28 "Calendar split into two pages" -- Week is a standalone
+     tabbar destination now (base.html), not one of four tabs inside a
+     shared Month/4-Week/Week/Day subnav -- no more cross-links to the
+     other calendar views here. 2026-08-29 follow-up (sidebar redesign
+     item 13e, direct request): the separate `.toolbar.top-app-bar.
+     toolbar-2row` row is gone -- "+ New event" was redundant with the
+     sidebar's own global quick-add, dropped rather than relocated;
+     prev/next week nav and the label filter now render inside the
+     narrow header's actions slot instead. -->
+<!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
+     own comment: the narrow header's title is a fixed <h2>"Planner", and
+     this page's old toolbar row was the only h1 carrying the specific
+     week's date range, so it's restored standalone here. -->
+<h1 class="sr-only">{{ label_text }}</h1>
+{% call page_header_narrow("Planner", "clock") %}
+<!-- 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc:
+     prev/next now navigate via AJAX (async_calendar.js's new bindCalNav)
+     instead of a full page reload -- the plain <a href> stays as the
+     no-JS fallback/real bookmark target, bindCalNav just intercepts the
+     click when JS is available. cal-nav-label is the new visible
+     date-range label (the "Sep 07 - Sep 13, 2026" text used to exist only
+     in the sr-only heading above); both now render from the same
+     request-scoped `label_text` so they can never drift apart. -->
+<a class="icon-btn cal-nav-prev" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
+<a class="icon-btn cal-nav-next" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{% endcall %}
+<!-- 1.9 side work: Week merged with the former "Timetable" sub-view (see
+     _calendar_week_grid.html's own top comment -- the whole grid lives in
+     that partial because it doubles as the week view's async-CRUD region,
+     id="week-grid", refreshed by async_calendar.js instead of a reload). -->
+{% include "_calendar_week_grid.html" %}
 {% endblock %}
 {% block extra_scripts %}
 <!-- Sleep Time / Leisure Time scheduling warning (static/time_blocks.js,
      Settings > Sleep & Leisure Time) -- loaded before calendar.js/
      project_calendar.js so both can call window.ccTimeBlocks. -->
-<script type="application/json" id="cc-time-blocks">{{ time_blocks_json | safe }}</script>
-<script src="{{ static_url('time_blocks.js') }}"></script>
-<script>
+<script type="application/json" id="cc-time-blocks" nonce="{{ csp_nonce() }}">{{ time_blocks_json | safe }}</script>
+<script defer src="{{ static_url('time_blocks.js') }}"></script>
+<!-- "Hide sleep hours in Planner" (Settings > General, 2026-09-09) --
+     static/sleep_collapse.js reads this once and exposes window.
+     CCSleepCollapse, which calendar.js/project_calendar.js's drag create/
+     move/resize handlers use to convert an on-screen pixel position back
+     to the real clock time it represents (see grid_layout.collapse_minutes'
+     own comment on why the two are inverses of each other). Loaded before
+     both, same ordering reason as time_blocks.js above -- this <script
+     defer> tag's own document position, not the `defer` attribute itself,
+     is what guarantees it runs first. -->
+<script type="application/json" id="cc-sleep-collapse" nonce="{{ csp_nonce() }}">{{ sleep_collapse_json | safe }}</script>
+<script defer src="{{ static_url('sleep_collapse.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
   // See this template's own top comment -- ordinary events keep calendar.js's
   // interactions; work-allocation blocks get project_calendar.js's, pointed
   // at this page's /calendar/week/allocations endpoints so create/move/
@@ -167,7 +78,9 @@
     weekDate: "{{ monday.isoformat() }}",
   };
 </script>
-<script src="{{ static_url('calendar.js') }}"></script>
-<script src="{{ static_url('project_calendar.js') }}"></script>
-<script src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
+<script defer src="{{ static_url('calendar.js') }}"></script>
+<script defer src="{{ static_url('project_calendar.js') }}"></script>
+<script defer src="{{ static_url('calendar_week_allday_drag.js') }}"></script>
+<script defer src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
+<script defer src="{{ static_url('async_calendar.js') }}"></script>
 {% endblock %}

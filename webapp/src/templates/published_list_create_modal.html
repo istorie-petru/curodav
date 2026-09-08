@@ -1,0 +1,169 @@
+<!-- 2026-08-29 (STATE.md backlog item 8, direct request): brought in line
+     with the rest of the app's modal styling (features/design-system.md §
+     Modal windows) -- this modal predated the 2026-08-15 uniformization
+     pass and was never swept up in it. Three fixes:
+       1. Body wrapped in `.card > .field-grid` (was bare `.field`/
+          `.field-wide` divs directly in `.modal-body` with no grid
+          container at all -- `.field-wide`'s 2-column span only means
+          anything inside a `.field-grid` parent, so fields were silently
+          stacking in a single column instead of the standard 2-up layout
+          every other form modal uses).
+       2. Footer is `{% include "_modal_footer.html" %}` now, not a
+          hand-rolled `.modal-footer` div with inline `style="border-top:
+          none; padding-top: 0; ..."` overrides -- see that partial's own
+          docstring for the shared contract.
+       3. `.modal-stable-height` removed -- that class is for a modal
+          whose own content changes shape post-open without a full
+          re-navigation; this modal's own content doesn't change shape
+          post-open either, so it stays the one non-cross-fade template
+          not carrying the class.
+
+     2026-09-08 (direct request, "make published lists more permissive
+     and easier to set up even if no labels present"): the form always
+     renders now, no zero-labels hard block -- the label section is
+     framed as optional narrowing, not a required step.
+
+     2026-09-08 follow-up (direct request, "the drop down menus are not
+     our own design, they are defaults"): Type and Visibility moved onto
+     `_widget_list_multiselect.html`'s `ms_mode="single"` variant instead
+     of native `<select>`s, same reasoning as task_form.html's Status/
+     Priority/Recurrence.
+
+     2026-09-08 (this session, direct request: "rework the table... it
+     should have an edit button. No inline editing. ... choosing a label
+     should be a checkbox drop down menu, and please delete any settings
+     hint that are unnecessary"): three changes bundled here --
+
+       1. This template now serves BOTH `GET /published-lists/new`
+          (`editing` absent from context) and the new `GET /published-
+          lists/{id}/edit` (`editing` = the existing row dict,
+          `selected_labels` = its current label filter's `any` list).
+          Name/Visibility/Labels are editable either way; Type is fixed
+          once a List exists (changing entity_type post-creation would
+          orphan the already-materialized Radicale collection -- routers/
+          published_lists.py's `update_list` never reads an `entity_type`
+          field from the edit form at all) -- shown as the same read-only
+          `.cell-tag tag-<entity_type>` pill the table's own Type column
+          uses, not an editable control, when `editing` is set. Visibility
+          gains a third option ("Paused") only in edit mode -- creating a
+          List already-paused isn't a real use case (create_list forces
+          `archived` back to `private`, unchanged), but archiving/
+          resuming an existing one now happens here instead of the
+          table's old inline auto-submitting `<select>` (see
+          published_lists.html's own comment on why that was removed).
+       2. Labels filter swapped from a hand-rolled `.field-toggle-group`
+          of plain checkboxes onto this same `_widget_list_multiselect.
+          html` partial, `ms_mode="filter"` (the default -- an empty
+          selection reads "All", matching this field's own "leave blank
+          for everything" semantics exactly, unlike "select" mode's
+          "no labels"/never-collapses-to-All reading, which is right for
+          a record's actual tag set but wrong for a filter) with
+          `ms_pill=true` so each option renders as the same colored/
+          iconed label pill every other Labels picker in the app uses,
+          not plain text. One dropdown-with-checkboxes trigger+panel
+          instead of an always-open, unbounded-height checkbox grid.
+       3. Settings-hint cleanup: the Visibility hint's "Public also adds
+          a shareable link" clause is gone -- redundant now that the
+          option itself is labeled "Public (shareable link)" (2026-09-08
+          fix above), so only the genuinely non-obvious half ("Private
+          syncs to your Radicale account") survives. The trailing
+          "Change visibility or archive anytime from the list below"
+          hint is deleted outright -- false now that the table has no
+          inline visibility control at all (item 1 above); editing
+          anytime is what the row's own new Edit button is for, doesn't
+          need a hint to explain it. The other two hints (labels-filter
+          "matches any", no-labels-yet empty state) stay -- both carry
+          real, non-obvious information nothing else on the page says.
+
+     2026-09-08 (direct follow-up, same session): both remaining hints
+     ("Private syncs to your Radicale account.", "Matches any checked
+     label. Leave blank for everything.") are gone too -- direct request,
+     no replacement copy. And the field itself is renamed "Visibility" ->
+     "Sharing" (direct request: "the Visibility should become Linkage (or
+     other more normal or intuitive names)" -- "Sharing" was picked over
+     "Linkage" as the more ordinary word for what the field actually
+     controls) with its two real options relabeled to say what they are
+     rather than lean on the now-deleted hint to explain it: "Private" ->
+     "Private Radicale" (syncs to your Radicale/CalDAV account only) and
+     "Public (shareable link)" -> "Public" (the parenthetical moved into
+     the label's own wording being unnecessary once "Private Radicale"
+     already names the mechanism by contrast). "Paused" (edit-mode-only
+     archived option) is unchanged -- already self-explanatory. The
+     table's own Visibility column header and its read-only pill values
+     (published_lists.html) are renamed the same way, so the column
+     heading and the modal field describing the same thing don't drift
+     into two different names for one concept. -->
+{% set _editing = editing | default(none) %}
+{% set _form_id = 'edit-list-form' if _editing else 'create-list-form' %}
+<div id="modal-target" class="modal-height-md">
+    <div class="modal-header">
+        <h1>{{ 'Edit published list' if _editing else 'Create a published list' }}</h1>
+    </div>
+    <div class="modal-body">
+        <div class="card">
+        <form method="post" action="{{ ('/published-lists/' ~ _editing.id ~ '/update') if _editing else '/published-lists/create' }}" id="{{ _form_id }}">
+            <div class="field-grid">
+                <div class="field field-wide">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" value="{{ _editing.name if _editing else '' }}" required autocomplete="off">
+                </div>
+
+                {% if _editing %}
+                <div class="field">
+                    <label>Type</label>
+                    <span class="cell-tag tag-{{ _editing.entity_type }}">{{ entity_labels[_editing.entity_type] }}</span>
+                </div>
+                {% else %}
+                {% set ms_name = 'entity_type' %}
+                {% set ms_mode = 'single' %}
+                {% set ms_label = 'Type' %}
+                {% set ms_items = [] %}
+                {% for et in entity_types %}{% set _ = ms_items.append({'uid': et, 'name': entity_labels[et]}) %}{% endfor %}
+                {% set ms_selected = entity_types[0] %}
+                {% set ms_wide = false %}
+                {% set ms_form_id = _form_id %}
+                {% include "_widget_list_multiselect.html" %}
+                {% endif %}
+
+                {% set ms_name = 'visibility' %}
+                {% set ms_mode = 'single' %}
+                {% set ms_label = 'Sharing' %}
+                {% set ms_items = [
+                    {'uid': 'private', 'name': 'Private'},
+                    {'uid': 'public', 'name': 'Public'},
+                ] %}
+                {% if _editing %}{% set _ = ms_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}
+                {% set ms_selected = _editing.visibility if _editing else 'private' %}
+                {% set ms_wide = false %}
+                {% set ms_form_id = _form_id %}
+                {% include "_widget_list_multiselect.html" %}
+
+                {% if all_labels %}
+                {% set ms_name = 'labels' %}
+                {% set ms_mode = 'filter' %}
+                {% set ms_label = 'Filter by labels (optional)' %}
+                {% set ms_items = [] %}
+                {% for name in all_labels %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+                {% set ms_selected = selected_labels | default([]) %}
+                {% set ms_wide = true %}
+                {% set ms_pill = true %}
+                {% set ms_form_id = _form_id %}
+                {% include "_widget_list_multiselect.html" %}
+                {% else %}
+                <div class="field field-wide">
+                    <label>Filter by labels <span class="text-muted">(optional)</span></label>
+                    <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
+                </div>
+                {% endif %}
+            </div>
+        </form>
+        </div>
+    </div>
+{% set footer_back_url = '/published-lists' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = _form_id %}
+{% set footer_primary_label = 'Save Changes' if _editing else 'Publish List' %}
+{% set footer_primary_icon = 'check-square' if _editing else 'share-2' %}
+{% set footer_primary_id = 'save-list-btn' if _editing else 'publish-btn' %}
+{% include "_modal_footer.html" %}
+</div>

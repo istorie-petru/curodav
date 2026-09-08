@@ -16,49 +16,6 @@ from typing import Any
 
 from icalendar import Alarm, Event, Todo
 
-# --------------------------------------------------------------------- #
-# Importance/Urgency -> iCal PRIORITY (1.1, plans/open-priority.md
-# § Virtual & derived states -- "Importance and urgency (replacing WebDAV
-# priority)"; export direction only since a later, post-1.1 side work
-# rework removed the explicit per-task axes -- see src/derived_state.py's
-# module docstring).
-#
-# Recorded decision: PRIORITY is the single WebDAV channel for the two
-# semantic axes. Export combines Importance and Urgency into one PRIORITY
-# via a deterministic, urgency-dominant precedence table -- callers pass in
-# the *effective* (computed) values, since there's no explicit column left
-# to read directly (see routers/export.py's tasks.ics/published_lists.py's
-# materialize, which resolve label rules once and attach the effective
-# values before calling task_row_to_ical). Import no longer maps PRIORITY
-# back to anything (ical_to_task_row below) -- there is no field left to
-# write it to; this app is the write-source for its own tasks, so a
-# foreign CalDAV client's own PRIORITY edits are simply not read back.
-#
-# Export table (importance, urgency) -> PRIORITY, urgency dominant:
-#   urgency 3 -> 1    urgency 2 -> 3    urgency 1 -> 5
-#   urgency 0, importance 3 -> 2
-#   urgency 0, importance 2 -> 4
-#   urgency 0, importance 1 -> 6
-#   both 0 -> 0 (undefined)
-_URGENCY_TO_ICAL = {3: 1, 2: 3, 1: 5}
-_IMPORTANCE_ONLY_TO_ICAL = {3: 2, 2: 4, 1: 6}
-
-
-def _priority_to_ical(importance: int | None, urgency: int | None) -> int:
-    """Importance/Urgency (1..3 each, 0/None = unset) -> one iCal PRIORITY
-    per the precedence table above. Urgency (the time-sensitive axis) wins
-    the lower/redder numbers; importance fills the between-values when
-    urgency is unset. Both unset -> 0 (undefined), matching iCalendar's own
-    meaning of PRIORITY 0 and the old code's behavior for a None priority."""
-    importance = int(importance or 0)
-    urgency = int(urgency or 0)
-    if urgency:
-        return _URGENCY_TO_ICAL[urgency]
-    if importance:
-        return _IMPORTANCE_ONLY_TO_ICAL[importance]
-    return 0
-
-
 _STATUS_TO_VTODO = {
     "active": "NEEDS-ACTION",
     "waiting": "NEEDS-ACTION",
@@ -168,7 +125,6 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
         todo.add("DTSTART", _parse_dt(row["start_at"]))
     if row.get("due_at"):
         todo.add("DUE", _parse_dt(row["due_at"]))
-    todo.add("PRIORITY", _priority_to_ical(row.get("importance"), row.get("urgency")))
     todo.add("STATUS", _STATUS_TO_VTODO.get(row.get("status", "active"), "NEEDS-ACTION"))
     if row.get("progress") is not None:
         todo.add("PERCENT-COMPLETE", round(row["progress"] * 100))
@@ -201,14 +157,11 @@ def ical_to_task_row(todo: Todo) -> dict[str, Any]:
         row["start_at"] = _dt_to_field(todo.get("DTSTART").dt)
     if "DUE" in todo:
         row["due_at"] = _dt_to_field(todo.get("DUE").dt)
-    # Side work (post-1.1): incoming PRIORITY is no longer imported at all
-    # -- there is no explicit urgency field left to write it to (Importance
-    # /Urgency are purely computed, see src/derived_state.py's module
-    # docstring). Deliberately silent: the rest of the VTODO still parses
-    # normally, this one property is simply dropped on the floor. Export
-    # (task_row_to_ical above) still writes PRIORITY out from the
-    # *effective* urgency-dominant value, so external CalDAV clients keep
-    # seeing it -- this app just never reads it back.
+    # Incoming PRIORITY is not imported at all -- Importance/Urgency are
+    # removed as a feature entirely (see src/derived_state.py's module
+    # docstring), and export (task_row_to_ical above) no longer writes
+    # PRIORITY either. Deliberately silent: the rest of the VTODO still
+    # parses normally, this one property is simply dropped on the floor.
     row["status"] = _VTODO_TO_STATUS.get(str(todo.get("STATUS", "")), "active")
     if "PERCENT-COMPLETE" in todo:
         row["progress"] = int(todo.get("PERCENT-COMPLETE")) / 100

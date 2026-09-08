@@ -117,13 +117,19 @@ class TestCustomizeForms:
         # survives in the template's historical comment, which is fine).
         assert 'class="widget-builder-added-bar"' not in body
 
-    def test_add_widget_button_in_footer_no_cancel(self, conn):
+    def test_add_widget_button_in_footer_with_cancel(self, conn):
+        # 2026-08-07 removed the separate Done/cancel button (Add widget
+        # was made the only footer action); 2026-08-31 direct feedback
+        # ("add a button to cancel ... adding a new widget") brings it
+        # back -- this form only POSTs on an explicit Add widget click, so
+        # a plain close-with-no-side-effects Cancel is safe to reintroduce
+        # without reviving the old stay-open/Duplicate/Edit flow that
+        # 2026-08-07 actually meant to remove.
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
-        # Add widget is the footer's primary action, submitting the builder
-        # form; there is no separate Done/cancel button any more (2026-08-07).
         assert 'id="widget-builder-form"' in body
         assert "Add widget" in body
-        assert 'data-modal-cancel' not in body
+        assert 'data-modal-cancel' in body
+        assert "Cancel</a>" in body
 
     def test_customize_modal_has_a_footer_with_add_widget(self, conn):
         # 2026-08-07 rework: the modal now has a real modal-footer holding
@@ -193,7 +199,9 @@ class TestBuilderFieldsRework:
         assert 'class="stepper-btn stepper-dec"' in body
         assert 'class="stepper-btn stepper-inc"' in body
         assert 'name="limit"' in body
-        assert '<input type="number" name="limit" class="widget-preview-field stepper-input" min="1"' in body
+        # min="0" (2026-08-31 direct feedback: "add a way to set the limit
+        # to 0 (0 = unlimited)") -- was min="1", which blocked reaching 0.
+        assert '<input type="number" name="limit" class="widget-preview-field stepper-input" min="0"' in body
 
     def test_labels_is_a_chip_multiselect_over_known_label_names(self, conn):
         db.upsert_task(conn, {

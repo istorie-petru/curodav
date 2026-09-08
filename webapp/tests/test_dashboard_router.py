@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from src import db
+from src import db, deps
 from src.routers import dashboard as dashboard_router
 
 
@@ -54,8 +54,11 @@ class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
         # today) + a stack of At a Glance / Agenda (all_upcoming, events
-        # only) / Agenda (today, overdue only) -- see
-        # dashboard_router._seed_agenda_stack_layout.
+        # only) / Agenda (today, overdue+tasks+events) -- see
+        # dashboard_router._seed_agenda_stack_layout. 2026-09-03: the
+        # third member's Show list used to be overdue-only, direct
+        # follow-up widened it to overdue+tasks+events so a "Today" pane
+        # actually shows today's tasks/events, not just what's overdue.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
@@ -65,7 +68,7 @@ class TestDefaultWidgetSeeding:
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
         assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
         assert members[1]["config"]["show"] == ["events"]
-        assert members[2]["config"]["show"] == ["overdue"]
+        assert members[2]["config"]["show"] == ["overdue", "tasks", "events"]
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
         # The main Agenda widget and the stack share the width split
@@ -117,6 +120,21 @@ class TestFiltering:
         _seed_task(conn, "t2", due_at=date.today().isoformat(), tags=["personal"])
         result = dashboard_router._filtered_tasks(conn, {"tags": ["uni"]})
         assert {t["uid"] for t in result} == {"t1"}
+
+    def test_no_label_sentinel_matches_only_unlabeled_items(self, conn):
+        # 2026-08-31 direct feedback: "add a way to not select any label
+        # to filter by" -- distinct from an empty tags filter (= "All").
+        _seed_task(conn, "tagged", due_at=date.today().isoformat(), tags=["uni"])
+        _seed_task(conn, "untagged", due_at=date.today().isoformat(), tags=[])
+        result = dashboard_router._filtered_tasks(conn, {"tags": [dashboard_router.NO_LABEL_SENTINEL]})
+        assert {t["uid"] for t in result} == {"untagged"}
+
+    def test_no_label_sentinel_ors_with_real_labels(self, conn):
+        _seed_task(conn, "uni", due_at=date.today().isoformat(), tags=["uni"])
+        _seed_task(conn, "personal", due_at=date.today().isoformat(), tags=["personal"])
+        _seed_task(conn, "untagged", due_at=date.today().isoformat(), tags=[])
+        result = dashboard_router._filtered_tasks(conn, {"tags": ["uni", dashboard_router.NO_LABEL_SENTINEL]})
+        assert {t["uid"] for t in result} == {"uni", "untagged"}
 
     def test_project_filter_is_a_noop_since_task_lists_are_gone(self, conn):
         # Phase 1 (label-space rework, 2026-08-06) dropped `task_lists` --
@@ -195,9 +213,24 @@ class TestAgendaWidgetDays:
         all_task_uids = {t["uid"] for day in data["days"] for t in day["tasks"]}
         assert all_task_uids == {"t1", "t2"}
 
-    def test_next_30_days_range(self, conn):
+    def test_next_30_days_range_is_flat_like_all_upcoming(self, conn):
+        # 2026-08-31 direct feedback: "next 30 days range css should look
+        # like all upcoming" -- it's flat/limit-capped/chronological now,
+        # not a 30-cell day grid.
+        today = date.today()
+        _seed_task(conn, "t_in", due_at=(today + timedelta(days=3)).isoformat())
+        _seed_task(conn, "t_out", due_at=(today + timedelta(days=40)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "next_30_days"})
-        assert len(data["days"]) == 30
+        assert data["mode"] == "flat"
+        assert "days" not in data
+        assert {t["uid"] for t in data["tasks"]} == {"t_in"}
+
+    def test_next_30_days_windows_events_for_recurrence(self, conn):
+        today = date.today()
+        _seed_recurring_event(conn, "recur", start_at=f"{(today - timedelta(days=30)).isoformat()}T09:00", recurrence="FREQ=WEEKLY")
+        data = dashboard_router._render_agenda(conn, {"range": "next_30_days", "show": ["events"]})
+        assert data["mode"] == "flat"
+        assert any(e["uid"] == "recur" for e in data["events"])
 
 
 class TestAgendaWidgetAllUpcoming:
@@ -209,12 +242,40 @@ class TestAgendaWidgetAllUpcoming:
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"]})
         assert [e["uid"] for e in data["events"]] == ["soon", "later"]
 
+    def test_todays_earlier_events_still_count_as_upcoming(self, conn):
+        # 2026-09-03 direct bug report ("the data is not put in the...
+        # Upcoming correctly") -- this branch used to compare the full
+        # start_at timestamp against datetime.now().isoformat(), so an
+        # event whose clock time on *today's own date* was earlier than
+        # the moment this renders got silently dropped, even though it's
+        # still today, not "past." Only a fully past *date* should be
+        # excluded -- an event a minute from now, and one already an hour
+        # ago earlier today, must both still show.
+        now = datetime.now(timezone.utc)
+        today_str = now.date().isoformat()
+        _seed_event(conn, "earlier_today", start_at=f"{today_str}T00:00:00")
+        _seed_event(conn, "yesterday", start_at=(now - timedelta(days=1)).isoformat())
+        _seed_event(conn, "soon", start_at=(now + timedelta(hours=1)).isoformat())
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"]})
+        assert {e["uid"] for e in data["events"]} == {"earlier_today", "soon"}
+
     def test_respects_limit(self, conn):
         now = datetime.now(timezone.utc)
         for i in range(5):
             _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 2})
         assert len(data["events"]) == 2
+
+    def test_limit_zero_means_unlimited(self, conn):
+        # 2026-08-31 direct feedback: "add a way to set the limit to 0
+        # (0 = unlimited)" -- `config.get("limit") or 10` used to collapse
+        # a stored 0 back into the 10-item default; must not slice at all
+        # once explicitly set to 0.
+        now = datetime.now(timezone.utc)
+        for i in range(15):
+            _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 0})
+        assert len(data["events"]) == 15
 
 
 class TestAgendaWidgetOverdueOnly:
@@ -260,8 +321,8 @@ class TestWidgetCRUD:
             source = dashboard_router.WIDGET_VIEWS[view]["source"]
             dashboard_router.add_widget(
                 source=source, view=view, range=range_ or "", title="", project_uid="", tags="",
-                task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show_overdue=False,
-                show_tasks=False, show_events=False, space_uid="", conn=conn,
+                task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show=[],
+                space_uid="", conn=conn,
             )
             w = db.list_dashboard_widgets(conn)[-1]
             assert w["type"] == expected_type
@@ -418,10 +479,20 @@ class TestWidgetWidthAutomatic:
     <select> in the widget builder form, a drag handle on each card, its
     own /resize endpoint) was fully removed per direct feedback: "auto-fit
     by content" -- each widget type gets a natural width from its own
-    default_width, no per-instance override. These are regression guards
-    against any of that quietly coming back, not tests of behavior that
-    still exists (see TestWidgetStacking above for the width-sharing
-    behavior that *does* still exist, for stacks)."""
+    default_width, no per-instance override. The Width-field half of that
+    removal was reversed 2026-08-30 (TestWidgetWidthManualOverride below,
+    after the automatic masonry layout kept producing an arrangement the
+    user didn't want even with a same-day best-fit packing pass) and
+    stuck. The drag-handle/`.../resize` half was ALSO reversed the same
+    day, direct follow-up ("i don't really like the settings width
+    settings and much rather would mouse resize them") -- and then
+    removed again just as quickly, a second direct follow-up that it
+    still didn't drag correctly even after a first fix attempt ("remove
+    it... the dashboard customise is fine"). So the drag-handle/endpoint
+    tests below are back to asserting absence, same as before either
+    reversal -- only the Width field itself survived. (Height's own
+    removal is the one part of the original 2026-08-07 change that was
+    never touched at all -- no per-widget height concept came back.)"""
 
     def _add(self, conn, view="agenda", range_="today", **extra):
         dashboard_router.add_widget(
@@ -433,68 +504,195 @@ class TestWidgetWidthAutomatic:
     def test_no_resize_endpoint_left_on_the_module(self):
         assert not hasattr(dashboard_router, "resize_widget")
 
-    def test_add_widget_form_has_no_width_param(self):
-        import inspect
-
-        params = inspect.signature(dashboard_router.add_widget).parameters
-        assert "width" not in params
-
-    def test_edit_widget_form_has_no_width_param(self):
-        import inspect
-
-        params = inspect.signature(dashboard_router.edit_widget).parameters
-        assert "width" not in params
-
     def test_created_widget_always_renders_at_its_types_default_width(self, conn):
         # calendar_tasks/agenda_view resolves to agenda, whose
         # default_width is "half" -- confirm that's what actually renders
-        # regardless of anything a stale/forged client might have sent.
+        # when nothing overrides it (the common case -- no width= in the
+        # form submission below, same as _add's default call shape).
         w = self._add(conn)
         assert w["type"] == "agenda"
         wc = dashboard_router._widget_context(conn, w)
         assert wc["width"]["key"] == "half"
 
-    def test_editing_a_widget_does_not_accept_a_width_override(self, conn):
-        w = self._add(conn)
-        dashboard_router.edit_widget(
-            w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
-        )
-        updated = db.get_dashboard_widget(conn, w["uid"])
-        assert "width" not in updated["config"]
-
-    def test_widget_types_default_width_is_the_only_source_of_truth(self, conn):
-        # Even if a stale config["width"] is sitting in a widget's config
-        # (e.g. from before this removal), it's never read any more --
-        # the type's own default_width always wins.
-        w = self._add(conn)
-        row = dict(db.get_dashboard_widget(conn, w["uid"]))
-        row["config"] = dict(row.get("config") or {})
-        row["config"]["width"] = "full"  # simulate a stale override
-        db.upsert_dashboard_widget(conn, row)
-        wc = dashboard_router._widget_context(conn, row)
-        assert wc["width"]["key"] == "half"  # today_agenda's own default, not "full"
-
     def test_widget_page_context_has_no_widget_widths(self, conn):
+        # The reinstated Width field (2026-08-30) hardcodes its own five
+        # radio options directly in the templates rather than looping over
+        # a context variable -- no "widget_widths" key was added to page
+        # context for it, so this still holds.
         self._add(conn)
         ctx = dashboard_router.widget_page_context(conn)
         assert "widget_widths" not in ctx
 
-    def test_builder_fields_partial_has_no_width_field(self, conn):
-        from starlette.requests import Request
-
-        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
-        body = resp.body.decode()
-        assert 'name="width"' not in body
-
     def test_edit_mode_renders_no_width_resize_handle(self, conn):
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
+        assert 'class="widget-resize-handle"' not in resp.body.decode()
+
+
+class TestWidgetWidthManualOverride:
+    """2026-08-30, direct request after the automatic masonry layout
+    (static/app.js) kept producing an arrangement the user didn't want,
+    even after a same-day best-fit packing pass: "can't we have a width
+    setting in edit mode (100%,75%,50%,25%), or maybe actually fix the
+    automatic one." Reverses the 2026-08-07 "no manual override" decision
+    above for width specifically -- see WIDGET_WIDTHS/_widget_width's own
+    comment in routers/dashboard.py. Grid also widened 6->12 virtual
+    columns the same day so 25%/75% land on exact column counts."""
+
+    def _add(self, conn, view="agenda", range_="today", **extra):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view=view, range=range_, title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn, **extra,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_add_widget_form_has_a_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.add_widget).parameters
+        assert "width" in params
+
+    def test_edit_widget_form_has_a_width_param(self):
+        import inspect
+
+        params = inspect.signature(dashboard_router.edit_widget).parameters
+        assert "width" in params
+
+    def test_add_widget_stores_a_real_width_choice(self, conn):
+        w = self._add(conn, width="three_quarters")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert stored["config"]["width"] == "three_quarters"
+
+    def test_add_widget_ignores_blank_width_auto(self, conn):
+        w = self._add(conn, width="")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in stored["config"]
+
+    def test_add_widget_rejects_a_width_not_in_the_four_offered_choices(self, conn):
+        # "third"/"two_thirds" are real WIDGET_WIDTHS keys (still used as
+        # type defaults) but not offered by the Width field itself --
+        # WIDGET_WIDTH_CHOICES is the four literally asked for
+        # (100%/75%/50%/25%), so a stale/forged submission of either
+        # doesn't get stored as if it were a legitimate manual choice.
+        w = self._add(conn, width="third")
+        stored = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in stored["config"]
+
+    def test_manual_width_wins_over_the_types_default(self, conn):
+        w = self._add(conn, width="quarter")
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["width"]["key"] == "quarter"
+        assert wc["width"]["span"] == 3
+
+    def test_editing_a_widget_can_set_a_width_override(self, conn):
+        w = self._add(conn)
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="",
+            width="full", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert updated["config"]["width"] == "full"
+        wc = dashboard_router._widget_context(conn, updated)
+        assert wc["width"]["key"] == "full"
+        assert wc["width"]["span"] == 12
+
+    def test_editing_a_widget_back_to_auto_clears_the_override(self, conn):
+        w = self._add(conn, width="full")
+        dashboard_router.edit_widget(
+            w["uid"], source="calendar_tasks", view="agenda", range="today", title="",
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="",
+            width="", conn=conn,
+        )
+        updated = db.get_dashboard_widget(conn, w["uid"])
+        assert "width" not in updated["config"]
+        wc = dashboard_router._widget_context(conn, updated)
+        assert wc["width"]["key"] == "half"  # agenda's own default_width, back in charge
+
+    def test_builder_fields_partial_has_a_width_field(self, conn):
+        # The Add-widget form only renders inside the Customize modal
+        # (GET /dashboard/customize), not inline on the dashboard itself
+        # (2026-08-08 -- "New widget" opens the modal instead), so this
+        # has to hit that route rather than dashboard_view.
+        from starlette.requests import Request
+
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        req = Request({"type": "http", "method": "GET", "path": "/dashboard/customize", "headers": []})
+        resp = dashboard_router.dashboard_customize(req, conn=conn)
         body = resp.body.decode()
-        assert "widget-resize-handle" not in body
+        assert 'name="width"' in body
+        assert 'value="quarter"' in body
+        assert 'value="three_quarters"' in body
+
+    def test_widget_widths_span_out_of_twelve(self):
+        # 2026-08-30: grid widened 6 -> 12 columns so 25%/75% land exactly
+        # (6 has no integer quarter). Every pre-existing span doubled;
+        # real-world proportions unchanged (2/6 == 4/12, 3/6 == 6/12, ...).
+        assert dashboard_router.WIDGET_WIDTHS["quarter"]["span"] == 3
+        assert dashboard_router.WIDGET_WIDTHS["third"]["span"] == 4
+        assert dashboard_router.WIDGET_WIDTHS["half"]["span"] == 6
+        assert dashboard_router.WIDGET_WIDTHS["two_thirds"]["span"] == 8
+        assert dashboard_router.WIDGET_WIDTHS["three_quarters"]["span"] == 9
+        assert dashboard_router.WIDGET_WIDTHS["full"]["span"] == 12
+
+    def test_width_choices_are_exactly_the_four_percentages_asked_for(self):
+        assert set(dashboard_router.WIDGET_WIDTH_CHOICES) == {"quarter", "half", "three_quarters", "full"}
+
+    def test_stack_own_width_unaffected_by_the_choices_restriction(self, conn):
+        # A stack (spec=None) still reads its own raw config["width"]
+        # directly, any WIDGET_WIDTHS key -- WIDGET_WIDTH_CHOICES only
+        # gates what a *type-having* widget's manual override can be, per
+        # _widget_width's own branch order.
+        stack = {"type": "stack", "config": {"width": "two_thirds"}}
+        wc_width = dashboard_router._widget_width(stack, None)
+        assert wc_width["key"] == "two_thirds"
+        assert wc_width["span"] == 8
+
+
+class TestWidgetCardRegionEditMode:
+    """2026-08-30 bug fix, direct report ("saving a widget... not seeing
+    the change only after a hard refresh"). Root cause: widget_card_region
+    (GET /dashboard/widgets/{uid}, the async-CRUD single-widget region
+    fragment) hardcoded edit_mode=False, and dashboard_widget_preview.js's
+    Filters autosave never called it at all -- so an edited widget's own
+    card behind the modal never updated live. Two independent fixes,
+    tested here from the Python side (the JS side -- autosave calling
+    refreshRegion -- has no test coverage in this suite, same "no browser
+    in this test environment" ceiling every other JS-behavior change in
+    this session accepted)."""
+
+    def _add(self, conn):
+        dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
+        )
+        return db.list_dashboard_widgets(conn)[-1]
+
+    def test_region_reflects_current_edit_mode_on(self, conn):
+        w = self._add(conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": f"/dashboard/widgets/{w['uid']}", "headers": []})
+        resp = dashboard_router.widget_card_region(req, w["uid"], conn=conn)
+        body = resp.body.decode()
+        # Edit-mode-only chrome (the Filters/Edit link, the drag handle,
+        # the delete form) should all be present -- confirms this isn't
+        # silently rendering as if edit mode were off.
+        assert "widget-drag-handle" in body
+
+    def test_region_reflects_current_edit_mode_off(self, conn):
+        w = self._add(conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": f"/dashboard/widgets/{w['uid']}", "headers": []})
+        resp = dashboard_router.widget_card_region(req, w["uid"], conn=conn)
+        body = resp.body.decode()
+        assert "widget-drag-handle" not in body
 
 
 class TestWidgetStacking:
@@ -721,8 +919,9 @@ class TestDashboardRoute:
         # above wouldn't have caught a syntax error in that branch.
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         assert resp.status_code == 200
         assert b"Add widget" in resp.body
 
@@ -734,8 +933,9 @@ class TestDashboardRoute:
         # capping instead.
         from starlette.requests import Request
 
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-        resp = dashboard_router.dashboard_view(req, edit=True, conn=conn)
+        resp = dashboard_router.dashboard_view(req, conn=conn)
         body = resp.body.decode()
         assert "widget-resize-handle-vertical" not in body
         assert "data-height-key" not in body
@@ -768,14 +968,14 @@ class TestSpaceWidgets:
     def test_add_widget_redirects_back_to_the_space_page(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", edit=False, conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
         )
-        assert resp.headers["location"] == "/labels/space1"
+        assert resp.headers["location"] == "/settings/labels/space1"
 
     def test_add_widget_with_no_space_uid_redirects_home(self, conn):
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
-            task_list_uids=[], calendar_uids=[], limit="", space_uid="", edit=False, conn=conn,
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn,
         )
         assert resp.headers["location"] == "/"
 
@@ -791,18 +991,29 @@ class TestSpaceWidgets:
         w = self._add(conn, "Original", space_uid="space1")
         resp = dashboard_router.edit_widget(
             w["uid"], source="calendar_tasks", view="agenda", range="today", title="Renamed",
-            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", edit=False, conn=conn,
+            project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", conn=conn,
         )
         updated = db.get_dashboard_widget(conn, w["uid"])
         assert updated["title"] == "Renamed"
         assert updated["config"]["label_name"] == "space1"  # not clobbered by the edit form
-        assert resp.headers["location"] == "/labels/space1"
+        assert resp.headers["location"] == "/settings/labels/space1"
 
     def test_delete_widget_redirects_to_its_own_space(self, conn):
         w = self._add(conn, "A", space_uid="space1")
-        resp = dashboard_router.delete_widget(w["uid"], edit=False, conn=conn)
-        assert resp.headers["location"] == "/labels/space1"
+        resp = dashboard_router.delete_widget(w["uid"], conn=conn)
+        assert resp.headers["location"] == "/settings/labels/space1"
         assert db.get_dashboard_widget(conn, w["uid"]) is None
+
+    def test_add_widget_redirects_straight_to_spaces_for_a_real_space(self, conn):
+        """2026-08-28 fix: when the label actually has generate_space=1,
+        the redirect should go straight to /spaces/{name} rather than
+        bouncing through /settings/labels/{name}'s own 301."""
+        db.upsert_label_config(conn, {"name": "space1", "generate_space": 1, "created_at": "2026-01-01"})
+        resp = dashboard_router.add_widget(
+            source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
+        )
+        assert resp.headers["location"] == "/spaces/space1"
 
     def test_reorder_does_not_mix_widgets_from_different_pages(self, conn):
         home_a = self._add(conn, "Home A")
@@ -869,6 +1080,14 @@ class TestContactListWidget:
             self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 3})
         assert len(data["contacts"]) == 3
+
+    def test_limit_zero_means_unlimited(self, conn):
+        # 2026-08-31 direct feedback: "add a way to set the limit to 0
+        # (0 = unlimited)".
+        for i in range(25):
+            self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
+        data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 0})
+        assert len(data["contacts"]) == 25
 
     def test_registered_in_widget_types(self, conn):
         assert "contact_list" in dashboard_router.WIDGET_TYPES
@@ -1022,7 +1241,7 @@ class TestSpacesProjectsScope:
         dashboard_router.add_widget(
             source="spaces_projects", view="spaces_projects_view", range="", title="", project_uid="",
             tags="", task_list_uids=[], calendar_uids=[], limit="", style="cards", scope="everything",
-            show_overdue=False, show_tasks=False, show_events=False, space_uid="Uni", conn=conn,
+            show=[], space_uid="Uni", conn=conn,
         )
         w = db.list_dashboard_widgets(conn, space_uid="Uni")[0]
         assert w["type"] == "spaces_projects"
@@ -1030,115 +1249,217 @@ class TestSpacesProjectsScope:
         assert w["config"]["style"] == "cards"
 
 
-class TestOrganizeTodayWidget:
-    """2026-08-15, widget consolidation expanded scope: "what needs
-    organizing today" -- decisions to make, not things already scheduled."""
+class TestSpacesProjectsCardsIncludesProjects:
+    """2026-08-30, direct request ("merge the quick links and spaces &
+    projects into one data source") -- an unscoped "cards" style instance
+    now includes every open project alongside every Space, the same
+    "every Space + every open project" set the retired Quick Links widget
+    used to render on its own (see TestNextDeadlineOrganizeTodayStreakRemoved
+    for the removal side of the same session)."""
 
-    def test_unallocated_task_due_soon_is_listed(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
-        assert data["urgent"] == []
+    def test_unscoped_cards_includes_spaces_and_open_projects(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        names = {c["name"]: c["meta"] for c in data["cards"]}
+        assert names["Uni"] == "0 projects"
+        assert names["CS101"] == "Project"
 
-    def test_task_due_soon_but_already_fully_scheduled_is_excluded(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
-        db.create_work_allocation(conn, "t1", start_at=f"{today.isoformat()}T09:00:00", end_at=f"{today.isoformat()}T10:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
+    def test_archived_projects_excluded(self, conn):
+        db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "archived_at": _now(), "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        assert "Old" not in {c["name"] for c in data["cards"]}
 
-    def test_task_due_soon_with_only_an_undated_session_is_still_listed(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=1)).isoformat())
-        db.create_work_allocation(conn, "t1")  # undated placeholder
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
+    def test_project_card_uses_label_icon_and_folder_fallback(self, conn):
+        db.upsert_label_config(conn, {"name": "NoIcon", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Iconed", "is_project": 1, "icon": "rocket", "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        by_name = {c["name"]: c for c in data["cards"]}
+        assert by_name["NoIcon"]["icon"] == "folder"
+        assert by_name["Iconed"]["icon"] == "rocket"
+        assert by_name["NoIcon"]["href"] == "/projects/NoIcon"
 
-    def test_task_due_beyond_the_horizon_is_excluded(self, conn):
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
-        assert data["urgent"] == []
+    def test_scope_everything_also_includes_projects(self, conn):
+        # scope=="everything" opts a Space/Project page's own widget
+        # instance out of its page auto-scope, rendering the same as an
+        # unscoped Home instance -- that includes this merge too, not just
+        # the Space-only behavior scope=="everything" had before.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything", "style": "cards"})
+        assert {c["name"] for c in data["cards"]} == {"Uni", "CS101"}
 
-    def test_label_urgent_unallocated_task_beyond_the_due_soon_horizon_is_listed(self, conn):
-        # A label's urgency_threshold_days can make a task Urgency=3 well
-        # beyond the 3-day due-soon horizon (effective_urgency = max(label-
-        # derived, temporal); label-derived only needs a due date within
-        # the label's own window, not the widget's 3-day one).
-        db.upsert_label_config(conn, {"name": "Conference", "created_at": _now(), "urgency_threshold_days": 30})
-        today = date.today()
-        _seed_task(conn, "t1", due_at=(today + timedelta(days=10)).isoformat(), tags=["Conference"])
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["due_soon"] == []
-        assert [item["task"]["uid"] for item in data["urgent"]] == ["t1"]
+    def test_scoped_instance_does_not_double_up_projects(self, conn):
+        # label_name set (a Space/Project page) -- `labels` already comes
+        # from list_child_labels, which pools projects in directly. The
+        # unscoped-only merge branch must not also run here, or a Space's
+        # own child project would render twice.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "is_project": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "style": "cards"})
+        names = [c["name"] for c in data["cards"]]
+        assert names.count("CS101") == 1
 
-    def test_task_already_in_due_soon_is_not_duplicated_in_urgent(self, conn):
-        # Overdue/due-today is itself URGENCY_HIGH (temporal component) --
-        # a due-soon task that's also urgent must only appear once.
-        today = date.today()
-        _seed_task(conn, "t1", due_at=today.isoformat())
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [item["task"]["uid"] for item in data["due_soon"]] == ["t1"]
-        assert data["urgent"] == []
+    def test_empty_state_mentions_both_spaces_and_projects(self, conn):
+        import pathlib
 
-    def test_event_with_no_location_or_url_is_unclear(self, conn):
-        today = date.today()
-        _seed_event(conn, "e1", start_at=f"{today.isoformat()}T09:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert [e["uid"] for e in data["unclear_format"]] == ["e1"]
+        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
+        text = (templates / "_widget_spaces_projects.html").read_text()
+        assert "No Spaces or projects yet" in text
 
-    def test_event_with_a_location_is_not_unclear(self, conn):
-        today = date.today()
-        db.upsert_event(conn, {
-            "uid": "e1", "title": "e1", "description": "", "status": "active", "all_day": 0,
-            "start_at": f"{today.isoformat()}T09:00:00", "location": "Room 101",
-            "tags": [], "created_at": _now(),
+
+class TestWidgetRemovalMigration:
+    """2026-08-30 -- _migrate_widget_removal_2026_08_30, the one-time
+    migration for the same session's quick_links merge + next_deadline/
+    organize_today/streak removal, so an existing dashboard doesn't lose a
+    widget (or end up with a dead "Unknown widget type" card) just because
+    this version is running."""
+
+    def _seed_row(self, conn, uid, wtype, config=None, group_uid=None):
+        db.upsert_dashboard_widget(conn, {
+            "uid": uid, "type": wtype, "title": None, "config": config or {},
+            "position": 1, "created_at": _now(), "group_uid": group_uid,
         })
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["unclear_format"] == []
 
-    def test_event_beyond_tomorrow_is_excluded(self, conn):
-        today = date.today()
-        _seed_event(conn, "e1", start_at=f"{(today + timedelta(days=2)).isoformat()}T09:00:00")
-        data = dashboard_router._render_organize_today(conn, {})
-        assert data["unclear_format"] == []
+    def test_quick_links_becomes_spaces_projects_cards(self, conn):
+        self._seed_row(conn, "w1", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w = db.get_dashboard_widget(conn, "w1")
+        assert w["type"] == "spaces_projects"
+        assert w["config"]["style"] == "cards"
 
-    def test_registered_in_widget_types_and_selection_tables(self, conn):
-        assert "organize_today" in dashboard_router.WIDGET_TYPES
-        assert ("organize_today_view", None) in dashboard_router._SELECTION_TO_TYPE
-        assert ("organize_today", None) in dashboard_router._TYPE_TO_SELECTION
+    def test_quick_links_migration_preserves_other_config(self, conn):
+        self._seed_row(conn, "w1", "quick_links", config={"tags": ["Uni"]})
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w = db.get_dashboard_widget(conn, "w1")
+        assert w["config"]["tags"] == ["Uni"]
+        assert w["config"]["style"] == "cards"
+
+    def test_next_deadline_organize_today_streak_deleted(self, conn):
+        self._seed_row(conn, "w1", "next_deadline")
+        self._seed_row(conn, "w2", "organize_today")
+        self._seed_row(conn, "w3", "streak")
+        self._seed_row(conn, "w4", "agenda")  # untouched control
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        remaining = {w["uid"] for w in db.list_all_dashboard_widgets(conn)}
+        assert remaining == {"w4"}
+
+    def test_runs_exactly_once(self, conn):
+        self._seed_row(conn, "w1", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        # Simulate a user re-adding a fresh quick_links row after the
+        # migration already ran once (shouldn't happen in practice since
+        # the type is gone from the builder, but the guard itself -- "ran
+        # once, never touches new rows again" -- is what's under test).
+        self._seed_row(conn, "w2", "quick_links")
+        dashboard_router._migrate_widget_removal_2026_08_30(conn)
+        w2 = db.get_dashboard_widget(conn, "w2")
+        assert w2["type"] == "quick_links"  # untouched -- guard already tripped
+
+    def test_wired_into_widget_page_context(self, conn):
+        self._seed_row(conn, "w1", "next_deadline")
+        dashboard_router.widget_page_context(conn)
+        assert db.get_dashboard_widget(conn, "w1") is None
+
+
+class TestBareTileWidgets:
+    """2026-08-30, direct feedback ("i like the quick links grid but i'd
+    like to not have them inside a div card") -- Spaces & Projects' own
+    "cards" style renders .filled-cards-grid tiles, so a widget instance
+    using that style opts its .card wrapper out of the chrome (border/
+    shadow/background/padding -- see .widget-card--bare, static/style.css)
+    via _widget_context's own "bare" key. Spaces & Projects' "list" style
+    keeps its normal card chrome -- only the tile grid was the redundant-
+    double-frame complaint. (The standalone "quick_links" widget type this
+    originally also covered was retired the same day, merged into this
+    "cards" style -- see TestSpacesProjectsCardsIncludesProjects.)"""
+
+    def _widget(self, conn, wtype, config=None):
+        w = {
+            "uid": f"w-{wtype}-{(config or {}).get('style', 'x')}", "type": wtype, "title": None,
+            "config": config or {}, "position": 1, "created_at": _now(),
+        }
+        db.upsert_dashboard_widget(conn, w)
+        return w
+
+    def test_spaces_projects_cards_style_is_bare(self, conn):
+        w = self._widget(conn, "spaces_projects", {"style": "cards"})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is True
+
+    def test_spaces_projects_list_style_keeps_card_chrome(self, conn):
+        w = self._widget(conn, "spaces_projects", {"style": "list"})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_spaces_projects_default_style_keeps_card_chrome(self, conn):
+        # style absent -- _render_spaces_projects defaults to "list", the
+        # bare check has to agree with that same default rather than
+        # reading config.get("style") == "cards" in isolation and getting
+        # it right only when the key happens to be present.
+        w = self._widget(conn, "spaces_projects", {})
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_other_widget_types_are_not_bare(self, conn):
+        w = self._widget(conn, "at_a_glance")
+        wc = dashboard_router._widget_context(conn, w)
+        assert wc["bare"] is False
+
+    def test_bare_class_rendered_on_dashboard(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "0")
+        self._widget(conn, "spaces_projects", {"style": "cards"})
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        resp = dashboard_router.dashboard_view(req, conn=conn)
+        body = resp.body.decode()
+        assert "widget-card--bare" in body
+
+
+class TestNextDeadlineOrganizeTodayStreakRemoved:
+    """2026-08-30, direct request ("maybe just remove the next deadline,
+    what needs organizing and streak widgets - not really that useful")
+    -- these three 2026-08-15 widget-consolidation types are gone
+    outright, no replacement type. See TestWidgetRemovalMigration below
+    for how an existing dashboard carrying one of these rows is cleaned
+    up."""
+
+    def test_render_functions_are_gone(self):
+        assert not hasattr(dashboard_router, "_render_next_deadline")
+        assert not hasattr(dashboard_router, "_render_organize_today")
+        assert not hasattr(dashboard_router, "_render_streak")
+
+    def test_types_are_gone_from_every_registry(self):
+        for wtype in ("next_deadline", "organize_today", "streak"):
+            assert wtype not in dashboard_router.WIDGET_TYPES
+            assert not any(
+                cfg_type == wtype for cfg_type, _ in dashboard_router._SELECTION_TO_TYPE.values()
+            )
+            assert not any(key[0] == wtype for key in dashboard_router._TYPE_TO_SELECTION)
+
+    def test_views_are_gone(self):
+        for view in ("next_deadline_view", "organize_today_view", "streak_view"):
+            assert view not in dashboard_router.WIDGET_VIEWS
+            assert (view, None) not in dashboard_router._SELECTION_TO_TYPE
+
+    def test_templates_are_deleted(self):
+        import pathlib
+
+        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
+        for name in ("_widget_next_deadline.html", "_widget_organize_today.html", "_widget_streak.html"):
+            assert not (templates / name).exists()
 
 
 class TestLimitFieldExposedForMoreViews:
     """2026-08-15, widget consolidation expanded scope ("widgets should be
-    more customizable"): contact_list/important_urgent's own render
-    functions already read config['limit'] -- the builder just never
-    offered a way to set it. Verified via _resolve_selection + the stored
-    config, not the JS (no browser in this test environment)."""
-
-    def test_important_urgent_view_has_limit_flag(self):
-        assert dashboard_router.WIDGET_VIEWS["important_urgent_view"]["has_limit"] is True
+    more customizable"): contact_list's own render function already reads
+    config['limit'] -- the builder just never offered a way to set it.
+    Verified via _resolve_selection + the stored config, not the JS (no
+    browser in this test environment)."""
 
     def test_contact_list_view_has_limit_flag(self):
         assert dashboard_router.WIDGET_VIEWS["contact_list_view"]["has_limit"] is True
-
-    def test_add_widget_with_limit_on_important_urgent(self, conn):
-        dashboard_router.add_widget(
-            source="calendar_tasks", view="important_urgent_view", range="", title="", project_uid="",
-            tags="", task_list_uids=[], calendar_uids=[], limit="3", style="", scope="",
-            show_overdue=False, show_tasks=False, show_events=False, space_uid="", conn=conn,
-        )
-        w = db.list_dashboard_widgets(conn)[0]
-        assert w["config"]["limit"] == 3
-
-    def test_important_urgent_render_respects_the_stored_limit(self, conn):
-        db.upsert_label_config(conn, {"name": "Important", "created_at": _now(), "importance": 3})
-        for i in range(5):
-            _seed_task(conn, f"t{i}", tags=["Important"])
-        data = dashboard_router._render_important_urgent(conn, {"limit": 2})
-        assert len(data["rows"]) == 2
 
 
 class TestIsLongLivedRecurrence:
@@ -1231,3 +1552,25 @@ class TestWeeklyScheduleWidget:
         assert "weekly_schedule" in dashboard_router.WIDGET_TYPES
         assert ("weekly_schedule_view", None) in dashboard_router._SELECTION_TO_TYPE
         assert ("weekly_schedule", None) in dashboard_router._TYPE_TO_SELECTION
+
+    def test_all_day_recurring_event_is_excluded_not_crashed(self, conn):
+        # 2026-08-30 bug fix: db.sync_contact_birthday_event writes an
+        # all_day=True, FREQ=YEARLY event with a bare "1900-MM-DD"
+        # start_at (no "THH:MM" time portion) for every contact with a
+        # birthday -- automatic, not something a user has to construct by
+        # hand. Before the fix, this crashed _minutes_of_day's fixed-
+        # offset slice (ValueError: invalid literal for int() with base
+        # 10: '') for any dashboard with a Weekly Schedule widget whose
+        # label matched a birthday'd contact, taking down GET / entirely.
+        # An all-day event has no time-of-day to place on this grid
+        # anyway (same exclusion grid_layout.layout_day already applies),
+        # so it should just be skipped, not crash the widget.
+        db.upsert_event(conn, {
+            "uid": "birthday-1", "title": "Jordan's Birthday",
+            "description": "", "status": "active", "all_day": 1,
+            "start_at": "1900-06-15", "end_at": None, "recurrence": "FREQ=YEARLY",
+            "tags": [], "created_at": _now(),
+        })
+        data = dashboard_router._render_weekly_schedule(conn, {})
+        assert data["days"] == []
+        assert data["agenda_rows"] == []

@@ -9,7 +9,10 @@
      (label-space rework, 2026-08-07). Contacts field parity slice 2 of 6:
      `email`/`phone` are now multi-value lists (`emails`/`phones`) -- this
      widget, like contacts_list.html's row subtitle, shows only the first
-     (lowest-position) entry of each, same "concise, one line" convention. -->
+     (lowest-position) entry of each, same "concise, one line" convention.
+     The empty state renders through the shared widget_empty macro
+     (_widget_items.html). -->
+{% from "_widget_items.html" import widget_empty %}
 {% if data.contacts %}
 <div class="contact-list-widget">
     {% for c in data.contacts %}
@@ -22,5 +25,5 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">No contacts match this filter.</div>
+{{ widget_empty('No contacts match this filter.') }}
 {% endif %}

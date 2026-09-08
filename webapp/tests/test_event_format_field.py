@@ -9,6 +9,16 @@ show/hide is plain CSS (style.css's `#event-form:has(...)` rules); the
 value-clearing-on-switch behavior lives in static/event_format_toggle.js
 and is covered structurally alongside sw.js's precache list in
 test_pwa_shell.py's convention, plus a source-shape check here.
+
+2026-09-03 direct feedback (Format toggle read as "cramped between icons
+and text... no clear 'not one of these' state"): the control is now built
+on the app's existing tile/card picker pattern (.tile-select/.tile-option)
+instead of the cramped .segmented/.seg-btn pill row, and "neither picked"
+is now a real, explicitly-selectable third radio (`event_format_none`)
+rather than just both other radios sitting unchecked. The original two
+ids/wrapper class are unchanged so the pre-existing tests below (written
+against `.segmented`/`.seg-btn`-era markup, but only ever asserting id
+strings and `checked`/not-`checked`, never the class names) still hold.
 """
 
 from __future__ import annotations
@@ -136,6 +146,39 @@ class TestFormatFieldMarkup:
         body = resp.body.decode()
         assert 'id="event_format_in_person"' in body
         assert 'id="event_format_online"' in body
+
+
+class TestFormatFieldNoneOption:
+    """2026-09-03: "neither picked" is now a real third radio,
+    `event_format_none`, rather than an implicit state -- checked whenever
+    neither Location nor Meeting URL has a value."""
+
+    def _none_tag(self, body: str) -> str:
+        return body.split('id="event_format_none"')[1].split(">")[0]
+
+    def test_new_event_form_checks_none(self, conn):
+        resp = calendar_router.new_event_form(_request("/events/new"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="event_format_none"' in body
+        assert "checked" in self._none_tag(body)
+
+    def test_edit_form_with_neither_set_checks_none(self, conn):
+        _seed_event(conn, "e3")
+        resp = calendar_router.edit_event_form("e3", _request("/events/e3/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "checked" in self._none_tag(body)
+
+    def test_edit_form_with_location_set_does_not_check_none(self, conn):
+        _seed_event(conn, "e1", location="Room 204")
+        resp = calendar_router.edit_event_form("e1", _request("/events/e1/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "checked" not in self._none_tag(body)
+
+    def test_edit_form_with_meeting_set_does_not_check_none(self, conn):
+        _seed_event(conn, "e2", meeting_url="https://meet.example.com/abc123")
+        resp = calendar_router.edit_event_form("e2", _request("/events/e2/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "checked" not in self._none_tag(body)
 
 
 class TestFormatFieldDoesNotChangeSavePath:

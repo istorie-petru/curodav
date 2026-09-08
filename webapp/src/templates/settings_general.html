@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block title %}General - Settings{% endblock %}
 {% block content %}
-{% include "_settings_breadcrumb.html" with context %}
-<h1>General</h1>
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("General", "user") }}
+
+{% if request.query_params.get('note') %}
+<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
+{% endif %}
 
 <div class="card">
     <!-- Profile picture (2026-08-09, routers/settings.py) -- the user's
@@ -25,7 +32,13 @@
         <div class="profile-photo-controls">
             <form method="post" action="/settings/profile-photo" enctype="multipart/form-data" data-autosubmit>
                 <div class="avatar-upload" title="Change photo">
-                    {{ avatar({'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
+                    {# 2026-08-29 (direct request: "better cache these images") --
+                       photo_url (a real, ?v=-versioned request, see
+                       routers/settings.py's profile_photo_image) is what
+                       avatar() actually renders when present, instead of
+                       inlining photo_b64 as a data: URI -- see deps.py's
+                       avatar() own comment. #}
+                    {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
                     <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
                     <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change profile picture">
                 </div>
@@ -42,7 +55,7 @@
             <span class="settings-field-hint">Used in Home's greeting ("Good evening, {name}")</span>
         </span>
         <span class="spacer"></span>
-        <input type="text" name="display_name" value="{{ display_name }}" placeholder="(not set)" onchange="this.form.requestSubmit()">
+        <input type="text" name="display_name" value="{{ display_name }}" placeholder="(not set)" data-change-submit>
     </form>
     <!-- Week starts on (2026-08-08) -- affects Calendar's Month/Week
          views (routers/calendar.py). Radio-backed segmented control
@@ -56,8 +69,8 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
-            <label class="seg-btn"><input type="radio" name="week_start" value="monday" class="seg-radio" {% if current_week_start == 'monday' %}checked{% endif %} onchange="this.form.requestSubmit()"> Monday</label>
-            <label class="seg-btn"><input type="radio" name="week_start" value="sunday" class="seg-radio" {% if current_week_start == 'sunday' %}checked{% endif %} onchange="this.form.requestSubmit()"> Sunday</label>
+            <label class="seg-btn"><input type="radio" name="week_start" value="monday" class="seg-radio" {% if current_week_start == 'monday' %}checked{% endif %} data-change-submit> Monday</label>
+            <label class="seg-btn"><input type="radio" name="week_start" value="sunday" class="seg-radio" {% if current_week_start == 'sunday' %}checked{% endif %} data-change-submit> Sunday</label>
         </div>
     </form>
     <!-- 4-Week view: current week (2026-08-11) -- which of the four rows
@@ -73,10 +86,10 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="4-Week view current week row">
-            <label class="seg-btn"><input type="radio" name="position" value="1" class="seg-radio" {% if current_four_week_position == 1 %}checked{% endif %} onchange="this.form.requestSubmit()"> First</label>
-            <label class="seg-btn"><input type="radio" name="position" value="2" class="seg-radio" {% if current_four_week_position == 2 %}checked{% endif %} onchange="this.form.requestSubmit()"> Second</label>
-            <label class="seg-btn"><input type="radio" name="position" value="3" class="seg-radio" {% if current_four_week_position == 3 %}checked{% endif %} onchange="this.form.requestSubmit()"> Third</label>
-            <label class="seg-btn"><input type="radio" name="position" value="4" class="seg-radio" {% if current_four_week_position == 4 %}checked{% endif %} onchange="this.form.requestSubmit()"> Fourth</label>
+            <label class="seg-btn"><input type="radio" name="position" value="1" class="seg-radio" {% if current_four_week_position == 1 %}checked{% endif %} data-change-submit> First</label>
+            <label class="seg-btn"><input type="radio" name="position" value="2" class="seg-radio" {% if current_four_week_position == 2 %}checked{% endif %} data-change-submit> Second</label>
+            <label class="seg-btn"><input type="radio" name="position" value="3" class="seg-radio" {% if current_four_week_position == 3 %}checked{% endif %} data-change-submit> Third</label>
+            <label class="seg-btn"><input type="radio" name="position" value="4" class="seg-radio" {% if current_four_week_position == 4 %}checked{% endif %} data-change-submit> Fourth</label>
         </div>
     </form>
     <!-- Recurrence terminology (1.6, "Configurable terminology") -- which
@@ -91,8 +104,23 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="Recurrence terminology">
-            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_recurrence_terminology == 'standard' %}checked{% endif %} onchange="this.form.requestSubmit()"> Standard</label>
-            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_recurrence_terminology == 'playful' %}checked{% endif %} onchange="this.form.requestSubmit()"> Playful</label>
+            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_recurrence_terminology == 'standard' %}checked{% endif %} data-change-submit> Standard</label>
+            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_recurrence_terminology == 'playful' %}checked{% endif %} data-change-submit> Playful</label>
+        </div>
+    </form>
+    <!-- Habit streak terminology (2026-08-28, direct feedback) -- which
+         wording the Habits group's streak readout uses (Tasks table,
+         _habit_row.html via deps.py's habit_streak_text() global). Same
+         presentation-layer-only autosubmit segmented pattern as Recurrence
+         terminology above. -->
+    <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology">
+        <span class="settings-field-label">Habit streak terminology
+            <span class="settings-field-hint">Wording for the Habits group's streak readout</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Habit streak terminology">
+            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_habit_streak_terminology == 'standard' %}checked{% endif %} data-change-submit> Standard</label>
+            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_habit_streak_terminology == 'playful' %}checked{% endif %} data-change-submit> Playful</label>
         </div>
     </form>
     <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
@@ -105,9 +133,114 @@
         </span>
         <span class="spacer"></span>
         <div class="segmented" role="radiogroup" aria-label="Time format">
-            <label class="seg-btn"><input type="radio" name="time_format" value="24h" class="seg-radio" {% if current_time_format == '24h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 24-hour</label>
-            <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} onchange="this.form.requestSubmit()"> 12-hour</label>
+            <label class="seg-btn"><input type="radio" name="time_format" value="24h" class="seg-radio" {% if current_time_format == '24h' %}checked{% endif %} data-change-submit> 24-hour</label>
+            <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} data-change-submit> 12-hour</label>
         </div>
     </form>
+    <!-- Hide sleep hours in Planner (2026-09-09, direct request) -- Week
+         view's hour grid collapses whatever Sleep-kind window Settings >
+         Sleep & Leisure Time has configured, instead of just hatching it
+         (routers/calendar.py's _sleep_collapse_window/_week_view_context).
+         Off by default, same autosubmit On/Off segmented pattern as every
+         other boolean preference on this page. Day view is unaffected
+         regardless of this setting (direct decision, confirmed via
+         AskUserQuestion) -- the hint below says so up front rather than
+         letting someone discover it by checking Day and finding nothing
+         changed. -->
+    <form class="settings-field-row" method="post" action="/settings/hide-sleep-hours">
+        <span class="settings-field-label">Hide sleep hours in Planner
+            <span class="settings-field-hint">Removes the Sleep time block's hours from the Week grid entirely, instead of just highlighting them. Requires one consistent Sleep window in <a href="/settings/time-blocks">Sleep &amp; Leisure Time</a> -- Day view is unaffected.</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Hide sleep hours in Planner">
+            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_hide_sleep_hours %}checked{% endif %} data-change-submit> On</label>
+            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_hide_sleep_hours %}checked{% endif %} data-change-submit> Off</label>
+        </div>
+    </form>
+    <!-- Calendar views setting removed 2026-08-29 (STATE.md backlog item 5,
+         direct request) -- the Month/Day switcher's visibility toggle added
+         2026-08-28 is gone; both views are unconditionally available now,
+         same as before that setting existed. -->
+</div>
+
+<!-- Account (2026-09-08 -- replaces the old separate "Login & security"
+     card and Data & Maintenance's "CalDAV / Radicale sync" credentials,
+     direct request: "merge the concept of radicale username to the app
+     username, and merge the app password with the radicale password").
+     One username/password governs both the app's own login and the
+     Radicale connection; routers/settings.py::account_settings' own
+     docstring covers where each is actually stored (env file vs
+     app_meta) and why. `env_managed` here mirrors that route's own
+     "either half being env-configured puts the whole account there"
+     rule. -->
+{% set env_managed = auth_is_env or radicale_env_configured %}
+<div class="settings-group">
+    <div class="card">
+        {% if env_managed and not env_file_available %}
+        <p class="settings-hint">Login/Radicale are set via environment variables (<code>CC_AUTH_USERNAME</code>/<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change them.</p>
+        {% else %}
+        <p class="settings-hint">
+            {% if has_account %}Signed in as <strong>{{ account_username }}</strong> -- this is also your Radicale username. Enter your current password to make changes.
+            {% else %}No account set up yet. Choose a username and password -- used for both signing in and syncing to Radicale.{% endif %}
+            {% if env_managed %}Saved to <code>curodav.env</code> -- click "Restart app" below to apply.{% endif %}
+        </p>
+        <form method="post" action="/settings/account">
+            <div class="settings-field-row">
+                <span class="settings-field-label">Username</span>
+                <span class="spacer"></span>
+                <input type="text" name="username" value="{{ account_username }}" autocomplete="off" class="field-narrow">
+            </div>
+            {% if has_account %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">Current password</span>
+                <span class="spacer"></span>
+                <input type="password" name="current_password" autocomplete="off" class="field-narrow">
+            </div>
+            {% endif %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">New password
+                    <span class="settings-field-hint">{% if has_account %}Leave blank to keep your current password{% else %}At least 8 characters{% endif %}</span>
+                </span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Repeat new password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password_confirm" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Radicale server URL
+                    <span class="settings-field-hint">Optional -- for syncing tasks/events/contacts to a Radicale server</span>
+                </span>
+                <span class="spacer"></span>
+                <input type="text" name="radicale_url" value="{{ radicale_url }}" placeholder="http://127.0.0.1:5232/you/" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="spacer"></span>
+                <button type="submit" class="btn tonal">{{ icon('check-circle', 'icon-sm') }} {{ 'Save' if has_account else 'Create account' }}</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+    <!-- Restart app (2026-09-08, direct request: "have a button actually
+         restarting the app so it applies") -- only meaningful under
+         systemd with Restart=always (routers/settings.py::restart_app's
+         own docstring); hidden entirely outside that deploy, rather than
+         shown disabled, since there's nothing an operator running this
+         locally could do to make it work anyway. -->
+    {% if restart_available %}
+    <div class="card">
+        <div class="settings-field-row">
+            <span class="settings-field-label">Restart app
+                <span class="settings-field-hint">Applies any saved login/Radicale change -- the app is unreachable for a few seconds</span>
+            </span>
+            <span class="spacer"></span>
+            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
+                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

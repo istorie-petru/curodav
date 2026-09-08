@@ -5,7 +5,10 @@ is about full CRUD functionality first."""
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,13 +18,93 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from . import db, sync
+from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
-from .config import load_settings
+from .config import apply_persisted_radicale_overrides, load_settings, uses_default_radicale_credentials
+from .security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _BASE_DIR = Path(__file__).resolve().parent
+
+# 2026-09-07 (direct request) -- first-run defaults, sourced from image
+# files the user dropped in the repo-root `pictures/` directory (a sibling
+# of `webapp/`, hence the two `.parent`s off this file's own `src/`
+# directory). Seeded ONCE into app_meta (see _seed_default_media below);
+# after that they're indistinguishable from any other user-set banner/
+# avatar -- editable/removable as normal in Settings > Appearance/General,
+# never re-applied over a value the user has since changed.
+_PICTURES_DIR = _BASE_DIR.parent.parent / "pictures"
+_DEFAULT_MEDIA_SEEDED_KEY = "default_media_seeded_v1"
+_DEFAULT_PAGE_BANNER_FILE = "banner_51.jpg"
+_DEFAULT_AVATAR_FILE = "avatar.jpg"
+_DEFAULT_SEASON_FILES = {
+    "spring": "spring_51.jpg",
+    "summer": "summer_51.jpg",
+    "autumn": "autumn_51.jpg",
+    "winter": "winter_51.jpg",
+}
+
+
+def _seed_default_media(conn: sqlite3.Connection, pictures_dir: Path = _PICTURES_DIR) -> None:
+    """Pre-populates the global page banner (db.PAGE_HEADER_BANNER_SCOPE,
+    all pages' fallback), the four seasonal task/event banners
+    (db.SEASON_BANNER_SCOPES), and the app's own avatar (db.
+    set_profile_photo) from `pictures_dir` so a fresh install already looks
+    finished instead of showing bare gradients/initials everywhere.
+
+    Gated on a one-time app_meta flag, checked and set unconditionally
+    (even when some/all source files are missing) so this only ever
+    attempts the seed once per database -- a value the user has since
+    edited or removed in Settings is never re-applied or overwritten by a
+    later startup. Each file is read independently and a missing/unreadable
+    one is skipped with a warning rather than failing the others or
+    aborting startup -- a partial `pictures/` directory still boots the app
+    and seeds whatever it can.
+
+    Stores images the exact same way an upload through routers/banners.py
+    or routers/settings.py's profile-photo route would (base64 in app_meta,
+    content-hash `version` for cache-busting) -- these seeded defaults are
+    real, normal banners/avatar from every other code path's point of view,
+    not a separate mechanism."""
+    if db.get_app_meta(conn, _DEFAULT_MEDIA_SEEDED_KEY):
+        return
+
+    def _read(filename: str) -> bytes | None:
+        path = pictures_dir / filename
+        try:
+            return path.read_bytes()
+        except OSError:
+            logger.warning("Default media seed: could not read %s, skipping", path)
+            return None
+
+    def _upload_banner(scope: str, data: bytes) -> None:
+        db.set_page_banner(
+            conn,
+            scope,
+            {
+                "kind": "upload",
+                "image_b64": base64.b64encode(data).decode("ascii"),
+                "image_type": "jpeg",
+                "version": hashlib.md5(data).hexdigest()[:12],
+            },
+        )
+
+    banner_bytes = _read(_DEFAULT_PAGE_BANNER_FILE)
+    if banner_bytes:
+        _upload_banner(db.PAGE_HEADER_BANNER_SCOPE, banner_bytes)
+
+    for season, filename in _DEFAULT_SEASON_FILES.items():
+        season_bytes = _read(filename)
+        if season_bytes:
+            _upload_banner(db.SEASON_BANNER_SCOPES[season], season_bytes)
+
+    avatar_bytes = _read(_DEFAULT_AVATAR_FILE)
+    if avatar_bytes:
+        db.set_profile_photo(conn, base64.b64encode(avatar_bytes).decode("ascii"), "jpeg")
+
+    db.set_app_meta(conn, _DEFAULT_MEDIA_SEEDED_KEY, "1")
 
 
 class _VersionedStaticFiles(StaticFiles):
@@ -45,9 +128,64 @@ class _VersionedStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
+
+    # 2026-08-29 -- a Radicale connection entered through /setup or
+    # Settings (routers/auth.py, routers/settings.py) lives in app_meta,
+    # not the environment; apply it here, before the settings are
+    # published to app.state and before the bridge below is built, so
+    # both see the effective (possibly overridden) connection. A no-op
+    # when CC_RADICALE_URL was set in the environment (env always wins,
+    # see apply_persisted_radicale_overrides's docstring) or when nothing
+    # was ever saved.
+    with db.connect(settings.db_path) as _conn:
+        settings = apply_persisted_radicale_overrides(settings, _conn)
+        # First-run default banners/avatar (2026-09-07, direct request) --
+        # see _seed_default_media's own docstring. Must not be allowed to
+        # fail startup over e.g. a missing pictures/ directory on a deploy
+        # that never got one; that's just "nothing seeded," not fatal.
+        try:
+            _seed_default_media(_conn)
+        except Exception:
+            logger.exception("Default media seed failed; continuing without it")
     app.state.settings = settings
 
-    bridge = CalDavBridge(settings)
+    # The bridge's constructor connects to Radicale (DAVClient -> principal,
+    # plus eager default collection lookups). Radicale is OPTIONAL -- the app
+    # is fully usable standalone (writes are plain SQL to the local SQLite
+    # store; see routers/tasks.py's "no bridge in this path anymore" notes) --
+    # so an unreachable server must not refuse to boot. On failure the app
+    # keeps running without sync/published lists; the background thread and
+    # the Settings > Published lists surface both degrade gracefully on the
+    # None bridge, and a restart re-attempts the connection.
+    try:
+        bridge = CalDavBridge(settings)
+    except Exception:
+        bridge = None
+        logger.exception("Radicale unreachable at startup; running without the sync bridge")
+    else:
+        # 2026-09-07 audit fix (documentation/reports/
+        # full-app-audit-2026-09-07.md): a production deploy that just
+        # authenticated to a REACHABLE Radicale server using the dev-only
+        # devuser/devpass fallback (config.py's load_settings default) is
+        # refused outright -- unlike the broad except above, this is
+        # deliberately allowed to raise and fail the whole lifespan startup.
+        # Gated on the bridge having actually connected (the `else` branch,
+        # not a bare settings check before the try) so a standalone install
+        # with no Radicale server at all -- which never authenticates
+        # against anything with these credentials -- isn't forced to set
+        # them just to boot; only a deploy where the fallback pair is
+        # genuinely live and reachable is the real exposure the audit
+        # flagged ("only reachable if a real deploy forgets to set
+        # CC_RADICALE_URL/CC_RADICALE_PASSWORD").
+        if settings.deploy_mode == "production" and uses_default_radicale_credentials(settings):
+            raise RuntimeError(
+                "CC_DEPLOY_MODE=production connected to a live Radicale "
+                "server using the dev-only fallback credentials "
+                "(devuser/devpass) -- set CC_RADICALE_USER/"
+                "CC_RADICALE_PASSWORD (or configure real credentials via "
+                "Settings > Data & Maintenance) before running this in "
+                "production."
+            )
     app.state.bridge = bridge
 
     # Populate the cache synchronously once at startup so the first page
@@ -103,6 +241,39 @@ def create_app() -> FastAPI:
     # overhead would net-lose.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+    # CSRF protection (2026-08-29, src/auth.py::CSRFMiddleware) -- added
+    # before AuthMiddleware below so Auth ends up the outer layer (Starlette
+    # runs the most-recently-added middleware first): an unauthenticated
+    # forged request gets Auth's normal 401/redirect, never reaching this
+    # check at all; only a request that already carries a session cookie
+    # goes through the Origin/Referer verification.
+    app.add_middleware(CSRFMiddleware)
+
+    # Single-user login (2026-08-16, src/auth.py) -- a no-op gate when no
+    # CC_AUTH_USERNAME/CC_AUTH_PASSWORD are configured, otherwise every
+    # request except /login and /static needs a valid session cookie. The
+    # middleware reads its settings off `app.state.settings` (set by the
+    # lifespan below), so an unset pair keeps the app behaving exactly as
+    # it always has. 2026-08-29: also forces GET/POST /setup on an
+    # unconfigured production deploy (CC_DEPLOY_MODE=production) -- see
+    # auth.py's module docstring.
+    app.add_middleware(AuthMiddleware)
+
+    # Security headers (2026-08-29, src/security_headers.py) -- added
+    # LAST (after CSRF and Auth above), so it ends up the OUTERMOST layer
+    # (Starlette runs the most-recently-added middleware first, wrapping
+    # everything registered before it -- see CSRFMiddleware's own comment
+    # on this same ordering rule). Being outermost is the whole point
+    # here: a middleware that short-circuits a request (Auth's 302/401,
+    # CSRF's 403) never calls further into the stack, so anything added
+    # BEFORE it would simply never run for a denied request. Being
+    # outermost means this one still wraps `send` before Auth/CSRF get a
+    # chance to respond, so these headers land on every response,
+    # including denials -- a denied response is still a response a
+    # browser renders/acts on, so it needs the same X-Frame-Options/CSP/
+    # nosniff protection as a normal page.
+    app.add_middleware(SecurityHeadersMiddleware)
+
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
     # Phase 1 (label-space rework, 2026-08-06): routers/calendars.py,
@@ -122,8 +293,15 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, published_lists, pwa, quick_capture, search, settings, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, public_lists, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
+    app.include_router(auth.router)
+    # Published Lists' standalone public feed (2026-08-29) -- no login, no
+    # Radicale account, see routers/public_lists.py's module docstring and
+    # AuthMiddleware's "/public/" exemption in src/auth.py. Registered
+    # early alongside auth.router since both define the app's few
+    # genuinely public-without-a-session routes.
+    app.include_router(public_lists.router)
     app.include_router(dashboard.router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
@@ -133,9 +311,7 @@ def create_app() -> FastAPI:
     # `sync` (the unrelated Radicale Published-Lists background sync).
     app.include_router(sync_api.router)
     # 1.8 slice 3 -- the PWA shell's own two routes (GET /sw.js, GET
-    # /offline). Neither path collides with anything else already
-    # registered, so ordering relative to the rest of this list doesn't
-    # matter the way timeline.router's does below.
+    # /offline)
     app.include_router(pwa.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
@@ -159,6 +335,7 @@ def create_app() -> FastAPI:
     # not query).
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
+    app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
     app.include_router(banners.router)

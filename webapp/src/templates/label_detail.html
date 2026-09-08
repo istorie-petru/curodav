@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
 <!-- 2026-08-08: opt out of the default 1120px-max-width centered column,
      same fix dashboard.html already applies (see that template's own
@@ -17,22 +18,25 @@
      a banner the buttons float bottom-right over the photo, without one
      they're a plain top bar with the label title left of them. The old
      separate .toolbar row is gone. -->
+{% set _title %}{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}{% endset %}
 <div class="page-banner-wrap">
-{% include "_page_banner.html" %}
-{% if banner %}
-<h1 class="page-banner-title">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
-{% endif %}
-<div class="page-banner-actions">
-    {% if not banner %}
-    <h1 class="page-banner-title-plain">{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}</h1>
-    {% endif %}
+{% call page_banner(_title) %}
+    <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
+         persistent, app-wide Settings > Appearance toggle instead of a
+         per-page `?edit=1` query param with its own "Edit mode"/"Done"
+         buttons here -- see dashboard.html's own comment. -->
     {% if edit_mode %}
-    <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
     <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
          Opens the banner editor modal (routers/banners.py); "Add" vs
-         "Change" labels by whether a banner is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+         "Change" labels by whether THIS page has its own banner
+         (2026-08-29 direct request: `has_own_banner`, not `banner` -- a
+         page with no override of its own still renders `banner` truthy
+         now, via the Settings > Appearance default,
+         routers/dashboard.py's _page_banner_context). -->
+    {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
+       own trigger for why. #}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (item #1, dashboard usability rework,
          2026-08-07) -- Settings has no per-space subpage to host this
          (it's a single hub page, see routers/settings.py's module
@@ -42,20 +46,14 @@
          app already uses, not a second confirmation UI. -->
     <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset this page's widgets to the default layout? This deletes every widget you've added or customized here.">
         <input type="hidden" name="label_name" value="{{ label.uid }}">
-        <input type="hidden" name="edit" value="1">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
-    {% else %}
-    <!-- Quick capture, one merged "+" (2026-08-10) -- same single "+"
-         button as dashboard.html, opening the merged task/event quick-add
-         modal (quick_add.html) -- no pre-fill of this label onto the new
-         task/event (the quick-add doesn't accept a tags/label query param
-         yet, and this pass doesn't add new prefill plumbing for it).
-         Hidden in edit mode, same reasoning as dashboard.html. -->
-    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
-    <a href="/labels/{{ label.uid }}?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
     {% endif %}
-</div>
+    <!-- 2026-08-29 (direct request): the quick capture "+" button that
+         used to live here outside edit mode is gone -- obsolete now that
+         the sidebar rail has its own global "+ New" (13c, base.html),
+         reachable from every page including this one. -->
+{% endcall %}
 </div>
 
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}
@@ -65,7 +63,8 @@
 <h2>{{ icon('folder', 'icon-sm') }} Projects <span class="tag-usage-count">{{ children|length }}</span></h2>
 <div class="card">
 {% for child in children %}
-<a class="calendar-row settings-row" href="/labels/{{ child.uid }}">
+{% set child_is_space = child.generate_space %}
+<a class="calendar-row settings-row" href="{{ '/spaces/' ~ child.uid if child_is_space else '/settings/labels/' ~ child.uid }}">
     <span class="cell-tag cal-{{ child.color }}">{{ icon(child.icon or 'folder', 'icon-sm') }} {{ child.name }}</span>
     <span class="spacer"></span>
     <span class="tag-usage-count">Open</span>
@@ -82,5 +81,5 @@
 {% include "_widget_workspace.html" %}
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('habit_checkin.js') }}"></script>
+<script defer src="{{ static_url('habit_checkin.js') }}"></script>
 {% endblock %}

@@ -4,8 +4,10 @@ collapsible filters, auto-open when a filter is active) applied to Tasks
 (Table/Timeline/Board), Calendar (Month/Week/Day/Agenda), and Contacts.
 
 Covers:
-  1. Board/Timeline now respect date_filter/status_filter/importance_filter/
-     urgency_filter (previously Table-only).
+  1. Board/Timeline now respect date_filter/status_filter (previously
+     Table-only; both Board/Timeline and the Importance/Urgency filters
+     are since removed outright, see the module comment below and
+     src/derived_state.py's module docstring).
   2. The new Tasks label filter narrows results in all three views.
   3. The new Calendar event label filter narrows results in month + day
      views, including the task chips Day also shows.
@@ -29,7 +31,6 @@ from src import db
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
 from src.routers import tasks as tasks_router
-from src.routers import timeline as timeline_router
 
 
 @pytest.fixture()
@@ -58,22 +59,7 @@ def _request(path="/"):
     )
 
 
-def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency=None, tags=None):
-    """importance/urgency are computed, not stored columns (side work,
-    post-1.1, src/derived_state.py) -- a given importance level is
-    reproduced via a dedicated per-task label with that label_config rule.
-    urgency only ever supports level 3 here (due today, temporal) --
-    that's the only level every call site in this file actually needs;
-    level 1 has no source at all in the purely-computed model (label
-    thresholds only ever imply URGENCY_HIGH, temporal state only ever
-    yields 0/2/3), so it isn't reproducible via seeding."""
-    all_tags = list(tags or [])
-    if importance is not None:
-        label = f"{uid}-imp-label"
-        db.upsert_label_config(conn, {"name": label, "importance": importance})
-        all_tags.append(label)
-    if urgency == 3 and due_at is None:
-        due_at = date.today().isoformat()
+def _seed_task(conn, uid, due_at=None, status="active", tags=None):
     db.upsert_task(
         conn,
         {
@@ -82,7 +68,7 @@ def _seed_task(conn, uid, due_at=None, status="active", importance=None, urgency
             "description": "",
             "status": status,
             "due_at": due_at,
-            "tags": all_tags,
+            "tags": list(tags or []),
             "created_at": _now(),
         },
     )
@@ -129,90 +115,25 @@ def _toolbar_div_count(body: str) -> int:
     return len(_TOOLBAR_DIV_RE.findall(body))
 
 
-class TestBoardTimelineFiltersRespected:
-    def test_board_respects_status_filter_without_removing_columns(self, conn):
-        _seed_task(conn, "a1", status="active")
-        _seed_task(conn, "w1", status="waiting")
-        resp = tasks_router.board_view(_request("/tasks/board"), status_filter="active", conn=conn)
-        columns = resp.context["columns"]
-        # Board's whole layout is a status grouping -- status_filter narrows
-        # *which* tasks land in each column, it doesn't remove columns.
-        assert "waiting" in columns
-        assert columns["waiting"] == []
-        assert [t["uid"] for t in columns["active"]] == ["a1"]
-
-    def test_board_respects_importance_filter(self, conn):
-        _seed_task(conn, "hi", status="active", importance=3)
-        _seed_task(conn, "lo", status="active", importance=1)
-        resp = tasks_router.board_view(_request("/tasks/board"), importance_filter="3", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"hi"}
-
-    def test_board_respects_urgency_filter(self, conn):
-        _seed_task(conn, "now", status="active", urgency=3)
-        _seed_task(conn, "later", status="active", due_at=(date.today() + timedelta(days=20)).isoformat())
-        resp = tasks_router.board_view(_request("/tasks/board"), urgency_filter="3", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"now"}
-
-    def test_board_respects_date_filter(self, conn):
-        today = date.today()
-        _seed_task(conn, "today_task", status="active", due_at=today.isoformat())
-        _seed_task(conn, "future_task", status="active", due_at=(today + timedelta(days=20)).isoformat())
-        resp = tasks_router.board_view(_request("/tasks/board"), date_filter="today", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"today_task"}
-
-    def test_timeline_respects_status_and_importance_filters(self, conn):
-        today = date.today()
-        _seed_task(conn, "keep", status="active", importance=3, due_at=today.isoformat())
-        _seed_task(conn, "drop_status", status="waiting", importance=3, due_at=today.isoformat())
-        _seed_task(conn, "drop_importance", status="active", importance=1, due_at=today.isoformat())
-        resp = timeline_router.timeline_view(
-            _request("/tasks/timeline"), status_filter="active", importance_filter="3", conn=conn
-        )
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"keep"}
-
-    def test_timeline_respects_date_filter(self, conn):
-        today = date.today()
-        _seed_task(conn, "today_task", status="active", due_at=today.isoformat())
-        _seed_task(conn, "overdue_task", status="active", due_at=(today - timedelta(days=5)).isoformat())
-        resp = timeline_router.timeline_view(_request("/tasks/timeline"), date_filter="overdue", conn=conn)
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"overdue_task"}
+def _narrow_header_count(body: str) -> int:
+    """Counts top-level `.page-header-narrow` divs -- the replacement for
+    Calendar's old `.toolbar.top-app-bar.toolbar-2row` row (2026-08-29,
+    sidebar redesign item 13e follow-up, direct request): the toolbar is
+    gone outright, its real controls (prev/next nav, the Month|Day
+    subnav, the label filter) folded into this one header strip instead.
+    Same "exactly one, never duplicated" invariant the old
+    _toolbar_div_count coverage guarded, just pointed at the new
+    structure."""
+    return body.count('class="page-header-narrow"') + body.count('class="page-header-narrow has-banner"')
 
 
-class TestTaskLabelFilter:
-    def test_table_view_narrows_by_label(self, conn):
-        _seed_task(conn, "work1", tags=["Work"])
-        _seed_task(conn, "home1", tags=["Home"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="Work", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"work1"}
-        assert resp.context["active_label"] == "Work"
-        assert "Work" in resp.context["task_label_names"]
-
-    def test_board_view_narrows_by_label(self, conn):
-        _seed_task(conn, "work1", status="active", tags=["Work"])
-        _seed_task(conn, "home1", status="active", tags=["Home"])
-        resp = tasks_router.board_view(_request("/tasks/board"), label="Work", conn=conn)
-        all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
-        assert all_uids == {"work1"}
-
-    def test_timeline_view_narrows_by_label(self, conn):
-        today = date.today()
-        _seed_task(conn, "work1", status="active", due_at=today.isoformat(), tags=["Work"])
-        _seed_task(conn, "home1", status="active", due_at=today.isoformat(), tags=["Home"])
-        resp = timeline_router.timeline_view(_request("/tasks/timeline"), label="Work", conn=conn)
-        bar_uids = {b["task"]["uid"] for b in resp.context["bars"]}
-        assert bar_uids == {"work1"}
-
-    def test_label_filter_is_case_insensitive(self, conn):
-        _seed_task(conn, "work1", tags=["Work"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="work", conn=conn)
-        open_uids = {t["uid"] for t in resp.context["open_tasks"]}
-        assert open_uids == {"work1"}
+# 2026-08-28 "major rework" session (items 3+4): TestBoardTimelineFilters
+# Respected and TestTaskLabelFilter are both deleted -- Kanban/Timeline are
+# retired to plain redirects (routers/tasks.py::board_view_redirect,
+# routers/timeline.py's whole-file rewrite) and the Tasks table's label
+# filter is gone entirely (item 3, "filtering reduced to date only"), so
+# none of this coverage has anything left to exercise. See
+# test_timeline_router.py/test_tasks_view_rework.py for what replaced it.
 
 
 class TestEventLabelFilter:
@@ -249,18 +170,25 @@ class TestEventLabelFilter:
 
 
 class TestCalendarSingleToolbar:
+    # 2026-08-29 (sidebar redesign item 13e follow-up, direct request):
+    # Calendar's `.toolbar.top-app-bar.toolbar-2row` row is gone outright
+    # -- these now guard the same "exactly one, never duplicated"
+    # invariant against its replacement, .page-header-narrow.
     def test_month_view_renders_exactly_one_toolbar(self, conn):
         resp = calendar_router.month_view(_request("/calendar"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_week_view_renders_exactly_one_toolbar(self, conn):
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_day_view_renders_exactly_one_toolbar(self, conn):
         today_iso = date.today().isoformat()
         resp = calendar_router.day_view(today_iso, _request(f"/calendar/day/{today_iso}"), conn=conn)
-        assert _toolbar_div_count(resp.body.decode()) == 1
+        assert _toolbar_div_count(resp.body.decode()) == 0
+        assert _narrow_header_count(resp.body.decode()) == 1
 
     def test_agenda_view_redirects_to_day_which_has_exactly_one_toolbar(self, conn):
         # 2026-08-08: Agenda merged into Day and was then removed again
@@ -291,35 +219,20 @@ class TestContactsNoArchivedState:
 class TestActiveFilterShownInDropdown:
     """2026-08-08: Tasks' and Calendar's row-2 collapsible filter body is
     gone (feedback: "remove the filters details button and reintegrate
-    these drop down menus into the topbar") -- date/status/importance/
-    urgency/label
-    are inline "fancy dropdowns" (_filter_dropdown.html) in row 1, each a
+    these drop down menus into the topbar") -- date/status/label are
+    inline "fancy dropdowns" (_filter_dropdown.html) in row 1, each a
     radio list that navigates on pick. The active filter is simply the
     checked radio (mirrored in the trigger's summary text), so there's no
     collapsible panel left to auto-open. Contacts still uses the
     checkbox-hack, so its assertions below are unchanged."""
 
-    def test_tasks_status_filter_is_the_checked_radio(self, conn):
-        _seed_task(conn, "a", status="active")
-        resp = tasks_router.list_tasks(_request("/tasks"), status_filter="active", conn=conn)
-        body = resp.body.decode()
-        assert ("active", True) in _radios(body, "status_filter")
-        assert ("all", False) in _radios(body, "status_filter")
-        # the checkbox-hack is gone entirely
-        assert "toolbar-filters-checkbox" not in body
-
-    def test_tasks_no_filter_selects_all_statuses(self, conn):
-        _seed_task(conn, "a", status="active")
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        body = resp.body.decode()
-        assert ("all", True) in _radios(body, "status_filter")
-
-    def test_tasks_label_filter_is_the_checked_radio(self, conn):
-        _seed_task(conn, "a", tags=["Work"])
-        resp = tasks_router.list_tasks(_request("/tasks"), label="Work", conn=conn)
-        body = resp.body.decode()
-        assert ("Work", True) in _radios(body, "label")
-        assert ("", False) in _radios(body, "label")
+    # 2026-08-28 "major rework" session (item 3): Tasks' Status/label
+    # dropdowns are gone -- the old test_tasks_status_filter_is_the_checked_
+    # radio/test_tasks_no_filter_selects_all_statuses/test_tasks_label_
+    # filter_is_the_checked_radio all exercised removed machinery. Tasks'
+    # one surviving dropdown (Date) is unaffected by this rework and has no
+    # dedicated radio-checked test here to begin with (pre-existing gap,
+    # not introduced by this session).
 
     def test_calendar_label_filter_is_the_checked_radio(self, conn):
         today = date.today()
@@ -365,20 +278,17 @@ class TestActiveFilterShownInDropdown:
 
 class TestIconOnlyFiltersNextToAdd:
     """2026-08-08: the icon-only "Filters" button is gone too -- Tasks and
-    Calendar now carry the four "fancy dropdown" filter triggers inline in
-    row 1 (templates/_filter_dropdown.html's .filter-dropdown-trigger), each
-    a compact descriptor+chevron button sitting next to the primary "New"
-    button. Covers Tasks/Calendar/Contacts/Schedule -- 2026-08-08 Contacts'
-    tag filter and Schedule's label filter both moved off their old
-    mechanisms (Contacts' checkbox-hack Filters button, Schedule's
-    nothing-at-all) onto the same dropdown, so they're part of this
-    trigger-position check too.
+    Calendar carry their filter triggers inline (templates/
+    _filter_dropdown.html's .filter-dropdown-trigger), each a compact
+    descriptor+chevron button.
 
-    Critically, this also checks the New button is NOT pushed out of
-    row 1 -- both the dropdown triggers (compact, fixed-size) and the New
-    button are direct children of .toolbar-row; the old collapsible
-    .toolbar-filters-body (which lived outside .toolbar-row entirely) no
-    longer exists, so nothing can affect row 1's wrapping anymore."""
+    2026-08-29 follow-up (sidebar redesign item 13e, direct request):
+    Tasks/Calendar/Contacts' own `.toolbar.top-app-bar.toolbar-2row` row
+    -- and the per-page "+ New" button that used to live in it -- is gone
+    outright, redundant with the sidebar's own global quick-add. What
+    used to be "does Filters sit right before New in row 1" is now
+    "does the filter trigger render inside the narrow header, with no
+    toolbar-2row/toolbar-filters-body left at all"."""
 
     def test_tasks_filters_trigger_has_no_text_label(self, conn):
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
@@ -386,29 +296,28 @@ class TestIconOnlyFiltersNextToAdd:
         assert ">Filters<" not in body
         assert "filter-dropdown-trigger" in body
 
-    def test_tasks_dropdowns_and_new_button_both_stay_in_row_1(self, conn):
+    def test_tasks_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
         body = resp.body.decode()
-        # All four filter dropdowns plus the New button sit inside row 1 --
-        # there is no .toolbar-filters-body (or hidden checkbox) anymore to
-        # push anything onto another line.
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/tasks/new"')
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
         assert "toolbar-filters-body" not in body
         assert "tasks-filters-toggle" not in body
 
-    def test_calendar_filters_trigger_sits_immediately_before_new_button(self, conn):
+    def test_calendar_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         today = date.today()
         _seed_event(conn, "a", start_at=f"{today.isoformat()}T09:00:00", tags=["Work"])
         resp = calendar_router.month_view(_request("/calendar"), conn=conn)
         body = resp.body.decode()
         assert ">Filters<" not in body
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/events/new"')
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
 
-    def test_contacts_filters_trigger_sits_immediately_before_new_button(self, conn):
+    def test_contacts_filter_trigger_lives_in_the_narrow_header_not_a_toolbar(self, conn):
         db.upsert_contact(
             conn,
             {
@@ -422,9 +331,10 @@ class TestIconOnlyFiltersNextToAdd:
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         body = resp.body.decode()
         assert ">Filters<" not in body
+        header_pos = body.index('class="page-header-narrow"')
         filters_pos = body.index("filter-dropdown-trigger")
-        new_button_pos = body.index('href="/contacts/new"')
-        assert filters_pos < new_button_pos
+        assert header_pos < filters_pos
+        assert 'toolbar-2row"' not in body
         assert "toolbar-filters-body" not in body
 
 

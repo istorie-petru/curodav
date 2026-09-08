@@ -13,7 +13,15 @@
      semantics via db.upsert_task_completion/delete_task_completion) so
      there's exactly one heatmap implementation, not two near-duplicates
      for the two "quantified daily thing" object types this app has. -->
-{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='') %}
+{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='', interactive=true) %}
+{# `interactive=false` (2026-08-29, the habit view modal's "a heatmap
+   graph should be able to be visible... not interactable") renders the
+   exact same grid as a plain `<span>` per day instead of a `<form>`/
+   `<button>` -- no click target, no toggle route hit at all, view-only.
+   Used by habit_task_detail.html/_habit_detail_body.html's own view
+   modals; the editable form (habit_form.html's backfill card, the
+   heatmap's own day-click) is unaffected -- this only swaps out the grid
+   markup itself, not any other part of the page. #}
 {% set _prefix = action_prefix or ('/habits/' ~ uid ~ '/entries') %}
 <div class="heatmap {{ extra_class }}" {{ extra_attrs|safe }}>
     <div class="heatmap-months">
@@ -25,10 +33,12 @@
             {% for day in week %}
             {% if day.is_future %}
             <span class="heatmap-cell level-future"></span>
-            {% else %}
+            {% elif interactive %}
             <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form">
                 <button type="submit" class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></button>
             </form>
+            {% else %}
+            <span class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></span>
             {% endif %}
             {% endfor %}
         </div>

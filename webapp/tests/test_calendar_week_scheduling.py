@@ -403,6 +403,103 @@ class TestUnscheduledPanelStepper:
         assert 'draggable="true"' not in body
 
 
+class TestUnscheduledPanelStepperIsAsync:
+    """Direct bug report (2026-09-08): stepping a work session's count from
+    the "Unscheduled work" panel hard-reloaded the whole Planner page, unlike
+    every other action on it (drag-create, drag-move, unschedule-by-drop --
+    all already async via ccApi/cc-entity-changed). The stepper forms posted
+    with no `data-cc-change` at all, so async-crud.js's generic
+    `[data-cc-change]` submit handler (which every other page-level mutation
+    form in this app already goes through) never intercepted them -- they
+    fell through to a plain browser form submit and its 303 redirect.
+    _unscheduled_task_item.html now carries `data-cc-change="task"` on both
+    the "+" and "-" forms, in both the plain-task and habit branches, so
+    async_calendar.js's own `cc-entity-changed` listener (already wired for
+    /calendar/week) claims the event and refreshes just #week-grid."""
+
+    def test_plus_and_minus_forms_carry_data_cc_change(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")  # one undated session -> "-" renders too
+        body = calendar_router.week_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert (
+            '<form method="post" action="/tasks/t1/work-allocations" data-cc-change="task" data-cc-action="create">'
+            in body
+        )
+        assert (
+            '<form method="post" action="/tasks/t1/work-allocations/remove-latest" '
+            'data-cc-change="task" data-cc-action="remove">' in body
+        )
+
+    def test_habit_branch_forms_also_carry_data_cc_change(self, conn):
+        # A habit-tracked task (tagged with the configured habit label,
+        # default "Habit", db.get_task_habit_settings) with an open
+        # recurrence and no check-ins this week -- same setup
+        # test_habit_ui_rework.py's own habit_work_sessions_status tests use.
+        _task(conn, "h1", title="Meditate", tags=["Habit"], recurrence="FREQ=DAILY")
+        db.create_work_allocation(conn, "h1")  # one undated session -> "-" renders too
+        body = calendar_router.week_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert 'data-task-uid="h1"' in body  # confirms the habit branch actually rendered
+        assert 'data-cc-change="task" data-cc-action="create"' in body
+        assert 'data-cc-change="task" data-cc-action="remove"' in body
+
+
+class TestUnscheduledPanelFixedHeight:
+    """Direct bug report (2026-09-08), same session as the class above:
+    "dragging and dropping from unscheduled work to the planner, and vice
+    versa, should not move the scrollbar page." Root cause: #unscheduled-
+    panel-body's outer height used to be purely a function of its item
+    count (`.project-calendar-unscheduled` is `flex:none`) -- scheduling or
+    unscheduling one task changes that count by exactly one, reflowing the
+    grid card below it in the same flex column even though the grid's own
+    `.time-grid-wrap` scrollTop (already preserved, async_calendar.js
+    `refreshWeek`) never moved. A plain block move/resize never touches this
+    panel's item count, which is why the report was scoped to exactly the
+    two unscheduled<->planner drag directions. Fix: a fixed (not max-)
+    height + its own overflow-y:auto on style.css's `#unscheduled-panel-body`
+    so the aside's own footprint can no longer change with item count. A
+    first pass fixed it at ~3 rows (84px) -- a direct follow-up report
+    ("the Unscheduled work div got bigger") caught that this read as a
+    size regression for the common one-or-two-item case, so it's now
+    sized to exactly one row (26px) instead, still fixed either way. A
+    second follow-up ("it shouldn't have a sidebar") caught that a one-row
+    box hits its own scrollbar far more often than the 3-row one did, so
+    the track is now hidden (scrollbar-width:none + the -webkit- override,
+    same pattern .tabbar already uses) -- still scrollable, just no
+    visible track. A third follow-up ("I would like to have it have the min
+    height a bit bigger") caught that 26px (the exact content height of one
+    row, no slack) read as cramped -- bumped to 36px, still a fixed height
+    either way."""
+
+    def test_panel_body_has_a_fixed_height_with_its_own_scroll(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#unscheduled-panel-body{height:36px; overflow-y:auto; scrollbar-width:none;}" in css
+        assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" in css
+        # A max-height (not a fixed height) would still shrink/grow with
+        # content and reintroduce the exact reflow this fix removes.
+        assert "#unscheduled-panel-body{max-height:" not in css
+
+
+class TestUnscheduledPanelToggleStaysOnTheRight:
+    """Direct follow-up report (2026-09-08), same session as the two classes
+    above: collapsing the "Unscheduled work" panel moved its toggle button
+    from the right edge of the header to the left. Root cause:
+    `.unscheduled-panel-head` is `justify-content:space-between` with two
+    children (the h2 title + the toggle button) -- collapsing hides the h2
+    (`display:none`), leaving the toggle as the row's ONLY flex item, and
+    `space-between` puts a lone flex item at flex-start (left), not
+    flex-end. Fix: `#unscheduled-panel-toggle{margin-left:auto;}` pins it to
+    the row's own right edge regardless of whether its sibling is present in
+    layout."""
+
+    def test_toggle_has_margin_left_auto(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#unscheduled-panel-toggle{margin-left:auto;}" in css
+
+
 class TestGridDragConflictFix:
     """Direct feedback, confirmed live (2026-08-14): dragging a task from the
     Unscheduled work panel onto the merged Week grid showed a 30-minute-tall
@@ -432,3 +529,56 @@ class TestGridDragConflictFix:
         assert "slotGhost" in script
         assert "DEFAULT_BLOCK_MINUTES" in script
         assert 'slotGhost.className = "schedule-ghost"' in script
+
+
+class TestWeekGridAsyncCrud:
+    """async-CRUD (features/async-crud.md) for the merged Week grid: the
+    work-allocation create/move/delete endpoints stay dual-mode -- plain 303
+    redirect to /calendar/week without the fetch header (no-JS forms keep
+    working), JSON when `X-Requested-With: fetch` (project_calendar.js now
+    POSTs through ccApi instead of submitting a hidden form), so a drag no
+    longer reloads the page. And `GET /calendar/regions?region=week` renders
+    the #week-grid fragment async_calendar.js swaps in after such a change."""
+
+    def test_create_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        resp = calendar_router.create_week_allocation(
+            task_uid="t1",
+            start_at=f"{_MONDAY}T16:00:00",
+            end_at=f"{_MONDAY}T18:00:00",
+            date_=_MONDAY,
+            x_requested_with="fetch",
+            conn=conn,
+        )
+        assert resp.status_code == 200
+        assert resp.body.decode() == '{"ok":true}'
+        assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
+
+    def test_move_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        resp = calendar_router.move_week_allocation(
+            event_uid=uid,
+            start_at=f"{_MONDAY}T09:00:00",
+            end_at=f"{_MONDAY}T10:00:00",
+            date_=_MONDAY,
+            x_requested_with="fetch",
+            conn=conn,
+        )
+        assert resp.status_code == 200
+        assert db.get_event(conn, uid)["start_at"] == f"{_MONDAY}T09:00:00"
+
+    def test_delete_allocation_is_dual_mode(self, conn):
+        _task(conn, "t1", title="Research")
+        uid = db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
+        resp = calendar_router.delete_week_allocation(event_uid=uid, date_=_MONDAY, x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert db.get_event(conn, uid)["start_at"] is None  # unscheduled, not deleted
+
+    def test_week_region_renders_the_week_grid_fragment(self, conn):
+        _task(conn, "t1", title="Research")
+        resp = calendar_router.calendar_regions(_request(query_string=b"region=week&date_=" + _MONDAY.encode()), region="week", date_=_MONDAY, conn=conn)
+        body = resp.body.decode()
+        assert 'id="week-grid"' in body
+        assert 'id="unscheduled-panel"' in body
+        assert 'time-col calendar-create-col project-calendar-col' in body

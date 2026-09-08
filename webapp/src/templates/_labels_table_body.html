@@ -1,0 +1,38 @@
+{# Labels table body fragment for async-CRUD region refresh #}
+{% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
+{% for l in labels %}
+<tr data-label-name="{{ l.name }}">
+    <td>
+        <div class="label-cell">
+            <span class="color-dot cal-{{ l.color or 'blue' }}"></span>
+            <span class="label-name">{{ l.name }}</span>
+        </div>
+    </td>
+    <td>
+        {% if l.label_group %}
+            <span class="group-badge">{{ l.label_group }}</span>
+        {% else %}
+            <span class="text-muted">—</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if l.usage_count and l.usage_count > 0 %}
+            <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
+        {% else %}
+            <span class="text-muted">Not used</span>
+        {% endif %}
+    </td>
+    <td>
+        {{ row_action_buttons(
+            "/settings/labels/" ~ l.name ~ "/edit",
+            "/settings/labels/" ~ l.name ~ "/delete",
+            "label",
+            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
+        ) }}
+    </td>
+</tr>
+{% endfor %}
+{% if not labels %}
+{{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
+{% endif %}

@@ -1,0 +1,18 @@
+name: Deploy curodav
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via curodav-ctl update
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LXC_IP }}
+          username: ${{ secrets.LXC_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            sudo /usr/local/bin/curodav-ctl update

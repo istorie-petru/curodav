@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_page_banner.html" import page_banner with context %}
 {% block title %}Dashboard{% endblock %}
 <!-- 2026-08-07: opt out of the default 1120px-max-width centered column
      (base.html's main_class block), same mechanism Calendar already uses
@@ -9,41 +10,34 @@
      6 virtual columns off the grid's own (boxed) rendered width, so the
      fix is simply giving the grid the full width to lay out in, not a
      change to the masonry math itself. -->
-{% block main_class %}main-full-width{% endblock %}
+{% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
-<!-- Header banner + one page-action bar (2026-08-10) -- the banner cover
-     (when set, routers/banners.py) and ALL of this page's actions live
-     together in one .page-banner-wrap: with a banner the buttons float
-     bottom-right over the photo (see style.css's .page-banner-actions
-     rules); without one they're a plain top bar with the greeting h1 left
-     of them. The old separate .toolbar row is gone. -->
+<!-- Header banner + one page-action bar (2026-08-10, reworked 2026-09-07
+     into the shared page_banner() macro -- see _page_banner.html's own
+     comment for why) -- the banner cover (when set, routers/banners.py)
+     and ALL of this page's actions live together: with a banner the
+     buttons float bottom-right over the photo (see style.css's
+     .page-banner-actions rules) and the greeting sits below the photo,
+     Notion-style, next to the avatar; without one it's a plain top bar
+     with the greeting h1 left of the buttons. -->
 <div class="page-banner-wrap">
-{% include "_page_banner.html" %}
-{% if banner %}
-<h1 class="page-banner-title">{{ greeting }}</h1>
-{% endif %}
-<div class="page-banner-actions">
-    {% if not banner %}
+{% call page_banner(greeting) %}
     <!-- Dynamic greeting (dashboard usability rework, 2026-08-07) --
          "Good morning/afternoon/evening[, name]" computed server-side in
          routers/dashboard.py's dashboard_view (_greeting_for_hour), local
          server time same as date.today() uses everywhere else in this
-         app. Replaces the old static "Dashboard" h1 -- this is Home's own
-         identity element specifically. Rendered here (left of the actions)
-         only when there's no banner -- with one the same greeting is the
-         overlay title above instead, so the page always has exactly one
-         h1. -->
-    <h1 class="page-banner-title-plain">{{ greeting }}</h1>
-    {% endif %}
-    <!-- Move/reorder/delete controls on each widget below are hidden
-         unless this is on -- plain ?edit=1 query param (not JS/
-         localStorage) so it works with no JS, same pattern as every
-         other stateful toggle already server-rendered in this app
-         (sort direction, filter selects). Doesn't persist across visits
-         by design -- same "you turn it on, do your rearranging, turn it
-         back off" session-scoped flow as most dashboard edit modes. -->
+         app -- passed to page_banner() above as the page's title either
+         way (overlay-below-the-cover with a banner, plain top-bar title
+         without one), so there's exactly one h1 regardless of which.
+
+         Move/reorder/delete controls on each widget below are hidden
+         unless this is on. 2026-08-29 (sidebar redesign item 13d): edit
+         mode is now a persistent, app-wide Settings > Appearance toggle
+         (routers/dashboard.py's EDIT_MODE_KEY) instead of a per-page
+         `?edit=1` query param with its own "Edit mode"/"Done" buttons
+         here -- there's no page-level control left to turn it on/off,
+         only Settings. -->
     {% if edit_mode %}
-    <a href="{{ page_url }}" class="btn primary">{{ icon('check-square', 'icon-sm') }} Done</a>
     <!-- New widget (Phase 3 rework, 2026-08-03) -- opens the widget
          customization modal (dashboard_customize.html) to add a new widget.
          Only visible in edit mode -- adding/removing widgets is an explicit
@@ -51,39 +45,49 @@
     <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode,
          since both are page-content edits. Opens the banner editor modal
-         (routers/banners.py); "Add" vs "Change" labels by whether a banner
-         is already set. -->
-    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ (page_url ~ '?edit=1')|urlencode }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('image', 'icon-sm') }}{% if banner %} Change banner{% else %} Add banner{% endif %}</a>
+         (routers/banners.py); "Add" vs "Change" labels by whether THIS
+         page has its own banner (2026-08-29 direct request: `has_own_
+         banner`, not `banner` -- a page with no override of its own
+         still renders `banner` truthy now, via the Settings > Appearance
+         default, routers/dashboard.py's _page_banner_context). -->
+    {# 2026-09-08: data-modal-size="wide" dropped -- the editor's content
+       shrank to a small preview thumbnail + a short footer that day, so
+       the 1040px wide dialog just left a huge empty gap around it (and,
+       on mobile, its 700px min-width wasn't reset by the bottom-sheet
+       breakpoint, overflowing the viewport -- see style.css's is-wide fix
+       in the same commit). Default modal sizing is plenty now. #}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
          a label page's (label_detail.html): wipes Home's widgets back to
          the seeded default via /dashboard/reset. data-confirm-sheet is the
          same confirmation mechanism every other destructive action in this
          app already uses, not a second confirmation UI. -->
     <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset Home's widgets to the default layout? This deletes every widget you've added or customized here.">
-        <input type="hidden" name="edit" value="1">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
-    {% else %}
-    <!-- Quick capture, one merged "+" (2026-08-10) -- the single button
-         opens one modal (quick_add.html via static/modal.js's data-modal)
-         with a Task/Event tab switch inside it, replacing the old pair of
-         separate New task / New event buttons and modals (dashboard
-         usability rework, 2026-08-07). Hidden in edit mode: editing the
-         widget grid and quick-capturing a new task/event are different
-         modes of using this page, and edit mode's own actions (New
-         widget/the Done button) take that slot instead. -->
-    <a href="/quick/add" data-modal class="btn primary" data-fab title="New task or event">{{ icon('plus') }} New</a>
-    <a href="?edit=1" class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit mode</a>
     {% endif %}
-</div>
+    <!-- 2026-08-29 (direct request): the quick capture "+" button that
+         used to live here outside edit mode is gone -- obsolete now that
+         the sidebar rail has its own global "+ New" (13c, base.html),
+         reachable from every page including this one. -->
+{% endcall %}
 </div>
 
 <!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
      with every Space page (routers/projects.py's space_detail) via
-     routers/dashboard.py's widget_page_context. See _widget_workspace.html. -->
+     routers/dashboard.py's widget_page_context. See _widget_workspace.html.
+     Wrapped in .main-shell-body (2026-09-07, direct request extending the
+     flex-shell model here) -- #dashboard-grid itself keeps setting its own
+     JS-computed `style.height` (static/app.js's masonry layout, sized off
+     total card content, often taller than the viewport), unchanged; this
+     wrapper is the one that actually gets the fixed viewport-derived
+     height + overflow-y:auto, so the grid scrolls inside it exactly the
+     same way Calendar's .time-grid-body scrolls inside .time-grid-wrap. -->
+<div class="main-shell-body">
 {% include "_widget_workspace.html" %}
+</div>
 
 {% endblock %}
 {% block extra_scripts %}
-<script src="{{ static_url('habit_checkin.js') }}"></script>
+<script defer src="{{ static_url('habit_checkin.js') }}"></script>
 {% endblock %}

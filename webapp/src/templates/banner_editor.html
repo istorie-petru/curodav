@@ -15,12 +15,22 @@
      banner, the upload form, and the remove form.
 
      The upload form's hidden file input sits inside its label, so a
-     click on the button opens the picker, and the file's onchange
-     auto-submits the form on selection -- routed through static/app.js's
-     CCBannerUpload.onFile (2026-08-10), which resizes the picked image
-     in the browser first so the stored/served banner is a ~2400px
-     WebP/JPEG rather than the camera's multi-MB original; browsers
-     without that script still submit the original unchanged.
+     click on the button opens the picker. 2026-08-29 (direct request,
+     "add the ability to crop, move, aspect ratio... after all image
+     uploads"): file selection now opens the same interactive crop editor
+     contact photos/the profile picture already had (static/
+     avatar_cropper.js, generalized that day to also wire
+     `.banner-upload-input` -- see that file's own header comment), not
+     the old silent-resize-then-submit CCBannerUpload.onFile it replaces.
+     The editor's own Apply always submits this form on completion
+     (banner_editor.html's own upload always did, even before the editor
+     existed) -- the wiring is pure JS (avatar_cropper.js's init() finds
+     `.banner-upload-input` elements itself, same as it always has for
+     `.avatar-upload-input`), no inline onchange needed here any more. A
+     device with JS disabled (or the script failing to load) still
+     submits the original file unchanged -- the crop editor is the only
+     way to pre-process client-side, same honest degradation contact
+     photos already had.
 
      Variables: scope (page key, "" = Home), page_url (where to return),
      banner (current banner dict or None). -->
@@ -28,65 +38,96 @@
     <div class="modal-header">
         {# 2026-08-15 modal uniformization rule 3: plain title, no icon
            prefix, to match every other utility modal (label_edit_modal,
-           note_form, _modal_widget_customize, ...). #}
+           note_form, _modal_widget_customize, ...).
+           2026-09-09 (direct follow-up, "the mobile handle should sit on
+           top of the banner"): when a banner is set, this reuses the
+           exact same cover treatment the event/task/contact detail
+           modals already carry (.detail-cover-wrap/.detail-header-inner/
+           .detail-heading-row -- "Variant B baseline... for all view
+           modal windows", 2026-09-03) instead of a one-off bleed just for
+           this template. .modal-handle is now position:absolute (style.
+           css, mobile breakpoint) rather than its own row above
+           modal-header, so it floats on top of whichever of these two
+           renders -- the cover image here, or a plain header elsewhere --
+           the same way a native bottom sheet's handle overlays its own
+           content instead of pushing it down. The small preview thumbnail
+           that used to sit in modal-body (2026-09-08's "small,
+           preview-only thumbnail" pass) is retired in favor of this --
+           showing the same image twice would be redundant now that it
+           renders here. #}
+        {% if banner %}
+        <div class="detail-header-inner">
+            <div class="detail-cover-wrap">
+                <div class="detail-cover">
+                    {# Same served /banners/image URL as _page_banner.html when
+                       the banner has local bytes (version) -- never embed the
+                       base64 blob inline, that was the page-size leak. Only a
+                       legacy hotlink-only searched banner (set before the
+                       web-search feature was removed) falls back to its
+                       remote URL. #}
+                    {% if banner.version %}
+                    <img class="detail-cover-img" src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
+                    {% else %}
+                    <img class="detail-cover-img" src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-heading-row">
+                <h1>Page banner</h1>
+            </div>
+        </div>
+        {% else %}
         <h1>Page banner</h1>
+        {% endif %}
     </div>
     <div class="modal-body">
         <div class="banner-editor">
-            <!-- Preferred aspect ratio -- the one spec the upload control
-                 needs to tell the user: on desktop the banner renders
-                 object-fit: cover in a 5:1 box (3:1 on phones), so a
-                 wide landscape image works best and a non-matching image
-                 is center-cropped rather than distorted. -->
-            <p class="banner-editor-note">A wide header image for this page. Preferred aspect ratio is <strong>5:1</strong> &mdash; about 2400&times;480&nbsp;px, or any wide landscape image. Non-5:1 images are center-cropped to fit.</p>
-
-            {% if banner %}
-            <div class="card banner-current">
-                <div class="settings-field-label">Current banner</div>
-                {# Same served /banners/image URL as _page_banner.html when the
-                   banner has local bytes (version) -- never embed the base64
-                   blob inline, that was the page-size leak. Only a legacy
-                   hotlink-only searched banner (set before the web-search
-                   feature was removed) falls back to its remote URL. #}
-                {% if banner.version %}
-                <img src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
-                {% else %}
-                <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
-                {% endif %}
-                <form method="post" action="/banners/remove" class="form-inline">
-                    <input type="hidden" name="scope" value="{{ scope }}">
-                    <input type="hidden" name="page_url" value="{{ page_url }}">
-                    <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove banner</button>
-                </form>
-            </div>
+            {% if not banner %}
+            <p class="banner-editor-empty">No banner set yet.</p>
             {% endif %}
-
-            <!-- Upload -- minimalist: a single ghost button.
-                 The file input is hidden inside its label (click the
-                 button = open the picker), and onchange auto-submits on
-                 selection, so the form POSTs the moment a file is chosen
-                 with no extra "Upload" step. -->
-            <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form">
-                <input type="hidden" name="scope" value="{{ scope }}">
-                <input type="hidden" name="page_url" value="{{ page_url }}">
-                <label class="btn ghost banner-upload-btn">
-                    {{ icon('upload', 'icon-sm') }} Upload image
-                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload" onchange="window.CCBannerUpload ? CCBannerUpload.onFile(this) : this.form.requestSubmit()">
-                </label>
-                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; auto-compressed to max 2400px &middot; 8MB cap</span>
-            </form>
         </div>
     </div>
-    {# 2026-08-15 modal uniformization slice F: every action here (upload,
-       remove) is instant/auto-submitting, so there's still no primary
-       button -- but per rule 1 every modal gets a footer, so this is a
-       documented Back/Done-only exception rather than the accidental
-       "no footer markup at all" it was before. page_url is a real
-       navigable page (this template also renders standalone for a no-JS
-       visit -- see the header comment), so footer_back_url is the real
-       URL, not "#". #}
+    {# 2026-09-08: Remove banner and Upload image both move into the
+       footer, alongside Done, instead of living as their own body
+       section -- same side-by-side-forms shape .profile-photo-controls
+       already uses (HTML forbids nesting a form inside a form, so these
+       stay two independent <form>s rather than one). Routed through
+       _modal_footer.html's new footer_extra_html escape hatch rather than
+       hand-rolling `.modal-footer` here: the app-wide regression guard
+       (test_modal_uniformization.py::TestFullAppModalSweep) requires
+       every modal include the shared partial, and Upload doesn't fit the
+       existing footer_delete_url/footer_primary_* slots -- it's a <label>
+       wrapping a hidden file input (clicking it opens the picker, and
+       picking a file hands off to the crop editor -- avatar_cropper.js,
+       see this template's own header comment -- whose own Apply is what
+       actually submits the form), not a plain submit button. page_url is
+       a real navigable page (this template also renders standalone for a
+       no-JS visit), so footer_back_url is the real URL, not "#". #}
     {% set footer_back_url = page_url %}
     {% set footer_back_label = 'Done' %}
+    {% set footer_extra_html %}
+    {% if banner %}
+    <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
+        <input type="hidden" name="scope" value="{{ scope }}">
+        <input type="hidden" name="page_url" value="{{ page_url }}">
+        {# 2026-09-08 follow-up (direct request, "standard button style"):
+           swapped the quiet .detail-delete-link text-link (the detail
+           modals' demoted-Delete treatment -- meant to rank below a
+           primary Edit) for a plain .btn ghost, matching Done/Upload and
+           every other secondary footer button in the app -- this footer
+           has no Edit-vs-Delete hierarchy to demote against. #}
+        <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/banners/upload" enctype="multipart/form-data" class="form-inline" data-cc-change="banner" data-cc-action="upload">
+        <input type="hidden" name="scope" value="{{ scope }}">
+        <input type="hidden" name="page_url" value="{{ page_url }}">
+        <label class="btn primary banner-upload-btn">
+            {{ icon('upload', 'icon-sm') }} Upload
+            <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">
+        </label>
+    </form>
+    {% endset %}
     {% include "_modal_footer.html" %}
 </div>
 {% endblock %}

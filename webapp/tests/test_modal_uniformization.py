@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db
+from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import habits as habits_router
@@ -103,8 +103,8 @@ class TestLabelEditModalFooter:
         assert 'class="detail-delete-link"' in body
         assert 'class="btn danger"' not in body
         assert "data-confirm-sheet=" in body
-        assert "/labels/work/clear" in body
-        assert 'form="label-edit-form"' in body
+        assert "/labels/work/delete" in body
+        assert 'form="label-form"' in body
 
 
 class TestLabelMergeModalFooter:
@@ -147,8 +147,11 @@ class TestQuickAddFooter:
 class TestNewWidgetTriggerWideSizing:
     def test_new_widget_trigger_carries_wide_attribute(self, conn):
         # "New widget" only renders in edit mode (dashboard.html's own
-        # {% if edit_mode %} gate).
-        body = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn).body.decode()
+        # {% if edit_mode %} gate) -- a persistent Settings > Appearance
+        # toggle now (2026-08-29, sidebar redesign item 13d), not a
+        # per-page `?edit=1` query param.
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        body = dashboard_router.dashboard_view(_request(), conn=conn).body.decode()
         # the New widget link must open the same wide dialog
         # _widget_edit_modal.html's own trigger already opens.
         assert "/dashboard/customize" in body
@@ -158,14 +161,20 @@ class TestNewWidgetTriggerWideSizing:
 
 
 class TestWidgetCustomizeModalFooter:
-    def test_customize_modal_is_primary_only_no_back_link(self, conn):
+    def test_customize_modal_has_cancel_and_primary(self, conn):
+        # 2026-08-07 made this footer primary-only (no back/cancel link,
+        # relying on the dialog's own X); 2026-08-31 direct feedback ("add
+        # a button to cancel ... adding a new widget") brings a Cancel
+        # link back -- see _modal_widget_customize.html's own comment for
+        # why this is safe (nothing POSTs here until Add widget is
+        # clicked, so Cancel is a plain close with no side effects, unlike
+        # the old stay-open/Duplicate/Edit flow 2026-08-07 removed).
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
         assert 'class="modal-footer"' in body
         assert 'form="widget-builder-form"' in body
         assert "Add widget" in body
-        # deliberately no back/cancel link at all -- the dialog's own X
-        # closes it (2026-08-07 "one button" decision, preserved by slice D).
-        assert "data-modal-cancel" not in body
+        assert "data-modal-cancel" in body
+        assert "Cancel</a>" in body
         assert "detail-delete-link" not in body
         # plain title, no icon prefix -- rule 3.
         assert "<h1>Customize" in body
@@ -211,7 +220,7 @@ class TestFullAppModalSweep:
         templates_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
         modal_files = [
             "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
-            "habit_form.html", "habit_task_form.html", "label_edit_modal.html", "label_merge_modal.html",
+            "habit_form.html", "habit_task_form.html", "label_merge_modal.html",
             "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
             "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
         ]

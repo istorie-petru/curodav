@@ -1,0 +1,93 @@
+<!-- 2026-08-08: fits the viewport instead of pushing the page taller and
+     letting the whole page scroll -- see style.css's own comment on
+     .calendar-viewport/.month-viewport for the "slight resize" mechanics
+     (each week row flexes to share whatever height is left, day cells
+     drop their fixed-height floor). Desktop only, see that same comment.
+
+     id="month-grid": the month view's async-CRUD region
+     (features/async-crud.md) -- calendar.js/async_calendar.js refresh this
+     element from GET /calendar/regions?region=month after an event change
+     instead of a full page reload, then re-run the drag-to-create /
+     drag-to-move bindings (calendar_month.js / calendar_month_drag.js). -->
+<div class="card calendar-viewport month-viewport" id="month-grid" data-year="{{ year }}" data-month="{{ month }}" data-label="{{ active_label | default('') }}">
+<div class="month-weekday-row">
+    {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
+</div>
+{% for week in weeks %}
+<div class="month-week-grid">
+    <!-- 2026-09-08: all-day (bar-worthy) events lane-packed into
+         continuous spanning bars for this whole week row, reversing the
+         2026-08-08 "flat per-day list" design for exactly that item type
+         (routers/calendar.py's _week_bars) -- FullCalendar-parity
+         interactions, slice 1 (backend lane-packing + spanning-bar
+         rendering, no drag/resize yet). Absolutely positioned on top of
+         the day cells (.month-week-bars, style.css), NOT a normal-flow
+         grid row -- .month-bars-offset-{{ week.lane_count }} below
+         reserves the matching empty space at the top of each day cell's
+         own text-row list so the two layers never overlap, the exact bug
+         the 2026-08-08 rework's own comment warned this design must not
+         reintroduce. -->
+    {% if week.bars %}
+    <div class="month-week-bars">
+        {% for bar in week.bars %}
+        <a class="month-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}"
+           href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}"
+           data-modal title="{{ bar.event.title }}"
+           {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}" data-all-day="1"{% endif %}>
+            {% if not bar.event.recurrence and bar.is_start %}<span class="month-bar-resize-handle month-bar-resize-left" aria-hidden="true"></span>{% endif %}
+            <span class="month-bar-label">{{ bar.event.title }}</span>
+            {% if not bar.event.recurrence and bar.is_end %}<span class="month-bar-resize-handle month-bar-resize-right" aria-hidden="true"></span>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% for day in week.days %}
+    <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}">
+        <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
+        <div class="month-day-bottom month-bars-offset-{{ week.lane_count }}">
+            <!-- 2026-08-08: one flat list per day, no overlap -- timed
+                 events as quiet time+dot text, tasks as square+title text
+                 (routers/calendar.py's _month_grid tags each with its
+                 `kind`). All-day events are no longer in this list (see
+                 the bar layer above). Everything past
+                 MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
+                 below, which directs to the day view. -->
+            {% for item in day.rows %}
+                {% if item.kind == "event" %}
+                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
+                        <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
+                        {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
+                        <span class="month-item-title">{{ item.event.title }}</span>
+                    </a>
+                {% else %}
+                    <a class="month-task-item month-due-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
+                {% endif %}
+            {% endfor %}
+            {% if day.overflow_count %}
+                <!-- 2026-09-09 (FullCalendar-parity interactions, slice 3):
+                     "+N more" no longer navigates to Day view -- it opens
+                     an info toast (calendar_month_overflow.js) listing the
+                     hidden items as click-through buttons, each opening
+                     that item's own edit modal via window.CCModal.open.
+                     The actual overflow items live in this sibling
+                     <template> (inert, never rendered) instead of a fresh
+                     fetch, reusing the exact href-building logic the
+                     visible day.rows loop above already uses so the two
+                     never drift apart. -->
+                <button type="button" class="month-more-link">+{{ day.overflow_count }} more</button>
+                <template class="month-overflow-data">
+                    {% for item in day.overflow %}
+                        {% if item.kind == "event" %}
+                            <a href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal>{{ item.event.title }}</a>
+                        {% else %}
+                            <a href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ item.task.title }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </template>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+</div>

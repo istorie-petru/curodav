@@ -11,10 +11,23 @@
 // 2026-07-19 fix; this avoids repeating that by snapping the displayed
 // position on every mousemove, not just at the end). On release, the new
 // time (and day column, for a cross-day move in the week view) is saved via
-// POST /events/{uid}/reschedule, then the page reloads -- simplest way to
-// guarantee the reload reflects whatever the server actually persisted
-// (including a server-side conflict/validation outcome), rather than
-// trusting the client's optimistic position.
+// POST /events/{uid}/reschedule, then `window.ccApi.dispatchChange` fires
+// the app-wide `cc-entity-changed` event (async-CRUD,
+// features/async-crud.md) -- async_calendar.js re-fetches the whole
+// #week-grid/#day-grid region and swaps it in, which re-runs
+// grid_layout.layout_day server-side. That's deliberate, not just "reuse
+// the existing plumbing": this is also the fix for a direct bug report --
+// two overlapping events (each rendered at half-width by layout_day) where
+// dragging one so it no longer overlaps left BOTH stuck at their old
+// width, because `left_pct`/`width_pct` are baked into the HTML once at
+// render time and this handler used to only ever touch `top`/`height`
+// (and, on success, patch the `.te-time` label text) -- never the lane
+// layout of the event just moved OR the one it used to overlap with,
+// which a client-side patch can't fix without duplicating layout_day's
+// packing algorithm in JS. Every other calendar drag path (month/day-cell
+// drag, all-day-row drag, work-allocation drag) already dispatches this
+// same event on success; this handler was the one holdout still patching
+// DOM by hand instead.
 //
 // move/up listeners are attached to `document`, not the dragged
 // element itself, for the drag's duration -- earlier used
@@ -27,6 +40,22 @@
 //
 // A short drag (a few px, effectively a click) is treated as a click and
 // left alone, so the event's normal href (open its edit form) still works.
+//
+// FullCalendar-parity slice 4 (2026-09-09): a move-mode drag (not resize --
+// crossing rows mid-resize makes no sense) can now also be dropped onto
+// Week's "All day" row (`.allday-col`, templates/_calendar_week_grid.html),
+// the other half of the cross-boundary move calendar_week_allday_drag.js's
+// own setupItem() implements for the reverse direction. Deliberately does
+// NOT reparent the dragged element into the all-day row's normal-flow DOM
+// mid-drag (it's an absolutely-positioned `.time-event`, the all-day row is
+// plain flow -- reprojecting it correctly there is exactly what the full
+// #week-grid region refresh on a successful drop already does server-side,
+// same "let the server re-render" reasoning every other calendar drag path
+// in this app already follows for lane/lay-out-affecting moves). While
+// hovering the all-day row this handler skips its own top/column-tracking
+// logic entirely -- the element's on-screen top/height stay wherever they
+// last were, which is fine since a successful drop replaces the whole
+// region a moment later anyway.
 
 (function () {
   const grid = document.querySelector(".time-col");
@@ -35,7 +64,16 @@
   const PX_PER_HOUR = Number(document.body.dataset.pxPerHour || 48);
   const SNAP_MINUTES = 15;
   const SNAP_PX = (PX_PER_HOUR / 60) * SNAP_MINUTES;
-  const DAY_HEIGHT_PX = 24 * PX_PER_HOUR;
+  // "Hide sleep hours in Planner" (static/sleep_collapse.js, Week view
+  // only -- undefined on Day, where both fall back to the plain 24h
+  // behavior this file always had). DAY_HEIGHT_PX shrinks to match the
+  // grid's own collapsed height so drag clamping can't push an event past
+  // the bottom of the now-shorter column; toRealMin converts a final
+  // pixel-derived minutes value back to the real clock time it represents
+  // before it's saved -- see that file's own header comment for why this
+  // is necessary, not optional, once a window's been collapsed out.
+  const DAY_HEIGHT_PX = window.CCSleepCollapse ? window.CCSleepCollapse.dayHeightPx(PX_PER_HOUR) : 24 * PX_PER_HOUR;
+  const toRealMin = window.CCSleepCollapse ? window.CCSleepCollapse.toReal : (m) => m;
   const CLICK_THRESHOLD_PX = 4;
 
   function snap(px) {
@@ -59,10 +97,12 @@
     let currentCol = el.closest(".time-col");
     let startCol = currentCol; // the column to revert to if the save fails
     let dragged = false;
+    let dropAllDayCol = null; // set while hovering an .allday-col mid-move (slice 4)
 
     function begin(e, isResize) {
       mode = isResize ? "resize" : "move";
       dragged = false;
+      dropAllDayCol = null;
       startX = e.clientX;
       startY = e.clientY;
       origTop = parseFloat(el.style.top) || 0;
@@ -84,6 +124,30 @@
       if (!dragged) return;
 
       if (mode === "move") {
+        // Slice 4: check the all-day row FIRST -- if the pointer (not the
+        // dragged element's own clamped-to-column box, which can never
+        // reach up there) is over an `.allday-col`, this drag is a
+        // cross-boundary move-to-all-day candidate. Skip the normal
+        // top/column tracking entirely while hovering it (see this file's
+        // own header comment for why) and just track which column would
+        // receive the drop.
+        const alldayCols = Array.from(document.querySelectorAll(".allday-col"));
+        let hoverAllDay = null;
+        for (const c of alldayCols) {
+          const r = c.getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+            hoverAllDay = c;
+            break;
+          }
+        }
+        alldayCols.forEach((c) => c.classList.toggle("drop-hover", c === hoverAllDay));
+        if (hoverAllDay) {
+          dropAllDayCol = hoverAllDay;
+          document.querySelectorAll(".time-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
+          return;
+        }
+        dropAllDayCol = null;
+
         let newTop = snap(origTop + dy);
         newTop = Math.max(0, Math.min(DAY_HEIGHT_PX - origHeight, newTop));
         el.style.top = newTop + "px";
@@ -123,15 +187,52 @@
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", end);
       if (!mode) return;
+      const wasResize = mode === "resize";
       mode = null;
       el.classList.remove("dragging");
       document.querySelectorAll(".time-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
+      document.querySelectorAll(".allday-col.drop-hover").forEach((c) => c.classList.remove("drop-hover"));
       if (!dragged) return; // was a click -- let the href navigate normally
+
+      // Slice 4: dropped on the all-day row instead of a time slot -- flip
+      // to all_day, drop the time-of-day, reuse the same reschedule
+      // endpoint (its own comment covers the new optional `all_day` field).
+      // Never reached for a resize (dropAllDayCol is only ever set inside
+      // the mode === "move" branch of move() above).
+      if (!wasResize && dropAllDayCol) {
+        // Week's `.allday-col` carries its own `data-date`; Day's doesn't
+        // (there's only ever one column, so no per-column date to disambiguate)
+        // -- fall back to the time-col the event started in, which is
+        // necessarily the same day on a single-day Day view.
+        const day = dropAllDayCol.dataset.date || (startCol && startCol.dataset.date);
+        dropAllDayCol = null;
+        if (day) {
+          const uid = el.dataset.uid;
+          fetch(`/events/${uid}/reschedule`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ start_at: `${day}T00:00:00`, end_at: null, all_day: true }),
+          }).then((resp) => {
+            if (!resp.ok) throw new Error("reschedule failed");
+            window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
+          }).catch(() => {
+            el.style.top = origTop + "px";
+            el.style.height = origHeight + "px";
+            window.ccToast({ message: "Could not save that move. Reverted.", variant: "error" });
+          });
+          return;
+        }
+        // No date to attribute the drop to (shouldn't happen given the
+        // startCol fallback above, but fall through to the normal timed
+        // reschedule below rather than silently drop the move) --
+        // `top`/`height`/`currentCol` are still whatever they last were
+        // before the all-day-row hover branch in move() took over.
+      }
 
       const top = parseFloat(el.style.top) || 0;
       const height = parseFloat(el.style.height) || SNAP_PX;
-      const startMin = Math.round((top / PX_PER_HOUR) * 60);
-      const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((top / PX_PER_HOUR) * 60));
+      const endMin = toRealMin(Math.round(((top + height) / PX_PER_HOUR) * 60));
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
       const droppedCol = currentCol;
@@ -141,15 +242,22 @@
       // no-op if the page has no configured blocks or the script didn't load.
       if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
 
-      // Optimistic, same as Kanban's drag-and-drop (tasks_board.js) --
-      // the position on screen is already correct the instant the pointer
-      // is released (that's what the whole drag was doing), so a reload
-      // on *every* successful save was throwing away a fluid interaction
-      // with a jarring full-page flash at the very last step. Only revert
-      // (back to the exact day/top/height this drag started from) and
-      // reload on an actual failure, so the one case that still reloads
-      // is also the one case where the user needs to see the server's
-      // real, authoritative state rather than trust the optimistic guess.
+      // Optimistic during the drag itself, same as Kanban's drag-and-drop
+      // (tasks_board.js) -- the position on screen is already correct the
+      // instant the pointer is released (that's what the whole drag was
+      // doing), so there's no visible flash waiting on the network before
+      // the block appears to land. On success, though, dispatch the
+      // app-wide change event instead of patching this one element by
+      // hand: async_calendar.js's listener re-fetches the whole
+      // #week-grid/#day-grid region, which re-runs grid_layout.layout_day
+      // server-side and so fixes up `left_pct`/`width_pct` for every event
+      // in the column -- not just this one's label -- covering both the
+      // dragged event and whatever it used to (or now does) overlap with.
+      // Only revert (back to the exact day/top/height this drag started
+      // from) and reload on an actual failure, so the one case that still
+      // does a full reload is also the one case where the user needs to
+      // see the server's real, authoritative state rather than trust the
+      // optimistic guess.
       fetch(`/events/${uid}/reschedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,15 +267,7 @@
         }),
       }).then((resp) => {
         if (!resp.ok) throw new Error("reschedule failed");
-        // The block's position already reflects the new time (that's what
-        // the drag just did) -- but its *label* is still server-rendered
-        // text from before the drag (e.g. "14:00-15:00"), and nothing
-        // reloads the page anymore to refresh it. Update it directly so
-        // the visible time doesn't silently go stale after a successful
-        // move. `.te-time` can appear twice on Day view (time range +
-        // location) -- the time range is always the first one.
-        const timeEl = el.querySelector(".te-time");
-        if (timeEl) timeEl.textContent = `${minutesToDisplayTime(startMin)}–${minutesToDisplayTime(endMin)}`;
+        window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
       }).catch(() => {
         el.style.top = origTop + "px";
         el.style.height = origHeight + "px";
@@ -196,7 +296,16 @@
   // (move/resize/delete-to-unschedule, plus click-to-open-task). Without
   // this exclusion both scripts would attach a competing pointerdown
   // handler to the same element.
-  document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
+  //
+  // init() is re-invocable: async_calendar.js re-runs it after swapping in
+  // a fresh #week-grid region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered event blocks and create-cols get bound again. It must
+  // only ever run over fresh DOM (the region swap guarantees that) --
+  // running it twice on the same elements would double-attach handlers.
+  function init() {
+    document.querySelectorAll(".time-event:not(.work-allocation)").forEach(setupEvent);
+    document.querySelectorAll(".calendar-create-col").forEach(setupCreateCol);
+  }
 
   // ---------------------------------------------------------------- //
   // Hover-preview + click / click-drag-release to CREATE a new event on
@@ -222,27 +331,13 @@
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
-  // 2026-08-08 -- display-only counterpart to minutesToHHMM above:
-  // respects the "24-hour time" Settings > General preference (deps.py's
-  // time_format(), exposed here via base.html's `data-time-format` body
-  // attribute, same pattern as `data-px-per-hour`) for the drag-resize
-  // preview *label* text. Deliberately a separate function, not a
-  // TIME_FORMAT branch added to minutesToHHMM itself -- that function's
-  // output also feeds `start_time`/`end_time` prefill values for the New
-  // Event redirect (see setupCreateCol below), which a native
-  // `<input type="time">` requires in plain 24-hour "HH:MM" regardless of
-  // this display preference; branching the one function by format would
-  // have silently broken that prefill whenever "12-hour time" was on.
-  const TIME_FORMAT = document.body.dataset.timeFormat || "24h";
-  function minutesToDisplayTime(totalMinutes) {
-    if (TIME_FORMAT !== "12h") return minutesToHHMM(totalMinutes);
-    totalMinutes = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    const period = h < 12 ? "AM" : "PM";
-    const h12 = h % 12 || 12;
-    return h12 + ":" + String(m).padStart(2, "0") + " " + period;
-  }
+  // (A `minutesToDisplayTime` 12-hour-format helper used to live here,
+  // feeding the drag-resize handler's `.te-time` label patch below. That
+  // patch is gone now -- a successful move/resize dispatches the app-wide
+  // change event instead, so async_calendar.js's region refresh
+  // re-renders the label server-side, honoring 12h/24h the same way the
+  // rest of the page's `fmt_time` filter already does. Removed rather
+  // than left dead.)
 
   // Deliberately NOT given `touch-action:none` the way .time-event/
   // .timeline-bar are -- those are small, unambiguous drag targets, but
@@ -254,7 +349,7 @@
   // stationary tap as a scroll gesture) -- only the "drag to pick a
   // custom length" refinement stays mouse-only, since touch genuinely
   // can't do both a scroll and a drag-create on the same surface at once.
-  document.querySelectorAll(".calendar-create-col").forEach((col) => {
+  function setupCreateCol(col) {
     const ghost = document.createElement("div");
     ghost.className = "schedule-ghost";
     ghost.style.display = "none";
@@ -327,8 +422,8 @@
       const top = parseFloat(ghost.style.top) || 0;
       const height = parseFloat(ghost.style.height) || CREATE_SNAP_PX;
       ghost.style.display = "none";
-      const startMin = Math.round((top / PX_PER_HOUR) * 60);
-      const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((top / PX_PER_HOUR) * 60));
+      const endMin = toRealMin(Math.round(((top + height) / PX_PER_HOUR) * 60));
       const date = col.dataset.date;
       const params = new URLSearchParams({
         date,
@@ -348,5 +443,8 @@
       creating = false;
       ghost.style.display = "none";
     });
-  });
+  }
+
+  init();
+  window.CCWeekGrid = { init: init };
 })();

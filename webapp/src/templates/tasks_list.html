@@ -1,19 +1,22 @@
 {% extends "base.html" %}
 {% from "_task_row.html" import task_row with context %}
 {% block title %}Tasks{% endblock %}
+{% block main_class %}main-shell{% endblock %}
 {% block content %}
-{# active_group_uid/active_project_uid helpers -- defined at block scope so
-   they're available in the sort_link macro and empty-state links below.
-   Always empty today: nothing populates these query params since the dead
-   Space/Project filter dropdowns were removed 2026-08-07. The real
-   label-based filter Phase 9b added uses a separate `label` param/
-   `active_label` context key instead (see _tasks_toolbar.html) -- these
-   two are kept as plain default('') reads rather than deleted outright
-   since the URLs below still harmlessly reference them, not because
-   they're still load-bearing. #}
-{% set _aguid = active_group_uid | default('') %}
-{% set _apuid = active_project_uid | default('') %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+<!-- Real page heading, kept sr-only -- the narrow header's own title
+     (_page_header_narrow.html) is deliberately an h2 element, not h1 (see
+     that partial's own comment), since most pages using it already have
+     their own real/sr-only h1 elsewhere. This page's old toolbar row
+     WAS that h1 (removed below, 2026-08-29 sidebar redesign item 13e
+     follow-up) -- restored standalone here so the page still has exactly
+     one real heading for assistive tech. is_inbox is never actually set
+     anywhere in routers/tasks.py (dead branch, predates this change) --
+     simplified to the one text it ever rendered. -->
+<h1 class="sr-only">Tasks</h1>
+{% call page_header_narrow("Tasks", "check-square") %}
 {% include "_tasks_toolbar.html" %}
+{% endcall %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
      pass) -- the "+ New" button in the toolbar above opens the same create
@@ -23,7 +26,7 @@
 <!-- Bulk actions -- 2026-08-01. Hidden until at least one row is selected
      (static/tasks_table.js toggles it), same "don't show controls with
      nothing to act on" reasoning as Dashboard's edit-mode gating. -->
-<div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none">
+<div class="bulk-actions-bar" id="bulk-actions-bar">
     <span id="bulk-count" class="bulk-count"></span>
     <div class="spacer"></div>
     <select id="bulk-status-select" aria-label="Set status">
@@ -59,6 +62,7 @@
         {% set ms_items = tag_name_items %}
         {% set ms_selected = [] %}
         {% set ms_mode = 'select' %}
+        {% set ms_pill = true %}
         {% include "_widget_list_multiselect.html" %}
     </div>
     <button type="button" id="bulk-tag-add" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Add</button>
@@ -75,11 +79,10 @@
    them, and the fragment route supplies its own defaults. #}
 {% include "_tasks_body.html" %}
 
-{# "Habits & Recurring" section removed 2026-08-08 -- superseded by the
-   real Tasks > Habits tab (tasks_habits.html), which shows every
-   habit-labeled task with a proper check-in row + heatmap grid instead of
-   this one flat table. Habit-labeled tasks are excluded from this page
-   entirely now (db.list_tasks' default include_habit_tasks=False) so
-   they don't appear in both places. #}
+{# The Tasks > Habits tab and the standalone Habits page are both retired
+   (2026-08-28 "major rework" session, items 2+3) -- every habit-labeled
+   task and every standalone Habit entity now renders inline as a row in
+   the "Habits" group below, right alongside Project/Unassigned/Completed
+   (see _tasks_body.html and routers/tasks.py's _build_task_groups). #}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

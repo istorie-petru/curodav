@@ -1,0 +1,94 @@
+{# _widget_items.html -- the shared body components every dashboard widget
+   renders through, so a widget is a composition of these pieces instead of
+   a hand-rolled variant of them. Created 2026-08-17 (widget uniformity
+   pass): before this the 13 visual widgets each re-derived the same
+   row / pill / stat / empty-state / filled-card markup with small
+   differences -- see plans/STATE.md's widget-library entry for the audit
+   and features/design-system.md's "Widget bodies" section for the rules.
+
+   Follows UI_CONSISTENCY_GUIDE.md: empty states are .empty-state (§8),
+   read-only status pills are .pill-static on the shared identity palette
+   (§6), a simple link list is a real <table> (§4), and no widget reaches
+   for a new CSS class when one of these canonical pieces already covers
+   it.
+
+   Every macro below is pure -- it takes only its own params and uses
+   Jinja globals (icon(), fmt_time, ...) -- so widgets import it plainly:
+       {% from "_widget_items.html" import widget_empty, widget_pill,
+          widget_section_label, stat_block, filled_card, widget_link_row,
+          relative_due, widget_complete_button %}
+   widget_link_row's right-hand cell can be supplied either as the `right`
+   param or as a {% call %} block (useful when the cell holds several
+   pills / conditional spans). #}
+
+{% macro widget_empty(message, inset=False) -%}
+<div class="empty-state{% if inset %} empty-state--inset{% endif %}">{{ message }}</div>
+{%- endmacro %}
+
+{% macro widget_section_label(text) -%}
+<div class="widget-section-label">{{ text }}</div>
+{%- endmacro %}
+
+{# Read-only status pill -- UI guide §6: .pill-static on the shared
+   identity palette. `color` is a pill-{color} name (the full 16-color
+   tag palette, completed for the pill family 2026-08-17); default gray
+   so a call that forgets a color still renders a real pill, never the
+   bare .cell-tag-with-no-color bug this macro was born from. #}
+{% macro widget_pill(text, color='gray', icon_name=None) -%}
+<span class="pill-static pill-{{ color }}">{% if icon_name %}{{ icon(icon_name, 'icon-sm') }} {% endif %}{{ text }}</span>
+{%- endmacro %}
+
+{# At-a-glance stat block: a big number with its small caption, optionally
+   itself a link (the At-a-glance widget's counts all link out to the
+   matching filtered Tasks view). number_class adds e.g. is-overdue. #}
+{% macro stat_block(number, label, href=None, number_class=None) -%}
+{% if href %}<a class="at-a-glance-stat" href="{{ href }}">{% else %}<div class="at-a-glance-stat">{% endif %}
+    <div class="at-a-glance-number{% if number_class %} {{ number_class }}{% endif %}">{{ number }}</div>
+    <div class="widget-section-label">{{ label }}</div>
+{% if href %}</a>{% else %}</div>{% endif %}
+{%- endmacro %}
+
+{# A label-space filled tile (filled_cards style) -- the canonical colored
+   tile grid, shared by Quick Links and Spaces & Projects' cards style.
+   `color` is a cal-{color} swatch name; anything outside the swatch set
+   falls back to blue. description wins over meta when both are given. #}
+{% macro filled_card(name, href, color, icon_name=None, meta=None, description=None) -%}
+{% set color_class = 'cal-' + (color if color in ['blue','green','orange','red','purple','pink','gray','yellow'] else 'blue') %}
+<a class="filled-card {{ color_class }}" href="{{ href }}">
+    <div class="filled-card-content">
+        {% if icon_name %}{{ icon(icon_name, 'icon-lg') }}{% endif %}
+        <div class="filled-card-title">{{ name }}</div>
+        {% if description %}<div class="filled-card-description">{{ description }}</div>
+        {% elif meta %}<div class="filled-card-meta">{{ meta }}</div>{% endif %}
+    </div>
+</a>
+{%- endmacro %}
+
+{# One <table> row for a widget's simple link list -- an optional leading
+   cell (icon / checkbox / time, width handled by a .widget-row-* class),
+   the title link (plain text when url is None), and an optional
+   right-aligned muted cell. The right-hand cell can be passed as `right`
+   or rendered via a {% call %} block. #}
+{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None) -%}
+<tr>
+    {% if leading is not none %}<td{% if leading_class %} class="{{ leading_class }}"{% endif %}>{{ leading }}</td>{% endif %}
+    <td>{% if url %}<a href="{{ url }}" data-modal>{{ title }}</a>{% else %}{{ title }}{% endif %}</td>
+    {% if caller %}<td class="text-muted widget-row-right">{{ caller() }}</td>
+    {% elif right is not none %}<td class="text-muted widget-row-right">{{ right }}</td>{% endif %}
+</tr>
+{%- endmacro %}
+
+{# "Overdue / Today / Tomorrow / In N days" phrasing (shared by the Next
+   deadline widget's two rows). #}
+{% macro relative_due(days) -%}
+{%- if days < 0 %}Overdue{% elif days == 0 %}Today{% elif days == 1 %}Tomorrow{% else %}In {{ days }} days{% endif -%}
+{%- endmacro %}
+
+{# The agenda widget's inline "mark done" checkbox control -- a tiny form
+   posting to the existing POST /tasks/{uid}/complete, async via
+   data-cc-complete (features/async-crud.md). #}
+{% macro widget_complete_button(uid) -%}
+<form class="form-inline" method="post" action="/tasks/{{ uid }}/complete" data-cc-complete>
+    <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
+</form>
+{%- endmacro %}

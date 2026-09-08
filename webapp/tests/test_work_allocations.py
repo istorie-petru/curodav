@@ -296,18 +296,57 @@ class TestTaskDetailRouter:
         assert db.get_task(conn, "t1") is not None
         assert db.list_work_allocations_for_task(conn, "t1") == []
 
+    def test_set_times_route_dates_an_undated_session(self, conn):
+        """The Work sessions card's per-session picker (2026-08-17) posts
+        start_at/end_at to set-times; an undated placeholder becomes a
+        scheduled block."""
+        _seed_task(conn, "t1")
+        event_uid = db.create_work_allocation(conn, "t1")  # undated placeholder
+        resp = tasks_router.set_work_allocation_times(
+            "t1", event_uid, start_at="2026-08-17T16:00", end_at="2026-08-17T18:00", conn=conn
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"].endswith("/tasks/t1")
+        session = db.get_event(conn, event_uid)
+        assert session["start_at"] == "2026-08-17T16:00"
+        assert session["end_at"] == "2026-08-17T18:00"
+
+    def test_set_times_route_rejects_end_before_start(self, conn):
+        _seed_task(conn, "t1")
+        event_uid = db.create_work_allocation(conn, "t1")
+        tasks_router.set_work_allocation_times(
+            "t1", event_uid, start_at="2026-08-17T18:00", end_at="2026-08-17T16:00", conn=conn
+        )
+        session = db.get_event(conn, event_uid)
+        assert session["start_at"] is None
+
+    def test_set_times_route_rejects_non_allocation_event(self, conn):
+        """db.set_work_allocation_times only moves a session that actually
+        belongs to this task; an ordinary event (or another task's session)
+        is a no-op, never an error."""
+        _seed_task(conn, "t1")
+        _seed_event(conn, "e1")  # plain calendar event, not a work session
+        resp = tasks_router.set_work_allocation_times(
+            "t1", "e1", start_at="2026-08-17T16:00", end_at="2026-08-17T18:00", conn=conn
+        )
+        assert resp.status_code == 303
+        assert db.get_event(conn, "e1")["start_at"] == "2026-08-17T09:00:00"  # untouched
+
     def test_task_detail_renders_work_sessions_card(self, conn):
         _seed_task(conn, "t1", title="Research")
-        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        event_uid = db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert "Work sessions" in body
         assert "/tasks/t1/work-allocations" in body
         assert "/tasks/t1/work-allocations/remove" in body
         # New card shape: sessions are a numbered list ("Session n") with the
-        # date+hour at the row's end, added purely via the header's "+" button
-        # (no datetime inputs on the page).
+        # when-area now the shared datetime picker (client-rendered trigger
+        # label) posting to the session's own set-times endpoint; the hidden
+        # start/end inputs carry the current values.
         assert "Session 1" in body
-        assert "2026-08-17 16:00 &ndash; 18:00" in body
+        assert f"/tasks/t1/work-allocations/{event_uid}/set-times" in body
+        assert 'value="2026-08-17T16:00:00"' in body
+        assert 'value="2026-08-17T18:00:00"' in body
         assert "datetime-local" not in body
 
     def test_work_sessions_card_numbers_sessions_in_creation_order(self, conn):

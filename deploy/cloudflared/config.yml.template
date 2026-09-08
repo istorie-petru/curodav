@@ -1,0 +1,33 @@
+# Rendered by install-cloudflared.sh into /etc/cloudflared/config.yml
+# ({{TUNNEL_ID}}/{{DOMAIN_APP}}/{{DOMAIN_DAV}} substituted from the tunnel
+# just created + deploy.env). Re-run install-cloudflared.sh (not a manual
+# edit here) if DOMAIN_APP/DOMAIN_DAV change -- it re-renders and restarts
+# the service.
+#
+# No local TLS/reverse-proxy layer is needed -- Cloudflare terminates TLS
+# at their edge and the tunnel carries plain HTTP to each service over
+# loopback. Unlike a Caddy-in-front setup, no inbound port is opened on
+# this host at all: the tunnel is a fully outbound connection cloudflared
+# makes out to Cloudflare's network (see ../firewall.sh -- 80/443 don't
+# need to be open for this to work).
+
+tunnel: {{TUNNEL_ID}}
+credentials-file: /etc/cloudflared/{{TUNNEL_ID}}.json
+
+ingress:
+  # curodav.service already listens on 127.0.0.1:8000 (scripts/curodav-ctl).
+  - hostname: {{DOMAIN_APP}}
+    service: http://localhost:8000
+
+  # radicale.service listens on 127.0.0.1:5232 (radicale/config.template).
+  # DAVx5 talks to it through this hostname; the webapp itself keeps
+  # talking to Radicale directly over loopback (CC_RADICALE_URL), not
+  # through this tunnel.
+  - hostname: {{DOMAIN_DAV}}
+    service: http://localhost:5232
+
+  # Required catch-all -- cloudflared refuses to start without one. Any
+  # request that doesn't match a hostname above (shouldn't happen; DNS
+  # only ever routes DOMAIN_APP/DOMAIN_DAV at this tunnel) gets a 404
+  # instead of falling through to whatever's listening on some other port.
+  - service: http_status:404

@@ -33,7 +33,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db
+from src import db, deps
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
@@ -59,7 +59,14 @@ def _seed_task(conn, uid, due_at=None, tags=None, status="active"):
 
 
 def _request(path="/"):
-    return Request({"type": "http", "method": "GET", "path": path, "headers": []})
+    # query_string included (2026-08-30) -- settings_general.html now reads
+    # request.query_params.get('note'/'error') for its "Login & security"
+    # cards' flash messages (routers/settings.py::change_login_password/
+    # change_radicale_password), and starlette's Request.query_params
+    # property KeyErrors without this ASGI-spec-mandatory scope key.
+    return Request(
+        {"type": "http", "method": "GET", "path": path, "query_string": b"", "headers": []}
+    )
 
 
 def _make_space(conn, name):
@@ -197,17 +204,24 @@ class TestAtAGlanceWidget:
         assert data["week_count"] == 0
 
     def test_links_use_real_tasks_date_filters(self, conn):
+        # 2026-08-28 "major rework" session: Status/Importance/Urgency
+        # filtering is gone from the Tasks page entirely (item 3) -- overdue_
+        # link now just points at the plain Table view; today_link/week_link
+        # are unchanged since `date_filter` is still a real Tasks page param.
         data = dashboard_router._render_at_a_glance(conn, {})
-        assert data["overdue_link"] == "/tasks?status_filter=overdue"
+        assert data["overdue_link"] == "/tasks"
         assert data["today_link"] == "/tasks?date_filter=today"
         assert data["week_link"] == "/tasks?date_filter=this_week"
 
-    def test_links_append_label_when_scoped_to_a_label_page(self, conn):
+    def test_links_no_longer_append_label_since_the_tasks_label_filter_is_gone(self, conn):
+        # 2026-08-28 "major rework" session: was `&label=CS101` (the Tasks
+        # page's label filter, now removed, item 3) -- links are scope-
+        # agnostic now, same for every label page.
         _make_project(conn, "CS101")
         data = dashboard_router._render_at_a_glance(conn, {"label_name": "CS101"})
-        assert data["overdue_link"] == "/tasks?status_filter=overdue&label=CS101"
-        assert data["today_link"] == "/tasks?date_filter=today&label=CS101"
-        assert data["week_link"] == "/tasks?date_filter=this_week&label=CS101"
+        assert data["overdue_link"] == "/tasks"
+        assert data["today_link"] == "/tasks?date_filter=today"
+        assert data["week_link"] == "/tasks?date_filter=this_week"
 
     def test_scoped_to_project_label_excludes_other_tasks(self, conn):
         _make_project(conn, "CS101")
@@ -226,12 +240,16 @@ class TestDefaultSeedIncludesNewWidgets:
         # full-width top-level entries.
         # 2026-08-15 widget consolidation: "Overdue Tasks" is now an
         # `agenda` widget configured with show=["overdue"] rather than its
-        # own type -- see _DEFAULT_STACK_MEMBER_TYPES.
+        # own type -- see _DEFAULT_STACK_MEMBER_TYPES. 2026-09-03: that
+        # Show list widened to ["overdue", "tasks", "events"] (direct
+        # follow-up to a live "Today" widget showing "Nothing to show"
+        # bug report) -- still the same third stack member, just showing
+        # more than overdue-only now.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
         assert top_level[0]["type"] == "agenda"
 
@@ -241,7 +259,7 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
 
     def test_fresh_space_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_space(conn, "Uni")
@@ -249,14 +267,14 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="Uni")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue"] for w in widgets)
+        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
 
     def test_new_label_widgets_auto_scoped_with_label_name(self, conn):
         _make_project(conn, "CS101")
         dashboard_router._ensure_default_label_widgets(conn, "CS101")
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         at_a_glance = next(w for w in widgets if w["type"] == "at_a_glance")
-        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue"])
+        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"])
         assert at_a_glance["config"]["label_name"] == "CS101"
         assert overdue["config"]["label_name"] == "CS101"
 
@@ -293,7 +311,7 @@ class TestResetToDefault:
         )
         assert len(db.list_dashboard_widgets(conn)) == original_count + 1
 
-        resp = dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        resp = dashboard_router.reset_dashboard(label_name="", conn=conn)
         assert resp.headers["location"] == "/"
         widgets = db.list_dashboard_widgets(conn)
         assert [w["title"] for w in widgets] == [None] * len(widgets)  # back to plain defaults, no "Custom"
@@ -302,7 +320,7 @@ class TestResetToDefault:
     def test_home_reset_route_directly(self, conn):
         # Full route call, no pre-existing widgets -- confirms it seeds a
         # fresh default layout even from empty (not just after a delete).
-        resp = dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        resp = dashboard_router.reset_dashboard(label_name="", conn=conn)
         assert resp.status_code == 303
         assert _canonical_default_type_order(db.list_dashboard_widgets(conn)) == _DEFAULT_LAYOUT_TYPE_ORDER
 
@@ -315,8 +333,8 @@ class TestResetToDefault:
             db.delete_dashboard_widget(conn, w["uid"])
         assert db.list_dashboard_widgets(conn, label_name="CS101") == []
 
-        resp = dashboard_router.reset_dashboard(label_name="CS101", edit=False, conn=conn)
-        assert resp.headers["location"] == "/labels/CS101"
+        resp = dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
+        assert resp.headers["location"] == "/settings/labels/CS101"
         types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
         assert types == original_types
 
@@ -329,7 +347,7 @@ class TestResetToDefault:
         home_count = len(db.list_dashboard_widgets(conn))
         math_count = len(db.list_dashboard_widgets(conn, label_name="MATH201"))
 
-        dashboard_router.reset_dashboard(label_name="CS101", edit=False, conn=conn)
+        dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
 
         assert len(db.list_dashboard_widgets(conn)) == home_count
         assert len(db.list_dashboard_widgets(conn, label_name="MATH201")) == math_count
@@ -338,7 +356,7 @@ class TestResetToDefault:
         # "revert to default should show the default right away" -- after
         # reset, _ensure_default_widgets must not re-seed a *second* time
         # on the next normal page load (still a one-time-per-scope seed).
-        dashboard_router.reset_dashboard(label_name="", edit=False, conn=conn)
+        dashboard_router.reset_dashboard(label_name="", conn=conn)
         count_after_reset = len(db.list_dashboard_widgets(conn))
         dashboard_router._ensure_default_widgets(conn)  # simulates the next page load
         assert len(db.list_dashboard_widgets(conn)) == count_after_reset
@@ -413,50 +431,58 @@ class TestQuickAddButtons:
         assert 'id="quick-add-form"' not in body
         assert 'name="title" placeholder="Quick-add a task and press Enter' not in body
 
-    def test_dashboard_html_has_single_merged_quick_add_button(self, conn):
+    def test_dashboard_html_has_no_page_level_quick_add_button(self, conn):
         # 2026-08-10: the two New task/New event buttons merged into one
-        # "+" that opens the shared quick_add.html modal (a Task/Event tab
-        # switch inside it) -- the old per-kind buttons are gone from the
-        # page, which still opens the modal (data-modal). The whole action
-        # bar (New/Edit mode) now lives inside .page-banner-actions and the
-        # old separate .toolbar row is gone (2026-08-10 header rework).
+        # "+" that opened the shared quick_add.html modal, living in
+        # .page-banner-actions. 2026-08-29 (direct request): that
+        # page-level button is gone outright now -- obsolete once the
+        # sidebar rail got its own global "+ New" (13c, base.html),
+        # reachable from every page. Checked via `data-fab`, the removed
+        # button's own distinguishing attribute -- the sidebar's own
+        # quick-add link (always present, unrelated) has no data-fab, so
+        # a bare `href="/quick/add"` substring check would false-positive
+        # on it regardless of whether this page's own button still exists.
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' in body
+        assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert body.count('data-modal') >= 2
         assert 'class="page-banner-actions"' in body
         assert 'class="toolbar"' not in body
 
-    def test_label_page_has_single_merged_quick_add_button(self, conn):
+    def test_label_page_has_no_page_level_quick_add_button(self, conn):
         _make_project(conn, "CS101")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' in body
+        assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
         assert 'class="page-banner-actions"' in body
         assert 'class="toolbar"' not in body
 
-    def test_dashboard_html_hides_quick_add_in_edit_mode(self, conn):
-        # 2026-08-07 (screenshot-driven toolbar rework): quick capture
-        # lives in the main toolbar's non-edit-mode branch and must not
-        # render at all while editing the widget grid. Edit mode instead
-        # swaps in Done/New widget/Add-Change banner inside the same
-        # .page-banner-actions bar.
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+    def test_dashboard_html_edit_mode_actions_present(self, conn):
+        # 2026-08-07 (screenshot-driven toolbar rework): edit mode swaps
+        # in New widget/Add-Change banner inside .page-banner-actions.
+        # 2026-08-29 (sidebar redesign item 13d): edit mode is a
+        # persistent Settings > Appearance toggle now (EDIT_MODE_KEY), not
+        # a per-page `?edit=1` query param. 2026-08-29 (same day, direct
+        # request): the non-edit-mode branch that used to render here
+        # (the page-level quick-add button) is gone outright, not just
+        # hidden in edit mode -- there's nothing left to "hide".
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' not in body
+        assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Add banner' in body
         assert 'class="page-banner-actions"' in body
 
-    def test_label_page_hides_quick_add_in_edit_mode(self, conn):
+    def test_label_page_edit_mode_actions_present(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add"' not in body
+        assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Reset layout' in body
         assert 'class="page-banner-actions"' in body
@@ -472,10 +498,17 @@ class TestQuickAddButtons:
         body = resp.body.decode()
         assert 'dashboard-quick-add' not in body
 
-    def test_dashboard_html_quick_add_comes_before_edit_mode_button(self, conn):
+    def test_dashboard_html_no_longer_has_a_page_level_edit_mode_button(self, conn):
+        # 2026-08-29 (sidebar redesign item 13d): the old page-level "Edit
+        # mode" link (`<a href="?edit=1" ...>Edit mode</a>`) is gone --
+        # edit mode is only reachable from Settings > Appearance now.
+        # Checked by exact markup, not a bare substring: several code
+        # comments on this page legitimately mention "Edit mode"/`?edit=1`
+        # in prose while explaining the 2026-08-29 change itself.
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
-        assert body.index('href="/quick/add"') < body.index('Edit mode')
+        assert 'href="?edit=1"' not in body
+        assert '>Edit mode</a>' not in body
 
 
 class TestQuickAddModal:
@@ -524,7 +557,8 @@ class TestQuickAddModal:
 class TestLabelPageResetButton:
     def test_reset_button_present_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert '/dashboard/reset' in body
         assert 'data-confirm-sheet' in body
@@ -534,16 +568,17 @@ class TestLabelPageResetButton:
         # actions before mode/utility actions", same principle already
         # applied to the non-edit-mode row's New task/New event ordering.
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert body.index('New widget') < body.index('Reset layout')
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), edit=False, conn=conn)
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
-        # present outside edit mode -- only the Edit mode/Customize links.
+        # present outside edit mode -- only the New/Customize links.
         assert '<form method="post" action="/dashboard/reset"' not in body
 
 
@@ -552,7 +587,8 @@ class TestHomeResetButton:
     # control a label page already has (TestLabelPageResetButton above) --
     # /dashboard/reset with no label_name resets Home's scope.
     def test_reset_button_present_in_edit_mode(self, conn):
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
         assert 'action="/dashboard/reset"' in body
         assert 'data-confirm-sheet' in body
@@ -560,7 +596,8 @@ class TestHomeResetButton:
     def test_new_widget_comes_before_reset_layout_in_edit_mode_toolbar(self, conn):
         # Same "creation actions before mode/utility actions" ordering the
         # label page's toolbar already follows.
-        resp = dashboard_router.dashboard_view(_request("/?edit=1"), edit=True, conn=conn)
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_view(_request(), conn=conn)
         body = resp.body.decode()
         assert body.index('New widget') < body.index('Reset layout')
 
@@ -571,23 +608,38 @@ class TestHomeResetButton:
 
 
 class TestSettingsResetButton:
-    def test_settings_advanced_has_reset_button(self, conn, tmp_path):
+    def test_settings_data_maintenance_has_reset_button(self, conn, tmp_path):
         # 2026-08-08 Settings redesign: Reset to default layout lived on
         # Settings > Widgets, alongside the Custom widgets toggle it
         # shared a hub group with; that toggle was removed outright the
         # same day (see routers/settings.py's module docstring) and the
         # one remaining action folded into Settings > Advanced instead.
+        # 2026-08-17 Advanced itself folded into the merged Data &
+        # Maintenance page's "Maintenance & upkeep" section.
         #
-        # settings_advanced also reads request.app.state.settings
-        # .radicale_base_url now (Export & backup inlined into this page
-        # the same day) -- needs a fuller fake request than the bare one
-        # this file's own _request() builds.
+        # The merged page also reads request.app.state.settings' db_path,
+        # backup_dir and radicale_base_url and renders the note/error
+        # query-param strip -- needs a fuller fake request than the bare
+        # one this file's own _request() builds.
         from types import SimpleNamespace
 
-        fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(radicale_base_url="http://localhost:5232")))
-        req = _request("/settings/advanced")
-        req.scope["app"] = fake_app
-        resp = settings_router.settings_advanced(req, conn=conn)
+        fake_app = SimpleNamespace(
+            state=SimpleNamespace(
+                settings=SimpleNamespace(
+                    radicale_base_url="http://localhost:5232",
+                    db_path=tmp_path / "cache.sqlite",
+                    backup_dir=tmp_path / "backups",
+                )
+            )
+        )
+        req = Request(
+            {
+                "type": "http", "method": "GET", "path": "/settings/data-maintenance",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [], "app": fake_app,
+            }
+        )
+        resp = settings_router.settings_data_maintenance(req, conn=conn)
         body = resp.body.decode()
         assert 'action="/dashboard/reset"' in body
         assert 'data-confirm-sheet' in body

@@ -4,89 +4,153 @@
    Rendered alone by the fragment route it carries the exact id the page's
    own copy uses -- #tasks-body -- so static/async_crud.js's refreshRegion()
    can swap it in place by id after a mutation.
-   Expects the same context list_tasks builds (open_tasks, completed_tasks,
-   group_by, open_groups, completed_groups, paginated, total_pages, page,
-   sort, dir, active_* filters, q, active_label). The `sort_link` macro and
-   the active_group_uid/active_project_uid helpers it references must also
-   be in context -- the page defines them at block scope above this include;
-   the fragment route must supply the same defaults. #}
+
+   2026-08-28 "major rework" session (item 3): grouping is now always on
+   (Project -> Unassigned -> Completed, routers/tasks.py's
+   _build_task_groups) -- there is no more ungrouped flat table, no more
+   `group_by` toggle, and no more column-header sort links (every group but
+   Completed is fixed due-date-ascending; Completed is most-recent-first).
+
+   2026-08-29 (STATE.md backlog item 9 follow-up, direct request: "habits
+   should be a separate table at the end of the normal tasks table, with
+   its own first row") -- the Habits group used to be just another
+   `grp.kind == 'habits'` bucket inside this same `#task-table`, reusing
+   the Project/Unassigned/Completed header's Title/Status/Date/Scheduled/
+   Labels labels for columns _habit_row.html actually repurposes (Status
+   -> check-in, Date -> cadence, Scheduled -> streak -- see that template's
+   own header comment). Pulled out into its own `<table id="habits-table">`
+   below the main one, with a header row that names what its columns
+   actually are instead of borrowing the task table's. static/
+   tasks_table.js's bulk-select/inline-edit listeners are scoped to
+   `#tasks-body` as a whole (not either table specifically), so a
+   selection/checkbox-drag/double-click-edit still works across both --
+   see that file's own header comment.
+
+   2026-08-29 (direct request, sidebar-redesign layout fix session) -- the
+   task table's own "Scheduled" column (work-allocation hours,
+   test_task_scheduled_column.py) dropped from this table entirely. With the
+   sidebar redesign's wider expanded rail (base.html/style.css
+   html[data-sidebar-expanded]) narrowing the space `main` has to work with,
+   a table wide enough for Title/Status/Date/Scheduled/Labels routinely
+   didn't fit, forcing `.table-scroll`'s whole-table horizontal scroll and
+   pushing Status/Labels off-screen instead of just the Title text (a plain
+   "the tasks table is broken" bug, not a design choice). Dropping the least
+   load-bearing column -- Scheduled is still fully visible per-task on the
+   detail modal's "Work sessions" card, never removed there -- was simpler
+   and more direct than trying to keep all four narrow-table columns and
+   fighting for space among them. `t.work_hours` itself (routers/tasks.py's
+   `db.task_work_hours_bulk` batch) is untouched -- still attached to every
+   row's context, just no longer rendered as its own column.
+
+   2026-09-03 (direct request: "don't repeat column headers, say them once
+   -- don't group tasks by label any more, make one single big table --
+   also I want the white card background back") -- the several rounds of
+   per-group `.card`+`<table>`+`<thead>` (Project/Unassigned/Completed each
+   bounded and each repeating Title/Status/Date/Labels in its own header,
+   2026-08-30 history above) are gone. `routers/tasks.py`'s `_build_task_
+   groups`/`groups` context is UNCHANGED -- still computes Project
+   (alphabetical) -> Habits -> Unassigned -> Completed exactly as before
+   (test_tasks_grouping.py asserts that backend shape directly, not this
+   template's markup) -- only the rendering collapses every non-Habits,
+   non-Completed group's tasks into one flat `<tbody>`, in the same
+   Project-alphabetical-then-Unassigned order the groups list already
+   provides, followed by Completed's own tasks in that same `<tbody>`
+   (still visually dimmed via the existing `.task-row-completed` class,
+   still last, just no longer behind its own header/card boundary). One
+   `<table id="task-table">` inside one `.card.table-scroll` wrapper (the
+   plain elevated-card look restored -- see style.css's own comment on the
+   `.task-group-card`/`.task-table-habits` flattening override this
+   removes), one `<thead>` with the plain Title/Status/Date/Labels labels
+   -- no group name, no count, no per-group `+`. The one remaining way to
+   add a task is the "+ Task nou" button _tasks_toolbar.html now renders
+   above this region (the project it belongs to is picked inside the
+   create modal's own Labels field). The Habits table is entirely
+   untouched by this -- still its own bounded `.card`+`<table id="habits-
+   table">`+`<thead>` with its own name/count/`+`, per the reasoning
+   above: it isn't "grouping tasks by label," it's a different set of
+   columns for a different kind of row.
+   Expects: groups, has_any, has_main_tasks, has_habits, today_iso, q,
+   active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
-{% macro sort_link(key, label) %}
-<a class="th-sort" href="/tasks?date_filter={{ active_date_filter }}&status_filter={{ active_status_filter }}&importance_filter={{ active_importance_filter }}&urgency_filter={{ active_urgency_filter }}&sort={{ key }}&dir={{ 'desc' if sort==key and dir=='asc' else 'asc' }}{% if q %}&q={{ q }}{% endif %}{% if active_label %}&label={{ active_label|urlencode }}{% endif %}{% if _apuid %}&project_uid={{ _apuid }}{% endif %}{% if _aguid %}&group_uid={{ _aguid }}{% endif %}{% if group_by and group_by != 'none' %}&group_by={{ group_by }}{% endif %}">{{ label }}{% if sort==key %}{{ icon('chevron-up' if dir=='asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a>
-{% endmacro %}
-<div id="tasks-body">
-{% if open_tasks or completed_tasks %}
-<div class="card table-scroll">
-<table class="task-table" id="task-table">
+{% from "_habit_row.html" import habit_row with context %}
+{% set _habits_group = (groups | selectattr('kind', 'equalto', 'habits') | first) %}
+{% set _completed_group = (groups | selectattr('kind', 'equalto', 'completed') | first) %}
+{% set _flat_groups = groups | rejectattr('kind', 'equalto', 'habits') | rejectattr('kind', 'equalto', 'completed') | list %}
+<div id="tasks-body" class="main-shell-body">
+{% if has_any %}
+<!-- 2026-09-07 (direct report: "the habits or completed tables should
+     appear only if there is data") -- _build_task_groups
+     (routers/tasks.py) always appends a Habits group regardless of
+     whether there are any habits (grouping is unconditional, one fixed
+     order), so `_habits_group` here is always truthy even at zero --
+     gating on has_main_tasks/has_habits (routers/tasks.py's own new,
+     narrower flags) instead of group presence is what actually hides an
+     empty table. Completed was never a separate table to begin with (its
+     tasks are flattened into this same #task-table's <tbody>, right
+     below) -- an empty Completed group already contributed zero rows
+     silently, nothing to gate there. What WAS visibly broken: an
+     account with only habits (no regular/completed tasks) still got this
+     whole empty Title/Status/Date/Labels table rendered above the Habits
+     one, since the old `has_any` check didn't distinguish "habits exist"
+     from "regular tasks exist." -->
+{% if has_main_tasks %}
+<div id="task-table" class="card table-scroll task-group-card">
+<table class="task-table">
     <thead>
         <tr>
-            <th style="width:26px"></th>
-            <th>{{ sort_link('title', 'Title') }}</th>
-            <th>{{ sort_link('status', 'Status') }}</th>
-            <th>{{ sort_link('due_at', 'Due') }}</th>
-            <th>Scheduled</th>
+            <th></th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Date</th>
             <th>Labels</th>
-            <th style="width:40px"></th>
+            <th></th>
         </tr>
     </thead>
-    {# Row-select checkbox for bulk actions (static/tasks_table.js) --
-       2026-08-01. This column used to be a "Mark done" checkbox, but it
-       duplicated the Status pill two columns over (which already covers
-       "set to Done" inline, no reload) -- one control per outcome, not
-       two. Marking a task done is now the pill's job exclusively; this
-       checkbox's only job is selection. #}
-    {% if group_by == 'project' %}
-    {% for grp in open_groups %}
     <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
+        {% for grp in _flat_groups %}{% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}{% endfor %}
+        {% if _completed_group %}{% for t in _completed_group.tasks %}{{ task_row(t) }}{% endfor %}{% endif %}
     </tbody>
-    <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in open_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% if paginated and total_pages > 1 %}
-    <tbody>
-        <tr class="task-pager-row"><td colspan="9">{% include "_tasks_pager.html" %}</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks and open_tasks %}
-    <!-- Completed tasks stay visible rather than vanishing on check-off,
-         but are clearly separated and pushed to the bottom -- a dedicated
-         header row (not just a CSS class) makes the boundary obvious even
-         scrolling through a long table. -->
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">Completed ({{ completed_tasks|length }})</td></tr>
-    </tbody>
-    {% endif %}
-    {% if completed_tasks %}
-    {% if group_by == 'project' %}
-    {% for grp in completed_groups %}
-    <tbody>
-        <tr class="task-section-divider"><td colspan="9">{{ grp.name or 'No project' }} ({{ grp.tasks|length }})</td></tr>
-    </tbody>
-    <tbody>
-        {% for t in grp.tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endfor %}
-    {% else %}
-    <tbody>
-        {% for t in completed_tasks %}{{ task_row(t) }}{% endfor %}
-    </tbody>
-    {% endif %}
-    {% endif %}
 </table>
 </div>
+{% endif %}
+
+{% if has_habits %}
+<div class="card table-scroll task-table-habits">
+<table class="task-table" id="habits-table">
+    <thead>
+        <tr>
+            {# 2026-08-30 ("remove the grouping for habits, it's
+               redundant") -- Title renamed to this group's own name +
+               count, so the generic "Title" this table used to print
+               (redundant with its own Check-in/Cadence/Streak columns
+               already saying "this is Habits") carries real information
+               instead. Kept as-is by the 2026-09-03 flattening above --
+               Habits was never part of the Project/Unassigned/Completed
+               "grouped by label" complaint, it's a structurally different
+               row shape (see this file's own top comment). #}
+            <th></th>
+            <th>{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
+            <th>Check-in</th>
+            <th>Cadence</th>
+            <th>Streak</th>
+            <th>Labels</th>
+            <th class="task-table-add-th">
+                <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in _habits_group.habit_items %}{{ habit_row(item) }}{% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_label or active_date_filter != 'all' or active_status_filter != 'all' or active_importance_filter != 'all' or active_urgency_filter != 'all' or _apuid or _aguid %}
+    {% if q or active_date_filter != 'all' %}
     <div class="empty-state-title">No tasks match this filter</div>
-    <div class="empty-state-text">Try a different label, or clear the search and filters above.</div>
+    <div class="empty-state-text">Try a different date range, or clear the search.</div>
     {% elif is_inbox %}
     <div class="empty-state-title">Nothing to triage</div>
     <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>

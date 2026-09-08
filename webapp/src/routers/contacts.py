@@ -4,11 +4,12 @@ import base64
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates
+from ..image_sniff import sniff_image_type
 from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -55,7 +56,28 @@ async def _read_photo(photo: UploadFile | None) -> tuple[str, str] | None:
     data = await photo.read()
     if len(data) > _MAX_PHOTO_BYTES:
         raise HTTPException(400, "Photo is too large (max 5MB).")
-    return base64.b64encode(data).decode("ascii"), vcard_type
+    # 2026-09-07 fix (flagged in an earlier audit): `vcard_type` above only
+    # reflects the browser's own Content-Type claim -- confirm the bytes
+    # actually are a real image before they go anywhere near a vCard,
+    # using whatever the bytes actually are rather than trusting the
+    # (possibly spoofed) header any further.
+    sniffed = sniff_image_type(data)
+    if sniffed is None:
+        raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
+    return base64.b64encode(data).decode("ascii"), sniffed.upper()
+
+
+def _attach_photo_url(contact: dict) -> dict:
+    """Every place this router hands a contact dict to a template that
+    might render its avatar (deps.py's avatar() global) attaches
+    `photo_url` here first (2026-08-29, direct request: "better cache
+    these images") -- a real, `?v=`-versioned URL (contact_photo_image
+    below) that avatar() prefers over embedding the photo inline as a
+    `data:` URI. A contact with no photo is untouched (photo_url stays
+    unset, avatar() falls through to the initials fallback)."""
+    if contact.get("photo_b64"):
+        contact["photo_url"] = f"/contacts/{contact['uid']}/photo?v={contact.get('photo_version') or ''}"
+    return contact
 
 
 def _tags_list(tags: str) -> list[str]:
@@ -141,14 +163,8 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
     ]
 
 
-@router.get("")
-def list_contacts(
-    request: Request,
-    q: str | None = None,
-    tag: str | None = None,
-    conn=Depends(get_db),
-):
-    contacts = db.list_contacts(conn, q=q)
+def _contacts_list_context(conn, request: Request, q: str | None, tag: str | None) -> dict:
+    contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q)]
     # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
     # this is now the *only* grouping/filtering mechanism for contacts,
     # `category` is gone) -- `?tag=` matches contacts.tags
@@ -160,17 +176,47 @@ def list_contacts(
             c for c in contacts
             if any(t.lower() == active_tag for t in c.get("tags") or [])
         ]
+    return {
+        "request": request,
+        "active_tab": "contacts",
+        "contacts": contacts,
+        "q": q or "",
+        "contact_tags": db.list_contact_tag_names(conn),
+        "active_tag": active_tag,
+    }
+
+
+@router.get("")
+def list_contacts(
+    request: Request,
+    q: str | None = None,
+    tag: str | None = None,
+    conn=Depends(get_db),
+):
     return templates.TemplateResponse(
         "contacts_list.html",
-        {
-            "request": request,
-            "active_tab": "contacts",
-            "contacts": contacts,
-            "q": q or "",
-            "contact_tags": db.list_contact_tag_names(conn),
-            "active_tag": active_tag,
-        },
+        _contacts_list_context(conn, request, q, tag),
     )
+
+
+@router.get("/regions")
+def contacts_regions(
+    request: Request,
+    region: str = "list",
+    q: str | None = None,
+    tag: str | None = None,
+    conn=Depends(get_db),
+):
+    """Async-CRUD region fragment (features/async-crud.md): renders the
+    #contacts-body div shared with contacts_list.html so refreshRegion() can
+    swap it in place after a contact mutation instead of a full reload.
+    Takes the same query params as list_contacts so the refreshed region
+    honors the active search/label filter."""
+    if region != "list":
+        return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
+    ctx = _contacts_list_context(conn, request, q, tag)
+    html = templates.env.get_template("_contacts_body.html").render(ctx)
+    return HTMLResponse(html)
 
 
 @router.get("/new")
@@ -219,6 +265,7 @@ async def create_contact(
     tags_labels: list[str] = Form([]),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -273,18 +320,55 @@ async def create_contact(
         "updated_at": now,
     }
     db.upsert_contact(conn, row)
-    return RedirectResponse(url="/contacts", status_code=303)
+    return respond(x_requested_with, "/contacts", status_code=201, uid=row["uid"])
 
 
 @router.get("/{uid}")
 def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
+    if contact:
+        _attach_photo_url(contact)
     return templates.TemplateResponse(
         "contact_detail.html",
         {
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
+            # 2026-09-03 (direct request, view-modal cover banner baseline)
+            # -- same resolved label/Project/Space banner db.banner_for_task
+            # already gave tasks, generalized to db.banner_for_object.
+            "banner": db.banner_for_object(conn, "contact", contact) if contact else None,
+        },
+    )
+
+
+@router.get("/{uid}/photo")
+def contact_photo_image(uid: str, conn=Depends(get_db)):
+    """Serves a contact's decoded photo bytes for `<img src>` (2026-08-29,
+    direct request: "better cache these images"). Exact mirror of
+    routers/banners.py's banner_image / routers/settings.py's
+    profile_photo_image -- same problem (a contact's photo used to be
+    embedded as an inline `data:` URI, deps.py's avatar() global, riding
+    along in the HTML of every contact list row that has one, not just
+    the one contact being viewed), same fix (a real, separately cacheable
+    request), same immutable Cache-Control safety argument (the URL's own
+    `?v=` -- contacts.photo_version -- changes whenever the photo does)."""
+    contact = db.get_contact(conn, uid)
+    if not contact or not contact.get("photo_b64"):
+        raise HTTPException(404)
+    try:
+        data = base64.b64decode(contact["photo_b64"], validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(404)
+    image_type = str(contact.get("photo_type") or "").lower()
+    if image_type not in ("jpeg", "png", "gif", "webp"):
+        image_type = "jpeg"
+    return Response(
+        content=data,
+        media_type=f"image/{image_type}",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Encoding": "identity",
         },
     )
 
@@ -292,6 +376,8 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
 @router.get("/{uid}/edit")
 def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
     contact = db.get_contact(conn, uid)
+    if contact:
+        _attach_photo_url(contact)
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "contact_form.html",
@@ -338,6 +424,7 @@ async def update_contact(
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     remove_photo: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
@@ -379,10 +466,14 @@ async def update_contact(
         # else: no new file chosen -- row already carries the existing
         # photo_b64/photo_type through from `dict(existing)` above.
     db.upsert_contact(conn, row)
-    return RedirectResponse(url=f"/contacts/{uid}", status_code=303)
+    return respond(x_requested_with, f"/contacts/{uid}")
 
 
 @router.post("/{uid}/delete")
-def delete_contact(uid: str, conn=Depends(get_db)):
+def delete_contact(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     db.delete_contact(conn, uid)
-    return RedirectResponse(url="/contacts", status_code=303)
+    return respond(x_requested_with, "/contacts")

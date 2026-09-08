@@ -1,143 +1,111 @@
 {% extends "base.html" %}
 {% block title %}Sleep & Leisure Time - Settings{% endblock %}
 {% block content %}
-{% include "_settings_breadcrumb.html" with context %}
-<h1>Sleep &amp; Leisure Time</h1>
-<p class="settings-hint" style="margin-bottom:12px">
-    Weekly recurring hours -- no dates, just a time-of-day range and which
-    days it applies to (e.g. 00:00&ndash;05:59 Monday-Sunday). The Week and
-    Day calendar views hatch these hours (red for Sleep, green for Leisure)
-    and warn -- but never block -- when an event or scheduled work session
-    is placed inside one.
-</p>
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
+{% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
+{{ page_header_narrow("Sleep & Leisure Time", "moon") }}
+<!-- see event_form.html for why this is wrapped -- static/modal.js -->
+<div id="modal-target">
 
-<!-- Sleep Time -- same Tasks-table-style grid as Holidays
-     (settings_holidays.html), just with a fixed `kind` per section instead
-     of a free-form calendar name, and a day-of-week multiselect
-     (_widget_list_multiselect.html, filter mode) instead of a date range.
-     Deliberately two separate top-level sections rather than one Jinja
-     macro/include loop -- _widget_list_multiselect.html's own set-then-
-     include pattern is only proven (elsewhere in this codebase) directly
-     inside a template body/for-loop, not inside a macro's own local
-     scope, so this duplicates the small block rather than risk a scoping
-     surprise. -->
-<h2 style="margin:20px 0 8px">Sleep Time</h2>
-<div class="card" style="margin-bottom:14px">
-    <form method="post" action="/settings/time-blocks" id="new-sleep-form" class="calendar-new-form">
-        <input type="hidden" name="kind" value="sleep">
-        <input type="text" name="label" placeholder="Title (optional)">
-        <input type="time" name="start_time" required title="Start">
-        <input type="time" name="end_time" required title="End">
-        {% set ms_mode = 'filter' %}
-        {% set ms_form_id = 'new-sleep-form' %}
-        {% set ms_name = 'days' %}
-        {% set ms_label = 'Days' %}
-        {% set ms_items = [] %}
-        {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-        {% set ms_selected = time_block_days %}
-        {% set ms_wide = false %}
-        {% set ms_extra_class = '' %}
-        {% include '_widget_list_multiselect.html' %}
-        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
-    </form>
-</div>
+<!-- 2026-09-07 (audit-fixes-2.0.md item 8) / 2026-09-08 (direct request):
+     the per-group h2.section-label this .settings-group wrapper used to
+     carry is gone, along with every other Settings section-label.
 
-{% if sleep_blocks %}
-<div class="card table-scroll">
-<table class="task-table time-block-table" id="sleep-block-table">
-    <thead>
-        <tr><th>Title</th><th>Start</th><th>End</th><th>Days</th><th></th></tr>
-    </thead>
-    <tbody>
-        {% for b in sleep_blocks %}
-        <tr data-uid="{{ b.uid }}">
-            <td><input type="text" class="inline-text" data-uid="{{ b.uid }}" data-field="label" value="{{ b.label }}" placeholder="(untitled)"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="start_time" value="{{ b.start_time }}"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="end_time" value="{{ b.end_time }}"></td>
-            <td>
-                {% set ms_mode = 'filter' %}
-                {% set ms_form_id = none %}
-                {% set ms_name = 'days__' ~ b.uid %}
-                {% set ms_label = 'Days' %}
-                {% set ms_items = [] %}
-                {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-                {% set ms_selected = b.days.split(',') if b.days else [] %}
-                {% set ms_wide = false %}
-                {% set ms_extra_class = 'time-block-days-select' %}
-                {% include '_widget_list_multiselect.html' %}
-            </td>
-            <td style="text-align:right">
-                <form class="form-inline" method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-delete-undo="{{ b.label or 'Sleep time' }}">
-                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+     2026-09-08 follow-up (direct request): Sleep and Leisure used to be
+     two separate tables/bulk-select instances/"+ Add" rows here -- one
+     merged table now, with a per-row "Type" pill (red for Sleep, green
+     for Leisure, matching the Week/Day grid's own hatching colors --
+     routers/calendar.py's `_time_block_overlays`) standing in for what
+     table a row used to live in. routers/settings.py::settings_time_blocks
+     concatenates sleep_blocks + leisure_blocks (each already ordered by
+     start_time) into one `time_blocks` list, Sleep rows first -- see that
+     function's own comment for why concatenation rather than a single
+     alphabetical-by-kind query. -->
+<div class="settings-group">
+<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+     "bulk actions on tables"). Shared markup -- see _bulk_actions_bar.html
+     (2026-09-07, audit-fixes-2.0.md item 9). -->
+{{ bulk_actions_bar("time-blocks") }}
+<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
+     matches _tasks_body.html's exact "card table-scroll" single-div
+     convention now, same as the Labels/Holidays tables. -->
+<div class="card table-scroll" id="time-block-table-wrapper">
+        <table id="time-block-table">
+            <thead>
+                <tr>
+                    <th class="col-checkbox"></th>
+                    <th>Block</th>
+                    <th>Type</th>
+                    <th>Hours</th>
+                    <th>Days</th>
+                    <th class="col-actions-narrow">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="time-block-body">
+                {% if time_blocks %}
+                    {% for b in time_blocks %}
+                    <tr data-uid="{{ b.uid }}">
+                        <td>
+                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or (b.kind ~ ' time block') }}">
+                        </td>
+                        <td>
+                            <div class="label-cell">
+                                <span class="label-name">{{ b.label or '(untitled)' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if b.kind == 'sleep' %}
+                            <span class="pill-static pill-red">{{ icon('moon', 'icon-sm') }} Sleep</span>
+                            {% else %}
+                            <span class="pill-static pill-green">{{ icon('sun', 'icon-sm') }} Leisure</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
+                        </td>
+                        <td>
+                            <span class="settings-hint">{{ b.days_label }}</span>
+                        </td>
+                        <td>
+                            {{ row_action_buttons(
+                                "/settings/time-blocks/" ~ b.uid ~ "/edit",
+                                "/settings/time-blocks/" ~ b.uid ~ "/delete",
+                                b.kind ~ " time",
+                                'Delete "' ~ (b.label or (b.kind ~ ' time block')) ~ '"? This stops the Week/Day grid from hatching these hours.'
+                            ) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    {{ empty_state_row(6, "No time blocks configured yet") }}
+                {% endif %}
+                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
+                     "+ Add X" convention as _tasks_body.html's
+                     .task-add-row. -->
+                <tr class="task-add-row">
+                    <td colspan="6"><a href="/settings/time-blocks/new" data-modal>{{ icon('plus', 'icon-sm') }} Add time block</a></td>
+                </tr>
+            </tbody>
+        </table>
 </div>
-{% else %}
-<div class="empty-state">No sleep time configured yet -- add one above.</div>
-{% endif %}
-
-<!-- Leisure Time -- identical shape to Sleep Time above, kind="leisure". -->
-<h2 style="margin:24px 0 8px">Leisure Time</h2>
-<div class="card" style="margin-bottom:14px">
-    <form method="post" action="/settings/time-blocks" id="new-leisure-form" class="calendar-new-form">
-        <input type="hidden" name="kind" value="leisure">
-        <input type="text" name="label" placeholder="Title (optional)">
-        <input type="time" name="start_time" required title="Start">
-        <input type="time" name="end_time" required title="End">
-        {% set ms_mode = 'filter' %}
-        {% set ms_form_id = 'new-leisure-form' %}
-        {% set ms_name = 'days' %}
-        {% set ms_label = 'Days' %}
-        {% set ms_items = [] %}
-        {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-        {% set ms_selected = time_block_days %}
-        {% set ms_wide = false %}
-        {% set ms_extra_class = '' %}
-        {% include '_widget_list_multiselect.html' %}
-        <button type="submit" class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} Add</button>
-    </form>
 </div>
-
-{% if leisure_blocks %}
-<div class="card table-scroll">
-<table class="task-table time-block-table" id="leisure-block-table">
-    <thead>
-        <tr><th>Title</th><th>Start</th><th>End</th><th>Days</th><th></th></tr>
-    </thead>
-    <tbody>
-        {% for b in leisure_blocks %}
-        <tr data-uid="{{ b.uid }}">
-            <td><input type="text" class="inline-text" data-uid="{{ b.uid }}" data-field="label" value="{{ b.label }}" placeholder="(untitled)"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="start_time" value="{{ b.start_time }}"></td>
-            <td><input type="time" class="inline-time" data-uid="{{ b.uid }}" data-field="end_time" value="{{ b.end_time }}"></td>
-            <td>
-                {% set ms_mode = 'filter' %}
-                {% set ms_form_id = none %}
-                {% set ms_name = 'days__' ~ b.uid %}
-                {% set ms_label = 'Days' %}
-                {% set ms_items = [] %}
-                {% for _d in time_block_days %}{% set _ = ms_items.append({'uid': _d, 'name': _d}) %}{% endfor %}
-                {% set ms_selected = b.days.split(',') if b.days else [] %}
-                {% set ms_wide = false %}
-                {% set ms_extra_class = 'time-block-days-select' %}
-                {% include '_widget_list_multiselect.html' %}
-            </td>
-            <td style="text-align:right">
-                <form class="form-inline" method="post" action="/settings/time-blocks/{{ b.uid }}/delete" data-delete-undo="{{ b.label or 'Leisure time' }}">
-                    <button type="submit" class="icon-btn" title="Delete">{{ icon('trash') }}</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
 </div>
-{% else %}
-<div class="empty-state">No leisure time configured yet -- add one above.</div>
-{% endif %}
 {% endblock %}
-{% block extra_scripts %}<script src="{{ static_url('settings_time_blocks.js') }}"></script>{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener("DOMContentLoaded", function () {
+    window.CCBulkSelect.init({
+        tableId: "time-block-table",
+        barId: "time-blocks-bulk-bar",
+        countId: "time-blocks-bulk-count",
+        clearId: "time-blocks-bulk-clear",
+        deleteButtonId: "time-blocks-bulk-delete",
+        deleteUrl: "/settings/time-blocks/bulk-delete",
+        itemLabel: "time block",
+    });
+});
+</script>
+{% endblock %}

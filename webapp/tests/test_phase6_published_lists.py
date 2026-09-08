@@ -152,11 +152,18 @@ class TestEvaluateLabelFilter:
         )
         assert set(result) == {"t1", "t2"}
 
-    def test_no_positive_criteria_matches_nothing(self, conn):
+    def test_no_positive_criteria_matches_everything(self, conn):
+        # 2026-09-08 (direct request, "make published lists more
+        # permissive... even if no labels present"): this used to assert
+        # the opposite -- an empty filter meant "match nothing." Flipped
+        # to "match everything of this entity_type" so an account with no
+        # labels at all can still publish a useful (non-empty-forever)
+        # List. `none` still subtracts from that "everything" base.
         _make_task(conn, "t1", "A", ["University"])
-        assert evaluate_label_filter(conn, "task", {}) == []
-        assert evaluate_label_filter(conn, "task", None) == []
-        assert evaluate_label_filter(conn, "task", {"none": ["University"]}) == []
+        _make_task(conn, "t2", "B", [])
+        assert set(evaluate_label_filter(conn, "task", {})) == {"t1", "t2"}
+        assert set(evaluate_label_filter(conn, "task", None)) == {"t1", "t2"}
+        assert evaluate_label_filter(conn, "task", {"none": ["University"]}) == ["t2"]
 
     def test_scoped_to_entity_type(self, conn):
         _make_task(conn, "t1", "A", ["University"])
@@ -280,11 +287,12 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         _make_task(conn, "t1", "A", ["University"])
+        _make_task(conn, "t2", "B", ["Personal"])
         bridge = FakeBridge()
 
         router.create_list(
             name="Uni tasks", entity_type="task",
-            filter_all=["University"], filter_any=[], filter_none=[],
+            labels=["University"],
             conn=conn, bridge=bridge,
         )
         rows = db.list_published_lists(conn)
@@ -293,15 +301,7 @@ class TestPublishedListsRouterCrud:
         assert rows[0]["radicale_collection_path"] == "published-uni-tasks"
         assert set(bridge.task_collections["published-uni-tasks"]) == {"t1"}
 
-        # Edit: broaden the filter to include a second label via "any".
-        _make_task(conn, "t2", "B", ["Personal"])
-        router.update_list(
-            list_id, name="Uni tasks", filter_all=[], filter_any=["University", "Personal"],
-            filter_none=[], conn=conn, bridge=bridge,
-        )
-        updated = db.get_published_list(conn, list_id)
-        assert updated["label_filter"] == {"all": [], "any": ["University", "Personal"], "none": []}
-        assert set(bridge.task_collections["published-uni-tasks"]) == {"t1", "t2"}
+        # Edit not supported in new simplified API -- only create and delete
 
         # Delete: row gone AND the collection torn down via the bridge.
         router.delete_list(list_id, conn=conn, bridge=bridge)
@@ -312,8 +312,8 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="My List!!", entity_type="task", filter_all=[], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
-        router.create_list(name="My List!!", entity_type="task", filter_all=[], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
         rows = db.list_published_lists(conn)
         paths = {r["radicale_collection_path"] for r in rows}
         assert paths == {"published-my-list", "published-my-list-2"}
@@ -324,7 +324,7 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", filter_all=["University"], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
 
         request = Request(
             {
@@ -337,6 +337,109 @@ class TestPublishedListsRouterCrud:
         resp = router.list_index(request, conn=conn)
         assert resp.status_code == 200
         assert resp.context["lists"][0]["subscribe_url"] == "http://127.0.0.1:5232/devuser/published-uni/"
+
+
+class TestNoLabelsPresent:
+    """2026-09-08 (direct request, "make published lists more permissive
+    and easier to set up even if no labels present"): an account with
+    zero labels used to be stuck at an empty-state ("go create a label
+    first") and could never create a List at all. Now the create form
+    always renders, and a List created with no labels selected -- because
+    none exist yet -- materializes with every item of that entity_type,
+    not zero."""
+
+    def test_create_form_renders_with_zero_labels_in_account(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        body = resp.body.decode()
+        assert 'id="create-list-form"' in body
+        assert "No labels available" not in body
+        assert "publish-btn" in body
+
+    def test_create_with_no_labels_in_account_includes_everything(self, conn):
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", [])
+        _make_task(conn, "t2", "B", [])
+        bridge = FakeBridge()
+
+        router.create_list(name="All my tasks", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        rows = db.list_published_lists(conn)
+        assert len(rows) == 1
+        assert set(bridge.task_collections[rows[0]["radicale_collection_path"]]) == {"t1", "t2"}
+
+
+class TestCreateModalDropdownsAreCustomStyled:
+    """2026-09-08 (direct request, "the drop down menus are not our own
+    design, they are defaults"): Type and Visibility used to be plain
+    <select>s -- a native select's open dropdown list is unstyleable OS/
+    browser chrome no matter what CSS targets the closed box (same reason
+    task_form.html's Status/Priority/Recurrence already moved off <select>
+    onto _widget_list_multiselect.html's ms_mode="single" variant). Both
+    fields now reuse that same component."""
+
+    def test_no_native_select_in_the_form(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        # Strip the header comment before asserting -- it names the old
+        # <select> element in prose to explain the fix, which would
+        # otherwise be a false-positive match for the literal string.
+        body = resp.body.decode().split("-->", 1)[1]
+        assert "<select" not in body
+
+    def test_entity_type_and_visibility_render_as_single_mode_multiselects(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        body = resp.body.decode()
+        assert 'data-ms-mode="single" data-ms-label="type"' in body
+        # 2026-09-08 (direct follow-up, same session as the table rework):
+        # the Visibility field/label was renamed "Sharing" (direct
+        # request: "the Visibility should become Linkage (or other more
+        # normal or intuitive names)") -- data-ms-label is ms_label
+        # lowercased, so this tracks that rename; the field name submitted
+        # to the server (`name="visibility"`) is unchanged.
+        assert 'data-ms-mode="single" data-ms-label="sharing"' in body
+        assert 'type="radio" name="entity_type" value="task"' in body
+        assert 'type="radio" name="visibility" value="private"' in body
+        # entity_type defaults to the first configured type, same default
+        # a native <select> with no explicit `selected` option would have
+        # picked, matching this fix's own "no behavior change" intent.
+        assert '<span class="ms-summary">Tasks</span>' in body
+        # 2026-09-08 further follow-up, same session: "Private" briefly
+        # read "Private Radicale" (previous entry's comment above), then
+        # reverted to plain "Private" by direct request ("rename the
+        # Private Radicale and Public Link to Private and Public").
+        assert '<span class="ms-summary">Private</span>' in body
 
 
 class _FakeSettings:
@@ -362,7 +465,7 @@ class TestReadOnlyness:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", filter_all=["University"], filter_any=[], filter_none=[], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
         row = db.list_published_lists(conn)[0]
         assert row["sync_direction"] == "read_only"
 

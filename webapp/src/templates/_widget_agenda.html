@@ -2,23 +2,26 @@
      see routers/dashboard.py::_render_agenda. Consolidated Agenda widget
      (2026-08-15 widget consolidation) replacing today_agenda/
      weekly_overview/upcoming_events/overdue_tasks -- mode="flat" (Range:
-     Today/All upcoming) renders a flat list, same shape today_agenda/
-     upcoming_events used; mode="days" (Range: Next 7/30 days) renders a
-     day-by-day grid, same shape weekly_overview used, with an Overdue
-     section (when shown) ahead of the grid. -->
+     Today/Next 30 days/All upcoming, since 2026-08-31 -- "next 30 days
+     css should look like all upcoming") renders a flat list, same shape
+     today_agenda/upcoming_events used; mode="days" (Range: Next 7 days
+     only now) renders a day-by-day grid, same shape weekly_overview used,
+     with an Overdue section (when shown) ahead of the grid. Rows render
+     through the shared widget row/pill/empty-state macros
+     (_widget_items.html) -- the complete checkbox, section labels,
+     "Today" pill and event-time cells are all composed from the library
+     rather than hand-rolled here. Non-today dates (Overdue/Tasks/Events
+     rows in flat mode) go through the `relative_date` filter (deps.py,
+     2026-08-31 direct feedback: "make the dates ... shorthand or
+     relative") -- "Today"/"Tomorrow"/"Yesterday", else "5 Sep" (year only
+     when it isn't the current one), instead of a raw "2026-09-05". -->
+
+{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button %}
 {% macro overdue_table(tasks) %}
-<div class="widget-section-label">Overdue</div>
+{{ widget_section_label('Overdue') }}
 <table>
     {% for t in tasks %}
-    <tr>
-        <td style="width:26px">
-            <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/complete" data-cc-complete>
-                <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
-            </form>
-        </td>
-        <td><a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></td>
-        <td class="text-muted" style="text-align:right">{{ t.due_at[:10] }}</td>
-    </tr>
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(t.due_at[:10] | relative_date)) }}
     {% endfor %}
 </table>
 {% endmacro %}
@@ -30,7 +33,7 @@
     <div class="week-overview-day-label">{{ day.label }}</div>
     {% if day.tasks or day.events %}
     {% for t in day.tasks %}
-    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('square', true), 'icon-sm') }} {{ t.title }}</a>
+    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
     {% endfor %}
     {% for e in day.events %}
     <a class="week-overview-item" href="/events/{{ e.uid }}" data-modal>{{ icon('calendar', 'icon-sm') }} {{ e.title }}</a>
@@ -45,41 +48,26 @@
 {% if data.overdue_tasks or data.tasks or data.events %}
 {% if data.overdue_tasks %}{{ overdue_table(data.overdue_tasks) }}{% endif %}
 {% if data.tasks %}
-<div class="widget-section-label">Tasks</div>
+{{ widget_section_label('Tasks') }}
 <table>
     {% for t in data.tasks %}
-    <tr>
-        <td style="width:26px">
-            <form class="form-inline" method="post" action="/tasks/{{ t.uid }}/complete" data-cc-complete>
-                <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
-            </form>
-        </td>
-        <td><a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></td>
-        <td style="text-align:right">
-            {% if data.range == 'today' %}<span class="cell-tag tag-blue">Today</span>{% else %}<span class="text-muted">{{ t.due_at[:10] }}</span>{% endif %}
-        </td>
-    </tr>
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else (t.due_at[:10] | relative_date))) }}
     {% endfor %}
 </table>
 {% endif %}
 {% if data.events %}
-<div class="widget-section-label">Events</div>
+{{ widget_section_label('Events') }}
 <table>
     {% for e in data.events %}
-    <tr>
-        <td class="text-muted" style="width:150px; white-space:nowrap">
-            {% if data.range == 'today' %}
-                {% if not e.all_day and e.start_at %}{{ e.start_at | fmt_time }}{% else %}All day{% endif %}
-            {% else %}
-                {{ e.start_at[:10] }}{% if not e.all_day %} {{ e.start_at | fmt_time }}{% endif %}
-            {% endif %}
-        </td>
-        <td><a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a></td>
-    </tr>
+    {% if data.range == 'today' %}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), leading_class='widget-row-time') }}
+    {% else %}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+    {% endif %}
     {% endfor %}
 </table>
 {% endif %}
 {% else %}
-<div class="empty-state">Nothing to show.</div>
+{{ widget_empty('Nothing to show.') }}
 {% endif %}
 {% endif %}

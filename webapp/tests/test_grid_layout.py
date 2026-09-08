@@ -4,7 +4,14 @@ time-grid's core layout algorithm, ported from desktop's `_pack_overlaps`.
 
 from __future__ import annotations
 
-from src.grid_layout import PX_PER_HOUR, layout_day
+from src.grid_layout import (
+    GRID_HOURS,
+    PX_PER_HOUR,
+    collapse_minutes,
+    grid_height_px,
+    layout_day,
+    visible_hours,
+)
 
 
 def _ev(uid, start, end):
@@ -60,3 +67,62 @@ class TestLayoutDay:
         e = {"uid": "a", "start_at": "2026-09-01T09:00:00"}
         laid = layout_day([e])
         assert laid[0]["height_px"] == 0.5 * PX_PER_HOUR
+
+
+class TestSleepHourCollapse:
+    """"Hide sleep hours in Planner" (Settings > General, 2026-09-09) --
+    grid_layout.py's own collapse math, decoupled from routers/calendar.py's
+    decision of WHETHER to collapse (that's _sleep_collapse_window, covered
+    in test_calendar_planner_sleep_collapse.py)."""
+
+    def test_collapse_minutes_before_window_is_unchanged(self):
+        assert collapse_minutes(5 * 60, (6 * 60, 14 * 60)) == 5 * 60
+
+    def test_collapse_minutes_after_window_shifts_up_by_its_width(self):
+        # 14:00, exactly at the end of a 06:00-14:00 (8h) window, lands
+        # right at the seam -- the same collapsed position as 06:00 itself.
+        assert collapse_minutes(14 * 60, (6 * 60, 14 * 60)) == 6 * 60
+        assert collapse_minutes(15 * 60, (6 * 60, 14 * 60)) == 7 * 60
+
+    def test_collapse_minutes_inside_window_clamps_to_its_start(self):
+        assert collapse_minutes(10 * 60, (6 * 60, 14 * 60)) == 6 * 60
+
+    def test_collapse_minutes_none_window_is_a_no_op(self):
+        assert collapse_minutes(9 * 60, None) == 9 * 60
+
+    def test_layout_day_shrinks_and_shifts_event_after_the_window(self):
+        # 09:00-10:00 with 00:00-06:00 collapsed should render as if it
+        # started at 03:00 (9h - 6h removed = 3h in).
+        laid = layout_day([_ev("a", "09:00", "10:00")], (0, 6 * 60))
+        assert laid[0]["top_px"] == 3 * PX_PER_HOUR
+        assert laid[0]["height_px"] == 1 * PX_PER_HOUR
+
+    def test_layout_day_event_entirely_inside_window_collapses_to_the_seam(self):
+        laid = layout_day([_ev("a", "02:00", "03:00")], (0, 6 * 60))
+        assert laid[0]["top_px"] == 0
+
+    def test_grid_height_px_shrinks_by_the_window_width(self):
+        uncollapsed = grid_height_px(None)
+        collapsed = grid_height_px((0, 6 * 60))
+        assert uncollapsed - collapsed == 6 * PX_PER_HOUR
+        assert uncollapsed == (GRID_HOURS + 1) * PX_PER_HOUR
+
+    def test_visible_hours_drops_every_hour_inside_the_window(self):
+        hours = visible_hours((0, 6 * 60))
+        assert [h["hour"] for h in hours] == list(range(6, 24))
+
+    def test_visible_hours_first_visible_hour_after_window_sits_at_top_zero(self):
+        hours = visible_hours((0, 6 * 60))
+        assert hours[0] == {"hour": 6, "top_px": 0}
+
+    def test_visible_hours_none_window_returns_every_hour_uncompressed(self):
+        hours = visible_hours(None)
+        assert [h["hour"] for h in hours] == list(range(24))
+        assert hours[9]["top_px"] == 9 * PX_PER_HOUR
+
+    def test_visible_hours_partial_hour_window_keeps_the_boundary_hour_visible(self):
+        # A 00:00-06:30 window: hour 6 (06:00) is inside [0, 390) so it's
+        # dropped; hour 7 (07:00) is the first one after it, 30 min in.
+        hours = visible_hours((0, 6 * 60 + 30))
+        assert hours[0]["hour"] == 7
+        assert hours[0]["top_px"] == 0.5 * PX_PER_HOUR

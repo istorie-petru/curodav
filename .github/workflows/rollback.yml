@@ -1,0 +1,25 @@
+name: Rollback curodav
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      # Blunt rollback: swaps current -> whatever 'previous' currently
+      # points at and restarts, with no health-check verification (unlike
+      # curodav-ctl update's built-in auto-rollback). A second consecutive
+      # run is a no-op at best, not a redo -- 'previous' isn't updated
+      # here, so it just re-points current at the same release again. Use
+      # this for "the last deploy broke something, get back to what was
+      # running before" -- not for stepping back more than one release.
+      - name: Roll back to previous release
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LXC_IP }}
+          username: ${{ secrets.LXC_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            sudo ln -snf /srv/curodav/previous /srv/curodav/current
+            sudo systemctl restart curodav

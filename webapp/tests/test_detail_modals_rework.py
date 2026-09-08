@@ -12,11 +12,16 @@ three contexts in a single stroke):
 2. The header carries the entity's identity at a glance: a large bold
    `.detail-title` plus a colored `.detail-identity-dot` (event's calendar
    color, task's status color) or the contact's `.avatar-large`.
+   (2026-09-03: the identity dot/avatar moved into the shared
+   `_detail_cover.html` cover banner's floating badge -- see
+   `TestIdentityMark` below, updated the same day.)
 
-3. The body is one elevated tonal `.detail-card` -- with a colored left
-   accent following the entity's identity color via `--detail-accent` --
-   holding the 2-column `.detail-meta-grid`, whose values use the crisp
-   `.detail-meta-value` typography.
+3. The body holds the 2-column `.detail-meta-grid`, whose values use the
+   crisp `.detail-meta-value` typography. (2026-09-03 direct feedback:
+   the grid's wrapper is the plain `.detail-meta-panel` -- no elevated
+   tonal surface, no colored left accent -- the identity color instead
+   stays only on the header's `.detail-identity-dot` and, for events, the
+   `.color-dot` next to the Start value.)
 
 4. The old filled-red `.btn.danger` Delete is demoted to a quiet
    `.detail-delete-link` text-link in the footer, letting the primary
@@ -135,29 +140,40 @@ class TestDetailModalSections:
 
 
 class TestIdentityMark:
-    """The header leads with a big bold title plus a color-coded dot (or
-    the contact's avatar), so the entity is identified at a glance."""
+    """The header leads with a cover banner whose floating badge carries a
+    color-coded icon (or the contact's avatar), so the entity is identified
+    at a glance. 2026-09-03: rewritten for the Variant B cover-banner
+    baseline ("I like variant B so much I want it to be the baseline for
+    all view modal windows") -- the old .detail-identity-dot beside the
+    title is gone; the same color now drives .detail-cover-icon's `color`
+    (an icon's stroke is `currentColor`, see style.css's `.icon` rule) when
+    no real banner image is resolved."""
 
-    def test_event_identity_dot_uses_calendar_color(self, conn):
+    def test_event_identity_badge_uses_calendar_color(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-blue"' in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-blue)"' in body
+        assert '#icon-calendar' in body
         assert 'class="detail-title"' in body
 
-    def test_event_identity_dot_follows_a_label_color(self, conn):
+    def test_event_identity_badge_follows_a_label_color(self, conn):
         # An event's calendar_color is its first label's color -- a red
-        # label must drive both the identity dot and the card accent red.
+        # label must drive both the cover badge's color and the Start
+        # value's own color-dot (2026-09-03: the meta panel itself no
+        # longer carries a colored accent, so these two are the only
+        # remaining color tells).
         _seed_event(conn, "e1")
         db.upsert_label_config(conn, {"name": "Work", "color": "red"})
         db.set_object_labels(conn, "event", "e1", ["Work"])
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-red"' in body
-        assert "--detail-accent: var(--cal-accent-red)" in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-red)"' in body
+        assert 'class="color-dot cal-red"' in body
 
-    def test_task_identity_dot_uses_status_color(self, conn):
+    def test_task_identity_badge_uses_status_color(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'class="detail-identity-dot cal-orange"' in body
+        assert 'class="detail-cover-icon" data-style="color:var(--cal-accent-orange)"' in body
+        assert '#icon-check-square' in body
         assert 'class="detail-title"' in body
 
     def test_task_detail_has_no_subtask_identity(self, conn):
@@ -179,20 +195,21 @@ class TestIdentityMark:
 
 
 class TestDetailCardAndMetaGrid:
-    """The body is an elevated tonal .detail-card with a colored left
-    accent, a 2-column meta grid, and crisp value typography."""
+    """2026-09-03: the meta grid's wrapper is the plain .detail-meta-panel
+    (no elevated tonal surface, no colored left accent -- direct feedback
+    that the colored bg card read wrong for showing plain metadata), just
+    the 2-column grid and crisp value typography."""
 
     def test_event_card_has_calendar_accent(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-card"' in body
-        assert "--detail-accent: var(--cal-accent-blue)" in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_task_card_has_status_accent(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert "--detail-accent: var(--cal-accent-orange)" in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_contact_uses_the_shared_meta_grid_not_the_old_table(self, conn):
@@ -208,23 +225,27 @@ class TestDetailCardAndMetaGrid:
             addresses=[{"type": "Other", "street": "1 St"}],
         )
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
-        assert 'class="detail-card"' in body
+        assert 'class="detail-meta-panel"' in body
         assert 'class="detail-meta-grid"' in body
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
 
-    def test_task_relations_card_is_a_second_detail_card(self, conn):
+    def test_task_page_has_no_detail_card_left(self, conn):
+        # 2026-08-29 (STATE.md backlog item 4, direct request): the
+        # Relations card is fully removed -- this test used to assert
+        # meta + Relations + Work sessions (three detail cards), then just
+        # meta + Work sessions after that (1.4, plans/open-priority.md §
+        # Work allocations). 2026-09-03: the meta grid moved off
+        # .detail-card onto .detail-meta-panel, and the same day Work
+        # sessions moved onto .detail-plain-section ("could we also rework
+        # the work sessions... without having the background color card
+        # div") -- so the task detail page now has zero real .detail-cards
+        # left at all.
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        # meta + Relations + Work sessions (1.4, plans/open-priority.md §
-        # Work allocations) -- three detail cards now.
-        assert body.count('class="detail-card') == 3
-        # The relations picker trigger + its hidden submit form (1.2 side
-        # work: replaces the old inline <select> add-row) are still wired
-        # for in-place refresh (data-modal-keep-open) inside the modal.
-        assert "data-relations-picker" in body
-        assert 'class="relations-hidden-form"' in body
-        assert "data-modal-keep-open" in body
+        assert 'class="detail-meta-panel"' in body
+        assert 'class="detail-plain-section"' in body
+        assert body.count('class="detail-card') == 0
 
 
 class TestFooterActions:

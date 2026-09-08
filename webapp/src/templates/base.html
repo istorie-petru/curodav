@@ -7,14 +7,10 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
     <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
-    <!-- PWA shell (1.8 slice 3) -- manifest.webmanifest is plain, unversioned
-         static content (no cache-busting needed, its icons are referenced by
-         stable /static/icons/... paths); theme-color matches style.css's
-         light-mode --accent so the installed app's OS chrome (title bar,
-         task switcher) isn't a jarring mismatch even before dark-mode-aware
-         theming is worth the complexity here. -->
+    {# PWA shell (1.8 slice 3) -- DISABLED
     <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
     <meta name="theme-color" content="#007aff">
+    #}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
          (app.js used to do this at the bottom of <body>, which painted the
@@ -23,13 +19,24 @@
          paint. Falls back to the OS-level preference via
          prefers-color-scheme when the user has never toggled the switch
          here (localStorage empty), instead of always defaulting to light. -->
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var KEY = "commandCenterWeb.theme";
         var stored = localStorage.getItem(KEY);
         var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
       })();
+      // Sidebar expanded/collapsed state (2026-08-29, sidebar redesign
+      // slice 13a) -- same "apply before first paint" reasoning as the
+      // theme block above: doing this in sidebar_tree.js at the bottom of
+      // <body> would paint the 80px collapsed rail first and then jump to
+      // 240px once the script ran, on every load for anyone who'd chosen
+      // expanded. Collapsed (no attribute) is the default for an install
+      // that's never touched the toggle -- unlike theme there's no OS-level
+      // signal to fall back to, so "unset" just means "collapsed."
+      if (localStorage.getItem("commandCenterWeb.sidebarExpanded") === "1") {
+        document.documentElement.setAttribute("data-sidebar-expanded", "1");
+      }
       // Cross-document View Transitions support check (2026-08-11). The
       // CSS `main`-fade fallback (style.css's page-transitions block) must
       // only run in browsers that *don't* animate cross-document
@@ -48,6 +55,7 @@
     </script>
 </head>
 <body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}">
+<a href="#main-content" class="skip-link">Skip to main content</a>
 {% include "_icons_sprite.html" %}
 <div class="app-window">
     <!-- Icons + a scrollable, snap-aligned row (see .tabbar in style.css)
@@ -86,7 +94,112 @@
          Calendar events (`recurrence_picker.js`), which fully superseded
          Schedule's one distinguishing feature; see plans/STATE.md's
          removal entry. -->
-    <nav class="tabbar" role="navigation" aria-label="Main">
+    {% if not hide_tabbar %}
+    <nav class="tabbar" id="mobile-nav-drawer" role="navigation" aria-label="Main">
+        <!-- Mobile nav drawer grab handle (2026-09-04, plans/STATE.md
+             mobile-nav decision) -- only visible/interactive below the
+             mobile breakpoint (style.css's `.mobile-nav-handle` rule),
+             where this whole <nav> becomes a bottom-sheet drawer instead
+             of the desktop rail (see the new `.mobile-tabbar`/
+             `.mobile-nav-scrim` further down + static/
+             mobile_nav_drawer.js). Same drag-to-dismiss visual pattern as
+             `#modal-handle` (static/modal.js) deliberately, rather than
+             inventing a second one for this second bottom sheet. -->
+        <div class="mobile-nav-handle" id="mobile-nav-handle" aria-hidden="true"></div>
+        <!-- 2026-08-29 sidebar redesign, direct follow-up to slice 13a: the
+             expand/collapse toggle moved here, to a fixed spot at the very
+             top of the rail, always rendered (not conditional on having a
+             Spaces section) -- matches the reference screenshot's own
+             always-present top-of-sidebar toggle rather than living inline
+             above the Spaces list where it only existed for accounts that
+             had at least one Space. Same button/behavior as before
+             (flips html[data-sidebar-expanded], sidebar_tree.js persists
+             it) -- only its position in the DOM changed, see plans/
+             STATE.md's slice 13a entry for the collapsible-width design
+             decision itself.
+
+             2026-08-29 further follow-up: the icon itself is now the
+             sprite's dedicated `icon-sidebar` symbol (a panel-with-divider
+             glyph) instead of a rotated chevron-right -- a chevron reads
+             as "next/expand a list item" (that's exactly what it still
+             means on each Space's own disclosure toggle below), not "show
+             or hide the whole sidebar." No rotate-on-expand transform
+             anymore either, for the same reason: rotating a panel icon
+             doesn't communicate anything, unlike a chevron flipping
+             direction.
+
+             2026-08-29 further follow-up (direct request): expanded mode
+             left the rest of the toggle's row empty -- the button itself
+             stayed icon-only and centered (justify-content:center override
+             in style.css, kept as-is here) so widening it to a normal
+             left-aligned .tab-btn row would just re-center a lone icon in
+             a wider box, not fill the space. Wrapping it with a sibling
+             "Command Center" label in a `.sidebar-header` row instead:
+             `.sidebar-app-name` is display:none/collapsed by default
+             (same hide-until-expanded pattern the Spaces group header
+             uses further down) and only shown
+             under html[data-sidebar-expanded], so collapsed mode's 80px
+             rail is unchanged. The divider/spacing that used to live on
+             `.sidebar-expand-toggle` itself moved to `.sidebar-header` so
+             it still spans the full row now that the row has two
+             children. Plain text, not a link -- "Command Center" isn't a
+             destination, just the wordmark next to the toggle that
+             already controls the whole sidebar.
+
+             2026-08-29 immediate follow-up (direct report -- name still
+             didn't show): the button carries the base `.tab-btn` class,
+             which the expanded-mode ruleset sets to width:100% -- it filled
+             `.sidebar-header`'s whole row by itself, leaving nothing for
+             `.sidebar-app-name` to sit next to. style.css now targets
+             `#sidebar-expand-toggle` directly (already a unique id, no new
+             class needed -- keeps this button's own
+             test_expand_toggle_uses_the_dedicated_sidebar_icon_not_a_chevron
+             assertion window, which slices a fixed number of characters
+             after the id attribute, from growing past the icon markup it
+             checks for) to shrink just this button to a small fixed 32px
+             square -- a compact title-bar control, distinct from the wide
+             nav-item rows below it -- instead of it stretching like every
+             other `.tab-btn`. -->
+        <div class="sidebar-header">
+          <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
+          <span class="sidebar-app-name">Command Center</span>
+        </div>
+        <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md's
+             "Sidebar Controls: Add a + button... to instantly add new
+             Entries/Pages specific to the page or in general (contacts
+             should open the add new contact modal, while [elsewhere] it
+             can default on tasks[/events])". Reuses the existing
+             data-modal mechanism every other "+ New" button in this app
+             already uses (modal.js), just placed in the rail instead of a
+             page-local toolbar/FAB. Context-aware on exactly the one case
+             the doc calls out (Contacts); every other page falls back to
+             the existing task/event quick-add modal (`/quick/add`,
+             quick_add.html) -- that modal's own tab switcher already
+             covers "default on tasks, with the possibility to switch to
+             events." A third Contacts tab *inside* that same modal (so
+             this button wouldn't need to branch by page at all) is a
+             real follow-up, not done here -- quick_add.html only renders
+             Task/Event panels today.
+
+             Hidden while `edit_mode` is on (dashboard.html/label_detail.html's
+             own widget-grid edit mode, now a persistent Settings >
+             Appearance toggle rather than a per-page one -- see
+             deps.py's EDIT_MODE_KEY -- but still only threaded into the
+             render context by widget_page_context on those two pages'
+             own routes, same as before 2026-08-29): editing the widget
+             grid and quick-capturing a new task/event are different
+             modes of using the page, and this button lives on every
+             page regardless of which one a given page happens to be in
+             right now, so it has to check the same flag they do rather
+             than assuming it's always safe to show. Every other page
+             (Tasks, Settings, Contacts, ...) never sets this context
+             key, so it's a known, accepted gap (same precedent as every
+             other _cached_app_meta-backed preference in this app) that
+             this button won't hide there even while Edit mode is on --
+             not fixed here, out of scope for 13d specifically. -->
+        {% if not edit_mode %}
+        <a href="{{ '/contacts/new' if active_tab == 'contacts' else '/quick/add' }}" data-modal class="tab-btn sidebar-quick-add" title="{% if active_tab == 'contacts' %}New contact{% else %}New task or event{% endif %}">{{ icon('plus') }}<span>New</span></a>
+        {% endif %}
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)
            were retired as standalone tabs (1.9 side work) -- their own
@@ -105,20 +218,43 @@
            path text discoverable in every page's markup -- exactly the
            string test_calendar_week_scheduling.py's own
            test_no_separate_timetable_link_in_subnav asserts is gone. #}
-        <a href="/calendar" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
+        {# 2026-08-28 "Calendar split into two pages," then same-day follow-up
+           feedback ("in the month view it should be the 4 week view, not
+           actually the month view" / "in the sidebar it should be actually
+           the WEEK view"): the standalone "4-Week" tab added earlier that
+           session is gone again -- "Calendar" IS the 4-Week view now
+           (routers/calendar.py's calendar_root_redirect sends the bare
+           /calendar root straight to /calendar/fourweek; this link points
+           there directly so there's no redirect round-trip on click).
+           Month and Day are both nav-disabled: Month has no reachable route
+           at all anymore (its code stays on disk, only reachable by its own
+           tests -- see calendar_root_redirect's docstring), Day keeps its
+           route (reached by direct link, e.g. 4-Week's day-number/"+N more"
+           links) but no tabbar or subnav entry of its own. Week stays a
+           second, separate destination -- the planner, not folded into
+           "Calendar." 2026-08-29 (STATE.md backlog item 10, direct
+           request): the visible label is now literally "Planner" instead
+           of "Week" -- label change only, the route (/calendar/week),
+           `data-tab="calendar_week"` identifier, and everything the page
+           itself renders (calendar_week.html) are unchanged. No collision
+           with any other "Planner" concept -- grepped the app, nothing
+           else in src/ or features/ uses that word. #}
+        <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}">{{ icon('calendar') }}<span>Calendar</span></a>
+        <a href="/calendar/week" data-tab="calendar_week" class="tab-btn {% if active_tab == 'calendar_week' %}active{% endif %}">{{ icon('clock') }}<span>Planner</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}">{{ icon('check-square') }}<span>Tasks</span></a>
         {# 2026-08-15 -- the "Projects" tabbar destination (1.3) is gone,
            following the same fold-then-redirect precedent already set for
            the /today and /week tabbar removals above: the standalone
-           /projects page and its two child views were redundant with
-           /tasks?group_by=project and the merged /calendar/week grid (see
-           routers/projects.py's own module docstring and plans/open.md's
-           "Retire the standalone /projects page" decision record). The old
-           paths still redirect (any bookmark still lands somewhere real),
-           they just no longer have their own tabbar entry. A Jinja comment
-           here, not an HTML comment, for the same reason as the /today//week
-           note above -- no stale path text should leak into rendered
-           markup. #}
+           /projects page and its two child views were redundant with the
+           Tasks table (grouped by project unconditionally now, 2026-08-28
+           "major rework" session, item 3) and the merged /calendar/week
+           grid (see routers/projects.py's own module docstring and
+           plans/open.md's "Retire the standalone /projects page" decision
+           record). The old paths still redirect (any bookmark still lands
+           somewhere real), they just no longer have their own tabbar
+           entry. A Jinja comment here, not an HTML comment, for the same
+           reason as the /today//week note above -- no stale path text
+           should leak into rendered markup. #}
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
         <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
              user-defined list in the same rail, directly below the five
@@ -135,8 +271,93 @@
         {% set spaces = sidebar_spaces(request) %}
         {% if spaces %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
+        <!-- 2026-08-29 follow-up: a visible group-header label ("tiny,
+             uppercase, gray text" per plans/sidebar-redesign.md's own
+             wording) for expanded mode, replacing the plain divider line
+             there -- collapsed mode (no room for text) keeps just the
+             divider above, unchanged. aria-hidden since `.tab-separator`
+             already carries the equivalent aria-label for assistive tech;
+             this is a purely visual label for sighted expanded-mode
+             users. -->
+        <div class="sidebar-section-label" aria-hidden="true">Spaces</div>
         {% for l in spaces %}
-        <a href="/labels/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/labels/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+        {% set has_children = l.children|length > 0 %}
+        {# A child's own href mirrors label_detail.html's Projects section:
+           a child that's itself a Space goes to its generated page, a
+           promoted-project child goes to its own Kanban page
+           (routers/projects.py::project_detail, real again as of
+           2026-08-30), a plain child label goes to its settings edit
+           page. namespace() is needed (not a plain {% set %}) because
+           child_active is written from inside a nested {% for %} and read
+           after it -- a bare {% set %} inside that loop wouldn't leak
+           back out to this scope. #}
+        {% set ns = namespace(child_active=false) %}
+        {% if has_children %}
+          {% for child in l.children %}
+            {# 2026-08-30: a nested child that's itself a promoted project
+               gets its own Kanban page now (routers/projects.py::
+               project_detail) -- was /settings/labels/{name} while that
+               page was a redirect stub, see that route's own comment. #}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
+            {% if request.url.path == child_href %}{% set ns.child_active = true %}{% endif %}
+          {% endfor %}
+        {% endif %}
+        <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ l.name }}">
+          <div class="sidebar-tree-row">
+            <a href="/spaces/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/spaces/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+            {% if has_children %}
+            {# aria-expanded defaults to true when one of this space's own
+               children is the active page -- so a direct link/reload lands
+               with its parent already open, before sidebar_tree.js's stored
+               per-space preference (if any) overrides it on load. #}
+            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ l.name }} projects">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
+            {% endif %}
+          </div>
+          {% if has_children %}
+          <div class="sidebar-tree-children">
+            {% for child in l.children %}
+            {# 2026-08-30: a nested child that's itself a promoted project
+               gets its own Kanban page now (routers/projects.py::
+               project_detail) -- was /settings/labels/{name} while that
+               page was a redirect stub, see that route's own comment. #}
+            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
+            {# 2026-08-29 follow-up: no more `icon-sm` here -- it made a
+               child's icon (12px) visibly smaller than its parent Space's
+               (20px, the plain .tab-btn .icon size) for no reason tied to
+               meaning, just depth. Dropping the size override lets it
+               inherit the same 20px as every other rail icon; the
+               .tab-btn-child padding-left indent (style.css) is what
+               signals depth instead. #}
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'folder') }}<span>{{ child.name }}</span></a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+        <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md
+             asks for "Spaces", "Projects", and "Private" as separate group
+             headers. "Private" has no equivalent in this app's data model
+             (nothing here is a private/public toggle on a label the way
+             the doc's source app apparently has -- Published Lists' own
+             public/private setting is a different, unrelated concept, see
+             that feature's own visibility work) and isn't stubbed out for
+             that reason. "Projects" is real: every is_project=1 label with
+             no parent_name (i.e. not already nested under a Space above,
+             see deps.py::_sidebar_projects) gets its own flat section
+             here -- flat, not a tree, since a project has no further
+             nested children in this app's data model today. -->
+        {% set projects = sidebar_projects(request) %}
+        {% if projects %}
+        <div class="tab-separator" role="separator" aria-label="Projects"></div>
+        <div class="sidebar-section-label" aria-hidden="true">Projects</div>
+        {% for p in projects %}
+        {# 2026-08-30: a project's own page moved to /projects/{name} (a
+           Kanban board, routers/projects.py::project_detail) -- was
+           /settings/labels/{name} (the generic widget-grid dashboard
+           every plain label gets), see that route's own comment. #}
+        {% set project_href = ('/spaces/' ~ p.name) if p.generate_space else ('/projects/' ~ p.name) %}
+        <a href="{{ project_href }}" class="tab-btn tab-btn-project {% if request.url.path == project_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or 'folder') }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>
@@ -165,6 +386,34 @@
            (settings_appearance.html), keeping the topbar free of a second,
            less capable way to change the same setting. #}
     </nav>
+    <!-- Mobile bottom bar (2026-09-04, plans/STATE.md mobile-nav decision)
+         -- replaces the old icon-only bottom row of every tabbar
+         destination (crushed/overflowing at phone widths, direct report
+         against a real install screenshot) with exactly 3 persistent
+         controls: a Sidebar toggle that opens the .tabbar above as a
+         bottom-sheet drawer (full nav content, not a trimmed subset --
+         confirmed explicitly, not a default), Home, and Search. Desktop-
+         hidden entirely (style.css scopes both this and .tabbar's own
+         drawer treatment to max-width:720px); above that breakpoint
+         .tabbar renders as the normal rail and this bar never displays.
+         A plain <nav>, not reusing `.tabbar`'s own class -- its 3 buttons
+         need a completely different fixed layout (one row of 3, not a
+         scrollable column of many) rather than trying to make one class
+         cover both shapes. -->
+    <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
+        <button type="button" id="mobile-nav-toggle" class="mobile-tabbar-btn" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Open navigation menu">{{ icon('sidebar') }}<span>Menu</span></button>
+        <a href="/" data-tab="dashboard" class="mobile-tabbar-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
+        <a href="/search" data-tab="search" data-command-palette-open class="mobile-tabbar-btn {% if active_tab == 'search' %}active{% endif %}">{{ icon('command') }}<span>Search</span></a>
+    </nav>
+    <!-- Scrim behind the open drawer -- tap to close (static/
+         mobile_nav_drawer.js), sibling of the thing it darkens rather
+         than a wrapper around it, same portal reasoning as
+         #modal-overlay/#color-popover further down. Stops short of
+         .mobile-tabbar itself (style.css: bottom:64px, not 0) so Home/
+         Search/the toggle stay reachable while the drawer is open instead
+         of being covered by their own scrim. -->
+    <div class="mobile-nav-scrim" id="mobile-nav-scrim" aria-hidden="true"></div>
+{% endif %}
     <!-- 2026-08-07: the main-class block below lets a page opt out of the
          default 1120px-max-width centered column -- Calendar (Month/
          Week/Day, Agenda merged into Day 2026-08-08) is the first user of
@@ -173,7 +422,7 @@
          sidebar rather than being boxed in like a text-heavy page. Empty
          by default so every other page keeps the current column width
          unchanged. -->
-    <main class="{% block main_class %}{% endblock %}">
+    <main id="main-content" class="{% block main_class %}{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 </div>
@@ -184,7 +433,7 @@
       full page load. Empty until JS populates it. MD3 Dialog structure:
       header (title + close), scrollable body, footer (actions). -->
 <div class="modal-overlay" id="modal-overlay">
-    <div class="modal" id="modal-dialog" role="dialog" aria-modal="true">
+    <div class="modal" id="modal-dialog" role="dialog" aria-modal="true" tabindex="-1">
         <!-- Grab handle -- only visible/interactive below the mobile
               breakpoint (see .modal-handle in style.css), where .modal
               becomes a bottom sheet instead of a centered dialog. Gives
@@ -252,18 +501,56 @@
     </div>
 </div>
 
-<script src="{{ static_url('toast.js') }}"></script>
-<script src="{{ static_url('app.js') }}"></script>
-<script src="{{ static_url('modal.js') }}"></script>
+<script defer src="{{ static_url('toast.js') }}"></script>
+<script defer src="{{ static_url('app.js') }}"></script>
+<script defer src="{{ static_url('sidebar_tree.js') }}"></script>
+<!-- Mobile nav drawer (2026-09-04, plans/STATE.md mobile-nav decision) --
+     toggles the .mobile-tabbar Sidebar button / .tabbar bottom-sheet
+     drawer / scrim added above. Loaded globally like sidebar_tree.js
+     right above it (same category: a base.html nav control needed on
+     every page, not a page-specific script) -- it no-ops instantly via an
+     early return when its target elements aren't present (hide_tabbar
+     pages). -->
+<script defer src="{{ static_url('mobile_nav_drawer.js') }}"></script>
+<!-- Icon-only accessible names (audit-fixes-2.0.md slice 5) -- sets
+     aria-label from title on any icon-only control app-wide. Loaded
+     globally and needs no wireContent() hook: it watches the whole
+     document via MutationObserver, so modal/region-refresh/quick-add
+     content injected later is covered automatically. -->
+<script defer src="{{ static_url('a11y_icon_labels.js') }}"></script>
+<!-- Generic `data-style` -> CSSOM applier (audit-fixes-2.0.md item 11,
+     CSP `'unsafe-inline'` elimination) -- see dynamic_styles.js's own
+     header comment. Loaded globally right alongside a11y_icon_labels.js,
+     same MutationObserver-covers-everything reasoning: calendar grid
+     event positioning, a label/Space's accent color, and any future
+     per-request-computed style all route through this one file instead
+     of a `style="..."` attribute. -->
+<script defer src="{{ static_url('dynamic_styles.js') }}"></script>
+<script defer src="{{ static_url('modal.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.
      Loaded before every page/extra script so modal.js, app.js and each
      page's own listeners can rely on window.ccApi existing. -->
-<script src="{{ static_url('async_crud.js') }}"></script>
-<script src="{{ static_url('tag_input.js') }}"></script>
-<script src="{{ static_url('recurrence_picker.js') }}"></script>
-<script src="{{ static_url('reminders_picker.js') }}"></script>
-<script src="{{ static_url('stepper.js') }}"></script>
+<script defer src="{{ static_url('async_crud.js') }}"></script>
+<!-- Notion-style click-to-edit table cells (2026-08-28, direct feedback:
+     "once you click two times on an element it becomes editable in a
+     non-discrete way") -- a plain `[data-inline-edit]` span renders as
+     bare text; double-click swaps it for a real input in place. Loaded
+     globally (like async_crud.js just above, which it reuses via
+     form.requestSubmit()) so any future table cell can opt in with the
+     same data attributes -- the Habits group's check-in counter
+     (_habit_row.html) is the first, not the only intended user. -->
+<script defer src="{{ static_url('inline_edit.js') }}"></script><script defer src="{{ static_url('tag_input.js') }}"></script>
+<script defer src="{{ static_url('recurrence_picker.js') }}"></script>
+<script defer src="{{ static_url('reminders_picker.js') }}"></script>
+<!-- Shared date+time range picker (2026-08-17, _datetime_picker.html,
+     static/datetime_picker.js) -- the event form, the time-block modal and
+     the Work sessions card are all injected into modals via innerHTML,
+     which never runs <script> tags, so this loads globally like the other
+     "picker" scripts and modal.js's wireContent() calls window.CCDateTimePicker
+     against freshly-injected content. -->
+<script defer src="{{ static_url('datetime_picker.js') }}"></script>
+<script defer src="{{ static_url('stepper.js') }}"></script>
 {#
     Widget scripts (2026-08-03) -- loaded globally (not just the Customize
     modal's own extra_scripts) so modal.js's wireContent() can call
@@ -280,36 +567,40 @@
     non-keep-open modal form in this app; see _modal_widget_customize.html's
     own comment.
 #}
-<script src="{{ static_url('dashboard_widget_preview.js') }}"></script>
+<script defer src="{{ static_url('dashboard_widget_preview.js') }}"></script>
 <!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
      -- loaded globally for the same reason as the Widget scripts above:
      contact_form.html is normally injected into the modal via innerHTML,
      which never runs <script> tags, so modal.js's wireContent() calls
      CCAvatarCropper.init(body) against the freshly-injected content. -->
-<script src="{{ static_url('avatar_cropper.js') }}"></script>
+<script defer src="{{ static_url('avatar_cropper.js') }}"></script>
 <!-- contact_form.html's Phone/Email rows (Contacts field parity slice 2 of
      6) -- same reason as the scripts above: contact_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()
      calls CCContactPhoneEmailRows.init(body) against the freshly-injected
      content. -->
-<script src="{{ static_url('contact_phone_email_rows.js') }}"></script>
+<script defer src="{{ static_url('contact_phone_email_rows.js') }}"></script>
 <!-- task_form.html's Daily target field (2026-08-08) -- loaded globally
      for the same reason as the scripts above: task_form.html is normally
      injected into the modal via innerHTML, so modal.js's wireContent()
      calls CCHabitFieldToggle.init(body) against the freshly-injected
      content. -->
- <script src="{{ static_url('task_habit_field_toggle.js') }}"></script>
+ <script defer src="{{ static_url('task_habit_field_toggle.js') }}"></script>
 <!-- label_edit_modal.html's Role picker (2026-08-15) -- same reason as
      the scripts above: that page is only ever opened via data-modal, so
      modal.js's wireContent() calls CCLabelRolePicker.init(body) against
      the freshly-injected content. -->
-<script src="{{ static_url('label_role_picker.js') }}"></script>
+<script defer src="{{ static_url('label_role_picker.js') }}"></script>
+<!-- label_form_modal.html's Space/Project checkbox toggles -- same reason:
+     page is only opened via data-modal, modal.js's wireContent() calls
+     CCLabelFormPicker.init(body) against the freshly-injected content. -->
+<script defer src="{{ static_url('label_form_picker.js') }}"></script>
 <!-- _event_form_fields.html's Format field (2026-08-15) -- loaded globally
      for the same reason as the scripts above: event_form.html/quick_add.html
      are normally injected into the modal via innerHTML, so modal.js's
      wireContent() calls CCEventFormatToggle.init(body) against the
      freshly-injected content. -->
-<script src="{{ static_url('event_format_toggle.js') }}"></script>
+<script defer src="{{ static_url('event_format_toggle.js') }}"></script>
 <!-- Universal command surface (1.2 side work) -- global Ctrl-K/Cmd-K search
      plus the Relations cards' "add related X" picker
      (_task_relations.html/_event_relations.html, replacing the old
@@ -319,35 +610,23 @@
      modal-injected-content scripts above it needs no wireContent()
      re-init hook -- delegation already covers content injected via
      modal.js's innerHTML swap. -->
-<script src="{{ static_url('command_palette.js') }}"></script>
+<script defer src="{{ static_url('command_palette.js') }}"></script>
 <!-- Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
      loaded globally for the same reason as the scripts above: quick_add.html
      is normally injected into the modal via innerHTML (which never runs
      <script> tags), so modal.js's wireContent() calls CCQuickAdd.init(body)
      against the freshly-injected content to wire its Task/Event tab switch. -->
-<script src="{{ static_url('quick_add.js') }}"></script>
-<!-- PWA shell (1.8 slice 3) -- registers static/sw.js (served at /sw.js,
-     not this /static/pwa.js path -- see routers/pwa.py's own comment on
-     why the service worker script itself can't live under /static/ and
-     keep the scope it needs). Loaded last, after everything the page
-     actually needs to function, since it's a pure enhancement. -->
+<script defer src="{{ static_url('quick_add.js') }}"></script>
+{# PWA shell (1.8 slice 3) -- DISABLED
 <script src="{{ static_url('pwa.js') }}"></script>
-<!-- Local read/sync path (1.8 slices 4-6) -- offline_db.js is the
-     IndexedDB mirror + outbox; offline_sync_client.js is the full §8 push/
-     pull sync engine (retry/backoff included) that keeps it warm and
-     flushes any locally-queued writes. Loaded globally (not just on
-     /offline) so the mirror already has data -- and a pending write
-     already has a chance to flush -- by the time the network actually
-     drops, or the moment it's back. offline_status.js is the small
-     status-indicator renderer (offline/synchronizing/pending/synced);
-     it listens for events the sync engine dispatches and touches no
-     IndexedDB/network itself. offline_write.js (the create, edit, and
-     removal UI hooks) stays specific to the /offline page itself -- see
-     offline.html's own extra_scripts block -- since nothing outside that
-     page has an offline write UI yet. -->
-<script src="{{ static_url('offline_db.js') }}"></script>
-<script src="{{ static_url('offline_sync_client.js') }}"></script>
-<script src="{{ static_url('offline_status.js') }}"></script>
+#}
+{# 2026-09-09: the local read/sync path's three global scripts
+   (offline_db.js, offline_sync_client.js, offline_status.js) were removed
+   along with the rest of the client-side "Offline Mode" feature (direct
+   request, after repeated UI complaints) -- see routers/pwa.py's own
+   header comment for the full removal note. They were already disabled
+   here (commented out, same as the PWA shell block above) before that,
+   so this is dead-code cleanup, not a behavior change. #}
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -47,13 +47,15 @@ def _bare_request(path="/"):
     )
 
 
-def _request_with_app(path, db_path):
+def _request_with_app(path, db_path, backup_dir=None):
     """Same helper as test_pinned_spaces_sidebar.py's own -- a Request
     whose `.app.state.settings.db_path` actually resolves, so deps.py's
     app_meta-backed globals exercise their real (non-fallback) path
     without needing a full TestClient (a pattern this suite doesn't use
-    anywhere else)."""
-    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path, radicale_base_url="http://localhost:5232")))
+    anywhere else). `backup_dir` defaults to None and can be supplied by
+    the test that renders the merged Data & Maintenance page, whose route
+    reads all three."""
+    fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path, backup_dir=backup_dir, radicale_base_url="http://localhost:5232")))
     return Request(
         {
             "type": "http", "method": "GET", "path": path, "query_string": b"",
@@ -242,27 +244,34 @@ class TestFmtTimeFilterInCalendarPages:
 
 class TestFmtTimeFilterInWorkSessionsCard:
     """1.9 side work, direct feedback ("the app should respect the user
-    choice of date preference 12 or 24 hours") -- _task_work_allocations
-    .html's "Work sessions" card used to slice the raw stored ISO string
-    directly (`wa.start_at[:16]`/`wa.end_at[11:16]`), ignoring this
-    preference entirely regardless of what Settings > General said. Fixed
-    to use fmt_time; also needed `with context` added to task_detail.html/
-    task_form.html's macro imports -- a Jinja macro imported across files
-    doesn't inherit the caller's template context (and so can't see
-    `request`) unless imported that way, which is why the filter silently
-    fell back to its 24h default before this fix even after the field
-    itself was switched to fmt_time."""
+    choice of date preference 12 or 24 hours") -- the Work sessions card's
+    when used to slice the raw stored ISO string directly
+    (`wa.start_at[:16]`/`wa.end_at[11:16]`), ignoring this preference
+    regardless of what Settings > General said. Fixed to use fmt_time; also
+    needed `with context` added to task_detail.html/task_form.html's macro
+    imports -- a Jinja macro imported across files doesn't inherit the
+    caller's template context (and so can't see `request`) unless imported
+    that way, which is why the filter silently fell back to its 24h default
+    before this fix even after the field itself was switched to fmt_time.
 
-    def test_session_time_respects_24h_default(self, tmp_path):
+    Since 2026-08-17 the when is the shared datetime picker, whose label is
+    rendered client-side; the server's job is to pass the preference down
+    as data-dtp-12h (still via time_format(request), still needing the
+    `with context` import) alongside the raw stored values in the hidden
+    start_at/end_at inputs the picker submits."""
+
+    def test_session_respects_24h_default(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
         with db.connect(db_path) as c:
             _make_task(c, "t1", title="Write report")
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert '<span class="session-when">2026-08-17 14:00' in body
+        assert 'data-dtp-12h=""' in body  # 24h is the default, no 12h flag
+        assert 'value="2026-08-17T14:00:00"' in body
+        assert 'value="2026-08-17T16:00:00"' in body
 
-    def test_session_time_respects_12h_when_set(self, tmp_path):
+    def test_session_respects_12h_when_set(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
         with db.connect(db_path) as c:
             db.set_app_meta(c, deps.TIME_FORMAT_KEY, "12h")
@@ -270,8 +279,8 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert '<span class="session-when">2026-08-17 2:00 PM &ndash; 4:00 PM</span>' in body
-        assert "14:00" not in body
+        assert 'data-dtp-12h="1"' in body
+        assert 'value="2026-08-17T14:00:00"' in body
 
     def test_task_edit_form_also_respects_12h(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
@@ -281,7 +290,7 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c)
         body = resp.body.decode()
-        assert "2:00 PM" in body
+        assert 'data-dtp-12h="1"' in body
 
 
 # --------------------------------------------------------------------- #
@@ -407,12 +416,13 @@ class TestSettingsGeneralNewFields:
         assert "time_format" not in resp.context
 
 
-class TestSettingsAdvancedAutoArchive:
+class TestSettingsAutoArchive:
     def test_renders_auto_archive_select_with_all_choices(self, conn, tmp_path):
-        # settings_advanced now also reads request.app.state.settings
-        # .radicale_base_url (2026-08-08, Export & backup inlined into
-        # this page) -- needs the fuller fake request, not the bare one.
-        resp = settings_router.settings_advanced(_request_with_app("/settings/advanced", tmp_path / "cache.sqlite"), conn=conn)
+        # The merged Data & Maintenance page (2026-08-17; auto-archive's
+        # old home Settings > Advanced folded into it) reads
+        # request.app.state.settings' db_path/backup_dir/radicale_base_url
+        # -- needs the fuller fake request, not the bare one.
+        resp = settings_router.settings_data_maintenance(_request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'action="/settings/task-auto-archive"' in body
         for value, label in settings_router.DAYS_CHOICES:
@@ -423,7 +433,7 @@ class TestSettingsAdvancedAutoArchive:
     def test_set_task_auto_archive_route(self, conn):
         resp = settings_router.set_task_auto_archive(days="30", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/advanced"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.get_app_meta(conn, tasks_router.TASK_AUTO_ARCHIVE_DAYS_KEY) == "30"
 
     def test_set_task_auto_archive_rejects_unrecognized_values(self, conn):
@@ -565,109 +575,60 @@ class TestSettingsAppearanceLabelIcons:
         assert db.get_app_meta(conn, deps.SHOW_LABEL_ICONS_KEY) == ""
 
 
-class TestShowRelationsCard:
-    """Settings > Appearance's "Show the Relations card" (2026-08-14) --
-    whether the Relations card renders on task/event detail and edit modals.
-    Unlike the label-icons toggle this one defaults ON: an install that has
-    never touched it stores nothing, which reads as the default "1" and
-    shows the card exactly as it always has."""
+class TestSettingsAppearanceEditMode:
+    """2026-08-29 (sidebar redesign item 13d) -- "Edit mode" replaces the
+    old per-page `?edit=1` toggle with a single persistent Settings >
+    Appearance setting, same on/off app_meta pattern as the "Show icons
+    next to labels" toggle above (TestSettingsAppearanceLabelIcons)."""
 
-    def test_defaults_on(self):
-        assert deps._show_relations_card(_bare_request()) is True
-
-    def test_on_when_stored_1(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "1")
-        assert deps._show_relations_card(_request_with_app("/", db_path)) is True
-
-    def test_off_when_stored_0(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
-        assert deps._show_relations_card(_request_with_app("/", db_path)) is False
-
-
-class TestShowRelationsCardInRenderedPages:
-    """The card is gated in the templates themselves
-    ({% if show_relations_card(request) %} around the macro call), so the
-    hidden state must drop the whole card from the rendered page while
-    leaving its sibling cards (Work sessions) intact."""
-
-    def _seed_task(self, conn):
-        db.upsert_task(conn, {
-            "uid": "t1", "title": "Essay", "description": "", "status": "active",
-            "tags": ["University"], "created_at": _now(),
-        })
-
-    def _seed_event(self, conn):
-        db.upsert_event(conn, {
-            "uid": "e1", "title": "Standup", "description": "", "start_at": "2026-08-17T09:00:00",
-            "end_at": "2026-08-17T09:30:00", "all_day": 0, "status": "active", "tags": ["University"],
-            "created_at": _now(),
-        })
-
-    def test_task_detail_shows_relations_by_default(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            self._seed_task(c)
-            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
-        assert "Related events" in resp.body.decode()
-
-    def test_task_detail_hides_relations_when_off(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
-            self._seed_task(c)
-            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
-        body = resp.body.decode()
-        assert "Related events" not in body
-        assert "Work sessions" in body  # the sibling card still renders
-
-    def test_edit_task_form_hides_relations_when_off(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
-            self._seed_task(c)
-            resp = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c)
-        body = resp.body.decode()
-        assert "Related events" not in body
-        assert "Work sessions" in body
-
-    def test_event_detail_shows_relations_by_default(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            self._seed_event(c)
-            resp = calendar_router.event_detail("e1", _request_with_app("/events/e1", db_path), conn=c)
-        assert "Related tasks" in resp.body.decode()
-
-    def test_event_detail_hides_relations_when_off(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.set_app_meta(c, deps.SHOW_RELATIONS_CARD_KEY, "0")
-            self._seed_event(c)
-            resp = calendar_router.event_detail("e1", _request_with_app("/events/e1", db_path), conn=c)
-        assert "Related tasks" not in resp.body.decode()
-
-
-class TestSettingsAppearanceRelationsCard:
-    def test_renders_toggle_defaulting_to_on(self, conn):
+    def test_renders_toggle_defaulting_to_off(self, conn):
         resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
         body = resp.body.decode()
-        assert 'action="/settings/relations-card"' in body
-        assert resp.context["current_show_relations_card"] is True
+        assert 'action="/settings/edit-mode"' in body
+        assert resp.context["current_edit_mode"] is False
 
-    def test_renders_toggle_off_when_stored_0(self, conn):
-        db.set_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY, "0")
+    def test_renders_toggle_on_when_set(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
-        assert resp.context["current_show_relations_card"] is False
+        assert resp.context["current_edit_mode"] is True
 
-    def test_set_relations_card_route_stores_1(self, conn):
-        resp = settings_router.set_relations_card(show="1", conn=conn)
+    def test_set_edit_mode_route_stores_1(self, conn):
+        resp = settings_router.set_edit_mode(enabled="1", conn=conn)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/appearance"
-        assert db.get_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY) == "1"
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == "1"
 
-    def test_set_relations_card_route_stores_0_on_off(self, conn):
-        settings_router.set_relations_card(show="0", conn=conn)
-        assert db.get_app_meta(conn, deps.SHOW_RELATIONS_CARD_KEY) == "0"
+    def test_set_edit_mode_route_clears_on_off(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        settings_router.set_edit_mode(enabled="", conn=conn)
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == ""
+
+
+class TestFmtDtFilter:
+    """2026-08-26 Data & Maintenance redesign -- backup timestamps on that
+    page render through the new fmt_dt filter ("Aug 25, 2026, 8:57 PM")
+    instead of raw ISO strings. Pure-function checks against
+    _format_datetime_value (the filter's core), same 12h/24h-preference
+    convention as fmt_time."""
+
+    def test_24h_vs_12h_share_the_date_part(self):
+        value = "2026-08-25T20:57:05"
+        assert deps._format_datetime_value(value, "24h") == "Aug 25, 2026, 20:57"
+        assert deps._format_datetime_value(value, "12h") == "Aug 25, 2026, 8:57 PM"
+
+    def test_aware_input_is_converted_to_the_local_zone(self):
+        # 00:30 UTC is 20:30 on Aug 25 at UTC-4 -- whatever this machine's
+        # own zone is, the rendered wall clock must match astimezone()'s,
+        # not stay pinned to the stored UTC reading.
+        from datetime import datetime
+
+        dt = datetime.fromisoformat("2026-08-26T00:30:00+00:00").astimezone()
+        expected = f"{dt.strftime('%b')} {dt.day}, {dt.year}, {dt.hour:02d}:30"
+        assert deps._format_datetime_value("2026-08-26T00:30:00+00:00", "24h") == expected
+
+    def test_unparseable_input_passes_through(self):
+        value = "not-a-timestamp"
+        assert deps._format_datetime_value(value, "24h") == value
+
+    def test_empty_input_stays_empty(self):
+        assert deps._format_datetime_value("", "24h") == ""

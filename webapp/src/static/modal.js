@@ -28,6 +28,34 @@
 // otherwise do (a "Cancel"/"Back" link that would normally navigate).
 
 (function () {
+    // 2026-09-08 direct report: a form rejected with FastAPI's 422 (e.g. a
+    // required field missing) surfaced its raw JSON validation body --
+    // `{"detail":[{"type":"missing","loc":["body","date_from"],...}]}` --
+    // straight into the error toast, truncated at 150 characters. Turns a
+    // real (if now mostly-preventable, see datetime_picker.js's own
+    // required-field guard) server rejection into something unreadable.
+    // Recognizes FastAPI/Pydantic's own `detail: [{type, loc, msg}, ...]`
+    // shape specifically and renders each entry as "<field>: <msg>";
+    // anything else (a plain-text 500, an HTML error page, a detail string)
+    // falls back to the raw text exactly as before.
+    function friendlyErrorMessage(text) {
+      try {
+        const body = JSON.parse(text);
+        if (Array.isArray(body && body.detail)) {
+          const msgs = body.detail.map((d) => {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : null;
+            return field ? field + ": " + d.msg : d.msg;
+          });
+          if (msgs.length) return msgs.join("; ").slice(0, 150);
+        } else if (typeof (body && body.detail) === "string") {
+          return body.detail.slice(0, 150);
+        }
+      } catch (err) {
+        // Not JSON -- fall through to the raw-text fallback below.
+      }
+      return text.slice(0, 150);
+    }
+
     const overlay = document.getElementById("modal-overlay");
     const dialog = document.getElementById("modal-dialog");
     const header = document.getElementById("modal-header");
@@ -177,6 +205,15 @@
    function closeModal() {
      closeOpenPopover();
      overlay.classList.remove("is-open");
+     // 2026-09-08 bugfix (direct report, confirmed live: the persistent
+     // mobile bottom bar -- Menu/Home/Search, base.html's .mobile-tabbar
+     // -- sat at a higher z-index than the modal overlay and covered the
+     // open dialog's own footer buttons on every phone-width viewport.
+     // style.css's body.modal-open rule hides that bar for as long as
+     // this class is present; removed here on every close path (X,
+     // Escape, backdrop click -- all of which call this function) so it
+     // never gets stuck hidden.
+     document.body.classList.remove("modal-open");
      body.innerHTML = "";
      if (header) header.innerHTML = "";
      if (footer) footer.innerHTML = "";
@@ -228,6 +265,8 @@
      if (!fragment) return;
      wireContent();
      stabilizeHeight(fragment);
+     applyHeightTier(fragment);
+     applyCoverHandle();
      animateContentSwap();
    }
 
@@ -257,6 +296,9 @@
     // label_edit_modal.html's Role picker (Space/Project date-field
     // reveal + switch-away confirm) -- same re-init reasoning.
     if (window.CCLabelRolePicker) window.CCLabelRolePicker.init(body);
+    // label_form_modal.html's Space/Project checkbox toggles -- same
+    // re-init reasoning.
+    if (window.CCLabelFormPicker) window.CCLabelFormPicker.init(body);
     // _event_form_fields.html's Format field (clears the other field's
     // value on switch) -- same re-init reasoning.
     if (window.CCEventFormatToggle) window.CCEventFormatToggle.init(body);
@@ -352,23 +394,22 @@
               // data-cc-change opts out of the full-page reload -- on
               // success we dispatch a document-level cc-entity-changed event
               // and let the page underneath refresh just its own region.
+              // If no surface listener claims the event (this page has no
+              // live region for that entity type), fall back to a reload so
+              // the page can't silently go stale.
               const changeType = form.getAttribute("data-cc-change");
-              if (changeType) {
-                document.dispatchEvent(
-                  new CustomEvent("cc-entity-changed", {
-                    detail: {
-                      type: changeType,
-                      action: form.getAttribute("data-cc-action") || "edit",
-                    },
-                  })
-                );
+              const changeAction = form.getAttribute("data-cc-action") || "edit";
+              if (changeType && window.ccApi && window.ccApi.dispatchChange) {
+                if (!window.ccApi.dispatchChange({ type: changeType, action: changeAction })) {
+                  window.location.reload();
+                }
               } else {
                 window.location.reload();
               }
             }
           } else {
             const text = await resp.text().catch(() => "");
-            window.ccToast({ message: "Could not save: " + text.slice(0, 150), variant: "error" });
+            window.ccToast({ message: "Could not save: " + friendlyErrorMessage(text), variant: "error" });
             submitting = false;
             if (submitBtn) {
               submitBtn.disabled = false;
@@ -398,6 +439,34 @@
     const stable = fragment && fragment.classList &&
       fragment.classList.contains("modal-stable-height");
     dialog.classList.toggle("is-stable-height", !!stable);
+  }
+
+  // 2026-08-30 (direct feedback): min-height tiers -- see style.css's
+  // .modal-height-md/.modal-height-lg comment. Same "fragment states its
+  // own shape, JS mirrors the marker onto the persistent .modal dialog"
+  // pattern stabilizeHeight above already uses (#modal-target is swapped
+  // out on every navigation; the dialog element wrapping it isn't).
+  function applyHeightTier(fragment) {
+    if (!dialog) return;
+    const isMd = fragment && fragment.classList && fragment.classList.contains("modal-height-md");
+    const isLg = fragment && fragment.classList && fragment.classList.contains("modal-height-lg");
+    dialog.classList.toggle("is-height-md", !!isMd && !isLg);
+    dialog.classList.toggle("is-height-lg", !!isLg);
+  }
+  // 2026-09-09 (direct follow-up, "the mobile handle should sit on top
+  // of the banner") -- style.css's `.modal.has-cover .modal-handle` rule
+  // floats the drag handle over a cover image instead of its own row
+  // above a plain header; this is what decides whether that rule is
+  // live. Same "fragment states its own shape, JS mirrors the marker
+  // onto the persistent dialog" pattern stabilizeHeight/applyHeightTier
+  // above use, just detected by content (`.detail-cover-wrap` inside the
+  // now-populated #modal-header) rather than a marker class on
+  // #modal-target itself -- the cover only sometimes renders even within
+  // one template (banner_editor.html's `{% if banner %}`), so a static
+  // class on the outer fragment wouldn't track that.
+  function applyCoverHandle() {
+    if (!dialog || !header) return;
+    dialog.classList.toggle("has-cover", !!header.querySelector(".detail-cover-wrap"));
   }
   function animateContentSwap() {
     if (!dialog) return;
@@ -429,6 +498,10 @@
      currentUrl = url;
      pendingReload = false;
      overlay.classList.add("is-open");
+     // See closeModal()'s own comment -- style.css hides the mobile
+     // bottom bar (.mobile-tabbar) for as long as this class is present,
+     // so it can't sit on top of the open dialog's footer.
+     document.body.classList.add("modal-open");
      // Size variant (2026-08-01) -- most modals (a field-grid form) are
      // fine at the default width, but a few (Schedule's Blocks table/week
      // grid, 9+ columns wide) need real room or they force a horizontal
@@ -450,6 +523,8 @@
      if (footer) footer.style.display = footer.innerHTML.trim() ? "" : "none";
      wireContent();
      stabilizeHeight(fragment);
+     applyHeightTier(fragment);
+     applyCoverHandle();
      if (wasOpen) animateContentSwap();
      const firstInput = body.querySelector("input, select, textarea");
      if (firstInput) firstInput.focus();
@@ -537,12 +612,66 @@
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeModal();
   });
+
+  // Keyboard focus trap (audit-fixes-2.0.md #4, full-app-audit-2026-09-07.md
+  // finding #2, WCAG 2.1.2/2.4.3) -- Escape-to-close already existed below,
+  // but nothing stopped Tab/Shift+Tab from walking focus straight out of an
+  // open modal into the page behind it. `dialog` (#modal-dialog) is the
+  // fixed element that wraps header/body/footer across every open/refresh/
+  // navigate cycle (see stabilizeHeight's comment above), so querying it
+  // fresh on every keydown -- rather than caching a focusable list at open
+  // time -- stays correct across refreshModalContent()/form navigation
+  // swapping #modal-body's content underneath it.
+  const FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled]):not([type=hidden])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+
+  function getFocusableElements() {
+    if (!dialog) return [];
+    return Array.prototype.filter.call(
+      dialog.querySelectorAll(FOCUSABLE_SELECTOR),
+      (el) => el.offsetParent !== null // skip hidden (display:none) elements
+    );
+  }
+
+  function trapTabKey(e) {
+    if (!overlay.classList.contains("is-open") || !dialog) return;
+    const focusable = getFocusableElements();
+    if (focusable.length === 0) {
+      e.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      // Shift+Tab off the first focusable (or from outside the dialog
+      // entirely, e.g. focus landed on the overlay backdrop) wraps to last.
+      if (active === first || !dialog.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last || !dialog.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && openPicker) {
       closeOpenPopover();
       return;
     }
     if (e.key === "Escape" && overlay.classList.contains("is-open")) closeModal();
+    if (e.key === "Tab" && overlay.classList.contains("is-open")) trapTabKey(e);
   });
 
   // Wire up any color/icon pickers already present on a plain full page

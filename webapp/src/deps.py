@@ -4,16 +4,19 @@ CalDavBridge singleton (writes go through this to reach Radicale)."""
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
 from fastapi import Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db, derived_state
+from . import db, habit_heatmap
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -51,15 +54,52 @@ FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # on-screen label does. Same memoized app_meta pattern as every other
 # display preference here.
 RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
-# 2026-08-14 -- "Show the Relations card" (Settings > Appearance) -- whether
-# the Relations card renders on task/event detail and edit modals (the merged
-# Relations/subtasks card, _task_relations.html/_event_relations.html). Same
-# memoized app_meta pattern as the others; the default is ON ("1" -- an
-# install that's never touched this stores nothing, which reads as the
-# default and shows the card, matching the behavior that predates the
-# setting), "0" hides it.
-SHOW_RELATIONS_CARD_KEY = "show_relations_card"
-
+# 2026-08-28 -- "Habit streak terminology" (Settings > General) -- "standard"
+# (default) or "playful" wording for the Habits group's streak readout
+# (Tasks table, _habit_row.html). Same presentation-layer-only pattern as
+# RECURRENCE_TERMINOLOGY_KEY above (1.6): the underlying current_streak
+# integer (habit_heatmap.streaks) never changes, only how it's phrased --
+# see habit_heatmap.streak_text for the actual wording.
+HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
+# 2026-08-29 (sidebar redesign item 13d) -- "Edit mode" (Settings >
+# Appearance): whether the widget grid's edit controls (move/resize/
+# reorder/delete a widget, New widget, Reset layout, Add/Change banner)
+# show on every dashboard/label/Space page. Used to be a per-page
+# `?edit=1` query param with its own "Edit mode"/"Done" toggle buttons on
+# dashboard.html/label_detail.html; replaced by this single persistent,
+# app-wide setting (routers/settings.py's set_edit_mode), read straight
+# off app_meta by routers/dashboard.py::widget_page_context -- no
+# per-request-memoized global registered here, unlike the other keys
+# above: nothing outside the three widget-grid pages needs it.
+EDIT_MODE_KEY = "edit_mode_enabled"
+# 2026-09-09 (direct request, Settings > General) -- "Hide sleep hours in
+# Planner": off by default ("", an existing install that's never touched
+# this), "1" when on. Only meaningful on the Week view's grid
+# (routers/calendar.py's _week_view_context/_sleep_collapse_window) -- Day
+# view deliberately keeps showing every hour regardless of this setting
+# (direct decision). No per-request-memoized global here, same reasoning
+# as EDIT_MODE_KEY above: only that one route needs it.
+HIDE_SLEEP_HOURS_KEY = "planner_hide_sleep_hours"
+# 2026-08-29 (sidebar redesign item 13e follow-up, direct request) -- the
+# Standard Page Header's own optional banner image, set once in Settings >
+# Appearance and reused as the background on every standard page's narrow
+# header (Tasks/Calendar/Planner/Contacts/Search/Notes/Settings/Labels/
+# Published Lists -- see _page_header_narrow.html). Not a per-page banner
+# like Home/label pages have (db.get_page_banner/set_page_banner's own
+# `page_key` is just a free-form string, "" for Home / the label name for
+# a label page) -- this is one more `page_key`, a fixed sentinel picked to
+# never collide with a real label name. Reuses the *entire* existing
+# banner editor/upload/remove machinery (routers/banners.py) unchanged --
+# `/banners/editor?scope=__page_header__&page_url=/settings/appearance`
+# is a real, working banner scope with no new routes needed.
+#
+# 2026-09-07: the literal now lives in db.py (db.PAGE_HEADER_BANNER_SCOPE)
+# instead of here -- db.banner_for_object needed it for the new task/event
+# season/default banner fallback, and db.py can't import deps.py (deps.py
+# already imports db, so the reverse would be circular). Re-exported under
+# the same name so every existing `from ..deps import
+# PAGE_HEADER_BANNER_SCOPE` call site is unaffected.
+PAGE_HEADER_BANNER_SCOPE = db.PAGE_HEADER_BANNER_SCOPE
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 
@@ -117,20 +157,97 @@ def _icon(name: str, cls: str = "") -> Markup:
 templates.env.globals["icon"] = _icon
 
 
+@pass_context
+def _csp_nonce(ctx) -> str:
+    """`{{ csp_nonce() }}` for every real inline `<script>`/`<style>` tag
+    left in the templates (audit-fixes-2.0.md item 11 -- CSP's script-src/
+    style-src moved off `'unsafe-inline'` onto nonces). Registered as a
+    Jinja global rather than templates reaching into `request.state`
+    directly, same reasoning as `icon`/`static_url` above: one place to
+    read from, and it stays usable from a child template that only
+    `{% extends %}` base.html. `SecurityHeadersMiddleware` (security_
+    headers.py) is what actually generates the nonce and stashes it on
+    `scope["state"]["csp_nonce"]` before this app even runs -- by the
+    time a template renders, `request.state.csp_nonce` is always already
+    set for every real HTTP request. Only falls back to `""` for the rare
+    context with no nonce at all (e.g. a template rendered directly in a
+    unit test with a hand-built request, no SecurityHeadersMiddleware in
+    the stack) rather than raising -- a missing nonce there just means
+    the rendered tag's `nonce=""` attribute won't match any real CSP
+    header, not a reason to fail the render."""
+    request = ctx.get("request")
+    if request is None:
+        return ""
+    return getattr(request.state, "csp_nonce", "")
+
+
+templates.env.globals["csp_nonce"] = _csp_nonce
+
+
+# Same 16 names as routers/labels.py's COLORS -- not imported directly,
+# since deps.py is imported by every router including labels.py itself
+# (importing back would be circular); duplicated here as a short, stable
+# list rather than restructuring the import graph just for this.
+_STABLE_COLOR_NAMES = (
+    "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
+    "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
+)
+
+
+def _stable_color(seed: str) -> str:
+    """Deterministic `.cal-*`/`--cal-accent-*` color name for something
+    with no color of its own (2026-09-03, contact detail-view cover
+    banner -- Variant B's baseline header treatment needs an accent for
+    every entity type's gradient-fallback cover, but contacts have no
+    color field the way events (calendar_color) and tasks (status) do.
+    A flat neutral cover for every contact would read as "nothing was
+    designed here"; a name-derived color instead gives each contact a
+    stable, distinct identity across visits without adding a real color
+    field/picker to the contact model. Seed on `contact.uid` (stable for
+    the contact's lifetime), not `full_name` (would jump on a rename)."""
+    digest = hashlib.md5(seed.encode("utf-8")).hexdigest()
+    return _STABLE_COLOR_NAMES[int(digest, 16) % len(_STABLE_COLOR_NAMES)]
+
+
+templates.env.globals["stable_color"] = _stable_color
+
+
 def _avatar(contact: dict | None, cls: str = "") -> Markup:
-    """Renders a contact's avatar -- their uploaded photo (data URI, from
-    contacts.photo_b64/photo_type -- see vcard_rows.py) if they have one,
-    otherwise the same initials-in-a-circle fallback every avatar spot
-    used before photos existed. One global (registered the same way as
-    `icon()` above, for the same reason) instead of duplicating this
-    if/else across contacts_list.html, contact_detail.html, and
-    contact_form.html's photo preview -- all three now render the exact
-    same markup for "this contact's avatar," which is the actual
-    UI-consistency fix, not just three separately-hand-matched copies of
-    similar-looking HTML."""
+    """Renders a contact's (or the app user's own profile) avatar -- their
+    uploaded photo if they have one, otherwise the same initials-in-a-
+    circle fallback every avatar spot used before photos existed. One
+    global (registered the same way as `icon()` above, for the same
+    reason) instead of duplicating this if/else across contacts_list.html,
+    contact_detail.html, contact_form.html's photo preview,
+    settings_general.html's profile-picture row, and _page_banner.html's
+    dashboard-header avatar -- all five now render the exact same markup
+    for "this photo," which is the actual UI-consistency fix, not just
+    five separately-hand-matched copies of similar-looking HTML.
+
+    2026-08-29 (direct request: "better cache these images... convert...
+    to webp or compress them") -- prefers a real, separately cacheable
+    `photo_url` (routers/contacts.py's contact_photo_image / routers/
+    settings.py's profile_photo_image, each `?v=`-versioned so an
+    immutable Cache-Control is safe) over embedding the photo inline as a
+    `data:` URI, which every caller here used to do unconditionally: that
+    put the full base64 blob in the HTML of every page showing it (a
+    contact list row, or -- worse -- the profile photo, rendered on every
+    dashboard/label/Space page via the header avatar overlap), the exact
+    "2MB inline blob made the page slow" problem routers/banners.py's own
+    banner_image already existed to solve for banners. `photo_url` is set
+    by each call site's own router (contacts.py/settings.py), not derived
+    here -- this function has no way to know a contact's uid or whether a
+    profile photo's version has been backfilled yet. Falls back to the
+    inline `data:` URI when no `photo_url` is given (a brand-new, not-yet-
+    saved contact has no uid to build a real URL from) or when `photo_b64`
+    is present without one (defensive -- keeps working for any caller that
+    hasn't been updated to attach `photo_url` yet)."""
     contact = contact or {}
     classes = f"avatar-circle {cls}".strip()
+    photo_url = contact.get("photo_url")
     photo_b64 = contact.get("photo_b64")
+    if photo_url:
+        return Markup(f'<img class="{classes}" src="{escape(photo_url)}" alt="">')
     if photo_b64:
         # `photo_type` is normally one of this app's own known-safe values
         # (routers/contacts.py's upload allowlist), but a contact synced in
@@ -180,15 +297,59 @@ def _sidebar_spaces(request: Request) -> list[dict]:
     care about the sidebar. Any other failure (a mid-migration database, a
     locked file) degrades the same way: an empty rail section, not a
     broken page load -- the sidebar is a shortcut, not something any page
-    depends on to render at all."""
+    depends on to render at all.
+
+    2026-08-29 (sidebar redesign slice 13a, plans/STATE.md): each space
+    dict now also carries `children` -- `db.list_child_labels(conn,
+    l["name"])`, the same parent_name relationship label_detail.html's own
+    Space page already uses for its "Projects" section (a label pointing
+    `parent_name` at a Space is, by that existing convention, one of its
+    projects). Fetched inside the same connection/try-except as the
+    spaces themselves rather than a second global, so the nested rail
+    tree degrades exactly the same way (empty, not broken) under the same
+    failure conditions."""
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
-            return db.list_space_labels(conn)
+            spaces = db.list_space_labels(conn)
+            for space in spaces:
+                space["children"] = db.list_child_labels(conn, space["name"])
+            return spaces
     except Exception:
         return []
 
 
 templates.env.globals["sidebar_spaces"] = _sidebar_spaces
+
+
+def _sidebar_projects(request: Request) -> list[dict]:
+    """Every *standalone* project (is_project=1 label with no parent_name)
+    for the nav rail's own "Projects" section (base.html, 2026-08-29
+    sidebar redesign follow-up -- plans/sidebar-redesign.md's source doc
+    explicitly asks for Spaces/Projects/Private as separate group headers,
+    which this app had no direct equivalent of: is_project=1 labels only
+    ever showed up in the Tasks table's own Project grouping, never in the
+    rail itself).
+
+    Deliberately excludes any project whose parent_name points at a Space
+    -- those already render nested under that Space via _sidebar_spaces'
+    own `children` (label_edit_modal.html's parent_name dropdown only ever
+    offers Space names as options, so "has a parent_name" and "nested
+    under a Space elsewhere in the rail" are the same condition here).
+    Showing a project in both places would be the exact kind of
+    duplication this app avoids elsewhere -- see _sidebar_spaces' own
+    docstring on the same principle.
+
+    Same broad try/except + short-lived connection pattern as
+    _sidebar_spaces above, for the same reasons (bare test Request objects
+    with no `.app`, graceful empty-section degradation on any DB error)."""
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return [p for p in db.list_project_labels(conn) if not p.get("parent_name")]
+    except Exception:
+        return []
+
+
+templates.env.globals["sidebar_projects"] = _sidebar_projects
 
 
 def _cached_app_meta(request: Request, key: str, default: str) -> str:
@@ -278,6 +439,32 @@ def _show_label_icons(request: Request) -> bool:
 templates.env.globals["show_label_icons"] = _show_label_icons
 
 
+def _page_header_banner(request: Request) -> dict | None:
+    """The Standard Page Header's own optional banner image (Settings >
+    Appearance, 2026-08-29 sidebar redesign item 13e follow-up) -- see
+    PAGE_HEADER_BANNER_SCOPE's own comment above. Same per-request-
+    memoized-connection, broad-try/except-on-a-bare-test-Request pattern
+    as _cached_app_meta below, but returns a banner dict (or None)
+    straight from db.get_page_banner instead of a plain string, so it
+    isn't built on top of that helper. Called by _page_header_narrow.html
+    (imported `with context`, so `request` is in scope at the call site)
+    -- every standard page gets this for free without its own route
+    needing to fetch and thread it through its context dict."""
+    cache_attr = "_cc_page_header_banner_cache"
+    if hasattr(request.state, cache_attr):
+        return getattr(request.state, cache_attr)
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            banner = db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
+    except Exception:
+        banner = None
+    setattr(request.state, cache_attr, banner)
+    return banner
+
+
+templates.env.globals["page_header_banner"] = _page_header_banner
+
+
 def _recurrence_terminology(request: Request) -> str:
     """"standard" (default) or "playful" -- see RECURRENCE_TERMINOLOGY_KEY
     above. Read by _event_form_fields.html/schedule_classes.html/schedule_
@@ -290,17 +477,45 @@ def _recurrence_terminology(request: Request) -> str:
 templates.env.globals["recurrence_terminology"] = _recurrence_terminology
 
 
-def _show_relations_card(request: Request) -> bool:
-    """Whether the Relations card renders on task/event detail and edit
-    modals (Settings > Appearance's "Show the Relations card", 2026-08-14).
-    Reads the app_meta flag via the same per-request-memoized helper as
-    week_start()/time_format(). On by default -- an install that has never
-    touched this stores nothing, which reads as the default "1" and shows
-    the card exactly as it always has; "0" hides it."""
-    return _cached_app_meta(request, SHOW_RELATIONS_CARD_KEY, "1") == "1"
+def _habit_streak_terminology(request: Request) -> str:
+    """"standard" (default) or "playful" -- see HABIT_STREAK_TERMINOLOGY_KEY
+    above. Read directly by settings_general.html's toggle; every other
+    caller should use habit_streak_text() below instead of reading this
+    and calling habit_heatmap.streak_text itself."""
+    return _cached_app_meta(request, HABIT_STREAK_TERMINOLOGY_KEY, "standard")
 
 
-templates.env.globals["show_relations_card"] = _show_relations_card
+templates.env.globals["habit_streak_terminology"] = _habit_streak_terminology
+
+
+def _habit_streak_text(request: Request, days) -> str:
+    """The Habits group's streak readout (_habit_row.html), phrased per
+    HABIT_STREAK_TERMINOLOGY_KEY -- "3 day streak" (standard) or "This
+    week has been full" (playful) for the same `current_streak` integer
+    either way. `days` arrives as whatever _habit_group_items stored
+    (an int already, but tolerate None/a stray float defensively rather
+    than letting a template render crash on a bad value)."""
+    try:
+        days_int = int(days or 0)
+    except (TypeError, ValueError):
+        days_int = 0
+    playful = _habit_streak_terminology(request) == "playful"
+    return habit_heatmap.streak_text(days_int, playful)
+
+
+templates.env.globals["habit_streak_text"] = _habit_streak_text
+
+
+def _recurrence_label(rrule) -> str:
+    """"Daily"/"Weekly"/"Monthly"/"Yearly"/"Custom" for an RRULE string --
+    see habit_heatmap.recurrence_label's own docstring for why this never
+    renders the raw "FREQ=DAILY" text. A plain jinja global (no request
+    needed, unlike habit_streak_text) since the phrasing doesn't depend on
+    any per-app terminology setting."""
+    return habit_heatmap.recurrence_label(rrule)
+
+
+templates.env.globals["recurrence_label"] = _recurrence_label
 
 
 def _label_icon(request: Request, label: str) -> str:
@@ -341,44 +556,36 @@ def _label_icon(request: Request, label: str) -> str:
 templates.env.globals["label_icon"] = _label_icon
 
 
-def _task_label_rules_for_request(request: Request) -> dict:
-    """{label name: effective config} for every label, memoized on
-    request.state per request -- same reasoning as `_label_icon` above:
-    the same rule set applies to every task on a page, so resolve it once
-    per request rather than once per task/template call. Broad
-    try/except + empty-dict fallback, same convention as every other
-    request-scoped helper in this file (this app's test suite constructs
-    bare Request({...}) objects with no real ASGI app in scope)."""
-    cache_attr = "_cc_task_label_rules_cache"
+def _label_color(request: Request, label: str) -> str:
+    """The `.cal-*` swatch name (e.g. "teal") a label's own pill should
+    paint with -- the read side of the same `label_config.color` field
+    the picker in `_color_swatch_picker.html` writes. Unlike `_label_icon`
+    above, this is NOT gated behind the "Show icons next to labels"
+    toggle -- color isn't an opt-in decoration, every label already has
+    one (`_LABEL_CONFIG_DEFAULTS["color"]` is "blue", so an unconfigured
+    label resolves to the same blue every `.cell-tag tag-blue` hardcode
+    used to paint everywhere, before this existed -- purely additive for
+    any label that's actually picked a color). Same per-request memoize +
+    broad try/except-on-bare-Request pattern as `_label_icon`, own cache
+    attr so the two never fight over one dict shape."""
+    cache_attr = "_cc_label_color_cache"
     cache = getattr(request.state, cache_attr, None)
-    if cache is not None:
-        return cache
+    if cache is None:
+        cache = {}
+        setattr(request.state, cache_attr, cache)
+    if label in cache:
+        return cache[label]
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
-            cache = db.list_label_rules(conn)
+            cfg = db.effective_label_config_ci(conn, label or "")
+            color = cfg.get("color") or "blue"
     except Exception:
-        cache = {}
-    setattr(request.state, cache_attr, cache)
-    return cache
+        color = "blue"
+    cache[label] = color
+    return color
 
 
-def _effective_importance(request: Request, task: dict) -> int:
-    """A task's computed Importance (1..3, 0 = none) for display --
-    `{{ effective_importance(request, t) }}` instead of the old `t.importance`
-    (side work, post-1.1: the explicit per-task axis is gone, see
-    src/derived_state.py's module docstring). The one template-facing
-    entry point every importance pill uses, so a page never needs its own
-    router to precompute/attach the value onto each task dict."""
-    return derived_state.effective_importance(task, _task_label_rules_for_request(request))
-
-
-def _effective_urgency(request: Request, task: dict) -> int:
-    """Urgency-axis sibling of `_effective_importance` above."""
-    return derived_state.effective_urgency(task, _task_label_rules_for_request(request))
-
-
-templates.env.globals["effective_importance"] = _effective_importance
-templates.env.globals["effective_urgency"] = _effective_urgency
+templates.env.globals["label_color"] = _label_color
 
 
 def _format_time_value(value: str, fmt: str) -> str:
@@ -456,6 +663,85 @@ def _fmt_birthday(value: str | None) -> str:
 templates.env.filters["fmt_birthday"] = _fmt_birthday
 
 
+def _relative_date(value: str | None) -> str:
+    """Jinja filter for a short/relative date -- `{{ t.due_at[:10] |
+    relative_date }}` instead of a raw "2026-09-05" (2026-08-31 direct
+    feedback on the Dashboard's Agenda widget: "make the dates ...
+    shorthand or relative"). Today/Tomorrow/Yesterday for the immediate
+    cases (the ones worth naming instead of counting), otherwise "5 Sep"
+    -- same day-drop-year-unless-different convention static/
+    datetime_picker.js's own `.dtp--compact` fmtDate already established
+    for the Tasks table's Date column (2026-08-30, praised then as "reads
+    at a glance"); this is that same convention's server-rendered
+    equivalent for read-only widget text rather than an editable picker's
+    trigger label. No @pass_context needed (unlike fmt_time/fmt_hour) --
+    pure function of the stored value and today's date, no per-request
+    Settings preference involved. Expects a plain "YYYY-MM-DD" (or a
+    longer ISO timestamp -- only the first 10 chars are read); anything
+    that doesn't parse is returned unchanged, same "display filter
+    degrades to the original value" rule as fmt_time/fmt_dt above."""
+    if not value:
+        return value
+    try:
+        d = date.fromisoformat(value[:10])
+    except ValueError:
+        return value
+    today = date.today()
+    delta = (d - today).days
+    if delta == 0:
+        return "Today"
+    if delta == 1:
+        return "Tomorrow"
+    if delta == -1:
+        return "Yesterday"
+    day_month = f"{d.day} {d.strftime('%b')}"
+    return day_month if d.year == today.year else f"{day_month} {d.year}"
+
+
+templates.env.filters["relative_date"] = _relative_date
+
+
+def _format_datetime_value(value: str, fmt: str) -> str:
+    """Shared formatting core for the fmt_dt filter below -- one stored ISO
+    timestamp ("2026-08-25T20:57:05", UTC like every timestamp this app
+    writes) rendered human-readably as "Aug 25, 2026, 8:57 PM" (12h pref)
+    or "Aug 25, 2026, 20:57" (24h pref). Aware timestamps are converted to
+    the server's local zone first (a backup made at 22:57 UTC should read
+    as the wall-clock time it was actually made at); naive ones are taken
+    as-is. Anything that doesn't parse is returned unchanged -- same
+    "display filter degrades to the original value" rule as
+    _format_time_value above."""
+    if not value:
+        return value
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()
+    date_part = f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+    hh = dt.hour % 12 or 12
+    minute = f"{dt.minute:02d}"
+    if fmt != "12h":
+        return f"{date_part}, {dt.hour:02d}:{minute}"
+    period = "AM" if dt.hour < 12 else "PM"
+    return f"{date_part}, {hh}:{minute} {period}"
+
+
+@pass_context
+def _fmt_dt(ctx, value: str) -> str:
+    """Jinja filter for whole-datetime display ("Aug 25, 2026, 8:57 PM")
+    -- Data & Maintenance's backup facts (2026-08-26 redesign: all raw ISO
+    timestamps on that page became human-readable ones). Same @pass_context
+    12h/24h-preference read as fmt_time above."""
+    request = ctx.get("request")
+    fmt = _time_format(request) if request is not None else "24h"
+    return _format_datetime_value(value, fmt)
+
+
+templates.env.filters["fmt_dt"] = _fmt_dt
+
+
 def _fmt_address(addr: dict) -> str:
     """Jinja filter for Contacts field parity slice 5 of 6 (Address) --
     `{{ a | fmt_address }}` to render one structured {"po_box", "extended",
@@ -475,3 +761,26 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
 
 def get_bridge(request: Request) -> CalDavBridge:
     return request.app.state.bridge
+
+
+# Async-CRUD dual-mode responses (features/async-crud.md): every mutation
+# endpoint keeps its plain-HTML 303 Redirect default (a form works with no
+# JS at all), but returns JSON when the request carries `X-Requested-With:
+# fetch` (static/async_crud.js always sends it). Read via a FastAPI Header
+# param (default None) rather than a Request object because this suite's
+# direct-call tests invoke the router functions as plain Python functions
+# without building a Request -- those keep getting the redirect default.
+def wants_json(x_requested_with: str | None) -> bool:
+    return x_requested_with == "fetch"
+
+
+def respond(
+    x_requested_with: str | None,
+    redirect_url: str,
+    *,
+    status_code: int = 200,
+    **payload,
+):
+    if wants_json(x_requested_with):
+        return JSONResponse({"ok": True, **payload}, status_code=status_code)
+    return RedirectResponse(url=redirect_url, status_code=303)

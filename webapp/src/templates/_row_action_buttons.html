@@ -1,0 +1,35 @@
+{# Shared row-level Edit/Delete icon-button pair -- the `.action-buttons`
+   cell that appears once per row in a settings/manage table (Edit link
+   opening a modal, Delete form with a confirm-sheet). Extracted 2026-09-07
+   (audit-fixes-2.0.md item 13) from four identical copies (settings_
+   holidays.html, settings_time_blocks.html's Sleep and Leisure sections,
+   labels_manage.html, _labels_table_body.html) that differed only in the
+   edit/delete URLs, the `title` noun, and the confirm-sheet message --
+   same shape as item 9's `_bulk_actions_bar.html` extraction, just not
+   caught in that pass.
+
+   Params:
+     edit_url        -- href for the Edit icon link (opens via data-modal).
+     delete_url       -- action for the Delete <form> (POST).
+     noun             -- text after "Edit "/"Delete " in each button's
+                         title attribute, e.g. "holiday", "sleep time",
+                         "label".
+     confirm_message  -- full data-confirm-sheet text, built by the caller
+                         (it embeds the row's own name/label mid-sentence,
+                         and the trailing explanation varies enough per
+                         caller -- e.g. labels' "clears usage, not a real
+                         delete" wording -- that it can't be assembled
+                         generically here). Any literal `"` in this value
+                         is auto-escaped to `&quot;` by Jinja's normal
+                         attribute-escaping, which a browser decodes back
+                         to `"` when JS reads the attribute -- same
+                         rendered/observed text as the un-extracted markup,
+                         now valid HTML instead of a raw embedded quote. #}
+{% macro row_action_buttons(edit_url, delete_url, noun, confirm_message) %}
+<div class="action-buttons">
+    <a href="{{ edit_url }}" class="icon-btn" data-modal title="Edit {{ noun }}">{{ icon('edit', 'icon-sm') }}</a>
+    <form method="post" action="{{ delete_url }}" data-confirm-sheet="{{ confirm_message }}">
+        <button type="submit" class="icon-btn danger" title="Delete {{ noun }}">{{ icon('trash', 'icon-sm') }}</button>
+    </form>
+</div>
+{% endmacro %}

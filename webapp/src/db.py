@@ -50,11 +50,18 @@ import json
 import logging
 import re
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+
+# habit_heatmap imports nothing from this module (or any router) -- see its
+# own module docstring -- so db.py depending on it for
+# habit_work_sessions_status's recurrence_frequency() lookup below doesn't
+# risk a cycle.
+from . import habit_heatmap
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +134,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- derived states) introduced Importance/Urgency as two explicit 1..3
     -- axes, replacing the old WebDAV `priority` concept. A later rework
     -- (side work, see this file's `_drop_column` calls below) removed the
-    -- explicit axes entirely -- both are now purely computed
-    -- (src/derived_state.py) from label rules + temporal state, never
-    -- manually set, so the `importance`/`urgency` columns no longer exist
-    -- on new databases. The old `priority` column stays physically on disk
-    -- for pre-1.1 databases but is no longer referenced by app code.
+    -- explicit axes' per-task columns, replacing them with a purely
+    -- computed derivation (src/derived_state.py) from label rules +
+    -- temporal state; that whole feature is since removed outright (no
+    -- longer something this app offers). The old `priority` column stays
+    -- physically on disk for pre-1.1 databases but is no longer
+    -- referenced by app code.
     priority INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     progress REAL,
@@ -148,6 +156,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_uid TEXT,
     recurrence TEXT,
     exdates_json TEXT NOT NULL DEFAULT '[]',
+    -- 2026-08-29 (STATE.md backlog item 3): the same non-working-day
+    -- policy as `events` (see that CREATE TABLE's own comment) -- only
+    -- meaningful for a recurring task, read by habit_heatmap.
+    -- excluded_dates_in_range/streaks, not recurrence_expand.
+    holiday_calendar TEXT,
+    exclude_saturday INTEGER NOT NULL DEFAULT 0,
+    exclude_sunday INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT,
     -- 2026-08-08: only meaningful for a habit-labeled task (see
     -- task_habit_settings/task_completions.value above) -- how many
@@ -424,6 +439,7 @@ CREATE TABLE IF NOT EXISTS label_config (
     icon TEXT,
     description TEXT,
     parent_name TEXT,
+    label_group TEXT,
     generate_space INTEGER NOT NULL DEFAULT 0,
     dashboard_preset_json TEXT,
     -- 2026-08-09: a short alias (max 5 characters) for a label, used as a
@@ -433,15 +449,12 @@ CREATE TABLE IF NOT EXISTS label_config (
     -- full name everywhere.
     abbreviation TEXT,
     -- 1.1 (virtual & derived states, plans/open-priority.md § Virtual &
-    -- derived states): label behavior rules feeding the Importance/Urgency
-    -- effective-value derivation. `importance` is the importance this label
-    -- implies for anything carrying it (1..3, NULL = no rule); `urgency_
-    -- threshold_days` makes this label imply urgency (level 3) once the
-    -- carrying entity's date falls within that many days ahead (NULL = no
-    -- rule). Persistent, stored configuration belonging to the label -- the
-    -- one category of derived-state input that is deliberately *not* a
-    -- query-time calculation (see that section's "Project behavior and
-    -- other persistent label behaviors are the exception").
+    -- derived states) added these two columns as label behavior rules
+    -- feeding the Importance/Urgency effective-value derivation. That
+    -- whole feature is since removed outright (no longer something this
+    -- app offers) -- app code no longer reads or writes either column.
+    -- Both stay physically on disk, unused, same "never force-drop old
+    -- data" convention as every other removed column in this file.
     importance INTEGER,
     urgency_threshold_days INTEGER,
     -- 1.3 (Project-enabled label stack, plans/open-priority.md § Project-
@@ -550,6 +563,12 @@ CREATE TABLE IF NOT EXISTS habits (
     icon TEXT,
     target_per_day REAL NOT NULL DEFAULT 1,
     archived_at TEXT,
+    -- 2026-08-29 (STATE.md backlog item 3): same non-working-day policy as
+    -- `tasks`/`events` above -- always applies (a habit is implicitly
+    -- daily, no RRULE to gate on).
+    holiday_calendar TEXT,
+    exclude_saturday INTEGER NOT NULL DEFAULT 0,
+    exclude_sunday INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
 );
@@ -1106,6 +1125,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # (never queried by, just read/written per-row), so no landmine here.
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
+    # 2026-08-29 (direct request: "better cache these images") -- a
+    # content-hash version, same convention as PROFILE_PHOTO_VERSION_KEY/
+    # a banner's own `version` field. upsert_contact computes it whenever
+    # photo_b64 is written; a contact whose photo was saved before this
+    # column existed gets it lazily backfilled the same way
+    # get_page_banner/get_profile_photo do -- see _contact_photo_version.
+    _ensure_column(conn, "contacts", "photo_version", "TEXT")
     # Contacts field parity with Nextcloud Contacts (open.md), slice 1 of 6
     # (Title -> Phone/Email -> Website -> Birthday -> Address -> Social
     # network, per the build order recorded there). Title is the vCard
@@ -1223,9 +1249,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # convention as every other column; an existing on-disk database that
     # never wrote one simply defaults to NULL (= no abbreviation).
     _ensure_column(conn, "label_config", "abbreviation", "TEXT")
-    # 1.1 (virtual & derived states) -- label behavior rules feeding the
-    # Importance/Urgency derivation (see the label_config CREATE TABLE
-    # comment above).
+    # 1.1 (virtual & derived states) -- label behavior rules that used to
+    # feed the Importance/Urgency derivation, a feature since removed
+    # outright (see the label_config CREATE TABLE comment above).
     _ensure_column(conn, "label_config", "importance", "INTEGER")
     _ensure_column(conn, "label_config", "urgency_threshold_days", "INTEGER")
     # 1.3 (Project-enabled label stack) -- see the label_config CREATE
@@ -1249,6 +1275,15 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # function.
     _ensure_column(conn, "tasks", "target_per_day", "REAL NOT NULL DEFAULT 1")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
+    # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
+    # non-working-day policy (see the `events` CREATE TABLE comment) to
+    # recurring tasks -- same three columns, same meaning, applied the same
+    # "either constraint excludes the day" way, just read by
+    # habit_heatmap.excluded_dates_in_range/streaks instead of
+    # recurrence_expand.expand_events.
+    _ensure_column(conn, "tasks", "holiday_calendar", "TEXT")
+    _ensure_column(conn, "tasks", "exclude_saturday", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "tasks", "exclude_sunday", "INTEGER NOT NULL DEFAULT 0")
     # 1.4 (Work allocations) -- see the event_task_relations CREATE TABLE
     # comment above for the model.
     _ensure_column(conn, "event_task_relations", "is_work_allocation", "INTEGER NOT NULL DEFAULT 0")
@@ -1280,6 +1315,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE tasks SET recurrence = NULL WHERE recurrence = 'None'")
     _ensure_column(conn, "habits", "archived_at", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived_at)")
+    # 2026-08-29 (STATE.md backlog item 3): same non-working-day policy as
+    # tasks/events above, extended to the standalone Habits feature. A
+    # habit has no RRULE (it's implicitly "every day"), so there's no
+    # "only meaningful once recurring" gate here the way there is for
+    # tasks/events -- the policy always applies once set.
+    _ensure_column(conn, "habits", "holiday_calendar", "TEXT")
+    _ensure_column(conn, "habits", "exclude_saturday", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "habits", "exclude_sunday", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "task_completions", "task_uid", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_task_completions_task ON task_completions(task_uid)")
     # 2026-08-07: fixes a real live bug (`sqlite3.IntegrityError: NOT NULL
@@ -1293,6 +1336,34 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _relax_legacy_not_null(conn, "events", ("href", "etag", "calendar_path"))
     _relax_legacy_not_null(conn, "tasks", ("href", "etag", "calendar_path", "list_path"))
     _relax_legacy_not_null(conn, "contacts", ("href", "etag", "addressbook_path"))
+    # 2026-08-29 (Published Lists visibility) -- a List is now `private`
+    # (materialized to Radicale only, today's original behavior), `public`
+    # (also served at a standalone, unauthenticated link -- see
+    # routers/public_lists.py -- independent of Radicale entirely), or
+    # `archived` (its Radicale collection torn down, DB row kept so
+    # re-activating doesn't need reconfiguring). Defaults to `private` for
+    # every pre-existing row -- the safe choice, since no public link
+    # could have existed before this feature (see the CREATE TABLE
+    # comment's original "no public/private toggle" note: everything
+    # published so far only ever required the shared Radicale account,
+    # which is what `private` still means). `public_token` is generated
+    # once, on first becoming public (auth.py-style `secrets.token_urlsafe`
+    # persisted, not derived from anything guessable like the collection
+    # slug), and stays stable across later public/private/archived
+    # toggles so a re-shared link keeps working.
+    _ensure_column(conn, "published_lists", "visibility", "TEXT NOT NULL DEFAULT 'private'")
+    _ensure_column(conn, "published_lists", "public_token", "TEXT")
+    # 2026-08-18 -- one-time backfill of pre-existing rows into the sync
+    # shadow store (see backfill_server_sync_writes). Runs last, after
+    # every _ensure_column migration above, so the whitelist columns it
+    # reads (deleted_at included) all exist.
+    backfill_server_sync_writes(conn)
+    # 2026-08-18 -- one-time backfill of the work-allocation sync flag
+    # (see backfill_work_allocation_flags). Separate pass with its own
+    # marker: on a real install sync_server_writes_backfilled may already
+    # be set, but that covers entity columns only -- the flag lives in
+    # event_task_relations, which that pass never reads.
+    backfill_work_allocation_flags(conn)
     conn.commit()
 
 
@@ -1352,6 +1423,36 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
     return d
 
 
+def _attach_tags_bulk(
+    conn: sqlite3.Connection, object_type: str, dicts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Batch form of `_attach_tags` -- one `IN (...)` query for the whole
+    result set instead of one `list_labels_for_object` call per row. Every
+    `list_*` function that returns more than one row should call this
+    instead of looping `_attach_tags` per row (the N+1 finding in
+    `documentation/reports/full-app-audit-2026-09-07.md` #1, `db.py:1415`
+    -- confirmed the hottest path in the app: dashboard, calendar,
+    tasks table, contacts). Mutates and returns `dicts` in place, same
+    "attach in place" contract `_attach_tags` already has, so callers that
+    build a list comprehension around it don't need to change shape."""
+    if not dicts:
+        return dicts
+    ids = [d["uid"] for d in dicts]
+    placeholders = ", ".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT object_id, label_name FROM object_labels "
+        f"WHERE object_type = ? AND object_id IN ({placeholders}) "
+        "ORDER BY label_name COLLATE NOCASE",
+        (object_type, *ids),
+    ).fetchall()
+    by_id: dict[str, list[str]] = {}
+    for r in rows:
+        by_id.setdefault(r["object_id"], []).append(r["label_name"])
+    for d in dicts:
+        d["tags"] = by_id.get(d["uid"], [])
+    return dicts
+
+
 # --------------------------------------------------------------------- #
 # Events
 # --------------------------------------------------------------------- #
@@ -1359,8 +1460,12 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
 _EVENT_JSON_FIELDS = ("reminders_json", "exdates_json")
 
 
-def upsert_event(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_event(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "events", str(data.get("uid")), _EVENT_SYNC_COLUMNS)
     data["reminders_json"] = json.dumps(data.get("reminders") or [])
     data["exdates_json"] = json.dumps(data.get("exdates") or [])
     # NOT NULL DEFAULT 0 columns -- must coerce None -> 0 explicitly here;
@@ -1394,10 +1499,22 @@ def upsert_event(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     )
     if tags is not None:
         set_object_labels(conn, "event", data["uid"], tags)
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "event",
+            data["uid"],
+            previous,
+            _row_columns(conn, "events", data["uid"], _EVENT_SYNC_COLUMNS),
+        )
     conn.commit()
 
 
-def delete_event(conn: sqlite3.Connection, uid: str) -> None:
+def delete_event(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "event", uid)
     conn.execute("DELETE FROM events WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'event' AND object_id = ?", (uid,))
     # Relations are graph links, not ownership -- the task on the other end
@@ -1449,7 +1566,7 @@ def list_events(
         query += " WHERE (recurrence IS NOT NULL OR (" + " AND ".join(bounds_clauses) + "))"
     query += " ORDER BY start_at ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -1571,8 +1688,12 @@ def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -
         raise MultipleProjectLabelsError(selected)
 
 
-def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_task(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "tasks", str(data.get("uid")), _TASK_SYNC_COLUMNS)
     tags = data.pop("tags", None)
     # Validated before anything is written (not just before set_object_labels
     # further down) so a rejected label set never leaves a partial write --
@@ -1615,11 +1736,19 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # placement to NULL -- there'd be no way to *un*-clobber it via the
     # round-trip pattern if it were in this list and a caller ever forgot
     # to carry it through.
+    # NOT NULL DEFAULT 0 columns -- same coercion upsert_event already does
+    # for its own holiday-policy columns, see that function's comment.
+    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
+    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     cols = [
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
         "target_per_day",
+        # 2026-08-29 (STATE.md backlog item 3) -- only meaningful for a
+        # recurring task, same convention as events: missing key -> column
+        # default (NULL/0).
+        "holiday_calendar", "exclude_saturday", "exclude_sunday",
     ]
     # parent_uid is deliberately absent from this list (1.2, task-model
     # decision): subtasks are removed, tasks are flat. The column stays
@@ -1650,10 +1779,22 @@ def upsert_task(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # diffing old vs. new title first.
     if data.get("title") is not None:
         sync_work_allocation_titles(conn, data["uid"], data["title"])
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "task",
+            data["uid"],
+            previous,
+            _row_columns(conn, "tasks", data["uid"], _TASK_SYNC_COLUMNS),
+        )
     conn.commit()
 
 
-def delete_task(conn: sqlite3.Connection, uid: str) -> None:
+def delete_task(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "task", uid)
     conn.execute("DELETE FROM tasks WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'task' AND object_id = ?", (uid,))
     # Mirror of delete_event's relation cleanup -- the linked event survives,
@@ -1738,6 +1879,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
         "habit_entries", "task_completions", "dashboard_widgets",
+        "time_blocks",
         "published_lists", "app_meta",
     ]
     for table in tables:
@@ -1784,14 +1926,11 @@ def list_tasks(
             params.extend(excluded_uids)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    # Importance/Urgency no longer sort here -- both are purely computed
-    # (src/derived_state.py, label rules + temporal state), not raw
-    # columns SQL can order by; a caller that needs importance/urgency
-    # ordering does it in Python via derived_state's effective values
-    # (see routers/tasks.py's _SORT_KEYS).
+    # Importance/Urgency used to sort here before that whole feature was
+    # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def list_habit_tasks(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -1805,7 +1944,7 @@ def list_habit_tasks(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     rows = conn.execute(
         f"SELECT * FROM tasks WHERE uid IN ({placeholders}) ORDER BY title COLLATE NOCASE", uids
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def all_task_uids(conn: sqlite3.Connection) -> set[str]:
@@ -1880,7 +2019,7 @@ def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[di
         "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC",
         (event_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
@@ -1890,7 +2029,7 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
         "WHERE r.task_uid = ? ORDER BY events.start_at ASC",
         (task_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -1953,6 +2092,12 @@ def create_work_allocation(
         "VALUES (?, ?, ?, 1)",
         (event_uid, task_uid, now),
     )
+    # 2026-08-18 -- offline "Upcoming" view: a device's pull only ever
+    # learns the work-allocation flag through field_versions, and the flag
+    # isn't an `events` column record_server_sync_write's diff can catch,
+    # so the sync-flag entry is recorded explicitly (see
+    # record_work_allocation_flag).
+    record_work_allocation_flag(conn, event_uid)
     conn.commit()
     return event_uid
 
@@ -1969,7 +2114,7 @@ def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> l
         "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.created_at ASC, events.uid ASC",
         (task_uid,),
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | None:
@@ -2101,6 +2246,45 @@ def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[
     }
 
 
+def habit_work_sessions_status(
+    conn: sqlite3.Connection, task_uid: str, recurrence: str | None, period_start: str, period_end: str
+) -> dict[str, Any]:
+    """Unscheduled-work visibility for a habit-tracked recurring task,
+    scoped to `period_start`/`period_end` (ISO dates, inclusive) --
+    routers/calendar.py's week_view picks the period per the habit's own
+    cadence (the displayed week for daily/weekly, that week's calendar
+    month for monthly/anything else) and passes it in here rather than
+    this function guessing at "which week" from the task alone.
+
+    Unlike a plain task's `work_allocation_panel_info` (which only ever
+    asks "does every session have a date, at all, ever"), a habit needs a
+    specific NUMBER of dated sessions before it's "handled" for the
+    period: one per day for a daily habit (`required=7` for a 7-day
+    period), just one for weekly/monthly/anything else -- 2026-08-29
+    direct feedback ("a daily habit remains persistent and disappears
+    from the unscheduled work only when the current week has all been
+    taken care of; for a weekly task it's enough to add only one, and
+    monthly the same"). `needed` (dated-in-period sessions still short of
+    `required`, after crediting any undated placeholder sessions already
+    added and awaiting placement) is what the caller checks for inclusion
+    -- 0 means this period is fully covered and the habit drops off the
+    panel; every value in between is the picture, ready-computed rather
+    than callers reaching into `list_work_allocations_for_task`
+    themselves."""
+    allocations = list_work_allocations_for_task(conn, task_uid)
+    dated_in_period = sum(
+        1 for a in allocations if a.get("start_at") and period_start <= a["start_at"][:10] <= period_end
+    )
+    undated = sum(1 for a in allocations if not a.get("start_at"))
+    required = 7 if habit_heatmap.recurrence_frequency(recurrence) == "daily" else 1
+    return {
+        "dated_in_period": dated_in_period,
+        "undated_count": undated,
+        "required": required,
+        "needed": max(0, required - dated_in_period - undated),
+    }
+
+
 def remove_latest_work_allocation(conn: sqlite3.Connection, task_uid: str) -> str | None:
     """Remove the task's most recently added UNDATED work session -- the
     last still-undated one in `list_work_allocations_for_task`'s creation
@@ -2221,7 +2405,7 @@ def list_tasks_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) 
         f"ORDER BY tasks.title COLLATE NOCASE",
         (*labels, habit_label),
     ).fetchall()
-    return [_attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
 def list_events_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) -> list[dict[str, Any]]:
@@ -2238,7 +2422,7 @@ def list_events_sharing_labels(conn: sqlite3.Connection, label_names: list[str])
         f"ORDER BY events.start_at ASC",
         labels,
     ).fetchall()
-    return [_attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
 
 
 # --------------------------------------------------------------------- #
@@ -2379,16 +2563,13 @@ def _search_tasks(
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    # Importance/Urgency no longer sort here -- both are purely computed
-    # (src/derived_state.py, label rules + temporal state), not raw
-    # columns SQL can order by; a caller that needs importance/urgency
-    # ordering does it in Python via derived_state's effective values
-    # (see routers/tasks.py's _SORT_KEYS).
+    # Importance/Urgency used to sort here before that whole feature was
+    # removed outright -- see src/derived_state.py's module docstring.
     query += " ORDER BY (due_at IS NULL), due_at ASC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "task", _row_to_dict(r, _TASK_JSON_FIELDS))
+    for d in dicts:
         out.append(
             {
                 "type": "task",
@@ -2445,9 +2626,9 @@ def _search_events(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY start_at ASC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "event", _row_to_dict(r, _EVENT_JSON_FIELDS))
+    for d in dicts:
         start = d.get("start_at") or ""
         subtitle = f"{start[:10]} {start[11:16]}" if start else "No start time"
         out.append(
@@ -2500,9 +2681,11 @@ def _search_contacts(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name COLLATE NOCASE"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_contact_phones_emails_bulk(
+        conn, _attach_tags_bulk(conn, "contact", [_row_to_dict(r, _CONTACT_JSON_FIELDS) for r in rows])
+    )
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
+    for d in dicts:
         first_email = d["emails"][0]["value"] if d.get("emails") else d.get("email")
         first_phone = d["phones"][0]["value"] if d.get("phones") else d.get("phone")
         subtitle = d.get("org") or d.get("title") or first_email or first_phone or ""
@@ -2551,9 +2734,9 @@ def _search_notes(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY updated_at DESC"
     rows = conn.execute(query, params).fetchall()
+    dicts = _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
     out: list[dict[str, Any]] = []
-    for r in rows:
-        d = _attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS))
+    for d in dicts:
         title = note_title(d)
         body = (d.get("content") or "").strip()
         subtitle = body[len(title) :].strip()[:80] if body.startswith(title) else body[:80]
@@ -2749,8 +2932,12 @@ def sync_contact_birthday_event(conn: sqlite3.Connection, contact_uid: str, full
     )
 
 
-def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+def upsert_contact(
+    conn: sqlite3.Connection, row: dict[str, Any], *, record_server_write: bool = True
+) -> None:
     data = dict(row)
+    if record_server_write:
+        previous = _row_columns(conn, "contacts", str(data.get("uid")), _CONTACT_SYNC_COLUMNS)
     tags = data.pop("tags", None)
     # `phones`/`emails` (the new multi-value lists) are handled separately
     # below, same "pop the non-column keys, write the base row, then attach
@@ -2770,10 +2957,19 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     # write the base row, then attach the related rows" shape as phones/
     # emails/websites/addresses above.
     social_profiles = data.pop("social_profiles", None)
+    # 2026-08-29 (direct request: "better cache these images") -- see
+    # contacts.photo_version's own _ensure_column comment above. Computed
+    # here, the one real write path every router/test uses to save a
+    # contact (including a plain "edit the name" save, which passes the
+    # existing photo_b64 straight through -- see routers/contacts.py's
+    # update_contact -- so this recomputes the same hash from the same
+    # bytes and writes back the identical value, a no-op in effect, not
+    # a bug).
+    data["photo_version"] = hashlib.md5(data["photo_b64"].encode("ascii")).hexdigest()[:12] if data.get("photo_b64") else None
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "birthday", "notes",
-        "photo_b64", "photo_type", "created_at", "updated_at",
+        "photo_b64", "photo_type", "photo_version", "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
@@ -2795,6 +2991,14 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         set_contact_addresses(conn, data["uid"], addresses)
     if social_profiles is not None:
         set_contact_social_profiles(conn, data["uid"], social_profiles)
+    if record_server_write:
+        record_server_sync_write(
+            conn,
+            "contact",
+            data["uid"],
+            previous,
+            _row_columns(conn, "contacts", data["uid"], _CONTACT_SYNC_COLUMNS),
+        )
     conn.commit()
     # Direct follow-up (2026-08-16): keep the generated Birthday calendar
     # event in sync with every save -- see sync_contact_birthday_event's
@@ -2807,7 +3011,11 @@ def upsert_contact(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     sync_contact_birthday_event(conn, data["uid"], data.get("full_name"), data.get("birthday"))
 
 
-def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
+def delete_contact(
+    conn: sqlite3.Connection, uid: str, *, record_server_write: bool = True
+) -> None:
+    if record_server_write:
+        record_server_delete(conn, "contact", uid)
     conn.execute("DELETE FROM contacts WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ?", (uid,))
     # Same cascade-cleanup reasoning as delete_checklist_items_for_task --
@@ -2827,12 +3035,28 @@ def delete_contact(conn: sqlite3.Connection, uid: str) -> None:
     conn.commit()
 
 
+def _backfill_contact_photo_version(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
+    """A contact whose photo was saved before contacts.photo_version
+    existed (_ensure_column above) has photo_b64 but a NULL version --
+    computed and persisted here, once, the same lazy-backfill-on-read
+    pattern get_page_banner/get_profile_photo use for their own version
+    field. Every other read already gets a fresh version for free
+    (upsert_contact computes it on every write), so this only ever fires
+    for a genuinely pre-migration row."""
+    if d.get("photo_b64") and not d.get("photo_version"):
+        version = hashlib.md5(d["photo_b64"].encode("ascii")).hexdigest()[:12]
+        conn.execute("UPDATE contacts SET photo_version = ? WHERE uid = ?", (version, d["uid"]))
+        conn.commit()
+        d["photo_version"] = version
+    return d
+
+
 def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM contacts WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return None
     d = _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS))
-    return _attach_contact_phones_emails(conn, d)
+    return _backfill_contact_photo_version(conn, _attach_contact_phones_emails(conn, d))
 
 
 def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -> dict[str, Any]:
@@ -2849,6 +3073,45 @@ def _attach_contact_phones_emails(conn: sqlite3.Connection, d: dict[str, Any]) -
     d["addresses"] = list_contact_addresses(conn, d["uid"])
     d["social_profiles"] = list_contact_social_profiles(conn, d["uid"])
     return d
+
+
+def _attach_contact_phones_emails_bulk(
+    conn: sqlite3.Connection, dicts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Batch form of `_attach_contact_phones_emails` -- one `IN (...)`
+    query per child table (5 total) for the whole contact list instead of
+    5 queries per row (the second half of the N+1 finding, `db.py:3038-
+    3042` in the audit report -- a contacts-list render used to cost the
+    base query plus 6 extra queries *per row*). Mutates and returns
+    `dicts` in place, same contract as `_attach_contact_phones_emails`."""
+    if not dicts:
+        return dicts
+    ids = [d["uid"] for d in dicts]
+    placeholders = ", ".join("?" for _ in ids)
+
+    def _grouped(table: str) -> dict[str, list[dict[str, Any]]]:
+        rows = conn.execute(
+            f"SELECT * FROM {table} WHERE contact_uid IN ({placeholders}) "
+            "ORDER BY position ASC, created_at ASC",
+            ids,
+        ).fetchall()
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            grouped.setdefault(r["contact_uid"], []).append(dict(r))
+        return grouped
+
+    phones = _grouped("contact_phones")
+    emails = _grouped("contact_emails")
+    websites = _grouped("contact_websites")
+    addresses = _grouped("contact_addresses")
+    social_profiles = _grouped("contact_social_profiles")
+    for d in dicts:
+        d["phones"] = phones.get(d["uid"], [])
+        d["emails"] = emails.get(d["uid"], [])
+        d["websites"] = websites.get(d["uid"], [])
+        d["addresses"] = addresses.get(d["uid"], [])
+        d["social_profiles"] = social_profiles.get(d["uid"], [])
+    return dicts
 
 
 def list_contacts(
@@ -2878,10 +3141,10 @@ def list_contacts(
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY full_name ASC"
     rows = conn.execute(query, params).fetchall()
-    return [
-        _attach_contact_phones_emails(conn, _attach_tags(conn, "contact", _row_to_dict(r, _CONTACT_JSON_FIELDS)))
-        for r in rows
-    ]
+    dicts = _attach_contact_phones_emails_bulk(
+        conn, _attach_tags_bulk(conn, "contact", [_row_to_dict(r, _CONTACT_JSON_FIELDS) for r in rows])
+    )
+    return [_backfill_contact_photo_version(conn, d) for d in dicts]
 
 
 # --------------------------------------------------------------------- #
@@ -3189,7 +3452,7 @@ def list_notes(conn: sqlite3.Connection, q: str | None = None) -> list[dict[str,
         params.append(f"%{q}%")
     query += " ORDER BY updated_at DESC"
     rows = conn.execute(query, params).fetchall()
-    return [_attach_tags(conn, "note", _row_to_dict(r, _NOTE_JSON_FIELDS)) for r in rows]
+    return _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
 
 
 def note_title(note: dict[str, Any]) -> str:
@@ -3233,12 +3496,6 @@ def list_contact_tag_names(conn: sqlite3.Connection) -> list[str]:
     return list_object_label_names(conn, "contact")
 
 
-def list_task_label_names(conn: sqlite3.Connection) -> list[str]:
-    """Distinct labels across all tasks -- Phase 9b toolbar rework's new
-    Tasks label filter (Table/Timeline/Board all share this)."""
-    return list_object_label_names(conn, "task")
-
-
 def list_event_label_names(conn: sqlite3.Connection) -> list[str]:
     """Distinct labels across all events -- Phase 9b toolbar rework's new
     Calendar label filter (Month/Week/Day/Agenda all share this)."""
@@ -3247,22 +3504,6 @@ def list_event_label_names(conn: sqlite3.Connection) -> list[str]:
 
 def all_contact_uids(conn: sqlite3.Connection) -> set[str]:
     return {r["uid"] for r in conn.execute("SELECT uid FROM contacts").fetchall()}
-
-
-def find_contact_by_name(conn: sqlite3.Connection, full_name: str) -> dict[str, Any] | None:
-    """Case-insensitive exact match on full_name. Exact-match rather than
-    fuzzy on purpose: silently linking to
-    the *wrong* same-ish-named contact would be a worse outcome than
-    occasionally creating a near-duplicate that the user can merge by
-    hand, and this app has no fuzzy-match/merge UI to clean that up
-    safely anyway. If more than one contact happens to share the exact
-    same name, this deterministically picks one (`LIMIT 1`) rather than
-    guessing further -- an edge case rare enough not to warrant a
-    disambiguation UI here."""
-    row = conn.execute(
-        "SELECT * FROM contacts WHERE full_name = ? COLLATE NOCASE LIMIT 1", (full_name,)
-    ).fetchone()
-    return _attach_tags(conn, "contact", _row_to_dict(row, _CONTACT_JSON_FIELDS)) if row else None
 
 
 # --------------------------------------------------------------------- #
@@ -3559,13 +3800,23 @@ def list_all_label_names(conn: sqlite3.Connection) -> list[str]:
     return [r["label_name"] for r in rows]
 
 
+def list_all_known_label_names(conn: sqlite3.Connection) -> list[str]:
+    """Every label name known to the system -- the union of labels in use
+    (object_labels) and labels with config (label_config). Used for the
+    label picker dropdowns so a label created in the manage page appears
+    immediately even before it's applied to anything."""
+    names = set(list_all_label_names(conn))
+    names |= {r["name"] for r in conn.execute("SELECT name FROM label_config").fetchall()}
+    return sorted(names, key=str.lower)
+
+
 def list_tag_names_in_use(conn: sqlite3.Connection) -> list[str]:
     """Phase 2 (label-space rework): the old tag registry is gone --
-    labels are the only vocabulary now, so this is just an alias for
-    list_all_label_names, kept under its old name so every existing
-    caller (the tag-chip autocomplete on task/event/contact/habit/
-    database forms) needed no renaming."""
-    return list_all_label_names(conn)
+    labels are the only vocabulary now. Returns all known label names
+    (from both object_labels and label_config) so the chip multiselect
+    dropdown includes labels created in the manage page before they're
+    applied to any object."""
+    return list_all_known_label_names(conn)
 
 
 _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
@@ -3573,11 +3824,10 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "icon": None,
     "description": None,
     "parent_name": None,
+    "label_group": None,
     "generate_space": 0,
     "dashboard_preset_json": None,
     "abbreviation": None,
-    "importance": None,
-    "urgency_threshold_days": None,
     "is_project": 0,
     "start_date": None,
     "end_date": None,
@@ -3631,9 +3881,8 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     same "only touch what you're told to" convention as every setter in
     this file."""
     cols = (
-        "name", "color", "icon", "description", "parent_name",
+        "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
-        "importance", "urgency_threshold_days",
         "is_project", "start_date", "end_date", "archived_at",
         "created_at",
     )
@@ -3651,17 +3900,6 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         [data.get(c) for c in cols],
     )
     conn.commit()
-
-
-def list_label_rules(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    """{label name: effective label config} for every label -- the resolved
-    rules the `important`/`urgent` derived-state filters and the dashboard's
-    aggregation service feed to src/derived_state.py. Built once per view
-    (never per task) via list_labels, which already returns each label's
-    effective config filled with defaults, so an `Exam` label with
-    `importance=3` configured contributes that rule to every task carrying
-    it."""
-    return {cfg["name"]: cfg for cfg in list_labels(conn)}
 
 
 def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -3953,7 +4191,11 @@ def _apply_tags_and_project(
 
 _HABIT_COLS = (
     "uid", "name", "description", "color", "icon", "target_per_day",
-    "archived_at", "created_at", "updated_at",
+    "archived_at",
+    # 2026-08-29 (STATE.md backlog item 3) -- same non-working-day policy
+    # as tasks/events, see the `habits` CREATE TABLE comment.
+    "holiday_calendar", "exclude_saturday", "exclude_sunday",
+    "created_at", "updated_at",
 )
 
 
@@ -3973,6 +4215,10 @@ def upsert_habit(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     data.setdefault("description", "")
     data.setdefault("color", "blue")
     data.setdefault("target_per_day", 1)
+    # NOT NULL DEFAULT 0 columns -- same coercion upsert_event/upsert_task
+    # already do for their own holiday-policy columns.
+    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
+    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
     project_uid = data.pop("project_uid", None)
     has_project_key = "project_uid" in row
@@ -4293,8 +4539,12 @@ def upsert_published_list(conn: sqlite3.Connection, row: dict[str, Any]) -> None
         "id", "name", "entity_type", "label_filter_json",
         "radicale_collection_path", "sync_direction",
         "last_materialized_at", "created_at",
+        # 2026-08-29 -- see the _ensure_column migration's comment above
+        # for what these mean.
+        "visibility", "public_token",
     ]
     data.setdefault("sync_direction", "read_only")
+    data.setdefault("visibility", "private")
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "id")
@@ -4329,6 +4579,45 @@ def set_published_list_materialized_at(conn: sqlite3.Connection, list_id: str, w
     conn.execute(
         "UPDATE published_lists SET last_materialized_at = ? WHERE id = ?", (when, list_id)
     )
+    conn.commit()
+
+
+def get_published_list_by_token(conn: sqlite3.Connection, token: str) -> dict[str, Any] | None:
+    """The row a public feed request (routers/public_lists.py) looks up
+    by its `public_token`. Does NOT filter on `visibility` here -- the
+    caller must check `row["visibility"] == "public"` itself and 404
+    otherwise, so a list that was switched back to private/archived after
+    being shared correctly stops serving even though the token row still
+    exists (the token is never cleared, only gated by visibility -- see
+    the migration's comment)."""
+    if not token:
+        return None
+    row = conn.execute(
+        "SELECT * FROM published_lists WHERE public_token = ?", (token,)
+    ).fetchone()
+    return _published_list_row_to_dict(row) if row else None
+
+
+def set_published_list_visibility(
+    conn: sqlite3.Connection, list_id: str, visibility: str, public_token: str | None = None
+) -> None:
+    """Targeted update for a visibility transition (routers/
+    published_lists.py's visibility route) -- deliberately NOT routed
+    through upsert_published_list, which requires re-supplying every
+    column (name, label_filter, ...) on every call; a visibility toggle
+    only ever touches these two columns. `public_token` is only written
+    when the caller passes one (generated once, the first time a list
+    becomes public -- see published_lists.py); passing None here leaves
+    whatever token already exists untouched rather than clearing it."""
+    if public_token is not None:
+        conn.execute(
+            "UPDATE published_lists SET visibility = ?, public_token = ? WHERE id = ?",
+            (visibility, public_token, list_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE published_lists SET visibility = ? WHERE id = ?", (visibility, list_id)
+        )
     conn.commit()
 
 
@@ -4387,26 +4676,108 @@ def set_app_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 PROFILE_PHOTO_B64_KEY = "profile_photo_b64"
 PROFILE_PHOTO_TYPE_KEY = "profile_photo_type"
+# 2026-08-29 (direct request: "better cache these images... convert for
+# smaller sizes") -- a content-hash version, same md5-first-12-hex-chars
+# convention as a banner's own `version` field (get_page_banner below).
+# Lets deps.py's avatar() global build a real, immutable-cacheable
+# `/settings/profile-photo/image?v=<hash>` URL instead of embedding the
+# full base64 blob inline in every page's HTML (which is what every
+# avatar spot in this app did until this change -- see routers/
+# banners.py's own docstring for the exact "2MB inline blob made the page
+# load at 100ms+" problem this mirrors). Computed at write time
+# (set_profile_photo below); pre-existing installs with a photo saved
+# before this key existed get it lazily backfilled on next read
+# (get_profile_photo below), same one-time-cheap-write pattern
+# get_page_banner already uses for a banner's own version.
+PROFILE_PHOTO_VERSION_KEY = "profile_photo_version"
 _PAGE_BANNER_PREFIX = "page_banner_"
+
+# 2026-08-29 (sidebar redesign item 13e follow-up) -- the Standard Page
+# Header's own optional banner image (deps.py's page_header_banner()/
+# _page_header_narrow.html) and, since 2026-08-29, the single fallback
+# every Home/Project/Space page's own big banner uses when it has none of
+# its own (routers/dashboard.py's _page_banner_context). Just one more
+# `page_key` for get_page_banner/set_page_banner -- a fixed sentinel picked
+# to never collide with a real label name. Lives here (not deps.py, which
+# imports this module) so banner_for_object below can reference it without
+# a circular import; deps.py re-exports it under the same name so every
+# existing `from ..deps import PAGE_HEADER_BANNER_SCOPE` call site is
+# unaffected.
+PAGE_HEADER_BANNER_SCOPE = "__page_header__"
+
+# 2026-09-07 (direct request) -- four more sentinel page_key scopes, same
+# shape as PAGE_HEADER_BANNER_SCOPE above, one per meteorological season.
+# banner_for_object uses these as a tier between "no matching label/
+# Project/Space banner" and the global default above: a task/event with no
+# banner of its own shows whichever of these matches its own due/start
+# date's month, before falling all the way back to PAGE_HEADER_BANNER_SCOPE.
+# Set/edited/removed through the exact same /banners/editor machinery as
+# any other scope -- nothing new to build, just four more page_keys.
+SEASON_BANNER_SCOPES = {
+    "spring": "__season_spring__",
+    "summer": "__season_summer__",
+    "autumn": "__season_autumn__",
+    "winter": "__season_winter__",
+}
+
+# object_type -> the date field banner_for_object reads to pick a season,
+# for the two object types that get a seasonal fallback (2026-09-07, direct
+# request: "all data (events and tasks) default to their season"). A task's
+# own due date if it has one, an event's own start -- not creation date, so
+# rescheduling a task/event changes which season banner it shows.
+# Contacts (no due/start date at all) simply aren't in this map, so
+# banner_for_object's season/default fallback never applies to them --
+# unchanged behaviour there, per direct instruction not to touch it.
+_SEASON_DATE_FIELD = {"task": "due_at", "event": "start_at"}
+
+
+def season_for_date(value: Any) -> str | None:
+    """Meteorological Northern-Hemisphere season for a stored start_at/
+    due_at value ("2026-09-07" or a full "...T..." datetime string) --
+    Dec/Jan/Feb winter, Mar/Apr/May spring, Jun/Jul/Aug summer, Sep/Oct/Nov
+    autumn. None for anything missing or unparseable (a bare date's first
+    10 characters cover both shapes) -- callers treat that exactly like
+    "no season resolved" and fall through to the next tier rather than
+    guessing a season for a malformed value."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        month = date.fromisoformat(value[:10]).month
+    except ValueError:
+        return None
+    if month in (12, 1, 2):
+        return "winter"
+    if month in (3, 4, 5):
+        return "spring"
+    if month in (6, 7, 8):
+        return "summer"
+    return "autumn"
 
 
 def get_profile_photo(conn: sqlite3.Connection) -> dict[str, str] | None:
-    """The app user's own profile picture -- {photo_b64, photo_type}
-    (same shape as a contact's photo_b64/photo_type columns), or None when
-    none is set. Unlike a contact's photo there's no vCard anywhere --
-    this is app-level identity (Settings > General)."""
+    """The app user's own profile picture -- {photo_b64, photo_type,
+    version} (same shape as a contact's photo_b64/photo_type/photo_version
+    columns), or None when none is set. Unlike a contact's photo there's
+    no vCard anywhere -- this is app-level identity (Settings >
+    General)."""
     b64 = get_app_meta(conn, PROFILE_PHOTO_B64_KEY)
     if not b64:
         return None
+    version = get_app_meta(conn, PROFILE_PHOTO_VERSION_KEY)
+    if not version:
+        version = hashlib.md5(b64.encode("ascii")).hexdigest()[:12]
+        set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, version)
     return {
         "photo_b64": b64,
         "photo_type": get_app_meta(conn, PROFILE_PHOTO_TYPE_KEY) or "jpeg",
+        "version": version,
     }
 
 
 def set_profile_photo(conn: sqlite3.Connection, photo_b64: str, photo_type: str) -> None:
     set_app_meta(conn, PROFILE_PHOTO_B64_KEY, photo_b64)
     set_app_meta(conn, PROFILE_PHOTO_TYPE_KEY, photo_type)
+    set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, hashlib.md5(photo_b64.encode("ascii")).hexdigest()[:12])
 
 
 def clear_profile_photo(conn: sqlite3.Connection) -> None:
@@ -4415,6 +4786,7 @@ def clear_profile_photo(conn: sqlite3.Connection) -> None:
     unset in this app uses), so a cleared photo reads as None."""
     set_app_meta(conn, PROFILE_PHOTO_B64_KEY, "")
     set_app_meta(conn, PROFILE_PHOTO_TYPE_KEY, "")
+    set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, "")
 
 
 def _page_banner_key(page_key: str) -> str:
@@ -4456,6 +4828,99 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
     return banner
 
 
+def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str, Any]) -> dict[str, Any] | None:
+    """2026-08-30 (direct request, tasks/kanban banner strip + task detail
+    modal header), generalized 2026-09-03 (direct request: the same cover
+    treatment as the baseline "Variant B" detail-modal header for events/
+    contacts/habit-tasks too, not just tasks) -- the banner an object
+    should show, if any, resolved by priority: its own directly-set plain
+    label(s) first, then its Project label, then that project's parent
+    Space (`label_config.parent_name`, the "Group" field
+    label_edit_modal.html exposes). No new storage: a label's banner
+    already exists (get_page_banner/routers/banners.py, keyed by label
+    name) as the image a label's own generated dashboard page shows --
+    this just resolves which one of an object's several labels wins, the
+    same banner data either way.
+
+    `object_type` is whatever `object_labels`/`project_label_for` already
+    key on ("task", "event", "contact" -- anything `set_object_labels` is
+    called with). `obj` needs `uid` (to look up its Project label) and
+    `tags` (every router's own dict-building helper already attaches
+    both -- routers/tasks.py's task dicts, _attach_tags(conn, "event"/
+    "contact", ...), db.list_tasks rows). Every tag but the project's own
+    is tried in list order before falling through to the project/Space
+    tiers -- an object with both a Project label and a more specific
+    plain label (e.g. "Client call") should show the specific one, not
+    the broader project's, which is why the project tag itself is skipped
+    in this first pass rather than tried alongside its siblings.
+
+    The returned dict carries one extra key beyond get_page_banner's own
+    shape: `scope` -- the label name the banner actually came from. A
+    template needs this to build the /banners/image?scope=... URL (an
+    uploaded banner's bytes are served per-scope, and the winning scope
+    here is whichever label/project/Space matched, not the object itself,
+    which has no scope of its own). Safe to inject: this dict is a fresh
+    json.loads() from get_page_banner, never written back through
+    set_page_banner, so the extra key can't leak into storage."""
+    tags = obj.get("tags") or []
+    project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
+    for tag in tags:
+        if tag == project:
+            continue
+        banner = get_page_banner(conn, tag)
+        if banner:
+            banner["scope"] = tag
+            return banner
+    if project:
+        banner = get_page_banner(conn, project)
+        if banner:
+            banner["scope"] = project
+            return banner
+        cfg = get_label_config(conn, project)
+        space = (cfg or {}).get("parent_name")
+        if space:
+            banner = get_page_banner(conn, space)
+            if banner:
+                banner["scope"] = space
+                return banner
+    # 2026-09-07 (direct request): a task/event with no matching label/
+    # Project/Space banner falls back further instead of stopping at None
+    # (a flat color gradient, _detail_cover.html) -- first to the seasonal
+    # banner matching its own due/start date (SEASON_BANNER_SCOPES,
+    # season_for_date), then to the same single global default every page
+    # already falls back to when it has no banner of its own
+    # (PAGE_HEADER_BANNER_SCOPE, routers/dashboard.py's
+    # _page_banner_context). Scoped to object types in _SEASON_DATE_FIELD
+    # only (task/event) -- contacts aren't in that map, so this whole block
+    # is a no-op for them and they keep resolving to None/the gradient
+    # fallback exactly as before.
+    date_field = _SEASON_DATE_FIELD.get(object_type)
+    if date_field:
+        season = season_for_date(obj.get(date_field))
+        if season:
+            season_scope = SEASON_BANNER_SCOPES[season]
+            banner = get_page_banner(conn, season_scope)
+            if banner:
+                banner["scope"] = season_scope
+                return banner
+        banner = get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
+        if banner:
+            banner["scope"] = PAGE_HEADER_BANNER_SCOPE
+            return banner
+    return None
+
+
+def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] | None:
+    """Thin, name-preserving wrapper over `banner_for_object` for task's
+    two pre-existing consumers (task_detail.html's cover, project_detail.
+    html's Kanban cards) -- kept as its own function (rather than inlining
+    `banner_for_object(conn, "task", task)` at both call sites) so neither
+    call site needed to change when this generalized 2026-09-03, and so
+    test_banners.py's own `TestBannerForTask` keeps testing the exact name
+    it always has."""
+    return banner_for_object(conn, "task", task)
+
+
 def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, Any]) -> None:
     set_app_meta(conn, _page_banner_key(page_key), json.dumps(banner))
 
@@ -4470,6 +4935,311 @@ def set_page_banner(conn: sqlite3.Connection, page_key: str, banner: dict[str, A
 # contains a router-shaped decision" convention as everywhere else in
 # this file.
 # --------------------------------------------------------------------- #
+
+# The entity tables and per-field sync whitelist, shared by offline_sync.py
+# (which only ever receives *device* ops) and the server-write recording
+# below (which makes the server itself a participant in the same scheme).
+# One copy lives here, not two -- offline_sync.py aliases it so a field
+# added to the sync protocol in one place can't silently diverge from the
+# other. Deliberately excludes `importance`/`urgency`: those axes were
+# removed as columns in an earlier side-work rework (see the `tasks`
+# CREATE TABLE comment), so a device op or server write targeting them has
+# no column to land in.
+ENTITY_TABLES: dict[str, str] = {
+    "task": "tasks",
+    "event": "events",
+    "contact": "contacts",
+    "note": "notes",
+}
+
+ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
+    "task": {
+        "title", "description", "start_at", "due_at", "status", "progress",
+        "recurrence", "exdates_json", "completed_at", "target_per_day",
+        "created_at", "updated_at", "deleted_at",
+    },
+    "event": {
+        "title", "description", "start_at", "end_at", "all_day", "location",
+        "meeting_url", "status", "recurrence", "exdates_json", "reminders_json",
+        "holiday_calendar", "exclude_saturday", "exclude_sunday",
+        "created_at", "updated_at", "deleted_at",
+    },
+    "contact": {
+        "full_name", "title", "org", "phone", "email", "address", "notes",
+        "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
+    },
+    "note": {
+        "content", "created_at", "updated_at", "deleted_at",
+    },
+}
+
+
+# --------------------------------------------------------------------- #
+# The server as a sync author (2026-08-18 follow-up -- the fix for the
+# "offline shows nothing" bug). The sync protocol delivers changes to a
+# device *only* through field_versions, and field_versions was only ever
+# written when a device pushed an op. The ordinary rendered web UI writes
+# to the same tables through db.upsert_*/delete_* -- those writes never
+# entered field_versions, so a fresh device's pull returned an empty delta
+# and its local mirror stayed empty forever, leaving the /offline shell
+# with nothing to render ("Nothing to load right now" on every page).
+#
+# The fix makes the server a first-class participant: every task/event/
+# contact write it performs on behalf of the plain UI is recorded into
+# field_versions under a server-minted HLC (device id "server"), exactly
+# as if a device had pushed it. A device's pull then delivers it like any
+# other change. The server stays a passive relay for device ops (the §5
+# ledger still guarantees a retried push replays instead of re-applying);
+# it is only an *author* for its own UI writes.
+#
+# The server HLC clock lives in app_meta and is merged forward past every
+# device op the server applies (offline_sync.apply_op calls
+# merge_server_hlc), so per §3 the server's own next write is guaranteed
+# to sort strictly after anything it has already observed -- an ordinary
+# online edit to a field a device last wrote offline genuinely outranks
+# that device's write when the device next pushes it. Same read-modify-
+# write shape (and same benign concurrency race under two requests in the
+# same millisecond) as the existing sync_data_version counter just above.
+# --------------------------------------------------------------------- #
+
+SERVER_DEVICE_ID = "server"
+_SERVER_HLC_KEY = "server_hlc_clock"
+
+
+def get_server_hlc_clock(conn: sqlite3.Connection) -> tuple[int, int] | None:
+    """The server's own HLC clock as (physical, logical) -- the stored
+    state merge_server_hlc/mint_server_hlc read-modify-write. None before
+    the server has ever minted or merged a write."""
+    raw = get_app_meta(conn, _SERVER_HLC_KEY)
+    if not raw:
+        return None
+    try:
+        clock = json.loads(raw)
+        return (clock[0], clock[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _put_server_hlc_clock(conn: sqlite3.Connection, clock: tuple[int, int]) -> None:
+    conn.execute(
+        "INSERT INTO app_meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (_SERVER_HLC_KEY, json.dumps([clock[0], clock[1]])),
+    )
+
+
+def merge_server_hlc(conn: sqlite3.Connection, observed: tuple[int, int, str]) -> None:
+    """§3's receive-side HLC merge, applied whenever the server applies a
+    device op (offline_sync.apply_op): advance the server's clock past
+    what it just observed so its own next minted write outranks it."""
+    prev = get_server_hlc_clock(conn) or (0, 0)
+    if observed[0] == prev[0]:
+        logical = max(prev[1], observed[1]) + 1
+    elif observed[0] > prev[0]:
+        logical = observed[1] + 1
+    else:
+        logical = prev[1]
+    _put_server_hlc_clock(conn, (max(prev[0], observed[0]), logical))
+
+
+def mint_server_hlc(conn: sqlite3.Connection) -> tuple[int, int, str]:
+    """Mints a fresh server HLC -- the timestamp every server-written field
+    change is recorded under. Physical time never goes backwards (the
+    clock is monotonic across the process's own writes and every device op
+    it has observed via merge_server_hlc), and two server writes within
+    the same millisecond get distinct logical values."""
+    prev = get_server_hlc_clock(conn) or (0, 0)
+    now = int(time.time() * 1000)
+    if prev[0] >= now:
+        physical, logical = prev[0], prev[1] + 1
+    else:
+        physical, logical = now, 0
+    _put_server_hlc_clock(conn, (physical, logical))
+    return (physical, logical, SERVER_DEVICE_ID)
+
+
+def _row_columns(
+    conn: sqlite3.Connection, table: str, uid: str, columns: list[str]
+) -> dict[str, Any]:
+    """Raw stored values for a fixed set of columns -- the diff substrate
+    for record_server_sync_write. Reads the real column names straight off
+    the table (not via get_*, which decodes *_json columns into bare names
+    and attaches labels), so the comparison always operates on the stored
+    representation, the same values a pull would deliver."""
+    row = conn.execute(
+        f"SELECT {', '.join(columns)} FROM {table} WHERE uid = ?", (uid,)
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def record_server_sync_write(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Records a server-side UI write into field_versions (the server-as-
+    author mechanism above). Diffs the entity's sync-whitelist columns
+    before vs. after the write and records each one that actually changed
+    under a single server HLC -- recording every column unconditionally
+    would overwrite a device's newer HLC on fields the server didn't touch
+    (see the module comment), so only real changes move the field HLCs.
+    Bumps the sync data version iff anything was recorded, exactly like a
+    device push that changed state. `hlc` lets a caller seed with a known
+    clock value instead of minting one (tests seeding pre-sync data)."""
+    fields = ENTITY_SYNC_FIELDS.get(entity_type)
+    if not fields or not current:
+        return
+    changed = [
+        f
+        for f in fields
+        if f in current and (previous or {}).get(f) != current[f]
+    ]
+    if not changed:
+        return
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    for f in changed:
+        set_field_hlc(conn, entity_type, entity_uid, f, hlc)
+    bump_sync_data_version(conn)
+
+
+def record_server_delete(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_uid: str,
+    *,
+    hlc: tuple[int, int, str] | None = None,
+) -> None:
+    """Records a server-side hard delete as a `deleted_at` field_versions
+    entry -- the same tombstone a device's delete op creates, but with no
+    stored value (the entity row is physically removed, unlike a sync
+    soft-delete). offline_sync.pull() synthesizes a truthy deleted_at for
+    a missing row (see _current_field_value), so a device's mirror learns
+    "this entity is gone" and hides it. `hlc` lets a caller seed with a
+    known clock value instead of minting one."""
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    set_field_hlc(conn, entity_type, entity_uid, "deleted_at", hlc)
+    bump_sync_data_version(conn)
+
+
+def record_work_allocation_flag(
+    conn: sqlite3.Connection, event_uid: str, *, hlc: tuple[int, int, str] | None = None
+) -> None:
+    """Records a work-allocation event's `is_work_allocation` sync flag into
+    field_versions, so a device's pull can deliver it. The flag is not an
+    `events` column -- it lives in `event_task_relations.is_work_allocation`
+    (see create_work_allocation) -- so record_server_sync_write's plain
+    column diff can never see it; it gets its own field_versions entry
+    here. The value itself is never stored: offline_sync.pull() reads it
+    back from the relation table (offline_sync._current_field_value's
+    special case), exactly as the deleted-at-tombstone value is synthesized
+    rather than stored. Only ever recorded for work allocations -- a
+    regular event has no flag entry, and a pull simply never mentions it,
+    which the mirror reads as "not a work allocation." `hlc` lets a caller
+    seed with a known clock value instead of minting one."""
+    if hlc is None:
+        hlc = mint_server_hlc(conn)
+    set_field_hlc(conn, "event", event_uid, "is_work_allocation", hlc)
+    bump_sync_data_version(conn)
+
+
+# The sync-whitelist columns for each entity, as a fixed ORDERED list --
+# the diff/read substrate for the server-as-author recording above (a
+# stable ordering keeps the generated SELECTs deterministic).
+_TASK_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["task"])
+_EVENT_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["event"])
+_CONTACT_SYNC_COLUMNS = sorted(ENTITY_SYNC_FIELDS["contact"])
+
+
+# One-time backfill (2026-08-18) -- the same "offline shows nothing" fix,
+# applied to data that already existed before the server-as-author change.
+# New server writes now record themselves into field_versions going
+# forward, but rows created *before* this fix have no entries at all, so
+# without a backfill a device's first pull would still return an empty
+# delta for them and the offline shell would still show "Nothing to load
+# right now." Runs at the end of init_schema, gated on an app_meta marker
+# so it happens exactly once on a real installation.
+_SERVER_WRITES_BACKFILLED_KEY = "sync_server_writes_backfilled"
+
+
+def backfill_server_sync_writes(conn: sqlite3.Connection) -> None:
+    """One-time: records every existing task/event/contact's sync-whitelist
+    columns into field_versions under a single server HLC, so a device's
+    very first pull delivers the full pre-existing dataset. `INSERT OR
+    IGNORE` (the field_versions primary key is entity_type+entity_uid+
+    field_name) means a field a device has already synced keeps its own
+    HLC untouched -- the backfill only ever adds *missing* entries and
+    never overwrites device state. Idempotent: the app_meta marker is set
+    even when there was nothing to backfill (a fresh database), so the
+    scan never re-runs; the data version only moves when something was
+    actually inserted."""
+    if get_app_meta(conn, _SERVER_WRITES_BACKFILLED_KEY):
+        return
+    hlc = mint_server_hlc(conn)
+    inserted = 0
+    for entity_type, table in ENTITY_TABLES.items():
+        uids = conn.execute(f"SELECT uid FROM {table}").fetchall()
+        for (uid,) in uids:
+            for field_name in ENTITY_SYNC_FIELDS[entity_type]:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO field_versions "
+                    "(entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (entity_type, uid, field_name, hlc[0], hlc[1], hlc[2]),
+                )
+                inserted += cur.rowcount
+    set_app_meta(conn, _SERVER_WRITES_BACKFILLED_KEY, "1")
+    if inserted:
+        bump_sync_data_version(conn)
+
+
+# One-time backfill of the work-allocation sync flag (2026-08-18, the
+# offline "Upcoming" view). The main sync_server_writes_backfilled marker
+# above may already be set on a real install -- it covers the entity
+# columns, but a work allocation's flag lives in event_task_relations, not
+# an `events` column, so its field_versions entry needs a separate one-time
+# pass, gated on its own marker.
+_WORK_ALLOCATION_FLAGS_BACKFILLED_KEY = "sync_work_allocation_flags_backfilled"
+
+
+def backfill_work_allocation_flags(conn: sqlite3.Connection) -> None:
+    """One-time: records an `is_work_allocation` field_versions entry for
+    every pre-existing work-allocation event (an event_task_relations row
+    with is_work_allocation=1), so a device's pull -- which only ever
+    learns the flag through field_versions -- sees pre-existing scheduled
+    work sessions as work allocations in its local mirror. `INSERT OR
+    IGNORE` (field_versions' primary key is entity_type+entity_uid+
+    field_name) means a field a device has already synced keeps its own
+    HLC untouched, same contract as backfill_server_sync_writes. Only the
+    =1 rows get an entry: a relation with is_work_allocation=0 is an
+    ordinary task/event link, and a regular event having *no* flag entry
+    is exactly what a pull expects to mean "not a work allocation."
+    Idempotent via its own app_meta marker, and only bumps the data
+    version when something was actually inserted (so a device's round-skip
+    pre-check notices the new flags)."""
+    if get_app_meta(conn, _WORK_ALLOCATION_FLAGS_BACKFILLED_KEY):
+        return
+    hlc = mint_server_hlc(conn)
+    inserted = 0
+    rows = conn.execute(
+        "SELECT event_uid FROM event_task_relations WHERE is_work_allocation = 1"
+    ).fetchall()
+    for (event_uid,) in rows:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO field_versions "
+            "(entity_type, entity_uid, field_name, hlc_physical, hlc_logical, hlc_device_id) "
+            "VALUES ('event', ?, 'is_work_allocation', ?, ?, ?)",
+            (event_uid, hlc[0], hlc[1], hlc[2]),
+        )
+        inserted += cur.rowcount
+    set_app_meta(conn, _WORK_ALLOCATION_FLAGS_BACKFILLED_KEY, "1")
+    if inserted:
+        bump_sync_data_version(conn)
 
 
 def get_field_hlc(
@@ -4585,6 +5355,41 @@ def get_sync_device(conn: sqlite3.Connection, device_id: str) -> dict[str, Any] 
         "last_pulled_hlc": (row[4], row[5], row[6]) if row[4] is not None else None,
         "last_seen_at": row[7],
     }
+
+
+# 2026-08-17 follow-up -- the server-side "database hash" a device
+# compares against its own last-synced copy before deciding whether a
+# sync round is needed at all. A monotonic counter over applied sync
+# writes, not a literal hash of the entity tables: the sync protocol can
+# only ever *deliver* changes that arrived through the sync path
+# (field_versions), so a counter that moves exactly when a sync write
+# actually lands is the only signal whose "did it change" answer matches
+# what a pull would return. A whole-DB hash would also move on ordinary
+# server-rendered app edits (which never enter field_versions) and would
+# send every device into a pull that returns nothing new, forever.
+# Stored in app_meta, same "sync bookkeeping is just a key/value row"
+# convention as the sync-GC settings (data_health.py) -- no schema change.
+_SYNC_DATA_VERSION_KEY = "sync_data_version"
+
+
+def get_sync_data_version(conn: sqlite3.Connection) -> int:
+    """The server's current data version -- 0 before any sync write has
+    ever been applied. Compared client-side (offline_sync_client.js's
+    round-skip pre-check) against the version the device saved the last
+    time it pulled successfully."""
+    raw = get_app_meta(conn, _SYNC_DATA_VERSION_KEY)
+    return int(raw) if raw else 0
+
+
+def bump_sync_data_version(conn: sqlite3.Connection) -> int:
+    """Advances the version by one and commits. Called once per batch
+    (offline_sync.apply_batch) when at least one op in it actually
+    changed server state, and by purge_expired when GC physically removes
+    anything -- so the version changes iff a pull would return something
+    new (or force a resync), and never regresses."""
+    version = get_sync_data_version(conn) + 1
+    set_app_meta(conn, _SYNC_DATA_VERSION_KEY, str(version))
+    return version
 
 
 def touch_sync_device(

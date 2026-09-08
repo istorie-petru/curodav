@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, derived_state, habit_heatmap
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates
 from . import dashboard as dashboard_router
 from . import calendar as calendar_router  # _annotate_calendar_colors, for related events' identity dots
 
@@ -23,6 +23,32 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 # task is the Radicale sync loop), and a cheap conditional DELETE that's
 # almost always a no-op costs nothing meaningful to run on each visit.
 TASK_AUTO_ARCHIVE_DAYS_KEY = "task_auto_archive_days"
+
+# 2026-08-28 follow-up ("direct number input" for the Habits group's
+# check-in cell) -- server-side mirror of the input's `max="999999"`, see
+# set_task_completion below. Shared with routers/habits.py's own copy
+# (kept as a plain duplicated constant rather than a cross-router import,
+# same "small enough to just repeat" call this app makes elsewhere for a
+# one-line bound rather than adding an import edge between two routers).
+_MAX_HABIT_VALUE = 999999
+
+
+def _excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) -> set[str]:
+    """2026-08-29 (STATE.md backlog item 3): the same holiday_calendar/
+    exclude_saturday/exclude_sunday policy resolution as routers/habits.py's
+    _excluded_dates_for_habit (kept as its own small copy here rather than
+    a cross-router import -- same "small enough to just repeat" call this
+    file already makes for _MAX_HABIT_VALUE above) -- `row` may be a
+    recurring task or a standalone habit entity, both now carry the same
+    three columns. Cheap no-op (no DB read) when the row has no policy set
+    at all."""
+    if not (row.get("holiday_calendar") or row.get("exclude_saturday") or row.get("exclude_sunday")):
+        return set()
+    logged = [date.fromisoformat(d) for d in entries_by_date if d]
+    start = min(logged) if logged else today
+    start = max(start, today - timedelta(days=730))
+    holiday_calendars = db.list_holidays_by_calendar(conn)
+    return habit_heatmap.excluded_dates_in_range(row, holiday_calendars, start, today)
 
 
 def _auto_archive_if_configured(conn) -> None:
@@ -43,16 +69,8 @@ def _auto_archive_if_configured(conn) -> None:
 # sends it). Read via a FastAPI Header param (default None) rather than a
 # Request object because this suite's direct-call tests invoke the router
 # functions as plain Python functions without building a Request -- those
-# keep getting the redirect default.
+# keep getting the redirect default. Shared helpers live in deps.py.
 # --------------------------------------------------------------------- #
-def _wants_json(x_requested_with: str | None) -> bool:
-    return x_requested_with == "fetch"
-
-
-def _respond(x_requested_with: str | None, redirect_url: str, *, status_code: int = 200, **payload) -> JSONResponse | RedirectResponse:
-    if _wants_json(x_requested_with):
-        return JSONResponse({"ok": True, **payload}, status_code=status_code)
-    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 STATUSES = ["active", "in_progress", "waiting", "done", "archived"]
@@ -71,15 +89,13 @@ STATUS_COLORS = {
     "archived": "gray",
 }
 # 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states): the single 1-4 WebDAV `priority` axis is gone from the UI,
-# replaced by two independent 1-3 axes -- Importance and Urgency (higher =
-# more; 0/None = unset). The display labels live in src/derived_state.py
-# (the one source of truth for the axes); colors are a UI concern kept
-# here. The old `tasks.priority` column stays physically on disk, unused.
-IMPORTANCE_LABELS = derived_state.IMPORTANCE_LABELS
-URGENCY_LABELS = derived_state.URGENCY_LABELS
-IMPORTANCE_COLORS = {1: "gray", 2: "yellow", 3: "red"}
-URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
+# states) introduced two independent 1-3 axes -- Importance and Urgency --
+# replacing the single 1-4 WebDAV `priority` axis. That whole feature (the
+# axes, their filters/sort keys, the task detail meta row, the Dashboard
+# widgets that read them, and the export columns) is removed outright --
+# no longer a feature this app offers. The old `tasks.priority` column
+# stays physically on disk, unused, same "never force-drop old data"
+# convention as every other removed column in db.py.
 
 # 2026-08-08 direct feedback ("rework Priority/Status/Recurrence to look
 # the same as Range/View/Labels") -- task_form.html's Status field moved
@@ -89,34 +105,18 @@ URGENCY_COLORS = {1: "gray", 2: "yellow", 3: "red"}
 # single-mode multiselect panel View/Range/Labels already share. {uid,
 # name} pairs, the same shape that partial expects everywhere else.
 # Importance/Urgency used to have their own *_ITEMS lists here too (the
-# 1.1 manual multiselect fields); side work (post-1.1) removed the fields
-# entirely -- see _task_form_fields.html's header comment.
+# 1.1 manual multiselect fields); removed along with the rest of that
+# feature -- see this module's other Importance/Urgency comments.
 STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 
-# Reworked 2026-08-01: the single "smart filter" dropdown above (Today /
-# Overdue / High Priority / Waiting / Completed / Archived / All Open /
-# All) conflated three genuinely independent questions -- which dates,
-# which status, which priority -- into one flat list of preset
-# combinations, so you could never ask for e.g. "today's high-priority
-# waiting tasks" without a new preset. Replaced by three independent
-# filters that AND together. Each is computed in Python rather than SQL
-# since "today"/"this week"/"overdue" depend on the current date, not a
-# stored column.
-#
-# 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states) originally grew this dropdown with `tomorrow`/`this_month` plus the
-# two derived virtual states `important`/`urgent`, and later folded the
-# temporal `overdue` state in here too. Tasks page filter cleanup (small,
-# 2026-08-15, plans/open.md § Tasks page filter cleanup): direct feedback
-# said `overdue`/`important`/`urgent` read as clutter/wrong-drawer in the
-# Date dropdown -- they aren't dates, they're virtual states on other axes.
-# `important` moved into IMPORTANCE_FILTERS (an "(any level)" option
-# alongside the explicit 1/2/3 values -- decided), `urgent` moved into
-# URGENCY_FILTERS the same way (decided), and `overdue` moved into
-# STATUS_FILTERS as a virtual pseudo-status (the "fold it into the Status
-# dropdown" candidate from that section, since it isn't a value on any real
-# axis and a toolbar chip would've been a second, redundant filtering
-# mechanism). DATE_FILTERS is back to being just real date buckets.
+# 2026-08-28 "major rework" session (item 3, "filtering reduced to date
+# only"): Status/Importance/Urgency/label filtering and the group-by toggle
+# are gone from the Table view entirely -- DATE_FILTERS is the one filter
+# axis left. Reworked 2026-08-01: the old single "smart filter" dropdown
+# (Today / Overdue / High Priority / Waiting / Completed / Archived / All
+# Open / All) conflated several independent questions into one flat preset
+# list; that history is why this stayed a real date-bucket list rather than
+# a boolean "today only" toggle even after the other axes were cut.
 DATE_FILTERS = ["all", "today", "tomorrow", "this_week", "this_month"]
 DATE_FILTER_LABELS = {
     "all": "All dates",
@@ -126,34 +126,10 @@ DATE_FILTER_LABELS = {
     "this_month": "This month",
 }
 
-# `overdue` is a virtual pseudo-status (src/derived_state.py's `overdue`
-# state, computed from due_at vs. today) -- not a real `tasks.status` value,
-# same "query projection, never stored" nature DATE_FILTERS' old
-# important/urgent entries had. See _apply_status_filter.
-STATUS_FILTERS = ["all"] + STATUSES + ["overdue"]
-STATUS_FILTER_LABELS = {"all": "All statuses", **STATUS_LABELS, "overdue": "Overdue"}
-
-# `important` is an "(any level)" virtual option -- src/derived_state.py's
-# `is_important` (effective importance >= IMPORTANT_THRESHOLD), distinct
-# from picking an exact 1/2/3 level below it. See _apply_importance_filter.
-IMPORTANCE_FILTERS = ["all", "1", "2", "3", "important"]
-IMPORTANCE_FILTER_LABELS = {
-    "all": "All importance",
-    **{str(k): v for k, v in IMPORTANCE_LABELS.items()},
-    "important": "Important (any level)",
-}
-# `urgent` is the urgency-axis sibling of `important` above (`is_urgent`).
-URGENCY_FILTERS = ["all", "1", "2", "3", "urgent"]
-URGENCY_FILTER_LABELS = {
-    "all": "All urgency",
-    **{str(k): v for k, v in URGENCY_LABELS.items()},
-    "urgent": "Urgent (any level)",
-}
-
 DONE_STATUSES = ("done", "archived")
 
 
-def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | None = None) -> list[dict]:
+def _apply_date_filter(tasks: list[dict], date_filter: str) -> list[dict]:
     """Filters tasks by the real date buckets (today/tomorrow/this_week/
     this_month). Delegates to src/derived_state.py's `virtual_states`
     predicate -- the single place per-state membership is computed -- so
@@ -162,152 +138,28 @@ def _apply_date_filter(tasks: list[dict], date_filter: str, label_rules: dict | 
     date math.
 
     Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue`/
-    `important`/`urgent` used to live here too (1.1) but have moved to
-    STATUS_FILTERS/IMPORTANCE_FILTERS/URGENCY_FILTERS respectively -- see
-    _apply_status_filter/_apply_importance_filter/_apply_urgency_filter.
-    `label_rules` is kept as a parameter (unused by the remaining, purely
-    temporal buckets) rather than dropped, so every call site can keep
-    passing it uniformly across all four `_apply_*_filter` functions
-    without special-casing this one."""
+    `important`/`urgent` used to live here too (1.1) but moved to
+    Status/Importance/Urgency filters instead -- all of which are gone
+    entirely as of the 2026-08-28 "major rework" session (item 3,
+    "filtering reduced to date only"), and Importance/Urgency itself is now
+    gone as a feature -- `virtual_states` no longer takes a `label_rules`
+    argument at all."""
     if date_filter == "all":
         return tasks
     states = {date_filter}
-    return [t for t in tasks if states & derived_state.virtual_states(t, label_rules or {})]
-
-
-def _apply_status_filter(tasks: list[dict], status_filter: str, label_rules: dict | None = None) -> list[dict]:
-    """Status filter (toolbar Status dropdown). `overdue` (2026-08-15,
-    Tasks page filter cleanup) is a virtual pseudo-status, not a real
-    `tasks.status` value -- it delegates to src/derived_state.py's
-    `virtual_states` the same way the old DATE_FILTERS `overdue` entry did,
-    which is why this function now takes `label_rules` too (unused by the
-    real-status branch, needed for the virtual one) -- same "each `_apply_*`
-    takes label_rules uniformly" reasoning as _apply_date_filter above."""
-    if status_filter == "all":
-        return tasks
-    if status_filter == "overdue":
-        return [t for t in tasks if "overdue" in derived_state.virtual_states(t, label_rules or {})]
-    return [t for t in tasks if t["status"] == status_filter]
-
-
-def _apply_importance_filter(tasks: list[dict], importance_filter: str, label_rules: dict | None = None) -> list[dict]:
-    """Importance-level filter (toolbar Importance dropdown) -- matches
-    the *computed* effective importance value (1..3, src/derived_state.py:
-    label-derived, no manual per-task value exists anymore). `important`
-    (2026-08-15, Tasks page filter cleanup -- moved here from DATE_FILTERS)
-    is the "(any level)" virtual option: at/above the Important threshold
-    (`derived_state.is_important`) rather than one exact level."""
-    if importance_filter == "all":
-        return tasks
-    label_rules = label_rules or {}
-    if importance_filter == "important":
-        return [t for t in tasks if derived_state.is_important(t, label_rules)]
-    try:
-        wanted = int(importance_filter)
-    except ValueError:
-        return tasks
-    return [t for t in tasks if derived_state.effective_importance(t, label_rules) == wanted]
-
-
-def _apply_urgency_filter(tasks: list[dict], urgency_filter: str, label_rules: dict | None = None) -> list[dict]:
-    """Urgency-level filter (toolbar Urgency dropdown) -- the urgency-axis
-    sibling of _apply_importance_filter, same "exact level, plus an
-    `urgent` (any level) virtual option moved here from DATE_FILTERS
-    2026-08-15" shape."""
-    if urgency_filter == "all":
-        return tasks
-    label_rules = label_rules or {}
-    if urgency_filter == "urgent":
-        return [t for t in tasks if derived_state.is_urgent(t, label_rules)]
-    try:
-        wanted = int(urgency_filter)
-    except ValueError:
-        return tasks
-    return [t for t in tasks if derived_state.effective_urgency(t, label_rules) == wanted]
-
-
-def _apply_label_filter(tasks: list[dict], label: str | None) -> list[dict]:
-    """Phase 9b toolbar rework -- Tasks' new label filter, same
-    case-insensitive single-label match Contacts' `?tag=` filter already
-    uses (routers/contacts.py::list_contacts). Shared by Table/Timeline/
-    Board so a label picked in one view carries the same meaning in every
-    other."""
-    if not label:
-        return tasks
-    wanted = label.lower()
-    return [t for t in tasks if any((tg or "").lower() == wanted for tg in t.get("tags") or [])]
-
-
-def _task_label_rules(conn) -> dict[str, dict]:
-    """{label name: effective label config} for every label -- the resolved
-    rules the `important`/`urgent` derived-state filters feed to
-    src/derived_state.py. Delegates to db.list_label_rules (one call, never
-    per task) -- see that function's docstring. Kept as a thin alias so the
-    router's call sites read naturally and so dashboard.py (which imports
-    this helper for its aggregation-service widget) has one stable name."""
-    return db.list_label_rules(conn)
-
-
-def _active_filter_count(
-    date_filter: str, status_filter: str, importance_filter: str, urgency_filter: str, label: str | None
-) -> int:
-    """How many of the row-2 filters are currently non-default -- drives
-    both the collapsible `<details>`'s auto-open state and the "Filters
-    (N)" badge in its `<summary>` (see the new toolbar-filters CSS in
-    style.css and the *_toolbar.html partials)."""
-    return sum(
-        [
-            date_filter != "all",
-            status_filter != "all",
-            importance_filter != "all",
-            urgency_filter != "all",
-            bool(label),
-        ]
-    )
+    return [t for t in tasks if states & derived_state.virtual_states(t)]
 
 
 def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
 
 
-def _shares_label(a_tags: list[str] | None, b_tags: list[str] | None) -> bool:
-    """The defining rule of a relation (2026-08-09): an event and a task
-    may only be linked when they carry at least one label in common --
-    "both have at least one label in common." Enforced by the picker (it
-    only offers already-shared candidates) and re-checked defensively by
-    the add-relation routes, since labels can change between render and
-    submit."""
-    return bool(set(a_tags or []) & set(b_tags or []))
-
-
-def _related_context(conn, task: dict) -> dict:
-    """Context keys every task view modal needs for its Relations card: the
-    events already linked to this task. `None` task -> empty list, so
-    templates never branch on the object existing.
-
-    1.2 side work (Universal command surface step 3): this used to also
-    precompute `linkable_events` -- every not-yet-linked event sharing a
-    label with this task, the old `<select>`'s entire option pool. The
-    picker overlay (static/command_palette.js) now asks `GET /api/search
-    ?for_task=<uid>` for exactly the page of candidates it needs instead,
-    so there's nothing left to precompute here."""
-    if task is None:
-        return {"related_events": []}
-    related = db.related_events_for_task(conn, task["uid"])
-    # Events fetched via db don't carry calendar_color (only the calendar
-    # views' _annotate_calendar_colors sets it) -- annotate so the card's
-    # identity dots follow each event's first-label color like everywhere
-    # else in the app.
-    related = calendar_router._annotate_calendar_colors(conn, related)
-    return {"related_events": related}
-
-
 def _work_allocation_context(conn, task: dict) -> dict:
     """Context keys every task view modal needs for its Work sessions card
     (1.4, plans/open-priority.md § Work allocations): the scheduled work
     blocks for this task plus the scheduled/completed/remaining hour totals
-    they add up to. `None` task -> empty, same "templates never branch on
-    the object existing" convention as _related_context above."""
+    they add up to. `None` task -> empty, so templates never have to branch
+    on the object existing."""
     if task is None:
         return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}}
     allocations = db.list_work_allocations_for_task(conn, task["uid"])
@@ -334,54 +186,149 @@ def _task_context(request: Request) -> dict:
         "statuses": STATUSES,
         "status_labels": STATUS_LABELS,
         "status_colors": STATUS_COLORS,
-        "importance_labels": IMPORTANCE_LABELS,
-        "importance_colors": IMPORTANCE_COLORS,
-        "urgency_labels": URGENCY_LABELS,
-        "urgency_colors": URGENCY_COLORS,
     }
 
 
-def _sort_keys(label_rules: dict) -> dict:
-    """Factory, not a plain module-level dict: the importance/urgency sort
-    keys need `label_rules` to compute the effective value (side work,
-    post-1.1 -- there's no stored column to sort by anymore, see
-    src/derived_state.py). Every other key is unaffected by label rules,
-    kept here rather than split out so `list_tasks` has one dict to look
-    `sort` up in either way."""
-    return {
-        "title": lambda t: (t.get("title") or "").lower(),
-        "due_at": lambda t: t.get("due_at") or "9999",
-        "importance": lambda t: derived_state.effective_importance(t, label_rules),
-        "urgency": lambda t: derived_state.effective_urgency(t, label_rules),
-        "status": lambda t: STATUSES.index(t["status"]) if t["status"] in STATUSES else 99,
-    }
+def _due_at_key(t: dict) -> str:
+    """The one sort key the reworked Table view still needs -- 2026-08-28
+    "major rework" session (item 3): sorting is no longer user-choosable
+    (the old Title/Status/Due column-header sort links and the `sort`/`dir`
+    query params are gone, along with the importance/urgency sort keys they
+    used to sit next to), every non-Completed group is simply due-date
+    ascending, always. A task with no due date sorts last within its group
+    (the same '9999' sentinel the old due_at sort key already used)."""
+    return t.get("due_at") or "9999"
 
 
-def _group_tasks_by_project(conn, tasks: list[dict]) -> list[dict]:
-    """1.5 slice ("Tasks page as a table groupable by project", see
-    plans/open-priority.md § Task model): cluster an already-filtered/
-    already-sorted task list under project headers, reusing
-    db.project_label_for -- the same "which of this task's labels, if any,
-    is the project" lookup the project detail page relies on -- rather
-    than reimplementing that logic. Named groups are sorted alphabetically
-    (case-insensitive); a task with no project label falls into a "No
-    project" bucket rendered last (deliberate choice, not required by the
-    spec: named projects are the primary organizing unit here, so they
-    lead). Within each group, task order is preserved exactly as passed in
-    -- callers sort *before* grouping so a group's own tasks keep the
-    page's active `sort`/`dir`."""
+def _habit_group_items(conn) -> list[dict]:
+    """2026-08-28 "major rework" session (item 2, "merge Habits into the
+    Tasks table"): the Habits group's rows are a merge of the two habit
+    concepts this app has grown -- habit-*labeled tasks* (task_habit_
+    settings, "Tasks > Habits" as it existed before this session, real
+    `tasks` rows tracked via target_per_day/task_completions) and the
+    separate, standalone Habit *entities* (routers/habits.py's `habits`/
+    `habit_entries` tables, whose own dedicated list page is retired by
+    this same session -- see routers/habits.py's module docstring). Both
+    are normalized into one shared shape here so _habit_row.html only has
+    to render one thing, not two -- `kind` ('task' | 'entity') is the only
+    field that varies where the two check-in mechanics differ (the toggle/
+    plus/delete URLs). Going forward, the group's own "+" add-row only
+    creates NEW habit-tracked work via the task-habit flow (`/tasks/new?
+    habit=1`, unchanged) -- routers/habits.py's create endpoints stay alive
+    (a pre-existing standalone habit needs somewhere to keep living, and
+    its edit/archive/delete/entries endpoints are still exactly how this
+    group's "entity" rows are mutated), but there's deliberately only one
+    *creation* entry point post-merge rather than two competing ones."""
+    today = date.today()
+    today_iso = today.isoformat()
+    items: list[dict] = []
+    for t in db.list_habit_tasks(conn):
+        if t["status"] in DONE_STATUSES:
+            continue
+        entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, t["uid"])}
+        target = t.get("target_per_day") or 1
+        excluded = _excluded_dates_for_row(conn, t, entries_by_date, today)
+        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
+        today_value = entries_by_date.get(today_iso, 0)
+        items.append(
+            {
+                "kind": "task",
+                "uid": t["uid"],
+                "title": t["title"],
+                "tags": t.get("tags") or [],
+                "is_quantity": target > 1,
+                "target": target,
+                "today_value": today_value,
+                "next_value": today_value + 1,
+                "done_today": today_value > 0,
+                "current_streak": current_streak,
+                # 2026-08-29 direct feedback: the Due column shows this
+                # habit's cadence ("Daily"/"Weekly"/...), not its streak --
+                # habit_heatmap.recurrence_label never renders the raw
+                # "FREQ=DAILY" the task's own `recurrence` column stores.
+                "recurrence_label": habit_heatmap.recurrence_label(t.get("recurrence")),
+                "detail_url": f"/tasks/{t['uid']}",
+                "toggle_url": f"/tasks/{t['uid']}/completion/{today_iso}/toggle",
+                "plus_url": f"/tasks/{t['uid']}/completions",
+                "delete_url": f"/tasks/{t['uid']}/delete",
+            }
+        )
+    for h in db.list_habits(conn):
+        entries_by_date = db.habit_entries_by_date(conn, h["uid"])
+        target = h.get("target_per_day") or 1
+        excluded = _excluded_dates_for_row(conn, h, entries_by_date, today)
+        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
+        today_value = entries_by_date.get(today_iso, 0)
+        items.append(
+            {
+                "kind": "entity",
+                "uid": h["uid"],
+                "title": h["name"],
+                # 2026-09-03 bug fix (found while verifying the label-icon
+                # fix above): this was hardcoded to `[]` -- a standalone
+                # Habit entity's own labels (`db.list_habits`'s
+                # `_habit_row_to_dict` already attaches them as `h["tags"]`,
+                # same `object_labels` mechanism every other entity type
+                # uses) were computed and then silently discarded, so no
+                # label a Habit entity carried ever rendered on this page's
+                # Habits group, icon or no icon. A habit-labeled *task*
+                # right above (`kind: "task"`, `t.get("tags")`) never had
+                # this bug -- only the standalone-entity branch did.
+                "tags": h.get("tags") or [],
+                "is_quantity": target > 1,
+                "target": target,
+                "today_value": today_value,
+                "next_value": today_value + 1,
+                "done_today": today_value > 0,
+                "current_streak": current_streak,
+                # A standalone Habit entity has no recurrence field at all
+                # (habit_entries is inherently a per-day log) -- it's
+                # implicitly daily, same as habit_task_form.html's "New
+                # habit" flow defaults its own Recurrence field to.
+                "recurrence_label": "Daily",
+                "detail_url": f"/habits/{h['uid']}",
+                "toggle_url": f"/habits/{h['uid']}/entries/{today_iso}/toggle",
+                "plus_url": f"/habits/{h['uid']}/entries",
+                "delete_url": f"/habits/{h['uid']}/delete",
+            }
+        )
+    items.sort(key=lambda it: (it["title"] or "").lower())
+    return items
+
+
+def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
+    """2026-08-28 "major rework" session (item 3): grouping is now always
+    on, in one fixed order -- Project (one group per project label,
+    alphabetical) -> Habits (its own group, see _habit_group_items) ->
+    Unassigned (open tasks with no project label) -> Completed (every
+    completed task regardless of project, most-recent-first, always last).
+    `open_tasks` is expected pre-sorted by due date (_due_at_key) -- every
+    group but Completed simply preserves that order, so a project/
+    Unassigned group's own tasks read due-date-ascending for free without
+    re-sorting per bucket. Completed intentionally does NOT nest under its
+    task's project anymore (the pre-rework `group_by=project` grouping did)
+    -- "completed always last" only holds if every completed task, from
+    every project, lands in the one trailing group together."""
     buckets: dict[str | None, list[dict]] = {}
     order: list[str | None] = []
-    for t in tasks:
+    for t in open_tasks:
         proj = db.project_label_for(conn, "task", t["uid"])
         if proj not in buckets:
             buckets[proj] = []
             order.append(proj)
         buckets[proj].append(t)
     named = sorted((p for p in order if p is not None), key=str.lower)
-    groups = [{"name": p, "tasks": buckets[p]} for p in named]
-    if None in buckets:
-        groups.append({"name": None, "tasks": buckets[None]})
+
+    groups = [{"kind": "project", "name": p, "tasks": buckets[p]} for p in named]
+    # NOTE: the key is `habit_items`, not `items` -- Jinja's attribute
+    # lookup falls back to `dict.items` (the bound method every plain dict
+    # already carries) if a `grp.items` template expression is used, which
+    # would silently shadow a real "items" dict key with the builtin
+    # instead of erroring.
+    groups.append({"kind": "habits", "name": "Habits", "habit_items": _habit_group_items(conn)})
+    groups.append({"kind": "unassigned", "name": "Unassigned", "tasks": buckets.get(None, [])})
+    completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
+    groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
     return groups
 
 
@@ -389,147 +336,81 @@ def _tasks_list_context(
     conn,
     request: Request,
     date_filter: str = "all",
-    status_filter: str = "all",
-    importance_filter: str = "all",
-    urgency_filter: str = "all",
-    label: str | None = None,
     q: str | None = None,
-    sort: str = "due_at",
-    dir: str = "asc",
-    group_by: str = "none",
-    page: int = 1,
-    limit: int = 50,
 ) -> dict:
-    """Build the full render context for the Table view. Shared between the
-    full page (list_tasks) and the async-CRUD region fragment
+    """Build the full render context for the Table view -- now the *only*
+    Tasks view (2026-08-28 "major rework" session, item 4). Shared between
+    the full page (list_tasks) and the async-CRUD region fragment
     (tasks_regions, GET /tasks/regions?region=table) so a mutation-triggered
     region refresh re-renders the exact same markup as the full page --
     _tasks_body.html is the single source of truth either way
-    (features/async-crud.md)."""
+    (features/async-crud.md).
+
+    Filtering is date-only now (item 3) -- Status/Importance/Urgency/label
+    filtering, the group-by toggle, sorting-by-column, and pagination are
+    all gone (see this module's other 2026-08-28 comments for why each one
+    went). No pagination in particular: the 1.9 pagination slice already
+    special-cased "grouped mode shows everything, don't paginate it" --
+    grouping is unconditional now, so that's simply the whole page's
+    behavior, not a narrower special case anymore."""
     _auto_archive_if_configured(conn)
-    label_rules = _task_label_rules(conn)
     tasks = db.list_tasks(conn, q=q)
-    tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter, label_rules)
-    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
-    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
-    # Phase 9b toolbar rework: label filter, the real replacement for the
-    # old dead Space/Project dropdowns (see routers/labels.py and
-    # db.list_task_label_names) -- narrows by object_labels membership
-    # (object_type='task'), same case-insensitive single-label match
-    # Contacts' `?tag=` filter already uses.
-    tasks = _apply_label_filter(tasks, label)
-    sort_keys = _sort_keys(label_rules)
-    key_fn = sort_keys.get(sort, sort_keys["due_at"])
-    tasks.sort(key=key_fn, reverse=(dir == "desc"))
+    tasks = _apply_date_filter(tasks, date_filter)
+    tasks.sort(key=_due_at_key)
 
     # Completed tasks (done/archived) stay visible in every view -- Today,
     # This week, All -- rather than disappearing the moment they're
-    # checked off, but are clearly separated and pushed below the open
-    # ones (see tasks_list.html's two <tbody> sections) instead of
-    # interleaved by date/importance/urgency with active work. If
-    # status_filter
-    # already narrows to a single status, "separating" a single-status
-    # list from itself would just be a redundant empty section, so the
-    # split only actually matters (and the template only shows a divider)
-    # when both groups are non-empty.
+    # checked off, but are pulled into their own trailing "Completed" group
+    # (_build_task_groups) instead of interleaved with open work.
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
-
-    # 1.9 slice (Webapp usability Phase B, plans/open.md § Webapp usability +
-    # DAVx5 mobile hosting): paginate the open section of the Table view --
-    # the highest-traffic surface named in that doc as the first pagination
-    # target. Applies only in the default ungrouped view (group_by=='none');
-    # group_by=project clusters tasks under per-project header rows, and a
-    # flat page boundary would split a project's own tasks arbitrarily
-    # across pages, so grouped mode is left showing everything, same as
-    # before this slice -- a deliberate, documented scope cut, not an
-    # oversight. limit is clamped to a sane range so a stray ?limit=0 or
-    # ?limit=100000 can't produce a zero-division or an effectively
-    # unpaginated "page". Completed tasks are never paginated: they're
-    # already visually separated below Open, and bounded in practice by the
-    # "Auto-archive completed tasks" setting (_auto_archive_if_configured
-    # above) -- if that turns out wrong at real volume, it's a follow-up,
-    # not a blocker for this slice (open.md's own "live-volume verification
-    # required" note).
-    limit = min(max(limit, 1), 200)
-    page = max(page, 1)
-    paginated = group_by == "none"
-    open_total = len(open_tasks)
-    total_pages = max(1, -(-open_total // limit)) if paginated else 1
-    if paginated:
-        page = min(page, total_pages)
-        open_tasks = open_tasks[(page - 1) * limit : page * limit]
-    else:
-        page = 1
 
     # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
     # plans/open-priority.md § Task model): attach each visible task's
     # scheduled/completed/remaining hours so _task_row.html can render a
     # "Scheduled" column distinct from "Due" -- one batched query
     # (db.task_work_hours_bulk) for the whole page instead of one query per
-    # row. Scoped to open_tasks + completed_tasks (i.e. after the 1.9
-    # pagination slice above) rather than the full filtered `tasks` list, so
-    # a large filtered set only pays for the hours of rows it actually
-    # renders.
+    # row.
     _rendered = open_tasks + completed_tasks
     _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in _rendered])
     for t in _rendered:
         t["work_hours"] = _hours[t["uid"]]
 
-    # 1.5 slice ("Tasks page as a table groupable by project"): grouping is
-    # opt-in via ?group_by=project (default "none" is exactly today's
-    # behavior, so a bookmarked/existing URL without the param is
-    # unaffected). Groups are built *after* the open/completed split and
-    # *after* sorting, so grouping composes with both the existing
-    # completed-stays-visible-but-separated rule and the active sort/dir
-    # instead of replacing either.
-    open_groups = None
-    completed_groups = None
-    if group_by == "project":
-        open_groups = _group_tasks_by_project(conn, open_tasks)
-        completed_groups = _group_tasks_by_project(conn, completed_tasks)
+    groups = _build_task_groups(conn, open_tasks, completed_tasks)
+    has_habits = bool(groups[-3]["habit_items"])  # the Habits group
+    # 2026-09-07 (direct report: "the habits or completed tables should
+    # appear only if there is data") -- _build_task_groups always appends
+    # a Habits group (see its own comment: grouping is unconditional, one
+    # fixed order), so `_habits_group` in the template was always truthy
+    # even with zero habits, rendering an empty "Habits (0)" table with a
+    # header row and no data. has_any (below) stayed a combined "is there
+    # anything to show at all" flag for the page's own top-level empty
+    # state -- has_main_tasks is the new, narrower flag _tasks_body.html
+    # uses to gate the Project/Unassigned/Completed table specifically,
+    # so an account with only habits (no regular tasks) doesn't also get
+    # an empty main table above them.
+    has_main_tasks = bool(open_tasks or completed_tasks)
+    has_any = has_main_tasks or has_habits
 
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
     ctx.update(
         {
-            "open_tasks": open_tasks,
-            "completed_tasks": completed_tasks,
-            "group_by": group_by,
-            "open_groups": open_groups,
-            "completed_groups": completed_groups,
+            "groups": groups,
+            "has_any": has_any,
+            "has_main_tasks": has_main_tasks,
+            "has_habits": has_habits,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
-            "status_filters": STATUS_FILTERS,
-            "status_filter_labels": STATUS_FILTER_LABELS,
-            "importance_filters": IMPORTANCE_FILTERS,
-            "importance_filter_labels": IMPORTANCE_FILTER_LABELS,
-            "urgency_filters": URGENCY_FILTERS,
-            "urgency_filter_labels": URGENCY_FILTER_LABELS,
             "active_date_filter": date_filter,
-            "active_status_filter": status_filter,
-            "active_importance_filter": importance_filter,
-            "active_urgency_filter": urgency_filter,
-            "active_label": label or "",
-            "task_label_names": db.list_task_label_names(conn),
-            "active_filter_count": _active_filter_count(date_filter, status_filter, importance_filter, urgency_filter, label),
             "q": q or "",
-            "sort": sort,
-            "dir": dir,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
-            "paginated": paginated,
-            "page": page,
-            "limit": limit,
-            "open_total": open_total,
-            "total_pages": total_pages,
-            # The dead Space/Project filter helpers (_aguid/_apuid, see
-            # tasks_list.html) are always empty today; the page sets them via
-            # `default('')` at block scope, so the fragment route must supply
-            # the same empty values for the shared _tasks_body.html partial.
-            "_aguid": "",
-            "_apuid": "",
+            # _habit_row.html's check-in "+1" form needs today's date to
+            # post as entry_date/completion_date -- same value
+            # _habit_group_items already anchored its per-item today_value/
+            # next_value computation to.
+            "today_iso": date.today().isoformat(),
         }
     )
     return ctx
@@ -539,22 +420,10 @@ def _tasks_list_context(
 def list_tasks(
     request: Request,
     date_filter: str = "all",
-    status_filter: str = "all",
-    importance_filter: str = "all",
-    urgency_filter: str = "all",
-    label: str | None = None,
     q: str | None = None,
-    sort: str = "due_at",
-    dir: str = "asc",
-    group_by: str = "none",
-    page: int = 1,
-    limit: int = 50,
     conn=Depends(get_db),
 ):
-    ctx = _tasks_list_context(
-        conn, request, date_filter, status_filter, importance_filter,
-        urgency_filter, label, q, sort, dir, group_by, page, limit,
-    )
+    ctx = _tasks_list_context(conn, request, date_filter, q)
     return templates.TemplateResponse("tasks_list.html", ctx)
 
 
@@ -563,16 +432,7 @@ def tasks_regions(
     request: Request,
     region: str = "table",
     date_filter: str = "all",
-    status_filter: str = "all",
-    importance_filter: str = "all",
-    urgency_filter: str = "all",
-    label: str | None = None,
     q: str | None = None,
-    sort: str = "due_at",
-    dir: str = "asc",
-    group_by: str = "none",
-    page: int = 1,
-    limit: int = 50,
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders a single
@@ -581,152 +441,46 @@ def tasks_regions(
     refreshRegion() can swap it in place after a mutation instead of a full
     page reload. Takes the same query params as list_tasks; the client
     forwards the page's own query string so the refreshed region honors the
-    active filters/sort/page."""
+    active date filter."""
     if region != "table":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
-    ctx = _tasks_list_context(
-        conn, request, date_filter, status_filter, importance_filter,
-        urgency_filter, label, q, sort, dir, group_by, page, limit,
-    )
+    ctx = _tasks_list_context(conn, request, date_filter, q)
     html = templates.env.get_template("_tasks_body.html").render(ctx)
     return HTMLResponse(html)
 
 
 @router.get("/board")
-def board_view(
-    request: Request,
-    date_filter: str = "all",
-    status_filter: str = "all",
-    importance_filter: str = "all",
-    urgency_filter: str = "all",
-    label: str | None = None,
-    q: str | None = None,
-    conn=Depends(get_db),
-):
-    tasks = db.list_tasks(conn, q=q)
-    # Board only ever shows open/active work by convention (matches
-    # desktop's Kanban, which has no "show archived" toggle either) --
-    # otherwise every completed task ever created accumulates forever in
-    # the Done column with no way to clear it.
-    tasks = [t for t in tasks if t["status"] != "archived"]
-    # Phase 9b toolbar rework: Board gains the same date/status/
-    # importance/urgency/label filters Table already has. Board's whole
-    # layout is already a status grouping, so `status_filter` here narrows
-    # *which* tasks appear in their columns rather than removing columns --
-    # e.g. "only Active tasks with importance High, still grouped by
-    # status" is a meaningful, non-redundant combination.
-    label_rules = _task_label_rules(conn)
-    tasks = _apply_date_filter(tasks, date_filter, label_rules)
-    tasks = _apply_status_filter(tasks, status_filter, label_rules)
-    tasks = _apply_importance_filter(tasks, importance_filter, label_rules)
-    tasks = _apply_urgency_filter(tasks, urgency_filter, label_rules)
-    tasks = _apply_label_filter(tasks, label)
-    columns = {s: [] for s in STATUSES if s != "archived"}
-    for t in tasks:
-        columns.setdefault(t["status"], []).append(t)
-    ctx = _task_context(request)
-    ctx.update(
-        {
-            "columns": columns,
-            "board_statuses": [s for s in STATUSES if s != "archived"],
-            "date_filters": DATE_FILTERS,
-            "date_filter_labels": DATE_FILTER_LABELS,
-            "status_filters": STATUS_FILTERS,
-            "status_filter_labels": STATUS_FILTER_LABELS,
-            "importance_filters": IMPORTANCE_FILTERS,
-            "importance_filter_labels": IMPORTANCE_FILTER_LABELS,
-            "urgency_filters": URGENCY_FILTERS,
-            "urgency_filter_labels": URGENCY_FILTER_LABELS,
-            "active_date_filter": date_filter,
-            "active_status_filter": status_filter,
-            "active_importance_filter": importance_filter,
-            "active_urgency_filter": urgency_filter,
-            "active_label": label or "",
-            "task_label_names": db.list_task_label_names(conn),
-            "active_filter_count": _active_filter_count(date_filter, status_filter, importance_filter, urgency_filter, label),
-            "q": q or "",
-        }
-    )
-    return templates.TemplateResponse("tasks_board.html", ctx)
+def board_view_redirect():
+    """Kanban is retired (2026-08-28 "major rework" session, item 4) --
+    Table is now the only Tasks view. Redirect rather than a bare 404, same
+    "any bookmark still lands somewhere real" precedent `/projects`'s own
+    retirement established (routers/projects.py). tasks_board.html and this
+    route's old filter-driven column logic are gone; `_apply_status_filter`
+    et al died with them (see this module's other 2026-08-28 comments)."""
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 @router.get("/habits")
-def habits_view(request: Request, q: str | None = None, conn=Depends(get_db)):
-    """4th Tasks view (2026-08-08, "add habits page as a view on tasks")
-    -- every task carrying the configured habit label (task_habit_settings,
-    default "Habit"), shown with a checkbox/number-stepper check-in row
-    (like the Dashboard's habit check-in widget) plus a per-task heatmap
-    (like the standalone Habits feature), sourced entirely from
-    task_completions/tasks.target_per_day rather than the habits/
-    habit_entries tables -- these are real tasks, just hidden from every
-    other task view/widget by db.list_tasks' default exclusion. Reuses
-    ../habit_heatmap.py's heatmap_range/streaks/current_half_year
-    (identical {date: value} shape, also used by routers/habits.py's own
-    heatmap_weeks) rather than a second copy of that math.
-
-    2026-08-08 follow-up (direct feedback on the first version of this
-    page): the heatmap is a *fixed* calendar range now, not "N weeks
-    ending today" -- every card starts on the same date (the current
-    half-year's first day) so they line up for comparison instead of each
-    scrolling its own rolling window, and covers 6 months so the grid is
-    wide enough to genuinely fill a card's width once stretched (see
-    style.css's .heatmap-wide). Each card also gets a second, full
-    calendar-year grid (`weeks_full`) alongside the half-year one
-    (`weeks`) -- normally hidden, revealed by the card's own "View full
-    year" toggle (static/task_habit_checkin.js) -- computed up front here
-    rather than fetched on demand since it's the same cheap query/loop
-    either way and avoids a second request."""
-    settings = db.get_task_habit_settings(conn)
-    habit_label = settings["habit_label"]
-    tasks = db.list_habit_tasks(conn)
-    if q:
-        needle = q.lower()
-        tasks = [t for t in tasks if needle in t["title"].lower()]
-
-    today = date.today()
-    today_iso = today.isoformat()
-    half_start, half_end = habit_heatmap.current_half_year(today)
-    year_start, year_end = date(today.year, 1, 1), date(today.year, 12, 31)
-    cards = []
-    for t in tasks:
-        entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, t["uid"])}
-        target = t.get("target_per_day") or 1
-        current_streak, longest_streak = habit_heatmap.streaks(entries_by_date)
-        today_value = entries_by_date.get(today_iso, 0)
-        cards.append(
-            {
-                "task": t,
-                "weeks": habit_heatmap.heatmap_range(entries_by_date, target, half_start, half_end, today),
-                "weeks_full": habit_heatmap.heatmap_range(entries_by_date, target, year_start, year_end, today),
-                "current_streak": current_streak,
-                "longest_streak": longest_streak,
-                "today_value": today_value,
-                "target": target,
-                # Same shape as routers/dashboard.py's _render_habit_checkin
-                # rows, for the identical checkbox-vs-stepper check-in row.
-                "is_quantity": target > 1,
-                "done_today": today_value > 0,
-                "next_value": today_value + 1,
-            }
-        )
-
-    ctx = _task_context(request)
-    ctx.update(
-        {
-            "cards": cards,
-            "habit_label": habit_label,
-            "today_iso": today_iso,
-            "q": q or "",
-            "active_filter_count": 0,
-        }
-    )
-    return templates.TemplateResponse("tasks_habits.html", ctx)
+def habits_view_redirect():
+    """The dedicated Tasks > Habits view is retired (2026-08-28 "major
+    rework" session, items 2+3) -- every habit-labeled task, and every
+    standalone Habit entity, now renders as a row in the Table view's own
+    Habits group instead (see _habit_group_items/_build_task_groups).
+    Redirect, same precedent as board_view_redirect above."""
+    return RedirectResponse(url="/tasks", status_code=302)
 
 
 @router.post("/habits/settings")
 def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
+    """Which label marks a task as habit-tracked -- 2026-08-28: the
+    dedicated Tasks > Habits page this used to live on (a collapsible
+    Settings panel at the bottom) is gone, but the setting itself, and this
+    endpoint, are left in place unchanged -- a future slice can surface it
+    somewhere in the merged Table view's Habits group if that turns out to
+    be needed; nothing currently reads this route's redirect target as a
+    real page, so it just returns to the Table."""
     db.save_task_habit_settings(conn, habit_label)
-    return RedirectResponse(url="/tasks/habits", status_code=303)
+    return RedirectResponse(url="/tasks", status_code=303)
 
 
 @router.get("/new")
@@ -750,6 +504,7 @@ def new_task_form(
             {
                 "request": request,
                 "active_tab": "tasks",
+                "task": None,
                 "habit_label": habit_label,
             },
         )
@@ -789,6 +544,9 @@ def new_task_form(
             # only pre-checks the label chip (still removable, same as any
             # other prefill in this app) rather than silently forcing it.
             "prefill_tags": [project] if project else [],
+            # 2026-08-29 (STATE.md backlog item 3) -- feeds the same
+            # holiday-calendar dropdown _event_form_fields.html uses.
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -804,6 +562,9 @@ def create_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -829,6 +590,14 @@ def create_task(
     # handling -- would otherwise blow up the SQL insert below.
     if not isinstance(start_at, str):
         start_at = ""
+    # Same coercion for the three new holiday-policy fields (2026-08-29,
+    # STATE.md backlog item 3) -- see the comment just above.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
@@ -847,6 +616,11 @@ def create_task(
         "tags": _tags_list(tags),
         "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
         "target_per_day": target_per_day_value,
+        # 2026-08-29 (STATE.md backlog item 3) -- see the `tasks` CREATE
+        # TABLE comment; only meaningful once `recurrence` above is set.
+        "holiday_calendar": holiday_calendar or None,
+        "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+        "exclude_sunday": exclude_sunday in ("1", "true", "on"),
         "created_at": now,
         "updated_at": now,
     }
@@ -863,7 +637,7 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return _respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
+    return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
 # --------------------------------------------------------------------- #
@@ -894,7 +668,18 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
     payload = await request.json()
     action = payload.get("action")
     uids = payload.get("uids") or []
-    if not uids:
+    # 2026-08-29 (STATE.md backlog item 1, "bulk actions... then Habits"):
+    # a selection on the Tasks page may include Habits-group rows for the
+    # standalone Habit entity kind (_habit_row.html's checkbox, kind=
+    # "entity") alongside plain task uids -- only "delete" needs to know
+    # the difference (see static/tasks_table.js's selectedByKind), since
+    # a habit entity lives in `habits`, not `tasks`. Only meaningful for
+    # `action == "delete"`; every other branch below is unchanged and
+    # still only ever looks at `uids`.
+    habit_uids = payload.get("habit_uids") or []
+    if action != "delete" and not uids:
+        return JSONResponse({"error": "no tasks selected"}, status_code=400)
+    if action == "delete" and not uids and not habit_uids:
         return JSONResponse({"error": "no tasks selected"}, status_code=400)
 
     if action == "delete":
@@ -904,7 +689,9 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         for uid in uids:
             db.delete_task(conn, uid)
             db.delete_checklist_items_for_task(conn, uid)
-        return JSONResponse({"ok": True, "count": len(uids)})
+        for uid in habit_uids:
+            db.delete_habit(conn, uid)
+        return JSONResponse({"ok": True, "count": len(uids) + len(habit_uids)})
 
     if action == "status":
         status = payload.get("status")
@@ -993,9 +780,41 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
     return JSONResponse({"error": f"unknown action '{action}'"}, status_code=400)
 
 
+def _is_habit_task(conn, task: dict | None) -> bool:
+    """True if `task` carries the configured habit label -- the same test
+    `db.list_habit_tasks`' own filter applies, done directly against a
+    single already-fetched task instead of a second query. Used to route
+    a habit-tracked task's edit/view to the dedicated habit_task_form.html/
+    habit_task_detail.html templates (2026-08-29 direct feedback: "habits
+    should not have in their edit modal a label dropdown, a status
+    dropdown, a due or a start date") instead of the generic task_form.
+    html/task_detail.html every other task uses."""
+    if not task:
+        return False
+    habit_label = db.get_task_habit_settings(conn)["habit_label"]
+    return habit_label in (task.get("tags") or [])
+
+
 @router.get("/{uid}/edit")
 def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
     task = db.get_task(conn, uid)
+    if _is_habit_task(conn, task):
+        # Dedicated stripped-down edit form (2026-08-29) -- see
+        # habit_task_form.html's own docstring for why the generic
+        # task_form.html (label dropdown, status dropdown, due/start date)
+        # is wrong for a habit-tracked task, and _is_habit_task above.
+        return templates.TemplateResponse(
+            "habit_task_form.html",
+            {
+                "request": request,
+                "active_tab": "tasks",
+                "task": task,
+                "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+                # Work sessions card (2026-08-29 addition to this form) --
+                # see _work_allocation_context above.
+                **_work_allocation_context(conn, task),
+            },
+        )
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "task_form.html",
@@ -1007,8 +826,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
-            # Relations card (2026-08-09) -- see _related_context above.
-            **_related_context(conn, task),
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **_work_allocation_context(conn, task),
             # Fallback only -- every task has a real start_at since
@@ -1019,6 +836,8 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             # task_form.html only shows that field once this label is
             # actually applied.
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
+            # 2026-08-29 (STATE.md backlog item 3) -- see new_task_form.
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
 
@@ -1030,8 +849,12 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     ctx.update(
         {
             "task": task,
-            # Relations card (2026-08-09) -- see _related_context above.
-            **(_related_context(conn, task)),
+            # 2026-08-30 (direct request): the resolved label/project/Space
+            # banner (db.banner_for_task), if any -- rendered as a hero
+            # strip above the modal header, same "identity" role the app's
+            # dashboard-page banners already play, just scoped to one task
+            # instead of a whole page.
+            "banner": db.banner_for_task(conn, task) if task else None,
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **(_work_allocation_context(conn, task)),
         }
@@ -1042,7 +865,8 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     # unchanged either way and never has to branch on "is this recurring?".
     if task and task.get("recurrence"):
         completions = {c["due_date"]: "x" for c in db.list_task_completions(conn, uid)}
-        current_streak, longest_streak = _completion_streaks(completions)
+        excluded = _excluded_dates_for_row(conn, task, completions, date.today())
+        current_streak, longest_streak = _completion_streaks(completions, excluded_dates=excluded)
         ctx.update(
             {
                 "completions": completions,
@@ -1060,6 +884,13 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
                 "longest_streak": 0,
             }
         )
+    if _is_habit_task(conn, task):
+        # Dedicated view modal (2026-08-29) -- see habit_task_detail.html's
+        # own docstring/_is_habit_task above. Every context key it needs
+        # (task, completion_weeks, current_streak, work_allocations,
+        # work_hours, habit_label) is already on `ctx`/available here.
+        ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
+        return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)
 
 
@@ -1075,6 +906,9 @@ def update_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    holiday_calendar: str = Form(""),
+    exclude_saturday: str = Form(""),
+    exclude_sunday: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1087,6 +921,15 @@ def update_task(
         target_per_day_value = 1.0
     if target_per_day_value < 1:
         target_per_day_value = 1.0
+    # Defensively coerced -- same reasoning as create_task's own comment;
+    # every pre-existing direct caller of update_task (this suite's tests)
+    # predates these three fields entirely.
+    if not isinstance(holiday_calendar, str):
+        holiday_calendar = ""
+    if not isinstance(exclude_saturday, str):
+        exclude_saturday = ""
+    if not isinstance(exclude_sunday, str):
+        exclude_sunday = ""
     existing = db.get_task(conn, uid) or {}
     row = dict(existing)
     row.update(
@@ -1101,6 +944,15 @@ def update_task(
             "tags": _tags_list(tags),
             "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
             "target_per_day": target_per_day_value,
+            # 2026-08-29 (STATE.md backlog item 3) -- always overwritten by
+            # whatever this form submits, same convention as recurrence/tags
+            # just above; habit_task_form.html has no such fields and so
+            # always submits the Form(...) defaults here, same as it
+            # already does for due_at/start_at/status (see that template's
+            # own comment).
+            "holiday_calendar": holiday_calendar or None,
+            "exclude_saturday": exclude_saturday in ("1", "true", "on"),
+            "exclude_sunday": exclude_sunday in ("1", "true", "on"),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -1108,20 +960,30 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
-_UPDATABLE_FIELDS = {"status", "due_at", "title"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title", "tags"}
 
 
 @router.post("/{uid}/update-field")
 async def update_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit, used by both the Table view's click-to-edit
-    pills/date cell and the Kanban board's drag-to-a-new-column (which is
-    just a `field=status` call). Deliberately a JSON body, not a Form --
-    this is only ever called from tasks_table.js/tasks_kanban.js via
-    fetch(), never from a plain HTML form/no-JS fallback, unlike every
-    other route in this router."""
+    """Single-field inline edit, used by the Table view's click-to-edit
+    pills/date/labels cells. Deliberately a JSON body, not a Form -- this is
+    only ever called from tasks_table.js via fetch(), never from a plain
+    HTML form/no-JS fallback, unlike every other route in this router. (The
+    Projects page's Kanban board used to call this too for its own per-card
+    status dropdown -- removed 2026-09-02, "no inline editing"; a status
+    change there now happens by opening the task's own edit form instead,
+    which POSTs through the normal `/tasks/{uid}` route, not this one.)
+
+    `tags` (2026-08-29, STATE.md backlog item 9, "Labels ... become
+    always-clickable checkbox dropdown menus") -- the Table view's Labels
+    cell is now an editable checkbox dropdown (static/tasks_table.js), same
+    "no separate Save step" convention as status/due_at above: every
+    checkbox toggle re-posts the row's *complete* new tag list (a replace,
+    not an add/remove delta -- simpler than diffing, and the client already
+    has the full checked set at hand from the panel's own checkboxes)."""
     payload = await request.json()
     field = payload.get("field")
     value = payload.get("value")
@@ -1136,10 +998,23 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     elif field == "status":
         row["status"] = value
         row["progress"] = _progress_for_status(value)
+    elif field == "tags":
+        if not isinstance(value, list):
+            return JSONResponse({"error": "tags value must be a list"}, status_code=400)
+        row["tags"] = sorted({t.strip() for t in value if isinstance(t, str) and t.strip()})
     else:  # title
-        row["title"] = value
+        if not isinstance(value, str) or not value.strip():
+            return JSONResponse({"error": "title cannot be blank"}, status_code=400)
+        row["title"] = value.strip()
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    db.upsert_task(conn, row)
+    # 1.5 (single-project-per-task): the tags path can put a second project
+    # label on a task same as the create/edit forms/bulk "Add label" can --
+    # surfaced the same way, a plain 400 rather than a silent 500/partial
+    # write (db.upsert_task raises before writing anything).
+    try:
+        db.upsert_task(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True})
 
 
@@ -1156,47 +1031,85 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
         # again tomorrow. Plain tasks just flip to done, no history row.
         if row.get("recurrence"):
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
-def _completion_streaks(completions: dict[str, str], today: date | None = None) -> tuple[int, int]:
+def _completion_streaks(
+    completions: dict[str, str], today: date | None = None, excluded_dates: set[str] | None = None
+) -> tuple[int, int]:
     """(current_streak, longest_streak) in days for a recurring task's
     completion history (dict of {due_date: ...}). Any present date counts
     as done. The current streak tolerates today not being checked off yet
     (you haven't lost the streak because it's 9am) but breaks the moment a
-    full calendar day is skipped -- same semantics as habits' _streaks."""
+    full calendar day is skipped -- same semantics as habits' _streaks.
+
+    `excluded_dates` (2026-08-29, STATE.md backlog item 3): same meaning
+    as habit_heatmap.streaks' own parameter -- a non-working day per this
+    task's holiday_calendar/exclude_saturday/exclude_sunday policy is
+    invisible to the walk below, neither done nor a break. This is a
+    hand-rolled twin of habit_heatmap.streaks (presence-only `completions`
+    keys instead of a {date: value} log) rather than a shared call --
+    reworking `completions` into the value-shaped dict streaks() expects
+    just to reuse it would be more churn than the ~20 lines duplicated
+    here, same call this function's own pre-existing docstring note
+    ("same semantics as habits' _streaks") already implied before this
+    change."""
+    excluded_dates = excluded_dates or set()
     today = today or date.today()
-    done_dates = sorted(d for d in completions if d)
+    done_dates = sorted(d for d in completions if d and d not in excluded_dates)
     if not done_dates:
         return 0, 0
     done_set = set(done_dates)
+
+    def _all_excluded_between(a: date, b: date) -> bool:
+        span = (b - a).days
+        return all((a + timedelta(days=i)).isoformat() in excluded_dates for i in range(1, span))
 
     longest = current_run = 0
     prev: date | None = None
     for d_str in done_dates:
         d = date.fromisoformat(d_str)
-        current_run = current_run + 1 if prev and (d - prev).days == 1 else 1
+        if prev is not None and ((d - prev).days == 1 or _all_excluded_between(prev, d)):
+            current_run += 1
+        else:
+            current_run = 1
         longest = max(longest, current_run)
         prev = d
 
     cursor = today
-    if cursor.isoformat() not in done_set:
+    if cursor.isoformat() not in done_set and cursor.isoformat() not in excluded_dates:
         cursor -= timedelta(days=1)
     current = 0
-    while cursor.isoformat() in done_set:
-        current += 1
-        cursor -= timedelta(days=1)
+    while True:
+        iso = cursor.isoformat()
+        if iso in done_set:
+            current += 1
+            cursor -= timedelta(days=1)
+        elif iso in excluded_dates:
+            cursor -= timedelta(days=1)
+        else:
+            break
     return current, longest
 
 
 def _completion_heatmap_weeks(
-    completions: dict[str, str], weeks: int = 12, today: date | None = None
+    completions: dict[str, str], weeks: int = habit_heatmap.DETAIL_WEEKS, today: date | None = None
 ) -> list[list[dict]]:
     """Monday-aligned grid of `weeks` columns x 7 rows ending on `today`,
     same shape habits' _heatmap_weeks produces (so the shared
     _habit_heatmap.html macro can paint it). A present date is "full"
     (level 4 -- there's no target-per-day concept for task check-offs);
-    future days render blank/non-interactive (level -1)."""
+    future days render blank/non-interactive (level -1).
+
+    Default was 12 weeks until 2026-08-29 direct feedback ("the heatmap
+    graph should not have empty space... prefer to show more months, empty
+    cells, but not empty space"): at the heatmap's fixed 11px cell size, 12
+    weeks (~168px) was far narrower than the ~660px modal body
+    habit_task_detail.html renders it in, leaving a large blank gap.
+    Reusing habit_heatmap.DETAIL_WEEKS (53 weeks, "a bit over a year") both
+    fills that width with real grid (extra future days render as blank
+    *cells* within the grid, not blank space around it) and keeps this
+    heatmap visually consistent with the standalone habit detail modal's."""
     today = today or date.today()
     start = today - timedelta(days=weeks * 7 - 1)
     start -= timedelta(days=start.weekday())  # snap back to the preceding Monday
@@ -1233,14 +1146,26 @@ def _completion_heatmap_weeks(
 
 @router.post("/{uid}/completion/{completion_date}/toggle")
 def toggle_task_completion(
-    uid: str, completion_date: str, request: Request, conn=Depends(get_db)
-) -> RedirectResponse:
+    uid: str,
+    completion_date: str,
+    request: Request,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     """The heatmap/list toggle for a recurring task's daily check-off: no
     completion for that date -> record one; already logged -> remove it
     (back to true "not done", not a hidden zero row). Redirects back to the
     referer (the tasks list's Today column), falling back to the task's own
     detail page when there's no referer -- same pattern as the habits
-    toggle."""
+    toggle.
+
+    2026-08-28 follow-up fix: this endpoint always redirected regardless of
+    `X-Requested-With`, so the Habits group's checkbox (_habit_row.html,
+    posts here for a plain kind='task' habit) never had a JSON success path
+    to key off of -- it fell back to a plain, unenhanced native form submit
+    (no `data-cc-change` was even set), causing a full-page reload/re-
+    navigate on every check-in. Now dual-mode like every other mutation
+    endpoint in this router (deps.respond)."""
     if db.get_task_completion(conn, uid, completion_date) is not None:
         db.delete_task_completion(conn, uid, completion_date)
     else:
@@ -1248,7 +1173,7 @@ def toggle_task_completion(
             conn, uid, completion_date, datetime.now(timezone.utc).isoformat()
         )
     referer = request.headers.get("referer")
-    return RedirectResponse(url=referer or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, referer or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/completions")
@@ -1257,6 +1182,7 @@ def set_task_completion(
     request: Request,
     completion_date: str = Form(...),
     value: str = Form("1"),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """Explicit-value counterpart to toggle_task_completion above -- same
@@ -1267,17 +1193,27 @@ def set_task_completion(
     detail page). Only relevant for a habit-labeled task with
     target_per_day > 1 -- a plain checkbox habit (or an ordinary recurring
     task) never has anything that posts here, it just uses the toggle
-    route above."""
+    route above.
+
+    2026-08-28 follow-up fix: same always-redirects gap as the toggle route
+    above -- now dual-mode (deps.respond) so the Habits group's "+1" button
+    can succeed via fetch instead of a full native form submit."""
     try:
         parsed_value = float(value) if value else 1.0
     except ValueError:
         parsed_value = 1.0
+    # 2026-08-28 follow-up (direct number input replacing the "+1"/reset
+    # buttons): the input's own `max="999999"` is advisory only -- an HTML
+    # `max` doesn't stop a hand-crafted request, so clamp here too. Keeps
+    # a typo or scroll-wheel nudge from writing an arbitrarily large value.
+    if parsed_value > _MAX_HABIT_VALUE:
+        parsed_value = _MAX_HABIT_VALUE
     if parsed_value <= 0:
         db.delete_task_completion(conn, uid, completion_date)
     else:
         db.upsert_task_completion(conn, uid, completion_date, datetime.now(timezone.utc).isoformat(), parsed_value)
     referer = request.headers.get("referer")
-    return RedirectResponse(url=referer or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, referer or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/delete")
@@ -1289,85 +1225,24 @@ def delete_task(uid: str, x_requested_with: str | None = Header(default=None), c
     # checklist/subtask removal still physically has.
     db.delete_task(conn, uid)
     db.delete_checklist_items_for_task(conn, uid)
-    return _respond(x_requested_with, "/tasks")
+    return respond(x_requested_with, "/tasks")
 
 
 # --------------------------------------------------------------------- #
-# Relations -- 2026-08-09, event<->task associative links ("a relation can
-# link an event with existing/new tasks that both have at least one label
-# in common"; see the event_task_relations comment in db.py). The task
-# side of the feature: a task's Relations card links it to events -- either
-# an existing event (the picker only offers ones already sharing a label,
-# and _shares_label re-checks defensively) or a brand-new event created
-# inline that inherits this task's labels, which guarantees the rule. Both
-# routes redirect back to the task's own detail page so the card's
-# data-modal-keep-open forms re-render in place (modal.js).
+# Relations -- fully removed 2026-08-29 (STATE.md backlog item 4, direct
+# request). This used to be the task side of an event<->task associative
+# links feature ("a relation can link an event with existing/new tasks
+# that both have at least one label in common"): POST /{uid}/relations and
+# /{uid}/relations/remove, backed by the Relations card in task_form.html/
+# task_detail.html (_task_relations.html, now unreferenced). Not the same
+# thing as Work allocations right below, which is a distinct feature built
+# on the same event_task_relations table (is_work_allocation=1 rows) and
+# is untouched. db.py's underlying CRUD (add_event_task_relation/
+# remove_event_task_relation/related_events_for_task/related_tasks_for_
+# event) is left in place -- other things still read it (routers/export.py's
+# backup/restore, the offline-sync tests) -- there's just no UI path left
+# that calls it for an ordinary (non-work-allocation) relation anymore.
 # --------------------------------------------------------------------- #
-
-
-def _create_related_event(conn, task: dict, title: str) -> str | None:
-    """Create a new event related to `task` from the Relations card's
-    "＋ New event…" path. Inherits the task's labels (guaranteeing the
-    shared-label rule) and starts today at 09:00 -- the same default
-    routers/calendar.py's own new-event form prefills -- the user edits
-    time/labels later. Returns None (no event created) when the task has no
-    labels at all, since no shared-label link could ever hold."""
-    task_tags = task.get("tags") or []
-    if not task_tags:
-        return None
-    title = (title or "").strip()
-    if not title:
-        return None
-    now = datetime.now(timezone.utc).isoformat()
-    event = {
-        "uid": str(uuid.uuid4()),
-        "title": title,
-        "description": "",
-        "start_at": f"{date.today().isoformat()}T09:00",
-        "end_at": None,
-        "all_day": False,
-        "location": None,
-        "meeting_url": None,
-        "status": "active",
-        "tags": task_tags,
-        "recurrence": None,
-        "reminders": [],
-        "created_at": now,
-        "updated_at": now,
-    }
-    db.upsert_event(conn, event)
-    return event["uid"]
-
-
-@router.post("/{uid}/relations")
-def add_task_relation(
-    uid: str,
-    target_uid: str = Form(""),
-    new_title: str = Form(""),
-    conn=Depends(get_db),
-):
-    task = db.get_task(conn, uid)
-    if task is None:
-        return RedirectResponse(url="/tasks", status_code=303)
-    event_uid = None
-    if target_uid == "__new__":
-        event_uid = _create_related_event(conn, task, new_title)
-    elif target_uid:
-        event = db.get_event(conn, target_uid)
-        if event and _shares_label(task.get("tags") or [], event.get("tags") or []):
-            event_uid = event["uid"]
-    if event_uid:
-        db.add_event_task_relation(conn, event_uid, uid)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
-
-
-@router.post("/{uid}/relations/remove")
-def remove_task_relation(uid: str, event_uid: str = Form(...), conn=Depends(get_db)):
-    """Unlink an event from a task's Relations card. Graph link only -- the
-    event itself is left entirely alone (relations are associative, not
-    ownership; no cascade, matching delete_event/delete_task's cleanup)."""
-    db.remove_event_task_relation(conn, event_uid, uid)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -1442,6 +1317,21 @@ def remove_work_allocation(uid: str, event_uid: str = Form(...), conn=Depends(ge
     the task." db.delete_work_allocation is delete_event under a name that
     states that at the call site; `uid` (the task) isn't touched."""
     db.delete_work_allocation(conn, event_uid)
+    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+
+
+@router.post("/{uid}/work-allocations/{event_uid}/set-times")
+def set_work_allocation_times(uid: str, event_uid: str, start_at: str = Form(""), end_at: str = Form(""), conn=Depends(get_db)):
+    """The Work sessions card's per-session picker (2026-08-17): give one
+    session its scheduled start/end right from the card instead of only by
+    drag. The shared datetime picker's hidden start_at/end_at inputs post
+    here (data-modal-keep-open refreshes the card in place). db.
+    set_work_allocation_times guards the same contract the drag endpoints
+    use -- the event must actually be one of this task's work allocations
+    and end_at must follow start_at -- and returns False (no-op) otherwise,
+    never an error page, so a cancelled/invalid Apply just leaves the
+    session untouched."""
+    db.set_work_allocation_times(conn, event_uid, start_at, end_at)
     return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 

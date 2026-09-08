@@ -14,10 +14,8 @@
    ms_form_id is set inside the partial (it's always this form's own id),
    and carries into the included _widget_list_multiselect.html instances.
 
-   Importance/Urgency (side work, post-1.1) have no field here anymore --
-   both are purely computed from label rules + temporal state
-   (src/derived_state.py), never manually set; task_detail.html shows the
-   computed values (read-only) instead. #}
+   Importance/Urgency have no field here -- that whole feature is removed;
+   see src/derived_state.py's module docstring. #}
     {% set ms_form_id = 'task-form' %}
     <div class="field-grid">
         <div class="field field-wide">
@@ -30,7 +28,8 @@
         </div>
         <div class="field">
             <label>Due date</label>
-            <input type="date" name="due_at" value="{{ task.due_at[:10] if task and task.due_at else '' }}">
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('due_at', '', task.due_at[:10] if task and task.due_at else '', '', 'date') }}
         </div>
         <!-- 2026-08-08 direct feedback: Start date is editable on the
              new-task form now too, not just when editing -- defaults to
@@ -39,7 +38,7 @@
              so "today" reads as the default rather than a blank field). -->
         <div class="field">
             <label>Start date</label>
-            <input type="date" name="start_at" value="{{ task.start_at[:10] if task and task.start_at else today }}">
+            {{ datetime_picker('start_at', '', task.start_at[:10] if task and task.start_at else today, '', 'date') }}
         </div>
         <!-- Status -- 2026-08-08 direct feedback ("rework the drop down
              menus for priority, status, Recurrence to look the same as
@@ -49,9 +48,8 @@
              reason (a native <select>'s open dropdown is unstyleable
              browser chrome, see that partial's own header comment).
              Importance/Urgency used to have their own fields right here
-             (1.1's two independent 1..3 axes); side work (post-1.1)
-             removed them -- both are now purely computed, see this
-             partial's own header comment. -->
+             (1.1's two independent 1..3 axes); that whole feature is now
+             removed, see this partial's own header comment. -->
         {% set ms_name = 'status' %}
         {% set ms_mode = 'single' %}
         {% set ms_label = 'Status' %}
@@ -85,6 +83,7 @@
             {% set ms_selected = task.tags if task else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}
+            {% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
         <!-- 2026-08-08 follow-up ("both tasks and event should have
@@ -105,6 +104,42 @@
             <label>Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task else '' }}">
         </div>
+        <!-- 2026-08-29 (STATE.md backlog item 3, direct request): the same
+             non-working-day policy _event_form_fields.html has had since
+             1.6 -- holiday calendar + exclude Saturday/Sunday -- extended
+             to recurring tasks. Same `.holiday-field`-classed single-select
+             widget, same "sibling of a `.recurrence-input` in the same
+             `.field-grid`" contract static/recurrence_picker.js's `sync()`
+             already scans for (see that file's own comment: "task_form.
+             html/habit_task_form.html's recurrence field has no such
+             siblings, so this is just an empty NodeList there" -- no
+             longer true here) -- starts `hidden` unless the task is
+             already recurring, no JS changes needed. Affects only the
+             completion-streak calc (habit_heatmap.streaks via
+             routers/tasks.py's _excluded_dates_for_task), never which days
+             a recurring task is actually due (this app's recurring tasks
+             don't materialize per-occurrence due dates the way events do
+             -- see recurrence_expand.expand_tasks's own "not hit by
+             anything built so far" docstring). -->
+        {% set _playful = recurrence_terminology(request) == 'playful' %}
+        {% set _recurring = task and task.recurrence not in (None, 'None', 'Nothing', '') %}
+        {% set ms_mode = 'single' %}
+        {% set ms_name = 'holiday_calendar' %}
+        {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
+        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
+        {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+        {% set ms_selected = task.holiday_calendar if task and task.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
+        {% set ms_allow_new = false %}
+        {% set ms_wide = false %}
+        {% set ms_extra_class = 'holiday-field' %}
+        {% set ms_hidden = not _recurring %}
+        {% set ms_extra_checkboxes = [
+            {'name': 'exclude_saturday', 'id': 'exclude_saturday', 'checked': task.exclude_saturday if task else false,
+             'label': 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday'},
+            {'name': 'exclude_sunday', 'id': 'exclude_sunday', 'checked': task.exclude_sunday if task else false,
+             'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
+        ] %}
+        {% include "_widget_list_multiselect.html" %}
         <!-- 2026-08-08 direct feedback: Daily target is only relevant for
              a task carrying the habit label (Tasks > Habits' check-in row
              shows a checkbox for target=1, a number-stepper for
@@ -120,9 +155,9 @@
              id="habit-target-field" data-habit-label="{{ habit_label }}" data-form-id="task-form">
             <label>Daily target</label>
             <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target" tabindex="-1">&minus;</button>
+                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
                 <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day|int if task and task.target_per_day else 1 }}">
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target" tabindex="-1">+</button>
+                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
             </div>
         </div>
     </div>

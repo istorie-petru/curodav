@@ -9,6 +9,7 @@ behavior Month's _month_grid already has)."""
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -93,7 +94,13 @@ class TestWeekViewStrip:
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
         assert 'class="allday-cols week"' in body
-        assert body.count('class="allday-col"') == 7
+        # Exact `class="allday-col"` (no trailing class) undercounts once a
+        # past day in the displayed week also carries `is-past` (2026-08-31
+        # dimming feature) -- `class="allday-col is-past"` is still one
+        # day-column cell, just with a second class appended. Match on a
+        # word boundary instead of the whole attribute value so this stays
+        # true regardless of which/how many days in the strip are past.
+        assert len(re.findall(r'class="allday-col(?:\s|")', body)) == 7
 
     def test_single_day_event_only_lands_in_its_own_column(self, conn):
         monday = _this_monday()

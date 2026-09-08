@@ -12,7 +12,11 @@ categories, each earning its own focused page because each is a distinct
 thing a user thinks about, not because five is a tidy number --
 
   1. General     -- identity + format preferences: display name, week
-                     start, time format.
+                     start, time format; plus (2026-08-30) old/new/confirm
+                     password forms for the app's own login and the app's
+                     stored Radicale connection credential ("Login &
+                     security" -- see change_login_password/
+                     change_radicale_password below).
   2. Appearance   -- how the app looks: theme.
   3. Labels       -- the app's one organizing concept (spaces/projects/tags
                      collapsed into "labels", see features/architecture
@@ -92,20 +96,28 @@ whatever page was open before Settings was entered (redesign brief item 3).
 from __future__ import annotations
 
 import base64
+import hmac
+import logging
+import os
+import threading
 import uuid
 
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import data_health, db, offline_sync
+from .. import auth, config, data_health, db, env_file, offline_sync
+from ..image_sniff import sniff_image_type
 from ..deps import (
+    EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
+    HABIT_STREAK_TERMINOLOGY_KEY,
+    HIDE_SLEEP_HOURS_KEY,
+    PAGE_HEADER_BANNER_SCOPE,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
-    SHOW_RELATIONS_CARD_KEY,
     TIME_FORMAT_KEY,
     WEEK_START_KEY,
     _four_week_position_from_value,
@@ -113,10 +125,11 @@ from ..deps import (
     templates,
 )
 from .dashboard import DISPLAY_NAME_KEY
-from .export import export_context
+from .export import _redirect_with_error, _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 
 router = APIRouter(tags=["settings"])
+logger = logging.getLogger(__name__)
 
 # Hub categories (settings_index.html) -- name/desc/icon/url for each of the
 # pages above. Labels/Published lists are direct links to their existing
@@ -124,51 +137,75 @@ router = APIRouter(tags=["settings"])
 # labels_manage.html/published_lists.html's own breadcrumbs for how each
 # still reads as "inside Settings"). Habits is deliberately NOT a hub
 # category: it's reached from Tasks > Habits, its contextual home.
+#
+# 2026-08-17 settings HTML uniformity pass (SETTINGS_UI_GUIDE.md
+# "Proposed reorganization") -- Data health, Sync conflicts and Advanced
+# were three pages splitting "everything about your data's safety and
+# lifecycle" across them with no priority ordering inside any of them.
+# They're one "Data & Maintenance" category now (settings_data_maintenance.
+# html, urgent items first): the old /settings/data-health,
+# /settings/sync-conflicts and /settings/advanced URLs stay as 303
+# redirects for old bookmarks/links. The conflict-count badge that makes an
+# unresolved conflict visible from the hub itself lives on this one row
+# (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
-    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format"},
+    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format, login & security"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
+    {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
-    {"url": "/settings/data-health", "icon": "database", "name": "Data health", "desc": "Backups, integrity, storage"},
-    {"url": "/settings/sync-conflicts", "icon": "merge", "name": "Sync conflicts", "desc": "Offline edits the sync engine couldn't auto-merge"},
+    {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
-    {"url": "/settings/advanced", "icon": "sliders", "name": "Advanced", "desc": "Export & backup, reset layout, purge data"},
 ]
 
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
-_ADVANCED_CRUMB = _ROOT_CRUMB + [{"url": "/settings/advanced", "name": "Advanced"}]
 
-# Which schedule_holidays fields the Holidays table's inline edit
-# (static/settings_holidays.js) is allowed to touch -- same allowlist
-# convention as routers/tasks.py's _UPDATABLE_FIELDS, so a crafted request
-# can't write an arbitrary column.
-_HOLIDAY_UPDATABLE_FIELDS = {"calendar_name", "label", "date_from", "date_to"}
-
-# "Auto-archive completed tasks" (settings_advanced.html) -- a fixed set
-# of choices, not a free-typed number: a handful of sane presets is
-# faster to pick from and impossible to fat-finger into "archive after
+# "Auto-archive completed tasks" (settings_data_maintenance.html) -- a
+# fixed set of choices, not a free-typed number: a handful of sane presets
+# is faster to pick from and impossible to fat-finger into "archive after
 # 0.5 days" or a negative number. "0" is Never, this app's original
 # behavior (nothing auto-deletes) -- always the default for an existing
-# install that's never touched this control.
-DAYS_CHOICES = [("0", "Never"), ("7", "7 days"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days")]
+# install that's never touched this control. Relabeled 2026-08-26 (page
+# redesign): the plain day-counts became the plainer phrases below; the
+# stored values are unchanged, so existing settings keep working.
+DAYS_CHOICES = [("0", "Never"), ("7", "After 1 week"), ("30", "After 1 month")]
 
 
 @router.get("/settings")
 def settings_index(request: Request, conn=Depends(get_db)):
+    # conflict_count feeds the Data & Maintenance row's badge
+    # (settings_index.html) -- the "visible even without visiting the page"
+    # half of SETTINGS_UI_GUIDE.md's sync-conflict recommendation.
     return templates.TemplateResponse(
         "settings_index.html",
         {
             "request": request,
             "active_tab": "settings",
             "categories": HUB_CATEGORIES,
+            "conflict_count": len(db.list_sync_conflicts(conn)),
         },
     )
 
 
+def _current_settings(request: Request):
+    """request.app.state.settings, defensively. Most routers can assume
+    "app" is always in scope (a real request always has one), but
+    settings_general is exercised by several older tests that build a bare
+    Request with no "app" key at all (predating this route needing
+    app.state -- see test_page_header_narrow.py's _bare_request). None is
+    a safe fallback: every caller below already treats it as "nothing
+    env-configured" (has_persisted_credentials's own `if not settings`
+    early-out, and the getattr-guarded env checks)."""
+    try:
+        return request.app.state.settings
+    except (KeyError, AttributeError):
+        return None
+
+
 @router.get("/settings/general")
 def settings_general(request: Request, conn=Depends(get_db)):
+    settings = _current_settings(request)
     return templates.TemplateResponse(
         "settings_general.html",
         {
@@ -209,12 +246,271 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # labels on the recurrence editor's holiday-calendar/weekend
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
             "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
+            # 2026-08-28 -- "Habit streak terminology" -- "standard" or
+            # "playful" wording for the Habits group's streak readout
+            # (Tasks table). See deps.py's HABIT_STREAK_TERMINOLOGY_KEY.
+            "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
+            # 2026-09-09 (direct request) -- "Hide sleep hours in Planner":
+            # off by default. Read back by routers/calendar.py's
+            # _week_view_context via _sleep_collapse_window; see that
+            # function's own docstring for what happens when this is on but
+            # the configured Sleep-kind time blocks don't agree on one
+            # single start/end window.
+            "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
             # avatar on this page.
             "profile_photo": db.get_profile_photo(conn),
+            # Account (2026-09-08 -- replaces the old separate "Login &
+            # security" app-login card and Data & Maintenance's "CalDAV /
+            # Radicale sync" card; see account_settings' own docstring for
+            # the merge this reflects: one username/password, used for
+            # both). auth_is_env / radicale_env_configured together decide
+            # whether this install's credentials currently live in the
+            # env file or in app_meta -- env_file_available is whether
+            # there's actually a CC_ENV_FILE to rewrite when they do
+            # (curodav-ctl deploys always have one; a local/manual run
+            # doesn't, and account_settings refuses to silently fall back
+            # to app_meta out from under an env-configured install).
+            # has_account distinguishes "change your credentials"
+            # (current password required) from "set them up for the first
+            # time" (no account yet -- common in local/dev, where /setup
+            # never runs). getattr-guarded: several test files build a
+            # bare SimpleNamespace Settings stand-in predating some of
+            # these fields.
+            "auth_is_env": bool(
+                getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)
+            ),
+            "radicale_env_configured": getattr(settings, "radicale_env_configured", False),
+            "env_file_available": bool(getattr(settings, "env_file_path", None)),
+            "has_account": auth.has_persisted_credentials(settings, conn)
+            or bool(getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)),
+            "account_username": (
+                getattr(settings, "auth_username", None)
+                or (auth.get_persisted_credentials(conn) or (None,))[0]
+                or ""
+            ),
+            "radicale_url": getattr(settings, "radicale_base_url", ""),
+            # Restart app (2026-09-08) -- only meaningful when this
+            # process is under systemd with Restart=always (curodav-ctl's
+            # generated unit); see restart_app's own docstring for why
+            # deploy_mode == "production" is the signal used.
+            "restart_available": getattr(settings, "deploy_mode", "local") == "production",
         },
+    )
+
+
+@router.post("/settings/account")
+def account_settings(
+    request: Request,
+    username: str = Form(""),
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    new_password_confirm: str = Form(""),
+    radicale_url: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Settings > General's "Account" card -- 2026-09-08, direct request
+    ("merge the concept of radicale username to the app username, and
+    merge the app password with the radicale password"). Replaces three
+    former routes (change_login_password, change_radicale_password, Data
+    & Maintenance's settings_radicale) that each managed a separate
+    credential -- the app's own login, and the app's stored copy of the
+    Radicale connection -- with one form: a single username and password
+    govern both, plus the Radicale server URL (not a credential, just
+    where to reach it).
+
+    Storage backend is chosen by whether this account is currently
+    env-configured (`auth_is_env`: CC_AUTH_USERNAME/PASSWORD both set) OR
+    the Radicale side is (`settings.radicale_env_configured`,
+    CC_RADICALE_URL set) -- either one puts the WHOLE account on the
+    env-file path from here on, converting the other half over too the
+    first time this form is saved (e.g. an install that only ever had
+    CC_RADICALE_URL set now also gets CC_AUTH_USERNAME/PASSWORD written
+    alongside it): the point of merging is one identity, not one still
+    living in two different places depending on which half happened to
+    be configured first.
+
+    - Env-configured (either half) with `settings.env_file_path` known
+      (`CC_ENV_FILE`, set by curodav-ctl's generated unit): writes
+      CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
+      CC_RADICALE_PASSWORD (only when `new_password` is given) via
+      env_file.update_env_file. Takes effect on the next process start --
+      Settings > General's "Restart app" button (restart_app below) is
+      how an operator actually applies it without SSHing in.
+    - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
+      that still sets these env vars by some other means): refuses to
+      edit at all, same "edit curodav.env and restart yourself" fallback
+      the three routes this replaces always used -- there's nowhere safe
+      to write.
+    - Neither env-configured: persisted in app_meta, same as before --
+      auth.set_persisted_credentials (hashed) for login, config.
+      RADICALE_USERNAME_KEY/RADICALE_PASSWORD_KEY (retrievable, config.
+      py's own docstring covers why) mirrored to match. Login takes
+      effect immediately (session re-minted below, same as the old
+      change_login_password); the Radicale connection still needs a
+      restart to reach CalDavBridge (main.py's lifespan builds it once).
+
+    Any existing account (env or persisted) requires `current_password`
+    to verify before ANY change here is accepted -- username, password,
+    or just the Radicale URL -- since this form now controls both the
+    login and the sync credential together; a first-time save (no
+    account yet) has nothing to verify against and requires a
+    `new_password` to create one. `new_password` left blank on an
+    existing account keeps the current password, changing only the
+    username and/or URL. The Radicale password key is only ever written
+    when `new_password` is actually supplied -- never silently persists
+    `settings.radicale_password`'s dev-default fallback ("devpass") as if
+    it were a real chosen credential."""
+    settings = request.app.state.settings
+    username = username.strip()
+    radicale_url = radicale_url.strip()
+
+    auth_is_env = bool(getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None))
+    env_managed = auth_is_env or getattr(settings, "radicale_env_configured", False)
+    env_path = getattr(settings, "env_file_path", None)
+
+    if env_managed and not env_path:
+        return _redirect_with_error(
+            "/settings/general",
+            "Login/Radicale are set via environment variables, and this install has no CC_ENV_FILE to edit them through -- edit curodav.env by hand and restart.",
+        )
+
+    if not username:
+        return _redirect_with_error("/settings/general", "Choose a username.")
+
+    if auth_is_env:
+        has_account = True
+
+        def verify(pw: str) -> bool:
+            return hmac.compare_digest(pw, settings.auth_password or "")
+    else:
+        persisted = auth.get_persisted_credentials(conn)
+        has_account = persisted is not None
+        if has_account:
+            _, stored_hash = persisted
+
+            def verify(pw: str) -> bool:
+                return auth._verify_password_hash(pw, stored_hash)
+        else:
+            def verify(pw: str) -> bool:
+                return True
+
+    error = None
+    if has_account and not verify(current_password):
+        error = "Current password is incorrect."
+    elif not has_account and not new_password:
+        error = "Choose a password."
+    elif new_password:
+        if len(new_password) < 8:
+            error = "New password must be at least 8 characters."
+        elif new_password != new_password_confirm:
+            error = "New passwords do not match."
+    if error:
+        return _redirect_with_error("/settings/general", error)
+
+    if env_managed:
+        updates = {"CC_AUTH_USERNAME": username, "CC_RADICALE_USER": username}
+        if new_password:
+            updates["CC_AUTH_PASSWORD"] = new_password
+            updates["CC_RADICALE_PASSWORD"] = new_password
+        if radicale_url:
+            updates["CC_RADICALE_URL"] = radicale_url
+        try:
+            env_file.update_env_file(env_path, updates)
+        except OSError:
+            logger.exception("Failed to write env file %s", env_path)
+            return _redirect_with_error(
+                "/settings/general",
+                "Could not save -- the app couldn't write to its env file. Check file permissions.",
+            )
+        return _redirect_with_note(
+            '/settings/general', 'Saved. Click "Restart app" below to apply it.'
+        )
+
+    # Not env-managed -- app_meta, same storage as before this merge.
+    if new_password:
+        auth.set_persisted_credentials(conn, username, new_password)
+        db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, new_password)
+    else:
+        db.set_app_meta(conn, auth.AUTH_USERNAME_KEY, username)
+    db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
+    db.set_app_meta(conn, config.RADICALE_URL_KEY, radicale_url or settings.radicale_base_url)
+
+    state = getattr(request.app, "state", None)
+    if state is not None:
+        state._cc_auth_configured = True
+    # 2026-09-07 audit fix (carried over from change_login_password): rotate
+    # the session-signing secret whenever persisted credentials are
+    # (re)established, so a session issued under the old password stops
+    # verifying immediately instead of staying valid for the rest of its
+    # 30-day life. The in-process cache AuthMiddleware reads is updated
+    # here too, same as purge_all, so this response's own freshly-minted
+    # cookie doesn't look unauthenticated on the very next request.
+    secret = auth.rotate_session_secret(settings, conn)
+    if state is not None:
+        state._cc_auth_secret = secret
+    token = auth.make_session_token(secret, username)
+    response = _redirect_with_note(
+        "/settings/general",
+        "Saved. Restart the app for the Radicale connection to pick up the change."
+        if (new_password or radicale_url)
+        else "Saved.",
+    )
+    response.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=auth.SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=auth.is_secure_request(request),
+        path="/",
+    )
+    return response
+
+
+@router.post("/settings/restart")
+def restart_app(request: Request):
+    """Settings > General's "Restart app" button -- 2026-09-08, direct
+    request ("have a button actually restarting the app so it applies").
+    Applies an account_settings env-file save (or any other change that
+    needs a fresh process, e.g. a Radicale connection saved to app_meta)
+    by having THIS process exit cleanly and letting systemd relaunch it
+    with the new environment -- not by shelling out to `systemctl`
+    itself, which would need granting the service user new privileges it
+    deliberately doesn't have (NoNewPrivileges/ProtectSystem in
+    scripts/curodav-ctl's generated unit). `Restart=always` on that unit
+    (changed from `on-failure` alongside this route) is what makes a
+    plain, non-crashing `exit(0)` come back up at all.
+
+    Gated on `deploy_mode == "production"` -- the one signal this app
+    already has for "systemd-managed, something is watching to relaunch
+    me" (curodav-ctl's generated .env always sets it; local/manual runs
+    default to "local"). Without that gate, clicking this on a bare
+    `uvicorn` dev run would just kill the process with nothing to bring
+    it back.
+
+    The actual exit happens on a background thread half a second after
+    this function returns its response -- long enough for uvicorn to
+    finish writing the redirect to the socket first, short enough that
+    the operator's browser barely notices before the reload. `os._exit`
+    (not `sys.exit`, not raising) skips normal interpreter teardown on
+    purpose: there's nothing here that needs flushing or rolling back --
+    every write that led to this point is already committed (SQLite,
+    or env_file.update_env_file's own atomic rename) -- and an ordinary
+    shutdown path risks hanging on an in-flight background sync tick
+    instead of actually exiting."""
+    settings = request.app.state.settings
+    if getattr(settings, "deploy_mode", "local") != "production":
+        return _redirect_with_error(
+            "/settings/general",
+            "Restart isn't available outside a systemd-managed (production) deploy -- stop and restart the process yourself.",
+        )
+    logger.warning("Restart requested from Settings > General -- exiting for systemd to relaunch.")
+    threading.Timer(0.5, os._exit, args=(0,)).start()
+    return _redirect_with_note(
+        "/settings/general", "Restarting -- this page will reconnect in a few seconds."
     )
 
 
@@ -269,7 +565,15 @@ def set_profile_photo(
         data = photo.file.read()
         if len(data) > _MAX_PROFILE_PHOTO_BYTES:
             raise HTTPException(400, "Photo is too large (max 5MB).")
-        db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), image_type)
+        # 2026-09-07 fix (flagged in an earlier audit): `image_type` above
+        # only reflects the browser's own Content-Type claim -- confirm the
+        # bytes actually are a real image before storing them, using
+        # whatever the bytes actually are rather than trusting the
+        # (possibly spoofed) header any further.
+        sniffed = sniff_image_type(data)
+        if sniffed is None:
+            raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
+        db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), sniffed)
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
@@ -280,6 +584,39 @@ def remove_profile_photo(conn=Depends(get_db)):
     same non-cacheable convention as every other destructive action here."""
     db.clear_profile_photo(conn)
     return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.get("/settings/profile-photo/image")
+def profile_photo_image(conn=Depends(get_db)):
+    """Serves the profile picture's decoded bytes for `<img src>` (2026-08-29,
+    direct request: "better cache these images"). Exact mirror of routers/
+    banners.py's banner_image -- same problem (a profile photo used to be
+    embedded as an inline `data:` URI, deps.py's avatar() global, riding
+    along in the HTML of every page that shows it: contact list rows aside,
+    this one specifically rendered on every dashboard/label/Space page via
+    the header avatar overlap), same fix (a real, separately cacheable
+    request), same immutable Cache-Control safety argument (the URL's own
+    `?v=` -- db.get_profile_photo's `version` -- changes whenever the photo
+    does, so a stale cached response can never be served under a freshly-
+    rendered page's URL)."""
+    photo = db.get_profile_photo(conn)
+    if not photo:
+        raise HTTPException(404)
+    try:
+        data = base64.b64decode(photo["photo_b64"], validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(404)
+    image_type = str(photo.get("photo_type") or "").lower()
+    if image_type not in ("jpeg", "png", "gif", "webp"):
+        image_type = "jpeg"
+    return Response(
+        content=data,
+        media_type=f"image/{image_type}",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Encoding": "identity",
+        },
+    )
 
 
 @router.post("/settings/week-start")
@@ -321,6 +658,18 @@ def set_recurrence_terminology(terminology: str = Form("standard"), conn=Depends
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
+@router.post("/settings/habit-streak-terminology")
+def set_habit_streak_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
+    """"Habit streak terminology" -- "standard" or "playful" wording for
+    the Habits group's streak readout (Tasks table, _habit_row.html via
+    deps.py's habit_streak_text() global). Only ever stores one of the two
+    offered choices; anything else falls back to "standard", same
+    convention as set_recurrence_terminology above. Presentation-layer
+    only -- the underlying current_streak integer never changes."""
+    db.set_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
 @router.post("/settings/time-format")
 def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     """"24-hour time" -- affects every server-rendered time in the app
@@ -329,6 +678,18 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     minutesToDisplayTime(), which reads this via base.html's
     `data-time-format` body attribute)."""
     db.set_app_meta(conn, TIME_FORMAT_KEY, "12h" if time_format == "12h" else "24h")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/hide-sleep-hours")
+def set_hide_sleep_hours(enabled: str = Form(""), conn=Depends(get_db)):
+    """"Hide sleep hours in Planner" (Settings > General, 2026-09-09, direct
+    request: "the time tagged as sleep time is just removed as cells from
+    the planner calendar view"). Off by default, same on/off pattern as
+    set_edit_mode above. Read back by routers/calendar.py's
+    _week_view_context -- Week/Planner only, Day view is unaffected
+    regardless of this setting (direct decision)."""
+    db.set_app_meta(conn, HIDE_SLEEP_HOURS_KEY, "1" if enabled == "1" else "")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
@@ -348,22 +709,26 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # forced on the General page for the exact same reason (see
             # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
-            "current_show_relations_card": db.get_app_meta(conn, SHOW_RELATIONS_CARD_KEY) != "0",
+            # Sidebar redesign item 13d (2026-08-29): edit mode is now a
+            # persistent, app-wide toggle here instead of each dashboard/
+            # label page's own "Edit mode"/"Done" buttons -- see
+            # EDIT_MODE_KEY's own comment in routers/dashboard.py.
+            "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+            # 2026-08-29 (sidebar redesign item 13e follow-up) -- the
+            # Standard Page Header's own optional banner (deps.py's
+            # PAGE_HEADER_BANNER_SCOPE); "Add"/"Change" label + the Remove
+            # control inside the editor both key off whether this is set,
+            # same convention as dashboard.html/label_detail.html's own
+            # Add/Change banner button. Named current_page_header_banner,
+            # NOT page_header_banner -- that name is taken by deps.py's own
+            # Jinja global (page_header_banner(request), called inside
+            # _page_header_narrow.html's own macro on every page, including
+            # this one), same "current_X" convention as current_show_label_
+            # icons/current_edit_mode above for the exact same shadowing
+            # reason.
+            "current_page_header_banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         },
     )
-
-
-@router.post("/settings/relations-card")
-def set_relations_card(show: str = Form("1"), conn=Depends(get_db)):
-    """"Show the Relations card" (Settings > Appearance, 2026-08-14) --
-    whether the Relations card renders on task/event detail and edit modals
-    (_task_relations.html/_event_relations.html). Read back via deps.py's
-    show_relations_card() Jinja global. Default on -- an install that's
-    never touched this stores nothing, which reads as "1" (shown), so the
-    card behaves exactly as it did before the setting existed; "0" hides
-    it."""
-    db.set_app_meta(conn, SHOW_RELATIONS_CARD_KEY, "1" if show == "1" else "0")
-    return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 @router.post("/settings/label-icons")
@@ -379,18 +744,30 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
+@router.post("/settings/edit-mode")
+def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
+    """"Edit mode" (Settings > Appearance, 2026-08-29, sidebar redesign
+    item 13d) -- shows the widget grid's editing controls (move/resize/
+    reorder/delete a widget, New widget, Reset layout, Add/Change banner)
+    on every dashboard/label/Space page until turned off here, replacing
+    the old per-page "Edit mode"/"Done" buttons and their `?edit=1` query
+    param (routers/dashboard.py's widget_page_context reads this flag
+    directly now). Same on/off pattern as set_label_icons above."""
+    db.set_app_meta(conn, EDIT_MODE_KEY, "1" if enabled == "1" else "")
+    return RedirectResponse(url="/settings/appearance", status_code=303)
+
+
 # --------------------------------------------------------------------- #
 # Holidays -- moved here from Schedule's own Table view (2026-08-14), per
 # direct feedback: a holiday calendar is a reusable, named resource that
 # any recurring event can reference (1.6, "Generalized non-working-day
 # policy + named holiday calendars"), not something specific to Schedule
 # blocks -- the same "Labels get their own page, not a Tasks-only widget"
-# reasoning that already applies elsewhere in this Settings hub. Rendered
-# as a Tasks-table-style grid (id="holiday-table", inline-editable cells
-# via static/settings_holidays.js's update-field call, same shape as
-# static/tasks_table.js) rather than the old compact add-form-plus-plain-
-# table pair, so editing an existing holiday's dates no longer requires
-# delete-and-re-add.
+# reasoning that already applies elsewhere in this Settings hub. The page
+# is a grouped list plus a modal (2026-08-17 settings HTML uniformity
+# pass, SETTINGS_UI_GUIDE.md pattern B -- holiday_edit_modal.html) rather
+# than the old inline-editable grid, so editing an existing holiday's dates
+# is one whole-form Save instead of per-cell PATCH calls.
 # --------------------------------------------------------------------- #
 
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
@@ -406,6 +783,44 @@ def settings_holidays(request: Request, conn=Depends(get_db)):
             "crumbs": _HOLIDAYS_CRUMB,
             "title": "Holidays",
             "holidays": db.list_holidays(conn),
+        },
+    )
+
+
+@router.get("/settings/holidays/new")
+def new_holiday_modal(request: Request, conn=Depends(get_db)):
+    """The "+ Add holiday" entry point (2026-08-17 settings HTML
+    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
+    holiday_edit_modal.html the Edit buttons open, empty. Opens via
+    data-modal, posts to create_holiday below."""
+    return templates.TemplateResponse(
+        "holiday_edit_modal.html",
+        {
+            "request": request,
+            "h": None,
+            "form_title": "Add holiday",
+            "form_action": "/settings/holidays",
+            "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+        },
+    )
+
+
+@router.get("/settings/holidays/{uid}/edit")
+def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
+    """The Holiday Edit button's modal (pattern B) -- one form for every
+    field, replacing the old inline-editable table cells
+    (static/settings_holidays.js's per-field PATCH). Opens via data-modal
+    from the Holidays list row; posts to update_holiday below."""
+    holiday = db.get_holiday(conn, uid)
+    if holiday is None:
+        raise HTTPException(404, "Holiday not found")
+    return templates.TemplateResponse(
+        "holiday_edit_modal.html",
+        {
+            "request": request,
+            "h": holiday,
+            "form_title": "Edit holiday",
+            "form_action": f"/settings/holidays/{uid}/update",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -435,29 +850,31 @@ def create_holiday(
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
-@router.post("/settings/holidays/{uid}/update-field")
-async def update_holiday_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit for the Holidays table -- mirrors
-    routers/tasks.py's identical update-field endpoint. Merges the one
-    changed field onto the existing row and
-    round-trips through upsert_holiday (there's no separate "update"
-    helper in db.py -- a holiday's uid never changes, so upsert-by-uid
-    already is the update)."""
-    payload = await request.json()
-    field = payload.get("field")
-    value = payload.get("value")
-    if field not in _HOLIDAY_UPDATABLE_FIELDS:
-        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+@router.post("/settings/holidays/{uid}/update")
+def update_holiday(
+    uid: str,
+    calendar_name: str = Form("Default"),
+    label: str = Form(""),
+    date_from: str = Form(...),
+    date_to: str = Form(...),
+    conn=Depends(get_db),
+):
+    """The Holiday edit modal's single Save button (pattern B) -- one
+    endpoint for every field the inline edit used to PATCH separately.
+    There's no separate "update" helper in db.py -- a holiday's uid never
+    changes, so upsert-by-uid already is the update."""
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if field in ("date_from", "date_to") and not str(value).strip():
-        return JSONResponse({"error": "date cannot be empty"}, status_code=400)
-    holiday[field] = value.strip() if field == "calendar_name" else value
-    if field == "calendar_name" and not holiday[field]:
-        holiday[field] = "Default"
-    db.upsert_holiday(conn, holiday)
-    return JSONResponse({"ok": True})
+        raise HTTPException(404, "Holiday not found")
+    db.upsert_holiday(
+        conn,
+        {
+            **holiday,
+            "calendar_name": calendar_name.strip() or "Default",
+            "label": label, "date_from": date_from, "date_to": date_to,
+        },
+    )
+    return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
 @router.post("/settings/holidays/{uid}/delete")
@@ -466,29 +883,84 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
+@router.post("/settings/holidays/bulk-delete")
+async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
+    """2026-08-29 (STATE.md backlog item 1, direct request: "bulk actions
+    on tables"). JSON endpoint for `static/bulk_select.js`'s Holidays
+    instance -- a plain loop over the same `db.delete_holiday` each row's
+    own single-delete button already calls, same "no all-or-nothing
+    rollback" shape as `routers/tasks.py::bulk_action`'s delete branch."""
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no holidays selected"}, status_code=400)
+    for uid in uids:
+        db.delete_holiday(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
+
+
 # --------------------------------------------------------------------- #
 # Sleep Time / Leisure Time (1.9 side work, direct feedback: "Add an
 # option in the settings to set-up Leisure Time and Sleep Time... similar
 # to the holiday settings, but just adding the hours... and days"). Same
-# Tasks-table-style grid shape as Holidays directly above -- one page,
-# two tables (Sleep, Leisure), each row inline-editable via
-# static/settings_time_blocks.js. Unlike Holidays, `kind` is fixed per
-# table (no free-form calendar name) and there's no date range, just a
-# time-of-day start/end plus a day-of-week set
-# (`_widget_list_multiselect.html`, filter mode -- see db.TIME_BLOCK_DAYS).
-# See routers/calendar.py's `_time_block_overlays` for where these rows
-# turn into the Week/Day grid's soft hatching + scheduling warning.
+# grouped-list-plus-modal shape as Holidays directly above (2026-08-17
+# settings HTML uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- a
+# read-only row per block, Edit button opening time_block_edit_modal.html.
+# There's no date range, just a time-of-day start/end plus a day-of-week
+# set (`_widget_list_multiselect.html`, filter mode -- see
+# db.TIME_BLOCK_DAYS). See routers/calendar.py's `_time_block_overlays`
+# for where these rows turn into the Week/Day grid's soft hatching +
+# scheduling warning.
+#
+# 2026-09-08 follow-up (direct request): Sleep and Leisure used to be two
+# separate tables (own bulk-select instance, own "+ Add" row, `kind`
+# fixed by which table a row's Edit button lived in). They're one merged
+# table now -- `kind` is a per-row "Type" column (a pill, red for Sleep/
+# green for Leisure, matching the Week/Day grid's own hatching colors)
+# instead of which table a row happens to sit in, and the add/edit modal
+# grew a real Sleep/Leisure chooser (time_block_edit_modal.html's own
+# comment) so a row's type is just another editable field now, not fixed
+# at creation. `db.list_time_blocks` already stored both kinds in one
+# `time_blocks` table with a `kind` column -- this was a template/route
+# change, not a schema change.
 # --------------------------------------------------------------------- #
 
 _TIME_BLOCKS_CRUMB = _ROOT_CRUMB
 
-# Which time_blocks fields the inline edit (static/settings_time_blocks.js)
-# may touch -- same allowlist convention as _HOLIDAY_UPDATABLE_FIELDS.
-_TIME_BLOCK_UPDATABLE_FIELDS = {"label", "start_time", "end_time", "days"}
+_DAY_ABBR = {
+    "Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu",
+    "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun",
+}
+
+
+def _time_block_days_label(days_csv: str) -> str:
+    """Human summary of a time block's day set (2026-08-17 direct
+    feedback) -- abbreviations ("Mon Tue Fri"), not the full stored day
+    names, with the two named sets spelled out: every day is "All week",
+    exactly Monday-Friday is "All work week". `days_csv` is comma-separated
+    in db.TIME_BLOCK_DAYS order (the form's checkbox order), so both the
+    len==7 test and the Mon-Fri slice comparison are order-safe."""
+    days = days_csv.split(",") if days_csv else []
+    if len(days) == len(db.TIME_BLOCK_DAYS):
+        return "All week"
+    if days == db.TIME_BLOCK_DAYS[:5]:
+        return "All work week"
+    return " ".join(_DAY_ABBR.get(d, d) for d in days)
 
 
 @router.get("/settings/time-blocks")
 def settings_time_blocks(request: Request, conn=Depends(get_db)):
+    # 2026-09-08 (direct request): one merged, chronologically-sorted list
+    # instead of two separate per-kind tables -- sleep_blocks/leisure_blocks
+    # are still fetched separately (each already ordered by start_time) so
+    # the merge is a simple concatenation, Sleep rows first then Leisure,
+    # rather than an alphabetical-by-kind sort that would otherwise
+    # interleave/reorder them in a less predictable way.
+    sleep_blocks = db.list_time_blocks(conn, "sleep")
+    leisure_blocks = db.list_time_blocks(conn, "leisure")
+    time_blocks = sleep_blocks + leisure_blocks
+    for block in time_blocks:
+        block["days_label"] = _time_block_days_label(block.get("days") or "")
     return templates.TemplateResponse(
         "settings_time_blocks.html",
         {
@@ -496,8 +968,58 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_time_blocks",
             "crumbs": _TIME_BLOCKS_CRUMB,
             "title": "Sleep & Leisure Time",
-            "sleep_blocks": db.list_time_blocks(conn, "sleep"),
-            "leisure_blocks": db.list_time_blocks(conn, "leisure"),
+            "time_blocks": time_blocks,
+            "time_block_days": db.TIME_BLOCK_DAYS,
+        },
+    )
+
+
+@router.get("/settings/time-blocks/new")
+def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depends(get_db)):
+    """The "+ Add time block" entry point (2026-08-17 settings HTML
+    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
+    time_block_edit_modal.html the Edit buttons open, empty. Opens via
+    data-modal from the list toolbar and posts to create_time_block below.
+    `kind` is just this modal's initial chooser selection now (2026-09-08,
+    direct request) -- Sleep/Leisure is a real field in the form
+    (time_block_edit_modal.html's own comment), not fixed by the entry
+    point; the `?kind=` query param survives only as a convenience default,
+    unused by the current single "+ Add time block" row (always opens to
+    the "sleep" default) but left in place in case a future caller wants
+    to pre-select Leisure."""
+    return templates.TemplateResponse(
+        "time_block_edit_modal.html",
+        {
+            "request": request,
+            "b": None,
+            "form_title": "Add time block",
+            "form_action": "/settings/time-blocks",
+            "kind": kind,
+            "time_block_days": db.TIME_BLOCK_DAYS,
+        },
+    )
+
+
+@router.get("/settings/time-blocks/{uid}/edit")
+def edit_time_block_modal(uid: str, request: Request, conn=Depends(get_db)):
+    """The time-blocks table's Edit button modal (pattern B) -- one form
+    for every field, replacing the old inline-editable table cells
+    (static/settings_time_blocks.js's per-field PATCH). Opens via
+    data-modal from the list row; posts to update_time_block below. `kind`
+    (the row's current Sleep/Leisure) flows in as the chooser's initial
+    selection, same as new_time_block_modal -- it's an editable field now
+    (2026-09-08, direct request), not fixed by which row this is."""
+    block = db.get_time_block(conn, uid)
+    if block is None:
+        raise HTTPException(404, "Time block not found")
+    return templates.TemplateResponse(
+        "time_block_edit_modal.html",
+        {
+            "request": request,
+            "b": block,
+            "form_title": "Edit time block",
+            "form_action": f"/settings/time-blocks/{uid}/update",
+            "kind": block["kind"],
             "time_block_days": db.TIME_BLOCK_DAYS,
         },
     )
@@ -524,31 +1046,44 @@ def create_time_block(
     return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
-@router.post("/settings/time-blocks/{uid}/update-field")
-async def update_time_block_field(uid: str, request: Request, conn=Depends(get_db)):
-    """Single-field inline edit for the Sleep/Leisure tables -- mirrors
-    update_holiday_field. `field == "days"` takes a comma-joined string
-    (static/settings_time_blocks.js collects every checked day into one
-    string before calling this, same as it does for a plain text/time
-    input's single value) rather than a JSON list, so this endpoint has
-    exactly one request shape regardless of which field changed."""
-    payload = await request.json()
-    field = payload.get("field")
-    value = payload.get("value")
-    if field not in _TIME_BLOCK_UPDATABLE_FIELDS:
-        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+@router.post("/settings/time-blocks/{uid}/update")
+def update_time_block(
+    uid: str,
+    kind: str = Form(""),
+    label: str = Form(""),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    days: list[str] = Form([]),
+    conn=Depends(get_db),
+):
+    """The time block edit modal's single Save button (pattern B) -- one
+    endpoint for every field the inline edit used to PATCH separately.
+    2026-09-08 (direct request): `kind` now DOES come from the form -- the
+    Sleep/Leisure tables merged into one, so a row's type is just another
+    editable field (the modal's chooser, time_block_edit_modal.html's own
+    comment), not fixed by which table it used to live in. An unrecognized
+    `kind` (a crafted/stale request) falls back to the block's existing
+    kind rather than storing garbage -- same "drop the malformed edit,
+    keep what's on screen" reasoning the end-time-after-start-time guard
+    below already uses, just applied to this field too."""
     block = db.get_time_block(conn, uid)
     if block is None:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if field in ("start_time", "end_time") and not str(value).strip():
-        return JSONResponse({"error": "time cannot be empty"}, status_code=400)
-    if field == "days":
-        value = ",".join(d for d in str(value).split(",") if d.strip() in db.TIME_BLOCK_DAYS)
-    block[field] = value
-    if block["end_time"] <= block["start_time"]:
-        return JSONResponse({"error": "end time must be after start time"}, status_code=400)
-    db.upsert_time_block(conn, block)
-    return JSONResponse({"ok": True})
+        raise HTTPException(404, "Time block not found")
+    valid_days = [d for d in days if d in db.TIME_BLOCK_DAYS]
+    valid_kind = kind if kind in db.TIME_BLOCK_KINDS else block["kind"]
+    if start_time and end_time and end_time > start_time:
+        db.upsert_time_block(
+            conn,
+            {
+                **block,
+                "kind": valid_kind,
+                "label": label,
+                "start_time": start_time,
+                "end_time": end_time,
+                "days": ",".join(valid_days),
+            },
+        )
+    return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
 @router.post("/settings/time-blocks/{uid}/delete")
@@ -557,58 +1092,147 @@ def delete_time_block(uid: str, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/time-blocks", status_code=303)
 
 
-# --------------------------------------------------------------------- #
-# Data health (`plans/open.md` § Data health & maintenance) -- server-side,
-# actively-verified backups plus database integrity/repair. The 1.8
-# (offline-first editing & synchronization) precondition: "trusted only
-# once verified backups exist" (plans/STATE.md). Every route here is a
-# thin wrapper around src/data_health.py's plain functions -- the same
-# functions scripts/data_health.py calls -- so the GUI and CLI genuinely
-# share one implementation instead of two copies that could drift
-# (open.md's own requirement). This is deliberately NOT folded into
-# Advanced's existing "Export & backup" section: that section is an
-# on-demand *download* a person triggers and keeps themselves; Data health
-# is server-side, verifiable, and restorable without ever leaving the app.
-# --------------------------------------------------------------------- #
+@router.post("/settings/time-blocks/bulk-delete")
+async def bulk_delete_time_blocks(request: Request, conn=Depends(get_db)):
+    """2026-08-29 (STATE.md backlog item 1) -- same shape as
+    bulk_delete_holidays above. Sleep and Leisure share one merged table
+    (and one `CCBulkSelect` instance) since 2026-09-08, but this endpoint
+    never needed to know which kind a uid belonged to in the first place --
+    a time block's uid alone is all `db.delete_time_block` needs -- so it's
+    unchanged by that merge."""
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no time blocks selected"}, status_code=400)
+    for uid in uids:
+        db.delete_time_block(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
 
-_DATA_HEALTH_CRUMB = _ROOT_CRUMB
+
+# --------------------------------------------------------------------- #
+# Data & Maintenance (`plans/open.md` § Data health & maintenance) --
+# the merged page for everything about your data's safety and lifecycle,
+# reorganized 2026-08-17 (SETTINGS_UI_GUIDE.md "Proposed reorganization:
+# Advanced + Data health + Sync conflicts") into one priority-ordered page:
+# needs-attention first, then health status, primary actions, export &
+# import, danger zone, backups last. It folds together three former pages
+# -- Data health (server-side, actively-verified backups plus database
+# integrity/repair, the 1.8 "trusted only once verified backups exist"
+# precondition; every route here is a thin wrapper around src/data_health.
+# py's plain functions, the same functions scripts/data_health.py calls),
+# Advanced (export & backup, reset Home's widget layout, auto-archive
+# completed tasks by age, plus two explicit confirmed-destructive purge
+# actions), and Sync conflicts (1.8 slice 2, §7b/c -- a conflict is never
+# auto-resolved, restore/dismiss are the only two things a person can do
+# with one). The old three URLs redirect here for old bookmarks/links.
+# --------------------------------------------------------------------- #
 
 # Fixed preset choices, not a free-typed number -- same reasoning as
-# settings_advanced.html's own auto-archive field (this module's own
-# DAYS_CHOICES): a select autosubmits on pick, matching this page's other
-# direct controls, and a validated preset can never end up storing
+# settings_data_maintenance.html's own auto-archive field (this module's
+# own DAYS_CHOICES): a select autosubmits on pick, matching this page's
+# other direct controls, and a validated preset can never end up storing
 # something typo'd/out-of-range. This app's sync design documents 90 days
 # as the retention horizon's own default (offline_sync.RETENTION_DAYS),
-# so unlike DAYS_CHOICES' "0/Never" default, this field's own default
-# selection is 90 -- see data_health.sync_gc_retention_days's docstring.
-SYNC_GC_DAYS_CHOICES = [("0", "Never (disabled)"), ("14", "14 days"), ("30", "30 days"), ("90", "90 days"), ("180", "180 days")]
+# so this field's default selection is 90 -- see
+# data_health.sync_gc_retention_days's docstring. "0" disables the GC
+# outright -- tombstones are then kept forever, which is exactly what the
+# redesigned control's "Keep forever" label says (relabeled 2026-08-26,
+# stored values unchanged).
+SYNC_GC_DAYS_CHOICES = [("30", "Keep 30 days"), ("90", "Keep 90 days"), ("0", "Keep forever")]
 
 
 def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
 
 
-@router.get("/settings/data-health")
-def settings_data_health(request: Request, conn=Depends(get_db)):
+def _choices_with_stored_value(
+    choices: list[tuple[str, str]], stored: str
+) -> list[tuple[str, str]]:
+    """The rendered select's options, with one honest extra entry appended
+    when the currently-stored value isn't among the presets (2026-08-26:
+    the redesigned controls offer three presets each, but an install that
+    picked "14"/"90"/"180 days" before the relabel still stores one of
+    those). Without this, the browser would silently display the first
+    preset while the stored value stayed something else -- a lie. The
+    extra entry autosubmits like any other, so picking anything real
+    replaces it; it's never itself written back (the POST routes validate
+    against the preset lists only)."""
+    if any(value == stored for value, _ in choices):
+        return choices
+    return [*choices, (stored, f"{stored} days (current)")]
+
+
+@router.get("/settings/data-maintenance")
+def settings_data_maintenance(request: Request, conn=Depends(get_db)):
+    """The merged Data & Maintenance page (2026-08-17 reorg). Context is
+    everything the three former pages used to gather separately: the data
+    health summary (health_summary's `integrity`/`latest_backup`/
+    `latest_verified_backup`/`sync`/`sync_gc`/`storage`/`entities`/
+    `backups`), the unresolved sync conflicts, and Advanced's export/
+    import + purge/auto-archive context (export_context() plus the counts
+    and choices settings_data_maintenance.html renders).
+
+    2026-08-26 page redesign: the two Maintenance selects' choice lists go
+    through _choices_with_stored_value so a legacy stored value stays
+    visible; everything else about the context shape is unchanged."""
     backups_dir = _backups_dir(request)
     summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
-    return templates.TemplateResponse(
-        "settings_data_health.html",
-        {
-            "request": request,
-            "active_tab": "settings_data_health",
-            "crumbs": _DATA_HEALTH_CRUMB,
-            "title": "Data health",
-            "sync_gc_days_choices": SYNC_GC_DAYS_CHOICES,
-            **summary,
-        },
-    )
+    completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
+    auto_archive_days = db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0"
+    sync_gc_days = str(summary["sync_gc"]["retention_days"])
+    ctx = {
+        "request": request,
+        "active_tab": "settings_data_maintenance",
+        "crumbs": _ROOT_CRUMB,
+        "title": "Data & Maintenance",
+        "conflicts": db.list_sync_conflicts(conn),
+        "sync_gc_days_choices": _choices_with_stored_value(SYNC_GC_DAYS_CHOICES, sync_gc_days),
+        "completed_task_count": completed_task_count,
+        "task_auto_archive_days": auto_archive_days,
+        "days_choices": _choices_with_stored_value(DAYS_CHOICES, auto_archive_days),
+        # Export & backup (was settings_advanced.html's, itself moved off
+        # its own /export page -- direct feedback: "export and backup
+        # should be fully with all buttons... in the advanced page").
+        # export_context() is the same data /export's own page used to
+        # gather; radicale_url is fetched here directly since
+        # export_context() takes no `request`.
+        "radicale_url": request.app.state.settings.radicale_base_url,
+        # 2026-09-08 -- this card is read-only display now (the URL only;
+        # credentials moved to Settings > General's merged Account card,
+        # account_settings' own docstring covers why). radicale_env_
+        # configured still distinguishes "set via curodav.env" wording
+        # from "set through Settings" in the card's copy. getattr-guarded:
+        # several test files build their own minimal SimpleNamespace
+        # stand-in for Settings (not the real dataclass) predating this
+        # field.
+        "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
+    }
+    ctx.update(summary)
+    ctx.update(export_context(conn))
+    return templates.TemplateResponse("settings_data_maintenance.html", ctx)
+
+
+# /settings/radicale (the old plain URL/username/password form) is gone
+# (2026-09-08, superseded by /settings/account -- account_settings' own
+# docstring covers the merge) -- Data & Maintenance's "CalDAV / Radicale
+# sync" card is now a read-only display of the current URL, pointing at
+# Settings > General to actually change the connection, since the
+# credentials it used to collect independently are now the same
+# username/password as the app's own login.
+
+
+@router.get("/settings/data-health")
+def settings_data_health(request: Request, conn=Depends(get_db)):
+    """Old Data health page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the many action endpoints' redirect targets) land somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/data-health/backup")
 def data_health_backup(request: Request, conn=Depends(get_db)):
     path = data_health.create_backup(conn, _backups_dir(request))
-    return RedirectResponse(url=f"/settings/data-health?note=Backup+created+({path.name}).", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note=Backup+created+({path.name}).", status_code=303)
 
 
 @router.post("/settings/data-health/verify")
@@ -619,10 +1243,10 @@ def data_health_verify(request: Request, filename: str = Form(""), conn=Depends(
         latest = data_health.latest_backup(backups_dir)
         target = Path(latest["path"]) if latest else None
     if target is None:
-        return RedirectResponse(url="/settings/data-health?error=No+backup+to+verify+yet.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=No+backup+to+verify+yet.", status_code=303)
     result = data_health.verify_backup(target)
     note = "Backup+verified+OK." if result.ok else f"Verification+found+{len(result.errors)}+problem(s)."
-    return RedirectResponse(url=f"/settings/data-health?{'note' if result.ok else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result.ok else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/restore")
@@ -638,9 +1262,9 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
         raise HTTPException(400, "Invalid backup filename.")
     result = data_health.restore_backup(conn, target, backups_dir=backups_dir)
     if not result["ok"]:
-        return RedirectResponse(url="/settings/data-health?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
     return RedirectResponse(
-        url=f"/settings/data-health?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
+        url=f"/settings/data-maintenance?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
         status_code=303,
     )
 
@@ -649,13 +1273,13 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
 def data_health_integrity_check(conn=Depends(get_db)):
     result = data_health.check_integrity(conn)
     note = "Database+integrity%3A+OK." if result["ok"] else "Database+integrity+check+found+problems+-+see+detail."
-    return RedirectResponse(url=f"/settings/data-health?{'note' if result['ok'] else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result['ok'] else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/repair")
 def data_health_repair(request: Request, conn=Depends(get_db)):
     result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
-    return RedirectResponse(url="/settings/data-health?note=Compacted+and+reindexed+the+database.", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance?note=Compacted+and+reindexed+the+database.", status_code=303)
 
 
 @router.post("/settings/data-health/sync-retention")
@@ -669,7 +1293,7 @@ def data_health_set_sync_retention(days: str = Form("90"), conn=Depends(get_db))
     -own-options convention as `set_task_auto_archive`."""
     valid = {choice for choice, _ in SYNC_GC_DAYS_CHOICES}
     data_health.set_sync_gc_retention_days(conn, int(days) if days in valid else 90)
-    return RedirectResponse(url="/settings/data-health?note=Sync+cleanup+retention+updated.", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance?note=Sync+cleanup+retention+updated.", status_code=303)
 
 
 @router.post("/settings/data-health/sync-gc")
@@ -683,57 +1307,38 @@ def data_health_run_sync_gc(conn=Depends(get_db)):
     purged_entities = result["purged_entities"]
     purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
     note = f"Sync+cleanup+ran%3A+{purged_total}+row(s)+purged." if purged_total else "Sync+cleanup+ran%3A+nothing+to+purge."
-    return RedirectResponse(url=f"/settings/data-health?note={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note={note}", status_code=303)
 
 
 # --------------------------------------------------------------------- #
 # Advanced -- export & backup, reset Home's widget layout, auto-archive
 # completed tasks by age, plus two explicit, confirmed-destructive purge
-# actions. Scope confirmed directly with the user before building the
-# purge actions (2026-08-07): "Purge completed" is tasks-only (every
-# done/archived task); "Purge all" is a full data wipe across the whole
-# app (not just tasks) -- see db.py's purge_all_data/
-# delete_completed_tasks docstrings for exactly what each touches and,
-# for purge-all, its one known limitation (Published Lists' already-
-# materialized Radicale collections aren't torn down, only this app's own
-# tracking of them). Reset layout itself lives in routers/dashboard.py
-# (POST /dashboard/reset) -- this page just links to it, same as it
-# always has from label_detail.html's own edit-mode toolbar. Export &
-# backup itself lives in routers/export.py (/export) -- this page links
+# actions. 2026-08-17: this whole page is now the "Export & import",
+# "Maintenance & upkeep" and "Danger zone" sections of the merged Data &
+# Maintenance page (settings_data_maintenance.html); /settings/advanced is
+# a redirect there for old bookmarks/links. Scope confirmed directly with
+# the user before building the purge actions (2026-08-07): "Purge
+# completed" is tasks-only (every done/archived task); "Purge all" is a
+# full data wipe across the whole app (not just tasks) -- see db.py's
+# purge_all_data/delete_completed_tasks docstrings for exactly what each
+# touches and, for purge-all, its one known limitation (Published Lists'
+# already-materialized Radicale collections aren't torn down, only this
+# app's own tracking of them). Reset layout itself lives in routers/
+# dashboard.py (POST /dashboard/reset) -- this page just links to it, same
+# as it always has from label_detail.html's own edit-mode toolbar. Export
+# & backup itself lives in routers/export.py (/export) -- this page links
 # to it (2026-08-08, moved here from the now-deleted "Data & backup"
 # category, see this module's own docstring).
-#
-# 2026-08-08: auto-archive sits right above the two purge actions
-# deliberately, not off in a "Tasks" category of its own -- it's the
-# automatic, age-based version of "Purge completed" directly below it
-# (routers/tasks.py's TASK_AUTO_ARCHIVE_DAYS_KEY/_auto_archive_if_
-# configured, checked lazily on every visit to the Tasks table view;
-# db.delete_old_completed_tasks does the actual deleting). Grouping them
-# together is what makes the relationship legible: "this happens on its
-# own, or trigger it manually below."
 # --------------------------------------------------------------------- #
 
 
 @router.get("/settings/advanced")
 def settings_advanced(request: Request, conn=Depends(get_db)):
-    completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
-    ctx = {
-        "request": request,
-        "active_tab": "settings_advanced",
-        "crumbs": _ROOT_CRUMB,
-        "title": "Advanced",
-        "completed_task_count": completed_task_count,
-        "task_auto_archive_days": db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0",
-        "days_choices": DAYS_CHOICES,
-        # Export & backup (2026-08-08, moved off its own /export page
-        # entirely -- direct feedback: "export and backup should be fully
-        # with all buttons... in the advanced page") -- export_context()
-        # is the same data /export's own page used to gather, radicale_url
-        # fetched here directly since export_context() takes no `request`.
-        "radicale_url": request.app.state.settings.radicale_base_url,
-    }
-    ctx.update(export_context(conn))
-    return templates.TemplateResponse("settings_advanced.html", ctx)
+    """Old Advanced page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the export/import redirect from routers/export.py) land
+    somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/task-auto-archive")
@@ -741,25 +1346,50 @@ def set_task_auto_archive(days: str = Form("0"), conn=Depends(get_db)):
     """"Auto-archive completed tasks" -- a plain string count of days
     ("0" = Never, the default) read back by routers/tasks.py's
     _auto_archive_if_configured on every visit to the Tasks table view.
-    Only ever stores one of settings_advanced.html's own offered options
-    (validated against DAYS_CHOICES rather than trusting the raw POST
-    body) -- an unrecognized value falls back to "0"/Never rather than
-    silently deleting tasks on some unintended schedule."""
+    Only ever stores one of settings_data_maintenance.html's own offered
+    options (validated against DAYS_CHOICES rather than trusting the raw
+    POST body) -- an unrecognized value falls back to "0"/Never rather
+    than silently deleting tasks on some unintended schedule."""
     valid = {choice for choice, _ in DAYS_CHOICES}
     db.set_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY, days if days in valid else "0")
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/purge-completed")
 def purge_completed(conn=Depends(get_db)):
     db.delete_completed_tasks(conn)
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/purge-all")
-def purge_all(conn=Depends(get_db)):
+def purge_all(request: Request, conn=Depends(get_db)):
     db.purge_all_data(conn)
-    return RedirectResponse(url="/settings/advanced", status_code=303)
+    # A purge is a fresh install, and the auto-generated session signing
+    # secret lives in the just-wiped app_meta (see src/auth.py's
+    # session_secret). Drop the in-process memoized secret (AuthMiddleware
+    # caches it on app.state._cc_auth_secret) and clear the session cookie
+    # so the very next request re-mints a fresh secret and the old cookie
+    # no longer verifies -- with auth enabled that lands the user back on
+    # /login, the same state a brand-new install would be in. When a stable
+    # CC_AUTH_SECRET is configured instead, the secret isn't in the DB so
+    # it's unaffected, but clearing the cookie forces the re-login there
+    # too.
+    #
+    # 2026-08-29: a purge also wipes any /setup-created account (it lives
+    # in app_meta too, see auth.py's AUTH_USERNAME_KEY/AUTH_PASSWORD_HASH_
+    # KEY), so the "is this install configured" cache AuthMiddleware keeps
+    # on app.state._cc_auth_configured must be dropped as well -- otherwise
+    # a purged production install would still look configured and skip
+    # the forced /setup flow a fresh database should trigger.
+    state = getattr(request.app, "state", None)
+    if state is not None:
+        state._cc_auth_secret = None
+        state._cc_auth_configured = False
+    response = RedirectResponse(url="/settings/data-maintenance", status_code=303)
+    response.delete_cookie(
+        auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
+    )
+    return response
 
 
 # --------------------------------------------------------------------- #
@@ -770,24 +1400,18 @@ def purge_all(conn=Depends(get_db)):
 # offline_sync.py's apply_op/apply_batch record one whenever a genuinely
 # concurrent event-time edit or a same-batch project-label clash picks a
 # winner) -- restore or dismiss are the only two things a person can do
-# with one.
+# with one. 2026-08-17: the list itself renders at the top of the merged
+# Data & Maintenance page ("Needs attention" section, settings_data_
+# maintenance.html); /settings/sync-conflicts is a redirect there.
 # --------------------------------------------------------------------- #
-
-_SYNC_CONFLICTS_CRUMB = _ROOT_CRUMB
 
 
 @router.get("/settings/sync-conflicts")
 def settings_sync_conflicts(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse(
-        "settings_sync_conflicts.html",
-        {
-            "request": request,
-            "active_tab": "settings_sync_conflicts",
-            "crumbs": _SYNC_CONFLICTS_CRUMB,
-            "title": "Sync conflicts",
-            "conflicts": db.list_sync_conflicts(conn),
-        },
-    )
+    """Old Sync conflicts page URL -- kept as a redirect to the merged
+    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
+    (and the restore/dismiss redirects below) land somewhere real."""
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/sync-conflicts/{conflict_id}/restore")
@@ -800,7 +1424,7 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     conflict is then dismissed -- the restore itself is the resolution."""
     conflict = db.get_sync_conflict(conn, conflict_id)
     if conflict is None:
-        return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance", status_code=303)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
     if conflict["field_name"] == "project_label":
@@ -827,10 +1451,10 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
             "fields": {conflict["field_name"]: {"value": conflict["losing_value"], "hlc": restore_hlc}},
         })
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/sync-conflicts/{conflict_id}/dismiss")
 def dismiss_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings/sync-conflicts", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)

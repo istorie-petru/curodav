@@ -1,12 +1,17 @@
-// label_edit_modal.html's Role control (side work, 2026-08-15 direct
+// label_form_modal.html's Role control (side work, 2026-08-15 direct
 // feedback: "becoming a project should be mutually exclusive to a space --
 // selected via a fancy dropdown menu. Spaces or project settings appear
-// only after being selected"). Two purely client-side jobs, both driven
-// off the segmented radio group's live selection vs. the role the label
-// actually had when the modal opened (`data-original-role`):
+// only after being selected"), reworked 2026-09-09 (direct request, twice):
+// first into a plain native <select>, then into the same radio-backed
+// custom dropdown _widget_list_multiselect.html/static/app.js already
+// render/wire everywhere else (.multiselect/.multiselect-trigger/
+// .multiselect-panel) -- app.js's own global handlers already own that
+// control's open/close, portal-out-of-the-modal, and trigger-summary-text
+// jobs, so this file's two jobs stay exactly the same as before, just
+// reading the checked radio's value instead of a <select>'s:
 //
 //  1. Show the Project start/end date fields only while "Project" is the
-//     selected radio -- `hidden` toggled on `.label-project-fields`, no
+//     selected option -- `hidden` toggled on `.label-project-fields`, no
 //     server round trip, same "reveal on selection" idiom
 //     task_habit_field_toggle.js already established for this app's forms.
 //
@@ -25,15 +30,25 @@
 //     that's actually about to happen, never about unrelated field edits
 //     (color, icon, ...) on a form that also happens to contain this
 //     control.
+//
+// Radios are captured into a plain array at init, not re-queried from
+// `wrap` on every sync -- static/app.js's multiselect handling portals the
+// open `.multiselect-panel` (and every radio inside it) out to
+// #multiselect-portal while open, so `wrap.querySelector(...)` would find
+// nothing at that point even though the wrapping `.field` itself (`wrap`,
+// what this script actually walks up from) never moves. Element
+// references captured up front stay valid wherever the node currently
+// lives in the DOM.
 (function () {
   function init(root) {
-    (root || document).querySelectorAll(".label-role-segmented[data-original-role]").forEach((seg) => {
-      if (seg.dataset.ccWired) return;
-      seg.dataset.ccWired = "1";
+    (root || document).querySelectorAll(".label-role-picker[data-original-role]").forEach((wrap) => {
+      if (wrap.dataset.ccWired) return;
+      wrap.dataset.ccWired = "1";
 
-      const originalRole = seg.dataset.originalRole || "none";
-      const warnRole = seg.dataset.warnRole || "";
-      const form = seg.closest("form");
+      const originalRole = wrap.dataset.originalRole || "none";
+      const warnRole = wrap.dataset.warnRole || "";
+      const radios = Array.from(wrap.querySelectorAll('input[name="role"]'));
+      const form = wrap.closest("form");
       const fields = form ? form.querySelector(".label-project-fields") : null;
 
       const MESSAGES = {
@@ -44,7 +59,7 @@
       };
 
       function selectedRole() {
-        const checked = seg.querySelector('input[name="role"]:checked');
+        const checked = radios.find((r) => r.checked);
         return checked ? checked.value : originalRole;
       }
 
@@ -59,9 +74,7 @@
         }
       }
 
-      seg.querySelectorAll('input[name="role"]').forEach((radio) => {
-        radio.addEventListener("change", sync);
-      });
+      radios.forEach((radio) => radio.addEventListener("change", sync));
       sync(); // initial state -- date fields' hidden attribute is already
               // server-rendered to match, this just covers a stale/cached
               // fragment and keeps the two code paths honest with each other.

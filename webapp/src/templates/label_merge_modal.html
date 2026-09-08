@@ -15,7 +15,7 @@
 <div class="modal-body">
 <div class="card">
 <p class="settings-hint">Every object tagged "{{ name }}" moves to the label you pick below, and "{{ name }}" is removed. This can't be undone.</p>
-<form method="post" id="label-merge-form" action="/labels/{{ name }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another label? Every object tagged with it moves to the destination and this label is removed.">
+<form method="post" id="label-merge-form" action="/labels/{{ name }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another label? Every object tagged with it moves to the destination and this label is removed." data-cc-change="label" data-cc-action="merge">
     <div class="field">
         <label>Merge into</label>
         <select name="dest_name" required autofocus>

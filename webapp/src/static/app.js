@@ -149,7 +149,8 @@ document.addEventListener("submit", (event) => {
         if (!r.ok) throw new Error("archive failed");
         if (row) row.style.display = "none";
         window.ccToast({
-          message: `Archived "${label}"`,
+          title: "Archived",
+          message: `"${label}"`,
           actionLabel: unarchiveUrl ? "Undo" : undefined,
           onAction: unarchiveUrl
             ? () => {
@@ -187,14 +188,14 @@ document.addEventListener("submit", (event) => {
         .then(() => {
           // async-CRUD (features/async-crud.md): a form marked data-cc-change
           // opts out of the reload -- the page the modal was opened over
-          // refreshes just its own region on the cc-entity-changed event.
+          // refreshes just its own region on the cc-entity-changed event. If
+          // no surface listener claims it (no live region here), fall back
+          // to a reload/navigate so the page can't go stale.
           const changeType = form.getAttribute("data-cc-change");
-          if (inModal && changeType) {
-            document.dispatchEvent(
-              new CustomEvent("cc-entity-changed", {
-                detail: { type: changeType, action: "delete" },
-              })
-            );
+          if (inModal && changeType && window.ccApi && window.ccApi.dispatchChange) {
+            if (!window.ccApi.dispatchChange({ type: changeType, action: "delete" })) {
+              window.location.reload();
+            }
           } else if (inModal) window.location.reload();
           else window.location.href = redirect;
         })
@@ -232,7 +233,8 @@ document.addEventListener("submit", (event) => {
         });
     }, 4500);
     window.ccToast({
-      message: `Deleted "${label}"`,
+      title: "Deleted",
+      message: `"${label}"`,
       actionLabel: "Undo",
       onAction: () => {
         cancelled = true;
@@ -482,6 +484,36 @@ document.addEventListener("submit", (event) => {
     return input.closest(".widget-list-multiselect") || (openPanel && openPanel.panel.contains(input) ? openPanel.anchor : null);
   }
 
+  // `data-change-submit` (2026-09-07, audit-fixes-2.0.md item 11 -- CSP
+  // `'unsafe-inline'` elimination) replaces every `onchange="this.form.
+  // requestSubmit()"`/`onchange="this.form.submit()"` inline handler this
+  // app used to sprinkle on auto-saving selects/radios/checkboxes
+  // (Settings > General/Appearance's segmented controls, the
+  // maintenance-page lifecycle <select>s, Published Lists' visibility
+  // <select>, the filter dropdown's multiselect checkboxes,
+  // _widget_list_multiselect.html's ms_autosubmit option) with one
+  // delegated listener -- inline event-handler attributes are exactly
+  // what `'unsafe-inline'` on script-src was covering, so every one of
+  // them has to go for the CSP to drop it. Deliberately a different
+  // attribute name from the existing form-level `data-autosubmit`
+  // (avatar_cropper.js/modal.js's "submit this whole form once a picker
+  // resolves" flag, checked via `hasAttribute` on the `<form>` itself) --
+  // this one lives on the individual input/select that changed, so
+  // reusing the same name for a different element/semantic would be
+  // confusing even though the two never collide in practice. `e.target.
+  // form` (not `.closest("form")`) matches what `this.form` on an inline
+  // handler already resolved to, including portalled controls that reach
+  // their form via the `form="..."` attribute rather than DOM nesting
+  // (_widget_list_multiselect.html's portalled panel, see that file's own
+  // header comment). Uses `requestSubmit()` uniformly (some inline
+  // handlers used the older `.submit()`, which skips the `submit` event
+  // and validation) -- no call site depended on skipping either.
+  document.addEventListener("change", (e) => {
+    if (e.target.matches && e.target.matches("[data-change-submit]") && e.target.form) {
+      e.target.form.requestSubmit();
+    }
+  });
+
   document.addEventListener("change", (e) => {
     const ms = wrapperFor(e.target);
     if (!ms) return;
@@ -494,20 +526,64 @@ document.addEventListener("submit", (event) => {
       closeOpenPanel();
     }
   });
+
+  // Handle "New label..." input in multiselect -- when user types a new
+  // label and presses Enter, add it as a selected checkbox option in the
+  // dropdown so it can be combined with other labels before form submit.
+  document.addEventListener("keydown", (e) => {
+    const input = e.target.closest(".multiselect-new-input");
+    if (!input || e.key !== "Enter") return;
+    const value = input.value.trim();
+    if (!value) return;
+    const panel = input.closest(".multiselect-panel");
+    if (!panel) return;
+    const ms = panel.closest(".multiselect") || (openPanel && openPanel.panel === panel ? openPanel.anchor : null);
+    if (!ms) return;
+    const msName = ms.querySelector('input[type="checkbox"], input[type="radio"]').name;
+    const formId = input.getAttribute("form");
+    const newOption = document.createElement("label");
+    newOption.className = "multiselect-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = ms.dataset.msMode === "single" ? "radio" : "checkbox";
+    checkbox.name = msName;
+    checkbox.value = value;
+    checkbox.checked = true;
+    if (formId) checkbox.setAttribute("form", formId);
+    const span = document.createElement("span");
+    span.textContent = value;
+    newOption.appendChild(checkbox);
+    newOption.appendChild(span);
+    const newOptionWrapper = input.closest(".multiselect-new-option");
+    if (newOptionWrapper) {
+      newOptionWrapper.parentNode.insertBefore(newOption, newOptionWrapper);
+    } else {
+      panel.appendChild(newOption);
+    }
+    input.value = "";
+    updateMsSummary(ms);
+    e.preventDefault();
+  });
+
   document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);
 })();
 
 // Dashboard masonry layout (dashboard.html's #dashboard-grid, both edit
-// and view mode -- 2026-08-02) -- a plain `display:grid` 6-column grid
+// and view mode -- 2026-08-02) -- a plain `display:grid` column grid
 // sizes every *row* to its tallest occupant, so a short widget next to a
 // tall one always left dead space under itself instead of letting
 // whatever comes next start right where it actually ends. This computes
-// real positions instead: each card still claims a `data-span` out of 6
-// virtual columns (third=2/half=3/two_thirds=4/full=6, unchanged from
-// before), but its top is wherever those columns are *actually* free,
-// tracked per-column as cards are placed in DOM order -- the standard
-// "skyline" packing masonry libraries use, just handwritten here since
-// the dependency isn't worth it for one grid on one page.
+// real positions instead: each card still claims a `data-span` out of
+// `maxCols` virtual columns (12 as of 2026-08-30, up from 6 -- see
+// routers/dashboard.py's WIDGET_WIDTHS own comment for why: a manual
+// Width override was reinstated that needs an exact 25%/75% option,
+// which 6 columns can't express; every span was doubled at the same
+// time, so real-world widths are unchanged -- quarter=3/half=6/
+// three_quarters=9/full=12, third=4/two_thirds=8), but its top is
+// wherever those columns are *actually* free, tracked per-column as
+// cards are placed -- the standard "skyline" packing masonry libraries
+// use, just handwritten here since the dependency isn't worth it for one
+// grid on one page. (2026-08-30, same day: placement itself is best-fit,
+// not strict DOM order -- see the loop below its own comment.)
 //
 // Runs unconditionally (not gated behind edit mode -- unlike every other
 // dashboard grid script below) because the gaps this fixes are exactly
@@ -525,7 +601,27 @@ document.addEventListener("submit", (event) => {
   if (!grid) return;
 
   const MOBILE_BREAKPOINT = 720; // matches every other collapsing layout in this app
+  // 2026-08-30, direct report ("the width settings doesn't work for
+  // smaller devices... the 25% should round up to 50%") -- a manually-set
+  // "quarter" (span 3 of 12, 25%) card is fine on a full-width desktop
+  // window but becomes too narrow to read on a narrower one (a snapped/
+  // half-monitor browser window, not yet the MOBILE_BREAKPOINT full-width
+  // collapse). Below MEDIUM_BREAKPOINT (and still above MOBILE_BREAKPOINT
+  // -- that already forces every span to full-width regardless, this
+  // promotion is a no-op there), any span-3 card is promoted to span-6
+  // (half) for layout purposes only -- the widget's own stored
+  // config["width"] is untouched, same "CSS/JS-only, no data mutation"
+  // precedent MOBILE_BREAKPOINT's own full-width collapse already sets.
+  const MEDIUM_BREAKPOINT = 1000;
   const GAP = 16; // var(--space-4) -- see style.css's design tokens
+
+  function effectiveSpan(card, maxCols) {
+    const raw = Math.max(1, parseInt(card.dataset.span, 10) || maxCols);
+    if (raw === 3 && window.innerWidth > MOBILE_BREAKPOINT && window.innerWidth <= MEDIUM_BREAKPOINT) {
+      return Math.min(maxCols, 6);
+    }
+    return Math.min(maxCols, raw);
+  }
 
   function cardIsVisible(card) {
     // data-delete-undo (app.js's generic delete handler, used on every
@@ -542,12 +638,12 @@ document.addEventListener("submit", (event) => {
   // twice: once just to find out how many of the `cols` virtual columns
   // this particular set of cards actually ends up touching, and again for
   // real once that number is known (see effectiveCols below).
-  function packColumns(cards, cols) {
+  function packColumns(cards, cols, spanOf) {
     const colHeights = new Array(cols).fill(0);
     const placements = [];
     let maxTouched = 0;
     cards.forEach((card) => {
-      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
+      const span = spanOf(card, cols);
       let bestStart = 0;
       let bestTop = Infinity;
       for (let start = 0; start <= cols - span; start++) {
@@ -576,63 +672,103 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const containerWidth = grid.clientWidth;
-    const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 6;
+    // 12, not 6 (2026-08-30 -- see this section's own header comment):
+    // widened so the reinstated manual Width override has an exact
+    // 25%/75% option, not just halves/thirds.
+    const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 12;
     // 2026-08-08 direct feedback ("weird permanent empty space on the
     // right, widgets crowded") -- a dashboard with only a couple of
-    // widgets (e.g. two half/third-width cards, 5 of 6 virtual columns
-    // claimed) always reserved the full 6-column width regardless, so the
-    // one never-touched column sat there as dead space on the right
-    // forever, and every card's own pixel width was computed against a
-    // colWidth one column narrower than the space actually available.
-    // Fix: a cheap dry run (packColumns, pure index math, no DOM) using
-    // the full 6 columns first, just to find out how many columns this
-    // actual set of cards ends up touching -- then the real pass below
-    // uses THAT as its column count, so colWidth (and therefore every
-    // card's width) is computed against the space genuinely in use, not
-    // an assumed max. A dashboard with enough widgets to fill all 6
-    // columns anyway sees no change at all (effectiveCols === maxCols).
-    const dryRun = packColumns(cards, maxCols);
+    // widgets (e.g. two half/third-width cards, some columns never
+    // claimed) always reserved the full column width regardless, so the
+    // untouched columns sat there as dead space on the right forever,
+    // and every card's own pixel width was computed against a colWidth
+    // narrower than the space actually available. Fix: a cheap dry run
+    // (packColumns, pure index math, no DOM) using the full column count
+    // first, just to find out how many columns this actual set of cards
+    // ends up touching -- then the real pass below uses THAT as its
+    // column count, so colWidth (and therefore every card's width) is
+    // computed against the space genuinely in use, not an assumed max. A
+    // dashboard with enough widgets to fill every column anyway sees no
+    // change at all (effectiveCols === maxCols).
+    const dryRun = packColumns(cards, maxCols, effectiveSpan);
     const cols = Math.max(1, dryRun.maxTouched);
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
+
+    // Width only ever depends on a card's own span (not on which column it
+    // lands in), so every card's width can be set -- and its real height
+    // measured -- up front, in one batched write-then-read pass (cheaper
+    // than the old interleaved write/measure/write/measure per card, and
+    // it's what the best-fit placement loop below needs anyway: it has to
+    // know every remaining card's height *before* choosing which one to
+    // place next, not just the next one in DOM order).
+    const remaining = cards.map((card) => {
+      const span = effectiveSpan(card, cols);
+      const width = span * colWidth + (span - 1) * GAP;
+      card.style.width = `${width}px`;
+      return { card, span };
+    });
+    remaining.forEach((entry) => {
+      // offsetHeight forces the width write above to actually apply before
+      // measuring -- same reason the old per-card version read it right
+      // after setting width.
+      entry.height = entry.card.offsetHeight;
+    });
+
+    // Best-fit placement (2026-08-30, direct report: "the way widgets are
+    // aranged is not ok" -- a short widget (e.g. a bare Spaces & Projects
+    // cards instance with just a couple tiles) landing next to a much
+    // taller one left the short column dead for the rest of the page,
+    // because strict DOM-order placement could only ever offer that gap to
+    // *whichever widget happened to come next*, even when that widget was
+    // too wide to fit in it -- every valid starting position for a 3-wide
+    // widget touching a 2-wide gap next to a tall 4-wide neighbor is
+    // already tall, so it was forced to the very bottom regardless, and
+    // nothing narrower ever got a chance at the gap it *could* have filled).
+    // Rather than committing to cards in strict DOM order, every remaining
+    // card is re-considered on each iteration and whichever one achieves
+    // the single lowest `top` anywhere on the grid is placed next -- a
+    // standard best-fit bin-packing, not a rewrite of the packing model
+    // itself (still the same span/column math, still the same "shortest
+    // valid column range" search per card). Ties (the overwhelmingly
+    // common case -- no shorter alternative actually available to backfill
+    // with) resolve to whichever card comes first in `remaining`, i.e. DOM
+    // order -- `<` not `<=` below only ever replaces the current best on a
+    // strictly better fit, so a normal row with no gap-filling opportunity
+    // places identically to before, card by card, in order. Only ever
+    // reorders visually when doing so measurably reduces height; never
+    // touches the DOM itself (drag-to-reorder above reads real DOM order,
+    // untouched by this purely visual left/top).
     const colHeights = new Array(cols).fill(0);
     let maxBottom = 0;
-
-    cards.forEach((card) => {
-      const span = Math.min(cols, Math.max(1, parseInt(card.dataset.span, 10) || cols));
-      // Skyline packing: among every valid starting column for this
-      // card's width, pick whichever leaves the least wasted space --
-      // the one where the tallest column it would span is shortest.
+    while (remaining.length) {
+      let bestIdx = -1;
       let bestStart = 0;
       let bestTop = Infinity;
-      for (let start = 0; start <= cols - span; start++) {
-        const top = Math.max(...colHeights.slice(start, start + span));
-        if (top < bestTop) {
-          bestTop = top;
-          bestStart = start;
+      for (let idx = 0; idx < remaining.length; idx++) {
+        const span = remaining[idx].span;
+        for (let start = 0; start <= cols - span; start++) {
+          const top = Math.max(...colHeights.slice(start, start + span));
+          if (top < bestTop) {
+            bestTop = top;
+            bestStart = start;
+            bestIdx = idx;
+          }
         }
       }
+      const { card, span, height } = remaining[bestIdx];
+      remaining.splice(bestIdx, 1);
       const left = bestStart * (colWidth + GAP);
-      const width = span * colWidth + (span - 1) * GAP;
       card.style.left = `${left}px`;
       card.style.top = `${bestTop}px`;
-      card.style.width = `${width}px`;
-      // Reading offsetHeight here forces the browser to actually apply
-      // the width change above before measuring -- necessary since a
-      // narrower/wider card reflows its own text and can change height,
-      // and the next card's placement depends on that real height, not
-      // whatever height it had at its old width.
-      const bottom = bestTop + card.offsetHeight;
+      const bottom = bestTop + height;
       maxBottom = Math.max(maxBottom, bottom);
       // GAP is added here, not to `bottom` itself -- `bottom` (the real
       // edge of this card) is what maxBottom/grid.style.height below
       // needs, but the *next* card stacked under this one in the same
       // column has to start GAP further down than that, or they touch
-      // with zero space between them (this was missing entirely at
-      // first: horizontal neighbors got GAP from the `left` formula
-      // below, but two cards landing in the same column stacked
-      // vertically had nothing enforcing space between them at all).
+      // with zero space between them.
       for (let i = bestStart; i < bestStart + span; i++) colHeights[i] = bottom + GAP;
-    });
+    }
 
     grid.style.height = `${maxBottom}px`;
   }
@@ -851,6 +987,15 @@ document.addEventListener("submit", (event) => {
   grid.addEventListener("lostpointercapture", endDrag);
 })();
 
+// Drag-to-resize width -- reinstated 2026-08-30, then removed again the
+// same day, direct follow-up report that it still didn't work after a
+// first fix attempt ("the mouse resize still doesn't work. remove it.
+// but the dashboard customise is fine. no more work needed"). The
+// Filters panel's own Width field (_widget_edit_form.html) is the only
+// way to set config["width"] now -- see routers/dashboard.py's
+// WIDGET_WIDTHS/_widget_width. No resize handle, no /resize endpoint,
+// left on the page or the server.
+
 // Reordering *within* a stack (2026-08-02) -- deliberately a separate,
 // simpler script from the top-level grid drag above rather than
 // generalizing that one further: stack members aren't wrapped in
@@ -981,51 +1126,148 @@ document.addEventListener("submit", (event) => {
 // There is no more .widget-resize-handle-vertical element and no more
 // /dashboard/widgets/{uid}/resize-height endpoint to POST to.
 
-// Banner upload auto-compression (2026-08-10, banner_editor.html) -- the
-// upload tab's file input calls this on change instead of submitting the
-// original file. A phone camera hands back a 4-8MB image that then gets
-// stored base64 in app_meta and served on every page load; this resizes it
-// in the browser before the form ever posts, so what reaches the server
-// (and later the network on every visit) is a ~2400px WebP/JPEG at a
-// fraction of the bytes. No-JS / unsupported browsers skip the resize and
-// submit the original -- the 8MB server cap is still the real guard, this
-// is a best-effort size reduction. Animated GIFs are deliberately left
-// alone (re-encoding them would flatten the animation into a static frame).
-window.CCBannerUpload = {
-  onFile(input) {
-    const form = input.form;
-    const file = input.files && input.files[0];
-    const bail = () => form && form.requestSubmit();
-    if (!file || !file.type.startsWith("image/") || file.type === "image/gif" || !window.DataTransfer) return bail();
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onerror = () => { URL.revokeObjectURL(url); bail(); };
-    img.onload = () => {
-      // Max long edge, matching the editor's own "about 2400x480px" guidance
-      // (2x for retina). Never upscales; small images stay untouched.
-      const MAX = 2400;
-      const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-      const ctx = canvas.getContext("2d");
-      // White underneath transparent pixels (PNG) so the JPEG fallback
-      // doesn't turn transparency black; WebP keeps alpha when supported.
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      const webp = canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
-      const outType = webp ? "image/webp" : "image/jpeg";
-      canvas.toBlob((blob) => {
-        if (blob && blob.size < file.size) {
-          const dt = new DataTransfer();
-          dt.items.add(new File([blob], webp ? "banner.webp" : "banner.jpg", { type: outType }));
-          input.files = dt.files;
-        }
-        form && form.requestSubmit();
-      }, outType, 0.82);
-    };
-    img.src = url;
-  },
-};
+// Banner upload auto-compression (2026-08-10, banner_editor.html) -- REMOVED
+// 2026-08-29 (direct request: "add the ability to crop, move, aspect ratio
+// modal window after all image uploads"). Replaced by an interactive crop
+// editor instead of this silent background resize -- static/
+// avatar_cropper.js, generalized that day to also wire
+// `.banner-upload-input` (see that file's own header comment and
+// banner_editor.html's), which already did the equivalent client-side
+// downscale-before-upload step for contact photos/the profile picture, now
+// covering banners too with a UI to actually choose the crop region
+// instead of a fixed center-crop.
+
+// Action menu (three-dot dropdown for status cards) -- lightweight,
+// accessible dropdown that closes on outside click/Escape/scroll and
+// supports keyboard navigation. On open the panel is DETACHED to
+// document.body (the same portal technique #color-popover /
+// #multiselect-portal use): .status-card:hover carries a transform, and
+// a transformed ancestor becomes the containing block for position:fixed
+// descendants -- a panel left inside the card would be positioned
+// relative to the card and teleport as hover toggles, and its clicks
+// would still bubble into the wrapping <a>. At body level there is no
+// transformed ancestor, so fixed coordinates mean the real viewport.
+(function () {
+  let activeMenu = null; // { trigger, panel } -- at most one open at a time
+
+  function closeMenu() {
+    if (!activeMenu) return;
+    const { panel, trigger } = activeMenu;
+    panel.classList.remove("is-open");
+    // Return the panel to where the template put it.
+    if (panel.__ccHome && panel.__ccHome.parent && panel.__ccHome.parent.isConnected) {
+      panel.__ccHome.parent.insertBefore(panel, panel.__ccHome.next);
+    }
+    trigger.setAttribute("aria-expanded", "false");
+    activeMenu = null;
+  }
+
+  function showMenu(menu) {
+    closeMenu();
+    const { trigger, panel } = menu;
+    if (!panel.__ccHome) {
+      panel.__ccHome = { parent: panel.parentNode, next: panel.nextSibling };
+    }
+    document.body.appendChild(panel);
+
+    // Measure while invisible -- display:none has no box -- then clamp to
+    // the viewport and reveal in one place.
+    panel.classList.add("is-open");
+    panel.style.visibility = "hidden";
+    const rect = trigger.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    let left = rect.right - pr.width;
+    let top = rect.bottom + 4;
+    left = Math.max(8, Math.min(left, window.innerWidth - pr.width - 8));
+    if (top + pr.height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - pr.height - 4);
+      panel.dataset.side = "top";
+    } else {
+      panel.dataset.side = "bottom";
+    }
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+    panel.style.visibility = "";
+
+    trigger.setAttribute("aria-expanded", "true");
+    activeMenu = menu;
+  }
+
+  function handleKeydown(e, menu) {
+    const items = Array.from(menu.panel.querySelectorAll(".action-menu-item"));
+    const currentIndex = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMenu();
+      menu.trigger.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      (items[currentIndex + 1] || items[0])?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      (items[currentIndex - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!activeMenu) return;
+    if (activeMenu.panel.contains(e.target) || activeMenu.trigger.contains(e.target)) return;
+    closeMenu();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") closeMenu();
+  });
+
+  // A fixed panel doesn't follow page scroll -- closing on any scroll
+  // beats leaving it stranded next to content that has moved on.
+  document.addEventListener("scroll", () => closeMenu(), true);
+
+  function initActionMenus() {
+    document.querySelectorAll(".action-menu").forEach((root) => {
+      if (root.dataset.menuBound) return; // idempotent across pagereveal
+      root.dataset.menuBound = "1";
+      const trigger = root.querySelector(".action-menu-trigger");
+      const panel = root.querySelector(".action-menu-panel");
+      if (!trigger || !panel) return;
+
+      trigger.setAttribute("aria-haspopup", "true");
+      trigger.setAttribute("aria-expanded", "false");
+
+      const menu = { trigger, panel }; // ONE stable identity -- the toggle
+      // below compares object identity, so a per-click literal would never
+      // match activeMenu and the menu could open but never close.
+      trigger.addEventListener("click", (e) => {
+        e.preventDefault(); // keep the wrapping status-card <a> from navigating
+        e.stopPropagation();
+        if (activeMenu === menu) closeMenu();
+        else showMenu(menu);
+      }, true);
+
+      panel.addEventListener("keydown", (e) => handleKeydown(e, { trigger, panel }));
+
+      // Any action closes the menu -- including plain anchor items (the
+      // Export…/Import…/Restore a file…/Reset database dialog triggers),
+      // which otherwise stayed open behind the opened modal overlay. The
+      // click still completes: closing only re-homes the panel, the
+      // activated item keeps working.
+      panel.addEventListener("click", () => closeMenu());
+
+      panel.querySelectorAll("form").forEach((form) => {
+        form.addEventListener("submit", () => closeMenu());
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", initActionMenus);
+  // Cross-document view transitions swap page content without a reload --
+  // pagereveal fires as the new page's content becomes live.
+  document.addEventListener("pagereveal", initActionMenus);
+  window.CCActionMenu = { close: closeMenu, init: initActionMenus };
+})();

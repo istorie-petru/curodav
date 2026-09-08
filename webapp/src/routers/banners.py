@@ -32,6 +32,7 @@ from fastapi.responses import RedirectResponse, Response
 
 from .. import db
 from ..deps import get_db, templates
+from ..image_sniff import sniff_image_type
 
 router = APIRouter(tags=["banners"])
 
@@ -58,7 +59,7 @@ def _safe_page_url(page_url: str, scope: str) -> str:
     erving a bare 303 with no Location."""
     if isinstance(page_url, str) and page_url.startswith("/") and "://" not in page_url:
         return page_url
-    return f"/labels/{scope}" if scope else "/"
+    return f"/settings/labels/{scope}" if scope else "/"
 
 
 @router.get("/banners/editor")
@@ -107,6 +108,15 @@ def upload_banner(
         data = banner_file.file.read()
         if len(data) > _MAX_BANNER_BYTES:
             raise HTTPException(400, "Image is too large (max 8MB).")
+        # 2026-09-07 fix (flagged in an earlier audit): `image_type` above
+        # only reflects the browser's own Content-Type claim -- confirm the
+        # bytes actually are a real image of one of the four supported
+        # kinds before storing them, using whatever the bytes actually are
+        # rather than trusting the (possibly spoofed) header any further.
+        sniffed = sniff_image_type(data)
+        if sniffed is None:
+            raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
+        image_type = sniffed
         db.set_page_banner(
             conn,
             scope,
@@ -178,7 +188,8 @@ def banner_image(scope: str = "", conn=Depends(get_db)):
 def remove_banner(scope: str = Form(""), page_url: str = Form(""), conn=Depends(get_db)):
     """Clear this page's banner entirely (the editor's "Remove banner"
     button). Scope + page_url ride along as hidden fields so the redirect
-    lands back on the exact page the editor was opened from, including its
-    ?edit=1 state."""
+    lands back on the exact page the editor was opened from. (2026-08-29:
+    page_url no longer carries a `?edit=1` -- edit mode is a persistent
+    Settings > Appearance toggle now, not part of the page's own URL.)"""
     db.clear_page_banner(conn, scope)
     return RedirectResponse(url=_safe_page_url(page_url, scope), status_code=303)

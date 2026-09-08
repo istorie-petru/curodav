@@ -22,9 +22,7 @@
 // plain click on empty space.
 
 (function () {
-  const cells = Array.from(document.querySelectorAll(".month-day-cell"));
-  if (!cells.length) return;
-
+  let cells = [];
   let anchorCell = null;
   let selecting = false;
 
@@ -58,14 +56,25 @@
   // identically on touch -- same-day quick-add, no scroll ambiguity since
   // a stationary tap never triggers the browser's own scroll gesture --
   // only the "drag across days" refinement stays mouse-primary.
-  cells.forEach((cell) => {
-    cell.addEventListener("pointerdown", (e) => {
-      if (e.target !== cell || e.button !== 0) return;
-      selecting = true;
-      anchorCell = cell;
-      highlight(cell, cell);
+  //
+  // init() is re-invocable: async_calendar.js re-runs it after swapping in
+  // a fresh #month-grid region (async-CRUD, features/async-crud.md) so the
+  // newly-rendered cells get their pointerdown bindings again.
+  function init() {
+    cells = Array.from(document.querySelectorAll(".month-day-cell"));
+    if (!cells.length) return;
+    cells.forEach((cell) => {
+      cell.addEventListener("pointerdown", (e) => {
+        if (e.target !== cell || e.button !== 0) return;
+        selecting = true;
+        anchorCell = cell;
+        highlight(cell, cell);
+      });
     });
-  });
+  }
+
+  init();
+  window.CCMonthGridCreate = { init };
 
   document.addEventListener("pointermove", (e) => {
     if (!selecting || !anchorCell) return;

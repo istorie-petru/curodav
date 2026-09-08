@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% from "_task_relations.html" import task_relations_section %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
+{% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js. Task
@@ -25,10 +26,28 @@
      2026-08-08 visual rework (all three detail modals at once -- events,
      tasks, contacts -- one cohesive stroke): header = identity (a dot in
      the task's status color + the large bold title), body = the meta grid
-     and the relations list inside elevated tonal .detail-cards (the first
-     one's left border follows the status color), footer = a quiet "Done"
-     back-link, a demoted Delete text-link, and the primary Edit action
-     taking center stage.
+     and the Work sessions card, footer = a quiet "Done" back-link, a
+     demoted Delete text-link, and the primary Edit action taking center
+     stage.
+
+     2026-09-03 direct feedback ("restyle the view modal to not use the
+     colored bg card div to view the meta"): the meta grid's wrapper is now
+     the plain .detail-meta-panel (style.css), not the elevated tonal
+     .detail-card with a status-colored left border the paragraph above
+     originally described -- just the grid plus a hairline rule underneath.
+     The Work sessions card below it is a separate, real .detail-card,
+     unchanged.
+
+     2026-09-03 direct request, same day ("I like variant B so much I want
+     it to be the baseline for all view modal windows") -- the header's old
+     colored dot + title row is now the shared _detail_cover.html cover
+     banner, and the resolved banner image (db.banner_for_task) that used
+     to render as its own hero strip at the top of .modal-body moved *into*
+     that same cover slot instead of staying a second, separate banner --
+     stacking a color header above an image banner would have looked like
+     two unrelated banners, confirmed via AskUserQuestion rather than
+     guessed. A task with no resolved banner gets the flat gradient fill in
+     its status color instead, with a floating check-square icon badge.
 
      2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
      html partial the edit form uses too (same structure, "Edit" swapped
@@ -39,38 +58,28 @@
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    <span class="detail-identity-dot cal-{{ status_colors[task.status] }}"></span>
-    <div class="detail-heading-text">
-        <h1 class="detail-title">{{ task.title }}</h1>
+    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
+         (margins)") -- .detail-header-inner (style.css) wraps the
+         cover+title, escaping .modal-header's own padding via negative
+         margins so that padding could stay intact for every plain
+         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ task.title }}</h1>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="modal-body">
-<div class="detail-card" style="--detail-accent: var(--cal-accent-{{ status_colors[task.status] }});">
+<div class="detail-meta-panel">
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>
             <span class="detail-meta-value"><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></span>
         </div>
-        {# Importance/Urgency (side work, post-1.1): computed, read-only --
-           no manual per-task value exists anymore (src/derived_state.py).
-           `effective_importance`/`effective_urgency` (deps.py globals)
-           resolve label rules once per request and derive from those +
-           temporal state. #}
-        {% set _imp = effective_importance(request, task) %}
-        {% if _imp %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Importance</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ importance_colors[_imp] }}">{{ importance_labels[_imp] }}</span></span>
-        </div>
-        {% endif %}
-        {% set _urg = effective_urgency(request, task) %}
-        {% if _urg %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Urgency</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ urgency_colors[_urg] }}">{{ urgency_labels[_urg] }}</span></span>
-        </div>
-        {% endif %}
         {% if task_list %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">List</span>
@@ -80,13 +89,13 @@
         {% if task.due_at %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Due</span>
-            <span class="detail-meta-value">{{ task.due_at[:10] }}</span>
+            <span class="detail-meta-value">{{ task.due_at | relative_date }}</span>
         </div>
         {% endif %}
         {% if task.start_at %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value">{{ task.start_at[:10] }}</span>
+            <span class="detail-meta-value">{{ task.start_at | relative_date }}</span>
         </div>
         {% endif %}
         {% if task.recurrence %}
@@ -98,7 +107,7 @@
         {% if task.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in task.tags %}<span class="cell-tag tag-blue">{% set _li = label_icon(request, tag) %}{% if _li %}{{ icon(_li, 'icon-sm') }}{% endif %} {{ tag }}</span> {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in task.tags %}{{ label_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>
@@ -110,13 +119,19 @@
     {% endif %}
 </div>
 
-     {% if show_relations_card(request) %}
-     <div class="detail-card detail-section-gap">
-    {{ task_relations_section(task, related_events) }}
-</div>
-     {% endif %}
-
-     <div class="detail-card detail-section-gap">
+     <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the
+          Relations card (event<->task associative links, "Related
+          events") that used to render here is fully removed -- not just
+          hidden behind the old Settings > Appearance toggle. Work
+          allocations (event_task_relations rows with is_work_allocation=1)
+          are a distinct feature and are untouched -- see
+          _task_work_allocations.html. -->
+     <!-- 2026-09-03 direct follow-up ("could we also rework the work
+          sessions... without having the background color card div") --
+          was `.detail-card detail-section-gap` (the elevated tonal card);
+          now `.detail-plain-section` (style.css), the same "no background
+          card" treatment the meta grid got earlier the same day. -->
+     <div class="detail-plain-section">
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
 </div>
 

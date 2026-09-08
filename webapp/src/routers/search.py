@@ -55,7 +55,7 @@ _STATIC_PAGES = [
 def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
     pages = list(_STATIC_PAGES)
     for space in db.list_space_labels(conn):
-        pages.append({"title": space["name"], "url": f"/labels/{space['name']}", "subtitle": "Space"})
+        pages.append({"title": space["name"], "url": f"/spaces/{space['name']}", "subtitle": "Space"})
     if not q:
         return pages[:limit]
     q_lower = q.lower()
