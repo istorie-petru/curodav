@@ -403,6 +403,73 @@ class TestUnscheduledPanelStepper:
         assert 'draggable="true"' not in body
 
 
+class TestUnscheduledPanelStepperIsAsync:
+    """Direct bug report (2026-09-08): stepping a work session's count from
+    the "Unscheduled work" panel hard-reloaded the whole Planner page, unlike
+    every other action on it (drag-create, drag-move, unschedule-by-drop --
+    all already async via ccApi/cc-entity-changed). The stepper forms posted
+    with no `data-cc-change` at all, so async-crud.js's generic
+    `[data-cc-change]` submit handler (which every other page-level mutation
+    form in this app already goes through) never intercepted them -- they
+    fell through to a plain browser form submit and its 303 redirect.
+    _unscheduled_task_item.html now carries `data-cc-change="task"` on both
+    the "+" and "-" forms, in both the plain-task and habit branches, so
+    async_calendar.js's own `cc-entity-changed` listener (already wired for
+    /calendar/week) claims the event and refreshes just #week-grid."""
+
+    def test_plus_and_minus_forms_carry_data_cc_change(self, conn):
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")  # one undated session -> "-" renders too
+        body = calendar_router.week_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert (
+            '<form method="post" action="/tasks/t1/work-allocations" data-cc-change="task" data-cc-action="create">'
+            in body
+        )
+        assert (
+            '<form method="post" action="/tasks/t1/work-allocations/remove-latest" '
+            'data-cc-change="task" data-cc-action="remove">' in body
+        )
+
+    def test_habit_branch_forms_also_carry_data_cc_change(self, conn):
+        # A habit-tracked task (tagged with the configured habit label,
+        # default "Habit", db.get_task_habit_settings) with an open
+        # recurrence and no check-ins this week -- same setup
+        # test_habit_ui_rework.py's own habit_work_sessions_status tests use.
+        _task(conn, "h1", title="Meditate", tags=["Habit"], recurrence="FREQ=DAILY")
+        db.create_work_allocation(conn, "h1")  # one undated session -> "-" renders too
+        body = calendar_router.week_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        assert 'data-task-uid="h1"' in body  # confirms the habit branch actually rendered
+        assert 'data-cc-change="task" data-cc-action="create"' in body
+        assert 'data-cc-change="task" data-cc-action="remove"' in body
+
+
+class TestUnscheduledPanelFixedHeight:
+    """Direct bug report (2026-09-08), same session as the class above:
+    "dragging and dropping from unscheduled work to the planner, and vice
+    versa, should not move the scrollbar page." Root cause: #unscheduled-
+    panel-body's outer height used to be purely a function of its item
+    count (`.project-calendar-unscheduled` is `flex:none`) -- scheduling or
+    unscheduling one task changes that count by exactly one, reflowing the
+    grid card below it in the same flex column even though the grid's own
+    `.time-grid-wrap` scrollTop (already preserved, async_calendar.js
+    `refreshWeek`) never moved. A plain block move/resize never touches this
+    panel's item count, which is why the report was scoped to exactly the
+    two unscheduled<->planner drag directions. Fix: a fixed (not max-)
+    height + its own overflow-y:auto on style.css's `#unscheduled-panel-body`
+    so the aside's own footprint can no longer change with item count."""
+
+    def test_panel_body_has_a_fixed_height_with_its_own_scroll(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#unscheduled-panel-body{height:84px; overflow-y:auto;}" in css
+        # A max-height (not a fixed height) would still shrink/grow with
+        # content and reintroduce the exact reflow this fix removes.
+        assert "#unscheduled-panel-body{max-height:" not in css
+
+
 class TestGridDragConflictFix:
     """Direct feedback, confirmed live (2026-08-14): dragging a task from the
     Unscheduled work panel onto the merged Week grid showed a 30-minute-tall

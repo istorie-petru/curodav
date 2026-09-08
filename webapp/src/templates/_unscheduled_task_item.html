@@ -29,7 +29,16 @@
        session *count*, which the task modal's Work sessions card still
        manages independently.
    Both forms carry `next_url` (a same-origin path, see the tasks router's
-   `_safe_next`) so the POST reloads the grid it was used from.
+   `_safe_next`) as their no-JS/failure fallback -- the endpoints themselves
+   always 303-redirect there. With JS, `data-cc-change="task"` (async-crud.js's
+   generic `[data-cc-change]` submit handler) intercepts the POST instead:
+   fetch, then dispatch `cc-entity-changed` on success. On the planning grids
+   (calendar_week.html / project_calendar.html) that's claimed by
+   async_calendar.js's own listener, which re-fetches just the `#week-grid`/
+   project-calendar region and swaps it in -- no full-page reload, matching
+   every other mutation on this page (drag-create, drag-move, unschedule).
+   Direct feedback (2026-09-08): stepping a session used to hard-reload the
+   whole planner page, unlike every other action on it.
    Import with `with context` -- the macro body calls the `icon` global. #}
 {% macro unscheduled_task_item(item, next_url) %}
 <div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
@@ -48,13 +57,13 @@
        tooltip so "why is this still here" is legible at a glance. #}
     <span class="unscheduled-stepper">
         {% if item.sessions.undated_count > 0 %}
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest" data-cc-change="task" data-cc-action="remove">
             <input type="hidden" name="next" value="{{ next_url }}">
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
         </form>
         {% endif %}
         <span class="unscheduled-count" title="Sessions still needed this period">{{ item.habit_sessions.needed }}</span>
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations" data-cc-change="task" data-cc-action="create">
             <input type="hidden" name="next" value="{{ next_url }}">
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this habit onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
         </form>
@@ -62,13 +71,13 @@
     {% else %}
     <span class="unscheduled-stepper">
         {% if item.sessions.undated_count > 0 %}
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest">
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest" data-cc-change="task" data-cc-action="remove">
             <input type="hidden" name="next" value="{{ next_url }}">
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
         </form>
         {% endif %}
         <span class="unscheduled-count" title="Sessions still needing placement">{{ item.sessions.undated_count }}</span>
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
+        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations" data-cc-change="task" data-cc-action="create">
             <input type="hidden" name="next" value="{{ next_url }}">
             <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this task onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
         </form>

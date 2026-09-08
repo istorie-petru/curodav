@@ -17,6 +17,75 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct report against the Planner (`/calendar/
+  week`) page, two bundled fixes, both scoped to the "Unscheduled work"
+  panel specifically (not the grid itself):
+
+  1. **"Incrementing work sessions for any unscheduled work should not hard
+     refresh the page."** `_unscheduled_task_item.html`'s "+"/"-" stepper
+     forms (both the plain-task and habit branches, 4 forms total) were
+     plain `<form method="post">`s with no `data-cc-change` attribute --
+     every other mutation on this page (drag-create, drag-move,
+     unschedule-by-drop) already goes through `ccApi`/`cc-entity-changed`
+     and a targeted `#week-grid` region refresh, but these four never got
+     that treatment, so a click fell through to a real browser submit and
+     its endpoint's unconditional 303 redirect (`routers/tasks.py`'s
+     `add_work_allocation`/`remove_latest_work_allocation` don't branch on
+     the fetch header at all). Fix: added `data-cc-change="task"` +
+     `data-cc-action="create"`/`"remove"` to all four forms -- async-crud.
+     js's existing generic `[data-cc-change]` submit handler (the same one
+     `task_form.html`/`event_form.html`/etc. already use) now intercepts
+     them, and async_calendar.js's already-wired `cc-entity-changed`
+     listener for `/calendar/week` claims the change and refreshes just the
+     region. No backend change needed -- confirmed live (a direct
+     `week_view()` router call rendering real Jinja output, not just the
+     unit tests) that both forms carry the new attributes in actual served
+     HTML.
+  2. **"Dragging and dropping from unscheduled work to the planner, and
+     vice versa, should not move the scrollbar page."** Root cause: `.
+     project-calendar-unscheduled` (the aside) is `flex:none`, so its own
+     outer height was purely a function of how many `.unscheduled-task-
+     item` chips it had to wrap (the 2026-09-02 "grow tall, more rows"
+     redesign). Scheduling a task (drag onto the grid) or unscheduling one
+     (drag onto the panel) changes that item count by exactly one, so the
+     aside got one row taller/shorter on every such drop -- reflowing `.
+     project-calendar-grid` below it in the same flex column. This is
+     separate from (and not fixed by) the 2026-09-09 slice-5 scroll-restore
+     work, which only preserves `.time-grid-wrap`'s own `scrollTop` -- that
+     value genuinely never changed here, the whole grid card just
+     physically moved on screen, which reads as a scrollbar jump even
+     though no real scroll position did. Explains why the report scoped
+     this to unscheduled<->planner drags specifically: a plain block move/
+     resize never touches the panel's item count, so it never reflows
+     anything. Fix, `style.css` only: `#unscheduled-panel-body` (the list
+     wrapper, not the always-visible header above it) now has a fixed
+     `height:84px` (not `max-height`, which would still shrink/grow with
+     content and reintroduce the same reflow) + its own `overflow-y:auto`
+     -- about 3 rows, so the aside's footprint can no longer change with
+     item count; a longer list scrolls inside this fixed box instead of
+     growing it. Trades a little empty space at very low item counts for a
+     grid that can't move under an active drag.
+
+  **Tests:** `test_calendar_week_scheduling.py` gained `TestUnscheduled
+  PanelStepperIsAsync` (2 tests: plain-task and habit-branch forms both
+  carry the new attributes) and `TestUnscheduledPanelFixedHeight` (1 test:
+  the fixed-height rule is present and no competing `max-height` rule
+  exists). `sw.js` `CACHE_NAME` bumped `v91` -> `v92`; `test_pwa_shell.py`'s
+  pin updated. Full suite re-run in 3 chunks across all 88 non-live test
+  files (`test_caldav_bridge_live.py` excluded as always): 975 + 646 + 425
+  = 2046 passed, 0 failed.
+
+  **No live browser reachable in this sandbox** (same recurring gap prior
+  entries in this file note) -- the stepper's async wiring was verified
+  against real server-rendered HTML (a direct `week_view()` call, not just
+  assertions), and the fixed-height CSS reasoning was verified by computing
+  the panel's own per-row pixel math from its existing rules, but neither
+  fix's actual on-screen *feel* (does a schedule/unschedule drop now truly
+  never nudge the grid, does the region refresh after a stepper click look
+  instant/non-jarring) has been seen rendered or clicked through. Worth
+  being the first thing confirmed next session if a browser becomes
+  reachable.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same day as round 3 above:
   "fix the drag and drop for tasks and events... it doesn't show the drag
   and drop shadow like in all day events." Plain event/task chips (Month/

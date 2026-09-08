@@ -3179,6 +3179,35 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .project-calendar-unscheduled.collapsed .unscheduled-panel-head h2,
 .project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
 .project-calendar-unscheduled.collapsed #unscheduled-panel-toggle svg{transform:rotate(180deg);}
+/* 2026-09-08 direct report: "dragging and dropping from unscheduled work to
+   the planner, and vice versa, should not move the scrollbar page." Root
+   cause -- this aside is `flex:none` (rule above, `.project-calendar-
+   unscheduled`), so its outer height was purely a function of how many
+   `.unscheduled-task-item` chips it had to wrap (the 2026-09-02 "grow tall,
+   more rows" redesign, comment above `.unscheduled-task-list`). Scheduling
+   a task (drag onto the grid) or unscheduling one (drag onto this panel)
+   changes that count by exactly one -- so the aside's own box got one row
+   taller or shorter on every such drop, which reflows `.project-calendar-
+   grid` below it (same flex column, `.project-calendar-layout`) up or down
+   by that same amount. Nothing about `.time-grid-wrap`'s own `scrollTop`
+   actually changed (async_calendar.js's `refreshWeek` already preserves
+   that, 2026-09-09 slice 5) -- the whole grid card just physically moved on
+   screen, which reads as "the page/scrollbar jumped" even though no real
+   scroll position changed. A plain move/resize of an already-placed block
+   never touches this list's item count, which is exactly why the report
+   scoped the complaint to unscheduled<->planner drags only, not every drag
+   on the page.
+   Fix: a fixed (not max-) height + its own `overflow-y:auto` on the LIST
+   body only (not the always-visible header above it) -- about 3 rows of
+   chips, matching this panel's own row height (~22px including the 1px
+   border + 5px row gap). The aside's outer footprint is now constant
+   regardless of item count, so a schedule/unschedule drop can no longer
+   move anything below it; a longer list scrolls inside this fixed box
+   instead of growing the box. Trades a little empty space when there are
+   very few (or zero) unscheduled items for a grid that never physically
+   moves during a drag -- worth it for a scheduling surface a drag is
+   actively happening on. */
+#unscheduled-panel-body{height:84px; overflow-y:auto;}
 /* 2026-09-02 redesign (direct feedback: "smaller, minimalist and be able
    to fit inline, and to have more rows"): a wrapping grid, not a
    horizontal scroll strip -- flex-wrap:wrap instead of nowrap+

@@ -258,5 +258,11 @@ class TestShellCacheVersion:
         # 4-Week) now get a pointer-follow drag ghost (.month-item-ghost)
         # matching .month-bar's own, instead of just sitting lifted in
         # place (calendar_month_drag.js, style.css).
+        # v92 (direct bug report, Planner/Week): the "Unscheduled work"
+        # panel's +/- session stepper forms now go through async-crud
+        # (data-cc-change, _unscheduled_task_item.html) instead of a plain
+        # POST -- no more hard reload -- and the panel body's height is
+        # fixed (style.css) so a schedule/unschedule drag no longer reflows
+        # the grid card below it.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v91"' in script
+        assert 'CACHE_NAME = "cc-shell-v92"' in script
