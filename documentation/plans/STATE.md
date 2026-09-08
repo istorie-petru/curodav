@@ -17,6 +17,16 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session as the four
+  entries below: "also remove the 'No account needed.' label."
+  published_lists.html only -- the public-link Link-column hint added
+  two entries below ("Anyone with this link can view it, no account
+  needed." -> "No account needed.") is deleted outright, same treatment
+  every other settings-hint on this page has gotten this session; no
+  replacement copy, the public-link row is now just the truncated URL +
+  copy button, nothing underneath. Full suite re-run in 6 chunks:
+  898+662+498 = 2058 passed, 0 failed.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session as the three
   entries below: "also rename the Private Radicale and Public Link to
   Private and Public. Also when no Filter just say All items."
