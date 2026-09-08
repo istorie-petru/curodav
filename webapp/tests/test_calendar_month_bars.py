@@ -189,6 +189,50 @@ class TestBars:
         assert week["lane_count"] == 1
 
 
+class TestBarStartEndFlags:
+    """FullCalendar-parity interactions, slice 2 (drag-move + edge-resize
+    for bars) -- `is_start`/`is_end` mark whether a bar SEGMENT's left/right
+    edge is the event's own real start/end, vs. a clip introduced by the
+    week row's own bounds. The template only renders a resize handle on a
+    `True` edge (_calendar_month_grid.html/_calendar_fourweek_grid.html) --
+    dragging a mid-event continuation segment's clipped edge must stay
+    move-only, since that edge was never a real date to begin with."""
+
+    def test_single_day_bar_is_both_start_and_end(self):
+        events = [_event("e1", "2026-08-05T00:00:00", "2026-08-05T23:59:00", all_day=True)]
+        weeks = calendar_router._month_grid(2026, 8, events, [])
+        week = _week_of(weeks, "2026-08-05")
+        bar = week["bars"][0]
+        assert bar["is_start"] is True
+        assert bar["is_end"] is True
+
+    def test_bar_fully_inside_one_week_is_both_start_and_end(self):
+        events = [_event("e1", "2026-08-05T00:00:00", "2026-08-07T23:59:00", all_day=True)]
+        weeks = calendar_router._month_grid(2026, 8, events, [])
+        week = _week_of(weeks, "2026-08-05")
+        bar = week["bars"][0]
+        assert bar["is_start"] is True
+        assert bar["is_end"] is True
+
+    def test_event_spanning_a_week_boundary_flags_each_segment_correctly(self):
+        # Sat 2026-08-08 -> Tue 2026-08-11, same fixture as the week-boundary
+        # test above: the first week's bar carries the event's real start
+        # (Saturday) but is clipped at its own right edge (the week ends
+        # Sunday, the event doesn't); the second week's bar is the inverse
+        # -- clipped at its own left edge (picks up mid-event on Monday) but
+        # carries the event's real end (Tuesday).
+        events = [_event("e1", "2026-08-08T00:00:00", "2026-08-11T23:59:00", all_day=True)]
+        weeks = calendar_router._month_grid(2026, 8, events, [])
+        week1 = _week_of(weeks, "2026-08-08")
+        week2 = _week_of(weeks, "2026-08-11")
+        bar1 = week1["bars"][0]
+        bar2 = week2["bars"][0]
+        assert bar1["is_start"] is True
+        assert bar1["is_end"] is False
+        assert bar2["is_start"] is False
+        assert bar2["is_end"] is True
+
+
 class TestTimedMultiDayStillRepeatsAsText:
     def test_timed_multiday_event_repeats_as_text_per_day(self):
         # A *timed* multi-day span (e.g. a conference with real daily

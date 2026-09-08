@@ -343,6 +343,18 @@ def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list
                 "event": e,
                 "col_start": col_start,
                 "col_span": col_end - col_start + 1,
+                # FullCalendar-parity interactions, slice 2 (drag-move +
+                # edge-resize): whether this bar SEGMENT's left/right edge
+                # is the event's own real start/end, vs. a clip introduced
+                # by this week row's own bounds. A multi-week event gets a
+                # separate bar per week it touches (this function's own
+                # docstring) -- only the segment that actually starts (or
+                # ends) the event should ever offer a resize handle on that
+                # edge; a mid-event continuation segment must stay
+                # move-only, since "resizing" a clipped edge back would
+                # silently change a date that was never the real boundary.
+                "is_start": clip_start == start_d,
+                "is_end": clip_end == end_d,
                 "_sort_start": clip_start,
             }
         )

@@ -34,7 +34,11 @@
         <a class="month-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}"
            href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}"
            data-modal title="{{ bar.event.title }}"
-           {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ bar.event.title }}</a>
+           {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}" data-all-day="1"{% endif %}>
+            {% if not bar.event.recurrence and bar.is_start %}<span class="month-bar-resize-handle month-bar-resize-left" aria-hidden="true"></span>{% endif %}
+            <span class="month-bar-label">{{ bar.event.title }}</span>
+            {% if not bar.event.recurrence and bar.is_end %}<span class="month-bar-resize-handle month-bar-resize-right" aria-hidden="true"></span>{% endif %}
+        </a>
         {% endfor %}
     </div>
     {% endif %}

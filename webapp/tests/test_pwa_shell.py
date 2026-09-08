@@ -221,10 +221,14 @@ class TestShellCacheVersion:
         # worked via window.CCOfflineSync, now permanently undefined --
         # removed outright (data_maintenance.js, settings_data_maintenance.
         # html) rather than left as a guaranteed-broken control.
-        # v82 (2026-09-08, this entry): FullCalendar-parity interactions
-        # slice 1 -- Month/4-Week spanning-bar layout (style.css's
-        # .month-week-bars/.month-bar-*/.month-bars-offset-* rules,
-        # calendar_month_drag.js's updated header comment on the
-        # temporary all-day-drag regression this slice introduces).
+        # v82 (2026-09-08): FullCalendar-parity interactions slice 1 --
+        # Month/4-Week spanning-bar layout (style.css's .month-week-bars/
+        # .month-bar-*/.month-bars-offset-* rules, calendar_month_drag.js's
+        # updated header comment on the temporary all-day-drag regression
+        # that slice introduces).
+        # v83 (2026-09-08, this entry): slice 2 -- drag-move + edge-resize
+        # for those bars, plus the pointer-follow drag ghost
+        # (calendar_month_drag.js's new setupBar/postReschedule, style.css's
+        # .month-bar-label/-resize-handle/-ghost rules).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v82"' in script
+        assert 'CACHE_NAME = "cc-shell-v83"' in script

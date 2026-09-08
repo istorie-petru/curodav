@@ -17,6 +17,95 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- FullCalendar-parity interactions, slice 2 of
+  6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
+  drag-move + edge-resize for Month/4-Week's spanning bars (slice 1's new
+  `.month-bar` elements), plus the pointer-follow drag ghost, fixing the
+  known temporary regression slice 1's own entry (below) flagged: whole-day
+  drag-to-move on an all-day bar had stopped working because
+  `calendar_month_drag.js`'s selector only ever matched the old
+  `.month-event-item[data-uid]` chip markup, not the new `.month-bar`.
+
+  **Backend (`routers/calendar.py`):** `_week_bars` now also returns
+  `is_start`/`is_end` per bar segment -- whether that segment's left/right
+  edge is the event's own real start/end, vs. a clip introduced by the
+  week row's own bounds (a multi-week event gets one independently
+  lane-assigned bar per week row it touches, per slice 1). Only a `True`
+  edge should ever offer a resize handle; dragging a mid-event
+  continuation segment's clipped edge back would silently rewrite a date
+  that was never a real boundary.
+
+  **Templates** (`_calendar_month_grid.html`/`_calendar_fourweek_grid.html`,
+  identical change to both, same "one script serves either grid" pattern
+  slice 1 established): each bar's title now sits in a `.month-bar-label`
+  child span, flanked by `.month-bar-resize-handle.month-bar-resize-left`/
+  `-right` -- rendered only when `bar.is_start`/`bar.is_end` (and never for
+  a recurring event, same exclusion the whole-bar drag already has, for
+  the same reason: a recurring master's own `start_at`/`end_at` covers the
+  whole series, not one occurrence).
+
+  **`calendar_month_drag.js`:** `cellAtPoint` rewritten to use
+  `elementsFromPoint` instead of `elementFromPoint` -- a `.month-bar` is an
+  absolutely-positioned SIBLING of the day cells (a separate stacked
+  layer), not their DOM descendant the way a plain chip is, so the old
+  `elementFromPoint(...).closest(".month-day-cell")` could never find the
+  cell underneath a bar; the full hit-test stack can. Works identically
+  for existing chips too (no behavior change there). New `setupBar`
+  (mirrors `setupItem`'s click-vs-drag threshold and event-shift math,
+  factored `postReschedule` shared across its three call sites) handles:
+  move (grab the bar body, shifts `start_at`/`end_at` by the same
+  whole-day delta `setupItem` already computes for chips), resize-left/
+  resize-right (grab a handle, changes just that one date, guarded against
+  crossing the event's own other end). A floating `.month-bar-ghost` clone
+  (an exact visual copy of the bar, `position:fixed`+`pointer-events:none`
+  so it doesn't defeat the `elementsFromPoint` hit-test) is spawned at
+  drag-start and removed on drop -- for a move it tracks the pointer
+  directly (offset by the original grab point); for a resize it stays
+  pinned to the bar's own row and only the dragged edge follows the day
+  cell currently under the pointer, snapped to that cell's own on-screen
+  edge (same "snap to the grid, not the raw cursor" feel Week/Day's
+  `.te-resize-handle` already has, one day instead of 15 minutes). The
+  real bar fades to `opacity:.25` while its ghost is what's actually
+  visible moving -- unlike Week/Day's `.time-event`, a bar can't move
+  itself (it's positioned by `.month-week-bars`' percentage-based column
+  math, not the pointer), so leaving it at full opacity in its original
+  spot while a ghost renders elsewhere would look like two bars at once.
+
+  **`style.css`:** `.month-bar-label` (block wrapper, same ellipsis
+  truncation the anchor already had), `.month-bar-resize-handle`/`-left`/
+  `-right` (8px edge grab zones, `cursor:ew-resize`, subtle hover tint),
+  `.month-bar.dragging{opacity:.25}`, `.month-bar-ghost` (`position:fixed`,
+  `pointer-events:none`, `z-index:50`, drop shadow) -- all bounded classes,
+  no inline `style=`, same CSP constraint every other per-item value in
+  this grid already follows.
+
+  **Tests:** new `TestBarStartEndFlags` class in `test_calendar_month_bars.py`
+  (3 tests) locks in `is_start`/`is_end` for a single-day bar, a bar fully
+  inside one week, and the two segments of a week-boundary-spanning event
+  (first segment: real start, clipped end; second: clipped start, real
+  end). No JS unit-test harness for `static/*.js` in this repo (same gap
+  every prior JS-only change in this file notes) -- verified via `node
+  --check` on the changed file (syntax) and a direct Jinja render of
+  `_calendar_month_grid.html` with a fake bar dict, confirming both handle
+  spans and the label span actually appear in the rendered HTML. `sw.js`
+  `CACHE_NAME` bumped `v82` -> `v83`; `test_pwa_shell.py`'s pin updated.
+
+  Full suite re-run in 10 sequential chunks (background processes don't
+  survive across tool calls in this sandbox, same constraint every entry
+  in this file already notes; `test_caldav_bridge_live.py` excluded as
+  always): 311 + 215 + 296 + 220 + 113 + 245 + 219 + 119 + 127 + 130 =
+  1995 passed, 0 failed (1992 + 3 net new).
+
+  **Next slice:** open.md slice 3 -- "+N more" overflow -> info toast
+  instead of a Day-view link. Has its own open decision to settle first
+  (plain `ccToast` text vs. its `actions` array for click-through, see
+  open.md's own note) before writing code. No live-browser check yet
+  either (same recurring gap every entry in this file already notes) --
+  this slice's drag/resize/ghost interactions were verified structurally
+  (JS reasoned about directly, a real Jinja render inspected, full test
+  suite green) but the actual pointer-drag feel has never been seen
+  rendered.
+
 - **Shipped:** 2026-09-08 -- FullCalendar-parity interactions, slice 1 of
   6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"
   for the full scoping of all six): backend lane-packing + spanning-bar

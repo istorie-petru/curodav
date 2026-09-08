@@ -3526,6 +3526,52 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   white-space:nowrap; text-overflow:ellipsis; text-decoration:none;
 }
 .month-bar:hover{text-decoration:none; filter:brightness(1.08);}
+/* FullCalendar-parity interactions, slice 2 (drag-move + edge-resize for
+   bars, plus the pointer-follow drag ghost) -- static/calendar_month_drag.js.
+
+   `.month-bar-label` wraps the title text (previously the bar's own direct
+   text node) so the two resize handles below can sit beside it as their
+   own elements instead of splitting a single text node; the ellipsis
+   truncation this used to get straight from `.month-bar`'s own
+   overflow:hidden/white-space:nowrap/text-overflow:ellipsis (still set
+   there, unchanged) still applies the same way since the handles are
+   absolutely positioned (out of normal flow, so they don't affect where
+   the label's own text wraps or gets cut). Only rendered on the bar
+   SEGMENT that carries the event's real start/end (`bar.is_start`/
+   `bar.is_end`, routers/calendar.py's `_week_bars`) -- a mid-event
+   continuation segment (an event that spans a week boundary gets a
+   separate bar per week row, this function's own docstring) is move-only,
+   no handle on the edge that's a week-row clip rather than the event's own
+   boundary. */
+.month-bar-label{display:block;}
+.month-bar-resize-handle{
+  position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize;
+}
+.month-bar-resize-left{left:0;}
+.month-bar-resize-right{right:0;}
+.month-bar-resize-handle:hover{background:rgba(255,255,255,.3);}
+/* The real bar fades toward invisible while its ghost (below) is the thing
+   actually tracking the pointer -- same "source disappears, ghost is the
+   visible representation" split Week/Day's own `.time-event.dragging` does
+   NOT need (that element IS what moves, no separate ghost), but a
+   `.month-bar` can't move itself: it's absolutely positioned against
+   `.month-week-bars`' own percentage-based column math, not the pointer,
+   and staying at full opacity in its pre-drag position while a ghost also
+   renders elsewhere would read as two bars existing at once. */
+.month-bar.dragging{opacity:.25;}
+/* The floating clone itself -- position:fixed + pointer-events:none are
+   also set inline by calendar_month_drag.js (belt-and-suspenders: the
+   class rule already wins on source order over `.month-bar`'s own
+   `position:absolute`/`pointer-events:auto` at equal specificity, but the
+   inline copy means this still works even if that source-order assumption
+   ever drifts, e.g. a future CSS reshuffle). z-index:50 clears every other
+   in-page stacking context this app uses (Week's own dragged `.time-event`
+   tops out at 30) since this ghost can be dragged anywhere on screen,
+   including over other cards/modals-in-transit. */
+.month-bar-ghost{
+  position:fixed; pointer-events:none; z-index:50; opacity:.9;
+  box-shadow:0 6px 14px rgba(0,0,0,.28);
+}
 .month-bar-lane-0{top:calc(0 * (var(--month-bar-h) + var(--month-bar-gap)));}
 .month-bar-lane-1{top:calc(1 * (var(--month-bar-h) + var(--month-bar-gap)));}
 .month-bar-lane-2{top:calc(2 * (var(--month-bar-h) + var(--month-bar-gap)));}

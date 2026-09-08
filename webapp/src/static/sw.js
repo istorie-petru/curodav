@@ -413,7 +413,13 @@
 // removed too (data_maintenance.js, settings_data_maintenance.html) rather
 // than left as a button that can only ever show an error. style.css lost
 // the dead .offline-* rules those deleted templates used.
-const CACHE_NAME = "cc-shell-v82";
+// v83 (2026-09-08, FullCalendar-parity interactions slice 2): drag-move +
+// edge-resize for Month/4-Week's spanning bars, plus the pointer-follow
+// drag ghost -- calendar_month_drag.js (setupBar, postReschedule, the
+// elementsFromPoint-based cellAtPoint shared with setupItem) and style.css
+// (.month-bar-label/-resize-handle/-resize-left/-resize-right/-ghost,
+// .month-bar.dragging's opacity) both changed.
+const CACHE_NAME = "cc-shell-v83";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
