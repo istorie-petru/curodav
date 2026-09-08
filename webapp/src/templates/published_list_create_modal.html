@@ -21,23 +21,29 @@
        3. `.modal-stable-height` removed -- that class is for a modal
           whose own content changes shape post-open without a full
           re-navigation (the event/task/contact view<->edit cross-fade,
-          quick_add.html's tab switch); this modal's empty-state-vs-form
-          branch is decided once at render time, never swapped client-side
-          afterward, so it was the only non-cross-fade template still
-          carrying the class. -->
+          quick_add.html's tab switch); this modal's own content doesn't
+          change shape post-open either (2026-09-08: the label-count-
+          dependent empty-state-vs-form branch this comment used to
+          describe is gone, see below), so it stays the one non-cross-fade
+          template not carrying the class.
+
+     2026-09-08 (direct request, "make published lists more permissive
+     and easier to set up even if no labels present"): the modal used to
+     hard-block here -- zero labels in the account meant an empty-state
+     ("go create a label first") instead of the form at all, and even
+     with labels present the JS wouldn't enable Publish until one was
+     checked (fixed same day, see published_lists.js's own comment).
+     Both blockers assumed a List needs a label filter to be useful;
+     src/published_lists.py's evaluate_label_filter now treats "no labels
+     selected" as "include everything of this type" instead of "include
+     nothing," so an unfiltered List is a real, useful thing to create --
+     the form always renders now, and the label section itself is framed
+     as optional narrowing, not a required step. -->
 <div id="modal-target" class="modal-height-md">
     <div class="modal-header">
         <h1>Create a published list</h1>
     </div>
     <div class="modal-body">
-        {% if not all_labels %}
-        <div class="empty-state empty-state-rich empty-state-rich-wide">
-            <div class="empty-state-icon">{{ icon('tag', 'icon-lg') }}</div>
-            <h2 class="empty-state-title">No labels available</h2>
-            <p class="empty-state-text">You need to create a label first to build a filter.</p>
-            <a href="/settings/labels" class="btn tonal">{{ icon('external-link', 'icon-sm') }} Go to Labels</a>
-        </div>
-        {% else %}
         <div class="card">
         <form method="post" action="/published-lists/create" id="create-list-form">
             <div class="field-grid">
@@ -64,8 +70,9 @@
                 </div>
 
                 <div class="field field-wide">
-                    <label>Filter by labels</label>
-                    <p class="settings-hint settings-hint-tight-bottom">Items matching any selected label will be included in this list.</p>
+                    <label>Filter by labels <span class="text-muted">(optional)</span></label>
+                    {% if all_labels %}
+                    <p class="settings-hint settings-hint-tight-bottom">Items matching any selected label will be included. Leave everything unchecked to include all items of the selected type instead.</p>
                     <div class="field-toggle-group" id="label-checkboxes">
                         {% for name in all_labels %}
                         <label class="field-toggle">
@@ -74,14 +81,15 @@
                         </label>
                         {% endfor %}
                     </div>
+                    {% else %}
+                    <p class="settings-hint settings-hint-flush">You don't have any labels yet, so this list will include everything of the selected type. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create a label</a> any time to narrow it down later.</p>
+                    {% endif %}
                 </div>
                 <p class="settings-hint field-wide settings-hint-flush">You can change visibility any time from the list below, or archive a list to pause it without deleting it.</p>
             </div>
         </form>
         </div>
-        {% endif %}
     </div>
-{% if all_labels %}
 {% set footer_back_url = '/published-lists' %}
 {% set footer_back_label = 'Cancel' %}
 {% set footer_primary_form = 'create-list-form' %}
@@ -89,5 +97,4 @@
 {% set footer_primary_icon = 'share-2' %}
 {% set footer_primary_id = 'publish-btn' %}
 {% include "_modal_footer.html" %}
-{% endif %}
 </div>

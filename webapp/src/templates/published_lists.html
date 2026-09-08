@@ -39,7 +39,7 @@
                                 {% endfor %}
                             </span>
                         {% else %}
-                            <span class="text-muted">No labels selected</span>
+                            <span class="text-muted">All items (no filter)</span>
                         {% endif %}
                     </td>
                     <td data-label="Visibility">
@@ -88,7 +88,7 @@
     <div class="empty-state empty-state-rich">
         <div class="empty-state-icon">{{ icon('share-2', 'icon-lg') }}</div>
         <h2 class="empty-state-title">No lists published yet</h2>
-        <p class="empty-state-text">Click <strong>"+ New List"</strong> to share a filtered subset of your data.</p>
+        <p class="empty-state-text">Click <strong>"+ New List"</strong> to share your tasks, events, or contacts -- optionally filtered by label.</p>
     </div>
     {% endif %}
 </div>

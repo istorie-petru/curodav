@@ -152,11 +152,18 @@ class TestEvaluateLabelFilter:
         )
         assert set(result) == {"t1", "t2"}
 
-    def test_no_positive_criteria_matches_nothing(self, conn):
+    def test_no_positive_criteria_matches_everything(self, conn):
+        # 2026-09-08 (direct request, "make published lists more
+        # permissive... even if no labels present"): this used to assert
+        # the opposite -- an empty filter meant "match nothing." Flipped
+        # to "match everything of this entity_type" so an account with no
+        # labels at all can still publish a useful (non-empty-forever)
+        # List. `none` still subtracts from that "everything" base.
         _make_task(conn, "t1", "A", ["University"])
-        assert evaluate_label_filter(conn, "task", {}) == []
-        assert evaluate_label_filter(conn, "task", None) == []
-        assert evaluate_label_filter(conn, "task", {"none": ["University"]}) == []
+        _make_task(conn, "t2", "B", [])
+        assert set(evaluate_label_filter(conn, "task", {})) == {"t1", "t2"}
+        assert set(evaluate_label_filter(conn, "task", None)) == {"t1", "t2"}
+        assert evaluate_label_filter(conn, "task", {"none": ["University"]}) == ["t2"]
 
     def test_scoped_to_entity_type(self, conn):
         _make_task(conn, "t1", "A", ["University"])
@@ -330,6 +337,46 @@ class TestPublishedListsRouterCrud:
         resp = router.list_index(request, conn=conn)
         assert resp.status_code == 200
         assert resp.context["lists"][0]["subscribe_url"] == "http://127.0.0.1:5232/devuser/published-uni/"
+
+
+class TestNoLabelsPresent:
+    """2026-09-08 (direct request, "make published lists more permissive
+    and easier to set up even if no labels present"): an account with
+    zero labels used to be stuck at an empty-state ("go create a label
+    first") and could never create a List at all. Now the create form
+    always renders, and a List created with no labels selected -- because
+    none exist yet -- materializes with every item of that entity_type,
+    not zero."""
+
+    def test_create_form_renders_with_zero_labels_in_account(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        body = resp.body.decode()
+        assert 'id="create-list-form"' in body
+        assert "No labels available" not in body
+        assert "publish-btn" in body
+
+    def test_create_with_no_labels_in_account_includes_everything(self, conn):
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", [])
+        _make_task(conn, "t2", "B", [])
+        bridge = FakeBridge()
+
+        router.create_list(name="All my tasks", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        rows = db.list_published_lists(conn)
+        assert len(rows) == 1
+        assert set(bridge.task_collections[rows[0]["radicale_collection_path"]]) == {"t1", "t2"}
 
 
 class _FakeSettings:

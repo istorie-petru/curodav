@@ -17,6 +17,60 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct request, same session as the
+  `deploy/`/Cloudflare Tunnel entries below: "make published lists more
+  permissive and easier to set up even if no labels present." Two real
+  blockers, both removed:
+
+  1. **The create modal hard-blocked with zero labels in the account.**
+     `published_list_create_modal.html` used to render an empty-state
+     ("go create a label first") instead of the form entirely when
+     `all_labels` was empty -- an account with no labels yet could never
+     create a List at all. The form now always renders; the label section
+     is explicitly framed as optional ("Filter by labels (optional)"),
+     and when there are no labels yet it shows an inline note ("this list
+     will include everything of the selected type") plus a `Create a
+     label` link (`/settings/labels/new`, modal) instead of blocking.
+  2. **An unfiltered List materialized as permanently empty.**
+     `evaluate_label_filter`'s "neither `all` nor `any` given" case used
+     to return `[]` outright (documented reasoning: "a List with zero
+     criteria publishing the entire pool would be a surprising default").
+     Flipped per this direct request: it now returns everything of that
+     `entity_type` (`_ALL_OBJECT_IDS` dispatch to `db.list_tasks`/
+     `list_events`/`list_contacts` -- `task` deliberately goes through
+     `list_tasks`'s own `include_habit_tasks=False` default rather than a
+     raw table scan, so an unfiltered List stays consistent with the
+     app's existing habit-task exclusion elsewhere). `none` still
+     subtracts from that base, so "everything except labelled X" stays
+     expressible with zero positive criteria. This is what actually makes
+     fix 1 useful -- without it, the newly-unblocked form would still
+     produce a List that stays empty forever.
+
+  **Copy updates to match:** `published_lists.html`'s table now shows
+  "All items (no filter)" instead of "No labels selected" for an
+  unfiltered List's Filter column (the old wording read as a
+  misconfiguration, not a deliberate choice); its empty-state text
+  dropped "a filtered subset" in favor of "optionally filtered by label."
+
+  **Tests:** `test_no_positive_criteria_matches_nothing` in
+  `test_phase6_published_lists.py` renamed/rewritten to
+  `test_no_positive_criteria_matches_everything` (its own docstring
+  explains the flip); new `TestNoLabelsPresent` (2 tests) -- the create
+  form renders (no "No labels available" text) against a conn with zero
+  labels, and `create_list(..., labels=[], ...)` against that same conn
+  materializes every task, not zero. No other test in the suite asserted
+  the old "empty filter = nothing" behavior (confirmed by grep for
+  `label_filter`/`evaluate_label_filter` across `webapp/`) -- every other
+  materialize/visibility test uses an explicit non-empty filter. No
+  `sw.js` bump -- only templates + Python changed this slice, no static
+  JS/CSS. Full suite re-run in the same 3-chunk pattern as recent
+  entries: 976 + 620 + 455 = 2051 passed, 0 failed (2049 + 2 net new).
+
+  **No live browser reachable in this sandbox** -- same recurring gap
+  every entry in this file already notes. Verified via direct router
+  calls (real Jinja output, confirms the form renders and the "No labels
+  available" text is gone) and the full test suite, not click-through.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session as the
   `deploy/` scaffolding entry right below: "we are going online via
   cloudflare tunnels." Swapped the whole reverse-proxy layer from

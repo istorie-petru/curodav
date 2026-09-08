@@ -36,6 +36,23 @@ from typing import Any
 from . import db
 
 
+# 2026-09-08 (direct request, "make published lists more permissive and
+# easier to set up even if no labels present"): what `evaluate_label_filter`
+# falls back to when neither `all` nor `any` is given -- see that
+# function's own docstring for the reasoning behind the change. `task`
+# goes through `db.list_tasks` (not a raw table scan) specifically so a
+# labelless "everything" List stays consistent with the rest of the app's
+# own habit-task exclusion (list_tasks' `include_habit_tasks=False`
+# default) -- a habit-tagged task is meant to live only on Tasks > Habits,
+# not any other view, and an unfiltered published list is still "a view,"
+# not an escape hatch around that rule.
+_ALL_OBJECT_IDS = {
+    "task": lambda conn: db.list_tasks(conn),
+    "event": lambda conn: db.list_events(conn),
+    "contact": lambda conn: db.list_contacts(conn),
+}
+
+
 def evaluate_label_filter(
     conn: sqlite3.Connection, entity_type: str, filter_dict: dict[str, Any] | None
 ) -> list[str]:
@@ -44,33 +61,43 @@ def evaluate_label_filter(
     `any` if non-empty, then NOT any of `none` subtracted at the end.
     `all`/`any` are combined with AND between the two groups when both
     are given (e.g. `all=["University"], any=["Homework","Exam"]` means
-    University AND (Homework OR Exam)). Neither `all` nor `any` given at
-    all means "no positive criterion" -- returns nothing, rather than
-    guessing "everything," since a List with zero criteria publishing the
-    entire pool would be a surprising default for something meant to be a
-    narrow, curated subscription."""
+    University AND (Homework OR Exam)).
+
+    Neither `all` nor `any` given at all means "no positive criterion" --
+    2026-09-08: this now means "no restriction," i.e. everything of
+    `entity_type` (still minus `none`, so "everything except labelled X"
+    stays expressible). Previously this returned nothing outright, on the
+    reasoning that a List with zero criteria publishing the entire pool
+    would be a surprising default for something meant to be a narrow,
+    curated subscription -- flipped per direct feedback: an account with
+    no labels defined yet had no way to make a List do anything at all
+    under the old rule, and "empty filter = show everything" is the more
+    standard convention anyway. A List that genuinely wants "nothing" has
+    no way to express that either way (there's no UI for it, before or
+    after this change) -- not a real use case for this feature."""
     filter_dict = filter_dict or {}
     all_names = [n for n in (filter_dict.get("all") or []) if n]
     any_names = [n for n in (filter_dict.get("any") or []) if n]
     none_names = [n for n in (filter_dict.get("none") or []) if n]
 
     if not all_names and not any_names:
-        return []
+        getter = _ALL_OBJECT_IDS.get(entity_type)
+        result: set[str] = {r["uid"] for r in getter(conn)} if getter else set()
+    else:
+        candidate_ids: set[str] | None = None
 
-    candidate_ids: set[str] | None = None
+        if all_names:
+            for name in all_names:
+                ids = set(db.list_object_ids_for_label(conn, entity_type, name))
+                candidate_ids = ids if candidate_ids is None else candidate_ids & ids
 
-    if all_names:
-        for name in all_names:
-            ids = set(db.list_object_ids_for_label(conn, entity_type, name))
-            candidate_ids = ids if candidate_ids is None else candidate_ids & ids
+        if any_names:
+            any_ids: set[str] = set()
+            for name in any_names:
+                any_ids |= set(db.list_object_ids_for_label(conn, entity_type, name))
+            candidate_ids = any_ids if candidate_ids is None else candidate_ids & any_ids
 
-    if any_names:
-        any_ids: set[str] = set()
-        for name in any_names:
-            any_ids |= set(db.list_object_ids_for_label(conn, entity_type, name))
-        candidate_ids = any_ids if candidate_ids is None else candidate_ids & any_ids
-
-    result: set[str] = candidate_ids or set()
+        result = candidate_ids or set()
 
     if none_names:
         exclude_ids: set[str] = set()
