@@ -17,6 +17,67 @@ session start.
 
 ## Right now
 
+- **Released 2.0** -- 2026-09-09, direct request, new session: "push this to
+  2.0." Before pushing, audited `audit-fixes-2.0.md` (the roadmap's own
+  stated gate) rather than taking "nothing left to do" at face value --
+  found items 7/8/13/14 had actually already shipped in code (7: dead
+  templates/db functions gone; 8: settings-heading consistency reached via
+  a different route than sketched, the per-page `section-label` removed
+  app-wide 2026-09-08 instead of these two pages conforming to it; 13/14:
+  `_row_action_buttons.html`/`_empty_state_row.html` macros exist and are
+  imported everywhere the item specified) but the doc itself was never
+  struck through -- fixed the bookkeeping to match reality. Item 15 (stale
+  roadmap claim) was only half-fixed: `roadmap.md`'s 1.9 detail section
+  already had the correct "superseded 2026-08-28" note, but the Release
+  map table's `1.8`/`1.9` rows still claimed a bare "shipped" -- fixed to
+  match. All 15 audit items now genuinely shipped; the FullCalendar-parity
+  calendar queue (`open.md`) was already fully shipped per its own slice
+  6 entry. Version bumped to **2.0.0** in both `pyproject.toml` files and
+  `README.md`; `roadmap.md`'s Release map `2.0` row marked shipped.
+
+  **README.md rewrite** (direct request, "in depth enough for normal
+  people to install it" -- it wasn't): added an "Is this for you?" framing
+  section; split "Getting started" into a clearly-labeled throwaway
+  local-eval path vs. a real always-on server install, spelling out
+  prerequisites (Debian 12, SSH, root) and what happens immediately after
+  `curodav-ctl install` (the app is reachable at `http://<ip>:8000` and
+  lands on a one-time `/setup` page to pick a login in-browser -- this
+  wasn't mentioned anywhere before, the old README implied env-var editing
+  was the only path). New "Security note" section (Tailscale vs. public
+  domain+TLS, don't bare-expose port 8000), "Connecting your phone"
+  section (DAVx5/iOS, pointing at `deploy/README.md`'s existing Cloudflare
+  Tunnel walkthrough rather than duplicating it), and "Troubleshooting"
+  (service status/logs, failed-update rollback, forgotten-password
+  recovery via direct `app_meta` deletion -- verified against
+  `auth.py`/`settings.py::purge_all` and `curodav-ctl`'s actual
+  `CC_DB_PATH` before writing the exact SQL, since `purge_all_data` wipes
+  *all* data, not just the login, so pointing there would have been wrong
+  advice). All jargon (systemd, LXC, symlink swap) now defined inline on
+  first use rather than assumed.
+
+  **Tests**: no code changed, so no new tests -- full suite re-verified
+  (92 files, run in 6 foreground batches of ~15 files each rather than one
+  `pytest` invocation, which timed out in this sandbox's 45s-per-command
+  limit; a background/detached run was also tried and discarded --
+  processes and `/tmp` don't survive between tool calls here, unlike a
+  normal shell session) -- 2091 passed, 1 failed (same pre-existing
+  `test_dashboard_router.py::TestAgendaWidgetAllUpcoming::
+  test_todays_earlier_events_still_count_as_upcoming` date-relative flake
+  every recent entry in this file already notes), 2092 collected. Matches
+  the prior session's baseline exactly.
+
+  **Manual verification**: none beyond reading the actual template/db
+  files for items 7/13/14 (confirmed dead code gone, macros exist and are
+  imported) and the actual `_row_action_buttons.html`/`_empty_state_row.
+  html` header comments (both already say "audit-fixes-2.0.md item N" and
+  a 2026-09-07 date, confirming they were real shipped work, just
+  undocumented in the tracking doc) -- no live browser in this sandbox,
+  same recurring gap.
+
+  **Next slice:** none mandated -- 2.0 is shipped. Future sessions can
+  drop back to normal minor-release-style work; there's no more "gate"
+  doc to read before starting.
+
 - **Shipped:** 2026-09-09 -- direct request, new session: "a setting in
   general so if checked (normally isn't), the time tagged as sleep time is
   just removed as cells from the planner calendar view." Three clarifying

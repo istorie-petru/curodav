@@ -41,9 +41,9 @@ never hold Track A up.
 | `1.5` | ~~Task management & grouping~~ **shipped 2026-08-13** | — | 1.3–1.4 |
 | `1.6` | ~~Schedule & recurrence rework~~ **shipped 2026-08-14, Schedule module itself removed 2026-08-15** | Configurable views (not started — optional, doesn't block 1.7+) | 1.3 |
 | `1.7` | ~~Information architecture & view surfaces~~ **shipped 2026-08-14** | — | 1.1, 1.3, 1.4 + widgets |
-| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | ~~Pagination~~ **shipped 2026-08-15 (as 1.9 slice)** | 1.1 (WebDAV) + ~~data health~~ (shipped) |
-| `1.9` | ~~Pagination (Tasks table)~~ **shipped 2026-08-15**; Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
-| `2.0` | Full release — everything implemented | — | all of 1.1–1.9 |
+| `1.8` | ~~Offline-first editing & synchronization~~ **shipped 2026-08-14** | ~~Pagination~~ **shipped 2026-08-15 (as 1.9 slice), later superseded 2026-08-28 — see 1.9** | 1.1 (WebDAV) + ~~data health~~ (shipped) |
+| `1.9` | ~~Pagination (Tasks table)~~ **shipped 2026-08-15, superseded 2026-08-28** (grouping made unconditional, no ungrouped section left to paginate); Deployment & polish: DAVx5 hosting | Remaining app-local items | domain + server |
+| `2.0` | ~~Full release — everything implemented~~ **shipped 2026-09-09** | — | all of 1.1–1.9 |
 
 ## Release detail
 

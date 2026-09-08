@@ -81,21 +81,25 @@ the biggest/riskiest (CSP migration) or genuinely optional polish.
    `#737378` in light theme only (dark theme already cleared AA contrast);
    `.week-overview-grid`'s breakpoint moved `700px` -> `720px`.
 
-7. **Dead code cleanup.** Delete `db.py`'s `find_contact_by_name` and
-   `list_task_label_names`, and templates `_labels_body.html`,
-   `_widget_add_form.html`, `_task_relations.html`, `_event_relations.html`,
-   `label_edit_modal.html` (the last three also carry retired CSS classes
-   per the UI-consistency findings, so deleting them closes two report
-   items at once). Before deleting `_task_heatmap.html`, actually check
-   whether `task_detail.html` used to render a recurring-task heatmap and
-   silently lost it (regression) versus the comment just being stale — do
-   not delete on the assumption it's dead until that's confirmed.
+7. ~~**Dead code cleanup.**~~ **Shipped** (confirmed 2026-09-09 during the
+   2.0 push: `find_contact_by_name`/`list_task_label_names` no longer in
+   `db.py`; `_labels_body.html`, `_widget_add_form.html`,
+   `_task_relations.html`, `_event_relations.html`, `label_edit_modal.html`
+   all removed from `src/templates/`). No dedicated STATE.md entry was
+   found for this slice — landed as part of other session work rather than
+   its own dated entry — but the code state matches the spec.
 
-8. **Settings page heading consistency.** Wrap `settings_holidays.html`'s
-   and `settings_time_blocks.html`'s sections in the `.settings-group` +
-   `.section-label` pattern `settings_general.html`/
-   `settings_appearance.html`/`settings_data_maintenance.html` already use,
-   instead of their current bare `<h1>`/inline-styled sub-headings.
+8. ~~**Settings page heading consistency.**~~ **Shipped**, via a different
+   resolution than first sketched (confirmed 2026-09-09 during the 2.0
+   push): rather than wrapping `settings_holidays.html`/
+   `settings_time_blocks.html`'s sections in `.settings-group` +
+   `.section-label` to match the other Settings pages, the per-group
+   `h2.section-label` was instead removed from *every* Settings page
+   (2026-09-08, per that template's own header comment — "redundant with
+   the page's own title") while the `.settings-group` wrapper stayed. Net
+   effect is the same consistency goal (no more bare/inline-styled
+   sub-headings on these two pages specifically), reached by simplifying
+   the shared pattern instead of conforming these two pages to it.
 
 9. ~~**Lower-priority UI consistency polish.**~~ **Shipped 2026-09-07** —
    see `STATE.md`'s entry of the same date. All three landed as sketched:
@@ -197,7 +201,10 @@ Each item below is written to be actionable cold, without needing the
     dragging a widget/task while a dropdown is open; focusing the skip
     link.
 
-13. **Icon-button edit/delete pair, duplicated 4x.** Same shape as item
+13. ~~**Icon-button edit/delete pair, duplicated 4x.**~~ **Shipped
+    2026-09-07** (per `_row_action_buttons.html`'s own header comment;
+    confirmed 2026-09-09 during the 2.0 push — all four original call
+    sites, plus `published_lists.html`, now import it). Same shape as item
     9's `.bulk-actions-bar` extraction, not caught in that pass:
     `settings_holidays.html`, `settings_time_blocks.html`,
     `labels_manage.html`, and `_labels_table_body.html` each repeat an
@@ -225,7 +232,11 @@ Each item below is written to be actionable cold, without needing the
     plus each of the 4 templates' own delete-button `title=` text before
     changing anything, same as item 9's process.
 
-14. **Empty-state table row, duplicated 5x.** `_labels_table_body.html`,
+14. ~~**Empty-state table row, duplicated 5x.**~~ **Shipped 2026-09-07**
+    (per `_empty_state_row.html`'s own header comment; confirmed 2026-09-09
+    during the 2.0 push — all five call sites now import it, `colspan`/
+    `css_class`/`style` handled as real per-caller params rather than a
+    naive single shape). `_labels_table_body.html`,
     `labels_manage.html`, `settings_holidays.html`, and
     `settings_time_blocks.html` (twice — Sleep and Leisure) each repeat:
 
@@ -247,15 +258,17 @@ Each item below is written to be actionable cold, without needing the
     — don't force it into this macro just because the copy reads
     similarly; that would fix a naming coincidence, not real duplication.
 
-15. **Stale roadmap claim: Tasks-table pagination.** `roadmap.md`'s 1.9
-    section says pagination "shipped 2026-08-15: `GET /tasks?page=&limit=`
-    paginates the Table view's Open section." Confirmed via `git log`
-    this is no longer true: commit `2162403` shipped it, but the later
-    `d86a34d` ("Major rework session, 2026-08-28") retired it as a
-    documented *consequence* of un-conditionally grouping the Tasks table
-    (Project -> Habits -> Unassigned -> Completed) — that commit's own
-    message says so explicitly ("pagination retired as a consequence").
-    Not a bug, not something to restore — the grouped-table design this
+15. ~~**Stale roadmap claim: Tasks-table pagination.**~~ **Shipped
+    2026-09-09**, during the 2.0 push. `roadmap.md`'s 1.9 detail section
+    already carried the correct "superseded 2026-08-28" note (unclear when
+    that landed — no dated STATE.md entry found for it), but the Release
+    map table's `1.8`/`1.9` rows still claimed a plain, unqualified
+    "shipped" with no mention of the later supersession — fixed to match
+    the detail section's own wording (commit `2162403` shipped pagination,
+    `d86a34d` "Major rework session, 2026-08-28" retired it as a documented
+    consequence of un-conditionally grouping the Tasks table).
+
+    Original finding, for reference: the grouped-table design this
     app settled on doesn't have an "Open section" to paginate anymore.
     Purely a documentation staleness fix: update `roadmap.md`'s 1.9
     section to stop claiming a retired feature is shipped (either drop
