@@ -17,6 +17,25 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- fourth direct follow-up, same session as the
+  three entries below: "I would like to have it have the min height a bit
+  bigger." `#unscheduled-panel-body`'s fixed height was 26px -- computed as
+  the exact content height of one row with no slack at all, which read as
+  cramped/clipped. Bumped to 36px, still a fixed (not max-/min-) height, so
+  the no-reflow-on-drag fix two entries below is unaffected either way.
+
+  **Tests:** `TestUnscheduledPanelFixedHeight`'s test updated for the new
+  36px value. `sw.js` `CACHE_NAME` bumped `v94` -> `v95`; `test_pwa_shell.
+  py`'s pin updated. Full suite re-run in 3 chunks: 976 + 646 + 425 = 2047
+  passed, 0 failed (same total, one assertion changed).
+
+  **No live browser reachable in this sandbox** -- same recurring caveat.
+  This is now the fourth same-day round on this one small panel (hard-
+  reload fix, height, toggle side, hidden scrollbar, now height again)
+  without ever seeing it rendered -- strongly worth a real look at this
+  specific panel first if a browser becomes reachable next session, rather
+  than continuing to iterate blind on exact pixel values.
+
 - **Shipped:** 2026-09-08 -- third direct follow-up, same session as the two
   entries below: "in the unscheduled work card it shouldn't have a
   sidebar." Root cause: shrinking `#unscheduled-panel-body` to a fixed

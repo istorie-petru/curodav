@@ -3229,8 +3229,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    already does -- `scrollbar-width:none` + the `::-webkit-scrollbar`
    override below -- the row still scrolls (wheel/touch/the drag auto-
    scroll a work-allocation drag can trigger), just with no visible track
-   cluttering the card. */
-#unscheduled-panel-body{height:26px; overflow-y:auto; scrollbar-width:none;}
+   cluttering the card.
+   2026-09-08 further follow-up ("I would like to have it have the min
+   height a bit bigger"): 26px was computed as the exact content height of
+   one row (no slack), which read as cramped/clipped-looking. Bumped to
+   36px -- a little breathing room above one row's content without going
+   back toward the earlier 84px "3 rows" version that read as oversized. */
+#unscheduled-panel-body{height:36px; overflow-y:auto; scrollbar-width:none;}
 #unscheduled-panel-body::-webkit-scrollbar{display:none;}
 /* 2026-09-02 redesign (direct feedback: "smaller, minimalist and be able
    to fit inline, and to have more rows"): a wrapping grid, not a
