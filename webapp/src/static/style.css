@@ -6545,15 +6545,21 @@ body.command-palette-open{overflow:hidden;}
     padding: var(--space-8) var(--space-5);
 }
 
-/* Create modal adjustments */
-@media (max-width: 560px) {
-    .modal {
-        min-height: 100vh;
-        max-height: 100vh;
-        border-radius: 0;
-    }
-
-    .modal-body {
-        padding: var(--space-4);
-    }
-}
+/* 2026-09-08 removal (direct bug report: banner editor modal "full
+   screen, overflows, buttons not visible" on mobile): this stray,
+   unscoped "Create modal adjustments" block used to force EVERY
+   `.modal` to min-height:100vh/max-height:100vh/border-radius:0 below
+   560px width -- no template anywhere carries a `.create-modal` class or
+   similar, so this wasn't actually scoped to one specific dialog, it
+   silently overrode the real MD3 bottom-sheet design (the documented
+   `@media (max-width:720px)` block above: a content-sized sheet capped
+   at max-height:90vh, rounded top corners, drag-to-dismiss handle) for
+   every modal on any phone-width viewport. Most modals have enough
+   content that forcing them to 100vh wasn't obviously wrong -- the
+   banner editor's newly-shrunk content (a small thumbnail + a short
+   footer, this same day's earlier UI pass) made the bug impossible to
+   miss: a near-empty dialog stretched to fill the entire screen, with a
+   `.modal-body{flex:1}` also fighting for that same forced full height.
+   Removed outright rather than re-scoped -- there's no evidence any
+   modal actually wanted always-100vh/square-corner behavior on top of
+   the bottom-sheet design that already existed one breakpoint up. */
