@@ -61,21 +61,43 @@
   const CLICK_THRESHOLD_PX = 4;
 
   // Unlike a plain `.month-event-item` chip (a normal-flow DESCENDANT of
-  // the `.month-day-cell` it's a click-through for so `.closest()` finds
-  // it directly), a `.month-bar` is an absolutely-positioned SIBLING of
-  // the day cells (`.month-week-bars`, a separate layer stacked on top --
-  // style.css). `elementFromPoint` at a bar's own on-screen position
-  // returns the bar itself, which has no day-cell ANCESTOR to `.closest()`
-  // up to. `elementsFromPoint` returns the full hit-test stack at that
-  // point (topmost first) instead of just the top hit, so this still finds
-  // the day cell sitting underneath the bar -- and works identically for a
-  // plain chip too (stack[0] there is already the chip, `.closest()` finds
-  // its ancestor cell same as before), so one helper now serves both.
+  // the `.month-day-cell` it's a click-through for so `.closest()` used to
+  // find it directly), a `.month-bar` is an absolutely-positioned SIBLING
+  // of the day cells (`.month-week-bars`, a separate layer stacked on top
+  // -- style.css). `elementFromPoint`/`.closest()` never finds a day-cell
+  // ancestor for a bar at all.
+  //
+  // 2026-09-08 (slice 2 bug fix, direct report: resize-to-shrink "most of
+  // the time doesn't work", resize-to-grow "sometimes needs N+1 to do N"):
+  // this used to try `document.elementsFromPoint(x, y)` (the full hit-test
+  // stack at that point, topmost first) and walk it for the first element
+  // with a `.month-day-cell` ancestor -- since a bar being RESIZED never
+  // actually changes its own on-screen box (only the separate ghost clone
+  // does, see `setupBar`), the pointer spends most of a shrink drag
+  // hovering a point still geometrically covered by the ORIGINAL,
+  // unshrunk bar (and the tail end of a grow drag crossing back over it
+  // too), so which element that stack call reports first for a given
+  // pixel depended on the browser's own pointer-events/stacking
+  // resolution at that exact point -- correct in principle (a
+  // `pointer-events:none` layer/`none`-marked element should be excluded
+  // from the stack, letting `.closest()` fall through to the real day
+  // cell beneath), but evidently not reliable enough in practice to
+  // pin down which day the cursor was actually over, which is exactly the
+  // "off by one, sometimes silently wrong" shape of both reports.
+  //
+  // Replaced with a plain geometric containment test against the day
+  // cells' own `getBoundingClientRect()`s -- no DOM stacking, pointer-
+  // events, or "what's on top at this pixel" involved at all, just "is
+  // (x, y) inside this cell's box." `cells` is a flat list of every
+  // `.month-day-cell` on the grid (populated once in `init()`), so this is
+  // a cheap ~42-rect scan, and it answers the ONLY question that actually
+  // matters here -- which calendar day the pointer is over -- directly,
+  // regardless of what any absolutely-positioned bar/ghost/handle happens
+  // to be drawn on top of that same pixel.
   function cellAtPoint(x, y) {
-    const stack = document.elementsFromPoint(x, y);
-    for (const el of stack) {
-      const cell = el.closest(".month-day-cell");
-      if (cell) return cell;
+    for (const cell of cells) {
+      const r = cell.getBoundingClientRect();
+      if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return cell;
     }
     return null;
   }
@@ -261,9 +283,11 @@
       // is reparented straight onto `<body>`, so this needs `fixed` against
       // the viewport instead, matching the viewport-relative coordinates
       // `getBoundingClientRect()` returns) and `pointer-events` (`.month-
-      // bar` sets `auto`; the ghost must stay a passthrough or
-      // `cellAtPoint`'s `elementsFromPoint` hit-test would find the ghost
-      // itself sitting over the day cell it's supposed to see through to).
+      // bar` sets `auto`; the ghost must stay a passthrough -- `cellAtPoint`
+      // no longer hit-tests the DOM at all (see its own comment), but a
+      // clickable ghost floating over the grid would still be a real
+      // problem on its own, e.g. swallowing a click meant for whatever's
+      // underneath while the ghost briefly lingers).
       const g = document.createElement("div");
       g.className = "month-bar-ghost " + el.className;
       const label = el.querySelector(".month-bar-label");

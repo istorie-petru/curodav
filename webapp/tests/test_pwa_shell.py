@@ -226,9 +226,13 @@ class TestShellCacheVersion:
         # .month-bar-*/.month-bars-offset-* rules, calendar_month_drag.js's
         # updated header comment on the temporary all-day-drag regression
         # that slice introduces).
-        # v83 (2026-09-08, this entry): slice 2 -- drag-move + edge-resize
-        # for those bars, plus the pointer-follow drag ghost
-        # (calendar_month_drag.js's new setupBar/postReschedule, style.css's
-        # .month-bar-label/-resize-handle/-ghost rules).
+        # v83 (2026-09-08): slice 2 -- drag-move + edge-resize for those
+        # bars, plus the pointer-follow drag ghost (calendar_month_drag.js's
+        # new setupBar/postReschedule, style.css's .month-bar-label/
+        # -resize-handle/-ghost rules).
+        # v84 (2026-09-08, this entry, same-day bug fix): direct report that
+        # bar resize was unreliable -- `cellAtPoint` rewritten from an
+        # `elementsFromPoint` DOM hit-test to plain rectangle-containment
+        # against the day cells' own bounding rects.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v83"' in script
+        assert 'CACHE_NAME = "cc-shell-v84"' in script

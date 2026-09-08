@@ -17,6 +17,53 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- same-day bug fix, direct report against the
+  slice 2 entry below: bar resize was unreliable in a live browser --
+  shrinking (dragging an edge inward) "most of the time doesn't work",
+  growing (dragging an edge outward) "sometimes needs N+1 to do N" (drag
+  one extra day further than the desired result requires).
+
+  **Root cause:** `cellAtPoint` (`calendar_month_drag.js`, shared by both
+  `setupItem` and the new `setupBar`) used `document.elementsFromPoint(x,
+  y)` -- the full hit-test stack at that pixel, topmost first -- and
+  walked it for the first element with a `.month-day-cell` ancestor. A bar
+  being resized never actually changes its own on-screen box (only its
+  separate ghost clone does, see slice 2's own entry below), so the
+  pointer spends most of a shrink drag -- and the tail end of a grow drag
+  -- hovering a point still geometrically covered by the ORIGINAL,
+  un-resized bar. Which element that stack reported first for a given
+  pixel then depended on the browser's own pointer-events/stacking
+  resolution rather than anything this code controlled directly --
+  unreliable enough in practice to explain both the "shrink mostly
+  fails" and "grow is off by one" shapes of the report.
+
+  **Fix:** `cellAtPoint` no longer touches DOM hit-testing at all --
+  it's now a plain rectangle-containment scan over `cells` (every
+  `.month-day-cell` on the grid, already collected in `init()`), checking
+  each cell's own `getBoundingClientRect()` directly against the pointer's
+  (x, y). This answers "which calendar day is the pointer over" as a pure
+  geometry question, with no dependency on what any absolutely-positioned
+  bar/ghost/handle happens to be drawn on top of that same pixel. Same
+  function, same call sites (`setupItem`'s move logic included) -- no
+  behavior change intended for plain chip dragging, which this bug never
+  actually affected (a chip is a normal-flow descendant of its cell, so
+  its own hit-test stack always had the cell as an unambiguous ancestor
+  either way).
+
+  `sw.js` `CACHE_NAME` bumped `v83` -> `v84`; `test_pwa_shell.py`'s pin
+  updated. No new tests -- same "no JS unit-test harness for `static/*.js`
+  in this repo" gap slice 2's own entry already notes; verified via `node
+  --check` (syntax) and re-running the full suite for regressions (nothing
+  Python-side changed). Full suite re-run in the same 10-chunk pattern as
+  the entry below: 311 + 215 + 296 + 220 + 113 + 245 + 219 + 119 + 127 +
+  130 = 1995 passed, 0 failed -- same total, no tests added/removed.
+
+  **Next slice:** unchanged from the entry below -- open.md slice 3.
+  Still no live-browser check available in this sandbox; this fix is
+  reasoned from the code and the user's own description of the symptom,
+  not confirmed against a real repro. Worth a direct follow-up ("does it
+  feel right now?") before treating this as fully closed.
+
 - **Shipped:** 2026-09-08 -- FullCalendar-parity interactions, slice 2 of
   6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
   drag-move + edge-resize for Month/4-Week's spanning bars (slice 1's new

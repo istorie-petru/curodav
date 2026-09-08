@@ -419,7 +419,16 @@
 // elementsFromPoint-based cellAtPoint shared with setupItem) and style.css
 // (.month-bar-label/-resize-handle/-resize-left/-resize-right/-ghost,
 // .month-bar.dragging's opacity) both changed.
-const CACHE_NAME = "cc-shell-v83";
+// v84 (2026-09-08, same-day bug fix, direct report): bar resize was
+// unreliable -- shrinking "most of the time doesn't work", growing
+// "sometimes needs N+1 to do N". Root cause: `cellAtPoint`'s
+// `elementsFromPoint`-based DOM hit-test depended on the browser's own
+// stacking/pointer-events resolution at a pixel still geometrically
+// covered by the original, un-resized bar (only its ghost clone actually
+// changes size during a resize) -- not reliable enough in practice.
+// Replaced with plain rectangle-containment against the known day cells'
+// own `getBoundingClientRect()`s, no DOM stacking involved.
+const CACHE_NAME = "cc-shell-v84";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
