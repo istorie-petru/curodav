@@ -71,9 +71,9 @@
                                 {{ icon('link', 'icon-sm') }}
                             </button>
                         </div>
-                        <p class="settings-hint settings-hint-tight-top">Anyone with this link can view it, no account needed.</p>
+                        <p class="settings-hint settings-hint-tight-top">No account needed.</p>
                         {% elif l.visibility == "archived" %}
-                        <span class="text-muted">Paused -- not synced or shared</span>
+                        <span class="text-muted">Not synced or shared</span>
                         {% else %}
                         <div class="link-wrapper">
                             <code class="truncated-url" data-full-url="{{ l.subscribe_url }}">{{ l.subscribe_url | truncate(45, true, '…') }}</code>
@@ -81,7 +81,6 @@
                                 {{ icon('link', 'icon-sm') }}
                             </button>
                         </div>
-                        <p class="settings-hint settings-hint-tight-top">Private -- needs your Radicale/CalDAV account.</p>
                         {% endif %}
                     </td>
                     <td>

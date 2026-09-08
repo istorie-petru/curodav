@@ -17,6 +17,31 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session as the two
+  entries below: "in the table, could you remove the 'Private -- needs
+  your Radicale/CalDAV account.' text. Also trim all text from that
+  table so that it, in most cases, doesn't overflow to another row."
+  published_lists.html only:
+  - The private-collection Link-column hint ("Private -- needs your
+    Radicale/CalDAV account.") is deleted outright, same treatment the
+    two Visibility hints already got in the entry below -- no
+    replacement copy.
+  - The public-collection Link-column hint shortened "Anyone with this
+    link can view it, no account needed." -> "No account needed."
+  - The archived/paused Link-column fallback shortened "Paused -- not
+    synced or shared" -> "Not synced or shared" -- the leading "Paused"
+    was dropped as redundant, the Sharing column's own pill (right next
+    to it) already says "Paused".
+  - Nothing else in the table needed trimming -- Name/Type/Filter/Sharing
+    cells are all either short fixed vocabulary or already truncated
+    (`.truncated-url`'s existing 45-char ellipsis, `white-space:nowrap`)
+    and the table sits in `.table-scroll` (horizontal scroll on overflow,
+    section 6 rule), so nothing here was wrapping to a second line
+    within its own cell before this either -- confirmed by reading the
+    template, not a browser check (no live browser reachable in this
+    sandbox, same recurring gap this file's other entries note).
+  - Full suite re-run in 6 chunks: 898+662+498 = 2058 passed, 0 failed.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session as the table-
   rework entry right below: "also remove 'Matches any checked label.
   Leave blank for everything.' and 'Private syncs to your Radicale
