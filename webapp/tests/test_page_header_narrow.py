@@ -278,5 +278,5 @@ class TestPageHeaderBanner:
         self._set_banner(conn)
         resp = banners_router.banner_editor(_bare_request("/banners/editor"), scope="__page_header__", page_url="/settings/appearance", conn=conn)
         body = resp.body.decode()
-        assert "Remove banner" in body
+        assert "Remove" in body
         assert 'name="scope" value="__page_header__"' in body

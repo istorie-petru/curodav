@@ -89,14 +89,20 @@
     <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
         <input type="hidden" name="scope" value="{{ scope }}">
         <input type="hidden" name="page_url" value="{{ page_url }}">
-        <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Remove banner</button>
+        {# 2026-09-08 follow-up (direct request, "standard button style"):
+           swapped the quiet .detail-delete-link text-link (the detail
+           modals' demoted-Delete treatment -- meant to rank below a
+           primary Edit) for a plain .btn ghost, matching Done/Upload and
+           every other secondary footer button in the app -- this footer
+           has no Edit-vs-Delete hierarchy to demote against. #}
+        <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove</button>
     </form>
     {% endif %}
     <form method="post" action="/banners/upload" enctype="multipart/form-data" class="form-inline" data-cc-change="banner" data-cc-action="upload">
         <input type="hidden" name="scope" value="{{ scope }}">
         <input type="hidden" name="page_url" value="{{ page_url }}">
         <label class="btn primary banner-upload-btn">
-            {{ icon('upload', 'icon-sm') }} Upload image
+            {{ icon('upload', 'icon-sm') }} Upload
             <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">
         </label>
     </form>
