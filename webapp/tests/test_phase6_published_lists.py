@@ -379,6 +379,59 @@ class TestNoLabelsPresent:
         assert set(bridge.task_collections[rows[0]["radicale_collection_path"]]) == {"t1", "t2"}
 
 
+class TestCreateModalDropdownsAreCustomStyled:
+    """2026-09-08 (direct request, "the drop down menus are not our own
+    design, they are defaults"): Type and Visibility used to be plain
+    <select>s -- a native select's open dropdown list is unstyleable OS/
+    browser chrome no matter what CSS targets the closed box (same reason
+    task_form.html's Status/Priority/Recurrence already moved off <select>
+    onto _widget_list_multiselect.html's ms_mode="single" variant). Both
+    fields now reuse that same component."""
+
+    def test_no_native_select_in_the_form(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        # Strip the header comment before asserting -- it names the old
+        # <select> element in prose to explain the fix, which would
+        # otherwise be a false-positive match for the literal string.
+        body = resp.body.decode().split("-->", 1)[1]
+        assert "<select" not in body
+
+    def test_entity_type_and_visibility_render_as_single_mode_multiselects(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        body = resp.body.decode()
+        assert 'data-ms-mode="single" data-ms-label="type"' in body
+        assert 'data-ms-mode="single" data-ms-label="visibility"' in body
+        assert 'type="radio" name="entity_type" value="task"' in body
+        assert 'type="radio" name="visibility" value="private"' in body
+        # entity_type defaults to the first configured type, same default
+        # a native <select> with no explicit `selected` option would have
+        # picked, matching this fix's own "no behavior change" intent.
+        assert '<span class="ms-summary">Tasks</span>' in body
+        assert '<span class="ms-summary">Private</span>' in body
+
+
 class _FakeSettings:
     radicale_base_url = "http://127.0.0.1:5232/devuser/"
 

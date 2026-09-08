@@ -38,7 +38,23 @@
      selected" as "include everything of this type" instead of "include
      nothing," so an unfiltered List is a real, useful thing to create --
      the form always renders now, and the label section itself is framed
-     as optional narrowing, not a required step. -->
+     as optional narrowing, not a required step.
+
+     2026-09-08 follow-up (direct request, "the drop down menus are not
+     our own design, they are defaults"): Type and Visibility were plain
+     `<select>`s -- style.css's site-wide `select{}` rule reskins the
+     CLOSED box (chevron, border-radius, padding) but a native select's
+     OPEN dropdown list is drawn by the OS/browser, not this stylesheet --
+     no CSS can touch it. This is the exact reason task_form.html's
+     Status/Priority/Recurrence and the widget builder's View/Range
+     already moved to `_widget_list_multiselect.html`'s `ms_mode="single"`
+     variant instead (see that partial's own header comment) -- reused
+     here for the same reason, so both fields now open the app's own
+     styled panel instead of native OS chrome. Also shortened every
+     `.settings-hint` in this modal (direct request, "make way short the
+     settings-hint") -- the long per-option sentences that used to live
+     inside the Visibility `<option>` text collapsed into one short hint
+     below both fields instead. -->
 <div id="modal-target" class="modal-height-md">
     <div class="modal-header">
         <h1>Create a published list</h1>
@@ -52,27 +68,33 @@
                     <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" required autocomplete="off">
                 </div>
 
-                <div class="field">
-                    <label for="entity_type">Type</label>
-                    <select id="entity_type" name="entity_type" required>
-                        {% for et in entity_types %}
-                        <option value="{{ et }}">{{ entity_labels[et] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                {% set ms_name = 'entity_type' %}
+                {% set ms_mode = 'single' %}
+                {% set ms_label = 'Type' %}
+                {% set ms_items = [] %}
+                {% for et in entity_types %}{% set _ = ms_items.append({'uid': et, 'name': entity_labels[et]}) %}{% endfor %}
+                {% set ms_selected = entity_types[0] %}
+                {% set ms_wide = false %}
+                {% set ms_form_id = 'create-list-form' %}
+                {% include "_widget_list_multiselect.html" %}
 
-                <div class="field">
-                    <label for="visibility">Visibility</label>
-                    <select id="visibility" name="visibility">
-                        <option value="private" selected>Private -- only your synced devices (Radicale account)</option>
-                        <option value="public">Public -- also get a link anyone can open, no account needed</option>
-                    </select>
-                </div>
+                {% set ms_name = 'visibility' %}
+                {% set ms_mode = 'single' %}
+                {% set ms_label = 'Visibility' %}
+                {% set ms_items = [
+                    {'uid': 'private', 'name': 'Private'},
+                    {'uid': 'public', 'name': 'Public (shareable link)'},
+                ] %}
+                {% set ms_selected = 'private' %}
+                {% set ms_wide = false %}
+                {% set ms_form_id = 'create-list-form' %}
+                {% include "_widget_list_multiselect.html" %}
+                <p class="settings-hint field-wide settings-hint-tight-top">Private syncs to your Radicale account; Public also adds a shareable link.</p>
 
                 <div class="field field-wide">
                     <label>Filter by labels <span class="text-muted">(optional)</span></label>
                     {% if all_labels %}
-                    <p class="settings-hint settings-hint-tight-bottom">Items matching any selected label will be included. Leave everything unchecked to include all items of the selected type instead.</p>
+                    <p class="settings-hint settings-hint-tight-bottom">Matches any checked label. Leave blank for everything.</p>
                     <div class="field-toggle-group" id="label-checkboxes">
                         {% for name in all_labels %}
                         <label class="field-toggle">
@@ -82,10 +104,10 @@
                         {% endfor %}
                     </div>
                     {% else %}
-                    <p class="settings-hint settings-hint-flush">You don't have any labels yet, so this list will include everything of the selected type. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create a label</a> any time to narrow it down later.</p>
+                    <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
                     {% endif %}
                 </div>
-                <p class="settings-hint field-wide settings-hint-flush">You can change visibility any time from the list below, or archive a list to pause it without deleting it.</p>
+                <p class="settings-hint field-wide settings-hint-flush">Change visibility or archive anytime from the list below.</p>
             </div>
         </form>
         </div>

@@ -17,6 +17,64 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct follow-up, same session/modal as the
+  entry right below: "in the Create a published list the drop down menu
+  are not our own design, they are defaults. also make way short the
+  settings-hint."
+
+  **Root cause (dropdowns):** Type and Visibility were plain `<select>`s.
+  style.css's site-wide `select{}` rule only reskins the CLOSED box
+  (custom chevron, border-radius, padding) -- a native select's OPEN
+  dropdown list is drawn by the OS/browser, unstyleable by any CSS on the
+  page. This is the exact reason `task_form.html`'s Status/Priority/
+  Recurrence and the widget builder's View/Range already moved off
+  `<select>` onto `_widget_list_multiselect.html`'s `ms_mode="single"`
+  variant (see that partial's own header comment) -- confirmed via a
+  subagent that this modal's markup was otherwise a correct, unremarkable
+  instance of the plain-`<select>` convention used elsewhere (habit_form/
+  contact_form's short-list pickers); the fix wasn't missing CSS/markup on
+  this file, it was the field never having been moved onto the
+  already-established richer component the way Status/Priority/View/
+  Range were.
+
+  **Fix, `published_list_create_modal.html` only:** both fields now
+  `{% include "_widget_list_multiselect.html" %}` with `ms_mode="single"`,
+  `ms_wide=false` (same half-width slot the two `<select>`s occupied
+  side by side), `ms_form_id="create-list-form"`. `entity_type` defaults
+  to `entity_types[0]` (same default a `<select>` with no `selected`
+  option would pick -- no behavior change). Visibility's items are now
+  short labels ("Private" / "Public (shareable link)") instead of full
+  sentences baked into `<option>` text, since a dropdown *option* can't
+  carry a secondary description the way a `.settings-hint` paragraph can.
+  Backend needed no change -- the radios still submit as `name="entity_
+  type"`/`name="visibility"`, same field names `create_list()`'s
+  `Form(...)` params already read.
+
+  **Shortened every `.settings-hint` in this modal** (second half of the
+  same direct request): the two long Visibility sentences collapsed into
+  one hint below both fields ("Private syncs to your Radicale account;
+  Public also adds a shareable link."); the labels-filter hint went from
+  two sentences to one ("Matches any checked label. Leave blank for
+  everything."); the no-labels-yet hint and the bottom "change visibility/
+  archive" hint were each trimmed similarly. `.settings-hint` itself has
+  no CSS length/width constraint (confirmed by research) -- this was a
+  copy edit, not a layout fix.
+
+  **Tests:** new `TestCreateModalDropdownsAreCustomStyled` (2 tests) --
+  asserts no literal `<select` tag anywhere in the rendered body (comment
+  stripped first, since the fix's own header comment names the old
+  element in prose) and that both fields render as `data-ms-mode="single"`
+  multiselects with the expected default-selected summary text ("Tasks"/
+  "Private"). Full suite re-run in the same 3-chunk pattern as recent
+  entries: 976 + 622 + 455 = 2053 passed, 0 failed (2051 + 2 net new). No
+  `sw.js` bump -- template + test only, no static JS/CSS touched.
+
+  **No live browser reachable in this sandbox** -- same recurring gap
+  every entry in this file already notes. Verified via a direct
+  `new_list_modal()` router call (real Jinja output, confirms the radios/
+  panel markup and default summaries) and the full test suite, not an
+  actual click-to-open-the-panel check.
+
 - **Shipped:** 2026-09-08 -- direct request, same session as the
   `deploy/`/Cloudflare Tunnel entries below: "make published lists more
   permissive and easier to set up even if no labels present." Two real
