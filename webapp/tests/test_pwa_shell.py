@@ -42,6 +42,15 @@ already-purged entity is gone -- static/offline_db.js's new `clearMirror`
 and offline_sync_client.js calling it before a full resync's re-pull is
 what closes that gap. This is the last of 1.8's 7 planned slices.
 
+2026-09-09: templates/offline.html was collapsed from a five-tab page that
+mirrored the whole app (Dashboard/Calendar/Tasks/Contacts/Notes, each with
+its own read-only mirror list) down to a single focused Quick Add screen --
+direct report against a screenshot flagging poor layout hierarchy and a
+"Quick Capture Syntax" preview textarea that generated text nothing ever
+parsed back in. static/offline_shell.js no longer renders those five
+panels; it only shows a one-line sync summary and drives the Quick Add
+form. `TestOfflineToolbar` below covers the current shape.
+
 Neither a real service worker nor real IndexedDB can be exercised by this
 app's usual pytest/router-function-call convention (there's no browser
 here to install a worker, intercept fetches, read Cache Storage, or run
@@ -172,12 +181,9 @@ class TestOfflineShell:
         assert "Offline Mode" in body
         # Offline indicator should be present
         assert "You're offline" in body
-        # Main panels should be present
-        assert "Dashboard" in body
-        assert "Calendar" in body
-        assert "Tasks" in body
-        assert "Contacts" in body
-        assert "Notes" in body
+        # 2026-09-09: collapsed to a single focused screen -- no more
+        # Dashboard/Calendar/Tasks/Contacts/Notes tabs, just Quick Add.
+        assert "Quick Add" in body
 
     def test_offline_page_reachable_without_simulating_a_dropped_connection(self):
         # A plain route, not sw.js-only -- confirms the page itself needs
@@ -238,12 +244,10 @@ class TestLocalReadPath:
 
     def test_offline_html_has_the_render_target_and_loads_the_shell_script(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        # New Offline Mode page has multiple panel IDs
-        assert 'id="offline-dashboard"' in html
-        assert 'id="offline-calendar"' in html
-        assert 'id="offline-tasks"' in html
-        assert 'id="offline-contacts"' in html
-        assert 'id="offline-notes"' in html
+        # 2026-09-09: single-screen page -- one sync-summary render target
+        # and the Quick Add builder partial, no more per-entity panel IDs.
+        assert 'id="offline-sync-summary"' in html
+        assert "_offline_quick_add.html" in html
         assert "offline_shell.js" in html
 
     def test_precache_list_includes_the_local_read_path_scripts(self):
@@ -287,10 +291,12 @@ class TestLocalWritePath:
         assert "/api/sync/push" not in script
 
     def test_offline_shell_wires_up_the_write_ui(self):
+        # 2026-09-09: the per-row complete/delete controls this test used to
+        # check (updateTaskField/deleteTask) belonged to the task-list panel
+        # that was removed along with the rest of the mirror-reading UI --
+        # only the Quick Add create path remains on this page now.
         script = (_STATIC_DIR / "offline_shell.js").read_text()
         assert "CCOfflineWrite.createTask" in script
-        assert "CCOfflineWrite.updateTaskField" in script
-        assert "CCOfflineWrite.deleteTask" in script
 
     def test_offline_html_loads_the_write_script(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
@@ -543,32 +549,29 @@ class TestLocalWritePath:
         # v78 (2026-09-09, same-day follow-up 3): purge confirm button
         # relabeled down to just "Delete" -- see sw.js's own v78 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v78"' in script
+        assert 'CACHE_NAME = "cc-shell-v79"' in script
 
 
 class TestOfflineToolbar:
-    """2026-08-19 -- Dedicated Offline Mode page: full tabbed interface
-    mirroring the main app navigation (Dashboard, Calendar, Tasks, Contacts,
-    Notes) with read/write access to the local IndexedDB mirror. Quick add is
-    a floating action button on every tab. Same "read the JS/template source,
-    assert the shape" level of confidence as every other class here."""
+    """2026-08-19 -- Dedicated Offline Mode page, originally a full tabbed
+    interface mirroring the main app navigation (Dashboard, Calendar, Tasks,
+    Contacts, Notes) with read/write access to the local IndexedDB mirror.
 
-    def test_offline_page_has_the_main_tabs(self):
+    2026-09-09 -- direct report against a screenshot: collapsed to a single
+    focused screen (no tabs, no per-entity mirror lists) plus a Quick Add
+    form with its confusing "Quick Capture Syntax" preview textarea removed
+    (it was display-only -- submit always read the visual fields directly,
+    never that box). Same "read the JS/template source, assert the shape"
+    level of confidence as every other class here."""
+
+    def test_offline_page_has_no_tabs(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert 'data-offline-main-tab="dashboard"' in html
-        assert 'data-offline-main-tab="calendar"' in html
-        assert 'data-offline-main-tab="tasks"' in html
-        assert 'data-offline-main-tab="contacts"' in html
-        assert 'data-offline-main-tab="notes"' in html
-        assert "Dashboard" in html
-        assert "Calendar" in html
-        assert "Tasks" in html
-        assert "Contacts" in html
-        assert "Notes" in html
+        assert "data-offline-main-tab" not in html
+        assert "offline-main-tabs" not in html
 
     def test_offline_html_has_the_quick_add_builder(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        # New inline visual builder replaces the modal - included via partial
+        # Inline visual builder, included via partial
         assert '_offline_quick_add.html' in html
         # Check the partial directly
         partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
@@ -578,8 +581,9 @@ class TestOfflineToolbar:
         assert 'id="offline-event-fields"' in partial_html
         assert 'id="offline-contact-fields"' in partial_html
         assert 'id="offline-note-fields"' in partial_html
-        assert 'id="offline-capture-text"' in partial_html
         assert 'id="offline-quick-add-result"' in partial_html
+        # The generated-but-never-parsed capture-syntax preview box is gone.
+        assert 'id="offline-capture-text"' not in partial_html
 
     def test_offline_html_loads_the_quick_add_scripts(self):
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
@@ -606,33 +610,32 @@ class TestOfflineToolbar:
         # create-op plumbing.
         assert "createEntity" in script
 
-    def test_offline_shell_renders_all_panels(self):
+    def test_offline_shell_renders_a_sync_summary_not_panels(self):
+        # 2026-09-09: the five-panel mirror render (Tasks/Upcoming Events/
+        # Timetabled events/Contacts/Notes) is gone -- offline_shell.js now
+        # only renders a one-line sync summary plus the label picker.
         script = (_STATIC_DIR / "offline_shell.js").read_text()
-        # Now renders all five panels
-        assert "Tasks (" in script
-        assert "Upcoming Events (" in script
-        assert "Timetabled events (" in script
-        assert "Contacts (" in script
-        assert "Notes (" in script
-        # The timetabled section is driven by the mirror's work-allocation
-        # flag -- the thing the server's new is_work_allocation sync field
-        # delivers.
-        assert "is_work_allocation" in script
+        assert "offline-sync-summary" in script
+        assert "getLastSyncedAt" in script
+        assert "getOutboxCount" in script
+        assert "Tasks (" not in script
+        assert "Upcoming Events (" not in script
 
     def test_offline_shell_wires_the_quick_add_builder(self):
         script = (_STATIC_DIR / "offline_shell.js").read_text()
-        # New inline visual builder (replaces modal-based quick capture)
+        # Inline visual builder (replaces modal-based quick capture)
         assert "offline-quick-add-form" in script
         assert "offline-entity-type" in script
         assert "offline-task-fields" in script
         assert "offline-event-fields" in script
         assert "offline-contact-fields" in script
         assert "offline-note-fields" in script
-        assert "offline-capture-text" in script
         assert "CCOfflineWrite.createEvent" in script
         assert "CCOfflineWrite.createContact" in script
         assert "CCOfflineWrite.createTask" in script
         assert "CCOfflineWrite.createNote" in script
+        # The generated-but-never-parsed capture-syntax preview is gone.
+        assert "offline-capture-text" not in script
 
     def test_quick_capture_script_not_loaded_globally(self):
         # offline_quick_capture.js is /offline-only, like offline_write.js

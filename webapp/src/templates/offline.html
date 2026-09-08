@@ -7,36 +7,24 @@
    any other page, so the tabbar/nav chrome renders identically -- the app
    *looks* like itself.
 
-   1.8 slice 4 -- #offline-local-data below is where offline_shell.js
-   renders a list straight from the local IndexedDB mirror (offline_db.js,
-   kept warm by offline_sync_client.js's pull loop running globally on
-   every online page visit -- see base.html). The static empty-state
-   markup underneath stays as the honest fallback for a device that has
-   genuinely never had anything local to show.
+   1.8 slice 4/5 -- earlier versions of this page rendered a local list
+   straight from IndexedDB (offline_db.js) with per-row complete/delete
+   controls. 2026-08-19 grew that into a five-tab "Dashboard/Calendar/
+   Tasks/Contacts/Notes" interface mirroring the main app's own nav, each
+   tab holding its own copy of an inline Quick Add builder.
 
-   1.8 slice 5 -- the task list rendered into #offline-local-data now
-   includes per-row complete/delete controls (offline_write.js), so this
-   page works for creating/editing/deleting even on a device that has never
-   been online.
-
-   2026-08-18 -- the toolbar is now two tabs (the "Quick add + Upcoming
-   toolbar" rework, offline.html + offline_shell.js): "Upcoming" -- the
-   existing mirror-read list, now split into Tasks / Upcoming events /
-   Timetabled events sections (timetabled = work-allocation sessions, via
-   the server's new is_work_allocation sync flag) -- and "Quick add" -- a
-   single-field capture input parsed client-side by offline_quick_capture.js
-   (a JS port of src/quick_capture.py's grammar) and created through
-   offline_write.js's createTask/createEvent/createContact.
-
-   2026-08-19 -- Dedicated Offline Mode page: full tabbed interface
-   mirroring the main app navigation (Dashboard, Calendar, Tasks, Contacts,
-   Notes) with read/write access to the local IndexedDB mirror. Quick add
-   is now available as a floating action button on every tab.
-
-   2026-08-19 (expansion) -- Merge Upcoming and Quick Add into single view:
-   each panel now shows its data with an integrated visual Quick Add builder
-   (entity type dropdown, label picker, date/time inputs) instead of a
-   separate modal. The floating FAB is removed. #}
+   2026-09-09 -- direct report against a screenshot: that tabbed page read
+   as cramped/unclear (poor spacing hierarchy between the tab bar, empty
+   states, and the form) and its "Quick Capture Syntax" textarea was
+   confusing, redundant UX -- it displayed a generated capture string that
+   the form's own submit handler never actually parsed back in (every field
+   was already read directly off the visual inputs), so it was pure
+   decoration masquerading as an editable field. Collapsed to a single
+   focused screen: no tabs, no per-entity mirror lists -- just the Quick
+   Add form plus a one-line sync summary. The five-panel mirror-reading
+   view (offline_shell.js's old render()) is gone; re-adding a real offline
+   read surface is a separate, larger piece of future work, not bundled
+   into this UI fix. #}
 
 {% extends "base.html" %}
 {% block title %}Offline Mode{% endblock %}
@@ -44,72 +32,13 @@
 {% block content %}
 <div class="toolbar top-app-bar">
     <h1>{{ icon('wifi-off', 'icon-sm') }} Offline Mode</h1>
-</div>
-
-<div class="segmented offline-main-tabs" role="tablist" aria-label="Offline mode views">
-    <button type="button" class="seg-btn active" role="tab" aria-selected="true" data-offline-main-tab="dashboard">{{ icon('home', 'icon-sm') }} Dashboard</button>
-    <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="calendar">{{ icon('calendar', 'icon-sm') }} Calendar</button>
-    <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="tasks">{{ icon('checklist', 'icon-sm') }} Tasks</button>
-    <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="contacts">{{ icon('users', 'icon-sm') }} Contacts</button>
-    <button type="button" class="seg-btn" role="tab" aria-selected="false" data-offline-main-tab="notes">{{ icon('file-text', 'icon-sm') }} Notes</button>
     <span class="offline-indicator" aria-live="polite">{{ icon('wifi-off', 'icon-sm') }} You're offline</span>
 </div>
 
-<div class="offline-main-panels">
-    <!-- Dashboard Panel -->
-    <section class="offline-main-panel is-active" data-offline-main-panel="dashboard" role="tabpanel" aria-label="Dashboard">
-        <div id="offline-dashboard"></div>
-        <div class="empty-state empty-state-rich" id="offline-dashboard-empty">
-            <div class="empty-state-icon">{{ icon('home') }}</div>
-            <div class="empty-state-title">No local data yet</div>
-            <div class="empty-state-text">Your dashboard will appear here once you have synced data. Use Quick Add below to create tasks, events, or contacts while offline.</div>
-        </div>
-        {% include "_offline_quick_add.html" with context %}
-    </section>
-
-    <!-- Calendar Panel -->
-    <section class="offline-main-panel" data-offline-main-panel="calendar" role="tabpanel" aria-label="Calendar">
-        <div id="offline-calendar"></div>
-        <div class="empty-state empty-state-rich" id="offline-calendar-empty">
-            <div class="empty-state-icon">{{ icon('calendar') }}</div>
-            <div class="empty-state-title">No events yet</div>
-            <div class="empty-state-text">Your calendar events will appear here after sync. Use Quick Add below to create events offline.</div>
-        </div>
-        {% include "_offline_quick_add.html" with context %}
-    </section>
-
-    <!-- Tasks Panel -->
-    <section class="offline-main-panel" data-offline-main-panel="tasks" role="tabpanel" aria-label="Tasks">
-        <div id="offline-tasks"></div>
-        <div class="empty-state empty-state-rich" id="offline-tasks-empty">
-            <div class="empty-state-icon">{{ icon('checklist') }}</div>
-            <div class="empty-state-title">No tasks yet</div>
-            <div class="empty-state-text">Your tasks will appear here after sync. Use Quick Add below to create tasks offline.</div>
-        </div>
-        {% include "_offline_quick_add.html" with context %}
-    </section>
-
-    <!-- Contacts Panel -->
-    <section class="offline-main-panel" data-offline-main-panel="contacts" role="tabpanel" aria-label="Contacts">
-        <div id="offline-contacts"></div>
-        <div class="empty-state empty-state-rich" id="offline-contacts-empty">
-            <div class="empty-state-icon">{{ icon('users') }}</div>
-            <div class="empty-state-title">No contacts yet</div>
-            <div class="empty-state-text">Your contacts will appear here after sync. Use Quick Add below to create contacts offline.</div>
-        </div>
-        {% include "_offline_quick_add.html" with context %}
-    </section>
-
-    <!-- Notes Panel -->
-    <section class="offline-main-panel" data-offline-main-panel="notes" role="tabpanel" aria-label="Notes">
-        <div id="offline-notes"></div>
-        <div class="empty-state empty-state-rich" id="offline-notes-empty">
-            <div class="empty-state-icon">{{ icon('file-text') }}</div>
-            <div class="empty-state-title">No notes yet</div>
-            <div class="empty-state-text">Your notes will appear here after sync. Use Quick Add below to create notes offline.</div>
-        </div>
-        {% include "_offline_quick_add.html" with context %}
-    </section>
+<div class="offline-page">
+    <p class="offline-page-hint">Anything you add here is saved on this device and syncs automatically once you're back online.</p>
+    <div id="offline-sync-summary" class="offline-synced-at"></div>
+    {% include "_offline_quick_add.html" with context %}
 </div>
 {% endblock %}
 {% block extra_scripts %}

@@ -5952,49 +5952,23 @@ body.command-palette-open{overflow:hidden;}
    stays on one tight row (no wrap). */
 .profile-photo-controls{display:flex; align-items:center; gap:var(--space-2);}
 
-/* Offline shell's local-mirror read path (templates/offline.html,
-   static/offline_shell.js, 1.8 slice 4). */
+/* Offline Mode page (templates/offline.html, static/offline_shell.js).
+   2026-09-09 -- collapsed from the earlier five-tab "mirrors the whole
+   app" page (Dashboard/Calendar/Tasks/Contacts/Notes tabs, each with its
+   own read-only mirror list) down to a single focused screen: a one-line
+   sync summary plus the Quick Add form. Removed the now-dead rules that
+   only ever styled that tabbed/mirrored layout (.offline-main-tabs,
+   .offline-main-panel(s), .offline-dashboard-grid/-card, and the still
+   older .offline-tabs/.offline-panel(s)/.offline-quick-capture-* trio
+   from a 2026-08-18 rework already superseded before this pass) --
+   confirmed via grep that nothing in templates/src/static referenced any
+   of them once offline_shell.js's render() stopped emitting that markup.
+   A max-width wrapper keeps the page from stretching the form edge-to-edge
+   on wide viewports, same reasoning as the centered single-user login
+   card (further down this file). */
+.offline-page{max-width:560px; margin:0 auto;}
+.offline-page-hint{color:var(--fg-secondary); margin:0 0 var(--space-4);}
 .offline-synced-at{font-size:var(--text-footnote); color:var(--fg-tertiary); margin-bottom:var(--space-4);}
-.offline-section-title{font-size:var(--text-headline); font-weight:600; margin:var(--space-5) 0 var(--space-2);}
-/* Offline shell's local *write* path (offline_write.js, 1.8 slice 5) --
-   the outbox pending-changes note and the inline "add a task" form, both
-   entirely client-rendered by offline_shell.js so they get no server-side
-   template counterpart. */
-.offline-pending-note{font-size:var(--text-footnote); color:var(--fg-secondary); background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); margin-bottom:var(--space-4);}
-/* 2026-08-18 rework -- the "Quick add + Upcoming" toolbar (offline.html +
-   offline_shell.js): two tab-style .segmented buttons over two mutually
-   exclusive .offline-panels (same show-one-at-a-time contract
-   .quick-add-panels/.quick-add-panel already establish for the quick-add
-   modal's Task/Event tabs). */
-.offline-tabs{width:100%; margin-bottom:var(--space-3);}
-.offline-panels{display:block;}
-.offline-panel{display:none;}
-.offline-panel.is-active{display:block;}
-/* Agenda-style leading cell for the Upcoming events / Timetabled events
-   rows -- date + clock (or "—" for an undated event), the client-side
-   stand-in for the Agenda widget's widget-row-time column. */
-.offline-event-when{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; min-width:9.5em;}
-/* Quick add panel -- the single-field capture input, its syntax hint, and
-   the inline result/error line below it (offline_shell.js's showResult). */
-.offline-quick-capture-form{display:flex; gap:var(--space-2); margin-bottom:var(--space-2);}
-.offline-quick-capture-form input[type="text"]{flex:1;}
-.offline-quick-capture-hint{font-size:var(--text-caption); color:var(--fg-tertiary); margin-bottom:var(--space-3);}
-.offline-quick-capture-hint code{font-size:inherit;}
-.offline-quick-capture-result{font-size:var(--text-footnote); color:var(--success);}
-.offline-quick-capture-result.is-error{color:var(--danger);}
-
-/* 2026-08-19 -- Dedicated Offline Mode page (templates/offline.html): full
-   tabbed interface mirroring the main app navigation (Dashboard, Calendar,
-   Tasks, Contacts, Notes) with read/write access to the local IndexedDB
-   mirror. Quick add is a floating action button on every tab. */
-.offline-main-tabs{width:100%; margin-bottom:var(--space-3);}
-.offline-main-panels{display:block;}
-.offline-main-panel{display:none;}
-.offline-main-panel.is-active{display:block;}
-.offline-dashboard-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:var(--space-3); margin-bottom:var(--space-4);}
-.offline-dashboard-card{background:var(--bg-elevated); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:var(--space-4); text-align:center;}
-.offline-dashboard-card h3{font-size:var(--text-display); font-weight:700; margin:0 0 var(--space-1); color:var(--accent);}
-.offline-dashboard-card p{font-size:var(--text-caption); color:var(--fg-tertiary); margin:0;}
 
 /* Offline mode quick-add builder (2026-08-19 expansion) -- inline visual
    builder replacing the floating FAB + modal. Appears at the bottom of each

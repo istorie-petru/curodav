@@ -17,6 +17,80 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- fourth same-day follow-up, direct request
+  (with a screenshot): the Offline Mode page's UI was "wrong," specifically
+  called out as the reason offline support had been effectively shelved
+  (its four scripts have sat dead-commented-out since the 2026-09-07
+  performance pass, per that entry's own note). Scoped down first via
+  AskUserQuestion: fix the Quick Add UI only, dropping the rest of the page
+  rather than trying to fix the whole five-tab surface at once.
+
+  **Collapsed `offline.html` from a five-tab page (Dashboard/Calendar/
+  Tasks/Contacts/Notes, each with its own read-only IndexedDB-mirror list)
+  to a single focused screen**: the offline indicator + a one-line "last
+  synced / N changes waiting to sync" summary + the Quick Add form, nothing
+  else. The tab bar (`offline-main-tabs`), all five `#offline-*` panel
+  render targets, and their empty-state markup are gone. Re-adding a real
+  offline *read* surface (browsing local tasks/events/contacts while
+  offline) is left for a separate future slice, not bundled into this UI
+  fix -- this pass is Quick Add only, per the direct scoping decision.
+
+  **Removed the "Quick Capture Syntax" preview textarea** from
+  `_offline_quick_add.html` -- flagged directly as confusing. Root cause
+  matched the complaint: it displayed a capture string generated from the
+  visual fields, but `offline_shell.js`'s submit handler always read those
+  fields directly and never parsed the textarea back in, so it was pure
+  decoration with no function, just an extra thing to look at.
+
+  `offline_shell.js` rewritten from ~520 lines (five-panel render + tab
+  wiring + per-row task complete/delete handlers) down to ~190: it now
+  only reads the mirror to compute the sync summary and populate the label
+  picker (`getAllTasks`/`getAllEvents` still called for label aggregation,
+  `getLastSyncedAt`/`getOutboxCount` for the summary line), plus the
+  Quick Add builder's entity-type toggle and submit-to-`CCOfflineWrite`
+  wiring, unchanged in substance. `wireTabs`/`wireWriteHandlers` (the
+  per-row complete/delete click handlers for a task/contact/note list that
+  no longer renders) removed outright. `style.css` lost the now-dead rules
+  those five panels/tabs used (`.offline-main-tabs`, `.offline-main-panel`,
+  `.offline-dashboard-grid/-card`, plus an already-orphaned older trio from
+  a superseded 2026-08-18 rework, `.offline-tabs`/`.offline-panels`/
+  `.offline-quick-capture-*` -- confirmed dead via grep before removing),
+  gaining a small `.offline-page` max-width wrapper so the lone form
+  doesn't stretch edge-to-edge on wide viewports.
+
+  `sw.js` `CACHE_NAME` bumped `v78` -> `v79` (`offline_shell.js`/
+  `style.css` both changed). `test_pwa_shell.py` updated throughout --
+  removed/rewrote every assertion tied to the old tab bar, the five panel
+  IDs, the per-row task write hooks, and the capture-text box; added
+  negative assertions (`"data-offline-main-tab" not in html"`,
+  `"offline-capture-text" not in script`, etc.) so a regression back to
+  either would be caught. Net test count unchanged (2019 -> 2019): two
+  tests renamed/repurposed in place, none added or removed. Full suite
+  re-run in 8 sequential chunks of ~10 files: 301 + 392 + 271 + 163 + 260 +
+  262 + 160 + 210 = 2019 passed, same total as the entry below.
+
+  **Repo housekeeping note, still unresolved:** the same ~13-file dirty
+  working-tree breadcrumb refactor flagged in the 2026-09-08 entry further
+  below (`settings.py` + several Settings templates + `test_settings_
+  radicale.py`/`test_settings_time_blocks.py`, `_settings_breadcrumb.html`
+  deleted) is still sitting uncommitted and untouched -- confirmed via
+  `git status` before committing this slice, deliberately excluded from
+  this commit (only the 6 files this slice actually touched were staged:
+  `offline_shell.js`, `style.css`, `sw.js`, `_offline_quick_add.html`,
+  `offline.html`, `test_pwa_shell.py`). Still worth asking directly next
+  session whether that other work is wanted or should be reverted.
+
+  **Next slice:** the deferred larger piece -- a real offline *read*
+  surface (browsing local tasks/events/contacts/notes while offline)
+  redesigned with the same "single clear screen" standard this pass just
+  applied to Quick Add, rather than reviving the old five-tab mirror
+  wholesale. Not scoped into a concrete diff yet; worth an AskUserQuestion
+  on shape (one combined list vs. separate screens per entity type) before
+  building. No live-browser check yet either (same recurring gap every
+  entry in this file already notes) -- worth being the first thing done
+  next session if Chrome or a sandbox browser becomes reachable, given
+  this is a direct UI complaint that was only verified structurally here.
+
 - **Shipped:** 2026-09-09 -- third same-day follow-up, direct request:
   "Delete Everything" -> "Delete" on the purge confirm toast's button.
   Removed the explicit `confirmLabel` override entirely rather than

@@ -3,8 +3,13 @@
    - Entity type dropdown (task/event/contact/note)
    - Label picker (for tasks/events, populated from local mirror)
    - Date/time inputs (due date for tasks, start/end for events)
-   - Capture text box that syncs with visual inputs
-   - Creates entities via CCOfflineWrite #}
+   - Creates entities via CCOfflineWrite
+
+   2026-09-09 -- dropped the "Quick Capture Syntax" preview textarea that
+   used to sit below these fields. It rendered a generated capture string
+   for display only -- submit always read the visual fields directly, so
+   the box was never actually parsed back in, just a confusing extra
+   surface with no real function. #}
 
 <div class="offline-quick-add-builder" data-offline-quick-add>
     <h3 class="offline-quick-add-title">{{ icon('plus', 'icon-sm') }} Quick Add</h3>
@@ -88,13 +93,6 @@
                 <textarea id="offline-note-content" name="content" placeholder="Note content" rows="4" maxlength="5000"></textarea>
             </div>
         </fieldset>
-
-        <!-- Capture text box (synced with visual inputs) -->
-        <div class="field">
-            <label for="offline-capture-text">{{ icon('code', 'icon-sm') }} Quick Capture Syntax</label>
-            <textarea id="offline-capture-text" name="capture_text" class="offline-capture-text" readonly placeholder="Fill in the fields above to generate capture syntax"></textarea>
-            <small class="field-hint">This is the capture syntax that will be parsed. You can also edit it directly.</small>
-        </div>
 
         <div class="modal-footer offline-quick-add-footer">
             <button type="button" class="btn ghost" id="offline-quick-add-cancel">{{ icon('x') }} Cancel</button>
