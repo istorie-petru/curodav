@@ -1492,30 +1492,10 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    Labels/Holidays/Time blocks all switched to the full-row ".task-add-row"
    convention (see that rule's own comment), no callers left. */
 
-/* Advanced section in label form modal -- collapsible, de-emphasized */
-.advanced-section {
-    margin-top: var(--space-4); padding-top: var(--space-4);
-    border-top: 1px solid var(--separator);
-}
-.advanced-summary {
-    cursor: pointer; display: inline-flex; align-items: center; gap: var(--space-1);
-    font-size: var(--text-caption); font-weight: 500; color: var(--fg-tertiary);
-    text-transform: uppercase; letter-spacing: .04em;
-    padding: var(--space-1) 0; user-select: none;
-}
-.advanced-summary:hover { color: var(--fg-secondary); }
-.advanced-summary .icon { width: 12px; height: 12px; flex-shrink: 0; transition: transform var(--dur-fast) var(--ease-standard); }
-.advanced-section[open] .advanced-summary .icon { transform: rotate(180deg); }
-.advanced-fields { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
-.advanced-fields .field-toggle {
-    padding: var(--space-2); background: var(--bg-secondary); border-radius: var(--radius-sm);
-    border: 1px solid var(--separator);
-}
-.advanced-fields .field-toggle label {
-    font-size: var(--text-footnote); font-weight: 400; color: var(--fg-secondary);
-    text-transform: none; letter-spacing: 0; cursor: pointer;
-}
-.advanced-fields .field-toggle input[type="checkbox"] { margin-right: var(--space-2); }
+/* Label form modal used to tuck Role/Project-dates/Banner into a
+   collapsible "Advanced options" <details> here -- retired 2026-09-09
+   (direct request: Role promoted to a plain field, no divider lines left
+   in this modal). See .label-role-picker/.label-project-fields below. */
 
 /* --------------------------------------------------------------------- */
 /* 7. Tags / pills (status, priority, category, credit labels)           */
@@ -2713,10 +2693,13 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
 .field.field-format-meeting{display:none;}
 #event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}
 #event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}
-/* label_edit_modal.html's Project date fields, toggled via `hidden` by
+/* label_form_modal.html's Project date fields, toggled via `hidden` by
    static/label_role_picker.js -- same `.field{display:flex}`-beats-bare-
-   `[hidden]` fight as .field.holiday-field right above; same fix. */
-.field.label-project-fields[hidden]{display:none;}
+   `[hidden]` fight as .field.holiday-field right above; same fix. Lives on
+   a `.field-grid` (a Start/End 2-column row of its own, 2026-09-09) rather
+   than a single `.field` now, so it's `.field-grid{display:grid}` beating
+   `[hidden]` here instead, same underlying issue. */
+.field-grid.label-project-fields[hidden]{display:none;}
 
 /* Tile/card picker (2026-08-07, modal-input-design pattern 1) -- a row of
    large tappable cards (icon + label), one visibly selected, for a
@@ -5969,10 +5952,18 @@ body.command-palette-open{overflow:hidden;}
    under its group's plain-text heading. */
 .label-list-row.is-child{padding-left:28px;}
 
-/* label_edit_modal.html's Role control (segmented, .segmented/.seg-btn
-   base already defined elsewhere) and the Project date fields it reveals. */
-.label-role-segmented{margin-bottom:6px;}
-.label-project-fields{margin-top:10px; padding-top:10px; border-top:1px solid var(--separator);}
+/* label_form_modal.html's Role control -- a radio-backed custom dropdown,
+   not a native <select> (2026-09-09 direct request: "should be a radio
+   box custom drop down, not html default one" -- a native <select>'s open
+   state can't be restyled, see _widget_list_multiselect.html's own header
+   comment on the same tradeoff). Markup mirrors that shared partial
+   exactly (.multiselect/.widget-list-multiselect/.multiselect-trigger/
+   .multiselect-panel/.multiselect-option below) so it's covered by that
+   same CSS with nothing extra needed here; .label-role-picker itself is
+   just the data-original-role carrier label_role_picker.js reads. The
+   Project date fields it reveals sit in their own field-grid row with no
+   divider, same as every other field in this modal. */
+.label-project-fields{margin-top:var(--space-3);}
 
 /* Small on-off switch (app preferences).
     MD3 Switch: track is a rounded rectangle, thumb is a circle

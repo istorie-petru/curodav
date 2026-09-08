@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Edit label' if l else 'New Label' }}{% endblock %}
 {% block content %}
-<!-- Everything fits in one modal: Name, Color (16 presets), Icon, Group,
-     plus collapsible Advanced (Space / Project toggles). See
-     routers/labels.py's edit_label_modal / create_label for the
-     server-side split; static/label_role_picker.js handles the
-     client-side show/hide of Project date fields and the switch-away
-     confirm when a real Space/Project is being turned off. -->
+<!-- Everything fits in one modal, all as plain fields: Name, Color (16
+     presets), Icon, Group, Role (Space / Project custom dropdown), plus
+     Project dates and Banner when applicable. See routers/labels.py's
+     edit_label_modal / create_label for the server-side split;
+     static/label_role_picker.js handles the client-side show/hide of
+     Project date fields and the switch-away confirm when a real
+     Space/Project is being turned off. -->
 <div id="modal-target" class="modal-height-lg">
 <div class="modal-header">
 <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
@@ -38,85 +39,95 @@
             <label>Group</label>
             <input type="text" name="label_group" value="{{ l.label_group if l else '' }}" placeholder="e.g. Work, Priority">
         </div>
+        <!-- Role -- 2026-08-29 fix (STATE.md backlog item 6, direct
+             feedback: "better visual picker for Space / Project / None
+             (currently unclear which is selected)"), reworked 2026-09-09
+             (direct request, twice): first into a plain native <select>,
+             then -- "should be a radio box custom drop down, not html
+             default one" -- into the same reusable radio-backed dropdown
+             control _widget_list_multiselect.html already established for
+             the widget builder's View/Range fields (see that partial's
+             own header comment on why a native <select>'s open state can
+             never be restyled to match the rest of the app). Not rendered
+             via that include here since this control also needs its own
+             data-original-role/data-warn-role for label_role_picker.js's
+             switch-away confirm, which the shared partial has no slot
+             for -- markup below intentionally mirrors it exactly
+             (.multiselect/.widget-list-multiselect/.multiselect-trigger/
+             .multiselect-panel/.multiselect-option) so it picks up the
+             exact same trigger/panel CSS and the exact same global
+             open-close/portal/summary-sync wiring in static/app.js, no
+             separate styling or JS needed for this one field. -->
+        {% set _role_labels = {'none': 'Plain label', 'space': 'Space', 'project': 'Project'} %}
+        <div class="field label-role-picker" data-original-role="{{ role }}">
+            <label>Role</label>
+            <div class="multiselect widget-list-multiselect" data-ms data-ms-mode="single" data-ms-label="role">
+                <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+                    <span class="ms-summary">{{ _role_labels[role] }}</span>
+                    <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="multiselect-panel ms-panel">
+                    <label class="multiselect-option">
+                        <input type="radio" name="role" value="none" form="label-form" {% if role == 'none' %}checked{% endif %}>
+                        <span>Plain label</span>
+                    </label>
+                    <label class="multiselect-option">
+                        <input type="radio" name="role" value="space" form="label-form" {% if role == 'space' %}checked{% endif %}>
+                        <span>{{ icon('layers', 'icon-sm') }} Space</span>
+                    </label>
+                    <label class="multiselect-option">
+                        <input type="radio" name="role" value="project" form="label-form" {% if role == 'project' %}checked{% endif %}>
+                        <span>{{ icon('folder', 'icon-sm') }} Project</span>
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Advanced options (collapsible, de-emphasized) -->
-    <details class="advanced-section" id="advanced-section" {% if role != 'none' %}open{% endif %}>
-        <summary class="advanced-summary">
-            {{ icon('chevron-down', 'icon-sm') }} Advanced options
-        </summary>
-        <div class="advanced-fields">
-            <!-- Role -- 2026-08-29 fix (STATE.md backlog item 6, direct
-                 feedback: "better visual picker for Space / Project / None
-                 (currently unclear which is selected)"). Space and Project
-                 used to be two independent checkboxes here, which could
-                 both render unchecked with no visible indication of which
-                 (if either) plain state was actually in effect. Replaced
-                 with the same mutually-exclusive segmented radio group
-                 already built for the retired label_edit_modal.html
-                 (static/label_role_picker.js, loaded globally in
-                 base.html) -- exactly one option is always visibly active,
-                 and an icon rides along with Space/Project so the choice
-                 reads at a glance even collapsed into this list. -->
-            <div class="field field-wide">
-                <label>Role</label>
-                <div class="segmented label-role-segmented" role="radiogroup" aria-label="Label role" data-original-role="{{ role }}">
-                    <label class="seg-btn"><input type="radio" name="role" value="none" class="seg-radio" {% if role == 'none' %}checked{% endif %}> Plain label</label>
-                    <label class="seg-btn"><input type="radio" name="role" value="space" class="seg-radio" {% if role == 'space' %}checked{% endif %}> {{ icon('layers', 'icon-sm') }} Space</label>
-                    <label class="seg-btn"><input type="radio" name="role" value="project" class="seg-radio" {% if role == 'project' %}checked{% endif %}> {{ icon('folder', 'icon-sm') }} Project</label>
-                </div>
-                <span class="settings-field-hint">Space aggregates child labels onto their own page. Project adds start/end date fields.</span>
-            </div>
-
-            <!-- Project period fields -- shown only when role is "project";
-                 label_role_picker.js toggles `hidden` client-side as the
-                 radios change, matching this server-rendered initial state. -->
-            <div class="field field-wide label-project-fields" {% if role != 'project' %}hidden{% endif %}>
-                <div class="field-grid">
-                    <div class="field">
-                        <label>Start date</label>
-                        {% from "_datetime_picker.html" import datetime_picker with context %}
-                        {{ datetime_picker('start_date', '', l.start_date if l else '', '', 'date') }}
-                    </div>
-                    <div class="field">
-                        <label>End date</label>
-                        {{ datetime_picker('end_date', '', l.end_date if l else '', '', 'date') }}
-                    </div>
-                </div>
-            </div>
-
-            {% if l %}
-            {# 2026-08-30 (direct request): a label's banner used to be
-               reachable only through a dashboard page's own edit-mode "Add/
-               Change banner" button (Home/Space/Project pages, since only
-               those render _page_banner.html) -- surfaced here too so any
-               label can carry one, not only a Space/Project that happens to
-               have a dashboard page. Same storage, same /banners/editor
-               dialog (routers/banners.py) -- this is just another entry
-               point into it, scoped to this label's own name, with
-               page_url pointed back at this same edit modal so its Done
-               link returns here instead of a dashboard page. Gated on `l`
-               (edit mode only) -- a brand-new label being created has no
-               saved name yet to key a banner off of. #}
-            <div class="field field-wide">
-                <label>Banner</label>
-                {% if banner %}
-                <div class="label-banner-preview">
-                    {% if banner.version %}
-                    <img src="/banners/image?scope={{ l.name|urlencode }}&amp;v={{ banner.version }}" alt="">
-                    {% else %}
-                    <img src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
-                    {% endif %}
-                    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn ghost btn-sm">{{ icon('image', 'icon-sm') }} Change banner</a>
-                </div>
-                {% else %}
-                <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn ghost btn-sm">{{ icon('image', 'icon-sm') }} Add banner</a>
-                {% endif %}
-                <span class="settings-field-hint">Shown on this label's own dashboard page, and -- for a task carrying this label, its project, or its space -- on that task's Kanban card and detail view (label banners win, then the project's, then the space's).</span>
-            </div>
-            {% endif %}
+    <!-- Project period fields -- shown only when role is "project";
+         label_role_picker.js toggles `hidden` client-side as the Role
+         radios change, matching this server-rendered initial state. -->
+    <div class="field-grid label-project-fields" {% if role != 'project' %}hidden{% endif %}>
+        <div class="field">
+            <label>Start date</label>
+            {% from "_datetime_picker.html" import datetime_picker with context %}
+            {{ datetime_picker('start_date', '', l.start_date if l else '', '', 'date') }}
         </div>
-    </details>
+        <div class="field">
+            <label>End date</label>
+            {{ datetime_picker('end_date', '', l.end_date if l else '', '', 'date') }}
+        </div>
+    </div>
+
+    {% if l %}
+    {# 2026-08-30 (direct request): a label's banner used to be
+       reachable only through a dashboard page's own edit-mode "Add/
+       Change banner" button (Home/Space/Project pages, since only
+       those render _page_banner.html) -- surfaced here too so any
+       label can carry one, not only a Space/Project that happens to
+       have a dashboard page. Same storage, same /banners/editor
+       dialog (routers/banners.py) -- this is just another entry
+       point into it, scoped to this label's own name, with
+       page_url pointed back at this same edit modal so its Done
+       link returns here instead of a dashboard page. Gated on `l`
+       (edit mode only) -- a brand-new label being created has no
+       saved name yet to key a banner off of. #}
+    <div class="field field-wide">
+        <label>Banner</label>
+        {% if banner %}
+        <div class="label-banner-preview">
+            {% if banner.version %}
+            <img src="/banners/image?scope={{ l.name|urlencode }}&amp;v={{ banner.version }}" alt="">
+            {% else %}
+            <img src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+            {% endif %}
+            <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Change banner</a>
+        </div>
+        {% else %}
+        <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Add banner</a>
+        {% endif %}
+    </div>
+    {% endif %}
 </form>
 </div>
 </div>
