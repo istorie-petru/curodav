@@ -537,8 +537,11 @@ class TestLocalWritePath:
         # v76 (2026-09-09, same-day follow-up -- purge confirmation): "Reset
         # database" moved from a modal dialog to a confirm toast with a
         # typed-phrase gate -- see sw.js's own v76 comment.
+        # v77 (2026-09-09, same-day follow-up 2): purge toast copy shortened,
+        # its two buttons stretch full-width to align with the input above
+        # -- see sw.js's own v77 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v76"' in script
+        assert 'CACHE_NAME = "cc-shell-v77"' in script
 
 
 class TestOfflineToolbar:

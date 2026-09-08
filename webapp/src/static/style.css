@@ -3979,6 +3979,12 @@ main.main-shell > .bulk-actions-bar{
   width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing:.08em; font-size:var(--text-caption);
 }
+/* This variant's two buttons stretch to fill the row edge-to-edge (equal
+   width each) instead of the plain confirm toast's flex-end pair -- lines
+   them up flush with the typed-phrase input's own left/right edges above,
+   rather than floating right as a short, variable-width pair. */
+.toast-confirm-typed .toast-actions{justify-content:stretch;}
+.toast-confirm-typed .toast-action{flex:1 1 0; text-align:center;}
 .toast-typed-input.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}

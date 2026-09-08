@@ -17,6 +17,47 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- second same-day follow-up, against a
+  screenshot of the new purge confirm toast: shorten the description,
+  and fix the two buttons not lining up under the typed-phrase input
+  box above them.
+
+  Message shortened: "This deletes every task, event, contact, label,
+  habit, and published list. Backups already saved to the server (Backup
+  card) are kept -- everything else is gone for good." -> "Deletes every
+  task, event, contact, label, habit, and published list. Backups are
+  kept." Confirm button label shortened too, "Permanently Delete
+  Everything" -> "Delete Everything" -- it was wide enough on its own to
+  be most of what made the button row look uneven against the input
+  above it.
+
+  Root cause of the alignment complaint: `.toast-actions` (the shared
+  Cancel/Confirm row every confirm toast uses) is `justify-content:
+  flex-end` -- fine for the plain confirm toast's normal short labels
+  (default "Delete"), but on this longer-label variant the two buttons
+  together got wide enough to visually read as spanning the toast, just
+  unevenly (packed right, empty gap on the left) rather than lining up
+  with the input's own left/right edges above them. Fixed with a
+  variant-scoped override rather than touching the shared rule every
+  other confirm toast in the app already relies on: new
+  `.toast-confirm-typed .toast-actions{justify-content:stretch}` +
+  `.toast-confirm-typed .toast-action{flex:1 1 0}` makes the two buttons
+  split the row evenly, edge-to-edge, flush with the typed-phrase
+  input's own width (`style.css`, right after `.toast-typed-input`).
+
+  `sw.js` `CACHE_NAME` bumped `v76` -> `v77`; `test_pwa_shell.py`'s pin
+  updated. No test text asserted the old copy/label strings (confirmed by
+  grep before editing), so no test changes needed beyond the version pin.
+  Full suite re-run in the same 6-chunk pattern: 434 + 485 + 282 + 360 +
+  248 + 210 = 2019 passed, same total as the entry below (no tests
+  added/removed).
+
+  **Next slice:** none mandated -- direct request, fully shipped. Still
+  worth the same real live-browser check the entry below already flags
+  (type the phrase, confirm the layout actually reads right at real
+  viewport widths) -- this whole toast has only ever been verified
+  structurally/by reasoning about CSS, never rendered.
+
 - **Shipped:** 2026-09-09 -- same-day follow-up direct request: "Reset
   database (purge all)" converted from a standalone modal dialog to a
   floating confirm toast, plus a direct question about whether purge

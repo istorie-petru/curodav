@@ -260,8 +260,8 @@
     if (!btn) return;
     window.ccConfirmSheet({
       anchor: btn,
-      message: "This deletes every task, event, contact, label, habit, and published list. Backups already saved to the server (Backup card) are kept -- everything else is gone for good.",
-      confirmLabel: "Permanently Delete Everything",
+      message: "Deletes every task, event, contact, label, habit, and published list. Backups are kept.",
+      confirmLabel: "Delete Everything",
       typedConfirm: { matchValue: "DELETE ALL" },
       onConfirm: function () {
         fetch("/settings/purge-all", { method: "POST", headers: { "X-Requested-With": "fetch" } })

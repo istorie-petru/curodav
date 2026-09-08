@@ -380,7 +380,12 @@
 // static/data_maintenance.js (the trigger + fetch) both changed;
 // static/style.css lost the old .dm-danger-* rules and gained
 // .toast-confirm-typed/.toast-typed-input.
-const CACHE_NAME = "cc-shell-v76";
+// v77 (2026-09-09, same-day follow-up 2): purge confirm-toast copy
+// shortened, and its two buttons now stretch edge-to-edge (equal width)
+// to line up with the typed-phrase input above them instead of floating
+// right as a variable-width pair -- static/data_maintenance.js,
+// static/style.css.
+const CACHE_NAME = "cc-shell-v77";
 
 const SHELL_ASSETS = [
   "/offline",
