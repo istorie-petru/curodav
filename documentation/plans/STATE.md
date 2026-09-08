@@ -17,6 +17,72 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- same-day bug fix, round 3, the ACTUAL root
+  cause, found by connecting a live browser to this sandbox after round 2
+  (further below) was reported still broken. Rounds 1 and 2 both reasoned
+  from the code alone and both fixed real-but-secondary issues in
+  `calendar_month_drag.js` (kept, not reverted) -- neither was the actual
+  cause of "resize down doesn't work" / "resize needs N+1" / "drops into
+  the wrong cell."
+
+  **Root cause:** `.month-day-cell:nth-child(N){grid-column:N;}` (style.css)
+  counts each day cell's position among ALL of `.month-week-grid`'s
+  children. `.month-week-bars` (`_calendar_month_grid.html`/
+  `_calendar_fourweek_grid.html`) is rendered as a PRECEDING sibling of the
+  day cells, but only `{% if week.bars %}` -- i.e. only in a week row that
+  actually has a bar-worthy event. In exactly those rows, every
+  `.month-day-cell` after it lands one `nth-child` index later than its own
+  weekday: Monday's cell silently gets `grid-column:2` (Tuesday's slot),
+  Tuesday's gets `grid-column:3`, and so on, with Sunday's cell falling off
+  the explicit 1-7 rule set entirely and auto-placing back into column 1.
+
+  Confirmed live, in a running instance, by dumping the actual DOM: a week
+  row with a bar had its 7 `.month-day-cell`s in date order but
+  `getBoundingClientRect().left` shifted one column right of where their
+  own `data-date` said they should be, while the bar itself (laid out
+  independently via `_week_bars`' own `col_start`/`col_span` math) sat at
+  its own correct position -- so the bar and the day cells under it
+  disagreed about which date lived where. Every `cellAtPoint` hit-test
+  during a drag reads a cell's `data-date` directly, so this wasn't a
+  hit-testing bug at all: a user dragging to what looked like the right day
+  was, in any week containing a bar, always landing on a cell one column
+  over from what they saw. This explains "wrong cell" outright, and
+  "resize needs N+1" as a direct consequence (the visual target and its
+  true date disagreed by exactly one column).
+
+  **Fix, `style.css` only** (no template change -- both grid partials
+  share this one rule block): `.month-day-cell:nth-child(N){...}` ->
+  `.month-day-cell:nth-child(N of .month-day-cell){...}` for N in 1-7 --
+  the CSS Selectors 4 "of <selector>" filter on `:nth-child`, which counts
+  only among siblings matching `.month-day-cell`, so `.month-week-bars`
+  (never itself a `.month-day-cell`) can no longer perturb the count.
+  Verified live: reproduced the shifted-column DOM, confirmed the fix
+  restores correct alignment, then re-ran an actual resize-grow drag
+  (landed exactly on the day dropped on, no overshoot) and an actual chip
+  move drag (same) against the running server -- not just reasoned about,
+  actually clicked through this time.
+
+  **Tests:** new `TestDragRound3DayCellColumnAlignment` in
+  `test_calendar_month_bars.py` -- greps style.css for the `of
+  .month-day-cell`-scoped rules (and asserts the old unscoped form is
+  gone, since a leftover at equal specificity would be a cascade-order
+  footgun) plus a precondition test locking in that `.month-week-bars`
+  is still a preceding, conditional sibling in both templates (if that
+  ever changes, this fix's own reasoning needs revisiting, not silent
+  invalidation). `sw.js` `CACHE_NAME` bumped `v89` -> `v90`; `test_pwa_
+  shell.py`'s pin updated. Full suite re-run across all 88 non-live test
+  files (`test_caldav_bridge_live.py` excluded as always) in 5 batches --
+  all green, 0 failures.
+
+  **Process note, worth keeping:** two rounds of "read the code, form a
+  hypothesis, ship it" both missed this because the bug wasn't in the file
+  either round was looking at -- it was one CSS rule, several hundred
+  lines away from the drag JS, that only manifests in weeks containing a
+  bar. Connecting a live browser (once one became reachable) and actually
+  dumping DOM rects took a few minutes and found it immediately. If a
+  future calendar-drag report doesn't yield an obvious cause on first read,
+  get a live browser in before iterating on hypotheses a second time.
+
 - **Shipped:** 2026-09-08 -- same-day bug fix, round 2, direct live-browser
   report against the round-1 fix further below (2026-09-08 "same-day bug
   fix" entry): Month/4-Week bar resize was *still* unreliable after that

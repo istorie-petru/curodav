@@ -23,6 +23,7 @@ from pathlib import Path
 from src.routers import calendar as calendar_router
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "templates"
 
 MONDAY = date(2026, 8, 3)  # 2026-08-03 is a Monday
 
@@ -424,3 +425,68 @@ class TestDragResizeRound2Structural:
     def test_drop_hover_has_a_visible_boundary_ring(self):
         css = (_STATIC_DIR / "style.css").read_text()
         assert ".month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle); box-shadow:inset 0 0 0 2px var(--accent-neutral);}" in css
+
+
+class TestDragRound3DayCellColumnAlignment:
+    """2026-09-08 same-day bug fix, round 3 -- the ACTUAL root cause, found
+    via a live browser session after rounds 1 and 2 (both above, both
+    reasoning purely from static code) failed to resolve the report.
+
+    `.month-day-cell:nth-child(N){grid-column:N;}` (just above this class's
+    own rules in style.css) counts a cell's position among ALL of
+    `.month-week-grid`'s children, not just the day cells. `.month-week-
+    bars` (_calendar_month_grid.html / _calendar_fourweek_grid.html) is a
+    CONDITIONAL preceding sibling -- rendered only in a week row that
+    actually has a bar-worthy event -- so in exactly those rows every
+    `.month-day-cell` was shifted one nth-child index off from its own
+    weekday: Monday's cell silently rendered in Tuesday's grid column, and
+    so on, with the 7th day falling off the explicit 1-7 rule set and
+    auto-placing back into column 1. Confirmed live: a bar's own start/end
+    dates were always correct (it's laid out independently, by
+    `_week_bars`' own col_start/col_span math), but the day CELLS under it
+    -- and therefore every `cellAtPoint` hit-test result during a drag,
+    since that's keyed off each cell's own `data-date` -- were reading a
+    different day than what was visually under them, in any week with a
+    bar. This fully explains "wrong cell" (any drag in a bar week landed
+    one day off from where it looked like it landed) and "resize needs
+    N+1" (the visual target cell and its true date disagreed by one column,
+    so trusting the visual made every resize land one day short). Rounds 1
+    and 2's fixes weren't wrong to make, but they were fixing a layer
+    (cellAtPoint's hit-testing itself, and the resize-handle/feedback UX)
+    that was never actually the culprit.
+
+    Fix is CSS-only, in the `.month-day-cell:nth-child(N)` rule block
+    itself: `:nth-child(N of .month-day-cell)` (CSS Selectors 4 "of
+    <selector>" filter) counts only among siblings that are themselves
+    `.month-day-cell`, so a `.month-week-bars` sibling can no longer
+    perturb the count. Shared by both `_calendar_month_grid.html` and
+    `_calendar_fourweek_grid.html` (identical markup/class names), so this
+    one rule fixes Month and 4-Week together -- no template change needed.
+
+    Verified live (not just reasoned about): reproduced the exact shifted-
+    column DOM structure in a running instance, confirmed the fix restores
+    correct alignment, then re-ran an actual resize-grow drag (landed on
+    the exact day dropped on, no overshoot needed) and an actual chip move
+    drag (landed on the exact day dropped on) against the live server."""
+
+    def test_day_cell_grid_column_rules_are_scoped_to_month_day_cell_siblings(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for n in range(1, 8):
+            assert f".month-day-cell:nth-child({n} of .month-day-cell){{grid-column:{n};}}" in css
+        # The old, sibling-count-vulnerable form must be gone, not just
+        # supplemented -- a leftover bare rule at equal specificity would
+        # be a real cascade-order footgun (last one in the file wins).
+        for n in range(1, 8):
+            assert f".month-day-cell:nth-child({n}){{grid-column:{n};}}" not in css
+
+    def test_month_week_bars_is_still_documented_as_a_preceding_conditional_sibling(self):
+        # Locks in the precondition the bug depended on -- if a future
+        # refactor moves `.month-week-bars` (e.g. outside `.month-week-
+        # grid`, or makes it unconditional) this assumption should be
+        # revisited, not silently invalidated.
+        for name in ("_calendar_month_grid.html", "_calendar_fourweek_grid.html"):
+            html = (_TEMPLATES_DIR / name).read_text()
+            bars_idx = html.index('class="month-week-bars"')
+            first_cell_idx = html.index('class="month-day-cell ')
+            assert bars_idx < first_cell_idx
+            assert "{% if week.bars %}" in html

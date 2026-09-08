@@ -249,5 +249,10 @@ class TestShellCacheVersion:
         # widened, drop-hover ring strengthened, resize-guard rejections now
         # toast instead of silently no-op'ing (calendar_month_drag.js,
         # style.css).
+        # v90 (same-day bug fix, round 3 -- the actual root cause, found via
+        # a live browser session): .month-day-cell's nth-child grid-column
+        # rules now scoped with ":nth-child(N of .month-day-cell)" so the
+        # conditional .month-week-bars sibling can't shift every day cell's
+        # grid column in a week that has a bar (style.css only).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v89"' in script
+        assert 'CACHE_NAME = "cc-shell-v90"' in script

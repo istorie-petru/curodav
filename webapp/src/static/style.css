@@ -3395,14 +3395,40 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    approximation of a wider range -- a real static CSS rule, not a
    workaround for a value that actually varies. Selector is a bare
    `nth-child` (not scoped to `.month-week-grid >`) so it applies
-   regardless of which grid partial includes it. */
-.month-day-cell:nth-child(1){grid-column:1;}
-.month-day-cell:nth-child(2){grid-column:2;}
-.month-day-cell:nth-child(3){grid-column:3;}
-.month-day-cell:nth-child(4){grid-column:4;}
-.month-day-cell:nth-child(5){grid-column:5;}
-.month-day-cell:nth-child(6){grid-column:6;}
-.month-day-cell:nth-child(7){grid-column:7;}
+   regardless of which grid partial includes it.
+
+   2026-09-08 same-day bug fix, round 3 -- ACTUAL root cause of "drag/
+   resize drops into the wrong cell" and the resize N+1/shrink-fails
+   reports, found via a live browser session (the round-1/round-2 fixes
+   above were reasoning about the wrong layer entirely -- calendar_month_
+   drag.js's hit-testing was never broken). `:nth-child(N)` counts a
+   cell's position among ALL of `.month-week-grid`'s children, not just
+   `.month-day-cell` ones. `.month-week-bars` (this file's own comment a
+   few rules up) is a CONDITIONAL preceding sibling -- only present in a
+   week row that actually has a bar-worthy event -- so in exactly those
+   rows every `.month-day-cell` after it was shifted one nth-child index
+   off from its own weekday, silently rendering Monday's cell in Tuesday's
+   grid column, Tuesday's in Wednesday's, and so on, with the 7th day
+   falling off the end of the explicit 1-7 rule set entirely (falls back
+   to grid auto-placement, which wraps it back to column 1). The day
+   CELLS were wrong; the bars/chips laid out against them (and every
+   pointer-driven date `cellAtPoint` read off `data-date`) were reading
+   correct dates the whole time -- so a user dragging to what looked like
+   the right day was, in any week with a bar, actually always one column
+   off. `:nth-child(N of .month-day-cell)` is the same pseudo-class with
+   the CSS Selectors 4 "of <selector>" filter -- it counts only among
+   siblings matching `.month-day-cell`, so `.month-week-bars` (also
+   present, also absolutely positioned, but never itself `.month-day-
+   cell`) no longer perturbs the count. Widely supported (Chromium/
+   Firefox/Safari all ship it) -- no fallback needed for a self-hosted
+   single-user app. */
+.month-day-cell:nth-child(1 of .month-day-cell){grid-column:1;}
+.month-day-cell:nth-child(2 of .month-day-cell){grid-column:2;}
+.month-day-cell:nth-child(3 of .month-day-cell){grid-column:3;}
+.month-day-cell:nth-child(4 of .month-day-cell){grid-column:4;}
+.month-day-cell:nth-child(5 of .month-day-cell){grid-column:5;}
+.month-day-cell:nth-child(6 of .month-day-cell){grid-column:6;}
+.month-day-cell:nth-child(7 of .month-day-cell){grid-column:7;}
 .month-day-cell.not-in-month{opacity:.4;}
 /* 2026-08-31 (direct request, "past events/tasks should show dim") -- a day
    already gone gets the same opacity-on-the-cell treatment as

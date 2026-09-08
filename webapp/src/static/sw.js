@@ -449,7 +449,7 @@
 // (style.css's new .cal-nav-label, the two grid templates' updated
 // markup). style.css and async_calendar.js both changed; neither is in
 // SHELL_ASSETS below, but style.css is, so the bump is required either way.
-const CACHE_NAME = "cc-shell-v89";
+const CACHE_NAME = "cc-shell-v90";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
