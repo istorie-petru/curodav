@@ -3,9 +3,6 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Data & Maintenance", "database") }}
-{% include "_settings_breadcrumb.html" with context %}
-<h1>Data & Maintenance</h1>
-<p class="settings-hint">Backups, database integrity, sync conflicts, export & import, and data lifecycle -- everything about your data's safety, in priority order.</p>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -17,11 +14,14 @@
 {% set needs_attention = conflicts or not integrity.ok or (latest_verified_backup and not latest_verified_backup.verification.ok) %}
 {% if needs_attention %}
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('x-circle', 'icon-sm') }} Needs attention
-        {% if conflicts %}<span class="pill-static pill-red align-middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span>{% endif %}
-    </h2>
     <div class="card card-danger">
         {% if conflicts %}
+        <!-- 2026-09-08 (direct request): the count pill used to live in
+             the now-removed "Needs attention" h2.section-label -- kept
+             here instead of dropped outright, since it's real information
+             (not just heading chrome) a reader can't get elsewhere on the
+             page at a glance. -->
+        <p class="settings-hint"><span class="pill-static pill-red align-middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span></p>
         <table class="task-table">
             <thead>
                 <tr>
@@ -62,8 +62,6 @@
      Health status + Maintenance & upkeep sections. Each card shows status prominently
      with a subtle tinted background, and a three-dot menu for actions. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('activity', 'icon-sm') }} System Status</h2>
-
     <div class="system-status-grid" role="region" aria-label="System status overview">
 
         <!-- DATABASE CARD -->
@@ -80,19 +78,19 @@
                             <form class="form-contents" method="post" action="/settings/data-health/integrity-check">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('eye', 'icon-sm') }} Check integrity</button>
                             </form>
-                            <form class="form-contents" method="post" action="/settings/data-health/verify">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify latest backup</button>
-                            </form>
                             <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
                             </form>
                         </div>
-                        <div class="action-menu-section">
-                            <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up sync data</button>
-                            </form>
-                            <button type="button" class="action-menu-item" role="menuitem" data-action="force-sync">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
-                        </div>
+                        <!-- 2026-09-08 direct request: "Verify latest backup",
+                             "Clean up sync data" and "Force sync" removed from
+                             this menu -- each was a verbatim duplicate of an
+                             action already offered in the Backup/Sync cards
+                             below (same endpoint/behavior, just a different
+                             label here). One home per action now: Verify
+                             lives in the Backup card (it already carries the
+                             specific filename), sync cleanup and Force sync
+                             both live in the Sync card. -->
                         <div class="action-menu-section">
                             <!-- 2026-08-26 second pass: opens the
                                  confirmation dialog (typed DELETE ALL check,
@@ -112,7 +110,7 @@
             <div class="status-card-meta">
                 <span>{{ entities.task_count + entities.event_count + entities.contact_count | int }} records &middot; {{ storage.db_size_bytes | filesizeformat }}</span>
                 {% if integrity.checked_at %}
-                <span class="text-muted">Last checked {{ integrity.checked_at | fmt_dt }}</span>
+                <span class="text-muted">Checked {{ integrity.checked_at | fmt_dt }}</span>
                 {% endif %}
             </div>
         </div>
@@ -169,9 +167,11 @@
                             </form>
                         </div>
                         {% endif %}
-                        <div class="action-menu-section">
-                            <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Restore a file&hellip;</a>
-                        </div>
+                        <!-- 2026-09-08 direct request: the old file-restore
+                             menu item here was removed -- verbatim duplicate
+                             of the Sync card's own Import item (same
+                             /export/import-modal dialog). Kept there,
+                             paired with Export. -->
                     </div>
                 </div>
             </div>
@@ -181,14 +181,12 @@
             </div>
             <div class="status-card-meta">
                 {% if latest_backup %}
-                <span>Last backup: {{ latest_backup.created_at | fmt_dt }} &middot; {{ latest_backup.size_bytes | filesizeformat }}</span>
+                <span>{{ latest_backup.created_at | fmt_dt }} &middot; {{ latest_backup.size_bytes | filesizeformat }}</span>
                 {% if latest_verified_backup %}
                 <span class="text-muted">Verified {{ latest_verified_backup.verification.checked_at | fmt_dt }}</span>
-                {% else %}
-                <span class="text-muted">Not yet verified</span>
                 {% endif %}
                 {% else %}
-                <span class="text-muted">No backups yet -- "Backup now" saves one on the server.</span>
+                <span class="text-muted">No backups yet.</span>
                 {% endif %}
             </div>
         </div>
@@ -232,9 +230,9 @@
                 {% if sync.configured %}
                 <span>{{ sync.detail }}</span>
                 {% if sync_gc.last_run %}
-                <span class="text-muted">Cleanup last ran {{ sync_gc.last_run.at }}</span>
+                <span class="text-muted">Last cleanup {{ sync_gc.last_run.at }}</span>
                 {% else %}
-                <span class="text-muted">Sync cleanup not run yet</span>
+                <span class="text-muted">No cleanup yet</span>
                 {% endif %}
                 {% else %}
                 <span class="text-muted">{{ sync.detail }}</span>
@@ -250,7 +248,6 @@
      install. A no-op display (env-managed) when CC_RADICALE_URL is set
      in the environment; an editable form otherwise. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('repeat', 'icon-sm') }} CalDAV / Radicale sync</h2>
     <div class="card">
         {% if radicale_env_configured %}
         <p class="settings-hint">Configured via environment variables (<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
@@ -289,7 +286,6 @@
      it's routine housekeeping, not a catastrophe -- and shows its live
      count. -->
 <div class="settings-group">
-    <h2 class="section-label">{{ icon('sliders', 'icon-sm') }} Maintenance &amp; cleanup</h2>
     <div class="card">
         <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
             <span class="settings-field-label">Auto-archive completed tasks

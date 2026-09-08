@@ -262,13 +262,15 @@ class TestDataAndBackupCategoryRemoved:
     def test_export_import_live_in_sync_menu_dialogs_not_on_the_page(self, conn, tmp_path):
         # 2026-08-26 third pass: the standalone Export & import card is
         # gone from the merged page entirely -- Export… / Import… are menu
-        # items on the Sync status card now, each opening its own dialog;
-        # the Backup card's "Restore a file…" opens the same Import one
-        # (restoring a downloaded data.json goes through it too).
+        # items on the Sync status card now, each opening its own dialog.
+        # 2026-09-08 direct request: the Backup card's own "Restore a
+        # file…", a verbatim duplicate of this same Import dialog, was
+        # removed -- Import now has exactly one entry point (the Sync
+        # menu), not two.
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/modal" data-modal' in body
-        assert body.count('href="/export/import-modal" data-modal') == 2  # Sync menu + Backup card
+        assert body.count('href="/export/import-modal" data-modal') == 1  # Sync menu only
         # Neither form lives on the page anymore.
         assert "/export/download" not in body
         assert "/export/import/auto" not in body

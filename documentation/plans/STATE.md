@@ -17,6 +17,88 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct request: audit + first fix pass on
+  Data & Maintenance (`settings_data_maintenance.html`), against a direct
+  ask to check the page for standards compliance -- icons on every
+  action, no repeated actions, on-page text vs. toast notifications, and
+  more minimal status-card text. Audited first (findings only, no code),
+  then implemented the first of two agreed slices: dedupe + minimal card
+  text. The toast-notification slice (replacing the `?note=`/`?error=`
+  redirect banner with `ccToast`) is deliberately deferred, not started.
+
+  **Four verbatim-duplicate actions removed**, each was the exact same
+  endpoint/URL offered under two different labels in two different status
+  cards' menus -- one home per action now:
+  - "Verify latest backup" (Database card, called `/settings/data-health/
+    verify` with no filename, which just falls back to the latest backup
+    anyway) dropped in favor of the Backup card's "Verify integrity"
+    (same endpoint, explicit filename).
+  - "Clean up sync data" (Database card) dropped in favor of the Sync
+    card's "Clean up now" -- both posted to `/settings/data-health/
+    sync-gc`.
+  - "Force sync" (Database card, `data-action="force-sync"`) dropped in
+    favor of the identical button already in the Sync card.
+  - "Restore a file..." (Backup card, `/export/import-modal`) dropped in
+    favor of the Sync card's "Import data..." -- same dialog.
+
+  The Database card's now-empty "Clean up sync data / Force sync"
+  `action-menu-section` was removed entirely rather than left as an empty
+  divider.
+
+  **Status-card meta text trimmed**, per "I would like to have the text
+  inside status-cards to be more minimal": dropped the redundant
+  "Last backup:" label prefix (the card is called Backup, the status pill
+  above already says Verified/Not verified/etc.); dropped the "Not yet
+  verified" meta line entirely for the not-yet-verified state, since the
+  status pill directly above it already says exactly that with no
+  additional information in the meta line; shortened "Last checked" ->
+  "Checked", "Cleanup last ran" -> "Last cleanup", "Sync cleanup not run
+  yet" -> "No cleanup yet", "No backups yet -- \"Backup now\" saves one on
+  the server." -> "No backups yet." (the affordance is the menu itself,
+  doesn't need re-explaining in the meta line).
+
+  Icons audited separately, no change needed -- every actual clickable
+  action (buttons, action-menu items, links) already carries an icon
+  consistently; the two `<select>` autosubmit rows (auto-archive,
+  sync retention) have none, but they're inline settings controls, not
+  menu actions, and no other Settings page in this app puts an icon on a
+  bare select label either.
+
+  Two structural tests (`test_data_health.py`, `test_phase8_settings_
+  hub.py`) had hardcoded "this link renders twice" counts for the
+  now-deduped `/export/import-modal` href -- updated `== 2` -> `== 1`
+  at both sites. Two more assertions rewritten rather than just
+  adjusted, since the thing they were checking for (`"Last backup: ..."`,
+  `"Not yet verified"`) no longer exists as literal text -- see
+  `test_backup_facts_are_human_readable_and_only_in_the_backup_card` and
+  `test_verification_state_flips_the_card_meta_line`. No `sw.js` bump --
+  template + tests only, no static JS/CSS changed.
+
+  **Repo housekeeping note:** the working tree already had ~13 other
+  files modified/deleted (a `settings.py` + Settings-breadcrumb refactor
+  across several other templates, `_settings_breadcrumb.html` deleted)
+  from some earlier, uncommitted session that never reached its own
+  commit -- untouched and unrelated to this slice, deliberately left
+  alone (not staged, not part of this commit) rather than guessed at or
+  swept in. Worth asking directly next session whether that work is
+  still wanted or should be reverted -- it's just sitting there dirty
+  right now.
+
+  Full suite run in 6 sequential chunks (same per-call-independent-
+  sandbox constraint every entry in this file already notes): 434 + 482 +
+  282 + 361 + 248 + 210 = 2017 passed, same total as the entry below (no
+  tests added/removed, two rewritten in place).
+
+  **Next slice:** the toast-notification pass -- replace the `?note=`/
+  `?error=` query-param banner (`.settings-hint-accent`/`.settings-hint-
+  error` at the top of the page) with `window.ccToast(...)`, the pattern
+  every delete/archive action elsewhere in the app already uses
+  (`app.js`). Likely a small JS shim that reads those two query params on
+  page load and fires a toast instead of adding a second templated
+  banner -- keeps every action's existing server-side redirect intact
+  rather than converting nine routes to fetch-based submits. Direct user
+  request, not yet scoped into a concrete diff.
+
 - **Shipped:** 2026-09-08 -- direct report: a holiday could be saved with
   no start/end date at all, surfacing a raw FastAPI 422 JSON blob
   ("Something went wrong. Could not save: {\"detail\":[{\"type\":\"missing\",

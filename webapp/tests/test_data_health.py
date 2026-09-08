@@ -349,7 +349,9 @@ class TestDataMaintenanceRedesign2026_08_26:
         assert "Download full backup" in body
         assert "Verify integrity" in body                   # per-backup actions
         assert "Restore this backup" in body
-        assert "Restore a file" in body                     # -> unified drop zone
+        # "Restore a file…" was removed 2026-09-08 (duplicate of the Sync
+        # card's "Import data…", same /export/import-modal dialog).
+        assert "Restore a file" not in body
 
     def test_backup_facts_are_human_readable_and_only_in_the_backup_card(self, conn, tmp_path):
         import re
@@ -362,8 +364,12 @@ class TestDataMaintenanceRedesign2026_08_26:
         body = self._page(conn, tmp_path)
         # Raw ISO timestamps became "Aug 25, 2026, 8:57 PM"-style text, and
         # the filename never renders as visible text -- it exists only as
-        # the two menu forms' hidden inputs (verify + restore).
-        assert re.search(r"Last backup: [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
+        # the two menu forms' hidden inputs (verify + restore). 2026-09-08
+        # direct request (minimal card text): the "Last backup:" label
+        # prefix was dropped -- the meta line is just "<date> · <size>" now,
+        # the status pill above it already says what state it's in.
+        assert re.search(r"status-card-meta[\s\S]{0,80}[A-Z][a-z]{2} \d{1,2}, \d{4}", body)
+        assert "Last backup:" not in body
         assert f">{backup['filename']}" not in body
         assert body.count(f'value="{backup["filename"]}"') == 2
         assert re.search(r"\d+(\.\d+)? (kB|MB|bytes)", body)
@@ -379,14 +385,18 @@ class TestDataMaintenanceRedesign2026_08_26:
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
         )
         body = self._page(conn, tmp_path)
-        assert "Not yet verified" in body
+        # 2026-09-08 direct request (minimal card text): an unverified
+        # backup no longer gets its own "Not yet verified" meta line --
+        # that state is already carried by the status pill above it
+        # ("Not verified"), so the meta line stays silent until there's a
+        # real timestamp to add.
+        assert "Verified " not in body
         backup = data_health.list_backups(tmp_path / "backups")[0]
         settings_router.data_health_verify(
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"),
             filename=backup["filename"], conn=conn,
         )
         body = self._page(conn, tmp_path)
-        assert "Not yet verified" not in body
         assert re.search(r"Verified [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
 
     def test_no_backup_yet_message_lives_in_the_card_meta(self, conn, tmp_path):
@@ -499,10 +509,13 @@ class TestDataMaintenanceScriptGate:
 
     def test_templates_carry_the_data_attributes_the_script_reads(self):
         # The page itself hosts no dialog markup -- the Sync card's menu
-        # items and the Backup card's "Restore a file…" are data-modal
-        # triggers; the attributes live in the three dialog templates.
+        # items are data-modal triggers; the attributes live in the three
+        # dialog templates. 2026-09-08 direct request: the Backup card's own
+        # "Restore a file…" (a verbatim duplicate of the Sync card's
+        # "Import data…", same URL) was removed -- one home per action now,
+        # so this link renders exactly once, not twice.
         assert 'href="/export/modal" data-modal' in self.PAGE
-        assert self.PAGE.count('href="/export/import-modal" data-modal') == 2  # Sync + Backup card
+        assert self.PAGE.count('href="/export/import-modal" data-modal') == 1  # Sync card only
         assert 'href="/settings/purge-confirm" data-modal' in self.PAGE
         for marker in ("data-dm-preview=", "data-dm-export-root", "data-modal-get", 'action="/export/download"'):
             assert marker in self.EXPORT
