@@ -261,7 +261,8 @@
     window.ccConfirmSheet({
       anchor: btn,
       message: "Deletes every task, event, contact, label, habit, and published list. Backups are kept.",
-      confirmLabel: "Delete Everything",
+      // confirmLabel omitted -- ccConfirmSheet's own default ("Delete") is
+      // exactly what every other confirm toast in the app already uses.
       typedConfirm: { matchValue: "DELETE ALL" },
       onConfirm: function () {
         fetch("/settings/purge-all", { method: "POST", headers: { "X-Requested-With": "fetch" } })

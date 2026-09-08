@@ -17,6 +17,22 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- third same-day follow-up, direct request:
+  "Delete Everything" -> "Delete" on the purge confirm toast's button.
+  Removed the explicit `confirmLabel` override entirely rather than
+  hardcoding the string "Delete" -- `ccConfirmSheet`'s own default
+  parameter is already `"Delete"` (`static/toast.js`), the exact label
+  every other confirm toast in the app already shows, so this now reads
+  as "use the standard label" rather than "coincidentally match it."
+
+  `sw.js` `CACHE_NAME` bumped `v77` -> `v78`; `test_pwa_shell.py`'s pin
+  updated. No test asserted the old label text (confirmed by grep), so
+  no other test changes. Full suite re-run in the same 6-chunk pattern:
+  434 + 485 + 282 + 360 + 248 + 210 = 2019 passed, same total as the
+  entry below.
+
+  **Next slice:** none mandated -- direct request, fully shipped.
+
 - **Shipped:** 2026-09-09 -- second same-day follow-up, against a
   screenshot of the new purge confirm toast: shorten the description,
   and fix the two buttons not lining up under the typed-phrase input

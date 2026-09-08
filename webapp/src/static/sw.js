@@ -385,7 +385,11 @@
 // to line up with the typed-phrase input above them instead of floating
 // right as a variable-width pair -- static/data_maintenance.js,
 // static/style.css.
-const CACHE_NAME = "cc-shell-v77";
+// v78 (2026-09-09, same-day follow-up 3): purge confirm-toast button
+// relabeled "Permanently Delete Everything" -> "Delete Everything" ->
+// just "Delete" (ccConfirmSheet's own default) -- static/
+// data_maintenance.js.
+const CACHE_NAME = "cc-shell-v78";
 
 const SHELL_ASSETS = [
   "/offline",
