@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, grid_layout, habit_heatmap, recurrence_expand
-from ..deps import _four_week_position, _week_start, get_db, respond, templates, wants_json
+from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
 # Month-view per-day list: how many rows (all-day colored rows + timed
@@ -87,23 +87,63 @@ def _hhmm_to_minutes(t: str) -> int:
     return int(h) * 60 + int(m)
 
 
-def _time_block_overlays_for_day(blocks: list[dict], day: date) -> list[dict]:
+def _sleep_collapse_window(blocks: list[dict]) -> grid_layout.CollapseWindow:
+    """Settings > General's "Hide sleep hours" (2026-09-09, direct request:
+    "the time tagged as sleep time is just removed as cells from the
+    planner calendar view") needs exactly ONE (start_min, end_min) window
+    to remove from the shared Week-grid hour axis -- every day column uses
+    the same hour gutter, so there's no such thing as collapsing a
+    different range per day. Confirmed via AskUserQuestion: if the
+    configured Sleep-kind blocks (db.list_time_blocks, possibly one per
+    distinct day-subset, Settings > Sleep & Leisure Time) don't all share
+    the exact same start_time/end_time, this returns None -- collapsing an
+    arbitrary pick among several different windows would silently hide the
+    wrong hours on whichever days don't actually match it, so an ambiguous
+    configuration just leaves the grid uncollapsed rather than guess.
+    Ignores each block's own `days` list entirely once a single uniform
+    window is confirmed -- the window applies to every column regardless
+    of which weekdays a given block formally covers, same "one shared axis"
+    reasoning."""
+    windows = {(b["start_time"], b["end_time"]) for b in blocks if b["kind"] == "sleep"}
+    if len(windows) != 1:
+        return None
+    (start_s, end_s) = next(iter(windows))
+    start_min = _hhmm_to_minutes(start_s)
+    end_min = _hhmm_to_minutes(end_s)
+    if end_min <= start_min:
+        return None  # defensive -- create/update already reject this, but never trust storage alone
+    return (start_min, end_min)
+
+
+def _time_block_overlays_for_day(blocks: list[dict], day: date, collapse: grid_layout.CollapseWindow = None) -> list[dict]:
     """Every Sleep/Leisure Time block (db.list_time_blocks) that applies to
     `day`'s weekday, turned into a top_px/height_px overlay the Week/Day
     grid can render directly behind its events -- same top/height math as
     grid_layout.position_event, just driven off a fixed weekly time range
     instead of one event's start_at/end_at. `date.strftime('%A')` gives the
     same full weekday name (e.g. "Monday") db.TIME_BLOCK_DAYS/time_blocks.days
-    already store, so no separate lookup table is needed here."""
+    already store, so no separate lookup table is needed here.
+
+    `collapse` (Planner "Hide sleep hours", Week view only -- always None
+    from Day view's own call site) does two things: a Sleep-kind block is
+    dropped entirely rather than positioned -- those hours have no cells to
+    hatch any more, the overlay would just be dead space -- while a
+    Leisure-kind block still renders, repositioned through the same
+    collapse_minutes map as everything else on a collapsed grid so it lands
+    in the right (now-compressed) spot."""
     weekday = day.strftime("%A")
     overlays = []
     for b in blocks:
         if weekday not in db.time_block_days(b):
             continue
+        if collapse and b["kind"] == "sleep":
+            continue
         start_min = _hhmm_to_minutes(b["start_time"])
         end_min = _hhmm_to_minutes(b["end_time"])
         if end_min <= start_min:
             continue  # defensive -- create/update already reject this, but never trust storage alone
+        start_min = grid_layout.collapse_minutes(start_min, collapse)
+        end_min = grid_layout.collapse_minutes(end_min, collapse)
         overlays.append(
             {
                 "kind": b["kind"],
@@ -801,14 +841,23 @@ def _week_view_context(conn, request, date_, label):
     # already uses.
     time_blocks = db.list_time_blocks(conn)
 
+    # "Hide sleep hours in Planner" (2026-09-09, Settings > General, off by
+    # default) -- Week view only, per direct decision (Day view is
+    # unaffected, see _day_view_context's own unchanged call sites below).
+    # `_sleep_collapse_window` is None whenever the setting is off, no Sleep
+    # blocks exist, or the configured ones disagree on start/end -- every
+    # collapse-aware call below already treats None as a plain no-op, so
+    # this is the one place that decision gets made.
+    collapse = _sleep_collapse_window(time_blocks) if db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1" else None
+
     days = []
     for i in range(7):
         d = week_start_date + timedelta(days=i)
         key = d.isoformat()
         day_events = [e for e in events if e.get("start_at", "").startswith(key)]
-        timed = grid_layout.layout_day(day_events)
+        timed = grid_layout.layout_day(day_events, collapse)
         day_tasks = [t for t in tasks if (t.get("due_at") or "").startswith(key)]
-        time_block_overlays = _time_block_overlays_for_day(time_blocks, d)
+        time_block_overlays = _time_block_overlays_for_day(time_blocks, d, collapse)
         # All-day events repeat on every day they span, not just their
         # start date -- the same "repeated entry per day" behavior Month's
         # _month_grid already has (a multi-day all-day trip should fill
@@ -902,8 +951,30 @@ def _week_view_context(conn, request, date_, label):
         "calendar_view": "week",
         "today_iso": date.today().isoformat(),
         "days": days,
-        "hours": list(range(grid_layout.GRID_HOURS)),
+        "hours": grid_layout.visible_hours(collapse),
         "px_per_hour": grid_layout.PX_PER_HOUR,
+        # Total height of the hour column, in px -- the shared `.time-grid-
+        # body{height:calc(25 * var(--hr-h))}` default only holds for an
+        # uncollapsed 24-hour grid; _calendar_week_grid.html overrides it
+        # with this value (via dynamic_styles.js's data-style, see that
+        # file's own comment on why not a plain `style=` attribute) so the
+        # column visibly shrinks by exactly the hidden window's height
+        # instead of leaving dead blank space where it used to be.
+        "grid_height_px": grid_layout.grid_height_px(collapse),
+        # Client-side counterpart of `collapse` for static/sleep_collapse.js
+        # -- static/calendar.js's and static/project_calendar.js's drag
+        # create/move/resize handlers read this (via that shared helper) to
+        # convert an on-screen pixel position back to the REAL clock time it
+        # represents. Without it, dragging anywhere below a collapsed window
+        # would save a time shifted earlier by however many hours are
+        # hidden above it -- the grid's own pixel math and this page's
+        # client-side drag math both derive from `top / PX_PER_HOUR * 60`,
+        # so both sides need the exact same collapse applied (see
+        # grid_layout.collapse_minutes' own comment on the two being
+        # inverses of each other).
+        "sleep_collapse_json": json.dumps(
+            {"active": bool(collapse), "skip_start": collapse[0] if collapse else 0, "skip_end": collapse[1] if collapse else 0}
+        ),
         # Context keys kept as "monday"/"sunday" for calendar_week.html
         # (unchanged template contract) even though the actual first
         # day of the displayed week is now whichever "Week starts on"

@@ -70,10 +70,19 @@
         </div>
     </div>
     </div>
-    <div class="time-grid-body">
+    <!-- "Hide sleep hours in Planner" (Settings > General, 2026-09-09) --
+         `hours` is now a list of {hour, top_px} (grid_layout.visible_hours),
+         not a plain range(24): a collapsed window drops the hours inside it
+         from this list entirely and compresses every top_px after it, so
+         both the gutter labels below and .time-grid-body's own height
+         (grid_height_px, set via data-style same as every other per-request
+         computed value here -- see dynamic_styles.js) have to come from the
+         server's own math rather than a flat `h * px_per_hour` the template
+         could still do for an always-contiguous 24-hour grid. -->
+    <div class="time-grid-body" data-style="height:{{ grid_height_px }}px">
         <div class="time-gutter">
             {% for h in hours %}
-            <div class="hr-label" data-style="top:{{ h * px_per_hour }}px">{{ h | fmt_hour }}</div>
+            <div class="hr-label" data-style="top:{{ h.top_px }}px">{{ h.hour | fmt_hour }}</div>
             {% endfor %}
         </div>
         <div class="time-cols week">

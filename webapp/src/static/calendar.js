@@ -64,7 +64,16 @@
   const PX_PER_HOUR = Number(document.body.dataset.pxPerHour || 48);
   const SNAP_MINUTES = 15;
   const SNAP_PX = (PX_PER_HOUR / 60) * SNAP_MINUTES;
-  const DAY_HEIGHT_PX = 24 * PX_PER_HOUR;
+  // "Hide sleep hours in Planner" (static/sleep_collapse.js, Week view
+  // only -- undefined on Day, where both fall back to the plain 24h
+  // behavior this file always had). DAY_HEIGHT_PX shrinks to match the
+  // grid's own collapsed height so drag clamping can't push an event past
+  // the bottom of the now-shorter column; toRealMin converts a final
+  // pixel-derived minutes value back to the real clock time it represents
+  // before it's saved -- see that file's own header comment for why this
+  // is necessary, not optional, once a window's been collapsed out.
+  const DAY_HEIGHT_PX = window.CCSleepCollapse ? window.CCSleepCollapse.dayHeightPx(PX_PER_HOUR) : 24 * PX_PER_HOUR;
+  const toRealMin = window.CCSleepCollapse ? window.CCSleepCollapse.toReal : (m) => m;
   const CLICK_THRESHOLD_PX = 4;
 
   function snap(px) {
@@ -222,8 +231,8 @@
 
       const top = parseFloat(el.style.top) || 0;
       const height = parseFloat(el.style.height) || SNAP_PX;
-      const startMin = Math.round((top / PX_PER_HOUR) * 60);
-      const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((top / PX_PER_HOUR) * 60));
+      const endMin = toRealMin(Math.round(((top + height) / PX_PER_HOUR) * 60));
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
       const droppedCol = currentCol;
@@ -413,8 +422,8 @@
       const top = parseFloat(ghost.style.top) || 0;
       const height = parseFloat(ghost.style.height) || CREATE_SNAP_PX;
       ghost.style.display = "none";
-      const startMin = Math.round((top / PX_PER_HOUR) * 60);
-      const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((top / PX_PER_HOUR) * 60));
+      const endMin = toRealMin(Math.round(((top + height) / PX_PER_HOUR) * 60));
       const date = col.dataset.date;
       const params = new URLSearchParams({
         date,

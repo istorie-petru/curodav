@@ -114,6 +114,7 @@ from ..deps import (
     EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
+    HIDE_SLEEP_HOURS_KEY,
     PAGE_HEADER_BANNER_SCOPE,
     RECURRENCE_TERMINOLOGY_KEY,
     SHOW_LABEL_ICONS_KEY,
@@ -249,6 +250,13 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # "playful" wording for the Habits group's streak readout
             # (Tasks table). See deps.py's HABIT_STREAK_TERMINOLOGY_KEY.
             "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
+            # 2026-09-09 (direct request) -- "Hide sleep hours in Planner":
+            # off by default. Read back by routers/calendar.py's
+            # _week_view_context via _sleep_collapse_window; see that
+            # function's own docstring for what happens when this is on but
+            # the configured Sleep-kind time blocks don't agree on one
+            # single start/end window.
+            "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -670,6 +678,18 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     minutesToDisplayTime(), which reads this via base.html's
     `data-time-format` body attribute)."""
     db.set_app_meta(conn, TIME_FORMAT_KEY, "12h" if time_format == "12h" else "24h")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/hide-sleep-hours")
+def set_hide_sleep_hours(enabled: str = Form(""), conn=Depends(get_db)):
+    """"Hide sleep hours in Planner" (Settings > General, 2026-09-09, direct
+    request: "the time tagged as sleep time is just removed as cells from
+    the planner calendar view"). Off by default, same on/off pattern as
+    set_edit_mode above. Read back by routers/calendar.py's
+    _week_view_context -- Week/Planner only, Day view is unaffected
+    regardless of this setting (direct decision)."""
+    db.set_app_meta(conn, HIDE_SLEEP_HOURS_KEY, "1" if enabled == "1" else "")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

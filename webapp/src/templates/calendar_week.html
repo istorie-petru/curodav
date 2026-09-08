@@ -51,6 +51,17 @@
      project_calendar.js so both can call window.ccTimeBlocks. -->
 <script type="application/json" id="cc-time-blocks" nonce="{{ csp_nonce() }}">{{ time_blocks_json | safe }}</script>
 <script defer src="{{ static_url('time_blocks.js') }}"></script>
+<!-- "Hide sleep hours in Planner" (Settings > General, 2026-09-09) --
+     static/sleep_collapse.js reads this once and exposes window.
+     CCSleepCollapse, which calendar.js/project_calendar.js's drag create/
+     move/resize handlers use to convert an on-screen pixel position back
+     to the real clock time it represents (see grid_layout.collapse_minutes'
+     own comment on why the two are inverses of each other). Loaded before
+     both, same ordering reason as time_blocks.js above -- this <script
+     defer> tag's own document position, not the `defer` attribute itself,
+     is what guarantees it runs first. -->
+<script type="application/json" id="cc-sleep-collapse" nonce="{{ csp_nonce() }}">{{ sleep_collapse_json | safe }}</script>
+<script defer src="{{ static_url('sleep_collapse.js') }}"></script>
 <script nonce="{{ csp_nonce() }}">
   // See this template's own top comment -- ordinary events keep calendar.js's
   // interactions; work-allocation blocks get project_calendar.js's, pointed

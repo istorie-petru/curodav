@@ -137,6 +137,26 @@
             <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} data-change-submit> 12-hour</label>
         </div>
     </form>
+    <!-- Hide sleep hours in Planner (2026-09-09, direct request) -- Week
+         view's hour grid collapses whatever Sleep-kind window Settings >
+         Sleep & Leisure Time has configured, instead of just hatching it
+         (routers/calendar.py's _sleep_collapse_window/_week_view_context).
+         Off by default, same autosubmit On/Off segmented pattern as every
+         other boolean preference on this page. Day view is unaffected
+         regardless of this setting (direct decision, confirmed via
+         AskUserQuestion) -- the hint below says so up front rather than
+         letting someone discover it by checking Day and finding nothing
+         changed. -->
+    <form class="settings-field-row" method="post" action="/settings/hide-sleep-hours">
+        <span class="settings-field-label">Hide sleep hours in Planner
+            <span class="settings-field-hint">Removes the Sleep time block's hours from the Week grid entirely, instead of just highlighting them. Requires one consistent Sleep window in <a href="/settings/time-blocks">Sleep &amp; Leisure Time</a> -- Day view is unaffected.</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="segmented" role="radiogroup" aria-label="Hide sleep hours in Planner">
+            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_hide_sleep_hours %}checked{% endif %} data-change-submit> On</label>
+            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_hide_sleep_hours %}checked{% endif %} data-change-submit> Off</label>
+        </div>
+    </form>
     <!-- Calendar views setting removed 2026-08-29 (STATE.md backlog item 5,
          direct request) -- the Month/Day switcher's visibility toggle added
          2026-08-28 is gone; both views are unconditionally available now,

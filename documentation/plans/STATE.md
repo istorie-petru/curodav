@@ -17,6 +17,100 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- direct request, new session: "a setting in
+  general so if checked (normally isn't), the time tagged as sleep time is
+  just removed as cells from the planner calendar view." Three clarifying
+  questions asked and answered up front (AskUserQuestion), since the
+  literal ask turned out to require rewriting the Week grid's pixel math
+  (server AND both drag-interaction JS files) to stay correct, not just a
+  CSS tweak: (1) Sleep can be configured with different start/end per
+  weekday (Settings > Sleep & Leisure Time) -- if the configured windows
+  disagree, **require one uniform window** rather than guessing which one
+  to collapse; (2) hidden hours are **fully removed** (no drag reachability
+  into them), not just zero-height-but-still-a-drop-target; (3) **Week
+  (Planner) only** -- Day view keeps all 24 hours regardless of this
+  setting.
+
+  **New Settings > General toggle**: "Hide sleep hours in Planner", off by
+  default (`deps.HIDE_SLEEP_HOURS_KEY = "planner_hide_sleep_hours"`,
+  `routers/settings.py::set_hide_sleep_hours`, same On/Off segmented
+  autosubmit pattern as Edit mode/Show label icons).
+
+  **`grid_layout.py`**: new `collapse_minutes(minute, (skip_start,
+  skip_end))` -- the actual "remove these hours" transform (before <=
+  skip_start unchanged, at/after skip_end shifts up by the window's width,
+  inside the window clamps to skip_start) -- plus `grid_height_px(collapse)`
+  and `visible_hours(collapse)` (the hour-gutter's own `{hour, top_px}`
+  list, dropping any hour whose boundary falls inside the window).
+  `position_event`/`layout_day` both gained an optional `collapse` param,
+  mapping an event's real start/end through `collapse_minutes` before the
+  existing pixel math -- Day view's own unchanged call sites just never
+  pass one.
+
+  **`routers/calendar.py`**: new `_sleep_collapse_window(blocks)` -- None
+  unless every Sleep-kind time_blocks row shares the exact same start/end
+  (the "require one uniform window" decision); `_week_view_context` computes
+  it once (only when the setting is on) and threads it through
+  `grid_layout.layout_day`/a reworked `_time_block_overlays_for_day`
+  (a Sleep-kind overlay is dropped entirely when collapsing -- those hours
+  don't exist any more -- a Leisure-kind one still renders, repositioned).
+  New context keys: `grid_height_px` (the collapsed column's total height)
+  and `sleep_collapse_json` (`{active, skip_start, skip_end}` for the
+  client). `_day_view_context` untouched.
+
+  **Templates**: `settings_general.html` gained the new row.
+  `_calendar_week_grid.html`'s hour gutter now reads `{hour, top_px}` pairs
+  instead of computing `h * px_per_hour` itself, and `.time-grid-body` gets
+  an explicit `data-style="height:..."` override (dynamic_styles.js's CSSOM
+  convention, CSP-safe) instead of relying on the shared
+  `height:calc(25 * var(--hr-h))` default. `calendar_week.html` renders a
+  new `#cc-sleep-collapse` JSON tag + loads the new `static/sleep_collapse.
+  js` before calendar.js/project_calendar.js.
+
+  **New `static/sleep_collapse.js`**: reads that JSON once, exposes
+  `window.CCSleepCollapse = {active, dayHeightPx(pxPerHour), toReal(min)}`
+  -- `toReal` is the exact client-side inverse of `collapse_minutes`,
+  needed because a drag create/move/resize's pixel position is already in
+  COLLAPSED space (there's no DOM height for the hidden hours at all); without
+  converting back to the real clock time before saving, anything dragged
+  below a collapsed window would save shifted earlier by the window's
+  width. `calendar.js`/`project_calendar.js` (both previously hardcoded
+  `DAY_HEIGHT_PX = 24 * PX_PER_HOUR` and read pixel positions straight into
+  saved minutes) now read `DAY_HEIGHT_PX` from `CCSleepCollapse.
+  dayHeightPx` and wrap every final real-minute conversion in `toRealMin`
+  (falls back to identity/`24 * PX_PER_HOUR` when the global is absent,
+  i.e. every page except Week). `time_blocks.js`'s own overlap-warning
+  check needed no change -- it already operated on real minutes, which is
+  exactly what it now keeps receiving.
+
+  **Tests**: `test_grid_layout.py` gained a `TestSleepHourCollapse` class
+  (collapse_minutes/grid_height_px/visible_hours + layout_day with a
+  collapse window, 12 new tests). New `test_calendar_planner_sleep_
+  collapse.py` (17 tests): setting defaults off and round-trips; Week view
+  renders all 24 hours when off OR when configured Sleep blocks disagree;
+  collapses correctly when on and uniform (hour count, sleep overlay
+  gone, leisure overlay repositioned, event after the window shifted,
+  grid_height_px shrunk, sleep_collapse_json payload); Day view unaffected
+  regardless of the setting. Full suite (2092 tests): 619 + 609 + 507 + 357
+  = 2092 collected, 2091 passed, 1 pre-existing unrelated failure
+  (`test_dashboard_router.py::TestAgendaWidgetAllUpcoming::test_todays_
+  earlier_events_still_count_as_upcoming`, a date-relative flake confirmed
+  pre-existing via `git stash` before this session touched anything;
+  4-chunk run).
+
+  **Manual verification**: none beyond the pytest suite + direct router/
+  grid_layout calls above -- no live browser in this sandbox to actually
+  drag-create/move/resize an event across a collapsed window and confirm
+  the saved time on screen. The math is covered by tests on both sides
+  (server `collapse_minutes` and its client inverse `toReal`), but an
+  actual pointer-drag round trip through calendar.js/project_calendar.js is
+  unverified beyond code review.
+
+  **Next slice:** none mandated -- direct request, fully shipped. Worth
+  live-verifying the drag-create/move/resize interactions in a real
+  browser next time Planner is touched, given the "no browser in this
+  sandbox" gap above.
+
 - **Shipped:** 2026-09-08 -- direct request, new session: "add the
   ability to change radicale environment variables in the app, and have
   a button actually restarting the app so it applies. also I would like

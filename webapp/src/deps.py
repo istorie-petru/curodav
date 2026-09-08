@@ -72,6 +72,14 @@ HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 # per-request-memoized global registered here, unlike the other keys
 # above: nothing outside the three widget-grid pages needs it.
 EDIT_MODE_KEY = "edit_mode_enabled"
+# 2026-09-09 (direct request, Settings > General) -- "Hide sleep hours in
+# Planner": off by default ("", an existing install that's never touched
+# this), "1" when on. Only meaningful on the Week view's grid
+# (routers/calendar.py's _week_view_context/_sleep_collapse_window) -- Day
+# view deliberately keeps showing every hour regardless of this setting
+# (direct decision). No per-request-memoized global here, same reasoning
+# as EDIT_MODE_KEY above: only that one route needs it.
+HIDE_SLEEP_HOURS_KEY = "planner_hide_sleep_hours"
 # 2026-08-29 (sidebar redesign item 13e follow-up, direct request) -- the
 # Standard Page Header's own optional banner image, set once in Settings >
 # Appearance and reused as the background on every standard page's narrow

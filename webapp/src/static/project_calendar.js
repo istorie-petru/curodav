@@ -59,7 +59,11 @@
   const PX_PER_HOUR = Number(document.body.dataset.pxPerHour || 48);
   const SNAP_MINUTES = 15;
   const SNAP_PX = (PX_PER_HOUR / 60) * SNAP_MINUTES;
-  const DAY_HEIGHT_PX = 24 * PX_PER_HOUR;
+  // "Hide sleep hours in Planner" (static/sleep_collapse.js) -- same
+  // collapsed-height clamp and pixel->real-minute fix as static/
+  // calendar.js's identical constants, see that file's own comment.
+  const DAY_HEIGHT_PX = window.CCSleepCollapse ? window.CCSleepCollapse.dayHeightPx(PX_PER_HOUR) : 24 * PX_PER_HOUR;
+  const toRealMin = window.CCSleepCollapse ? window.CCSleepCollapse.toReal : (m) => m;
   const CREATE_SNAP_MINUTES = 30;
   const CREATE_SNAP_PX = (PX_PER_HOUR / 60) * CREATE_SNAP_MINUTES;
   const DEFAULT_BLOCK_MINUTES = 60;
@@ -238,7 +242,7 @@
       const rect = col.getBoundingClientRect();
       const rawTop = e.clientY - rect.top;
       const startPx = Math.max(0, Math.min(DAY_HEIGHT_PX - CREATE_SNAP_PX, snap(rawTop, CREATE_SNAP_PX)));
-      const startMin = Math.round((startPx / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((startPx / PX_PER_HOUR) * 60));
       const endMin = startMin + DEFAULT_BLOCK_MINUTES;
       const day = col.dataset.date;
       // Sleep Time / Leisure Time warning (static/time_blocks.js) -- see
@@ -423,8 +427,8 @@
 
       const top = parseFloat(el.style.top) || 0;
       const height = parseFloat(el.style.height) || SNAP_PX;
-      const startMin = Math.round((top / PX_PER_HOUR) * 60);
-      const endMin = Math.round(((top + height) / PX_PER_HOUR) * 60);
+      const startMin = toRealMin(Math.round((top / PX_PER_HOUR) * 60));
+      const endMin = toRealMin(Math.round(((top + height) / PX_PER_HOUR) * 60));
       const day = currentCol.dataset.date;
       const uid = el.dataset.uid;
       if (window.ccTimeBlocks) window.ccTimeBlocks.warnIfOverlapping(day, startMin, endMin);
