@@ -6174,25 +6174,23 @@ body.command-palette-open{overflow:hidden;}
   color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
 }
 
-/* Banner editor modal (banner_editor.html, 2026-08-09). */
-.banner-editor-note{
-  color:var(--fg-tertiary); font-size:var(--text-footnote);
-  margin:0 0 var(--space-3); line-height:1.5;
+/* Banner editor modal (banner_editor.html, 2026-08-09; cut down to a
+   small preview-only thumbnail 2026-09-08 -- the old copy explaining the
+   5:1 aspect ratio, the full-width 3:1 hero, and the in-body Remove/
+   Upload buttons are gone; those two actions now live in the modal
+   footer instead, see .banner-upload-btn below). */
+.banner-preview-img{
+  display:block; width:240px; max-width:100%; aspect-ratio:5 / 1;
+  object-fit:cover; border-radius:var(--radius-card); border:1px solid var(--border);
 }
-.banner-current{margin-bottom:var(--space-4);}
-.banner-current .settings-field-label{margin-bottom:var(--space-2);}
-.banner-current img{
-  width:100%; aspect-ratio:3 / 1; object-fit:cover; display:block;
-  border-radius:var(--radius-card); border:1px solid var(--border);
-  margin-bottom:var(--space-2);
-}
-/* Minimalist upload row (2026-08-09 follow-up) -- one ghost button (its
-   hidden file input sits inside the label; onchange auto-submits) plus a
-   small format/size hint, at the top of the modal. */
-.banner-upload-form{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; margin-bottom:var(--space-4);}
+.banner-editor-empty{color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0;}
+/* Upload button now sits in .modal-footer, styled like any other
+   primary/ghost footer button -- .banner-upload-btn only adds the
+   file-input-hiding-label behavior (hidden input sits inside the label;
+   picking a file hands off to avatar_cropper.js's crop editor, whose own
+   Apply submits the form). */
 .banner-upload-btn{cursor:pointer;}
 .banner-upload-input{display:none;}
-.banner-upload-hint{font-size:var(--text-footnote); color:var(--fg-tertiary);}
 
 /* label_form_modal.html's Banner field (2026-08-30) -- a compact entry
    point into the same /banners/editor dialog banner-current/-editor above

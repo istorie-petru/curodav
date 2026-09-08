@@ -85,7 +85,22 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
                                `typedConfirm` option -- instead of a modal).
                                Left in place as general-purpose machinery for
                                the next modal that needs a server-disabled
-                               primary button. #}
+                               primary button.
+     footer_extra_html      -- raw safe HTML spliced in after Delete and
+                               before the primary button, for a modal whose
+                               action doesn't fit the delete/primary shape
+                               (2026-09-08, banner_editor.html's Remove
+                               banner + Upload image: Upload is a <label>
+                               wrapping a hidden file input, not a plain
+                               submit button, so it can't be expressed via
+                               footer_primary_*). Build it with
+                               `{% set footer_extra_html %}...{% endset %}`
+                               before the include -- Jinja's own autoescape
+                               leaves a block-assigned var unescaped only
+                               when rendered with `|safe`, which this
+                               partial applies for you. Prefer the named
+                               slots above for anything that fits them;
+                               this is an escape hatch, not the default. #}
 <div class="modal-footer">
 {% if footer_back_url %}
 {% if footer_back_mode == 'modal' %}
@@ -106,6 +121,7 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
 </form>
 {% endif %}
 {% endif %}
+{% if footer_extra_html %}{{ footer_extra_html|safe }}{% endif %}
 {% if footer_primary_label %}
 {% if footer_primary_href %}
 <a class="btn {{ footer_primary_variant|default('primary') }}"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>

@@ -43,61 +43,64 @@
     </div>
     <div class="modal-body">
         <div class="banner-editor">
-            <!-- Preferred aspect ratio -- the one spec the upload control
-                 needs to tell the user: on desktop the banner renders
-                 object-fit: cover in a 5:1 box (3:1 on phones), so a
-                 wide landscape image works best and a non-matching image
-                 is center-cropped rather than distorted. -->
-            <p class="banner-editor-note">A wide header image for this page. Preferred aspect ratio is <strong>5:1</strong> &mdash; about 2400&times;480&nbsp;px, or any wide landscape image. Non-5:1 images are center-cropped to fit.</p>
-
+            {# 2026-09-08 (direct request, "fix the banner UI"): the old
+               copy explaining the 5:1/2400x480 preferred size, the
+               full-width 3:1 hero preview, and the Remove/Upload buttons
+               sitting in the body are gone. What's left is just a small,
+               preview-only thumbnail of the current banner (or nothing, if
+               there isn't one) -- no label, no hint text, no in-body
+               actions. Every action lives in the footer now, see below. #}
             {% if banner %}
-            <div class="card banner-current">
-                <div class="settings-field-label">Current banner</div>
-                {# Same served /banners/image URL as _page_banner.html when the
-                   banner has local bytes (version) -- never embed the base64
-                   blob inline, that was the page-size leak. Only a legacy
-                   hotlink-only searched banner (set before the web-search
-                   feature was removed) falls back to its remote URL. #}
-                {% if banner.version %}
-                <img src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
-                {% else %}
-                <img src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
-                {% endif %}
-                <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
-                    <input type="hidden" name="scope" value="{{ scope }}">
-                    <input type="hidden" name="page_url" value="{{ page_url }}">
-                    <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove banner</button>
-                </form>
-            </div>
+            {# Same served /banners/image URL as _page_banner.html when the
+               banner has local bytes (version) -- never embed the base64
+               blob inline, that was the page-size leak. Only a legacy
+               hotlink-only searched banner (set before the web-search
+               feature was removed) falls back to its remote URL. #}
+            {% if banner.version %}
+            <img class="banner-preview-img" src="/banners/image?scope={{ scope|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
+            {% else %}
+            <img class="banner-preview-img" src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
             {% endif %}
-
-            <!-- Upload -- minimalist: a single ghost button.
-                 The file input is hidden inside its label (click the
-                 button = open the picker); picking a file opens the crop
-                 editor (avatar_cropper.js, see this template's own header
-                 comment), whose own Apply button is what actually submits
-                 this form -- no extra "Upload" step beyond that. -->
-            <form method="post" action="/banners/upload" enctype="multipart/form-data" class="banner-upload-form" data-cc-change="banner" data-cc-action="upload">
-                <input type="hidden" name="scope" value="{{ scope }}">
-                <input type="hidden" name="page_url" value="{{ page_url }}">
-                <label class="btn ghost banner-upload-btn">
-                    {{ icon('upload', 'icon-sm') }} Upload image
-                    <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">
-                </label>
-                <span class="banner-upload-hint">JPEG, PNG, GIF or WEBP &middot; crop to the 5:1 banner shape after picking &middot; 8MB cap</span>
-            </form>
+            {% else %}
+            <p class="banner-editor-empty">No banner set yet.</p>
+            {% endif %}
         </div>
     </div>
-    {# 2026-08-15 modal uniformization slice F: every action here (upload,
-       remove) is instant/auto-submitting, so there's still no primary
-       button -- but per rule 1 every modal gets a footer, so this is a
-       documented Back/Done-only exception rather than the accidental
-       "no footer markup at all" it was before. page_url is a real
-       navigable page (this template also renders standalone for a no-JS
-       visit -- see the header comment), so footer_back_url is the real
-       URL, not "#". #}
+    {# 2026-09-08: Remove banner and Upload image both move into the
+       footer, alongside Done, instead of living as their own body
+       section -- same side-by-side-forms shape .profile-photo-controls
+       already uses (HTML forbids nesting a form inside a form, so these
+       stay two independent <form>s rather than one). Routed through
+       _modal_footer.html's new footer_extra_html escape hatch rather than
+       hand-rolling `.modal-footer` here: the app-wide regression guard
+       (test_modal_uniformization.py::TestFullAppModalSweep) requires
+       every modal include the shared partial, and Upload doesn't fit the
+       existing footer_delete_url/footer_primary_* slots -- it's a <label>
+       wrapping a hidden file input (clicking it opens the picker, and
+       picking a file hands off to the crop editor -- avatar_cropper.js,
+       see this template's own header comment -- whose own Apply is what
+       actually submits the form), not a plain submit button. page_url is
+       a real navigable page (this template also renders standalone for a
+       no-JS visit), so footer_back_url is the real URL, not "#". #}
     {% set footer_back_url = page_url %}
     {% set footer_back_label = 'Done' %}
+    {% set footer_extra_html %}
+    {% if banner %}
+    <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
+        <input type="hidden" name="scope" value="{{ scope }}">
+        <input type="hidden" name="page_url" value="{{ page_url }}">
+        <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Remove banner</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/banners/upload" enctype="multipart/form-data" class="form-inline" data-cc-change="banner" data-cc-action="upload">
+        <input type="hidden" name="scope" value="{{ scope }}">
+        <input type="hidden" name="page_url" value="{{ page_url }}">
+        <label class="btn primary banner-upload-btn">
+            {{ icon('upload', 'icon-sm') }} Upload image
+            <input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">
+        </label>
+    </form>
+    {% endset %}
     {% include "_modal_footer.html" %}
 </div>
 {% endblock %}
