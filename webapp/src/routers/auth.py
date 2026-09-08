@@ -25,21 +25,25 @@ auth.py's module docstring, `setup_required`):
   - `GET /setup` -- the account-creation form. Only rendered when
     setup_required() is true (a production deploy with no account yet);
     otherwise redirects away, same as /login's disabled-install redirect.
-    Also offers an optional "connect to Radicale" section (URL/username/
-    password) when the environment didn't already configure one (see
-    config.py's radicale_env_configured) -- skippable, and editable again
-    later from Settings (routers/settings.py) since this page only ever
-    renders once per install.
+    Also offers an optional "connect to Radicale" section (URL only --
+    2026-09-08, "merge the concept of radicale username to the app
+    username": the chosen account username/password double as the
+    Radicale credential, see _save_radicale_fields) when the environment
+    didn't already configure one (see config.py's radicale_env_configured)
+    -- skippable, and editable again later from Settings > General's
+    Account card (routers/settings.py::account_settings) since this page
+    only ever renders once per install.
   - `POST /setup` -- validates and persists the chosen username/password
     (hashed) via `auth.set_persisted_credentials`, logs the browser in
     immediately (no separate trip through /login), and redirects home.
     Re-checks setup_required() itself too -- the middleware already blocks
     a configured install from reaching here without a valid session, but
     the route refuses to ever re-run setup regardless of how it's called.
-    Radicale fields are optional and, if all blank, silently skipped;
+    The Radicale URL field is optional and, if blank, silently skipped;
     persisted via config.RADICALE_*_KEY (config.py's own module docstring
-    covers why the password is stored retrievable, not hashed) when any
-    are filled in.
+    covers why the password is stored retrievable, not hashed) -- using
+    the same username/password just chosen above, not a separate pair --
+    when a URL is given.
 """
 
 from __future__ import annotations
@@ -156,13 +160,17 @@ def setup_page(request: Request, conn=Depends(get_db)):
 
 
 def _save_radicale_fields(conn, url: str, username: str, password: str) -> None:
-    """Persists a Radicale connection entered through /setup (or, later,
-    Settings) into app_meta -- see config.py's RADICALE_*_KEY docstring
-    for why the password is stored retrievable. Only writes anything when
-    all three fields are non-blank; a partially-filled form is treated as
-    "not filled in" rather than saving a broken connection."""
-    url, username, password = url.strip(), username.strip(), password.strip()
-    if url and username and password:
+    """Persists a Radicale connection entered through /setup into app_meta
+    -- see config.py's RADICALE_*_KEY docstring for why the password is
+    stored retrievable. `username`/`password` are the just-chosen account
+    credentials (setup_submit passes its own `username`/`password`, not a
+    separate pair -- 2026-09-08, "merge the concept of radicale username
+    to the app username" -- /setup's form itself only asks for a Radicale
+    URL, see setup.html), so this only needs a URL to actually do
+    anything; a blank URL is "skip Radicale for now," same as leaving the
+    whole optional section untouched always was."""
+    url = url.strip()
+    if url:
         db.set_app_meta(conn, config.RADICALE_URL_KEY, url)
         db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
         db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, password)
@@ -175,8 +183,6 @@ def setup_submit(
     password: str = Form(""),
     password_confirm: str = Form(""),
     radicale_url: str = Form(""),
-    radicale_username: str = Form(""),
-    radicale_password: str = Form(""),
     conn=Depends(get_db),
 ):
     settings = request.app.state.settings
@@ -206,7 +212,7 @@ def setup_submit(
         )
     auth.set_persisted_credentials(conn, username, password)
     if not settings.radicale_env_configured:
-        _save_radicale_fields(conn, radicale_url, radicale_username, radicale_password)
+        _save_radicale_fields(conn, radicale_url, username, password)
     # The middleware caches "is this install configured" on app.state once
     # true (see AuthMiddleware._configured) -- set it here too so the very
     # next request (the redirect this response issues) doesn't race a

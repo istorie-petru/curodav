@@ -45,14 +45,16 @@ login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
     configs already pass uvicorn `--proxy-headers`, so this reflects the
     real scheme even behind a TLS-terminating reverse proxy.
 
-2026-08-30: Settings > General gained an old/new/confirm "Login &
-security" password-change form (`routers/settings.py::
-change_login_password`) -- the always-available counterpart to /setup's
-one-time account creation, since that page only ever renders once per
-install (and, in local/dev mode, never at all -- see setup_required).
-Works whether or not an account exists yet: with none, it creates one
-under a fixed "admin" username with no old-password check; with one, the
-current password must verify first. This is also why `auth_enabled` no
+2026-08-30: Settings > General gained an old/new/confirm password-change
+form (`routers/settings.py::change_login_password` -- 2026-09-08:
+superseded by the merged `::account_settings`, same Settings > General
+page, now the "Account" card) -- the always-available counterpart to
+/setup's one-time account creation, since that page only ever renders
+once per install (and, in local/dev mode, never at all -- see
+setup_required). Works whether or not an account exists yet: with none,
+it creates one under a fixed "admin" username with no old-password check;
+with one, the current password must verify first. This is also why
+`auth_enabled` no
 longer special-cases `deploy_mode == "local"` -- a password set through
 this form has to actually take effect immediately, in every deploy mode,
 not just production (see `auth_enabled`'s own docstring for the tradeoff
@@ -61,7 +63,7 @@ that change makes).
 2026-09-07: audit fix (session revocation, `documentation/reports/
 full-app-audit-2026-09-07.md`) -- `rotate_session_secret` is now called
 whenever persisted credentials are (re)established (both /setup and
-change_login_password), reusing the exact mechanism `routers/settings.py
+account_settings), reusing the exact mechanism `routers/settings.py
 ::purge_all` already used to force a re-login after a purge: an
 auto-generated session secret lives in `app_meta`, so replacing it makes
 `read_session_token`'s HMAC check fail for every cookie signed under the
@@ -154,7 +156,7 @@ def auth_enabled(settings, conn=None) -> bool:
     """Whether login is enforced for this install: true when EITHER the
     env-var pair (CC_AUTH_USERNAME/PASSWORD, see config.py's docstring) is
     configured, OR a first-run /setup account (or a password set later
-    through Settings > General, routers/settings.py::change_login_password)
+    through Settings > General, routers/settings.py::account_settings)
     has been persisted (has_persisted_credentials). A `None` settings
     (middleware before the lifespan set it, or a bare test app) counts as
     disabled.

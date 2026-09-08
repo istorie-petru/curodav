@@ -194,7 +194,14 @@ CC_AUTH_SECRET=${secret}
 # CC_CONTACTS_COLLECTION=contacts
 EOF
   chown root:"$APP_USER" "$ENV_FILE"
-  chmod 0640 "$ENV_FILE"
+  # 0660 (was 0640) -- group-writable, not just group-readable. The app
+  # now has an in-app Settings > General editor for its own Radicale/
+  # login env vars (a "Restart to apply" button included) that persists
+  # changes by rewriting this file directly, running as $APP_USER (group
+  # $APP_USER, per the chown above) -- it needs write access to its own
+  # config, not just read. Still root-owned, still unreadable/unwritable
+  # by anyone outside the curodav group.
+  chmod 0660 "$ENV_FILE"
 }
 
 write_unit() {
@@ -220,13 +227,28 @@ Group=${APP_USER}
 # enough for the app to import correctly.
 WorkingDirectory=${CURRENT_LINK}
 EnvironmentFile=${ENV_FILE}
+# CC_ENV_FILE (distinct from EnvironmentFile= above): EnvironmentFile
+# injects that file's KEY=VALUE pairs as env vars, but never tells the
+# process where the file itself lives. Settings > General's env-var
+# editor (webapp/src/env_file.py) needs the actual path to rewrite it,
+# so it's handed in explicitly as one more ordinary env var, fixed at
+# the same value ENV_FILE resolves to for this install.
+Environment=CC_ENV_FILE=${ENV_FILE}
 # The repo is a uv workspace (root pyproject.toml, webapp/ as member), so
 # 'uv sync' from webapp/ puts the venv at the release root, not under
 # webapp/. --app-dir tells uvicorn to add webapp/ to sys.path itself
 # (equivalent to running with cwd=.../current/webapp) without requiring
 # WorkingDirectory to point there.
 ExecStart=${CURRENT_LINK}/.venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port ${TARGET_PORT} --proxy-headers --app-dir ${CURRENT_LINK}/webapp
-Restart=on-failure
+# Restart=always (was on-failure) -- Settings > General's "Restart app"
+# button (routers/settings.py::restart_app) applies a saved env-var
+# change by having the process exit cleanly (status 0) rather than
+# shelling out to systemctl itself (no new privileges granted to
+# $APP_USER for that). on-failure would never relaunch a clean exit;
+# always does, which is exactly what that button relies on. A crash
+# still restarts too, same as before -- always is a superset of
+# on-failure, not a different recovery policy for the crash case.
+Restart=always
 RestartSec=3
 
 # Hardening.

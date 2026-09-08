@@ -61,6 +61,16 @@ class Settings:
     # when this is False, since an env-configured install should keep
     # being managed the way it always was (edit curodav.env, restart).
     radicale_env_configured: bool = False
+    # `CC_ENV_FILE` (2026-09-08, src/env_file.py) -- the path to this
+    # process's own systemd `EnvironmentFile`, if it's running under one.
+    # `scripts/curodav-ctl`'s generated unit sets this to the exact same
+    # path as its `EnvironmentFile=` line (a real, fixed path known at
+    # install time -- EnvironmentFile itself only injects the file's
+    # *contents* as env vars, never its own path). None for local dev/any
+    # non-curodav-ctl deploy: Settings > General's Account card
+    # (routers/settings.py::account_settings) falls back to persisting in
+    # app_meta instead when this is unset, same as it always has.
+    env_file_path: str | None = None
 
 
 def load_settings() -> Settings:
@@ -93,6 +103,7 @@ def load_settings() -> Settings:
         auth_session_secret=os.environ.get("CC_AUTH_SECRET") or None,
         deploy_mode=os.environ.get("CC_DEPLOY_MODE", "local"),
         radicale_env_configured=bool(os.environ.get("CC_RADICALE_URL")),
+        env_file_path=os.environ.get("CC_ENV_FILE") or None,
     )
 
 

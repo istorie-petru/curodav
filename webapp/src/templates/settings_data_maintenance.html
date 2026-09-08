@@ -261,39 +261,20 @@
     </div>
 </div>
 
-<!-- 2b. CalDAV / Radicale sync (2026-08-29) -- editable any time, since
-     /setup's own "connect to Radicale" step only ever renders once per
-     install. A no-op display (env-managed) when CC_RADICALE_URL is set
-     in the environment; an editable form otherwise. -->
+<!-- 2b. CalDAV / Radicale sync -- 2026-09-08: read-only display now. The
+     credentials this card used to collect independently (URL/username/
+     password) merged into Settings > General's Account card -- one
+     username/password for both the app's own login and Radicale (direct
+     request, "merge the concept of radicale username to the app
+     username"); this card just shows where that connection currently
+     points. -->
 <div class="settings-group">
     <div class="card">
-        {% if radicale_env_configured %}
-        <p class="settings-hint">Configured via environment variables (<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change it.</p>
         <p class="settings-hint">Current URL: <code>{{ radicale_url }}</code></p>
-        {% else %}
-        <p class="settings-hint">Optional -- only needed to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Changes take effect after the app is restarted. All three fields are required to save -- re-enter the password each time, even if it isn't changing.</p>
-        <form method="post" action="/settings/radicale">
-            <div class="settings-field-row">
-                <span class="settings-field-label">Server URL</span>
-                <span class="spacer"></span>
-                <input type="text" name="radicale_url" value="{{ radicale_url }}" placeholder="http://127.0.0.1:5232/you/" autocomplete="off" class="field-narrow">
-            </div>
-            <div class="settings-field-row">
-                <span class="settings-field-label">Username</span>
-                <span class="spacer"></span>
-                <input type="text" name="radicale_username" value="{{ radicale_username }}" autocomplete="off" class="field-narrow">
-            </div>
-            <div class="settings-field-row">
-                <span class="settings-field-label">Password</span>
-                <span class="spacer"></span>
-                <input type="password" name="radicale_password" autocomplete="off" class="field-narrow">
-            </div>
-            <div class="settings-field-row">
-                <span class="spacer"></span>
-                <button type="submit" class="btn tonal">{{ icon('check-circle', 'icon-sm') }} Save connection</button>
-            </div>
-        </form>
+        {% if radicale_env_configured %}
+        <p class="settings-hint">Set via environment variables (<code>CC_RADICALE_URL</code>).</p>
         {% endif %}
+        <p class="settings-hint">Manage the connection (username, password, URL) from <a href="/settings/general">Settings &gt; General</a>.</p>
     </div>
 </div>
 

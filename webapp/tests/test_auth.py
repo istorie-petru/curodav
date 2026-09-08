@@ -1035,8 +1035,6 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="",
-            radicale_username="",
-            radicale_password="",
             conn=conn,
         )
         assert resp.status_code == 303
@@ -1058,8 +1056,6 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="",
-            radicale_username="",
-            radicale_password="",
             conn=conn,
         )
         assert req.app.state._cc_auth_configured is True
@@ -1078,8 +1074,6 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="",
-            radicale_username="",
-            radicale_password="",
             conn=conn,
         )
         persisted = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
@@ -1097,13 +1091,17 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="",
-            radicale_username="",
-            radicale_password="",
             conn=conn,
         )
         assert "Secure" in resp.headers["set-cookie"]
 
-    def test_optional_radicale_fields_persisted_when_filled_in(self, conn):
+    def test_optional_radicale_url_persisted_reusing_account_credentials(self, conn):
+        """2026-09-08 (direct request, "merge the concept of radicale
+        username to the app username, and merge the app password with
+        the radicale password"): /setup no longer asks for separate
+        Radicale username/password fields (see setup.html) -- a filled-in
+        URL persists the Radicale connection under the same
+        username/password just chosen for the account itself."""
         settings = _prod_no_account_settings()
         auth_router.setup_submit(
             _request(settings),
@@ -1111,24 +1109,20 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="http://127.0.0.1:5232/alice/",
-            radicale_username="alice",
-            radicale_password="hunter2",
             conn=conn,
         )
         assert db.get_app_meta(conn, "radicale_base_url") == "http://127.0.0.1:5232/alice/"
         assert db.get_app_meta(conn, "radicale_username") == "alice"
-        assert db.get_app_meta(conn, "radicale_password") == "hunter2"
+        assert db.get_app_meta(conn, "radicale_password") == "s3cret123"
 
-    def test_radicale_fields_skipped_when_partially_filled(self, conn):
+    def test_radicale_fields_skipped_when_url_blank(self, conn):
         settings = _prod_no_account_settings()
         auth_router.setup_submit(
             _request(settings),
             username="alice",
             password="s3cret123",
             password_confirm="s3cret123",
-            radicale_url="http://127.0.0.1:5232/alice/",
-            radicale_username="",
-            radicale_password="",
+            radicale_url="",
             conn=conn,
         )
         assert db.get_app_meta(conn, "radicale_base_url") is None
@@ -1141,8 +1135,6 @@ class TestSetupSubmit:
             password="s3cret123",
             password_confirm="s3cret123",
             radicale_url="http://127.0.0.1:5232/alice/",
-            radicale_username="alice",
-            radicale_password="hunter2",
             conn=conn,
         )
         assert db.get_app_meta(conn, "radicale_base_url") is None

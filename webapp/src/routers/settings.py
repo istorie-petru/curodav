@@ -97,6 +97,9 @@ from __future__ import annotations
 
 import base64
 import hmac
+import logging
+import os
+import threading
 import uuid
 
 from datetime import datetime, timezone
@@ -105,7 +108,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import auth, config, data_health, db, offline_sync
+from .. import auth, config, data_health, db, env_file, offline_sync
 from ..image_sniff import sniff_image_type
 from ..deps import (
     EDIT_MODE_KEY,
@@ -125,6 +128,7 @@ from .export import _redirect_with_error, _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 
 router = APIRouter(tags=["settings"])
+logger = logging.getLogger(__name__)
 
 # Hub categories (settings_index.html) -- name/desc/icon/url for each of the
 # pages above. Labels/Published lists are direct links to their existing
@@ -250,104 +254,201 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # helpers, same store as the display name). Rendered as the
             # avatar on this page.
             "profile_photo": db.get_profile_photo(conn),
-            # Login & security (2026-08-30) -- old/new/confirm password
-            # forms for the app's own login and its stored Radicale
-            # connection credential. auth_env_configured/radicale_env_
-            # configured gate each card between "form" and "edit
-            # curodav.env instead" (same pattern /settings/radicale
-            # already uses). has_login_account distinguishes "change your
-            # password" (current-password required) from "set a password
-            # for the first time" (no account yet -- common in local/dev,
-            # where /setup never runs).
-            "auth_env_configured": bool(
+            # Account (2026-09-08 -- replaces the old separate "Login &
+            # security" app-login card and Data & Maintenance's "CalDAV /
+            # Radicale sync" card; see account_settings' own docstring for
+            # the merge this reflects: one username/password, used for
+            # both). auth_is_env / radicale_env_configured together decide
+            # whether this install's credentials currently live in the
+            # env file or in app_meta -- env_file_available is whether
+            # there's actually a CC_ENV_FILE to rewrite when they do
+            # (curodav-ctl deploys always have one; a local/manual run
+            # doesn't, and account_settings refuses to silently fall back
+            # to app_meta out from under an env-configured install).
+            # has_account distinguishes "change your credentials"
+            # (current password required) from "set them up for the first
+            # time" (no account yet -- common in local/dev, where /setup
+            # never runs). getattr-guarded: several test files build a
+            # bare SimpleNamespace Settings stand-in predating some of
+            # these fields.
+            "auth_is_env": bool(
                 getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)
             ),
-            "has_login_account": auth.has_persisted_credentials(settings, conn),
-            "login_username": (auth.get_persisted_credentials(conn) or (None,))[0],
             "radicale_env_configured": getattr(settings, "radicale_env_configured", False),
-            "radicale_username": getattr(settings, "radicale_username", ""),
+            "env_file_available": bool(getattr(settings, "env_file_path", None)),
+            "has_account": auth.has_persisted_credentials(settings, conn)
+            or bool(getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)),
+            "account_username": (
+                getattr(settings, "auth_username", None)
+                or (auth.get_persisted_credentials(conn) or (None,))[0]
+                or ""
+            ),
+            "radicale_url": getattr(settings, "radicale_base_url", ""),
+            # Restart app (2026-09-08) -- only meaningful when this
+            # process is under systemd with Restart=always (curodav-ctl's
+            # generated unit); see restart_app's own docstring for why
+            # deploy_mode == "production" is the signal used.
+            "restart_available": getattr(settings, "deploy_mode", "local") == "production",
         },
     )
 
 
-@router.post("/settings/change-password")
-def change_login_password(
+@router.post("/settings/account")
+def account_settings(
     request: Request,
+    username: str = Form(""),
     current_password: str = Form(""),
     new_password: str = Form(""),
     new_password_confirm: str = Form(""),
+    radicale_url: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Old/new/confirm change form for the app's own login password
-    (Settings > General > "Login & security"). A no-op, same as
-    /settings/radicale, when the env-var pair (CC_AUTH_USERNAME/CC_AUTH_
-    PASSWORD) is configured -- env always wins (auth.verify_credentials),
-    so a persisted-account write here would be silently shadowed; the
-    operator is told to edit curodav.env and restart instead.
+    """Settings > General's "Account" card -- 2026-09-08, direct request
+    ("merge the concept of radicale username to the app username, and
+    merge the app password with the radicale password"). Replaces three
+    former routes (change_login_password, change_radicale_password, Data
+    & Maintenance's settings_radicale) that each managed a separate
+    credential -- the app's own login, and the app's stored copy of the
+    Radicale connection -- with one form: a single username and password
+    govern both, plus the Radicale server URL (not a credential, just
+    where to reach it).
 
-    Two shapes depending on whether a persisted account already exists
-    (auth.get_persisted_credentials):
-      - None yet (common in local/dev -- /setup never runs there, see
-        auth.setup_required): current_password isn't checked, and a first
-        account is created under a fixed "admin" username. Since
-        auth_enabled() consults the DB in every deploy mode now (see its
-        own 2026-08-30 docstring note), this genuinely turns login on
-        immediately, even for a local install.
-      - An account already exists: current_password must verify
-        (auth.verify_credentials, constant-time) before the new one is
-        accepted.
+    Storage backend is chosen by whether this account is currently
+    env-configured (`auth_is_env`: CC_AUTH_USERNAME/PASSWORD both set) OR
+    the Radicale side is (`settings.radicale_env_configured`,
+    CC_RADICALE_URL set) -- either one puts the WHOLE account on the
+    env-file path from here on, converting the other half over too the
+    first time this form is saved (e.g. an install that only ever had
+    CC_RADICALE_URL set now also gets CC_AUTH_USERNAME/PASSWORD written
+    alongside it): the point of merging is one identity, not one still
+    living in two different places depending on which half happened to
+    be configured first.
 
-    On success, re-mints the session cookie immediately (same shape as
-    routers/auth.py's login_submit/setup_submit) so the browser isn't
-    logged out by its own password change, and marks
-    app.state._cc_auth_configured True the same way setup_submit does, so
-    this response's own redirect doesn't race a fresh DB read."""
+    - Env-configured (either half) with `settings.env_file_path` known
+      (`CC_ENV_FILE`, set by curodav-ctl's generated unit): writes
+      CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
+      CC_RADICALE_PASSWORD (only when `new_password` is given) via
+      env_file.update_env_file. Takes effect on the next process start --
+      Settings > General's "Restart app" button (restart_app below) is
+      how an operator actually applies it without SSHing in.
+    - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
+      that still sets these env vars by some other means): refuses to
+      edit at all, same "edit curodav.env and restart yourself" fallback
+      the three routes this replaces always used -- there's nowhere safe
+      to write.
+    - Neither env-configured: persisted in app_meta, same as before --
+      auth.set_persisted_credentials (hashed) for login, config.
+      RADICALE_USERNAME_KEY/RADICALE_PASSWORD_KEY (retrievable, config.
+      py's own docstring covers why) mirrored to match. Login takes
+      effect immediately (session re-minted below, same as the old
+      change_login_password); the Radicale connection still needs a
+      restart to reach CalDavBridge (main.py's lifespan builds it once).
+
+    Any existing account (env or persisted) requires `current_password`
+    to verify before ANY change here is accepted -- username, password,
+    or just the Radicale URL -- since this form now controls both the
+    login and the sync credential together; a first-time save (no
+    account yet) has nothing to verify against and requires a
+    `new_password` to create one. `new_password` left blank on an
+    existing account keeps the current password, changing only the
+    username and/or URL. The Radicale password key is only ever written
+    when `new_password` is actually supplied -- never silently persists
+    `settings.radicale_password`'s dev-default fallback ("devpass") as if
+    it were a real chosen credential."""
     settings = request.app.state.settings
-    if settings.auth_username and settings.auth_password:
+    username = username.strip()
+    radicale_url = radicale_url.strip()
+
+    auth_is_env = bool(getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None))
+    env_managed = auth_is_env or getattr(settings, "radicale_env_configured", False)
+    env_path = getattr(settings, "env_file_path", None)
+
+    if env_managed and not env_path:
         return _redirect_with_error(
             "/settings/general",
-            "Login credentials are set via CC_AUTH_USERNAME/CC_AUTH_PASSWORD -- edit curodav.env and restart to change them.",
+            "Login/Radicale are set via environment variables, and this install has no CC_ENV_FILE to edit them through -- edit curodav.env by hand and restart.",
         )
-    persisted = auth.get_persisted_credentials(conn)
-    error = None
-    if persisted:
-        username, _ = persisted
-        if not auth.verify_credentials(settings, username, current_password, conn):
-            error = "Current password is incorrect."
+
+    if not username:
+        return _redirect_with_error("/settings/general", "Choose a username.")
+
+    if auth_is_env:
+        has_account = True
+
+        def verify(pw: str) -> bool:
+            return hmac.compare_digest(pw, settings.auth_password or "")
     else:
-        username = "admin"
-    if not error:
-        if not new_password:
-            error = "Choose a new password."
-        elif len(new_password) < 8:
+        persisted = auth.get_persisted_credentials(conn)
+        has_account = persisted is not None
+        if has_account:
+            _, stored_hash = persisted
+
+            def verify(pw: str) -> bool:
+                return auth._verify_password_hash(pw, stored_hash)
+        else:
+            def verify(pw: str) -> bool:
+                return True
+
+    error = None
+    if has_account and not verify(current_password):
+        error = "Current password is incorrect."
+    elif not has_account and not new_password:
+        error = "Choose a password."
+    elif new_password:
+        if len(new_password) < 8:
             error = "New password must be at least 8 characters."
         elif new_password != new_password_confirm:
             error = "New passwords do not match."
-        elif persisted and new_password == current_password:
-            error = "New password must be different from the current password."
     if error:
         return _redirect_with_error("/settings/general", error)
-    auth.set_persisted_credentials(conn, username, new_password)
+
+    if env_managed:
+        updates = {"CC_AUTH_USERNAME": username, "CC_RADICALE_USER": username}
+        if new_password:
+            updates["CC_AUTH_PASSWORD"] = new_password
+            updates["CC_RADICALE_PASSWORD"] = new_password
+        if radicale_url:
+            updates["CC_RADICALE_URL"] = radicale_url
+        try:
+            env_file.update_env_file(env_path, updates)
+        except OSError:
+            logger.exception("Failed to write env file %s", env_path)
+            return _redirect_with_error(
+                "/settings/general",
+                "Could not save -- the app couldn't write to its env file. Check file permissions.",
+            )
+        return _redirect_with_note(
+            '/settings/general', 'Saved. Click "Restart app" below to apply it.'
+        )
+
+    # Not env-managed -- app_meta, same storage as before this merge.
+    if new_password:
+        auth.set_persisted_credentials(conn, username, new_password)
+        db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, new_password)
+    else:
+        db.set_app_meta(conn, auth.AUTH_USERNAME_KEY, username)
+    db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
+    db.set_app_meta(conn, config.RADICALE_URL_KEY, radicale_url or settings.radicale_base_url)
+
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_configured = True
-    # 2026-09-07 audit fix: rotate the session-signing secret so every
-    # session issued under the old password -- this browser or any other
-    # -- stops verifying immediately instead of staying valid for the
-    # rest of its 30-day life (auth.rotate_session_secret's docstring).
-    # The in-process cache AuthMiddleware reads on every request is
-    # updated here too, same as purge_all already does, so this
-    # response's own freshly-minted cookie (signed below) doesn't look
-    # unauthenticated on the very next request.
+    # 2026-09-07 audit fix (carried over from change_login_password): rotate
+    # the session-signing secret whenever persisted credentials are
+    # (re)established, so a session issued under the old password stops
+    # verifying immediately instead of staying valid for the rest of its
+    # 30-day life. The in-process cache AuthMiddleware reads is updated
+    # here too, same as purge_all, so this response's own freshly-minted
+    # cookie doesn't look unauthenticated on the very next request.
     secret = auth.rotate_session_secret(settings, conn)
     if state is not None:
         state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
     response = _redirect_with_note(
         "/settings/general",
-        "Password updated."
-        if persisted
-        else f'Login enabled for "{username}" -- you\'ll need this password to sign in from now on.',
+        "Saved. Restart the app for the Radicale connection to pick up the change."
+        if (new_password or radicale_url)
+        else "Saved.",
     )
     response.set_cookie(
         auth.SESSION_COOKIE,
@@ -361,52 +462,47 @@ def change_login_password(
     return response
 
 
-@router.post("/settings/radicale-password")
-def change_radicale_password(
-    request: Request,
-    current_password: str = Form(""),
-    new_password: str = Form(""),
-    new_password_confirm: str = Form(""),
-    conn=Depends(get_db),
-):
-    """Old/new/confirm variant of /settings/radicale's password field
-    (Settings > General > "Login & security"). Same no-op-when-env-
-    configured guard as that route, but verifies the *current* value first
-    instead of blind-overwriting -- the plain 3-field form at /settings/
-    radicale (Data & Maintenance) still exists for changing the URL/
-    username together, or for a first-time connection with nothing to
-    verify against yet.
+@router.post("/settings/restart")
+def restart_app(request: Request):
+    """Settings > General's "Restart app" button -- 2026-09-08, direct
+    request ("have a button actually restarting the app so it applies").
+    Applies an account_settings env-file save (or any other change that
+    needs a fresh process, e.g. a Radicale connection saved to app_meta)
+    by having THIS process exit cleanly and letting systemd relaunch it
+    with the new environment -- not by shelling out to `systemctl`
+    itself, which would need granting the service user new privileges it
+    deliberately doesn't have (NoNewPrivileges/ProtectSystem in
+    scripts/curodav-ctl's generated unit). `Restart=always` on that unit
+    (changed from `on-failure` alongside this route) is what makes a
+    plain, non-crashing `exit(0)` come back up at all.
 
-    Only updates this app's own stored copy of the credential (app_meta,
-    same as the plain form) -- NOT the Radicale server's own account/
-    htpasswd file, which the app has no reliable filesystem access to on
-    either deploy target as of this writing (see plans/STATE.md's
-    2026-08-30 entry). Takes effect after a restart, same reason the plain
-    form documents (the CalDavBridge is only ever built once at process
-    start, main.py's lifespan)."""
+    Gated on `deploy_mode == "production"` -- the one signal this app
+    already has for "systemd-managed, something is watching to relaunch
+    me" (curodav-ctl's generated .env always sets it; local/manual runs
+    default to "local"). Without that gate, clicking this on a bare
+    `uvicorn` dev run would just kill the process with nothing to bring
+    it back.
+
+    The actual exit happens on a background thread half a second after
+    this function returns its response -- long enough for uvicorn to
+    finish writing the redirect to the socket first, short enough that
+    the operator's browser barely notices before the reload. `os._exit`
+    (not `sys.exit`, not raising) skips normal interpreter teardown on
+    purpose: there's nothing here that needs flushing or rolling back --
+    every write that led to this point is already committed (SQLite,
+    or env_file.update_env_file's own atomic rename) -- and an ordinary
+    shutdown path risks hanging on an in-flight background sync tick
+    instead of actually exiting."""
     settings = request.app.state.settings
-    if settings.radicale_env_configured:
+    if getattr(settings, "deploy_mode", "local") != "production":
         return _redirect_with_error(
             "/settings/general",
-            "Radicale connection is set via CC_RADICALE_URL -- edit curodav.env and restart to change it.",
+            "Restart isn't available outside a systemd-managed (production) deploy -- stop and restart the process yourself.",
         )
-    if not hmac.compare_digest(current_password, settings.radicale_password):
-        return _redirect_with_error("/settings/general", "Current Radicale password is incorrect.")
-    new_password = new_password.strip()
-    if not new_password:
-        return _redirect_with_error("/settings/general", "Choose a new Radicale password.")
-    if new_password != new_password_confirm:
-        return _redirect_with_error("/settings/general", "New Radicale passwords do not match.")
-    if new_password == current_password:
-        return _redirect_with_error(
-            "/settings/general", "New Radicale password must be different from the current one."
-        )
-    db.set_app_meta(conn, config.RADICALE_URL_KEY, settings.radicale_base_url)
-    db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, settings.radicale_username)
-    db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, new_password)
+    logger.warning("Restart requested from Settings > General -- exiting for systemd to relaunch.")
+    threading.Timer(0.5, os._exit, args=(0,)).start()
     return _redirect_with_note(
-        "/settings/general",
-        "Radicale password saved. Restart the app for it to take effect.",
+        "/settings/general", "Restarting -- this page will reconnect in a few seconds."
     )
 
 
@@ -1081,53 +1177,28 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         # gather; radicale_url is fetched here directly since
         # export_context() takes no `request`.
         "radicale_url": request.app.state.settings.radicale_base_url,
-        # 2026-08-29 -- lets this page offer an editable Radicale
-        # connection form (see the settings_data_maintenance.html "CalDAV
-        # / Radicale sync" card and the /settings/radicale route below)
-        # only when the environment didn't already configure one; an
-        # env-configured install keeps being managed via curodav.env.
-        # getattr-guarded: several test files build their own minimal
-        # SimpleNamespace stand-in for Settings (not the real dataclass)
-        # to exercise this route in isolation, predating these two
-        # fields -- defaulting rather than requiring every such fixture
-        # to grow them keeps this route working against either.
+        # 2026-09-08 -- this card is read-only display now (the URL only;
+        # credentials moved to Settings > General's merged Account card,
+        # account_settings' own docstring covers why). radicale_env_
+        # configured still distinguishes "set via curodav.env" wording
+        # from "set through Settings" in the card's copy. getattr-guarded:
+        # several test files build their own minimal SimpleNamespace
+        # stand-in for Settings (not the real dataclass) predating this
+        # field.
         "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
-        "radicale_username": getattr(request.app.state.settings, "radicale_username", ""),
     }
     ctx.update(summary)
     ctx.update(export_context(conn))
     return templates.TemplateResponse("settings_data_maintenance.html", ctx)
 
 
-@router.post("/settings/radicale")
-def settings_radicale(
-    request: Request,
-    radicale_url: str = Form(""),
-    radicale_username: str = Form(""),
-    radicale_password: str = Form(""),
-    conn=Depends(get_db),
-):
-    """Edits the Radicale connection saved through /setup (or here) --
-    the always-available counterpart to /setup's one-time "connect to
-    Radicale" step, since that page only ever renders once per install
-    (routers/auth.py::setup_page). A no-op when the environment already
-    configures Radicale (env always wins, config.py's
-    radicale_env_configured) or when all three fields are left blank.
-    Takes effect after a restart, same as an env-file edit always has --
-    the CalDavBridge is only ever built once at process start (main.py's
-    lifespan), so this can't hot-swap it."""
-    settings = request.app.state.settings
-    if not settings.radicale_env_configured:
-        url, username, password = radicale_url.strip(), radicale_username.strip(), radicale_password.strip()
-        if url and username and password:
-            db.set_app_meta(conn, config.RADICALE_URL_KEY, url)
-            db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
-            db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, password)
-            return _redirect_with_note(
-                "/settings/data-maintenance",
-                "Radicale connection saved. Restart the app for it to take effect.",
-            )
-    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
+# /settings/radicale (the old plain URL/username/password form) is gone
+# (2026-09-08, superseded by /settings/account -- account_settings' own
+# docstring covers the merge) -- Data & Maintenance's "CalDAV / Radicale
+# sync" card is now a read-only display of the current URL, pointing at
+# Settings > General to actually change the connection, since the
+# credentials it used to collect independently are now the same
+# username/password as the app's own login.
 
 
 @router.get("/settings/data-health")

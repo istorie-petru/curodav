@@ -42,18 +42,10 @@
                 {% if not radicale_env_configured %}
                 <hr class="setup-radicale-divider">
                 <p class="auth-subtitle text-muted setup-radicale-subtitle">Connect to a CalDAV/CardDAV server (optional)</p>
-                <p class="settings-hint setup-radicale-hint">Only needed if you want to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Leave blank to skip -- you can come back to this later in Settings, or run the installer with <code>--with-radicale</code> for a pre-configured one.</p>
+                <p class="settings-hint setup-radicale-hint">Only needed if you want to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Leave blank to skip -- you can come back to this later in Settings, or run the installer with <code>--with-radicale</code> for a pre-configured one. The username/password above are used for this too -- one account for both.</p>
                 <div class="field">
                     <label for="radicale_url">Server URL</label>
                     <input id="radicale_url" type="text" name="radicale_url" placeholder="http://127.0.0.1:5232/you/" autocomplete="off">
-                </div>
-                <div class="field">
-                    <label for="radicale_username">Username</label>
-                    <input id="radicale_username" type="text" name="radicale_username" autocomplete="off">
-                </div>
-                <div class="field">
-                    <label for="radicale_password">Password</label>
-                    <input id="radicale_password" type="password" name="radicale_password" autocomplete="off">
                 </div>
                 <p class="settings-hint setup-radicale-hint">Takes effect after the app is restarted.</p>
                 {% endif %}

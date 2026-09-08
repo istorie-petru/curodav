@@ -17,6 +17,104 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct request, new session: "add the
+  ability to change radicale environment variables in the app, and have
+  a button actually restarting the app so it applies. also I would like
+  to merge the concept of radicale username to the app username, and
+  merge the app password with the radicale password." Two clarifying
+  questions asked and answered up front (AskUserQuestion): restart
+  mechanism = self-exit + systemd `Restart=always` (not a sudo/systemctl
+  grant), and credential merge = "UI-level merge only, stores stay
+  separate" (not a privileged helper writing Radicale's own htpasswd --
+  that file, owned by a separate `radicale` system user, stays entirely
+  out of reach, unchanged).
+
+  **New: `webapp/src/env_file.py`** -- stdlib-only read/write for the
+  systemd `EnvironmentFile` (`/srv/curodav/shared/.env`). `read_env_file`
+  (live vars only, ignores commented-out template lines);
+  `update_env_file` (replaces a live `KEY=` line, or uncomments+fills a
+  `#KEY=` template line, or appends a new one; always double-quotes with
+  `\"`/`\\` escaped; atomic temp-file-then-`os.replace`, original file
+  mode preserved). `config.Settings` gained `env_file_path` (from
+  `CC_ENV_FILE`, a new env var `scripts/curodav-ctl`'s generated unit now
+  sets to the same path as its own `EnvironmentFile=` -- the file's
+  *contents* land in the process env either way, but nothing before this
+  told the process where that file itself lives).
+
+  **`scripts/curodav-ctl`**: `write_env_template`'s `chmod 0640` ->
+  `0660` (group-writable -- the app, running as the `curodav` group
+  owner, now needs to write its own config, not just read it).
+  `write_unit`'s `Restart=on-failure` -> `Restart=always` (a clean
+  `exit(0)` now gets relaunched too, not just a crash) plus the new
+  `Environment=CC_ENV_FILE=...` line.
+
+  **`routers/settings.py`**: three old routes --
+  `change_login_password`/`change_radicale_password` (Settings > General)
+  and `settings_radicale` (Data & Maintenance's plain URL/username/
+  password form) -- replaced by one `POST /settings/account`
+  (`account_settings`). One username/password now governs both the app's
+  login and its stored Radicale credential; a Radicale Server URL field
+  sits alongside. Storage backend: if either half was already
+  env-configured (`CC_AUTH_USERNAME`/`PASSWORD` or `CC_RADICALE_URL`) AND
+  `CC_ENV_FILE` is known, the whole account is written to the env file
+  from then on (converting the other half over too, if it wasn't already
+  -- deliberate, "one identity" was the point); env-configured with no
+  `CC_ENV_FILE` known still refuses to edit (same "edit curodav.env
+  yourself" fallback as before); neither env-configured persists to
+  app_meta, same as the three old routes did. Any existing account
+  requires `current_password` to verify before ANY change (username,
+  password, or just the URL) -- broader than the old routes' "only a
+  password change needs verification," since this form now controls the
+  sync credential too. The Radicale password key is only ever written
+  when a real `new_password` is supplied -- never silently persists
+  `settings.radicale_password`'s "devpass" dev-default as if it were a
+  chosen credential.
+
+  New `POST /settings/restart` (`restart_app`): gated on `deploy_mode ==
+  "production"` (the one existing signal for "systemd-managed, something
+  is watching to relaunch me"); schedules `os._exit(0)` on a
+  `threading.Timer` half a second out (long enough for the redirect to
+  reach the socket first) rather than exiting inline.
+
+  **`routers/auth.py` / `setup.html`**: `/setup`'s "connect to Radicale"
+  section dropped its separate username/password fields -- URL only now;
+  `_save_radicale_fields` reuses the account's own just-chosen
+  username/password as the Radicale credential.
+
+  **Templates**: `settings_general.html`'s two old cards ("Login &
+  security" + Radicale password) replaced by one "Account" card
+  (username, current/new/confirm password, Radicale URL) plus a
+  "Restart app" card/button, the latter hidden entirely (not shown
+  disabled) outside `deploy_mode == "production"`.
+  `settings_data_maintenance.html`'s "CalDAV / Radicale sync" card is
+  read-only display now (current URL + a link to Settings > General) --
+  no form of its own, credentials live in the merged Account card.
+
+  **Tests**: `test_settings_login_password.py` rewritten for
+  `account_settings`/`restart_app` (env-file path, app_meta path,
+  verification-required-for-any-change, restart gating via a fake
+  `threading.Timer` so the test process doesn't get killed by the real
+  one). `test_settings_radicale.py` rewritten for the now-read-only
+  Data & Maintenance card. New `test_env_file.py` (13 tests: live-line
+  replace, template uncomment+fill, append, quote/escape round-trip,
+  mode preservation, missing-file/missing-dir failure surfaces as a real
+  exception). `test_auth.py`'s `/setup` Radicale tests updated for the
+  dropped fields. Full suite (now 2071 tests, up from 2058): 898 + 672 +
+  501 = 2071 passed, 0 failed (6-chunk run).
+
+  **Manual verification**: `bash -n scripts/curodav-ctl` (syntax only --
+  no real systemd/root environment in this sandbox to actually exercise
+  install/restart); direct `env_file.update_env_file`/`read_env_file`
+  round-trip against a real temp file (quoting, mode, template-line
+  uncommenting all confirmed by hand before the pytest suite existed);
+  direct `settings_general`/`settings_data_maintenance` router calls
+  rendering real Jinja output across local/production/env-configured-
+  without-CC_ENV_FILE states, confirming the right form/button
+  presence in each. No live browser, no real systemd unit, no real
+  Radicale htpasswd anywhere in this sandbox -- the restart button's
+  actual "process exits, systemd relaunches it with new env" behavior is
+  unverified beyond code review + the mocked-Timer test.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session as the four
   entries below: "also remove the 'No account needed.' label."
   published_lists.html only -- the public-link Link-column hint added
