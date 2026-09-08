@@ -242,5 +242,8 @@ class TestShellCacheVersion:
         # resets scroll position on an async refresh (async_calendar.js's
         # refreshWeek() captures/restores .time-grid-wrap's scrollTop around
         # the #week-grid node swap).
+        # v88 (2026-09-09, FullCalendar-parity slice 6): 4-Week/Week prev/
+        # next navigate via AJAX (async_calendar.js's bindCalNav) with a
+        # live date-range label instead of a full page reload.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v87"' in script
+        assert 'CACHE_NAME = "cc-shell-v88"' in script

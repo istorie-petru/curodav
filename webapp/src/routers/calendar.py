@@ -702,6 +702,17 @@ def _four_week_view_context(conn, request, date_, label):
 
     weeks = _four_week_grid(view_start, events, tasks, week_start)
 
+    # Live label (slice 6, "FullCalendar-parity interactions" arc): a date
+    # range, matching FullCalendar's own default and Week's own choice below
+    # (confirmed via AskUserQuestion, 2026-09-08) rather than inventing a
+    # separate "4-Week" convention -- computed once here so the sr-only
+    # <h1> and the visible nav label (calendar_fourweek.html) and the async
+    # region fragment's own data-label-text (_calendar_fourweek_grid.html,
+    # read by async_calendar.js after a prev/next AJAX swap) can never drift
+    # apart, same "one source of truth" reasoning this function's own
+    # docstring already gives for the rest of its output.
+    label_text = f"{view_start.strftime('%b %d')} – {view_end.strftime('%b %d, %Y')}"
+
     return {
         "request": request,
         # "calendar" (not "calendar_fourweek"): 4-Week IS what the
@@ -717,6 +728,7 @@ def _four_week_view_context(conn, request, date_, label):
         "anchor_iso": anchor.isoformat(),
         "prev_start": (view_start - timedelta(days=7)).isoformat(),
         "next_start": (view_start + timedelta(days=7)).isoformat(),
+        "label_text": label_text,
         "event_label_names": db.list_event_label_names(conn),
         "active_label": label or "",
     }
@@ -874,6 +886,16 @@ def _week_view_context(conn, request, date_, label):
         )
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
+    # Live label (slice 6, "FullCalendar-parity interactions" arc): a date
+    # range -- confirmed via AskUserQuestion, 2026-09-08, matching
+    # FullCalendar's own default over an ISO week number. Same format the
+    # sr-only <h1> below already used inline; pulled out here so it's one
+    # value shared by the <h1>, the visible nav label
+    # (calendar_week.html), and the async region fragment's own
+    # data-label-text (_calendar_week_grid.html, read by async_calendar.js
+    # after a prev/next AJAX swap) instead of three copies that could drift.
+    label_text = f"{week_start_date.strftime('%b %d')} – {week_end_date.strftime('%b %d, %Y')}"
+
     return {
         "request": request,
         "active_tab": "calendar_week",
@@ -892,6 +914,7 @@ def _week_view_context(conn, request, date_, label):
         "sunday": week_end_date,
         "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
         "next_week": (week_start_date + timedelta(days=7)).isoformat(),
+        "label_text": label_text,
         "unscheduled_tasks": unscheduled_tasks,
         "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
         "event_label_names": db.list_event_label_names(conn),

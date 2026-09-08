@@ -442,7 +442,14 @@
 // #week-grid node swap (async_crud.js's refreshRegion does a wholesale
 // replaceWith, which previously discarded the user's scroll position) and
 // restores it on the fresh node afterward.
-const CACHE_NAME = "cc-shell-v87";
+//
+// v88 (2026-09-09): slice 6 of the same arc -- 4-Week/Week prev/next now
+// navigate via AJAX (async_calendar.js's new bindCalNav) instead of a full
+// page reload, with a live date-range label in the page header
+// (style.css's new .cal-nav-label, the two grid templates' updated
+// markup). style.css and async_calendar.js both changed; neither is in
+// SHELL_ASSETS below, but style.css is, so the bump is required either way.
+const CACHE_NAME = "cc-shell-v88";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

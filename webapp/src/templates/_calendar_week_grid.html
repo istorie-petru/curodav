@@ -16,9 +16,15 @@
      from GET /calendar/regions?region=week after a work-allocation
      create/move/delete or an event change on the week page, then re-runs
      the drag/create/panel bindings (calendar.js, project_calendar.js,
-     unscheduled_panel_toggle.js) instead of a full page reload. -->
+     unscheduled_panel_toggle.js) instead of a full page reload.
+
+     2026-09-09, slice 6 ("FullCalendar-parity interactions"): data-label-
+     text/data-prev/data-next added alongside the existing data-date/
+     data-label -- calendar_nav.js reads these off the freshly-swapped
+     element after a prev/next AJAX nav to update the visible label and
+     the two <a> hrefs for the *next* click, without a second round-trip. -->
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
-<div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}">
+<div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
     <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
         <div class="unscheduled-panel-head">
             <h2>Unscheduled work</h2>

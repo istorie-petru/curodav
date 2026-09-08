@@ -358,19 +358,17 @@ and touches all three view headers):
    `scrollTop` before calling `refreshRegion`, restore it on the new node
    after. Small, contained, no backend change — could ride along with
    slice 4 if convenient.
-6. **Live month/week label + AJAX prev/next nav, no full page reload.**
-   Today the visible header is a fixed `<h2>"Calendar"`/`"Planner"`
-   (`_page_header_narrow.html`); the actual "September 2026" / date-range
-   text only exists in a screen-reader-only `<h1 class="sr-only">`, and
-   prev/next are plain `<a href>` links causing full page loads — no AJAX
-   navigation exists today, only AJAX *refresh-after-mutation*
-   (`async_calendar.js`'s change-event listener). This slice adds a
-   separate fetch-and-swap navigation path for prev/next (also updating a
-   new visible label element and pushing the URL via `history.pushState`
-   so back/forward and bookmarks keep working) across Month, 4-Week, and
-   Week. Open decision: for Week, an actual ISO week number ("Week 37") or
-   a date range ("Sep 7 – 13")? FullCalendar itself defaults to a date
-   range, not a week number — confirm before building.
+6. **Shipped 2026-09-09.** Live month/week label + AJAX prev/next nav, no
+   full page reload -- 4-Week and Week only. Open decision (Week's visible
+   label: ISO week number vs. a date range) settled via direct
+   AskUserQuestion answer: a date range, matching FullCalendar's own
+   default; 4-Week's label follows the same convention. Month excluded
+   entirely -- confirmed before building that `month_view` has had no
+   route decorator since `calendar_root_redirect` retired it (bare
+   `/calendar` always redirects to `/calendar/fourweek`), so there was no
+   reachable page left to wire AJAX nav onto. See `plans/STATE.md`'s own
+   entry for this slice for the full detail. This was the final slice of
+   the arc -- all six now shipped.
 
 ## Event banners — "starting soon" notice (not yet scoped)
 

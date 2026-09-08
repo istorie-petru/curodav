@@ -18,10 +18,20 @@
      narrow header's actions slot instead. -->
 <!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
      own comment. -->
-<h1 class="sr-only">4-Week View</h1>
+<h1 class="sr-only">{{ label_text }}</h1>
 {% call page_header_narrow("Calendar", "calendar") %}
-<a class="icon-btn" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-<a class="icon-btn" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+<!-- 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc:
+     prev/next now navigate via AJAX (async_calendar.js's new bindCalNav)
+     instead of a full page reload -- the plain <a href> stays as the
+     no-JS fallback/real bookmark target, bindCalNav just intercepts the
+     click when JS is available. cal-nav-label is the new visible
+     date-range label (the sr-only heading above used to be a static
+     "4-Week View" string with no date info at all -- now a real range,
+     same `label_text` value as that heading so the two can never
+     drift). -->
+<a class="icon-btn cal-nav-prev" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
+<a class="icon-btn cal-nav-next" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
 {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
 {% endcall %}
 

@@ -35,7 +35,87 @@
 // Claims the change event only when a region is actually on this page (the
 // ccApi.claimed protocol); on a refresh failure it falls back to a reload so
 // the page converges to server truth.
+//
+// 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc: also
+// wires up AJAX prev/next navigation (4-Week and Week only -- Month's own
+// page route is retired, see routers/calendar.py's calendar_root_redirect
+// docstring, so there's no reachable page to wire nav clicks on for it).
+// `bindCalNav` below is the shared helper both regions call.
 (function () {
+  // Shared prev/next AJAX-nav wiring for a region that has `.cal-nav-prev`/
+  // `.cal-nav-next` <a> links and a `#cal-nav-label` span in its page header
+  // (calendar_fourweek.html / calendar_week.html). `refreshFn(dateVal)` must
+  // return the same kind of promise `ccApi.refreshRegion` does, resolving
+  // after the region's DOM has been swapped in for `dateVal`.
+  //
+  // The plain <a href> on each link stays the real, bookmarkable URL (also
+  // this function's no-JS fallback and its own failure fallback) --
+  // clicking just intercepts it into a region-fragment fetch instead of a
+  // full page load. After a swap, the freshly-rendered region's own
+  // data-label-text/data-prev/data-next (set server-side, same request-
+  // scoped `label_text`/`prev_*`/`next_*` values the full page would have
+  // used) drive the visible label and the two links' *next* href -- no
+  // second round-trip needed to know what "the week after this one" is.
+  // `history.pushState` keeps the URL bar (and therefore bookmarks) in
+  // sync; the `popstate` listener makes the browser's own Back/Forward
+  // buttons drive the same fetch-and-swap instead of just changing the
+  // address bar with nothing on screen reacting to it.
+  function bindCalNav(gridId, pageBase, refreshFn) {
+    var prevLink = document.querySelector(".cal-nav-prev");
+    var nextLink = document.querySelector(".cal-nav-next");
+    var labelEl = document.getElementById("cal-nav-label");
+    if (!prevLink && !nextLink) return;
+
+    function applyDataset() {
+      var gridEl = document.getElementById(gridId);
+      if (!gridEl) return;
+      var lq = gridEl.dataset.label ? "&label=" + encodeURIComponent(gridEl.dataset.label) : "";
+      if (prevLink && gridEl.dataset.prev) prevLink.href = pageBase + "?date_=" + gridEl.dataset.prev + lq;
+      if (nextLink && gridEl.dataset.next) nextLink.href = pageBase + "?date_=" + gridEl.dataset.next + lq;
+      if (labelEl && gridEl.dataset.labelText) {
+        labelEl.textContent = gridEl.dataset.labelText;
+        document.title = gridEl.dataset.labelText + " - Calendar";
+      }
+    }
+
+    function go(dateVal, push) {
+      refreshFn(dateVal)
+        .then(function () {
+          applyDataset();
+          if (push) {
+            var gridEl = document.getElementById(gridId);
+            var lq = gridEl && gridEl.dataset.label ? "&label=" + encodeURIComponent(gridEl.dataset.label) : "";
+            window.history.pushState({ calNavDate: dateVal }, "", pageBase + "?date_=" + dateVal + lq);
+          }
+        })
+        .catch(function () {
+          // Same "converge to server truth" fallback every other refresh
+          // failure in this file already takes -- a real navigation always
+          // gets the user to a correct page even if the AJAX path failed.
+          window.location.href = pageBase + "?date_=" + dateVal;
+        });
+    }
+
+    if (prevLink) {
+      prevLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        var url = new URL(prevLink.href, window.location.origin);
+        go(url.searchParams.get("date_") || "", true);
+      });
+    }
+    if (nextLink) {
+      nextLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        var url = new URL(nextLink.href, window.location.origin);
+        go(url.searchParams.get("date_") || "", true);
+      });
+    }
+    window.addEventListener("popstate", function () {
+      var params = new URLSearchParams(window.location.search);
+      go(params.get("date_") || "", false);
+    });
+  }
+
   var regionEl = document.getElementById("month-grid");
   if (regionEl) {
     var regionUrl =
@@ -61,11 +141,15 @@
 
   var fourweekEl = document.getElementById("fourweek-grid");
   if (fourweekEl) {
-    var fourweekUrl = "/calendar/regions?region=fourweek&date_=" + encodeURIComponent(fourweekEl.dataset.date || "");
-    if (fourweekEl.dataset.label) fourweekUrl += "&label=" + encodeURIComponent(fourweekEl.dataset.label);
-
-    function refreshFourweek() {
-      return window.ccApi.refreshRegion(fourweekUrl, "fourweek-grid").then(function () {
+    // `dateVal`: optional override for a prev/next nav fetch (bindCalNav
+    // below) -- defaults to the region's own current data-date, same as
+    // before this param existed, for the mutation-refresh call site
+    // (cc-entity-changed listener at the bottom of this file).
+    function refreshFourweek(dateVal) {
+      var d = dateVal != null ? dateVal : fourweekEl.dataset.date || "";
+      var url = "/calendar/regions?region=fourweek&date_=" + encodeURIComponent(d);
+      if (fourweekEl.dataset.label) url += "&label=" + encodeURIComponent(fourweekEl.dataset.label);
+      return window.ccApi.refreshRegion(url, "fourweek-grid").then(function () {
         fourweekEl = document.getElementById("fourweek-grid");
         // Same create/drag scripts as Month re-bind here -- they query by
         // class name only (.month-day-cell, .month-event-item[data-uid]),
@@ -74,14 +158,23 @@
         if (window.CCMonthGridDrag) window.CCMonthGridDrag.init();
       });
     }
+    bindCalNav("fourweek-grid", "/calendar/fourweek", refreshFourweek);
   }
 
   var weekEl = document.getElementById("week-grid");
   if (weekEl) {
-    var weekUrl = "/calendar/regions?region=week&date_=" + encodeURIComponent(weekEl.dataset.date || "");
-    if (weekEl.dataset.label) weekUrl += "&label=" + encodeURIComponent(weekEl.dataset.label);
-
-    function refreshWeek() {
+    // `dateVal`: optional override for a prev/next nav fetch (bindCalNav
+    // below) -- defaults to the region's own current data-date, same as
+    // before this param existed, for the mutation-refresh call site
+    // (cc-entity-changed listener at the bottom of this file). Kept the
+    // scroll-preserve behavior for a nav call too, not just a mutation
+    // refresh -- carrying the same time-of-day scroll position over when
+    // paging to a different week is a reasonable "stay where I was
+    // looking" default, not just an artifact of this being one function.
+    function refreshWeek(dateVal) {
+      var d = dateVal != null ? dateVal : weekEl.dataset.date || "";
+      var url = "/calendar/regions?region=week&date_=" + encodeURIComponent(d);
+      if (weekEl.dataset.label) url += "&label=" + encodeURIComponent(weekEl.dataset.label);
       // `refreshRegion` does `current.replaceWith(fragment)` -- a wholesale
       // node swap of #week-grid. `.time-grid-wrap` (the actual
       // `overflow-y:auto` scroll container, style.css) is a child of that
@@ -90,7 +183,7 @@
       // before the swap and restore it on the new node after.
       var oldScroller = weekEl.querySelector(".time-grid-wrap");
       var scrollTop = oldScroller ? oldScroller.scrollTop : null;
-      return window.ccApi.refreshRegion(weekUrl, "week-grid").then(function () {
+      return window.ccApi.refreshRegion(url, "week-grid").then(function () {
         weekEl = document.getElementById("week-grid");
         if (scrollTop !== null && weekEl) {
           var newScroller = weekEl.querySelector(".time-grid-wrap");
@@ -106,6 +199,7 @@
         if (window.CCUnscheduledPanel) window.CCUnscheduledPanel.init();
       });
     }
+    bindCalNav("week-grid", "/calendar/week", refreshWeek);
   }
 
   var dayEl = document.getElementById("day-grid");

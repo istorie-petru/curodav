@@ -6026,6 +6026,24 @@ body.command-palette-open{overflow:hidden;}
 .page-header-narrow.has-banner .page-header-narrow-actions .multiselect-trigger:hover{
   background:rgba(0,0,0,.55); color:#fff;
 }
+/* 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc: the
+   visible date-range label sitting between 4-Week/Week's prev/next
+   .icon-btn arrows in .page-header-narrow-actions (calendar_fourweek.html/
+   calendar_week.html, id="cal-nav-label", updated in place by
+   async_calendar.js's bindCalNav after an AJAX nav). Sized down from the
+   header's own 700-weight title (that's the page identity; this is a
+   secondary, current-position indicator, same visual hierarchy the rest
+   of this actions slot's smaller controls already have) and capped so a
+   long range can't push the prev/next arrows or the label filter out of
+   the header's fixed 48px-tall strip. */
+.cal-nav-label{
+  font-weight:600; font-size:var(--text-body); color:var(--fg-secondary);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  max-width:180px;
+}
+.page-header-narrow.has-banner .cal-nav-label{
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
 
 /* Banner editor modal (banner_editor.html, 2026-08-09). */
 .banner-editor-note{

@@ -17,8 +17,14 @@
      (features/async-crud.md) -- calendar_month.js/calendar_month_drag.js/
      async_calendar.js refresh this element from GET /calendar/regions?
      region=fourweek after an event/task change instead of a full page
-     reload, then re-run the drag-to-create / drag-to-move bindings. -->
-<div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}">
+     reload, then re-run the drag-to-create / drag-to-move bindings.
+
+     2026-09-09, slice 6 ("FullCalendar-parity interactions"): data-label-
+     text/data-prev/data-next added alongside the existing data-date/
+     data-label -- calendar_nav.js reads these off the freshly-swapped
+     element after a prev/next AJAX nav to update the visible label and
+     the two <a> hrefs for the *next* click, without a second round-trip. -->
+<div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_start }}" data-next="{{ next_start }}">
 <div class="month-weekday-row">
     {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
 </div>

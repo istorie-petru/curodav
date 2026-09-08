@@ -24,10 +24,19 @@
      own comment: the narrow header's title is a fixed <h2>"Planner", and
      this page's old toolbar row was the only h1 carrying the specific
      week's date range, so it's restored standalone here. -->
-<h1 class="sr-only">{{ monday.strftime('%b %d') }} &ndash; {{ sunday.strftime('%b %d, %Y') }}</h1>
+<h1 class="sr-only">{{ label_text }}</h1>
 {% call page_header_narrow("Planner", "clock") %}
-<a class="icon-btn" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-<a class="icon-btn" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+<!-- 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc:
+     prev/next now navigate via AJAX (async_calendar.js's new bindCalNav)
+     instead of a full page reload -- the plain <a href> stays as the
+     no-JS fallback/real bookmark target, bindCalNav just intercepts the
+     click when JS is available. cal-nav-label is the new visible
+     date-range label (the "Sep 07 - Sep 13, 2026" text used to exist only
+     in the sr-only heading above); both now render from the same
+     request-scoped `label_text` so they can never drift apart. -->
+<a class="icon-btn cal-nav-prev" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
+<a class="icon-btn cal-nav-next" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
 {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
 {% endcall %}
 <!-- 1.9 side work: Week merged with the former "Timetable" sub-view (see

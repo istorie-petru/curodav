@@ -17,6 +17,110 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 6 of
+  6 (final slice of the arc; see `plans/open.md` § "Calendar:
+  FullCalendar-parity interactions"): live month/week label + AJAX
+  prev/next navigation for 4-Week and Week, replacing the old full-page-
+  reload `<a href>` links. Month is deliberately NOT covered -- confirmed
+  before writing any code that `month_view` has had no route decorator
+  since `calendar_root_redirect` was added (bare `/calendar` always
+  redirects to `/calendar/fourweek`), so there's no reachable page left to
+  wire AJAX nav onto; `_calendar_month_grid.html`/`_month_view_context`
+  are untouched.
+
+  **Open decision, settled via AskUserQuestion (direct answer) before
+  building:** Week's visible label is a date range ("Sep 07 - Sep 13,
+  2026"), matching FullCalendar's own default over an ISO week number.
+  4-Week's label follows the same date-range convention -- its own
+  sr-only `<h1>` used to be a static "4-Week View" string with no date
+  info at all, so this also fixes that gap, not just adds nav.
+
+  **Backend (`routers/calendar.py`):** both `_four_week_view_context` and
+  `_week_view_context` now compute a `label_text` string once (`"%b %d"`
+  .. `"%b %d, %Y"`, en dash) and return it -- the same value now drives
+  the sr-only `<h1>` (previously computed inline in the template,
+  hand-duplicated), the new visible `#cal-nav-label` span, and the async
+  region fragment's own `data-label-text`, so the three can never drift
+  apart. `_calendar_fourweek_grid.html`/`_calendar_week_grid.html`'s root
+  elements also gained `data-prev`/`data-next` (the existing
+  `prev_start`/`next_start`/`prev_week`/`next_week` values) alongside
+  their existing `data-date`/`data-label` -- everything a prev/next click
+  needs to know for its *next* click is already on the freshly-swapped
+  node, no second round-trip required.
+
+  **Templates:** each page's prev/next `<a class="icon-btn">` gained a
+  `cal-nav-prev`/`cal-nav-next` class (href unchanged -- still the real,
+  bookmarkable full-page URL, and the no-JS/failure fallback); a new
+  `<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">`
+  sits between them.
+
+  **`async_calendar.js`:** new shared `bindCalNav(gridId, pageBase,
+  refreshFn)`, called once each for the 4-Week and Week blocks (not
+  Month). Intercepts a prev/next click, calls the region's existing
+  `refresh*` function (now parameterized with an optional `dateVal`
+  override -- defaults to the region's own current `data-date`, unchanged
+  behavior for the pre-existing mutation-refresh call site) instead of
+  following the link, then reads the freshly-swapped node's
+  `data-label-text`/`data-prev`/`data-next` to update the visible label,
+  `document.title`, and both links' hrefs for the next click.
+  `history.pushState` keeps the URL bar/bookmarks in sync; a `popstate`
+  listener makes the browser's own Back/Forward buttons re-run the same
+  fetch-and-swap (reading `date_` back off `window.location.search`)
+  instead of just changing the address bar with nothing reacting on
+  screen. A failed nav falls back to a real `window.location.href`
+  navigation, same "converge to server truth" pattern every other refresh
+  failure in this file already uses. Week's existing scroll-position
+  capture/restore (slice 5) is kept for a nav call too, not just a
+  mutation refresh -- carrying the same time-of-day scroll position over
+  when paging to a different week.
+
+  **`style.css`:** new `.cal-nav-label` (600-weight, `--text-body`,
+  `--fg-secondary`, ellipsis-truncated at 180px so a long range can't push
+  the arrows/filter out of the header's fixed 48px strip) plus a
+  `.page-header-narrow.has-banner` override matching the existing
+  banner-mode treatment other actions-slot controls already have.
+
+  **Bug caught before it shipped:** the first draft of both templates'
+  own header comments referenced "the sr-only `<h1>`" in prose -- since
+  Jinja doesn't strip HTML comments, that literal `<h1>` substring showed
+  up in the rendered page and broke `test_page_header_narrow.py`'s
+  "exactly one real `<h1>` per folded page" test (found by running that
+  file, not by inspection -- worth remembering: never write a literal
+  `<h1>`/`<h2>`/etc. tag name inside an HTML comment in these templates).
+  Reworded to "the sr-only heading" in both files; re-verified 1 match
+  each.
+
+  **Tests:** new `test_calendar_nav_labels.py` -- `label_text` shape and
+  that it moves with the window/anchor, the sr-only-`<h1>`-and-visible-
+  label-share-the-same-text invariant, the new `cal-nav-*` classes, the
+  region fragment's new data attributes, and (same "no JS unit-test
+  harness for `static/*.js` in this repo" gap every prior JS-only calendar
+  slice's own entry notes) `node --check` plus source greps pinning
+  `bindCalNav`'s click-interception/pushState/popstate/dataset-driven-
+  update/failure-fallback behavior and that Month's own block never calls
+  it. A `TestMonthUntouched` class locks in the scoping decision above
+  (no `label_text`/`data-prev`/`data-next` anywhere near Month's context
+  or grid partial).
+
+  `sw.js` `CACHE_NAME` bumped `v87` -> `v88`; `test_pwa_shell.py`'s pin
+  updated. Full suite re-run in 10 sequential chunks (background
+  processes don't survive across tool calls in this sandbox, same
+  constraint every entry in this file already notes; `test_caldav_bridge_
+  live.py` excluded as always): 301 + 220 + 338 + 211 + 181 + 218 + 196 +
+  144 + 120 + 103 = 2032 passed, 0 failed (2012 + 20 net new).
+
+  **Next slice:** none mandated -- this was the final slice of the
+  "FullCalendar-parity interactions" arc (plans/open.md), now fully
+  shipped end to end. No live-browser check yet either (same recurring
+  gap every entry in this file already notes) -- this slice's AJAX
+  nav/pushState/popstate wiring was verified structurally (JS reasoned
+  about directly, rendered HTML inspected via direct router calls, full
+  test suite green) but the actual click-through feel -- especially
+  Back/Forward behavior and whether the label visibly flickers during the
+  fetch -- has never been seen rendered. Worth being the first thing
+  checked next session if a browser becomes reachable, given this arc's
+  six slices have all shipped "structurally verified, never rendered."
+
 - **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 5 of
   6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
   Week view no longer resets scroll position on an async region refresh.
