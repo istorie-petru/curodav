@@ -436,7 +436,13 @@
 // /events/{uid}/reschedule, which gained an optional `all_day` field
 // (routers/calendar.py) to flip the flag on a cross-boundary move -- no new
 // endpoint.
-const CACHE_NAME = "cc-shell-v86";
+// v87 (2026-09-09, FullCalendar-parity interactions slice 5): Week view no
+// longer resets scroll position on an async refresh. async_calendar.js's
+// refreshWeek() now captures .time-grid-wrap's scrollTop before the
+// #week-grid node swap (async_crud.js's refreshRegion does a wholesale
+// replaceWith, which previously discarded the user's scroll position) and
+// restores it on the fresh node afterward.
+const CACHE_NAME = "cc-shell-v87";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

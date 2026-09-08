@@ -82,7 +82,20 @@
     if (weekEl.dataset.label) weekUrl += "&label=" + encodeURIComponent(weekEl.dataset.label);
 
     function refreshWeek() {
+      // `refreshRegion` does `current.replaceWith(fragment)` -- a wholesale
+      // node swap of #week-grid. `.time-grid-wrap` (the actual
+      // `overflow-y:auto` scroll container, style.css) is a child of that
+      // swapped element, so the fresh node starts at `scrollTop: 0`,
+      // discarding whatever position the user had scrolled to. Capture it
+      // before the swap and restore it on the new node after.
+      var oldScroller = weekEl.querySelector(".time-grid-wrap");
+      var scrollTop = oldScroller ? oldScroller.scrollTop : null;
       return window.ccApi.refreshRegion(weekUrl, "week-grid").then(function () {
+        weekEl = document.getElementById("week-grid");
+        if (scrollTop !== null && weekEl) {
+          var newScroller = weekEl.querySelector(".time-grid-wrap");
+          if (newScroller) newScroller.scrollTop = scrollTop;
+        }
         // Re-bind the swapped-in grid: ordinary events + drag-to-create
         // (calendar.js), work-allocation blocks + unscheduled-task drag
         // source (project_calendar.js), sidebar collapse (toggle script).

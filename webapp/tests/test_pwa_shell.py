@@ -238,5 +238,9 @@ class TestShellCacheVersion:
         # between the "All day" row and the timed grid, both directions
         # (calendar.js gained a drop-onto-.allday-col branch, calendar_
         # week_allday_drag.js gained a drop-onto-.time-col branch).
+        # v87 (2026-09-09, FullCalendar-parity slice 5): Week view no longer
+        # resets scroll position on an async refresh (async_calendar.js's
+        # refreshWeek() captures/restores .time-grid-wrap's scrollTop around
+        # the #week-grid node swap).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v86"' in script
+        assert 'CACHE_NAME = "cc-shell-v87"' in script

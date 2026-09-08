@@ -17,6 +17,59 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 5 of
+  6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
+  Week view no longer resets scroll position on an async region refresh.
+
+  **Root cause, confirmed exactly as open.md's own scoping note
+  predicted:** `async_crud.js`'s `refreshRegion()` does `current.replaceWith
+  (fragment)`, a wholesale swap of `#week-grid`. `.time-grid-wrap` (the
+  actual `overflow-y:auto` scroll container, style.css) is a child of that
+  swapped element, so the freshly-parsed fragment always started at
+  `scrollTop: 0`, discarding whatever position the user had scrolled to
+  before a create/move/etc. triggered a refresh.
+
+  **Fix, entirely in `async_calendar.js`'s `refreshWeek()`:** before
+  calling `ccApi.refreshRegion`, reads `.time-grid-wrap`'s current
+  `scrollTop` off the still-attached `weekEl`. After the swap resolves,
+  re-queries `#week-grid` (reassigning the outer `weekEl` -- previously
+  this function was the one region-refresh closure in the file that
+  *didn't* do this, unlike `refreshMonth`/`refreshFourweek`/`refreshDay`;
+  brought in line with them as part of this fix, since the restore needs a
+  reference to the newly-attached node anyway) and writes the captured
+  value onto the fresh node's own `.time-grid-wrap`. Both the capture and
+  the restore are null-guarded (no scroller found, or no scroll to
+  restore) rather than assuming the element always exists. Scoped to Week
+  only, per open.md's own slice split (Day has its own `.time-grid-wrap`
+  but wasn't part of this slice's acceptance line -- not touched).
+
+  **Tests:** new `test_calendar_week_scroll_restore.py`
+  (`TestWeekScrollRestoreStructural`, 4 tests) -- same "no JS unit-test
+  harness for `static/*.js` in this repo" gap every prior JS-only calendar
+  slice's own entry notes, so covered via `node --check` (syntax) plus
+  source greps pinning the specific capture/restore lines (including the
+  null-guard conditions) so a future refactor can't silently drop the fix.
+  No backend change, so no Python-side behavior to test beyond that.
+
+  `sw.js` `CACHE_NAME` bumped `v86` -> `v87`; `test_pwa_shell.py`'s pin
+  updated. Full suite re-run in 4 chunks of ~20-22 files each (background
+  processes don't survive across tool calls in this sandbox, same
+  constraint every entry in this file already notes; `test_caldav_bridge_
+  live.py` excluded as always): 569 + 572 + 473 + 398 = 2012 passed, 0
+  failed (2008 + 4 net new).
+
+  **Next slice:** open.md slice 6 (final slice of this arc) -- live
+  month/week label + AJAX prev/next navigation across Month, 4-Week, and
+  Week, replacing today's full-page-reload `<a href>` links. Has its own
+  open decision to settle first: for Week's visible label, an actual ISO
+  week number ("Week 37") or a date range ("Sep 7 - 13")? FullCalendar
+  itself defaults to a date range -- confirm via AskUserQuestion before
+  building. No live-browser check yet either (same recurring gap every
+  entry in this file already notes) -- this slice's scroll-preservation
+  fix was verified structurally (JS reasoned about directly, full test
+  suite green) but the actual "does the grid visibly stay put after a
+  drag" feel has never been seen rendered.
+
 - **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 4 of
   6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
   Week view drag between the "All day" row and the timed grid, both
