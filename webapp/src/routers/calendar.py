@@ -400,7 +400,14 @@ def _month_day_cells(
     not competing with its MONTH_MAX_VISIBLE_ITEMS cap. The key is `rows`,
     NOT `items` -- a dict key named `items` would collide with Python's own
     `dict.items` method in Jinja (a template's `day.items` would resolve to
-    the bound method and crash iterating over it)."""
+    the bound method and crash iterating over it).
+
+    `overflow` (2026-09-09, FullCalendar-parity interactions slice 3) is the
+    same-shaped tail end of `rows` past the cap -- the items the "+N more"
+    link doesn't show directly. The template renders these into a hidden
+    per-day `<template>` block so the "+N more" click can pop them into an
+    info toast with real click-through, without a second request back to
+    the server just to find out what was hiding behind the count."""
     week_days = []
     for day in dates:
         key = day.isoformat()
@@ -410,6 +417,7 @@ def _month_day_cells(
         for t in tasks_by_date.get(key, []):
             rows.append({"kind": "task", "task": t})
         visible = rows[:MONTH_MAX_VISIBLE_ITEMS]
+        overflow = rows[MONTH_MAX_VISIBLE_ITEMS:]
         week_days.append(
             {
                 "date": day,
@@ -418,7 +426,8 @@ def _month_day_cells(
                 "is_today": day == today,
                 "is_past": day < today,
                 "rows": visible,
-                "overflow_count": len(rows) - len(visible),
+                "overflow_count": len(overflow),
+                "overflow": overflow,
             }
         )
     return week_days

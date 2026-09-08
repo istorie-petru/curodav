@@ -235,4 +235,4 @@ class TestShellCacheVersion:
         # `elementsFromPoint` DOM hit-test to plain rectangle-containment
         # against the day cells' own bounding rects.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v84"' in script
+        assert 'CACHE_NAME = "cc-shell-v85"' in script

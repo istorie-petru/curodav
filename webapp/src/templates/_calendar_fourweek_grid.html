@@ -58,7 +58,21 @@
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
-                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+                <!-- 2026-09-09: see _calendar_month_grid.html's own comment
+                     on the matching block -- identical markup, same
+                     calendar_month_overflow.js wiring (class-selector
+                     only, no container-id dependency, same reasoning as
+                     the rest of this file's header comment). -->
+                <button type="button" class="month-more-link">+{{ day.overflow_count }} more</button>
+                <template class="month-overflow-data">
+                    {% for item in day.overflow %}
+                        {% if item.kind == "event" %}
+                            <a href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal>{{ item.event.title }}</a>
+                        {% else %}
+                            <a href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ item.task.title }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </template>
             {% endif %}
         </div>
     </div>

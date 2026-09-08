@@ -428,7 +428,7 @@
 // changes size during a resize) -- not reliable enough in practice.
 // Replaced with plain rectangle-containment against the known day cells'
 // own `getBoundingClientRect()`s, no DOM stacking involved.
-const CACHE_NAME = "cc-shell-v84";
+const CACHE_NAME = "cc-shell-v85";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

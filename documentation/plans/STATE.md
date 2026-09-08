@@ -17,6 +17,77 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- FullCalendar-parity interactions, slice 3 of
+  6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"):
+  Month/4-Week's "+N more" overflow no longer navigates to Day view --
+  clicking it opens an info toast listing the day's hidden events/tasks as
+  click-through buttons, each opening that item's own edit modal directly.
+
+  **Open decision settled first, via AskUserQuestion (direct answer):**
+  build the list on `ccToast`'s `actions` array (keeps click-through),
+  not a plain-text toast -- accepting the noted risk that `.toast-actions`
+  was built for a 1-2 button Cancel/Confirm pair, not 3-6 stacked items,
+  and would need its own styling.
+
+  **Backend (`routers/calendar.py`):** `_month_day_cells` now also returns
+  `overflow` -- the same-shaped tail of `rows` past `MONTH_MAX_VISIBLE_
+  ITEMS` (previously only `overflow_count`, an int, existed). Same
+  kind/event/task dicts as `rows`, same order -- `rows + overflow`
+  reconstructs every event/task on the day with nothing dropped or
+  duplicated.
+
+  **Templates** (`_calendar_month_grid.html`/`_calendar_fourweek_grid.html`,
+  same "one script serves either grid" pattern every slice in this arc
+  follows): the "+N more" `<a href="/calendar/day/...">` is now a plain
+  `<button class="month-more-link">`, with a sibling, inert `<template
+  class="month-overflow-data">` listing each overflow item as an `<a
+  data-modal href="...">title</a>` -- built with the exact same href logic
+  the visible `day.rows` loop above it already uses (event vs. task URL,
+  recurrence `occurrence_date` query param), so the two can never drift
+  apart the way a second hand-written URL-builder would.
+
+  **New `calendar_month_overflow.js`:** a single document-level delegated
+  click listener on `.month-more-link` (same reasoning modal.js's own
+  `[data-modal]` delegation comment gives) reads the sibling `<template>`'s
+  anchors and fires `window.ccToast({ actions: [...] })`, one action per
+  item, each calling `window.CCModal.open(href)`. No init()/rebind call
+  needed after `async_calendar.js`'s region-refresh DOM swaps -- unlike
+  `calendar_month_drag.js`'s `CCMonthGridDrag.init()`, this listener holds
+  no element references between clicks. Wired in via a new `<script defer>`
+  tag in both `calendar_month.html` and `calendar_fourweek.html`'s
+  `extra_scripts` block (not added to `sw.js`'s `SHELL_ASSETS` precache
+  list -- confirmed `calendar_month.js`/`calendar_month_drag.js` aren't
+  there either; this repo's precache list is core shell assets only, not
+  every page-specific script).
+
+  **`style.css`:** new `.toast-overflow` variant -- `.toast-actions`
+  stacks full-width instead of the default flex-end pair, each row
+  left-aligned and ellipsis-truncated (same overflow feel `.month-item-
+  title` already has in the grid itself) rather than wrapping, capped at
+  `max-height:220px` with its own scroll for a day with many hidden items.
+
+  **Tests:** new `TestOverflowItems` class in `test_calendar_month_bars.py`
+  (2 tests) locks in `overflow`'s shape/order and that it's `[]` (not
+  missing) when there's nothing to show. No JS unit-test harness for
+  `static/*.js` in this repo (same recurring gap every JS-only change in
+  this file notes) -- verified via `node --check` on the new file and a
+  direct Jinja render of `_calendar_month_grid.html` with a fake overflow
+  day dict (same ad hoc verification slice 1 used), confirming the
+  `<template>` and its `data-modal` anchors actually appear in the
+  rendered HTML with the right hrefs/titles.
+
+  `sw.js` `CACHE_NAME` bumped `v84` -> `v85`; `test_pwa_shell.py`'s pin
+  updated. Full suite re-run in the same 10-chunk pattern as the entry
+  below: 313 + 215 + 296 + 220 + 113 + 245 + 219 + 119 + 127 + 130 = 1997
+  passed, 0 failed (1995 + 2 net new).
+
+  **Next slice:** open.md slice 4 -- Week view drag between the "All day"
+  row and the timed grid, both directions. No live-browser check yet
+  either (same recurring gap every entry in this file already notes) --
+  this slice's toast/click-through wiring was verified structurally (JS
+  reasoned about directly, a real Jinja render inspected, full test suite
+  green) but never seen rendered or clicked.
+
 - **Shipped:** 2026-09-08 -- same-day bug fix, direct report against the
   slice 2 entry below: bar resize was unreliable in a live browser --
   shrinking (dragging an edge inward) "most of the time doesn't work",

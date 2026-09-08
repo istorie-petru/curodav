@@ -64,7 +64,26 @@
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
-                <a class="month-more-link" href="/calendar/day/{{ day.iso }}">+{{ day.overflow_count }} more</a>
+                <!-- 2026-09-09 (FullCalendar-parity interactions, slice 3):
+                     "+N more" no longer navigates to Day view -- it opens
+                     an info toast (calendar_month_overflow.js) listing the
+                     hidden items as click-through buttons, each opening
+                     that item's own edit modal via window.CCModal.open.
+                     The actual overflow items live in this sibling
+                     <template> (inert, never rendered) instead of a fresh
+                     fetch, reusing the exact href-building logic the
+                     visible day.rows loop above already uses so the two
+                     never drift apart. -->
+                <button type="button" class="month-more-link">+{{ day.overflow_count }} more</button>
+                <template class="month-overflow-data">
+                    {% for item in day.overflow %}
+                        {% if item.kind == "event" %}
+                            <a href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal>{{ item.event.title }}</a>
+                        {% else %}
+                            <a href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ item.task.title }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </template>
             {% endif %}
         </div>
     </div>

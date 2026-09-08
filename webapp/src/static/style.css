@@ -4096,6 +4096,22 @@ main.main-shell > .bulk-actions-bar{
 .toast-confirm-typed .toast-actions{justify-content:stretch;}
 .toast-confirm-typed .toast-action{flex:1 1 0; text-align:center;}
 .toast-typed-input.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
+
+/* Month/4-Week "+N more" overflow toast (2026-09-09, FullCalendar-parity
+   interactions slice 3) -- ccToast's default .toast-actions row (flex-end,
+   a couple of pill buttons) isn't built for the 3-6 stacked list items this
+   toast can carry, one per hidden event/task on that day. Stacks them
+   full-width instead, each row left-aligned and truncated rather than
+   wrapping, same overflow feel .month-item-title already has in the grid
+   itself. */
+.toast-overflow{max-width:320px;}
+.toast-overflow .toast-actions{flex-direction:column; align-items:stretch; gap:2px; max-height:220px; overflow-y:auto;}
+.toast-overflow .toast-action.toast-overflow-item{
+  align-self:stretch; text-align:left; font-weight:400; color:var(--fg-primary);
+  padding:var(--space-2); border-radius:var(--radius-sm);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.toast-overflow .toast-action.toast-overflow-item:hover{background:var(--row-alt);}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */

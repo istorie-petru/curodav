@@ -331,15 +331,11 @@ and touches all three view headers):
    the pointer, spawned on drag start and removed on drop — build once
    here for both move and resize rather than patching today's soon-to-be-
    replaced chip drag first.
-3. **"+N more" overflow → info toast instead of a Day-view link.** Open
-   decision to settle at the start of this slice: `ccToast` (`static/
-   toast.js`) renders `message` as plain `textContent`, no per-item links
-   — a straight port of "list the day's events in a toast" loses the
-   click-through the current Day-view link gives you. Either accept that
-   (plain info toast, matches the literal ask) or build the list on
-   `ccToast`'s existing `actions` array (small buttons, one per event,
-   keeps click-through) — untested territory for that component at
-   4-6 items, may need its own styling. Pick one before writing code.
+3. **Shipped 2026-09-09.** "+N more" overflow → info toast instead of a
+   Day-view link. Open decision (`ccToast`'s plain-text `message` vs. its
+   `actions` array) settled via direct AskUserQuestion answer: `actions`,
+   keeping per-item click-through. See `plans/STATE.md`'s own entry for
+   this slice for the full detail.
 4. **Week view: drag an event between the "All day" row and the timed
    grid, both directions** (FullCalendar's `allDayMaintainDuration`
    equivalent). Today `calendar_week_allday_drag.js` only moves all-day

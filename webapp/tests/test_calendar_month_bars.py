@@ -305,6 +305,39 @@ class TestOverflowCap:
         day = _day(weeks, "2026-08-04")
         assert day["rows"] == []
         assert day["overflow_count"] == 0
+        assert day["overflow"] == []
+
+
+class TestOverflowItems:
+    """FullCalendar-parity interactions, slice 3 -- the "+N more" link's
+    click target moved from a Day-view href to an info toast listing the
+    actual hidden items (calendar_month_overflow.js), built from a new
+    `day["overflow"]` list rather than just the `overflow_count` int the
+    link used to need. `overflow` must be exactly the same-shaped tail end
+    of `rows` past MONTH_MAX_VISIBLE_ITEMS -- same dicts (kind/event/task),
+    same order -- since the template renders it with the identical
+    kind-branch logic the visible rows loop already uses."""
+
+    def test_overflow_is_the_same_shaped_tail_past_the_cap(self):
+        events = [_event(f"e{i}", "2026-08-05T09:00:00", "2026-08-05T10:00:00") for i in range(2)]
+        tasks = [_task(f"t{i}", "2026-08-05") for i in range(4)]
+        weeks = calendar_router._month_grid(2026, 8, events, tasks)
+        day = _day(weeks, "2026-08-05")
+        assert len(day["overflow"]) == 2
+        assert all(i["kind"] == "task" for i in day["overflow"])
+        assert [i["task"]["uid"] for i in day["overflow"]] == ["t2", "t3"]
+        # rows + overflow together account for every event/task on the day,
+        # in the same relative order, nothing dropped or duplicated.
+        assert day["rows"] + day["overflow"] == [
+            {"kind": "event", "event": e} for e in events
+        ] + [{"kind": "task", "task": t} for t in tasks]
+
+    def test_no_overflow_is_an_empty_list_not_missing(self):
+        events = [_event("e1", "2026-08-05T09:00:00", "2026-08-05T10:00:00")]
+        weeks = calendar_router._month_grid(2026, 8, events, [])
+        day = _day(weeks, "2026-08-05")
+        assert day["overflow_count"] == 0
+        assert day["overflow"] == []
 
 
 class TestBarWorthySplit:
