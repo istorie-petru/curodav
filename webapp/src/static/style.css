@@ -4003,6 +4003,30 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
     box-shadow:0 -2px 8px rgba(0,0,0,.08);
     padding:0 4px; padding-bottom:env(safe-area-inset-bottom, 0px);
   }
+  /* 2026-09-08 bugfix (direct report, confirmed live in Chrome: "any of
+     the buttons of the modal windows are not visible on the mobile due
+     to the navbar"): --z-mobile-tabbar (160) was always higher than
+     --z-modal (100) -- documented at the time as "above the drawer/scrim
+     so it stays reachable while the drawer is open," which never
+     considered the regular data-modal dialog. Since the mobile modal is
+     a bottom sheet anchored to the same screen edge (.modal-overlay's
+     align-items:flex-end), this persistent 3-button bar rendered
+     directly on top of the sheet's own footer on every single modal,
+     fully covering whatever buttons lived there -- not a banner-editor-
+     specific bug, an app-wide one the banner editor's shrunk-to-content
+     footer just made land exactly in the tabbar's 64px strip instead of
+     scrolling past it underneath.
+     Fixed by hiding the bar outright while a modal is open (modal.js
+     toggles body.modal-open on openModal()/closeModal()) rather than
+     reshuffling the shared z-index scale -- bumping --z-modal above 160
+     would also have had to move above --z-overlay-panel (150, the color/
+     icon/multiselect popovers that must render ABOVE an open modal),
+     inverting a relationship the rest of the app still depends on. The
+     close button/backdrop/drag-handle already give the same three
+     destinations this bar offers (or better -- closing gets you there
+     directly), so hiding it costs no reachability while a dialog is
+     open. */
+  body.modal-open .mobile-tabbar{display:none;}
   .mobile-tabbar-btn{
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; background:none; border:none; cursor:pointer;

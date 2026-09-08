@@ -205,6 +205,15 @@
    function closeModal() {
      closeOpenPopover();
      overlay.classList.remove("is-open");
+     // 2026-09-08 bugfix (direct report, confirmed live: the persistent
+     // mobile bottom bar -- Menu/Home/Search, base.html's .mobile-tabbar
+     // -- sat at a higher z-index than the modal overlay and covered the
+     // open dialog's own footer buttons on every phone-width viewport.
+     // style.css's body.modal-open rule hides that bar for as long as
+     // this class is present; removed here on every close path (X,
+     // Escape, backdrop click -- all of which call this function) so it
+     // never gets stuck hidden.
+     document.body.classList.remove("modal-open");
      body.innerHTML = "";
      if (header) header.innerHTML = "";
      if (footer) footer.innerHTML = "";
@@ -473,6 +482,10 @@
      currentUrl = url;
      pendingReload = false;
      overlay.classList.add("is-open");
+     // See closeModal()'s own comment -- style.css hides the mobile
+     // bottom bar (.mobile-tabbar) for as long as this class is present,
+     // so it can't sit on top of the open dialog's footer.
+     document.body.classList.add("modal-open");
      // Size variant (2026-08-01) -- most modals (a field-grid form) are
      // fine at the default width, but a few (Schedule's Blocks table/week
      // grid, 9+ columns wide) need real room or they force a horizontal
