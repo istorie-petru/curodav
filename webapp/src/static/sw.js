@@ -413,7 +413,7 @@
 // removed too (data_maintenance.js, settings_data_maintenance.html) rather
 // than left as a button that can only ever show an error. style.css lost
 // the dead .offline-* rules those deleted templates used.
-const CACHE_NAME = "cc-shell-v81";
+const CACHE_NAME = "cc-shell-v82";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

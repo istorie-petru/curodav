@@ -29,6 +29,21 @@
 //
 // A short drag (a few px, effectively a click) is treated as a click and
 // left alone -- same CLICK_THRESHOLD_PX pattern as calendar.js.
+//
+// 2026-09-08 (FullCalendar-parity interactions, slice 1 -- backend
+// lane-packing + spanning-bar rendering, see documentation/plans/open.md):
+// all-day events no longer render as `.month-all-day.month-event-item`
+// chips inside a day cell at all -- they're now `.month-bar` spanning-bar
+// elements in a separate per-week-row layer (`.month-week-bars`,
+// _calendar_month_grid.html/_calendar_fourweek_grid.html), which this
+// script's `.month-event-item[data-uid]` selector does NOT match. So a
+// whole-day drag-to-move on an all-day event is a KNOWN, TEMPORARY
+// regression as of this slice -- it previously worked via this script,
+// and no longer does, until slice 2 ("Drag-move + edge-resize for bars,
+// plus the pointer-follow drag ghost") retargets this same delta-shift
+// logic at `.month-bar` elements. Single-day timed events and due-date
+// task chips are unaffected -- both are still plain `.month-event-item`/
+// `.month-due-task-item` rows, unchanged by this pass.
 
 (function () {
   let items = [];

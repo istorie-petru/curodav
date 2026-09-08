@@ -211,15 +211,20 @@ class TestShellCacheVersion:
         # single Quick Add screen, then fixing header/card/button/Labels
         # issues on that collapsed screen) -- see plans/STATE.md for the
         # full history of both.
-        # v81 (2026-09-09, this entry): the whole client-side Offline Mode
-        # feature those two passes were polishing is gone -- direct
-        # request ("let's just remove offline mode. purge it."). /offline
-        # and every static/offline_*.js entry dropped from SHELL_ASSETS
-        # (the route and files no longer exist), and the navigate handler's
+        # v81 (2026-09-09): the whole client-side Offline Mode feature
+        # those two passes were polishing is gone -- direct request
+        # ("let's just remove offline mode. purge it."). /offline and
+        # every static/offline_*.js entry dropped from SHELL_ASSETS (the
+        # route and files no longer exist), and the navigate handler's
         # fallback to a cached /offline copy removed. Same pass: the Sync
         # card's "Force sync" button (Settings > Data & Maintenance) only
         # worked via window.CCOfflineSync, now permanently undefined --
         # removed outright (data_maintenance.js, settings_data_maintenance.
         # html) rather than left as a guaranteed-broken control.
+        # v82 (2026-09-08, this entry): FullCalendar-parity interactions
+        # slice 1 -- Month/4-Week spanning-bar layout (style.css's
+        # .month-week-bars/.month-bar-*/.month-bars-offset-* rules,
+        # calendar_month_drag.js's updated header comment on the
+        # temporary all-day-drag regression this slice introduces).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v81"' in script
+        assert 'CACHE_NAME = "cc-shell-v82"' in script

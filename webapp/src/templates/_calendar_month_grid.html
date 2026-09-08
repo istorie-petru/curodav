@@ -15,21 +15,41 @@
 </div>
 {% for week in weeks %}
 <div class="month-week-grid">
+    <!-- 2026-09-08: all-day (bar-worthy) events lane-packed into
+         continuous spanning bars for this whole week row, reversing the
+         2026-08-08 "flat per-day list" design for exactly that item type
+         (routers/calendar.py's _week_bars) -- FullCalendar-parity
+         interactions, slice 1 (backend lane-packing + spanning-bar
+         rendering, no drag/resize yet). Absolutely positioned on top of
+         the day cells (.month-week-bars, style.css), NOT a normal-flow
+         grid row -- .month-bars-offset-{{ week.lane_count }} below
+         reserves the matching empty space at the top of each day cell's
+         own text-row list so the two layers never overlap, the exact bug
+         the 2026-08-08 rework's own comment warned this design must not
+         reintroduce. -->
+    {% if week.bars %}
+    <div class="month-week-bars">
+        {% for bar in week.bars %}
+        <a class="month-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}"
+           href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}"
+           data-modal title="{{ bar.event.title }}"
+           {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ bar.event.title }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% for day in week.days %}
     <div class="month-day-cell {% if not day.in_month %}not-in-month{% endif %} {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}" data-date="{{ day.iso }}">
         <a href="/calendar/day/{{ day.iso }}" class="month-day-num"><span>{{ day.date.day }}</span></a>
-        <div class="month-day-bottom">
-            <!-- 2026-08-08: one flat list per day, all three types, no
-                 overlap -- all-day events as full-width colored rows
-                 (.month-all-day), timed events as quiet time+dot text,
-                 tasks as square+title text (routers/calendar.py's
-                 _month_grid tags each with its `kind`). Everything past
+        <div class="month-day-bottom month-bars-offset-{{ week.lane_count }}">
+            <!-- 2026-08-08: one flat list per day, no overlap -- timed
+                 events as quiet time+dot text, tasks as square+title text
+                 (routers/calendar.py's _month_grid tags each with its
+                 `kind`). All-day events are no longer in this list (see
+                 the bar layer above). Everything past
                  MONTH_MAX_VISIBLE_ITEMS folds into the "+N more" link
                  below, which directs to the day view. -->
             {% for item in day.rows %}
-                {% if item.kind == "all_day" %}
-                    <a class="month-all-day month-event-item cal-{{ item.event.calendar_color }}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="1"{% endif %}>{{ item.event.title }}</a>
-                {% elif item.kind == "event" %}
+                {% if item.kind == "event" %}
                     <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
                         <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
                         {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}

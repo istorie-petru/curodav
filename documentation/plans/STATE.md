@@ -17,20 +17,90 @@ session start.
 
 ## Right now
 
-- **Scoped, not started:** 2026-09-08 -- direct request to bring Month/
-  4-Week/Week calendar's mouse interactions closer to fullcalendar.io
-  (continuous multi-day bars with drag-move/resize, a pointer-following
-  drag ghost, an info surface for "+N more", cross-boundary drag between
-  Week's all-day row and its timed grid, no scroll-reset on Week's async
-  refresh, live month/week header label with AJAX prev/next nav). Six
-  ordered slices, plus two open decisions to settle before slices 3 and 6
-  respectively (toast style for the overflow list; week-number vs.
-  date-range header wording) -- see `plans/open.md` § "Calendar:
-  FullCalendar-parity interactions" for the full scoping and
-  `plans/roadmap.md`'s 2.0 section for the one-paragraph pointer. This is
-  a second queue alongside `audit-fixes-2.0.md`, independent of it. No
-  code touched yet -- next session picking this up should start at open.md
-  slice 1 (backend lane-packing + spanning-bar rendering, Month + 4-Week).
+- **Shipped:** 2026-09-08 -- FullCalendar-parity interactions, slice 1 of
+  6 (see `plans/open.md` § "Calendar: FullCalendar-parity interactions"
+  for the full scoping of all six): backend lane-packing + spanning-bar
+  rendering for Month + 4-Week, no drag/resize yet (that's slice 2).
+
+  **Reverses `_is_bar_worthy`'s 2026-08-08 "flat per-day list" design for
+  all-day events only.** `_bucket_month_items` (routers/calendar.py) no
+  longer buckets all-day events per date -- it returns the raw bar-worthy
+  event list, which a new `_week_bars` lane-packs into one continuous bar
+  per week row an event touches (clipped to that week's 7-day bounds, a
+  separate independently-lane-assigned bar per week row for an event that
+  spans a week boundary). Standard interval-graph greedy lane assignment:
+  events sorted by (clipped start day, longest-span-first, title
+  tiebreak), each placed in the first lane whose last bar ends before this
+  one starts, no fit opens a new lane. `_month_day_cells` dropped the
+  `all_day_by_date`/`kind:"all_day"` row entirely -- its flat per-day list
+  (`day["rows"]`, capped at `MONTH_MAX_VISIBLE_ITEMS`) is now timed
+  events + tasks only; bars aren't subject to that cap or counted in
+  `overflow_count`. Timed *multi-day* events are unaffected -- still
+  repeat as a per-day text row, only `all_day` earns a bar (unchanged
+  `_is_bar_worthy` rule). `_month_grid`/`_four_week_grid` each week dict
+  now carries `bars` (list) and `lane_count` (int, capped at
+  `MONTH_MAX_BAR_LANES=8`) alongside `days`.
+
+  **Templates:** `_calendar_month_grid.html`/`_calendar_fourweek_grid.html`
+  each gained a `.month-week-bars` layer (absolutely positioned, one per
+  week row, rendered before that week's day cells) with one `<a
+  class="month-bar ...">` per bar; every day cell's `.month-day-bottom`
+  gained a `month-bars-offset-{{ week.lane_count }}` class reserving the
+  matching empty space at its top so the bar layer (a grid sibling, not a
+  child of any one day cell) can never visually overlap the timed-event/
+  task rows below it -- the specific failure mode the 2026-08-08 rework's
+  own comment warned a layered design must not reintroduce; this
+  reintroduces layering for all-day events only, with the offset class as
+  the fix. `style.css`: `.month-bar-col-1..7`/`.month-bar-span-1..7`/
+  `.month-bar-lane-0..7`/`.month-bars-offset-0..8` are bounded static
+  classes (no inline `style=`, consistent with `.month-day-cell`'s own
+  nth-child convention -- CSP has no `'unsafe-inline'` on style-src,
+  audit-fixes-2.0.md item 11) driven by `_week_bars`'/`_month_grid`'s
+  Python-side column/lane/offset math.
+
+  **Known, temporary regression, documented in `calendar_month_drag.js`'s
+  own header comment:** whole-day drag-to-move on an all-day event no
+  longer works -- it previously matched `.month-event-item[data-uid]`,
+  but a bar is `.month-bar`, a different class this script's selector
+  doesn't reach. Single-day timed events and due-date task chips are
+  unaffected. Slice 2 ("Drag-move + edge-resize for bars, plus the
+  pointer-follow drag ghost") retargets this same delta-shift logic at
+  `.month-bar` elements -- deliberately not fixed in this slice, per
+  open.md's own slice split.
+
+  **Tests:** `test_calendar_month_bars.py` substantially rewritten (the
+  old file's whole premise -- asserting the *absence* of bars -- is
+  exactly what this slice reverses); new `TestBars` class covers
+  single/multi-day bars, week-boundary wrapping (two independent bars,
+  each clipped to its own week), non-overlapping bars sharing lane 0,
+  overlapping bars getting different lanes, longest-bar-wins-lane-0
+  tiebreak, and lane reuse after a bar ends. `test_calendar_fourweek.py`'s
+  two bar-dependent tests rewritten to assert a bar instead of a repeated
+  row. No other test file depended on the old `kind:"all_day"`/
+  `.month-all-day` shape (confirmed by grep before editing) -- Week's own
+  `test_calendar_allday_strip.py` is untouched, out of scope (Week isn't
+  part of this slice).
+
+  `sw.js` `CACHE_NAME` bumped `v81` -> `v82` (style.css,
+  calendar_month_drag.js, both grid partials changed); `test_pwa_shell.py`
+  pin updated. Full suite re-run in 4 sequential chunks (background
+  processes don't survive across tool calls in this sandbox, same
+  constraint every entry in this file already notes, `test_caldav_bridge_
+  live.py` excluded as always): 819 + 488 + 391 + 294 = 1992 passed, 0
+  failed -- same total as before this slice (net: old file's ~20 tests
+  replaced by ~30 new ones in test_calendar_month_bars.py, a few rewritten
+  in test_calendar_fourweek.py, no other file's count changed).
+
+  **Next slice:** open.md slice 2 -- drag-move + edge-resize for bars
+  (retargeting `calendar_month_drag.js`'s delta-shift logic at
+  `.month-bar`, fixing the regression noted above as part of the same
+  work) plus the pointer-following drag ghost (new, for both move and
+  resize). Slice 3 ("+N more" overflow -> info toast) has its own open
+  decision to settle first (plain `ccToast` text vs. `actions` array for
+  click-through) -- see open.md. No live-browser check yet either (same
+  recurring gap every entry in this file already notes) -- this whole
+  slice was verified structurally (rendered HTML/CSS reasoned about
+  directly, full test suite green), never rendered.
 
 - **Shipped:** 2026-09-09 -- sixth same-day follow-up, direct request:
   "let's just remove offline mode. please. purge it." After two rounds of

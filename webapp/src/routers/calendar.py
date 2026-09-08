@@ -247,31 +247,28 @@ def _event_date_range(e: dict) -> tuple[date, date] | None:
     return start_d, end_d
 
 
-def _bucket_month_items(events: list[dict], tasks: list[dict]) -> tuple[dict, dict, dict]:
-    """Buckets events/tasks into per-date maps for the Month and 4-Week
-    grids -- the three dicts _month_grid used to build inline, extracted
-    so the new 4-Week view (_four_week_grid, 2026-08-11) builds identical
-    day cells from a continuous 28-day window without duplicating the
-    all-day/multi-day repeat-per-day + timed-sort logic. Returns
-    (all_day_by_date, timed_by_date, tasks_by_date).
+def _bucket_month_items(events: list[dict], tasks: list[dict]) -> tuple[list[dict], dict, dict]:
+    """Buckets events/tasks for the Month and 4-Week grids -- extracted so
+    the 4-Week view (_four_week_grid, 2026-08-11) builds identical day
+    cells from a continuous 28-day window without duplicating the
+    multi-day repeat-per-day + timed-sort logic. Returns
+    (all_day_events, timed_by_date, tasks_by_date).
 
-    Multi-day events (all-day or timed) repeat on every day they touch,
-    not just their start date -- same "repeated entry per day" behavior
-    Apple/Google use, and the fix for the original "event only showed on
-    its start day" bug this view's rework started from."""
+    `all_day_events` is the raw bar-worthy event list, NOT bucketed per
+    date the way it was pre-2026-09-08 -- Month/4-Week's spanning-bar
+    lane-packing (_week_bars) needs each event's own start/end range to
+    lay it out once per week row it touches (a continuous bar, wrapping
+    at week boundaries), not a per-day membership list the way timed
+    events/tasks still use for their flat per-day text rows.
+
+    Multi-day timed events still repeat on every day they touch, not just
+    their start date -- same "repeated entry per day" behavior Apple/
+    Google use, and the fix for the original "event only showed on its
+    start day" bug this view's rework started from. All-day events now
+    render as bars instead (see _week_bars), which cover their own full
+    span by construction, so they no longer need this per-day repeat."""
     all_day_events = [e for e in events if _is_bar_worthy(e)]
     timed_events = [e for e in events if not _is_bar_worthy(e)]
-
-    all_day_by_date: dict[str, list[dict]] = {}
-    for e in all_day_events:
-        rng = _event_date_range(e)
-        if rng is None:
-            continue
-        start_d, end_d = rng
-        d = start_d
-        while d <= end_d:
-            all_day_by_date.setdefault(d.isoformat(), []).append(e)
-            d += timedelta(days=1)
 
     timed_by_date: dict[str, list[dict]] = {}
     for e in timed_events:
@@ -292,12 +289,85 @@ def _bucket_month_items(events: list[dict], tasks: list[dict]) -> tuple[dict, di
             continue
         tasks_by_date.setdefault(t["due_at"][:10], []).append(t)
 
-    return all_day_by_date, timed_by_date, tasks_by_date
+    return all_day_events, timed_by_date, tasks_by_date
+
+
+# Cap on how many stacked bar lanes a week row's CSS actually accounts for
+# (style.css generates .month-bar-lane-0.._month-bar-lane-{N-1} and
+# .month-bars-offset-0..N static classes, same "bounded static classes, no
+# inline style=" constraint every other per-item CSS value in this grid
+# already follows -- see .month-day-cell's own nth-child comment). A week
+# with more simultaneous multi-day all-day events than this just stacks
+# past the reserved offset, overlapping the text rows below it slightly --
+# a graceful degradation for a genuinely rare case, not a crash.
+MONTH_MAX_BAR_LANES = 8
+
+
+def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list[dict], int]:
+    """Lane-packs every bar-worthy (all_day) event overlapping this week's
+    7-day span into a row of non-overlapping continuous bars -- reverses
+    the 2026-08-08 "flat per-day list" design for exactly this one item
+    type (_is_bar_worthy), per the 2026-09-08 direct request to bring
+    Month/4-Week closer to fullcalendar.io's continuous multi-day bars.
+
+    Standard interval-graph greedy lane assignment: events overlapping this
+    week are sorted by (clipped start day, then longest-span-first so a
+    week-long bar claims lane 0 before a 1-day one wedges in beside it,
+    then title for a stable tiebreak), and each is placed in the first lane
+    whose last-placed bar ends before this one starts; no fitting lane
+    opens a new one. Each bar is clipped to the week's own bounds (`col`
+    1-7) -- an event spanning multiple weeks gets a separate bar per week
+    row it touches, each independently lane-assigned, exactly like
+    FullCalendar's own dayGrid (no lane continuity is attempted or implied
+    across week-row boundaries).
+
+    Returns (bars, lane_count) -- `lane_count` (0 if no bars) is how many
+    stacked rows this week's bar layer needs, min-capped by
+    MONTH_MAX_BAR_LANES so the template's static offset/lane CSS classes
+    stay bounded."""
+    week_start, week_end = week_dates[0], week_dates[-1]
+    spans = []
+    for e in all_day_events:
+        rng = _event_date_range(e)
+        if rng is None:
+            continue
+        start_d, end_d = rng
+        if end_d < week_start or start_d > week_end:
+            continue
+        clip_start = max(start_d, week_start)
+        clip_end = min(end_d, week_end)
+        col_start = (clip_start - week_start).days + 1
+        col_end = (clip_end - week_start).days + 1
+        spans.append(
+            {
+                "event": e,
+                "col_start": col_start,
+                "col_span": col_end - col_start + 1,
+                "_sort_start": clip_start,
+            }
+        )
+    spans.sort(key=lambda s: (s["_sort_start"], -s["col_span"], s["event"].get("title") or ""))
+
+    lane_ends: list[int] = []  # lane index -> last occupied column
+    for s in spans:
+        del s["_sort_start"]
+        placed = False
+        for lane, end_col in enumerate(lane_ends):
+            if end_col < s["col_start"]:
+                lane_ends[lane] = s["col_start"] + s["col_span"] - 1
+                s["lane"] = lane
+                placed = True
+                break
+        if not placed:
+            s["lane"] = len(lane_ends)
+            lane_ends.append(s["col_start"] + s["col_span"] - 1)
+
+    lane_count = min(len(lane_ends), MONTH_MAX_BAR_LANES)
+    return spans, lane_count
 
 
 def _month_day_cells(
     dates: list[date],
-    all_day_by_date: dict,
     timed_by_date: dict,
     tasks_by_date: dict,
     today: date,
@@ -310,18 +380,19 @@ def _month_day_cells(
     days; 4-Week: always True, since its window is exactly 4 weeks and
     never bleeds into surrounding weeks/months).
 
-    Each cell is ONE flat list of rows: all-day colored rows first, then
-    timed events by time, then tasks -- same visual priority the cell
-    shows top-to-bottom, and the count that feeds the "+N more" link. The
-    key is `rows`, NOT `items` -- a dict key named `items` would collide
-    with Python's own `dict.items` method in Jinja (a template's `day.items`
-    would resolve to the bound method and crash iterating over it)."""
+    Each cell is ONE flat list of rows: timed events by time, then tasks --
+    same visual priority the cell shows top-to-bottom, and the count that
+    feeds the "+N more" link. All-day (bar-worthy) events are NOT in this
+    list any more (2026-09-08) -- they render once per week row as a
+    continuous spanning bar instead (see _week_bars), above this flat list,
+    not competing with its MONTH_MAX_VISIBLE_ITEMS cap. The key is `rows`,
+    NOT `items` -- a dict key named `items` would collide with Python's own
+    `dict.items` method in Jinja (a template's `day.items` would resolve to
+    the bound method and crash iterating over it)."""
     week_days = []
     for day in dates:
         key = day.isoformat()
         rows = []
-        for e in all_day_by_date.get(key, []):
-            rows.append({"kind": "all_day", "event": e})
         for e in timed_by_date.get(key, []):
             rows.append({"kind": "event", "event": e})
         for t in tasks_by_date.get(key, []):
@@ -342,18 +413,15 @@ def _month_day_cells(
 
 
 def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
-    # 2026-08-08 rework: every day cell is a single flat list, no more
-    # lane-packed bars layered on top of a separate quiet-text list --
-    # that layering is exactly what let the colored all-day rows overlap
-    # the text events/tasks. Now all three types live in one list where
-    # each item is tagged with its `kind` so the template can render
-    # all-day events as colored rows, timed events as time+dot text, and
-    # tasks as square+title text, with no overlap between them.
-    # Everything past MONTH_MAX_VISIBLE_ITEMS folds into the "+N more"
-    # overflow link that directs to the day view. The per-day cell work
-    # lives in _bucket_month_items/_month_day_cells so the 4-Week view
+    # 2026-09-08 rework: all-day (bar-worthy) events are lane-packed into
+    # continuous spanning bars per week row (_week_bars), reversing the
+    # 2026-08-08 "flat per-day list" design for exactly that item type --
+    # timed events and tasks stay a flat per-day list (_month_day_cells),
+    # capped at MONTH_MAX_VISIBLE_ITEMS with a "+N more" overflow link to
+    # the day view, same as before. The per-day cell work lives in
+    # _bucket_month_items/_month_day_cells so the 4-Week view
     # (_four_week_grid) can reuse it over a continuous 28-day window.
-    all_day_by_date, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
+    all_day_events, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
 
     # Python's calendar module: firstweekday=0 is Monday, 6 is Sunday --
     # same "Week starts on" preference _week_bounds above reads.
@@ -361,11 +429,14 @@ def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], we
     today = date.today()
     weeks = []
     for week in cal.monthdatescalendar(year, month):
+        bars, lane_count = _week_bars(week, all_day_events)
         weeks.append(
             {
                 "days": _month_day_cells(
-                    week, all_day_by_date, timed_by_date, tasks_by_date, today, lambda d: d.month == month
-                )
+                    week, timed_by_date, tasks_by_date, today, lambda d: d.month == month
+                ),
+                "bars": bars,
+                "lane_count": lane_count,
             }
         )
     return weeks
@@ -397,16 +468,17 @@ def _four_week_grid(view_start: date, events: list[dict], tasks: list[dict], wee
     the same interaction surface as Month: each cell's data-date + DOM
     order feed static/calendar_month.js's click-and-hold drag-to-create
     unchanged."""
-    all_day_by_date, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
+    all_day_events, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
     today = date.today()
     weeks = []
     for week_index in range(4):
         dates = [view_start + timedelta(days=week_index * 7 + i) for i in range(7)]
+        bars, lane_count = _week_bars(dates, all_day_events)
         weeks.append(
             {
-                "days": _month_day_cells(
-                    dates, all_day_by_date, timed_by_date, tasks_by_date, today, lambda d: True
-                )
+                "days": _month_day_cells(dates, timed_by_date, tasks_by_date, today, lambda d: True),
+                "bars": bars,
+                "lane_count": lane_count,
             }
         )
     return weeks

@@ -151,19 +151,25 @@ class TestFourWeekGrid:
         else:
             assert all(not d["is_today"] for w in weeks for d in w["days"])
 
-    def test_all_day_multiday_event_repeats_every_day_it_touches(self):
-        # Same repeat-per-day rule as _month_grid -- a 3-day all-day trip
-        # fills every day it touches, not just its start day.
+    def test_all_day_multiday_event_becomes_one_spanning_bar(self):
+        # 2026-09-08: all-day events lane-pack into a spanning bar per week
+        # row (_week_bars), same as Month -- no longer a per-day repeat in
+        # `day["rows"]` (that per-day-repeat behavior survives only for
+        # *timed* multi-day events, see test_calendar_month_bars.py).
         events = [_event("e1", "2026-08-12T00:00:00", "2026-08-14T23:59:00", all_day=True)]
         weeks = calendar_router._four_week_grid(_WEEK_START_MONDAY, events, [])
         touched = {d["iso"] for w in weeks for d in w["days"] if d["rows"]}
-        assert touched == {"2026-08-12", "2026-08-13", "2026-08-14"}
+        assert touched == set()
+        week = next(w for w in weeks if any(d["iso"] == "2026-08-12" for d in w["days"]))
+        assert len(week["bars"]) == 1
+        assert week["bars"][0]["event"]["uid"] == "e1"
+        assert week["bars"][0]["col_span"] == 3
 
     def test_rows_order_and_overflow_shared_with_month(self):
         # The day cells are literally _month_day_cells, so the flat-list
-        # ordering (all-day -> timed by time -> task) and the +N more cap
-        # carry over unchanged -- spot-check rather than re-testing Month's
-        # whole suite here.
+        # ordering (timed by time -> task) and the +N more cap carry over
+        # unchanged -- spot-check rather than re-testing Month's whole
+        # suite here. The all-day event is a bar, not a row (see above).
         events = [
             _event("late", "2026-08-12T16:00:00", "2026-08-12T17:00:00"),
             _event("trip", "2026-08-12T00:00:00", "2026-08-12T23:59:00", all_day=True),
@@ -172,10 +178,12 @@ class TestFourWeekGrid:
         weeks = calendar_router._four_week_grid(_WEEK_START_MONDAY, events, tasks)
         day = _day(weeks, "2026-08-12")
         kinds = [i["kind"] for i in day["rows"]]
-        # Same MONTH_MAX_VISIBLE_ITEMS=4 cap: the first four of the seven
-        # rows stay visible, the rest fold into "+N more".
-        assert kinds == ["all_day", "event", "task", "task"]
-        assert day["overflow_count"] == 3
+        # Same MONTH_MAX_VISIBLE_ITEMS=4 cap, now applied to the
+        # event+task list alone (6 items, 4 visible, 2 overflow).
+        assert kinds == ["event", "task", "task", "task"]
+        assert day["overflow_count"] == 2
+        week = next(w for w in weeks if any(d["iso"] == "2026-08-12" for d in w["days"]))
+        assert [b["event"]["uid"] for b in week["bars"]] == ["trip"]
 
 
 class TestFourWeekPositionParse:

@@ -301,20 +301,23 @@ visible month-name/week-range label via AJAX, no full page reload.
 so are worth running back-to-back, 4→5 are Week-specific, 6 is independent
 and touches all three view headers):
 
-1. **Backend lane-packing + spanning-bar rendering, Month + 4-Week, no
-   drag/resize yet.** Reverses `_is_bar_worthy`/the flat-per-day-list
-   design in `routers/calendar.py` (`_bucket_month_items`, `_month_grid`,
-   `_month_day_cells`): a new per-week-row lane-packing pass (closest
-   precedent is the pre-2026-08-08 bar-lane system, worth checking
-   `git log -p` on that commit rather than writing lane-packing from
-   scratch) that clips each bar to the week it's rendered in and assigns
-   non-overlapping lane indices for simultaneous multi-day events. New bar
+1. **Shipped 2026-09-08.** Backend lane-packing + spanning-bar rendering,
+   Month + 4-Week, no drag/resize yet. `git log -p` had no usable
+   pre-2026-08-08 bar-lane commit to crib from (this repo's history is
+   squashed before that point), so the lane-packing pass in
+   `routers/calendar.py` (`_bucket_month_items`, `_week_bars`,
+   `_month_day_cells`, `_month_grid`, `_four_week_grid`) was written fresh
+   as a standard interval-graph greedy assignment. New `.month-week-bars`
    layer in `_calendar_month_grid.html`/`_calendar_fourweek_grid.html` +
-   CSS (absolutely-positioned bars spanning grid columns within a week
-   row, non-bar items — timed events, tasks — keep rendering as the
-   existing per-day text list beneath the bars). `test_calendar_month_bars.py`
-   needs substantial rewriting: most of its current assertions lock in the
-   *absence* of bars, which this slice reverses.
+   bounded static CSS classes (no inline `style=`, CSP has no
+   `'unsafe-inline'` on style-src) in style.css; non-bar items (timed
+   events, tasks) still render as the existing per-day text list beneath
+   the bars, offset by a `month-bars-offset-N` class so the two layers
+   never overlap. `test_calendar_month_bars.py` rewritten. See
+   `plans/STATE.md`'s own entry for this slice for the full detail,
+   including a known temporary regression (whole-day drag-to-move on an
+   all-day event doesn't work until slice 2 retargets it at the new
+   `.month-bar` element).
 2. **Drag-move + edge-resize for bars, plus the pointer-follow drag
    ghost.** Move reuses `calendar_month_drag.js`'s whole-day-shift delta
    logic, retargeted at a bar element. Resize is new: left/right edge
