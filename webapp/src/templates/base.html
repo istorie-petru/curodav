@@ -620,11 +620,13 @@
 {# PWA shell (1.8 slice 3) -- DISABLED
 <script src="{{ static_url('pwa.js') }}"></script>
 #}
-{# Local read/sync path (1.8 slices 4-6) -- DISABLED
-<script src="{{ static_url('offline_db.js') }}"></script>
-<script src="{{ static_url('offline_sync_client.js') }}"></script>
-<script src="{{ static_url('offline_status.js') }}"></script>
-#}
+{# 2026-09-09: the local read/sync path's three global scripts
+   (offline_db.js, offline_sync_client.js, offline_status.js) were removed
+   along with the rest of the client-side "Offline Mode" feature (direct
+   request, after repeated UI complaints) -- see routers/pwa.py's own
+   header comment for the full removal note. They were already disabled
+   here (commented out, same as the PWA shell block above) before that,
+   so this is dead-code cleanup, not a behavior change. #}
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -17,6 +17,80 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- sixth same-day follow-up, direct request:
+  "let's just remove offline mode. please. purge it." After two rounds of
+  UI fixes against direct screenshot reports (the two entries below), the
+  whole client-side Offline Mode feature was deleted outright rather than
+  continuing to polish it. Scoped first via AskUserQuestion: client-side
+  only (the `/offline` page, its Quick Add builder, the local IndexedDB
+  mirror/write/sync scripts, the service worker's offline navigation
+  fallback) -- the server-side sync engine (`src/offline_sync.py`,
+  `routers/sync_api.py`, the HLC/conflict-resolution logic, its DB tables)
+  and the Sync card + cleanup controls on Settings > Data & Maintenance
+  were explicitly kept out of scope, since none of it depends on the
+  client page/files existing.
+
+  **Deleted outright:** `templates/offline.html`, `templates/
+  _offline_quick_add.html`, and all six `static/offline_*.js` files
+  (`offline_shell.js`, `offline_db.js`, `offline_sync_client.js`,
+  `offline_write.js`, `offline_status.js`, `offline_quick_capture.js`).
+  `routers/pwa.py`'s `GET /offline` handler removed (module docstring
+  rewritten -- `/sw.js`/`/favicon.ico` untouched). `base.html`'s three
+  already-dead-commented-out `<script>` tags for the three globally-loaded
+  offline scripts removed (dead cleanup, not a behavior change -- they were
+  inert since the 2026-09-07 performance pass). `sw.js`: `/offline` and
+  the six `offline_*.js` entries dropped from `SHELL_ASSETS`; the navigate
+  handler's `caches.match("/offline")` fallback on a failed fetch removed
+  (a failed navigation now just fails, same as with no service worker
+  installed -- this whole mechanism has been inert anyway since `pwa.js`'s
+  registration call is itself commented out in `base.html`); `CACHE_NAME`
+  bumped `v80` -> `v81`.
+
+  **Discovered mid-purge, outside the original scope but a direct
+  consequence of it:** Settings > Data & Maintenance's Sync card had a
+  "Force sync" button (`data-action="force-sync"`) that only worked by
+  calling `window.CCOfflineSync.syncNow()` -- defined by the now-deleted
+  `offline_sync_client.js`. It already had a defensive `if
+  (!window.CCOfflineSync)` guard (no crash, just an error toast), but
+  there's no such thing as forcing a client push/pull round with no client
+  engine to run it from -- removed the button (`settings_data_maintenance.
+  html`) and its dead wiring (`data_maintenance.js`'s `forceSyncFromServer`
+  + delegated click listener) rather than leave a control that could only
+  ever show "Sync engine not available." Everything else on that page
+  (the Sync card itself, its status/meta text, "Clean up now"/sync-gc,
+  export/import) is untouched, per the agreed scope.
+
+  **Tests:** `test_pwa_shell.py` rewritten -- removed `TestOfflineShell`,
+  `TestLocalReadPath`, `TestLocalWritePath`, `TestOfflineToolbar`, and the
+  client-side halves of `TestSyncEngine`/`TestTombstoneGc` outright; the
+  three tests in those last two classes that were actually server-side
+  (`test_data_health_sync_summary_reflects_real_sync_devices`,
+  `test_settings_data_maintenance_page_shows_sync_cleanup_controls`,
+  `test_scripts_data_health_cli_has_a_sync_gc_subcommand`) relocated to
+  `test_data_health.py` (`TestHealthSummary`, `TestSettingsDataMaintenance
+  Page`, and a new `TestDataHealthCli`) since they never depended on any
+  deleted file. Added a new `TestOfflineModeFullyRemoved` class asserting
+  the files/route are actually gone from disk, not just disconnected, and
+  revived the long-`DISABLED`-commented `TestRouterWiring` as a real test
+  (routes `/sw.js`/`/favicon.ico` present, `/offline` absent) instead of
+  dead commented-out code. `test_toast_rework.py`'s `TestSyncStatusToasts`
+  (tested `offline_status.js`'s rendering) removed. Net test count: 2023 ->
+  1985 (-38: -41 deleted across both files, +3 relocated to
+  `test_data_health.py`, +4 new in `TestOfflineModeFullyRemoved` --
+  arithmetic doesn't need to net to zero here, unlike a pure refactor,
+  since real functionality was deleted, not just moved). Full suite
+  re-run in the same 8-chunk pattern as the two entries below: 301 + 392 +
+  274 + 163 + 260 + 228 + 160 + 207 = 1985 passed, 0 failed.
+
+  **Next slice:** none mandated -- direct request, fully shipped. No
+  offline-related "next slice" carries forward from the two entries below
+  anymore (the deferred "real offline read surface" they mention is moot
+  now that the feature is gone entirely). Still worth a real live-browser
+  check that nothing else silently depended on `window.CCOffline*`
+  globals beyond the one "Force sync" case already found and fixed here --
+  this was found by grep, not by clicking through the app in a browser
+  (still unreachable in this sandbox).
+
 - **Shipped:** 2026-09-09 -- fifth same-day follow-up, direct report against
   a second screenshot of the just-collapsed Offline Mode page: still didn't
   match the rest of the app, six concrete complaints. Fixed all six:

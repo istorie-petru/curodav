@@ -222,9 +222,16 @@
                             <a class="action-menu-item" role="menuitem" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export data&hellip;</a>
                             <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
                         </div>
-                        <div class="action-menu-section">
-                            <button type="button" class="action-menu-item" role="menuitem" data-action="force-sync">{{ icon('download-cloud', 'icon-sm') }} Force sync</button>
-                        </div>
+                        <!-- 2026-09-09: "Force sync" removed -- it only ever
+                             worked by calling window.CCOfflineSync.syncNow(),
+                             defined by static/offline_sync_client.js, which
+                             was deleted along with the rest of the
+                             client-side Offline Mode feature (direct
+                             request, "purge it"). There's no such thing as
+                             forcing a push/pull sync without a client engine
+                             to run it from, so the button could only ever
+                             show "Sync engine not available" now -- removed
+                             rather than left as a guaranteed-broken control. -->
                         <div class="action-menu-section">
                             <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up now</button>

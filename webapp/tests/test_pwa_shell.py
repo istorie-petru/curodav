@@ -1,55 +1,26 @@
-"""1.8 slices 3-7 -- the PWA shell (plans/open-priority.md § Offline-first
-editing & synchronization §11).
+"""1.8 slice 3 -- the PWA shell (plans/open-priority.md § Offline-first
+editing & synchronization §11 slice 3): manifest, service worker, offline
+app-shell caching -- "can the app open at all with no network."
 
-Slice 3: manifest, service worker, offline app-shell caching -- "can the
-app open at all with no network."
+2026-09-09: everything past slice 3 -- the client-side local read path
+(slice 4: static/offline_db.js, offline_sync_client.js), the local write
+path (slice 5: offline_write.js), the sync engine's client half (slice 6:
+offline_sync_client.js's push/retry, offline_status.js's indicator), the
+`/offline` page and its Quick Add builder (offline_shell.js,
+offline_quick_capture.js, templates/offline.html, _offline_quick_add.html)
+-- was purged outright, direct request ("let's just remove offline mode...
+purge it"), after two earlier rounds of direct UI complaints against
+screenshots concluded the whole surface wasn't worth salvaging. All eight
+`static/offline_*.js` files and both templates are deleted; the `/offline`
+route is gone from routers/pwa.py; sw.js's precache list and offline
+navigation fallback are gone too. See routers/pwa.py's and sw.js's own
+header comments for the full removal note.
 
-Slice 4: the client-side local read path on top of that shell --
-static/offline_db.js (an IndexedDB mirror of tasks/events/contacts, keyed
-by the same per-field HLC rule offline_sync.py's own field_versions table
-uses server-side) and static/offline_sync_client.js (§8's pull half,
-run client-side, loaded globally so the mirror is warm before the network
-actually drops). templates/offline.html's #offline-local-data now renders
-straight from that mirror via static/offline_shell.js.
-
-Slice 5: the local *write* path -- static/offline_write.js
-(create/edit/delete a task offline, each queued as a §2 op into
-offline_db.js's new `outbox` IndexedDB store and applied optimistically to
-the mirror through the same per-field-HLC path a pull already uses).
-offline_db.js also gained this device's own §3 HLC clock (`nextHlc`/
-`mergeHlc`) -- nothing before this slice ever needed to *mint* an HLC, only
-apply server-supplied ones.
-
-Slice 6: the sync *engine* -- static/offline_sync_client.js grew a push
-half (draining the outbox against POST /api/sync/push) alongside its pull
-half, wrapped in §8's push-then-pull order; §5's retry/backoff with
-jitter; and static/offline_status.js, the small offline/synchronizing/
-pending/synced indicator, computed live off {navigator.onLine, in-flight,
-outbox size} rather than stored. This is what wires slices 1-5 together
-end to end -- an offline write finally leaves the device once one comes
-back online.
-
-Slice 7: "Tombstone GC" -- src/offline_sync.py's `purge_expired` (the
-physical-deletion half of §4's retention horizon; slice 1's `pull()`
-already had the safety half, forcing a full resync for a stale cursor),
-wired into routers/sync_api.py's pull handler as a lazy "check on every
-pull" trigger (src/data_health.py's `run_sync_gc`, also reachable from
-Settings > Data health and scripts/data_health.py's CLI). Closing this
-gap also exposed a real correctness risk in slice 4's own full_resync
-handling: once the server can physically purge an old tombstone, a plain
-re-pull-and-applyChanges could never tell a badly-stale device that
-already-purged entity is gone -- static/offline_db.js's new `clearMirror`
-and offline_sync_client.js calling it before a full resync's re-pull is
-what closes that gap. This is the last of 1.8's 7 planned slices.
-
-2026-09-09: templates/offline.html was collapsed from a five-tab page that
-mirrored the whole app (Dashboard/Calendar/Tasks/Contacts/Notes, each with
-its own read-only mirror list) down to a single focused Quick Add screen --
-direct report against a screenshot flagging poor layout hierarchy and a
-"Quick Capture Syntax" preview textarea that generated text nothing ever
-parsed back in. static/offline_shell.js no longer renders those five
-panels; it only shows a one-line sync summary and drives the Quick Add
-form. `TestOfflineToolbar` below covers the current shape.
+Explicitly out of scope for that purge, and unaffected here: the
+server-side sync engine (src/offline_sync.py, routers/sync_api.py, the
+Sync card + cleanup controls on Settings > Data & Maintenance) -- covered
+by test_offline_sync.py and test_data_health.py respectively, neither of
+which depended on the client-side files/route that are now gone.
 
 Neither a real service worker nor real IndexedDB can be exercised by this
 app's usual pytest/router-function-call convention (there's no browser
@@ -63,25 +34,14 @@ and covered here:
   - GET /sw.js serves static/sw.js's own content as a real script (not a
     404/redirect), with a JS content-type and no-store caching so browsers
     always refetch the script itself to notice an update.
-  - GET /offline renders the normal page chrome (tabbar, nav) plus an
-    honest "you're offline" message -- reachable normally online, not
-    sw.js-only, so this needs no simulated dropped connection.
   - sw.js's own precache list only names static assets that actually
-    exist under src/static, /offline, and /manifest.webmanifest --
-    confirmed at the source level since nothing else can run the service
-    worker. This automatically covers slice 4's own new scripts (offline_
-    db.js/offline_sync_client.js/offline_shell.js) once they're added to
-    that list, with no test change needed for them specifically.
+    exist under src/static and /manifest.webmanifest -- confirmed at the
+    source level since nothing else can run the service worker.
   - main.py actually registers pwa.router (routers/settings.py's own
     2026-08-14 follow-up note describes a router losing its decorator
     silently while every existing test still passed -- confirmed here via
     `router.routes` directly, the same fix applied there, not just by
-    hitting the routes through router-function calls).
-  - offline_db.js/offline_sync_client.js/offline_shell.js are structurally
-    sound (define the expected object stores/exports/handlers) and are
-    actually wired into base.html/offline.html -- the same "read the JS
-    source, assert the shape" level of confidence as the sw.js checks
-    above, not a claim that the logic runs correctly in a real browser."""
+    hitting the routes through router-function calls)."""
 
 from __future__ import annotations
 
@@ -89,27 +49,10 @@ import json
 import re
 from pathlib import Path
 
-from starlette.requests import Request
-
 from src.main import app as fastapi_app
 from src.routers import pwa as pwa_router
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
-
-
-def _request(path="/offline"):
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": b"",
-            "scheme": "http",
-            "server": ("testserver", 80),
-            "root_path": "",
-            "headers": [],
-        }
-    )
 
 
 class TestManifest:
@@ -161,761 +104,122 @@ class TestServiceWorker:
         urls = re.findall(r'"(/[^"]+)"', match.group(1))
         assert urls, "SHELL_ASSETS parsed empty"
         for url in urls:
-            if url == "/offline" or url == "/manifest.webmanifest":
+            if url == "/manifest.webmanifest":
                 continue
             assert url.startswith("/static/"), url
             rel = url[len("/static/"):]
             assert (_STATIC_DIR / rel).exists(), url
-        assert "/offline" in urls
+
+    def test_precache_list_has_no_offline_mode_leftovers(self):
+        # 2026-09-09: the purge dropped /offline itself (the route is gone)
+        # and every static/offline_*.js entry (the files are gone) from
+        # this list -- locking that in so a future edit can't silently
+        # reintroduce a reference to a route/file that no longer exists.
+        script = (_STATIC_DIR / "sw.js").read_text()
+        match = re.search(r"SHELL_ASSETS\s*=\s*\[(.*?)\];", script, re.S)
+        assert "/offline" not in match.group(1)
+        assert "offline_" not in match.group(1)
+
+    def test_navigate_fallback_no_longer_serves_a_cached_offline_page(self):
+        # The service worker's navigation handler used to fall back to a
+        # cached copy of /offline on a failed fetch; that page is gone, so
+        # a failed navigation now just fails, same as with no service
+        # worker installed at all.
+        script = (_STATIC_DIR / "sw.js").read_text()
+        assert 'caches.match("/offline")' not in script
 
     def test_pwa_js_registers_the_root_scoped_script(self):
         script = (_STATIC_DIR / "pwa.js").read_text()
         assert 'serviceWorker.register("/sw.js")' in script
 
 
-class TestOfflineShell:
-    def test_offline_page_renders_full_chrome_and_offline_message(self):
-        body = pwa_router.offline_shell(_request("/offline")).body.decode()
-        # Tabbar is hidden in offline mode (hide_tabbar = true)
-        assert '<nav class="tabbar"' not in body
-        assert "Offline Mode" in body
-        # Offline indicator should be present
-        assert "You're offline" in body
-        # 2026-09-09: collapsed to a single focused screen -- no more
-        # Dashboard/Calendar/Tasks/Contacts/Notes tabs, just Quick Add.
-        assert "Quick Add" in body
+class TestOfflineModeFullyRemoved:
+    """2026-09-09 direct request: "let's just remove offline mode. purge
+    it." Locks in that every client-side piece is actually gone, not just
+    disconnected -- files deleted from disk, the route gone, nothing left
+    loading them. The server-side sync engine (src/offline_sync.py,
+    routers/sync_api.py, Settings' Sync card) was explicitly out of scope
+    and is untouched -- see test_offline_sync.py and test_data_health.py."""
 
-    def test_offline_page_reachable_without_simulating_a_dropped_connection(self):
-        # A plain route, not sw.js-only -- confirms the page itself needs
-        # no DB/network dependency to render (no `conn` in the handler's
-        # signature at all).
-        import inspect
+    _DELETED_STATIC_FILES = (
+        "offline_shell.js",
+        "offline_db.js",
+        "offline_sync_client.js",
+        "offline_write.js",
+        "offline_status.js",
+        "offline_quick_capture.js",
+    )
+    _DELETED_TEMPLATES = ("offline.html", "_offline_quick_add.html")
 
-        params = inspect.signature(pwa_router.offline_shell).parameters
-        assert "conn" not in params
+    def test_offline_static_files_are_gone(self):
+        for name in self._DELETED_STATIC_FILES:
+            assert not (_STATIC_DIR / name).exists(), name
 
+    def test_offline_templates_are_gone(self):
+        templates_dir = Path(__file__).resolve().parent.parent / "src" / "templates"
+        for name in self._DELETED_TEMPLATES:
+            assert not (templates_dir / name).exists(), name
 
-class TestLocalReadPath:
-    def test_offline_db_defines_the_expected_stores_and_exports(self):
-        script = (_STATIC_DIR / "offline_db.js").read_text()
-        for store in ('"tasks"', '"events"', '"contacts"', '"notes"', '"field_hlc"', '"meta"'):
-            assert store in script
-        for export in (
-            "getDeviceId",
-            "getCursor",
-            "setCursor",
-            "getLastSyncedAt",
-            "setLastSyncedAt",
-            "applyChanges",
-            "getAllTasks",
-            "getAllEvents",
-            "getAllContacts",
-            "getAllNotes",
-        ):
-            assert export in script
-        assert "window.CCOfflineDB" in script
-        # §6's per-field HLC compare must exist, not just a blind
-        # overwrite -- the whole reason field_hlc is a separate store.
-        assert "isNewer" in script
+    def test_offline_route_is_gone(self):
+        assert not hasattr(pwa_router, "offline_shell")
+        paths = {getattr(route, "path", None) for route in pwa_router.router.routes}
+        assert "/offline" not in paths
+        # /sw.js and /favicon.ico are unrelated to the offline feature and
+        # must still be there.
+        assert "/sw.js" in paths
+        assert "/favicon.ico" in paths
 
-    def test_offline_sync_client_pulls_only_as_of_slice_4(self):
-        # Historical marker for slice 4's own scope, at the point this test
-        # was written -- offline_sync_client.js has since grown a push half
-        # too (slice 6, see TestSyncEngine below). Kept as a pull-specific
-        # smoke check rather than deleted outright.
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "/api/sync/pull" in script
-        assert "full_resync" in script
-        assert "window.CCOfflineSync" in script
-
-    def test_offline_shell_reads_from_the_mirror_not_the_network(self):
-        # 2026-09-09: no longer reads getAllTasks/getAllEvents -- those were
-        # only ever fetched to populate the Labels picker, which was removed
-        # (a selection there never actually applied to the created entity,
-        # a real "doesn't work" bug, not a styling one). The sync summary
-        # itself still reads the mirror, never the network.
-        script = (_STATIC_DIR / "offline_shell.js").read_text()
-        assert "CCOfflineDB.getLastSyncedAt" in script
-        assert "CCOfflineDB.getOutboxCount" in script
-        assert "fetch(" not in script
-
-    def test_base_html_loads_the_mirror_and_pull_loop_globally(self):
+    def test_base_html_no_longer_references_any_deleted_offline_script(self):
+        # Checks for the real `static_url('name')` call a <script> tag would
+        # use, not a bare filename substring -- base.html's own header
+        # comment mentions several of these filenames in prose, explaining
+        # the removal, which isn't a real reference to a live script tag.
         html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert "offline_db.js" in html
-        assert "offline_sync_client.js" in html
-        # offline_shell.js is /offline-specific, not a global page load --
-        # it belongs in offline.html's own extra_scripts block, not here.
-        assert "offline_shell.js" not in html
+        for name in self._DELETED_STATIC_FILES:
+            assert f"static_url('{name}')" not in html, name
 
-    def test_offline_html_has_the_render_target_and_loads_the_shell_script(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        # 2026-09-09: single-screen page -- one sync-summary render target
-        # and the Quick Add builder partial, no more per-entity panel IDs.
-        assert 'id="offline-sync-summary"' in html
-        assert "_offline_quick_add.html" in html
-        assert "offline_shell.js" in html
 
-    def test_precache_list_includes_the_local_read_path_scripts(self):
+class TestRouterWiring:
+    def test_pwa_router_is_registered_on_the_real_app(self):
+        # routers/settings.py's own 2026-08-14 follow-up note describes a
+        # router losing its decorator silently while every existing test
+        # still passed -- checked here via `router.routes` directly, not
+        # just by calling the route functions in isolation.
+        def _all_paths(routes):
+            paths = set()
+            for route in routes:
+                path = getattr(route, "path", None)
+                if path is not None:
+                    paths.add(path)
+                nested = getattr(route, "original_router", None)
+                if nested is not None:
+                    paths |= _all_paths(nested.routes)
+            return paths
+
+        paths = _all_paths(fastapi_app.routes)
+        assert "/sw.js" in paths
+        assert "/favicon.ico" in paths
+        # 2026-09-09 purge: this route is gone along with the rest of the
+        # client-side offline feature.
+        assert "/offline" not in paths
+
+
+class TestShellCacheVersion:
+    def test_shell_cache_name_was_bumped_for_the_offline_mode_purge(self):
+        # v79/v80 (2026-09-09): two rounds of Offline Mode UI fixes against
+        # direct screenshot reports (collapsing the five-tab page to a
+        # single Quick Add screen, then fixing header/card/button/Labels
+        # issues on that collapsed screen) -- see plans/STATE.md for the
+        # full history of both.
+        # v81 (2026-09-09, this entry): the whole client-side Offline Mode
+        # feature those two passes were polishing is gone -- direct
+        # request ("let's just remove offline mode. purge it."). /offline
+        # and every static/offline_*.js entry dropped from SHELL_ASSETS
+        # (the route and files no longer exist), and the navigate handler's
+        # fallback to a cached /offline copy removed. Same pass: the Sync
+        # card's "Force sync" button (Settings > Data & Maintenance) only
+        # worked via window.CCOfflineSync, now permanently undefined --
+        # removed outright (data_maintenance.js, settings_data_maintenance.
+        # html) rather than left as a guaranteed-broken control.
         script = (_STATIC_DIR / "sw.js").read_text()
-        for asset in ("/static/offline_db.js", "/static/offline_sync_client.js", "/static/offline_shell.js"):
-            assert asset in script
-
-
-class TestLocalWritePath:
-    """1.8 slice 5 -- "Local write path + outbox" (open-priority.md §11
-    slice 5). Same "read the JS source, assert the shape" level of
-    confidence as TestLocalReadPath above -- no real browser/IndexedDB
-    here. The actual outbox/HLC merge logic is exercised end-to-end by a
-    one-off Node + fake-indexeddb smoke script (not part of this suite,
-    same as slice 4's own smoke run) that caught a real ordering bug during
-    development: getOutboxOps() must sort explicitly (by each op's own
-    HLC), since IndexedDB's default key-order iteration over a random-UUID
-    keyPath is not insertion order."""
-
-    def test_offline_db_gained_the_hlc_clock_and_outbox(self):
-        script = (_STATIC_DIR / "offline_db.js").read_text()
-        assert '"outbox"' in script
-        for export in ("nextHlc", "mergeHlc", "enqueueOp", "getOutboxOps", "getOutboxCount"):
-            assert export in script
-
-    def test_offline_write_defines_create_edit_delete_for_tasks(self):
-        script = (_STATIC_DIR / "offline_write.js").read_text()
-        for export in ("createTask", "updateTaskField", "deleteTask"):
-            assert export in script
-        assert "window.CCOfflineWrite" in script
-        # Every op this file builds must go through the outbox, not just
-        # straight to the mirror -- that's the whole point of the slice
-        # ("queue as ops instead of failing," not "write straight through").
-        assert "enqueueOp" in script
-        # Still no network call anywhere in the write path itself (push is
-        # slice 6) -- a local write must succeed with zero connectivity.
-        assert "fetch(" not in script
-
-    def test_offline_write_never_pushes(self):
-        script = (_STATIC_DIR / "offline_write.js").read_text()
-        assert "/api/sync/push" not in script
-
-    def test_offline_shell_wires_up_the_write_ui(self):
-        # 2026-09-09: the per-row complete/delete controls this test used to
-        # check (updateTaskField/deleteTask) belonged to the task-list panel
-        # that was removed along with the rest of the mirror-reading UI --
-        # only the Quick Add create path remains on this page now.
-        script = (_STATIC_DIR / "offline_shell.js").read_text()
-        assert "CCOfflineWrite.createTask" in script
-
-    def test_offline_html_loads_the_write_script(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert "offline_write.js" in html
-        assert "offline_shell.js" in html
-
-    def test_base_html_does_not_load_the_write_script_globally(self):
-        # offline_write.js's UI hooks (the add-task form, per-row buttons)
-        # only exist on /offline's own markup -- loading it globally would
-        # be dead weight on every other page, unlike offline_db.js/
-        # offline_sync_client.js which genuinely need to run everywhere to
-        # keep the mirror warm. base.html's own comment block may still
-        # *mention* the filename in prose (explaining why it's excluded),
-        # so this checks for an actual <script src> tag, not a bare
-        # substring match.
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert "static_url('offline_write.js')" not in html
-
-    def test_precache_list_includes_the_write_path_script(self):
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert "/static/offline_write.js" in script
-
-    def test_shell_cache_name_was_bumped_for_the_reworked_sync_scripts(self):
-        # cc-shell-v3 was slice 5's own bump (adding offline_write.js);
-        # slice 6 added offline_status.js and bumped to v4; v5 fixed the
-        # manifest precache entry (was "/manifest.webmanifest", a path that
-        # 404s -- the file is only served at "/static/manifest.webmanifest"
-        # -- which made cache.addAll() reject and the whole shell precache
-        # fail on install); v6 (2026-08-15) dropped schedule_table.js/
-        # schedule_grid.js from the precache list along with the whole
-        # Schedule module, see plans/STATE.md's removal entry; v7
-        # (2026-08-15) added event_format_toggle.js, "Event format for
-        # simple events"; v8 (2026-08-16) reworked toast.js /
-        # offline_status.js / style.css (sync status + delete confirms as
-        # bottom-right toasts), forcing a fresh shell install so no
-        # precached copy of the old assets lingers; v9 (2026-08-17)
-        # reworked offline_sync_client.js / offline_status.js again (sync-
-        # status toasts fire only on real sync work), forcing a fresh
-        # shell install so an installed PWA never keeps serving a cached
-        # copy that announces "Syncing…"/"Synced" on dead-server page
-        # loads; v10 (2026-08-18) reworked offline_status.js again (the
-        # in-progress "Syncing…" toast is deferred by a grace period so a
-        # fast small sync never flashes it), forcing a fresh shell install
-        # so an installed PWA doesn't keep serving the pre-delay renderer;
-        # v11 (2026-08-18) made the static-asset handler fall back to
-        # `caches.match(request, { ignoreSearch: true })` so the versioned
-        # `?v=` URLs every page requests can be served from the precache's
-        # un-versioned entries -- before that, scripts only /offline loads
-        # (offline_shell.js / offline_write.js / offline_status.js) were
-        # never runtime-cached during normal page visits and failed to load
-        # on a device's first offline visit, leaving the static empty state
-        # visible; v12 (2026-08-18) added offline_quick_capture.js to the
-        # precache list (the "Quick add" toolbar's capture parser); v14
-        # (2026-08-26) picked up the Data & Maintenance export/import
-        # redesign's style.css additions; v15 (2026-08-29) is the root-cause
-        # fix for a session's worth of style.css edits silently not showing
-        # up in the browser -- the ignoreSearch fallback (v11) means a
-        # precached style.css never goes stale on its own, so a style-only
-        # change now has to bump CACHE_NAME too, not just a script rewrite;
-        # v16 (2026-08-29) is the very next style.css-only edit proving that
-        # lesson had to actually be followed, not just written down; v17
-        # (2026-08-29) is the heatmap scrollbar-visibility rules added for
-        # the "no scrollbar" follow-up; v18 (2026-08-29) superseded that with
-        # heatmap-wide cell-stretching instead (no scrollbar ever needed) and
-        # reverted the v17 CSS; v19 (2026-08-29) is the same lesson applied to
-        # a *script* -- static/sidebar_tree.js's dashboard-resize-dispatch fix
-        # wasn't reaching browsers with an already-installed PWA (the
-        # ignoreSearch fallback also matches a stale runtime-cached script,
-        # not just precached ones), so it needed the same CACHE_NAME bump;
-        # sidebar_tree.js was also added to SHELL_ASSETS (it's a base.html
-        # script loaded on every page, same category as app.js/modal.js).
-        # v20 (2026-08-29): bumped again for a style.css-only change (the
-        # sidebar-header/app-name rules), per the same v15 lesson.
-        # v21 (2026-08-29): bumped again for the collapsed/expanded item
-        # padding unification, same lesson.
-        # v22 (2026-08-29): bumped again for the new .page-header-narrow
-        # rules (sidebar redesign item 13e), same lesson.
-        # v23 (2026-08-29): bumped again for the narrow-header banner/
-        # actions-slot rules (folding Tasks/Contacts/Calendar's old
-        # toolbar-2row into the header), same lesson.
-        # v24 (2026-08-29): bumped again for the Dashboard Header
-        # (Expanded) avatar overlap rules, same lesson.
-        # v25 (2026-08-29): bumped for two SHELL_ASSETS *scripts* changing
-        # (avatar_cropper.js generalized to banners, app.js's CCBannerUpload
-        # removed) -- the v19 lesson, not just style.css.
-        # v26 (2026-08-29): bumped again for avatar_cropper.js changing once
-        # more (smaller avatar output cap, WebP output), same lesson.
-        # v27 (2026-08-30): bumped for a style.css-only change (collapsed
-        # rail's per-item height + icon-only labels), same lesson.
-        # v28 (2026-08-30): bumped again, same session (collapsed rail
-        # icon left-aligned + full-box active highlight), same lesson.
-        # v29 (2026-08-30): bumped again, same session (collapsed rail
-        # narrowed 80px -> 64px, icon nudged further from the left edge),
-        # same lesson.
-        # v30 (2026-08-30): bumped again, same session (collapsed rail
-        # narrowed again, 64px -> 56px), same lesson.
-        # v31 (2026-08-30): bumped again, same session (collapsed rail
-        # narrowed once more, 56px -> 52px), same lesson.
-        # v32 (2026-08-30): bumped again, same session (expanded mode's own
-        # left/right padding mismatch fixed), same lesson.
-        # v33 (2026-08-30): bumped again, same session (icon jump between
-        # collapsed/expanded fixed, active-highlight radius unified),
-        # same lesson.
-        # v34 (2026-08-30): bumped again, new session (widget CSS pass --
-        # item 1 of the design check-up queue: .widget-card chrome, header/
-        # section-label typography, widget-content table row style), same
-        # style.css-only lesson.
-        # v35 (2026-08-30): bumped again, same session (live bug report --
-        # Weekly Schedule crash fix, .widget-card--bare for Quick Links/
-        # Spaces & Projects cards style) -- style.css changed again.
-        # v36 (2026-08-30): bumped again, new session (quick_links merged
-        # into spaces_projects cards style; next_deadline/organize_today/
-        # streak removed outright) -- .widget-card--bare's own comment in
-        # style.css updated to match, comment-only but same file-changed
-        # convention as every other entry above.
-        # v37 (2026-08-30): bumped again, same session (direct report --
-        # "the way widgets are aranged is not ok" -- app.js's dashboard
-        # masonry switched from strict-DOM-order first-fit placement to
-        # best-fit-among-remaining, so a short widget's dead-space gap can
-        # be backfilled by a later, narrower widget instead of forcing
-        # everything after it down to the tallest neighbor's height).
-        # v38 (2026-08-30): bumped again, same session (direct request --
-        # "can't we have a width setting in edit mode (100%,75%,50%,25%)"
-        # -- manual per-widget width override reinstated, grid widened
-        # 6->12 virtual columns so 25%/75% land exactly; app.js's maxCols
-        # and style.css's data-span selectors both changed).
-        # v39 (2026-08-30): bumped again, same session -- three more
-        # direct-report fixes: widget_card_region's edit_mode no longer
-        # hardcoded False (a widget's own card can now refresh live after
-        # a Filters/Width save instead of needing a hard reload),
-        # dashboard_widget_preview.js's autosave calls refreshRegion,
-        # app.js gained a medium-breakpoint quarter->half promotion and a
-        # full drag-to-resize handle (both precached files changed).
-        # v40 (2026-08-30): bumped again, same session, immediate follow-up
-        # -- direct report the resize handle "just selects the text"
-        # instead of dragging. The handle is a plain <div> over ordinary
-        # text content (unlike the reorder handle, a real <button>, which
-        # browsers never start a text-selection drag from) -- its
-        # pointerdown now calls preventDefault (the load-bearing fix), and
-        # .widget-card.is-resizing/.widget-resize-handle both got
-        # user-select:none as a second CSS-only layer for the drag's
-        # whole duration, not just its first pixel.
-        # v41 (2026-08-30): root-cause fix for the fetch handler's static-
-        # asset fallback ORDER, not a precache-list change -- direct report
-        # ("edits don't show up, hard refresh fixes it, navigating away and
-        # back reverts to stale"). The old order tried the exact versioned
-        # match, then went straight to the ignoreSearch precache/runtime-
-        # cache match on a miss, BEFORE ever trying the network -- so any
-        # already-cached old version of a file was served forever, never
-        # re-fetched, regardless of the `?v=` query changing. Network is
-        # now tried before the ignoreSearch fallback; that fallback only
-        # fires if the network fetch itself fails (genuinely offline).
-        # v42 (2026-08-30): bumped again, same session, direct follow-up --
-        # "the mouse resize still doesn't work. remove it." The drag-to-
-        # resize handle (app.js/style.css/_widget_workspace.html/
-        # _widget_card.html/routers/dashboard.py's resize_widget) is gone
-        # outright, not fixed a third time -- the Filters panel's own
-        # Width field is confirmed working ("the dashboard customise is
-        # fine") and is the only way to set width now.
-        # v54 (2026-09-04, same day): touch-target follow-up fixes --
-        # .task-row-delete's @media (hover:none) fallback and .icon-btn's
-        # @media (pointer:coarse) size bump, both style.css only.
-        # v55 (2026-09-07, audit-fixes-2.0.md slice 4): static/modal.js
-        # keyboard focus trap (Tab/Shift+Tab cycling within an open .modal).
-        # v56 (2026-09-07, audit-fixes-2.0.md slice 5): new static/
-        # a11y_icon_labels.js, sets aria-label from title on icon-only
-        # controls app-wide.
-        # v57 (2026-09-07, audit-fixes-2.0.md slice 6): style.css + base.html
-        # only (touch-target bumps, skip-link, --fg-tertiary, breakpoint
-        # alignment) -- no new SHELL_ASSETS files.
-        # v58 (2026-09-07, audit-fixes-2.0.md item 9): style.css only (new
-        # .card-danger utility) -- no new SHELL_ASSETS files.
-        # v59 (2026-09-07, audit-fixes-2.0.md item 12): style.css only (raw
-        # z-index numbers replaced with named custom properties) -- no new
-        # SHELL_ASSETS files.
-        # v60 (2026-09-07, audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
-        # elimination): style.css changed extensively; new static/
-        # dynamic_styles.js added to SHELL_ASSETS (the generic `data-style`
-        # -> CSSOM applier, same "base.html script needed on every page"
-        # category as a11y_icon_labels.js).
-        # v61 (2026-09-07, direct report against a resized/narrow browser
-        # window): mobile follow-up to the desktop-only "Calendar fit the
-        # page" pass -- new main.main-calendar rules under style.css's
-        # max-width:720px block. No new SHELL_ASSETS files (templates
-        # aren't shell-precached).
-        # v62 (2026-09-07, same-day follow-up): dropped Month/4-Week's
-        # shrink-to-fit row logic in the >=721px block too, same "widget
-        # scrolls, page doesn't" treatment as Week/Day -- see sw.js's own
-        # v62 comment for why (the "v61 changed nothing" report was a
-        # >720px width, where v61's mobile-only rules never applied).
-        # v63 (2026-09-07, same-day follow-up again): flex:1 1 0 on
-        # .month-week-grid (desktop + mobile) so rows actually grow to
-        # fill leftover space -- v62's overflow-y:auto alone only helped
-        # when content overflowed, not when it was shorter than the box.
-        # Also 100vh -> 100dvh for main.main-calendar's mobile height
-        # (direct report: widget overflowing behind the bottom nav bar).
-        # See sw.js's own v63 comment.
-        # v64 (2026-09-07, direct request + suggestion): dropped
-        # main-full-width's extra margin-right, and folded the
-        # desktop/mobile "Calendar fit the page" passes into one
-        # breakpoint-independent main.main-calendar ruleset (no more
-        # --calendar-chrome-h magic number) -- see sw.js's own v64
-        # comment.
-        # v65 (2026-09-07, direct report): fixed Planner's Unscheduled-
-        # work/grid gap being 32px instead of 16px (flex gap stacking
-        # with each card's own margin-bottom) -- see sw.js's own v65
-        # comment.
-        # v66 (2026-09-07, direct measurement): .filter-dropdown-trigger
-        # 40px -> 32px so Tasks' header (58px) matches the 48px every
-        # other page's header measured at -- see sw.js's own v66 comment.
-        # v67 (2026-09-07, direct request): new generic main.main-shell
-        # flex-shell modifier, applied to Tasks/Contacts/Notes/Labels
-        # manage/Dashboard -- see sw.js's own v67 comment.
-        # v68 (2026-09-07, direct measurement): .page-header-narrow now
-        # sets height:48px explicitly (was missing its own 1px border
-        # from the earlier budget math) -- see sw.js's own v68 comment.
-        # v69 (2026-09-07, direct report): zeroed .calendar-viewport/
-        # .project-calendar-layout's inherited .card margin-bottom as
-        # main.main-calendar's own direct children -- see sw.js's own
-        # v69 comment.
-        # v70 (2026-09-07, direct report -- "the avatar and text for the
-        # big banner is a bit off... remake it Notion-like"): reworked
-        # .page-banner's title/avatar layout, see style.css's own
-        # .page-banner-header-row comment.
-        # v71 (2026-09-07, same-day follow-up direct report -- dark-image/
-        # light-theme title text unreadable): .page-banner-header-row
-        # align-items center -> flex-end, keeping the title fully below
-        # the cover instead of straddling it like the avatar does.
-        # v72 (2026-09-08, direct request): removed .settings-breadcrumb
-        # styling (_settings_breadcrumb.html itself deleted -- folded into
-        # .page-header-narrow's own back-arrow, see style.css's own
-        # comment there).
-        # v73 (2026-09-08, direct request -- Labels table "check up"):
-        # removed #labels-table's scoped row-padding override and dropped
-        # Labels manage from main.main-shell -- see sw.js's own v73
-        # comment.
-        # v74 (2026-09-08, direct report -- a holiday could be saved with no
-        # dates at all): datetime_picker.js's required-field submit guard,
-        # style.css's .dtp-trigger-invalid, modal.js's friendlyErrorMessage
-        # -- see sw.js's own v74 comment.
-        # v75 (2026-09-09, direct request -- Data & Maintenance notifications):
-        # data_maintenance.js now converts the ?note=/?error= banner into a
-        # ccToast on load -- see sw.js's own v75 comment.
-        # v76 (2026-09-09, same-day follow-up -- purge confirmation): "Reset
-        # database" moved from a modal dialog to a confirm toast with a
-        # typed-phrase gate -- see sw.js's own v76 comment.
-        # v77 (2026-09-09, same-day follow-up 2): purge toast copy shortened,
-        # its two buttons stretch full-width to align with the input above
-        # -- see sw.js's own v77 comment.
-        # v78 (2026-09-09, same-day follow-up 3): purge confirm button
-        # relabeled down to just "Delete" -- see sw.js's own v78 comment.
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v80"' in script
-
-
-class TestOfflineToolbar:
-    """2026-08-19 -- Dedicated Offline Mode page, originally a full tabbed
-    interface mirroring the main app navigation (Dashboard, Calendar, Tasks,
-    Contacts, Notes) with read/write access to the local IndexedDB mirror.
-
-    2026-09-09 -- direct report against a screenshot: collapsed to a single
-    focused screen (no tabs, no per-entity mirror lists) plus a Quick Add
-    form with its confusing "Quick Capture Syntax" preview textarea removed
-    (it was display-only -- submit always read the visual fields directly,
-    never that box).
-
-    2026-09-09 follow-up -- direct report against a second screenshot of
-    that collapsed page: still didn't match the rest of the app. Fixed:
-    the page said "you're offline" twice (header title + a separate
-    `.offline-indicator` badge, now gone -- merged into one `.offline-
-    page-hint` banner) and had two competing headings ("Offline Mode" then
-    a bold "+ Quick Add" right under it, now a quiet `.widget-header`-style
-    card title); the Quick Add form moved into a real `.card` instead of a
-    bespoke lookalike box; the footer's Cancel/Add buttons were missing the
-    `.spacer` every real modal footer uses to split them left/right, so
-    they read as stuck together; the Labels multiselect was removed
-    outright -- a selection there never actually applied to the created
-    entity (labels can't sync through the offline write path), so "the
-    dropdown doesn't work" was a correct bug report, not a styling one.
-    Same "read the JS/template source, assert the shape" level of
-    confidence as every other class here."""
-
-    def test_offline_page_has_no_tabs(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert "data-offline-main-tab" not in html
-        assert "offline-main-tabs" not in html
-
-    def test_offline_page_says_youre_offline_exactly_once(self):
-        # 2026-09-09 follow-up: used to say it twice (page title +
-        # .offline-indicator badge) -- now only the hint banner says it.
-        # Rendered body, not raw template source -- the source's own
-        # historical header comment mentions the old badge's class name in
-        # prose, which isn't a real occurrence on the page.
-        body = pwa_router.offline_shell(_request("/offline")).body.decode()
-        assert 'class="offline-indicator"' not in body
-        assert body.count("You're offline") == 1
-
-    def test_offline_page_uses_the_shared_flex_shell(self):
-        # Same "fits the viewport, scrolls internally" shell Tasks/
-        # Contacts/Notes/Dashboard already use, instead of whole-page
-        # scroll (direct report: "no scrollbar - flex").
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert "{% block main_class %}main-shell{% endblock %}" in html
-        assert "main-shell-body" in html
-
-    def test_offline_html_has_the_quick_add_builder(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        # Inline visual builder, included via partial
-        assert '_offline_quick_add.html' in html
-        # Check the partial directly
-        partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
-        assert 'id="offline-quick-add-form"' in partial_html
-        assert 'id="offline-entity-type"' in partial_html
-        assert 'id="offline-task-fields"' in partial_html
-        assert 'id="offline-event-fields"' in partial_html
-        assert 'id="offline-contact-fields"' in partial_html
-        assert 'id="offline-note-fields"' in partial_html
-        assert 'id="offline-quick-add-result"' in partial_html
-        # The generated-but-never-parsed capture-syntax preview box is gone.
-        assert 'id="offline-capture-text"' not in partial_html
-        # The builder is a real `.card`, like every other widget in the app.
-        assert 'class="card offline-quick-add-builder"' in partial_html
-        # Its title is a quiet card-header label, not a second page heading.
-        assert 'class="widget-header"' in partial_html
-
-    def test_offline_quick_add_footer_splits_buttons_like_a_real_modal(self):
-        # Direct report: Cancel/Add read as stuck together -- the shared
-        # `.modal-footer` look needs its own `.spacer` between the two
-        # buttons (same as _modal_footer.html's real back/primary split)
-        # to push Cancel left and Add right; it was missing here.
-        partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
-        footer = partial_html[partial_html.index('class="modal-footer'):]
-        assert footer.index('offline-quick-add-cancel') < footer.index('class="spacer"') < footer.index('type="submit"')
-
-    def test_offline_quick_add_has_no_labels_field(self):
-        # Direct report: "the labels dropdown doesn't work" -- correctly
-        # so, a selection there never applied to the created entity.
-        # Removed rather than cosmetically patched.
-        partial_html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "_offline_quick_add.html").read_text()
-        assert "offline-task-labels" not in partial_html
-        assert "offline-event-labels" not in partial_html
-        assert "offline-label-multiselect" not in partial_html
-
-    def test_offline_html_loads_the_quick_add_scripts(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "offline.html").read_text()
-        assert "offline_quick_capture.js" in html
-        assert "offline_write.js" in html
-        assert "offline_shell.js" in html
-
-    def test_offline_quick_capture_defines_the_parser_and_markers(self):
-        script = (_STATIC_DIR / "offline_quick_capture.js").read_text()
-        assert "window.CCOfflineCapture" in script
-        assert "parse: parse" in script
-        for marker in ("!t", "!e", "!c", "!n"):
-            assert marker in script
-        # Parser only -- no network call anywhere in it (it must work fully
-        # offline, there's no server to preview against).
-        assert "fetch(" not in script
-
-    def test_offline_write_gained_event_and_contact_creates(self):
-        script = (_STATIC_DIR / "offline_write.js").read_text()
-        assert "createEvent" in script
-        assert "createContact" in script
-        assert "createNote" in script
-        # Both built by one shared create helper, not two copies of the
-        # create-op plumbing.
-        assert "createEntity" in script
-
-    def test_offline_shell_renders_a_sync_summary_not_panels(self):
-        # 2026-09-09: the five-panel mirror render (Tasks/Upcoming Events/
-        # Timetabled events/Contacts/Notes) is gone -- offline_shell.js now
-        # only renders a one-line sync summary (the Labels picker it used to
-        # also populate from the mirror was removed outright, see
-        # TestOfflineToolbar's own docstring).
-        script = (_STATIC_DIR / "offline_shell.js").read_text()
-        assert "offline-sync-summary" in script
-        assert "getLastSyncedAt" in script
-        assert "getOutboxCount" in script
-        assert "Tasks (" not in script
-        assert "Upcoming Events (" not in script
-
-    def test_offline_shell_wires_the_quick_add_builder(self):
-        script = (_STATIC_DIR / "offline_shell.js").read_text()
-        # Inline visual builder (replaces modal-based quick capture)
-        assert "offline-quick-add-form" in script
-        assert "offline-entity-type" in script
-        assert "offline-task-fields" in script
-        assert "offline-event-fields" in script
-        assert "offline-contact-fields" in script
-        assert "offline-note-fields" in script
-        assert "CCOfflineWrite.createEvent" in script
-        assert "CCOfflineWrite.createContact" in script
-        assert "CCOfflineWrite.createTask" in script
-        assert "CCOfflineWrite.createNote" in script
-        # The generated-but-never-parsed capture-syntax preview is gone.
-        assert "offline-capture-text" not in script
-
-    def test_quick_capture_script_not_loaded_globally(self):
-        # offline_quick_capture.js is /offline-only, like offline_write.js
-        # and offline_shell.js -- loading it on every page would be dead
-        # weight (offline_db.js/offline_sync_client.js/offline_status.js
-        # are the ones that genuinely run everywhere).
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert "offline_quick_capture.js" not in html
-
-    def test_precache_list_includes_the_quick_capture_script(self):
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert "/static/offline_quick_capture.js" in script
-
-
-class TestSyncEngine:
-    """1.8 slice 6 -- "Sync engine" (open-priority.md §11 slice 6): the
-    push half of §8's protocol, §5's retry/backoff, and the status
-    indicator. Same structural-check level as every other class here --
-    the actual push/retry/backoff behavior needs a real browser or a
-    Node + fake-indexeddb smoke run (this slice's own, not part of this
-    suite, same pattern slices 4-5 already established) to exercise for
-    real."""
-
-    def test_offline_sync_client_now_pushes_before_pulling(self):
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "/api/sync/push" in script
-        assert "/api/sync/pull" in script
-        assert script.index("pushOnce()") < script.index("pullOnce()")
-
-    def test_offline_sync_client_acks_pushed_ops_via_removeOutboxOps(self):
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "removeOutboxOps" in script
-
-    def test_offline_sync_client_has_backoff_with_a_cap_and_jitter(self):
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "MAX_RETRY_MS" in script
-        assert "jitter" in script
-        assert 'addEventListener("online"' in script
-        assert 'addEventListener("offline"' in script
-
-    def test_offline_sync_client_exposes_status_for_the_indicator(self):
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "getStatus" in script
-        assert "requestSync" in script
-        assert "cc-offline-status-change" in script
-
-    def test_offline_sync_client_tracks_whether_a_round_moved_data(self):
-        # 2026-08-17 follow-up -- the "Synced" announcement must only fire
-        # when a round actually moved data (pushed a non-empty outbox or
-        # pulled a non-empty changes list), not on a routine page-load
-        # health check of an up-to-date, continuously-connected machine.
-        # `didWork` is reset at the start of every syncNow round and set by
-        # pushOnce/pullOnce only when there was something to move, then
-        # surfaced through getStatus for offline_status.js to read.
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "didWork" in script
-        assert "getOutboxOps()" in script
-        assert "body.changes" in script
-        assert "didWork }" in script  # getStatus returns it in the detail
-
-    def test_sync_now_announces_round_start_only_with_real_push_work(self):
-        # 2026-08-17 follow-up -- the round-start "synchronizing" emission
-        # must be gated on a non-empty outbox, so a routine pull-only
-        # page-load round never flashes a "Syncing…" toast on an
-        # up-to-date, continuously-connected machine; only the round's
-        # outcome is announced.
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        sync = script[script.index("async function syncNow()") : script.index("window.CCOfflineSync")]
-        assert "getOutboxCount()" in sync
-        assert sync.index("getOutboxCount()") < sync.index("pushOnce()")
-        # The round-start emission is conditioned on that non-empty outbox.
-        assert "if (outboxCount > 0)" in sync
-        assert "await emitStatus()" in sync
-
-    def test_sync_now_skips_the_round_entirely_when_the_server_version_is_unchanged(self):
-        # 2026-08-17 (the user's "hash attached to the database" idea) --
-        # when the outbox is empty and the server's data version matches
-        # what this device saved after its last successful pull, the round
-        # is skipped outright: no pull request, no status event, no toast.
-        # `nothingToDo()` must run only on the empty-outbox branch (a
-        # non-empty outbox always pushes, regardless of the version), and a
-        # failed state check must fall through to the normal round rather
-        # than being wrongly treated as "nothing to do".
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        sync = script[script.index("async function syncNow()") : script.index("window.CCOfflineSync")]
-        assert "getServerVersion()" in script
-        assert "nothingToDo()" in sync
-        assert sync.index("getOutboxCount()") < sync.index("nothingToDo()")
-        assert sync.index("nothingToDo()") < sync.index("pushOnce()")
-        assert '"GET"' in script and "/api/sync/state" in script
-        # A failed/unreachable state check must not count as "nothing to do".
-        nothing = script[script.index("async function nothingToDo()") : script.index("async function getStatus()")]
-        assert "return false" in nothing
-        assert "state.version === saved" in nothing
-
-    def test_offline_db_stores_the_last_synced_server_version(self):
-        # 2026-08-17 -- meta helper pair the round-skip pre-check reads.
-        script = (_STATIC_DIR / "offline_db.js").read_text()
-        assert "getServerVersion" in script
-        assert "setServerVersion" in script
-        assert "server_version" in script
-        assert "getServerVersion," in script  # exposed on window.CCOfflineDB
-
-    def test_offline_write_requests_a_sync_after_queuing_a_write(self):
-        # A local write shouldn't have to wait for the next periodic retry
-        # if the device is already online.
-        script = (_STATIC_DIR / "offline_write.js").read_text()
-        assert "CCOfflineSync" in script
-        assert "requestSync" in script
-
-    def test_offline_status_renders_from_events_not_direct_state(self):
-        script = (_STATIC_DIR / "offline_status.js").read_text()
-        assert "cc-offline-status-change" in script
-        # Renderer only -- no IndexedDB or network calls of its own.
-        assert "indexedDB.open" not in script
-        assert "fetch(" not in script
-
-    def test_offline_status_defers_the_in_progress_toast_behind_a_grace(self):
-        # 2026-08-18 follow-up -- the in-progress "Syncing…"/"Changes
-        # pending" toast is deferred by SYNC_SHOW_DELAY_MS on its first
-        # appearance: a small sync round that finishes inside the window
-        # never flashes a toast at all, and only a round still in flight
-        # once the grace elapses surfaces as "in progress" (the user's "for
-        # bigger syncing it shows, but for small ones it doesn't"). The
-        # deferral is renderer-side -- offline_sync_client.js's status
-        # events stay immediate -- and every new status event cancels a
-        # pending grace timer so a fast round's deferred toast can never
-        # surface after its outcome.
-        script = (_STATIC_DIR / "offline_status.js").read_text()
-        render = script[script.index("function render(") : script.index("document.addEventListener")]
-        assert "SYNC_SHOW_DELAY_MS" in script
-        assert "setTimeout(" in render
-        assert "clearSyncGraceTimer()" in render
-        # Defer only the *first* appearance -- an already-visible in-progress
-        # toast (a genuinely stuck/failing round) keeps updating in place,
-        # and the network-offline state surfaces immediately, never deferred.
-        assert "isAlive()" in render
-        assert 'detail.status === "offline"' in render
-        assert "clearTimeout(syncGraceTimer)" in script
-
-    def test_offline_status_script_loaded_globally_and_precached(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert "offline_status.js" in html
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert "/static/offline_status.js" in script
-
-    def test_data_health_sync_summary_reflects_real_sync_devices(self, tmp_path):
-        # open-priority.md §9: the fixed {"configured": False} placeholder
-        # data_health.py carried through slices 1-5 is what slice 6 was
-        # always meant to flip once a real sync engine exists to populate
-        # sync_devices.
-        from src import data_health, db
-
-        with db.connect(tmp_path / "cache.sqlite") as conn:
-            backups_dir = tmp_path / "backups"
-            summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
-            assert summary["sync"]["configured"] is False
-            assert summary["sync"]["device_count"] == 0
-
-            db.touch_sync_device(conn, "device-a", last_pushed_hlc=(1000, 0, "device-a"))
-            summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
-            assert summary["sync"]["configured"] is True
-            assert summary["sync"]["device_count"] == 1
-            assert summary["sync"]["last_seen_at"] is not None
-
-
-class TestTombstoneGc:
-    """1.8 slice 7 -- "Tombstone GC" (open-priority.md §11 slice 7). Same
-    structural-check level as every other class here; the real purge logic
-    is covered server-side by test_offline_sync.py's TestPurgeExpired, and
-    the client-side wipe-before-full-resync fix by a one-off Node +
-    fake-indexeddb smoke script (this slice's own, not part of this
-    suite, same pattern slices 4-6 already established)."""
-
-    def test_offline_db_gained_clear_mirror(self):
-        script = (_STATIC_DIR / "offline_db.js").read_text()
-        assert "clearMirror" in script
-        assert "window.CCOfflineDB" in script
-
-    def test_full_resync_clears_the_mirror_before_re_pulling(self):
-        script = (_STATIC_DIR / "offline_sync_client.js").read_text()
-        assert "clearMirror()" in script
-        # clearMirror() must run inside the `if (body.full_resync)` branch,
-        # strictly before the pull's own applyChanges call that follows it
-        # (whether or not that particular round hit the full_resync path).
-        assert script.index("if (body.full_resync)") < script.index("clearMirror()") < script.index(
-            "applyChanges(body.changes)"
-        )
-
-    def test_settings_data_maintenance_page_shows_sync_cleanup_controls(self):
-        # 2026-08-17: Data health, Sync conflicts and Advanced merged into
-        # the Data & Maintenance page (settings_data_maintenance.html); the
-        # sync-retention / sync-gc controls live in its "Maintenance &
-        # upkeep" section now.
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
-        assert "sync-retention" in html
-        assert "sync-gc" in html
-
-    def test_scripts_data_health_cli_has_a_sync_gc_subcommand(self):
-        script = (Path(__file__).resolve().parent.parent / "scripts" / "data_health.py").read_text()
-        assert '"sync-gc"' in script
-        assert "cmd_sync_gc" in script
-
-
-# DISABLED - PWA shell is currently disabled
-# class TestRouterWiring:
-#     def test_pwa_router_is_registered_on_the_real_app(self):
-#         def _all_paths(routes):
-#             paths = set()
-#             for route in routes:
-#                 path = getattr(route, "path", None)
-#                 if path is not None:
-#                     paths.add(path)
-#                 nested = getattr(route, "original_router", None)
-#                 if nested is not None:
-#                     paths |= _all_paths(nested.routes)
-#             return paths
-# 
-#         paths = _all_paths(fastapi_app.routes)
-#         assert "/sw.js" in paths
-#         assert "/offline" in paths
+        assert 'CACHE_NAME = "cc-shell-v81"' in script

@@ -209,6 +209,38 @@ class TestHealthSummary:
         assert summary["sync_gc"]["retention_days"] == 90
         assert summary["sync_gc"]["last_run"] is None
 
+    def test_sync_summary_reflects_real_sync_devices(self, conn, tmp_path):
+        # open-priority.md §9: the fixed {"configured": False} placeholder
+        # data_health.py carried through slices 1-5 is what slice 6 was
+        # always meant to flip once a real sync engine exists to populate
+        # sync_devices. Relocated here 2026-09-09 from test_pwa_shell.py's
+        # TestSyncEngine, which was gutted in the client-side Offline Mode
+        # purge -- this test is purely server-side (data_health.py + db.py)
+        # and never depended on any of the deleted client files.
+        backups_dir = tmp_path / "backups"
+        summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
+        assert summary["sync"]["configured"] is False
+        assert summary["sync"]["device_count"] == 0
+
+        db.touch_sync_device(conn, "device-a", last_pushed_hlc=(1000, 0, "device-a"))
+        summary = data_health.health_summary(conn, tmp_path / "cache.sqlite", backups_dir)
+        assert summary["sync"]["configured"] is True
+        assert summary["sync"]["device_count"] == 1
+        assert summary["sync"]["last_seen_at"] is not None
+
+
+class TestDataHealthCli:
+    """scripts/data_health.py -- the CLI half of the same service layer
+    Settings > Data & Maintenance uses. Relocated here 2026-09-09 from
+    test_pwa_shell.py's TestTombstoneGc, which was gutted in the
+    client-side Offline Mode purge -- this test only reads scripts/
+    data_health.py and never depended on any of the deleted client files."""
+
+    def test_has_a_sync_gc_subcommand(self):
+        script = (Path(__file__).resolve().parent.parent / "scripts" / "data_health.py").read_text()
+        assert '"sync-gc"' in script
+        assert "cmd_sync_gc" in script
+
 
 class TestSettingsDataMaintenancePage:
     """2026-08-17: Data health, Sync conflicts and Advanced merged into
@@ -224,6 +256,16 @@ class TestSettingsDataMaintenancePage:
         assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
         assert "No backups yet" in body
+
+    def test_shows_sync_cleanup_controls(self):
+        # 2026-08-17: the sync-retention / sync-gc controls live in this
+        # page's "Maintenance & upkeep" section. Relocated here 2026-09-09
+        # from test_pwa_shell.py's TestTombstoneGc, which was gutted in the
+        # client-side Offline Mode purge -- this test only reads this
+        # template and never depended on any of the deleted client files.
+        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "settings_data_maintenance.html").read_text()
+        assert "sync-retention" in html
+        assert "sync-gc" in html
 
     def test_old_data_health_url_redirects_to_the_merged_page(self, conn, tmp_path):
         resp = settings_router.settings_data_health(

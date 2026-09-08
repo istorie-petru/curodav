@@ -3,14 +3,25 @@
 // root path via routers/pwa.py::service_worker (not directly off
 // /static/sw.js) so its default scope is the whole app, not just /static/.
 //
+// 2026-09-09: the client-side "Offline Mode" feature this shell originally
+// existed to support (the /offline fallback page, its Quick Add builder,
+// and the local IndexedDB mirror/write/sync scripts) was purged outright,
+// direct request. This file now precaches the plain app shell (the CSS/JS/
+// icons every page loads, per base.html) for faster repeat loads and
+// serves no offline-specific fallback -- a navigation request that fails
+// with no network now just fails, the same as it would with no service
+// worker installed at all. See routers/pwa.py's own header comment for the
+// full removal note. This whole mechanism has been inert since before that
+// removal anyway (base.html's manifest `<link>` and pwa.js's registration
+// call are both commented out, per the note further down this file), so
+// nothing actually using this in a browser today changed behavior.
+//
 // Scope of this slice, deliberately: precache the app shell (the CSS/JS/
-// icons every page loads, per base.html, plus the /offline fallback page)
-// and serve /offline for a navigation request that fails offline with
-// nothing better cached. No sync, no IndexedDB, no runtime caching of
-// dynamic server-rendered pages (Tasks/Calendar/etc. still require a live
-// request -- caching their HTML here would go stale the moment the
-// underlying data changes, and there is no local data layer yet to keep
-// it honest; that's slices 4-5).
+// icons every page loads, per base.html). No sync, no IndexedDB, no
+// runtime caching of dynamic server-rendered pages (Tasks/Calendar/etc.
+// still require a live request -- caching their HTML here would go stale
+// the moment the underlying data changes, and there is no local data layer
+// to keep it honest).
 //
 // CACHE_NAME is bumped whenever this file's own precache list changes --
 // activate's cleanup below deletes any previous cc-shell-* cache, so an
@@ -389,10 +400,22 @@
 // relabeled "Permanently Delete Everything" -> "Delete Everything" ->
 // just "Delete" (ccConfirmSheet's own default) -- static/
 // data_maintenance.js.
-const CACHE_NAME = "cc-shell-v80";
+// v81 (2026-09-09, direct request: "let's just remove offline mode...
+// purge it"): the client-side Offline Mode feature is gone -- /offline
+// dropped from SHELL_ASSETS (the route no longer exists), the six
+// offline_*.js entries dropped (the files no longer exist), and the
+// navigate handler's fallback to a cached /offline copy removed (a failed
+// navigation now just fails, same as with no service worker at all). See
+// this file's own header comment and routers/pwa.py for the full note.
+// Same pass: discovered the Sync card's "Force sync" button (Settings >
+// Data & Maintenance, not itself an offline_* file) only worked by calling
+// window.CCOfflineSync.syncNow() -- now permanently undefined -- so it was
+// removed too (data_maintenance.js, settings_data_maintenance.html) rather
+// than left as a button that can only ever show an error. style.css lost
+// the dead .offline-* rules those deleted templates used.
+const CACHE_NAME = "cc-shell-v81";
 
 const SHELL_ASSETS = [
-  "/offline",
   "/static/manifest.webmanifest",
   "/static/style.css",
   "/static/toast.js",
@@ -413,18 +436,6 @@ const SHELL_ASSETS = [
   "/static/command_palette.js",
   "/static/quick_add.js",
   "/static/pwa.js",
-  // 1.8 slice 4 -- the local read path's own scripts must be in the
-  // shell precache too: a device that opens /offline fully offline still
-  // needs offline_db.js/offline_shell.js to read the mirror it already
-  // built while online (offline_sync_client.js is included for
-  // completeness/consistency, even though its own pull attempts are
-  // harmless no-ops with no network).
-  "/static/offline_db.js",
-  "/static/offline_sync_client.js",
-  "/static/offline_status.js",
-  "/static/offline_write.js",
-  "/static/offline_quick_capture.js",
-  "/static/offline_shell.js",
   "/static/favicon-16.png",
   "/static/favicon-32.png",
   "/static/apple-touch-icon.png",
@@ -478,13 +489,12 @@ self.addEventListener("fetch", (event) => {
     // rendered from live SQLite state (main.py's own comment on why
     // full-page HTTP caching is deliberately avoided), so a page that
     // *can* reach the network must never be served a stale cached copy.
-    // Only a genuine network failure (offline, DNS, timeout) falls
-    // through to the offline shell.
-    event.respondWith(
-      fetch(request).catch(() =>
-        caches.match("/offline").then((cached) => cached || caches.match(request))
-      )
-    );
+    // 2026-09-09: this used to fall back to a cached copy of /offline on a
+    // genuine network failure -- that page (and the whole client-side
+    // Offline Mode feature) was purged, direct request, so a failed
+    // navigation now just fails, the same as it would with no service
+    // worker installed at all.
+    event.respondWith(fetch(request));
     return;
   }
 
@@ -502,15 +512,15 @@ self.addEventListener("fetch", (event) => {
     // with the `?v=` suffix, and `caches.match` never matches that against
     // the precached un-versioned entry, so the precache only actually
     // served anything for assets the runtime path had ALSO cached under
-    // their versioned URL during a controlled online visit. Scripts that
-    // only /offline loads (offline_shell.js/offline_write.js/
-    // offline_status.js) are never requested by a normal page visit, so
-    // they were never runtime-cached -- and a device's first offline visit
-    // then failed to load them, leaving /offline's static empty state
-    // visible no matter how well-populated the local mirror was. The
-    // versioned-exact match is tried first (a runtime-cached copy is the
-    // freshest thing the SW knows); the ignoreSearch match against the
-    // un-versioned precache entry is the fallback.
+    // their versioned URL during a controlled online visit. (Originally
+    // motivated by /offline-only scripts that were never requested by a
+    // normal page visit and so never runtime-cached -- those scripts and
+    // that page are gone now, 2026-09-09, but the general staleness gap
+    // this fallback closes is still real for any precached-but-not-yet-
+    // runtime-cached asset, see v41 below.) The versioned-exact match is
+    // tried first (a runtime-cached copy is the freshest thing the SW
+    // knows); the ignoreSearch match against the un-versioned precache
+    // entry is the fallback.
     //
     // v41 (2026-08-30): root-cause fix for the actual bug behind every one
     // of the v15-v33 "I edited a file, the browser still shows the old
@@ -531,7 +541,7 @@ self.addEventListener("fetch", (event) => {
     // now goes to the network first and only falls back to the stale
     // ignoreSearch precache entry if that fetch itself fails (genuinely
     // offline) -- which is what the ignoreSearch fallback was actually
-    // meant for (see the offline_shell.js/offline_write.js note below).
+    // meant for (see the 2026-08-18 note above).
     event.respondWith(
       caches.match(request).then(
         (cached) =>
