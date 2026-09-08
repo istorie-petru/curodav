@@ -17,6 +17,22 @@ session start.
 
 ## Right now
 
+- **Noted, not shipped:** 2026-09-08 -- direct request, same session as
+  the `deploy/`/Cloudflare Tunnel entries below: the user wants "something
+  like this, or at least a good or easy way to deploy all." Right now
+  `scripts/curodav-ctl` (deploys the webapp) and `deploy/`'s three scripts
+  (`firewall.sh`, `cloudflared/install-cloudflared.sh`, `radicale/install-
+  radicale.sh`) are entirely separate tool chains -- none of them call or
+  even reference each other. A fresh server needs all four run by hand, in
+  order, plus a manual copy-paste of the Radicale credentials `install-
+  radicale.sh` prints into `curodav-ctl`'s own `/srv/curodav/shared/.env`
+  before restarting it. Logged as an explicit open request in `open.md`'s
+  "Webapp usability + DAVx5 mobile hosting" section (a single orchestrator
+  -- `deploy/bootstrap.sh` or a new `curodav-ctl` subcommand -- that runs
+  every step and wires the credentials through automatically) so it isn't
+  lost; not scoped or built this session. Next session picking this up
+  should read that note before starting.
+
 - **Shipped:** 2026-09-08 -- direct follow-up, same session/modal as the
   entry right below: "in the Create a published list the drop down menu
   are not our own design, they are defaults. also make way short the

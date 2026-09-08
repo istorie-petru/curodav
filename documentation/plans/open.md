@@ -274,6 +274,20 @@ open piece remains:
   walkthrough in `deploy/README.md`. Still blocked on the user actually
   owning a domain onboarded to Cloudflare and running this against a real
   server; nothing in `deploy/` has been run against a live public host yet.
+  **Open request (2026-09-08, direct):** the user wants "something like
+  this, or at least a good or easy way to deploy all" -- right now
+  `scripts/curodav-ctl` (the webapp) and `deploy/`'s three scripts
+  (firewall/cloudflared/radicale) are entirely separate tool chains that
+  don't reference each other at all; getting a fresh server fully running
+  means running `curodav-ctl install` AND all of `deploy/`'s scripts by
+  hand, in the right order, then manually copying the Radicale credentials
+  `install-radicale.sh` prints into `curodav-ctl`'s own `/srv/curodav/
+  shared/.env` and restarting it yourself -- nothing chains these
+  automatically. A real fix here is a single top-level orchestrator (a
+  `deploy/bootstrap.sh` or an extra `curodav-ctl` subcommand) that runs
+  every step in order and wires the Radicale credentials into the app's
+  own `.env` without a manual copy-paste in the middle. Not scoped or
+  built yet -- flagged here so it isn't lost, not attempted this session.
 
 (The Phase B "add a Databases section to project pages" item is superseded —
 Databases were removed; see `abandoned.md`.)
