@@ -28,6 +28,34 @@
 // otherwise do (a "Cancel"/"Back" link that would normally navigate).
 
 (function () {
+    // 2026-09-08 direct report: a form rejected with FastAPI's 422 (e.g. a
+    // required field missing) surfaced its raw JSON validation body --
+    // `{"detail":[{"type":"missing","loc":["body","date_from"],...}]}` --
+    // straight into the error toast, truncated at 150 characters. Turns a
+    // real (if now mostly-preventable, see datetime_picker.js's own
+    // required-field guard) server rejection into something unreadable.
+    // Recognizes FastAPI/Pydantic's own `detail: [{type, loc, msg}, ...]`
+    // shape specifically and renders each entry as "<field>: <msg>";
+    // anything else (a plain-text 500, an HTML error page, a detail string)
+    // falls back to the raw text exactly as before.
+    function friendlyErrorMessage(text) {
+      try {
+        const body = JSON.parse(text);
+        if (Array.isArray(body && body.detail)) {
+          const msgs = body.detail.map((d) => {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : null;
+            return field ? field + ": " + d.msg : d.msg;
+          });
+          if (msgs.length) return msgs.join("; ").slice(0, 150);
+        } else if (typeof (body && body.detail) === "string") {
+          return body.detail.slice(0, 150);
+        }
+      } catch (err) {
+        // Not JSON -- fall through to the raw-text fallback below.
+      }
+      return text.slice(0, 150);
+    }
+
     const overlay = document.getElementById("modal-overlay");
     const dialog = document.getElementById("modal-dialog");
     const header = document.getElementById("modal-header");
@@ -371,7 +399,7 @@
             }
           } else {
             const text = await resp.text().catch(() => "");
-            window.ccToast({ message: "Could not save: " + text.slice(0, 150), variant: "error" });
+            window.ccToast({ message: "Could not save: " + friendlyErrorMessage(text), variant: "error" });
             submitting = false;
             if (submitBtn) {
               submitBtn.disabled = false;

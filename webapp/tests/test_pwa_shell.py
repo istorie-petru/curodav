@@ -519,8 +519,20 @@ class TestLocalWritePath:
         # light-theme title text unreadable): .page-banner-header-row
         # align-items center -> flex-end, keeping the title fully below
         # the cover instead of straddling it like the avatar does.
+        # v72 (2026-09-08, direct request): removed .settings-breadcrumb
+        # styling (_settings_breadcrumb.html itself deleted -- folded into
+        # .page-header-narrow's own back-arrow, see style.css's own
+        # comment there).
+        # v73 (2026-09-08, direct request -- Labels table "check up"):
+        # removed #labels-table's scoped row-padding override and dropped
+        # Labels manage from main.main-shell -- see sw.js's own v73
+        # comment.
+        # v74 (2026-09-08, direct report -- a holiday could be saved with no
+        # dates at all): datetime_picker.js's required-field submit guard,
+        # style.css's .dtp-trigger-invalid, modal.js's friendlyErrorMessage
+        # -- see sw.js's own v74 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v71"' in script
+        assert 'CACHE_NAME = "cc-shell-v74"' in script
 
 
 class TestOfflineToolbar:

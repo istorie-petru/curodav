@@ -17,6 +17,68 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-08 -- direct report: a holiday could be saved with
+  no start/end date at all, surfacing a raw FastAPI 422 JSON blob
+  ("Something went wrong. Could not save: {\"detail\":[{\"type\":\"missing\",
+  \"loc\":[\"body\",\"date_from\"]...}") in the error toast -- the second
+  attempt (with dates actually picked) then succeeded, so nothing was
+  corrupted, just a confusing round trip.
+
+  Root cause: `_datetime_picker.html`'s `required` kwarg puts a `required`
+  attribute on the hidden `<input type="hidden">` the picker writes its
+  value to -- but the HTML spec explicitly bars `type="hidden"` inputs from
+  constraint validation, so that attribute has always been a complete
+  no-op. The component's own header comment claimed otherwise ("the hidden
+  input carries required so the browser still blocks an empty form submit
+  the way the native date input it replaces did") -- never actually true,
+  for every `required=true` caller (Holidays' two date fields, event
+  detail's "Move this occurrence" range, the habit check-in's entry date),
+  not just this report's one.
+
+  Fixed with a real guard rather than trying to coax the native
+  `required` attribute into working (impossible on a hidden input short of
+  swapping its type, which would break the value contract every server
+  route already expects): a single document-level, capture-phase `submit`
+  listener in `datetime_picker.js` that checks each required `.dtp`'s
+  hidden input for an empty value and, if found, blocks the submit
+  (`preventDefault` + `stopImmediatePropagation`) before it ever reaches
+  modal.js's own fetch-based per-form handler or a plain native submit --
+  capture-phase on `document` runs before target-phase listeners on the
+  form itself, sidestepping any registration-order race with modal.js's
+  own per-form wiring. Flags the offending trigger (new
+  `.dtp-trigger-invalid`, style.css) and opens its panel via a synthetic
+  click so the fix is one click away, plus a toast. The invalid flag
+  clears itself the moment the picker's value actually changes
+  (`updateTrigger()`, called from every commit path).
+
+  Also cleaned up the underlying error toast for the case where server-side
+  rejection still happens (any other 422, or a future `required` picker
+  added without this guard catching it first): `modal.js` gained
+  `friendlyErrorMessage()`, which recognizes FastAPI/Pydantic's own
+  `{"detail":[{type,loc,msg}]}` shape and renders "field: message" instead
+  of dumping the raw JSON; anything else still falls back to the raw text
+  exactly as before.
+
+  No Python changed -- `routers/settings.py::create_holiday`'s
+  `Form(...)`-required fields were already correct given a well-formed
+  request; this was purely a client-side gap. `sw.js` `CACHE_NAME` bumped
+  `v73` -> `v74` (style.css, datetime_picker.js, modal.js all changed);
+  `test_pwa_shell.py`'s pin updated. No new Python tests -- this repo has
+  no JS unit-test harness for `static/*.js` (confirmed by grep: nothing
+  under `tests/` exercises `datetime_picker.js`'s behavior directly, only
+  `test_pwa_shell.py`'s asset-list/cache-version checks), consistent with
+  every other JS-only fix already in this file. Verified via `node
+  --check` on both changed JS files (syntax) and a full sequential-chunk
+  test run (10 chunks by filename, `test_caldav_bridge_live.py` excluded
+  as always): 2017 passed, 0 failed -- no regressions, no tests
+  added/removed since this was a client-side-only change.
+
+  **Next slice:** none mandated -- direct report, not on any roadmap
+  list. Worth a real live-browser check once one is reachable (submit an
+  empty Holiday form, confirm the toast + trigger highlight + panel
+  auto-open all actually fire) -- same recurring verification gap every
+  entry in this file already notes.
+
 - **Shipped:** 2026-09-07 -- same-day follow-up direct report on the
   Notion-style banner rework two entries below: "the text has a bit of a
   problem if it's sitting behind a dark banner and the text is black,

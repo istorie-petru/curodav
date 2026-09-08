@@ -304,6 +304,11 @@
 
     function updateTrigger() {
       value.textContent = labelText();
+      // Clear any "you tried to submit this empty" flag (see the
+      // document-level submit guard at the bottom of this file) the moment
+      // the value actually changes -- covers picking a date, clearing, or
+      // completing a chip edit, whichever the caller's mode supports.
+      trigger.classList.remove("dtp-trigger-invalid");
     }
 
     // ------------------------------------------------------------------ //
@@ -912,4 +917,56 @@
   window.addEventListener("resize", () => {
     if (openInst) openInst.position();
   });
+
+  // ------------------------------------------------------------------ //
+  // Required-field guard (2026-09-08 direct report: a holiday could be
+  // submitted with no dates at all, producing a raw 422 from the server --
+  // FastAPI's "field required" -- surfaced to the user as an unreadable
+  // JSON blob by modal.js's generic error toast). Root cause: this
+  // component's hidden inputs carry `required` (see the macro's own doc
+  // comment, _datetime_picker.html), but `input[type="hidden"]` is
+  // explicitly barred from constraint validation by the HTML spec -- the
+  // browser never enforced it, on this or any other `required` picker in
+  // the app (event "Move this occurrence", habit check-in's entry date).
+  //
+  // A capturing, document-level `submit` listener (registered once here,
+  // not per-form) is what makes this actually block: capture-phase
+  // listeners on an ancestor (document) run before target-phase listeners
+  // attached directly to the form itself, which is where both modal.js's
+  // fetch-based handler and a plain native submit start -- so this always
+  // gets first look, regardless of which page/modal wired the form or in
+  // what order.
+  //
+  // Reads the hidden input's live `.value` straight off the DOM rather than
+  // this file's own per-instance `state` (a closure inside `enhance()`,
+  // not reachable from here) -- range/time modes' `commitLive()` only ever
+  // writes both the start and end hidden inputs together once a value is
+  // actually complete, so an empty *required* start input already implies
+  // an incomplete picker without needing the end input's own value too.
+  document.addEventListener(
+    "submit",
+    (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      const pickers = form.querySelectorAll(".dtp[data-dtp]");
+      for (const container of pickers) {
+        const startInput = container.querySelector('input[type="hidden"]');
+        if (!startInput || !startInput.hasAttribute("required")) continue;
+        if (startInput.value) continue;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const trigger = container.querySelector(".dtp-trigger");
+        if (trigger) {
+          trigger.classList.add("dtp-trigger-invalid");
+          trigger.scrollIntoView({ block: "nearest" });
+          trigger.click(); // opens the panel so the fix is one click away
+        }
+        if (window.ccToast) {
+          window.ccToast({ message: "Pick a date before saving.", variant: "error" });
+        }
+        return;
+      }
+    },
+    true,
+  );
 })();

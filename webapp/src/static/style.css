@@ -1447,18 +1447,19 @@ tbody tr:last-child{border-bottom:none;}
 tbody tr:hover{background:var(--row-alt);}
 tbody td{padding:10px 8px; vertical-align:middle;}
 
-/* Labels manage table -- clean, airy table for the Labels settings page.
-   Color dot + name, optional Group badge, Usage count, icon actions.
-   2026-08-28 fix: the compact 6px row padding below was originally written
-   as a *global* `tbody td` override -- it silently shrank every other
-   plain table in the app (Tasks, Holidays, Time blocks, ...) along with
-   this one. Scoped to #labels-table only; the global rule above is back
-   to its pre-existing 10px. */
-#labels-table tbody td { padding: 6px 8px; }
-#labels-table th:last-child,
-#labels-table td:last-child { text-align: right; padding-right: 12px; }
-#labels-table th:first-child,
-#labels-table td:first-child { padding-left: 12px; }
+/* Labels manage table -- color dot + name, optional Group badge, Usage
+   count, icon actions.
+   2026-08-28: this used to give #labels-table its own compact 6px row
+   padding (plus 12px first/last-child edge padding) so it read as a
+   denser, "airier" table than the rest of the app's plain tables.
+   2026-09-08 (direct request, "check up ... it looks different compared
+   to the others"): removed -- Holidays/Time Blocks/every other settings
+   table use the global `tbody td` 10px/8px padding above with no
+   first/last-child override, and there was no longer a real reason for
+   Labels alone to look denser than its own Settings siblings. The Actions
+   column still reads right-aligned without the removed `text-align:right`
+   here -- `.action-buttons` (below) is `justify-content:flex-end`
+   regardless of the cell's own text-align. */
 
 .label-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
 .color-dot {
@@ -3839,19 +3840,17 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 
    Unlike Calendar's .calendar-viewport/.project-calendar-layout, there's
    no single shared class name across these pages' body markup to hang a
-   descendant selector off of (a task table, a contact list, a labels
-   table, a masonry widget grid are shaped nothing alike) -- so each
-   page's own template applies one explicit `.main-shell-body` class to
-   whichever element is actually its scrollable region: #tasks-body,
-   #contacts-body, #notes-body, #modal-target (Labels manage's existing
-   wrapper -- see that template's own comment on why it's wrapped at
-   all), and a new wrapper div around Dashboard's widget-grid include.
-   Dashboard's #dashboard-grid itself keeps setting its own JS-computed
-   `style.height` (static/app.js's masonry layout, sized off total card
-   content) completely unchanged -- .main-shell-body is what actually
-   gets the fixed viewport-derived height + overflow-y:auto, so the grid
-   scrolls inside it the same way Calendar's .time-grid-body scrolls
-   inside .time-grid-wrap, one level up.
+   descendant selector off of (a task table, a contact list, a masonry
+   widget grid are shaped nothing alike) -- so each page's own template
+   applies one explicit `.main-shell-body` class to whichever element is
+   actually its scrollable region: #tasks-body, #contacts-body,
+   #notes-body, and a new wrapper div around Dashboard's widget-grid
+   include. Dashboard's #dashboard-grid itself keeps setting its own
+   JS-computed `style.height` (static/app.js's masonry layout, sized off
+   total card content) completely unchanged -- .main-shell-body is what
+   actually gets the fixed viewport-derived height + overflow-y:auto, so
+   the grid scrolls inside it the same way Calendar's .time-grid-body
+   scrolls inside .time-grid-wrap, one level up.
 
    main.main-calendar itself intentionally isn't folded into this (it
    already works, and its own body element IS always .calendar-viewport/
@@ -3859,12 +3858,20 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    verified ruleset just to save one shared class name).
 
    Scope of this pass, per direct confirmation: Tasks, Contacts, Notes,
-   Labels manage, Dashboard. Settings (hub + sub-pages), Search,
-   Published lists, and Project/Label detail pages are held for a
-   follow-up -- several of them don't have this same clean "one header,
-   one scrollable body" shape (multi-column forms, a Kanban board) and
-   need their own look at what should actually scroll before getting
-   this treatment. */
+   Dashboard. Settings (hub + sub-pages), Search, Published lists, and
+   Project/Label detail pages are held for a follow-up -- several of them
+   don't have this same clean "one header, one scrollable body" shape
+   (multi-column forms, a Kanban board) and need their own look at what
+   should actually scroll before getting this treatment.
+
+   2026-09-08 follow-up (direct request, Labels "check up ... it looks
+   different compared to the others"): Labels manage opted into this
+   shell the same pass added it, but it's reached from the Settings hub
+   and every other Settings page was deliberately held out above -- it
+   didn't actually belong in this pass's scope, just got swept in as a
+   plain table alongside Tasks/Contacts. Reverted to the normal
+   whole-page-scroll behavior its Settings siblings use
+   (labels_manage.html's own comment). */
 main.main-shell{
   display:flex; flex-direction:column; overflow:hidden;
 }
@@ -5514,18 +5521,12 @@ body.command-palette-open{overflow:hidden;}
 .settings-hub-row .settings-row-chevron{color:var(--fg-tertiary); flex:none;}
 .settings-hub-row:hover .settings-row-chevron{color:var(--fg-primary);}
 
-/* Settings breadcrumb (_settings_breadcrumb.html) -- one line, every
-   ancestor a link, sitting tight above the page's own <h1> so the two
-   read as one header (the h1 is the current page's title; the trail
-   above is just "where you are inside Settings"). Distinct from the
-   plain stacked .breadcrumb (label_detail.html's "< Labels" / "< Parent",
-   one per line) since this is always a single trail rendered inline, not
-   however many independent single-link rows a page happens to have. */
-.settings-breadcrumb{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 2px; font-size:var(--text-footnote); font-weight:600;}
-.settings-breadcrumb a{display:inline-flex; align-items:center; gap:2px; color:var(--fg-tertiary); text-decoration:none;}
-.settings-breadcrumb a:hover{color:var(--fg-primary);}
-.settings-breadcrumb .breadcrumb-sep{color:var(--fg-tertiary); opacity:.5;}
-.settings-breadcrumb + h1{font-size:var(--text-title1);}
+/* Settings breadcrumb -- removed 2026-09-08 (direct request): every
+   Settings child page's own `<h1>` + `_settings_breadcrumb.html` trail
+   got folded into `.page-header-narrow`'s own actions slot instead (a
+   small back-arrow `.icon-btn`, see _page_header_narrow.html's own
+   comment) -- `_settings_breadcrumb.html` and its `.settings-breadcrumb`
+   styling are gone, not just unused. */
 
 /* Settings field row -- "Setting name [ control ]" on one line, the fast-
    editing shape every child page (General/Appearance/Widgets/Advanced)
@@ -6061,6 +6062,14 @@ body.command-palette-open{overflow:hidden;}
 }
 .dtp-trigger:hover{background:var(--bg-secondary); border-color:var(--border-strong);}
 .dtp-trigger:focus-visible{outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
+/* 2026-09-08 direct report: a required date/range/time picker's `required`
+   attribute lives on a `type="hidden"` input, which HTML explicitly bars
+   from constraint validation -- the browser never actually blocked an empty
+   submit the way this component's own comment assumed. datetime_picker.js's
+   document-level submit guard adds this class to flag the offending
+   trigger instead, so there's still a visible "fix this" signal once the
+   submit is caught in JS. */
+.dtp-trigger.dtp-trigger-invalid{border-color:var(--danger); box-shadow:0 0 0 3px var(--tag-red-bg);}
 .dtp-trigger .dtp-value{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left;}
 .dtp-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard); color:var(--fg-tertiary);}
 .dtp.is-open > .dtp-trigger .filter-caret{transform:rotate(180deg);}

@@ -357,7 +357,20 @@
 // padding, reading as double the normal bottom space. Zeroed
 // margin-bottom on both, scoped to being main.main-calendar's own direct
 // child (`.card`'s margin-bottom is untouched everywhere else it's used).
-const CACHE_NAME = "cc-shell-v71";
+// v73 (2026-09-08, direct request -- Labels table "check up ... it looks
+// different compared to the others"): style.css changed again --
+// #labels-table's own scoped 6px/12px row-padding override is gone (now
+// inherits the app-wide 10px/8px `tbody td` default every other settings
+// table already uses), and Labels manage dropped main-shell/
+// .main-shell-body (style.css's own comment on that rule) so it scrolls
+// the whole page normally like Holidays/Time Blocks/Data & Maintenance
+// instead of Tasks/Contacts' fixed-viewport internal-scroll shell.
+// v74 (2026-09-08, direct report -- a holiday could be saved with no dates
+// at all, surfacing a raw 422 JSON blob as the error toast): style.css
+// (.dtp-trigger-invalid) and static/datetime_picker.js (the document-level
+// required-field submit guard) and static/modal.js (friendlyErrorMessage)
+// all changed.
+const CACHE_NAME = "cc-shell-v74";
 
 const SHELL_ASSETS = [
   "/offline",
