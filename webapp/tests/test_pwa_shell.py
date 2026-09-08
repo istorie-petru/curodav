@@ -531,8 +531,11 @@ class TestLocalWritePath:
         # dates at all): datetime_picker.js's required-field submit guard,
         # style.css's .dtp-trigger-invalid, modal.js's friendlyErrorMessage
         # -- see sw.js's own v74 comment.
+        # v75 (2026-09-09, direct request -- Data & Maintenance notifications):
+        # data_maintenance.js now converts the ?note=/?error= banner into a
+        # ccToast on load -- see sw.js's own v75 comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v74"' in script
+        assert 'CACHE_NAME = "cc-shell-v75"' in script
 
 
 class TestOfflineToolbar:

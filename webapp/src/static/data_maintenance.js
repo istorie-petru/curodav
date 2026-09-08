@@ -22,6 +22,41 @@
     return el && el.closest ? el.closest(selector) : null;
   }
 
+  // ---- ?note=/?error= banner -> toast (2026-09-09 direct request) --------
+  //
+  // Every action on this page (Backup now, Verify, Restore, Compact &
+  // reindex, sync retention/cleanup, purge completed, integrity check...)
+  // redirects back here with a message in the query string rather than a
+  // fetch-based response -- deliberate progressive enhancement, see this
+  // file's own header comment, so those routes stay plain form posts that
+  // work with no JS at all. settings_data_maintenance.html renders that
+  // message as a static `[data-dm-flash]` banner as its no-JS fallback.
+  // When ccToast IS available, this fires the same message as a floating
+  // toast instead -- the notification style every delete/archive elsewhere
+  // in the app already uses (app.js) -- then removes the banner and strips
+  // note/error from the URL so a refresh or share link doesn't repeat it.
+  // Runs once, at load; nothing on this page adds a new flash banner later
+  // without a full page redirect, so there's no delegated case to cover.
+  document.addEventListener("DOMContentLoaded", function () {
+    var flashes = document.querySelectorAll("[data-dm-flash]");
+    if (!flashes.length) return;
+    if (window.ccToast) {
+      flashes.forEach(function (el) {
+        window.ccToast({
+          message: el.textContent.trim(),
+          variant: el.getAttribute("data-dm-flash") === "error" ? "error" : "default",
+        });
+        el.remove();
+      });
+    }
+    if (window.history && window.history.replaceState) {
+      var url = new URL(window.location.href);
+      url.searchParams.delete("note");
+      url.searchParams.delete("error");
+      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    }
+  });
+
   // ---- Export dialog: live "Includes: N Events, N Tasks, N Contacts" ----
   //
   // Each <option> carries its own server-rendered phrase in

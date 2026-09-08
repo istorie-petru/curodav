@@ -17,6 +17,49 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-09 -- direct request, second of the two agreed
+  Data & Maintenance slices from the entry below: the `?note=`/`?error=`
+  redirect banner now shows as a `ccToast` instead of static page text,
+  the same floating-notification pattern every delete/archive elsewhere
+  in the app already uses (`app.js`).
+
+  Deliberately kept the server-side redirect-with-query-param shape
+  entirely intact rather than converting all nine of this page's POST
+  routes to fetch-based submits -- that's what keeps every action a plain
+  form post that still works with no JS at all (this file's own
+  "progressive enhancement only" header comment). The banner
+  `settings_data_maintenance.html` already rendered from
+  `request.query_params` is now the explicit no-JS fallback (still
+  renders server-side, unchanged text/wording), tagged
+  `data-dm-flash="note"` / `data-dm-flash="error"`. New
+  `data_maintenance.js` block, on `DOMContentLoaded`: if `window.ccToast`
+  exists, fire it with the banner's own text as the message (variant
+  `error` for the error case, default for note -- default's own "Done"
+  title reads fine against messages like "Compacted and reindexed the
+  database."), remove the banner element, and strip `note`/`error` from
+  the URL via `history.replaceState` so a refresh or shared link doesn't
+  replay the same message. If `ccToast` isn't available for any reason,
+  the banner is simply left alone -- a real fallback, not dead markup.
+
+  `sw.js` `CACHE_NAME` bumped `v74` -> `v75` (data_maintenance.js
+  changed); `test_pwa_shell.py`'s pin updated. No new tests -- same "no
+  JS unit-test harness for `static/*.js` in this repo" gap every other
+  JS-only fix in this file already notes; verified via `node --check` on
+  both changed JS files (syntax) and the full suite for regressions on
+  the server-rendered banner text/attributes, which is unchanged.
+
+  Full suite re-run in the same 6-chunk pattern as the entry below:
+  434 + 482 + 282 + 361 + 248 + 210 = 2017 passed, same total, no tests
+  added/removed.
+
+  **Next slice:** none mandated -- both agreed slices from the entry
+  below are now shipped. Worth a real live-browser check once one is
+  reachable (trigger an action, confirm the toast fires and the banner
+  never flashes visibly first) -- same recurring verification gap every
+  entry in this file already notes. The repo-housekeeping note in the
+  entry below (unrelated uncommitted breadcrumb refactor sitting in the
+  working tree) is still unresolved, still untouched by this slice.
+
 - **Shipped:** 2026-09-08 -- direct request: audit + first fix pass on
   Data & Maintenance (`settings_data_maintenance.html`), against a direct
   ask to check the page for standards compliance -- icons on every

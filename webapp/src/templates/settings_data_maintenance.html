@@ -4,11 +4,20 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Data & Maintenance", "database") }}
 
+{# 2026-09-09 direct request: every action below still redirects back here
+   with ?note=/?error= (progressive enhancement -- the routes work as plain
+   full-page form posts with no JS required), but data_maintenance.js now
+   converts that into a floating ccToast instead, the same notification
+   style every delete/archive elsewhere in the app already uses, and
+   removes this banner + strips the query params from the URL once it has.
+   The banner below is what actually shows if JS is unavailable/broken --
+   a real fallback, not dead markup. data-dm-flash is what the script looks
+   for; its value (note/error) is also the toast variant. #}
 {% if request.query_params.get('note') %}
-<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
+<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>
 {% endif %}
 {% if request.query_params.get('error') %}
-<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
+<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
 {% set needs_attention = conflicts or not integrity.ok or (latest_verified_backup and not latest_verified_backup.verification.ok) %}

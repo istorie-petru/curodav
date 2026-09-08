@@ -370,7 +370,11 @@
 // (.dtp-trigger-invalid) and static/datetime_picker.js (the document-level
 // required-field submit guard) and static/modal.js (friendlyErrorMessage)
 // all changed.
-const CACHE_NAME = "cc-shell-v74";
+// v75 (2026-09-09): static/data_maintenance.js changed -- the ?note=/
+// ?error= banner on Data & Maintenance now converts to a ccToast on load
+// (and strips the query params) instead of just sitting there as static
+// page text.
+const CACHE_NAME = "cc-shell-v75";
 
 const SHELL_ASSETS = [
   "/offline",
