@@ -2806,8 +2806,7 @@ img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
    attributes on the divider/hint paragraphs (2026-09-07, audit-fixes-2.0.
    md item 11, CSP `'unsafe-inline'` elimination). */
 .setup-radicale-divider{border:none; border-top:1px solid var(--border-color, #333); margin:var(--space-4, 16px) 0;}
-.setup-radicale-subtitle{margin-bottom:var(--space-2, 8px);}
-.setup-radicale-hint{margin:0 0 var(--space-3, 12px);}
+.setup-radicale-hint{margin:0;}
 
 .empty-state{padding:var(--space-8) var(--space-5); text-align:center; color:var(--fg-tertiary);}
 /* Small in-pane empty state -- the widget builder's "Loading preview…"
@@ -6328,11 +6327,11 @@ body.command-palette-open{overflow:hidden;}
    -- the one surface a signed-out browser sees. Centered card on the app's
    normal background, same design tokens, no app chrome. */
 .auth-wrap{
-  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
   padding:var(--space-4);
 }
 .auth-card{
-  width:100%; max-width:340px; background:var(--surface-container-high);
+  width:100%; max-width:340px; margin:0 auto; background:var(--surface-container-high);
   border:none; border-radius:var(--radius-card); box-shadow:var(--elevation-2);
   padding:var(--space-5) var(--space-4);
 }
@@ -6340,6 +6339,7 @@ body.command-palette-open{overflow:hidden;}
   display:flex; align-items:center; gap:8px;
   font-size:var(--text-title2); margin:0 0 2px;
 }
+.login-brand{margin-bottom:var(--space-4);}
 .auth-brand .icon{width:22px; height:22px; color:var(--accent);}
 .auth-subtitle{margin:0 0 var(--space-4);}
 .auth-error{
