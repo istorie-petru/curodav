@@ -73,6 +73,7 @@ case X- properties differently from registered ones)."""
 from __future__ import annotations
 
 import base64
+import uuid
 from typing import Any
 
 import vobject
@@ -216,7 +217,20 @@ def contact_row_to_vcard(row: dict[str, Any]) -> str:
 
 
 def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
-    row: dict[str, Any] = {"uid": str(card.uid.value)}
+    # A UID line is mandatory in the vCard spec, but plenty of real-world
+    # exporters (Nextcloud's own "Administrator" sample card among them --
+    # this is exactly the card that surfaced the crash) write cards with no
+    # UID property at all. `card.uid` raises AttributeError via vobject's
+    # `__getattr__` in that case (confirmed directly -- vobject has no
+    # `getattr(card, "uid", None)`-friendly accessor), which used to
+    # propagate all the way out as a 500 on /export/import/auto. Same
+    # "assign a fresh identity for anything that doesn't already have one"
+    # convention as every other uid-on-creation callsite in this app (see
+    # e.g. routers/contacts.py's own `str(uuid.uuid4())`) -- a uid-less
+    # imported card just becomes a new contact instead of failing the whole
+    # import.
+    uid = str(card.uid.value) if hasattr(card, "uid") and card.uid.value else str(uuid.uuid4())
+    row: dict[str, Any] = {"uid": uid}
     row["full_name"] = str(card.fn.value) if hasattr(card, "fn") else ""
     # `hasattr(card, "org")` (and the tel/email checks below) is only "this
     # property line exists in the vCard," not "it has a real value" -- a

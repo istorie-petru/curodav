@@ -296,6 +296,22 @@ class TestImportRestore:
         export_router.import_contacts(upload, conn=conn)
         assert db.get_contact(conn, "v1")["full_name"] == "Bob Brown"
 
+    def test_import_contact_with_no_uid_does_not_500(self, conn):
+        # audit-fixes-2.1.md regression: a real vCard missing UID entirely
+        # (Nextcloud's own "Administrator" sample export, among others --
+        # UID is mandatory per spec but plenty of real exporters omit it)
+        # crashed this endpoint with a 500 (`AttributeError: uid` from
+        # vcard_rows.vcard_to_contact_row). It must import as a new contact
+        # with a generated uid instead.
+        vcard = (
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Administrator\r\nN:Administrator;;;;\r\n"
+            "END:VCARD\r\n"
+        ).encode("utf-8")
+        upload = UploadFile(file=BytesIO(vcard))
+        export_router.import_contacts(upload, conn=conn)
+        contacts = db.list_contacts(conn)
+        assert any(c["full_name"] == "Administrator" for c in contacts)
+
     def test_import_empty_file_adds_nothing(self, conn):
         resp = export_router.import_events(UploadFile(file=BytesIO(b"")), conn=conn)
         assert resp.status_code == 303

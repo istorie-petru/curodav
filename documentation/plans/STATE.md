@@ -17,6 +17,55 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-10 -- direct request, new session: user dropped a new
+  `documentation/plans/audit-fixes-2.1.md` (a plain-text bug list -- ~14 UI/
+  UX items -- plus two production `journalctl`/traceback logs) and said "the
+  app has some bugs." Asked which item to start on (AskUserQuestion, since
+  the doc has no priority order of its own); picked the vCard-import crash:
+  `POST /export/import/auto` 500'd (`AttributeError: uid`) importing a vCard
+  with no UID property at all -- confirmed real, not hypothetical, since the
+  pasted traceback's sample card (a Nextcloud "Administrator" export) is
+  exactly this shape, and UID is spec-mandatory but plenty of real-world
+  exporters omit it anyway. Root cause: `vcard_rows.vcard_to_contact_row`
+  did `str(card.uid.value)` unconditionally -- vobject's `__getattr__`
+  raises `AttributeError` for an absent property, no `getattr(..., None)`-
+  friendly accessor exists. Fixed by falling back to `str(uuid.uuid4())`
+  when `card.uid` is absent or its `.value` is falsy (a `UID:` line with
+  nothing after the colon is a separate but same-shaped case) -- same
+  "always assign a fresh identity" convention as every other uid-on-
+  creation callsite in this app (`routers/contacts.py`, `routers/tasks.py`,
+  etc., all `str(uuid.uuid4())`). A uid-less card now imports as a new
+  contact instead of failing the whole import.
+
+  **Tests**: 3 new -- `test_row_translators.py`'s
+  `TestContactRow::test_missing_uid_gets_generated_not_crash` (UID property
+  absent) and `::test_blank_uid_value_gets_generated_not_stored_literally`
+  (UID property present, empty value -- a distinct code path,
+  `hasattr`-true but falsy `.value`), plus an endpoint-level regression in
+  `test_phase10_export.py`'s
+  `TestExportAndImport::test_import_contact_with_no_uid_does_not_500` using
+  the same card shape as the reported traceback. Full suite re-verified in
+  6 batches of ~15 files each (this sandbox's 45s-per-command limit still
+  applies, same workaround as the 2.0 session) -- **2095 passed, 0
+  failed**. The single pre-existing failure noted in the 2.0 entry below
+  (`test_dashboard_router.py::TestAgendaWidgetAllUpcoming::
+  test_todays_earlier_events_stil...`) is no longer present -- not
+  investigated further this session (out of scope for this slice), but
+  worth noting it's gone rather than silently carrying forward a stale
+  "known failure" caveat.
+
+  **Next slice** (per `audit-fixes-2.1.md`, no priority order of its own --
+  pick next): the other crash log in the doc (Radicale-unreachable-at-
+  startup traceback -- likely just noisy logging, app already degrades
+  gracefully per the log's own "running without the sync bridge" line, so
+  worth confirming that before treating it as a real bug), or any of the
+  ~14 plain-text UI items (banner upload modal crop/rotate exiting on
+  outside click is first in the doc's own order). `audit-fixes-2.1.md`
+  itself is untouched -- unlike `audit-fixes-2.0.md` this doc has no
+  checkbox/strikethrough convention yet; worth deciding one before the
+  list grows, so the same "audit before declaring done" mistake caught in
+  the 2.0 session doesn't recur.
+
 - **Released 2.0** -- 2026-09-09, direct request, new session: "push this to
   2.0." Before pushing, audited `audit-fixes-2.0.md` (the roadmap's own
   stated gate) rather than taking "nothing left to do" at face value --
