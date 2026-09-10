@@ -20,18 +20,22 @@ page -- a project's *default* landing spot until now was actually
 the same customizable widget-grid dashboard every plain label/Space gets),
 which is the "traditional dashboard" feedback was aimed at. This page is
 task-focused instead: a Kanban board (columns = task status) of every task
-carrying the project's label, with an upcoming-events card above it (real
-calendar events tagged with the same label, not a widget). `GET /projects`
-(the listing) and `GET /projects/{name}/calendar` (the Week Calendar view)
-are unaffected -- still redirects, per the reasoning above; an Agenda-style
-full events view is tracked separately in STATE.md, not part of this slice.
+carrying the project's label, with an Agenda card above it (real calendar
+events tagged with the same label, not a widget -- 2026-09-10,
+audit-fixes-2.1.md, direct request: due-dated tasks tagged with the label
+merged into the same chronological list too, no longer events-only, which
+is also when the card was renamed "Agenda" from its original "Upcoming
+events"). `GET /projects` (the listing) and `GET /projects/{name}/calendar`
+(the Week Calendar view) are unaffected -- still redirects, per the
+reasoning above; a fuller Agenda-style view (day-grouped, more than 8 rows)
+is tracked separately in STATE.md, not part of this slice.
 `promote`/`set_dates`/`demote`/`archive` below are untouched throughout,
 still the only way a label gains/loses Project behavior, still reached
 from Settings > Labels (routers/labels.py)."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -100,7 +104,7 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         t["banner"] = db.banner_for_task(conn, t)
         columns.setdefault(t["status"], []).append(t)
 
-    # Upcoming events card: every future event carrying this label, same
+    # Agenda card: every future event carrying this label, same
     # "list_events(start=now) + tag membership + sort + cap" recipe
     # routers/dashboard.py's Agenda widget uses for its own "All upcoming"
     # events section (_render_agenda) -- deliberately not expanded through
@@ -109,10 +113,22 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
     # keeps it consistent with the one other "upcoming events" surface
     # this app already has.
     now_iso = _now()
+    today_iso = date.today().isoformat()
     events = [
         e for e in db.list_events(conn, start=now_iso)
-        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"] >= now_iso
+        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    # 2026-09-10 fix (audit-fixes-2.1.md session, caught while touching this
+    # filter for the tasks-merge below): the line above used to compare the
+    # FULL `now_iso` timestamp (wall-clock precision) against `start_at` --
+    # the exact bug routers/dashboard.py's own Agenda widget fixed
+    # 2026-09-03 ("the data is not put in the... Upcoming correctly"):
+    # today's own events with an earlier stored clock time than the moment
+    # the page renders were silently dropped. Now a pure date-level
+    # comparison (`>= today_iso`), matching dashboard.py's `_render_agenda`
+    # and every date boundary elsewhere in this app -- "upcoming" means
+    # "today or later," not "later than this literal instant."
+    #
     # The project's own deadline (label_config.end_date) as a synthetic,
     # non-clickable entry in the same list -- direct request. Not a real
     # `events` row (a project's period is a label_config field, § Projects
@@ -127,7 +143,7 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
     # deadline dated *today* still counts as upcoming regardless of what
     # time it currently is -- a bare date has no "already passed today"
     # concept the way a timed event does.
-    if label.get("end_date") and label["end_date"] >= now_iso[:10]:
+    if label.get("end_date") and label["end_date"] >= today_iso:
         events.append({
             "uid": None,
             "title": "Project deadline",
@@ -135,15 +151,32 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
             "all_day": True,
             "is_deadline": True,
         })
+    # Tasks with a due date (audit-fixes-2.1.md, direct request: "I would
+    # like the agenda card to also include tasks due date in that list,
+    # like other widgets in the normal dashboard") -- merged into the SAME
+    # chronological list as events/the deadline above, not a separate
+    # section, since the request was for "that list" (singular) to include
+    # them, and the card is now named "Agenda" to match. `tasks` above
+    # already carries every non-archived task tagged with this project
+    # (built for the Kanban board) -- reused directly rather than a second
+    # `list_tasks` query, filtered here to open (not done) + due-dated +
+    # not already past. Each becomes an event-shaped dict with `kind:
+    # "task"` so project_detail.html can give it its own render branch
+    # (relative due date, links to /tasks/{uid} instead of /events/{uid})
+    # while still sorting and capping together with real events.
+    for t in tasks:
+        if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
+            continue
+        events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
     events.sort(key=lambda e: e["start_at"])
-    events = events[:8]
+    agenda_items = events[:8]
 
     ctx = {
         "request": request,
         "active_tab": "label",
         "project": label,
         "project_status": db.project_status(conn, label),
-        "events": events,
+        "agenda_items": agenda_items,
         "columns": columns,
         "board_statuses": board_statuses,
         "status_labels": tasks_router.STATUS_LABELS,

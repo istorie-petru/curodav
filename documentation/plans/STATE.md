@@ -18,6 +18,54 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` -- "In the projects page, I would like the agenda
+  card to also include tasks due date in that list, like other widgets in
+  the normal dashboard." The Project page's card (previously "Upcoming
+  events", `routers/projects.py::project_detail`) only ever queried
+  events; renamed to "Agenda" and merged in every open, due-dated task
+  tagged with the project's label into the SAME chronologically-sorted
+  list (not a separate section) -- the request said "that list," singular.
+  Checked first whether the normal Dashboard's own Agenda widget
+  (`dashboard.py::_render_agenda`) had a reusable merged-list helper to
+  call instead of writing new logic -- it doesn't: that widget actually
+  keeps tasks/events as two SEPARATE lists/sections internally, so "like
+  other widgets in the normal dashboard" is matched here via the same
+  `relative_date` formatting/row-macro conventions, not a literal shared
+  merge function (none exists to share).
+  Implementation: `tasks` (already computed for the Kanban board, already
+  excludes archived) filtered to not-done + has due_at + due_at >= today,
+  each turned into an event-shaped dict with `kind: "task"`; combined with
+  the existing events/deadline list, sorted by one `start_at` key, capped
+  at 8 same as before. Context key renamed `events` -> `agenda_items`
+  (there's no single-list precedent to preserve `events`'s old meaning
+  under, and "an agenda_items list that sometimes contains tasks" is more
+  honest than overloading `events`). Template gained a third row branch
+  (`item.kind == 'task'`) alongside the existing plain-event/`is_deadline`
+  branches.
+  **Also fixed while touching this filter** (caught mid-implementation,
+  not itself in the audit doc): the events filter compared the FULL
+  `now_iso` timestamp (wall-clock precision) against `start_at` -- the
+  exact bug `dashboard.py`'s own Agenda widget fixed 2026-09-03 (today's
+  earlier events silently dropped). Switched to the same date-level
+  `>= today_iso` comparison dashboard.py already uses, for consistency
+  and correctness.
+
+  **Tests**: `test_project_detail.py`'s `TestUpcomingEventsCard` ->
+  `TestAgendaCard` (context-key rename throughout, +1 new test for the
+  wall-clock fix), `TestProjectDeadlineAsEvent` updated for the same
+  rename, new `TestAgendaCardIncludesTasks` (9 tests: inclusion, no-due-
+  date/past-due/done/other-project exclusion, today-still-counts,
+  combined sort order, shared 8-item cap, task-row link markup). Full
+  suite re-verified in the usual 6 batches -- **2110 passed, 0 failed**
+  (2100 + 10 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Data &
+  Maintenance settings reorg (move "Purge Completed Tasks" into
+  Database's context menu, drop the redundant Reset-home-layout button),
+  or the "Your Profile" settings page split (move password/username/
+  Radicale URL/profile picture/nickname off General into a new page).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` -- "The kanban board for tasks doesn't allow for
   tasks to be drag and dropped." Diagnosis: `static/tasks_board.js` (a
   fully-implemented Pointer-Events drag-and-drop, not native HTML5 DnD --

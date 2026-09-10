@@ -182,16 +182,20 @@ class TestKanbanDragAndDrop:
         assert 'JSON.stringify({ field: "status", value: newStatus })' in script
 
 
-class TestUpcomingEventsCard:
+class TestAgendaCard:
     # end=None throughout this class (unlike _promote's own 2026-12-31
-    # default) -- these tests assert exact event lists, and a default
+    # default) -- these tests assert exact list contents, and a default
     # end_date would itself surface as a synthetic deadline row
     # (TestProjectDeadlineAsEvent below), throwing off every count/order
     # assertion here. Deadline behavior gets its own class/fixtures.
+    # Renamed from TestUpcomingEventsCard, context key from "events" to
+    # "agenda_items" (2026-09-10, audit-fixes-2.1.md) when the card
+    # started merging in due-dated tasks -- see TestAgendaCardIncludesTasks
+    # below for that half.
     def test_no_events_renders_empty(self, conn):
         _promote(conn, "Trip", end=None)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert resp.context["events"] == []
+        assert resp.context["agenda_items"] == []
 
     def test_only_future_events_tagged_with_the_project_show(self, conn):
         _promote(conn, "Trip", end=None)
@@ -201,7 +205,20 @@ class TestUpcomingEventsCard:
         _event(conn, "e_past", ["Trip"], past)
         _event(conn, "e_other_project", ["Other"], future)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert [e["uid"] for e in resp.context["events"]] == ["e_future"]
+        assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_future"]
+
+    def test_todays_earlier_event_still_shows(self, conn):
+        # 2026-09-10 fix, same pass as the tasks merge below: this filter
+        # used to compare the FULL now_iso timestamp (wall-clock precision)
+        # against start_at -- the exact bug routers/dashboard.py's own
+        # Agenda widget fixed 2026-09-03 for the same reason. An event
+        # earlier today than "right now" must still show; only a date-level
+        # comparison gets that right.
+        _promote(conn, "Trip", end=None)
+        earlier_today = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+        _event(conn, "e_earlier", ["Trip"], earlier_today)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_earlier"]
 
     def test_events_are_sorted_soonest_first(self, conn):
         _promote(conn, "Trip", end=None)
@@ -210,7 +227,7 @@ class TestUpcomingEventsCard:
         _event(conn, "e_later", ["Trip"], later)
         _event(conn, "e_soon", ["Trip"], soon)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert [e["uid"] for e in resp.context["events"]] == ["e_soon", "e_later"]
+        assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_soon", "e_later"]
 
     def test_capped_at_eight(self, conn):
         _promote(conn, "Trip", end=None)
@@ -218,41 +235,128 @@ class TestUpcomingEventsCard:
             when = (datetime.now(timezone.utc) + timedelta(days=i + 1)).isoformat()
             _event(conn, f"e{i}", ["Trip"], when)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert len(resp.context["events"]) == 8
+        assert len(resp.context["agenda_items"]) == 8
+
+
+class TestAgendaCardIncludesTasks:
+    """audit-fixes-2.1.md (2026-09-10, direct request): "I would like the
+    agenda card to also include tasks due date in that list, like other
+    widgets in the normal dashboard." Due-dated open tasks tagged with this
+    project merge into the SAME chronologically-sorted list events/the
+    deadline already render through (not a separate section) -- each
+    becomes an `{"kind": "task", ...}` dict alongside the plain event/
+    deadline shapes."""
+
+    def test_task_with_due_date_appears_in_the_agenda(self, conn):
+        _promote(conn, "Trip", end=None)
+        future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
+        _task(conn, "t1", ["Trip"], due_at=future)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        items = resp.context["agenda_items"]
+        assert len(items) == 1
+        assert items[0]["kind"] == "task"
+        assert items[0]["uid"] == "t1"
+        assert items[0]["start_at"] == future
+
+    def test_task_with_no_due_date_is_excluded(self, conn):
+        _promote(conn, "Trip", end=None)
+        _task(conn, "t1", ["Trip"])
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["agenda_items"] == []
+
+    def test_past_due_task_is_excluded(self, conn):
+        _promote(conn, "Trip", end=None)
+        past = (datetime.now(timezone.utc) - timedelta(days=3)).date().isoformat()
+        _task(conn, "t1", ["Trip"], due_at=past)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["agenda_items"] == []
+
+    def test_due_today_task_still_counts_as_upcoming(self, conn):
+        _promote(conn, "Trip", end=None)
+        today = datetime.now(timezone.utc).date().isoformat()
+        _task(conn, "t1", ["Trip"], due_at=today)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert [i["uid"] for i in resp.context["agenda_items"]] == ["t1"]
+
+    def test_done_task_is_excluded(self, conn):
+        _promote(conn, "Trip", end=None)
+        future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
+        _task(conn, "t1", ["Trip"], status="done", due_at=future)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["agenda_items"] == []
+
+    def test_task_from_another_project_is_excluded(self, conn):
+        _promote(conn, "Trip", end=None)
+        _promote(conn, "Other", start="2026-01-01", end="2026-12-31")
+        future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
+        _task(conn, "t1", ["Other"], due_at=future)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["agenda_items"] == []
+
+    def test_tasks_and_events_sort_together_by_date(self, conn):
+        _promote(conn, "Trip", end=None)
+        soon_task = (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat()
+        mid_event = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        later_task = (datetime.now(timezone.utc) + timedelta(days=10)).date().isoformat()
+        _task(conn, "t_later", ["Trip"], due_at=later_task)
+        _event(conn, "e_mid", ["Trip"], mid_event)
+        _task(conn, "t_soon", ["Trip"], due_at=soon_task)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        ordering = [i["uid"] for i in resp.context["agenda_items"]]
+        assert ordering == ["t_soon", "e_mid", "t_later"]
+
+    def test_tasks_and_events_share_the_same_eight_item_cap(self, conn):
+        _promote(conn, "Trip", end=None)
+        for i in range(5):
+            when = (datetime.now(timezone.utc) + timedelta(days=i + 1)).isoformat()
+            _event(conn, f"e{i}", ["Trip"], when)
+        for i in range(5):
+            when = (datetime.now(timezone.utc) + timedelta(days=i + 20)).date().isoformat()
+            _task(conn, f"t{i}", ["Trip"], due_at=when)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert len(resp.context["agenda_items"]) == 8
+
+    def test_task_row_renders_as_a_task_link_with_relative_due_date(self, conn):
+        _promote(conn, "Trip", end=None)
+        future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
+        _task(conn, "t1", ["Trip"], due_at=future)
+        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        assert 'href="/tasks/t1"' in body
 
 
 class TestProjectDeadlineAsEvent:
     """Direct follow-up request: the project's own deadline (label_config's
-    end_date) shows up in the upcoming-events card too, as a synthetic,
-    non-clickable entry (`is_deadline`) sorted in among the real events."""
+    end_date) shows up in the Agenda card too, as a synthetic,
+    non-clickable entry (`is_deadline`) sorted in among the real events/
+    tasks."""
 
     def test_future_end_date_appears_as_a_deadline_entry(self, conn):
         future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
         _promote(conn, "Trip", end=future_end)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        events = resp.context["events"]
-        assert len(events) == 1
-        assert events[0]["is_deadline"] is True
-        assert events[0]["title"] == "Project deadline"
-        assert events[0]["start_at"] == f"{future_end}T00:00:00"
+        items = resp.context["agenda_items"]
+        assert len(items) == 1
+        assert items[0]["is_deadline"] is True
+        assert items[0]["title"] == "Project deadline"
+        assert items[0]["start_at"] == f"{future_end}T00:00:00"
 
     def test_deadline_dated_today_still_counts_as_upcoming(self, conn):
         today = datetime.now(timezone.utc).date().isoformat()
         _promote(conn, "Trip", end=today)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert len(resp.context["events"]) == 1
-        assert resp.context["events"][0]["is_deadline"] is True
+        assert len(resp.context["agenda_items"]) == 1
+        assert resp.context["agenda_items"][0]["is_deadline"] is True
 
     def test_past_end_date_does_not_appear(self, conn):
         past_end = (datetime.now(timezone.utc) - timedelta(days=5)).date().isoformat()
         _promote(conn, "Trip", end=past_end)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert resp.context["events"] == []
+        assert resp.context["agenda_items"] == []
 
     def test_no_end_date_means_no_deadline_entry(self, conn):
         _promote(conn, "Trip", end=None)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert resp.context["events"] == []
+        assert resp.context["agenda_items"] == []
 
     def test_deadline_sorts_alongside_real_events_by_date(self, conn):
         future_end = (datetime.now(timezone.utc) + timedelta(days=5)).date().isoformat()
@@ -262,7 +366,7 @@ class TestProjectDeadlineAsEvent:
         _event(conn, "e_sooner", ["Trip"], sooner)
         _event(conn, "e_later", ["Trip"], later)
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        ordering = [e.get("uid") or e.get("title") for e in resp.context["events"]]
+        ordering = [e.get("uid") or e.get("title") for e in resp.context["agenda_items"]]
         assert ordering == ["e_sooner", "Project deadline", "e_later"]
 
     def test_deadline_renders_with_a_deadline_pill_and_no_link(self, conn):

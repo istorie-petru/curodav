@@ -38,40 +38,54 @@
 {% endcall %}
 </div>
 
-<!-- Upcoming events card -- every future event tagged with this project's
-     label, see routers/projects.py::project_detail's own comment on why
-     this isn't recurrence-expanded. Uses the same context-free widget row
-     macros the Dashboard's Agenda widget renders through (_widget_items.html)
-     so this reads like the rest of the app's "simple link list" surfaces,
-     without pulling in the whole widget/customize machinery for a card
-     that isn't configurable here. `.widget-card-static`, not `.widget-
-     card` -- the latter is `position:absolute` for the Dashboard's
-     JS-positioned masonry grid, which doesn't apply on this plain page
-     (bug fix: without a static variant this card had no geometry and
-     overlapped the Kanban board below it).
+<!-- Agenda card (renamed from "Upcoming events" 2026-09-10, audit-
+     fixes-2.1.md direct request: "I would like the agenda card to also
+     include tasks due date in that list, like other widgets in the normal
+     dashboard") -- every future event tagged with this project's label,
+     PLUS every open task tagged with it that has a due date, merged into
+     one chronologically sorted list (routers/projects.py::project_detail's
+     own comment covers both the merge and why events aren't recurrence-
+     expanded here). Uses the same context-free widget row macros the
+     Dashboard's Agenda widget renders through (_widget_items.html) so this
+     reads like the rest of the app's "simple link list" surfaces, without
+     pulling in the whole widget/customize machinery for a card that isn't
+     configurable here. `.widget-card-static`, not `.widget-card` -- the
+     latter is `position:absolute` for the Dashboard's JS-positioned
+     masonry grid, which doesn't apply on this plain page (bug fix:
+     without a static variant this card had no geometry and overlapped the
+     Kanban board below it).
 
-     Direct follow-up request: the project's own deadline (label_config's
-     `end_date`) also appears in this list -- a synthetic, non-clickable
-     row (`e.is_deadline`, routers/projects.py's own comment on why it's
-     built as a plain dict rather than a real `events` row), sorted in
-     among the real events by date rather than pinned separately, with a
-     red "Deadline" pill instead of the usual date/time leading cell
-     doubling as its own signal. -->
+     Three row shapes share this one list, `item.kind`/`item.is_deadline`
+     telling them apart (routers/projects.py builds every entry with a
+     common `start_at` sort key regardless of shape):
+       - a task (`item.kind == "task"`) -- links to /tasks/{uid}, leading
+         cell is its due date's relative_date, no time component (a task's
+         due_at has no meaningful clock time the way an event's start_at
+         does).
+       - the project's own deadline (`item.is_deadline`) -- a synthetic,
+         non-clickable row (routers/projects.py's own comment on why it's
+         built as a plain dict rather than a real `events`/task row), a
+         red "Deadline" pill instead of the usual leading cell doubling as
+         its own signal.
+       - a plain event (neither of the above) -- links to /events/{uid},
+         leading cell is relative_date plus a time (unless all-day). -->
 <div class="card widget-card-static">
-    <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Upcoming events</h2></div>
+    <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
     <div class="widget-content">
-    {% if events %}
+    {% if agenda_items %}
     <table>
-        {% for e in events %}
-        {% if e.is_deadline %}
-        {{ widget_link_row(none, e.title, leading=(e.start_at | relative_date), leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
+        {% for item in agenda_items %}
+        {% if item.kind == 'task' %}
+        {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=(item.start_at | relative_date), leading_class='widget-row-time') }}
+        {% elif item.is_deadline %}
+        {{ widget_link_row(none, item.title, leading=(item.start_at | relative_date), leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
         {% else %}
-        {{ widget_link_row('/events/' ~ e.uid, e.title, leading=((e.start_at | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), leading_class='widget-row-time') }}
         {% endif %}
         {% endfor %}
     </table>
     {% else %}
-    {{ widget_empty('No upcoming events tagged with this project.') }}
+    {{ widget_empty('No upcoming events or due tasks tagged with this project.') }}
     {% endif %}
     </div>
 </div>
