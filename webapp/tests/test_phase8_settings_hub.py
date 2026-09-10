@@ -99,7 +99,7 @@ class TestSettingsHub:
         resp = settings_router.settings_index(_request(), conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
-        for name in ("General", "Appearance", "Labels", "Holidays", "Sleep &amp; Leisure Time", "Data &amp; Maintenance", "Published lists"):
+        for name in ("General", "Your Profile", "Appearance", "Labels", "Holidays", "Sleep &amp; Leisure Time", "Data &amp; Maintenance", "Published lists"):
             assert name in body
         # Habits is not a hub category (2026-08-08 follow-up #3): it's
         # reached from Tasks > Habits, so a hub shortcut would duplicate
@@ -126,6 +126,7 @@ class TestSettingsHub:
         urls = {c["url"] for c in resp.context["categories"]}
         assert urls == {
             "/settings/general",
+            "/settings/your-profile",
             "/settings/appearance",
             "/settings/labels",
             "/settings/holidays",
@@ -169,11 +170,31 @@ class TestSyncConflictHubBadge:
 
 
 class TestSettingsGeneral:
-    def test_renders_display_name_field(self, conn):
+    def test_renders_the_format_preferences(self, conn):
         resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
         assert resp.context["active_tab"] == "settings_general"
         body = resp.body.decode()
+        assert 'href="/settings"' in body  # breadcrumb back to the hub
+        # 2026-09-11 direct request: Profile picture / Nickname / Account
+        # moved off this page onto Settings > Your Profile -- see
+        # TestSettingsYourProfile below.
+        assert 'name="display_name"' not in body
+        assert 'action="/settings/account"' not in body
+
+
+class TestSettingsYourProfile:
+    """2026-09-11 direct request: "move the password, username, radicale
+    url etc, settings from general to a new page named Your Profile. It
+    should include the Profile Picture and Nickname (current Your Name,
+    used in greeting)." Formerly TestSettingsGeneral's display-name/
+    account coverage -- same assertions, now against the new page."""
+
+    def test_renders_nickname_field(self, conn):
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
+        assert resp.context["active_tab"] == "settings_your_profile"
+        body = resp.body.decode()
         assert 'name="display_name"' in body
+        assert "Nickname" in body
         assert 'href="/settings"' in body  # breadcrumb back to the hub
 
     def test_display_name_autosaves_no_separate_save_button(self, conn):
@@ -181,33 +202,40 @@ class TestSettingsGeneral:
         # auto save") -- this was the one remaining manual-Save text
         # field in Settings; every other control on this page already
         # autosubmitted on change.
-        resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
         body = resp.body.decode()
         assert 'name="display_name"' in body
         # 2026-09-07 (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
         # elimination) -- the inline `onchange=` handler moved to a
         # delegated `data-change-submit` listener (app.js).
         assert 'data-change-submit' in body
-        assert ">Save<" not in body
 
     def test_passes_display_name(self, conn):
-        resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
         assert resp.context["display_name"] == ""
         db.set_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY, "Petru")
-        resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
         assert resp.context["display_name"] == "Petru"
 
-    def test_set_display_name_route_redirects_to_general(self, conn):
-        resp = settings_router.set_display_name(display_name="Petru", conn=conn)
-        assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/general"
-        assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == "Petru"
+    def test_renders_account_card(self, conn):
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/account"' in body
+        assert 'name="radicale_url"' in body
 
-    def test_set_display_name_strips_and_allows_clearing(self, conn):
-        settings_router.set_display_name(display_name="  Petru  ", conn=conn)
-        assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == "Petru"
-        settings_router.set_display_name(display_name="   ", conn=conn)
-        assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == ""
+
+def test_set_display_name_route_redirects_to_your_profile(conn):
+    resp = settings_router.set_display_name(display_name="Petru", conn=conn)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings/your-profile"
+    assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == "Petru"
+
+
+def test_set_display_name_strips_and_allows_clearing(conn):
+    settings_router.set_display_name(display_name="  Petru  ", conn=conn)
+    assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == "Petru"
+    settings_router.set_display_name(display_name="   ", conn=conn)
+    assert db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY) == ""
 
 
 class TestSettingsAppearance:

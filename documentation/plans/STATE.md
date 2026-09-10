@@ -18,6 +18,66 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order (first half only -- see note at the end): "I would like to move
+  the password, username, radicale url etc, settings from general to a new
+  page named Your Profile. It should include the Profile Picture and
+  Nickname (current Your Name, used in greeting)." New hub category/page,
+  `/settings/your-profile` (`settings_your_profile.html`, icon
+  `user-check`, between General and Appearance in `HUB_CATEGORIES`) --
+  holds the Profile picture upload/remove forms, the nickname field
+  (relabeled from "Your name" to "Nickname" per the direct request's own
+  wording, same `/settings/display-name` route/behavior), and the Account
+  card (username/current+new password/Radicale URL, `/settings/account`)
+  moved verbatim from `settings_general.html`. Restart app came along too
+  (not left orphaned on General with no Account card to apply) -- the
+  actual "move Restart app to Data & Maintenance, trigger it as a toast
+  after an env-data edit" half of the same doc line is intentionally
+  deferred to a follow-up slice (see below), since bundling both would
+  have made this one slice cover two unrelated relocations landing in two
+  different places.
+
+  General (`settings_general.html`) now holds only the format/display
+  preferences that aren't about who the user IS (week start, 4-week
+  position, recurrence/habit terminology, time format, hide-sleep-hours).
+  Every route these moved fields post to is unchanged (same URLs, same
+  handler functions in `routers/settings.py`) -- only the GET page they
+  live on and the redirect target on save moved: `account_settings`,
+  `restart_app`, `set_display_name`, `set_profile_photo`, and
+  `remove_profile_photo` now all redirect to `/settings/your-profile`
+  instead of `/settings/general`. `settings_data_maintenance.html`'s
+  read-only Radicale card, which used to point at "Settings > General" for
+  the actual connection fields, now points at "Settings > Your Profile."
+
+  **Tests**: updated in place rather than duplicated --
+  `test_phase8_settings_hub.py`'s old `TestSettingsGeneral` display-name/
+  account assertions split into a trimmed `TestSettingsGeneral` (asserts
+  those fields are now ABSENT from General) plus a new
+  `TestSettingsYourProfile` class covering the same ground against the new
+  page; its `test_set_display_name_route_redirects_to_general` became
+  `test_set_display_name_route_redirects_to_your_profile` (redirect target
+  updated). `test_dashboard_usability_rework.py`'s
+  `test_settings_general_passes_display_name` renamed/repointed to
+  `test_settings_your_profile_passes_display_name`.
+  `test_settings_radicale.py`'s href assertion updated to
+  `/settings/your-profile`. Full suite run in the same 4-parallel-batch
+  pattern as last session (single bash call, background `&`/`wait`):
+  **2138 passed**, same 4 pre-existing time-of-day-boundary failures as
+  last session (confirmed unrelated then, unchanged now -- not re-verified
+  against HEAD again since nothing this slice touched could plausibly
+  affect them).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order -- second half of
+  the same paragraph, deferred from this session): move "Restart app" from
+  Settings > Your Profile into Data & Maintenance, and make it triggerable
+  as a toast after editing "important environment data" (the Account
+  card's env-file path is the obvious trigger -- `account_settings`
+  already returns a note telling the user to click Restart when
+  `env_managed`; check whether that note itself should become the toast
+  trigger, or whether Data & Maintenance needs its own always-visible
+  Restart control regardless of what page any given env-data edit happened
+  on).
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
   order -- "the Purge Completed Tasks should sit in the context menu of
   Database (as purge completed). The reset home layout button should be
   removed, because in edit mode an exact button already exists."

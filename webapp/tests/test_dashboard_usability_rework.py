@@ -397,13 +397,15 @@ class TestGreeting:
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
         assert resp.context["greeting"].endswith(", Petru")
 
-    def test_settings_general_passes_display_name(self, conn):
+    def test_settings_your_profile_passes_display_name(self, conn):
         # 2026-08-08 Settings redesign: display name moved off the hub
         # itself onto its own focused page, Settings > General.
-        resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
+        # 2026-09-11 direct request: that page (and this nickname field)
+        # moved again, onto the new Settings > Your Profile.
+        resp = settings_router.settings_your_profile(_request("/settings/your-profile"), conn=conn)
         assert resp.context["display_name"] == ""
         db.set_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY, "Petru")
-        resp = settings_router.settings_general(_request("/settings/general"), conn=conn)
+        resp = settings_router.settings_your_profile(_request("/settings/your-profile"), conn=conn)
         assert resp.context["display_name"] == "Petru"
 
     def test_set_display_name_route(self, conn):

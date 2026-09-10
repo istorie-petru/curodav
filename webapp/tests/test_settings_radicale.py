@@ -2,8 +2,9 @@
 (2026-09-08 -- read-only now; see routers/settings.py::account_settings'
 docstring for the merge that superseded the old editable 3-field form this
 file used to test, POST /settings/radicale, which is gone). The card just
-shows the current URL and points at Settings > General for the actual
-connection (username/password/URL, merged with the app's own login)."""
+shows the current URL and points at Settings > Your Profile (2026-09-11:
+moved off General) for the actual connection (username/password/URL,
+merged with the app's own login)."""
 
 from __future__ import annotations
 
@@ -22,12 +23,12 @@ def conn(tmp_path):
 
 
 class TestSettingsDataMaintenanceRadicaleCard:
-    def test_shows_current_url_and_points_to_general(self, conn, tmp_path):
+    def test_shows_current_url_and_points_to_your_profile(self, conn, tmp_path):
         from test_data_health import _request as _dm_request
 
         req = _dm_request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        assert 'href="/settings/general"' in body
+        assert 'href="/settings/your-profile"' in body
         # No POST form/action for this card any more -- it's a plain
         # read-only display now.
         assert 'action="/settings/radicale"' not in body

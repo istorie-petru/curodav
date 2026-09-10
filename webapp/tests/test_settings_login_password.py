@@ -1,4 +1,4 @@
-"""Settings > General's "Account" card (2026-09-08, routers/settings.py::
+"""Settings > Your Profile's "Account" card (2026-09-08, routers/settings.py::
 account_settings) -- one username/password form governing both the app's
 own login and the app's stored Radicale connection credential (direct
 request: "merge the concept of radicale username to the app username, and

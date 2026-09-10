@@ -219,7 +219,7 @@ def _avatar(contact: dict | None, cls: str = "") -> Markup:
     global (registered the same way as `icon()` above, for the same
     reason) instead of duplicating this if/else across contacts_list.html,
     contact_detail.html, contact_form.html's photo preview,
-    settings_general.html's profile-picture row, and _page_banner.html's
+    settings_your_profile.html's profile-picture row, and _page_banner.html's
     dashboard-header avatar -- all five now render the exact same markup
     for "this photo," which is the actual UI-consistency fix, not just
     five separately-hand-matched copies of similar-looking HTML.

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Your Profile - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Your Profile", "user-check") }}
+
+{% if request.query_params.get('note') %}
+<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
+{% endif %}
+
+<!-- 2026-09-11 direct request: "move the password, username, radicale url
+     etc, settings from general to a new page named Your Profile. It should
+     include the Profile Picture and Nickname (current Your Name, used in
+     greeting)." This page is settings_general.html's former Profile
+     picture / Your name / Account cards, moved here verbatim (same forms,
+     same routes -- only the redirect targets and this page's own crumbs/
+     title changed). General keeps only the format/display preferences
+     that aren't about who the user IS. Restart app stays alongside Account
+     for now (it exists to apply an Account save) -- a follow-up slice
+     moves it into Data & Maintenance per the same direct request's second
+     half. -->
+<div class="card">
+    <!-- Profile picture (2026-08-09, routers/settings.py) -- the user's
+         own avatar, stored in app_meta (db.py's profile-photo helpers).
+         Reuses the `.avatar-upload` markup from contact_form.html, so the
+         shared avatar_cropper.js crop/resize tool wires up automatically;
+         the cropped JPEG lands back in this same `name="photo"` file input
+         and the form's `data-autosubmit` flag makes the crop editor submit
+         right on Apply -- this row has no other Save button to piggyback
+         on, unlike a contact's edit form. -->
+    <!-- The row is a plain .settings-field-row div, not a form: two
+         sibling forms live inside it (upload + remove) and HTML forbids
+         nesting a form inside a form, which would silently break the
+         remove button. -->
+    <div class="settings-field-row">
+        <span class="settings-field-label">Profile picture
+            <span class="settings-field-hint">Supports JPEG, PNG, GIF or WEBP, max 5MB</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="profile-photo-controls">
+            <form method="post" action="/settings/profile-photo" enctype="multipart/form-data" data-autosubmit>
+                <div class="avatar-upload" title="Change photo">
+                    {# 2026-08-29 (direct request: "better cache these images") --
+                       photo_url (a real, ?v=-versioned request, see
+                       routers/settings.py's profile_photo_image) is what
+                       avatar() actually renders when present, instead of
+                       inlining photo_b64 as a data: URI -- see deps.py's
+                       avatar() own comment. #}
+                    {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-large') }}
+                    <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
+                    <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change profile picture">
+                </div>
+            </form>
+            {% if profile_photo %}
+            <form method="post" action="/settings/profile-photo-remove" data-confirm-sheet="Remove your profile picture?">
+                <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <form class="settings-field-row" method="post" action="/settings/display-name">
+        <span class="settings-field-label">Nickname
+            <span class="settings-field-hint">Used in Home's greeting ("Good evening, {name}")</span>
+        </span>
+        <span class="spacer"></span>
+        <input type="text" name="display_name" value="{{ display_name }}" placeholder="(not set)" data-change-submit>
+    </form>
+</div>
+
+<!-- Account (2026-09-08 -- replaces the old separate "Login & security"
+     card and Data & Maintenance's "CalDAV / Radicale sync" credentials,
+     direct request: "merge the concept of radicale username to the app
+     username, and merge the app password with the radicale password").
+     One username/password governs both the app's own login and the
+     Radicale connection; routers/settings.py::account_settings' own
+     docstring covers where each is actually stored (env file vs
+     app_meta) and why. `env_managed` here mirrors that route's own
+     "either half being env-configured puts the whole account there"
+     rule. -->
+{% set env_managed = auth_is_env or radicale_env_configured %}
+<div class="settings-group">
+    <div class="card">
+        {% if env_managed and not env_file_available %}
+        <p class="settings-hint">Login/Radicale are set via environment variables (<code>CC_AUTH_USERNAME</code>/<code>CC_RADICALE_URL</code>) -- edit <code>curodav.env</code> and restart to change them.</p>
+        {% else %}
+        <p class="settings-hint">
+            {% if has_account %}Signed in as <strong>{{ account_username }}</strong> -- this is also your Radicale username. Enter your current password to make changes.
+            {% else %}No account set up yet. Choose a username and password -- used for both signing in and syncing to Radicale.{% endif %}
+            {% if env_managed %}Saved to <code>curodav.env</code> -- click "Restart app" below to apply.{% endif %}
+        </p>
+        <form method="post" action="/settings/account">
+            <div class="settings-field-row">
+                <span class="settings-field-label">Username</span>
+                <span class="spacer"></span>
+                <input type="text" name="username" value="{{ account_username }}" autocomplete="off" class="field-narrow">
+            </div>
+            {% if has_account %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">Current password</span>
+                <span class="spacer"></span>
+                <input type="password" name="current_password" autocomplete="off" class="field-narrow">
+            </div>
+            {% endif %}
+            <div class="settings-field-row">
+                <span class="settings-field-label">New password
+                    <span class="settings-field-hint">{% if has_account %}Leave blank to keep your current password{% else %}At least 8 characters{% endif %}</span>
+                </span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Repeat new password</span>
+                <span class="spacer"></span>
+                <input type="password" name="new_password_confirm" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="settings-field-label">Radicale server URL
+                    <span class="settings-field-hint">Optional -- for syncing tasks/events/contacts to a Radicale server</span>
+                </span>
+                <span class="spacer"></span>
+                <input type="text" name="radicale_url" value="{{ radicale_url }}" placeholder="http://127.0.0.1:5232/you/" autocomplete="off" class="field-narrow">
+            </div>
+            <div class="settings-field-row">
+                <span class="spacer"></span>
+                <button type="submit" class="btn tonal">{{ icon('check-circle', 'icon-sm') }} {{ 'Save' if has_account else 'Create account' }}</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+    <!-- Restart app (2026-09-08, direct request: "have a button actually
+         restarting the app so it applies") -- only meaningful under
+         systemd with Restart=always (routers/settings.py::restart_app's
+         own docstring); hidden entirely outside that deploy, rather than
+         shown disabled, since there's nothing an operator running this
+         locally could do to make it work anyway. -->
+    {% if restart_available %}
+    <div class="card">
+        <div class="settings-field-row">
+            <span class="settings-field-label">Restart app
+                <span class="settings-field-hint">Applies any saved login/Radicale change -- the app is unreachable for a few seconds</span>
+            </span>
+            <span class="spacer"></span>
+            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
+                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -20,7 +20,7 @@
 // either way (routers/settings.py's/contacts.py's/banners.py's upload
 // routes never resized/cropped server-side to begin with -- they just
 // store whatever bytes arrive). If that form carries `data-autosubmit`
-// (settings_general.html's profile-picture row, which has no Save button
+// (settings_your_profile.html's profile-picture row, which has no Save button
 // of its own) OR the input is a banner upload (banner_editor.html's own
 // upload form isn't marked data-autosubmit, but always auto-submitted on
 // file selection even before this editor existed -- see the removed

@@ -149,7 +149,8 @@ logger = logging.getLogger(__name__)
 # unresolved conflict visible from the hub itself lives on this one row
 # (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
-    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format, login & security"},
+    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
+    {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
@@ -205,7 +206,6 @@ def _current_settings(request: Request):
 
 @router.get("/settings/general")
 def settings_general(request: Request, conn=Depends(get_db)):
-    settings = _current_settings(request)
     return templates.TemplateResponse(
         "settings_general.html",
         {
@@ -213,15 +213,13 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_general",
             "crumbs": _ROOT_CRUMB,
             "title": "General",
-            "display_name": db.get_app_meta(conn, DISPLAY_NAME_KEY) or "",
-            # 2026-08-08 -- "Week starts on" and "24-hour time" joined
-            # Display name here: both are the same kind of thing (a
-            # personal display/format preference, not tied to one
-            # specific page) and both affect several pages at once
-            # (Calendar Month/Week, Schedule, every dashboard widget that
-            # shows a time), so neither earns its own Settings category --
-            # see deps.py's week_start()/time_format() for where these
-            # get read back out everywhere else in the app.
+            # 2026-08-08 -- "Week starts on" and "24-hour time" are the
+            # same kind of thing (a personal display/format preference, not
+            # tied to one specific page) and both affect several pages at
+            # once (Calendar Month/Week, Schedule, every dashboard widget
+            # that shows a time), so neither earns its own Settings
+            # category -- see deps.py's week_start()/time_format() for
+            # where these get read back out everywhere else in the app.
             # Named current_week_start/current_time_format, NOT week_start/
             # time_format -- those names are already taken by deps.py's
             # own Jinja globals (week_start(request)/time_format(request),
@@ -257,6 +255,29 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # the configured Sleep-kind time blocks don't agree on one
             # single start/end window.
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
+        },
+    )
+
+
+@router.get("/settings/your-profile")
+def settings_your_profile(request: Request, conn=Depends(get_db)):
+    """2026-09-11 direct request: "move the password, username, radicale
+    url etc, settings from general to a new page named Your Profile. It
+    should include the Profile Picture and Nickname (current Your Name,
+    used in greeting)." Same context fields settings_general used to build
+    for its Profile picture / Your name / Account / Restart app cards --
+    moved here verbatim, this page's own template is those same cards'
+    markup unchanged (only the page title/crumbs and where the underlying
+    routes redirect back to)."""
+    settings = _current_settings(request)
+    return templates.TemplateResponse(
+        "settings_your_profile.html",
+        {
+            "request": request,
+            "active_tab": "settings_your_profile",
+            "crumbs": _ROOT_CRUMB,
+            "title": "Your Profile",
+            "display_name": db.get_app_meta(conn, DISPLAY_NAME_KEY) or "",
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -311,7 +332,7 @@ def account_settings(
     radicale_url: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Settings > General's "Account" card -- 2026-09-08, direct request
+    """Settings > Your Profile's "Account" card -- 2026-09-08, direct request
     ("merge the concept of radicale username to the app username, and
     merge the app password with the radicale password"). Replaces three
     former routes (change_login_password, change_radicale_password, Data
@@ -337,7 +358,7 @@ def account_settings(
       CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
       CC_RADICALE_PASSWORD (only when `new_password` is given) via
       env_file.update_env_file. Takes effect on the next process start --
-      Settings > General's "Restart app" button (restart_app below) is
+      Settings > Your Profile's "Restart app" button (restart_app below) is
       how an operator actually applies it without SSHing in.
     - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
       that still sets these env vars by some other means): refuses to
@@ -373,12 +394,12 @@ def account_settings(
 
     if env_managed and not env_path:
         return _redirect_with_error(
-            "/settings/general",
+            "/settings/your-profile",
             "Login/Radicale are set via environment variables, and this install has no CC_ENV_FILE to edit them through -- edit curodav.env by hand and restart.",
         )
 
     if not username:
-        return _redirect_with_error("/settings/general", "Choose a username.")
+        return _redirect_with_error("/settings/your-profile", "Choose a username.")
 
     if auth_is_env:
         has_account = True
@@ -408,7 +429,7 @@ def account_settings(
         elif new_password != new_password_confirm:
             error = "New passwords do not match."
     if error:
-        return _redirect_with_error("/settings/general", error)
+        return _redirect_with_error("/settings/your-profile", error)
 
     if env_managed:
         updates = {"CC_AUTH_USERNAME": username, "CC_RADICALE_USER": username}
@@ -422,11 +443,11 @@ def account_settings(
         except OSError:
             logger.exception("Failed to write env file %s", env_path)
             return _redirect_with_error(
-                "/settings/general",
+                "/settings/your-profile",
                 "Could not save -- the app couldn't write to its env file. Check file permissions.",
             )
         return _redirect_with_note(
-            '/settings/general', 'Saved. Click "Restart app" below to apply it.'
+            '/settings/your-profile', 'Saved. Click "Restart app" below to apply it.'
         )
 
     # Not env-managed -- app_meta, same storage as before this merge.
@@ -453,7 +474,7 @@ def account_settings(
         state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
     response = _redirect_with_note(
-        "/settings/general",
+        "/settings/your-profile",
         "Saved. Restart the app for the Radicale connection to pick up the change."
         if (new_password or radicale_url)
         else "Saved.",
@@ -472,7 +493,7 @@ def account_settings(
 
 @router.post("/settings/restart")
 def restart_app(request: Request):
-    """Settings > General's "Restart app" button -- 2026-09-08, direct
+    """Settings > Your Profile's "Restart app" button -- 2026-09-08, direct
     request ("have a button actually restarting the app so it applies").
     Applies an account_settings env-file save (or any other change that
     needs a fresh process, e.g. a Radicale connection saved to app_meta)
@@ -504,24 +525,24 @@ def restart_app(request: Request):
     settings = request.app.state.settings
     if getattr(settings, "deploy_mode", "local") != "production":
         return _redirect_with_error(
-            "/settings/general",
+            "/settings/your-profile",
             "Restart isn't available outside a systemd-managed (production) deploy -- stop and restart the process yourself.",
         )
-    logger.warning("Restart requested from Settings > General -- exiting for systemd to relaunch.")
+    logger.warning("Restart requested from Settings > Your Profile -- exiting for systemd to relaunch.")
     threading.Timer(0.5, os._exit, args=(0,)).start()
     return _redirect_with_note(
-        "/settings/general", "Restarting -- this page will reconnect in a few seconds."
+        "/settings/your-profile", "Restarting -- this page will reconnect in a few seconds."
     )
 
 
 @router.post("/settings/display-name")
 def set_display_name(display_name: str = Form(""), conn=Depends(get_db)):
-    """"Your name" -- the optional display name Home's greeting reads
-    ("Good evening, {name}"), app_meta-backed. Empty/whitespace-only
-    clears it, back to the name-less "Good evening" alone
-    (routers/dashboard.py's _greeting_for_hour)."""
+    """"Nickname" (formerly "Your name") -- the optional display name
+    Home's greeting reads ("Good evening, {name}"), app_meta-backed.
+    Empty/whitespace-only clears it, back to the name-less "Good evening"
+    alone (routers/dashboard.py's _greeting_for_hour)."""
     db.set_app_meta(conn, DISPLAY_NAME_KEY, display_name.strip())
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -574,7 +595,7 @@ def set_profile_photo(
         if sniffed is None:
             raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
         db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), sniffed)
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 @router.post("/settings/profile-photo-remove")
@@ -583,7 +604,7 @@ def remove_profile_photo(conn=Depends(get_db)):
     POST route (never a GET link) so removing is a real form submission,
     same non-cacheable convention as every other destructive action here."""
     db.clear_profile_photo(conn)
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 @router.get("/settings/profile-photo/image")
