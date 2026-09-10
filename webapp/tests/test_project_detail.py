@@ -13,12 +13,15 @@ data the template would."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from starlette.requests import Request
 
 from src import db
 from src.routers import projects as projects_router
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
 
 
 @pytest.fixture()
@@ -135,6 +138,48 @@ class TestKanbanBoard:
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert "h1" not in all_uids
+
+
+class TestKanbanDragAndDrop:
+    """audit-fixes-2.1.md (2026-09-10, direct bug report): "The kanban
+    board for tasks doesn't allow for tasks to be drag and dropped."
+    static/tasks_board.js already implemented Pointer-Events drag-and-drop
+    against exactly this board's markup (`#kanban-board`, `.kanban-column
+    [data-status]`, `.kanban-cards[data-status]`, `.kanban-card[data-uid]`)
+    and posts to the same /tasks/{uid}/update-field endpoint the old
+    per-card status dropdown used -- it was simply never <script>-included
+    on this page after the 2026-08-28 rework that deleted the standalone
+    Kanban page it was originally written for. No browser harness in this
+    suite -- structural checks that the script is now wired up and its
+    selectors genuinely match this page's rendered markup, same convention
+    test_calendar_week_scheduling.py's TestGridDragConflictFix uses for
+    JS-only changes."""
+
+    def test_tasks_board_js_is_included(self, conn):
+        _promote(conn, "Trip")
+        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        assert 'src="/static/tasks_board.js' in body
+
+    def test_board_markup_matches_the_scripts_own_selectors(self, conn):
+        _promote(conn, "Trip")
+        _task(conn, "t1", ["Trip"], status="active")
+        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        script = (_STATIC_DIR / "tasks_board.js").read_text(encoding="utf-8")
+        # Every selector tasks_board.js queries against must actually
+        # appear in the rendered board -- confirms the re-wiring is
+        # against real, matching markup, not just an included-but-inert
+        # script.
+        assert 'getElementById("kanban-board")' in script
+        assert 'id="kanban-board"' in body
+        assert '.closest(".kanban-cards")' in script
+        assert 'class="kanban-cards" data-status="active"' in body
+        assert 'querySelectorAll(".kanban-card")' in script
+        assert 'class="kanban-card" data-uid="t1" data-status="active"' in body
+
+    def test_drag_persists_through_the_update_field_endpoint(self):
+        script = (_STATIC_DIR / "tasks_board.js").read_text(encoding="utf-8")
+        assert "/tasks/${uid}/update-field" in script
+        assert 'JSON.stringify({ field: "status", value: newStatus })' in script
 
 
 class TestUpcomingEventsCard:

@@ -80,25 +80,38 @@
      grouped by status. Reuses the (retired) global Tasks Kanban's own
      `.kanban-*` CSS/layout verbatim (templates/tasks_board.html itself
      was deleted in the 2026-08-28 rework, but the CSS was left in place
-     unused). Cards carry no inline status control any more (2026-09-02
+     unused). Cards carry no inline status DROPDOWN any more (2026-09-02
      redesign, direct request: "kanban redesign with support for better
      pills show, no inline editing" -- clarified the replacement is
-     "open task to change status") -- the card's own title already opens
-     the task detail modal via `data-modal`; static/tasks_kanban.js and its
-     per-card `.pill-select` (a native <select> styled as a pill) are gone,
-     column membership is purely a render of `columns[status]`. Editing a
-     task's status inside that modal saves through task_form.html's plain
-     `data-cc-change="task"` form; this page claims no live region for that
-     event, so modal.js's own fallback (`window.location.reload()`) is what
-     moves the card to its new column -- see modal.js's "no surface listener
-     claims the event" comment, not a mechanism specific to this page.
-     Drag-and-drop between columns remains out of scope (still the
-     2026-08-30 "Still open" note in plans/STATE.md -- a deliberate,
-     separate decision from removing the dropdown). Importance/Urgency
-     chips the old board template rendered are gone -- that feature was
-     removed outright (2026-08-30, see routers/tasks.py's own comment);
-     Due date and labels (now colored/iconed pills, _label_pill.html)
-     remain. -->
+     "open task to change status") -- the card's own title still opens the
+     task detail modal via `data-modal`; static/tasks_kanban.js and its
+     per-card `.pill-select` (a native <select> styled as a pill) are gone
+     for good, column membership is purely a render of `columns[status]`.
+     Editing a task's status inside that modal still saves through
+     task_form.html's plain `data-cc-change="task"` form; this page claims
+     no live region for that event, so modal.js's own fallback
+     (`window.location.reload()`) is what moves the card to its new column
+     when the edit came from the modal.
+     Drag-and-drop between columns (2026-09-10, audit-fixes-2.1.md direct
+     bug report: "The kanban board for tasks doesn't allow for tasks to be
+     drag and dropped") -- reversing the 2026-08-30 "Still open, out of
+     scope" note (that was a decision about the *dropdown*'s removal, not a
+     ban on drag-and-drop specifically; this is a later, separate, direct
+     request). static/tasks_board.js already existed, fully implemented
+     (Pointer Events, not native HTML5 DnD -- see its own header comment
+     for why), against exactly this markup's `.kanban-board`/`.kanban-
+     column`/`.kanban-cards[data-status]`/`.kanban-card[data-uid]`
+     structure and posting to the same `/tasks/{uid}/update-field`
+     endpoint the old dropdown used -- it was simply never re-attached to
+     this template after the 2026-08-28 rework that deleted the old
+     tasks_board.html. No markup changes were needed; only the `<script>`
+     include below was missing. style.css's `.kanban-card.dragging`/
+     `.kanban-cards.drop-hover` rules (left in place unused, same note as
+     the CSS-reuse comment above) are what that script drives. Importance/
+     Urgency chips the old board template rendered are still gone -- that
+     feature was removed outright (2026-08-30, see routers/tasks.py's own
+     comment); Due date and labels (now colored/iconed pills,
+     _label_pill.html) remain. -->
 <div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}
     <div class="kanban-column" data-status="{{ status }}">
@@ -136,3 +149,4 @@
     {% endfor %}
 </div>
 {% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}

@@ -17,6 +17,52 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` -- "The kanban board for tasks doesn't allow for
+  tasks to be drag and dropped." Diagnosis: `static/tasks_board.js` (a
+  fully-implemented Pointer-Events drag-and-drop, not native HTML5 DnD --
+  see its own header comment for why) already existed and already matched
+  `project_detail.html`'s Kanban board markup exactly (`#kanban-board`,
+  `.kanban-column[data-status]`, `.kanban-cards[data-status]`,
+  `.kanban-card[data-uid]`) and posts to the same `/tasks/{uid}/
+  update-field` endpoint the old per-card status dropdown used before its
+  2026-09-02 removal -- it was simply never `<script>`-included on this
+  page. It's a leftover from `templates/tasks_board.html`, a standalone
+  global Kanban page deleted in the 2026-08-28 rework; project_detail.html
+  later rebuilt its own Kanban board (2026-08-30) reusing the same
+  `.kanban-*` CSS by name but never re-attached the matching JS. style.css's
+  `.kanban-card.dragging`/`.kanban-cards.drop-hover` rules were likewise
+  already sitting there unused. Fix: added
+  `{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}`
+  to `project_detail.html` -- no markup or JS changes needed. Confirmed
+  this doesn't conflict with the 2026-09-02 "no inline editing" decision
+  (that removed the per-card native `<select>` dropdown specifically,
+  per direct request; today's request is a separate, later, direct ask
+  for drag-and-drop). Updated the stale "out of scope" comment blocks in
+  `project_detail.html`, `tasks_board.js`, and `style.css` that all
+  referenced the deleted `tasks_board.html`/the old "still open" note.
+  `tasks_board.js` is NOT added to `sw.js`'s `SHELL_ASSETS` (page-specific,
+  same as `project_calendar.js`/`tasks_table.js`) -- no cache-version bump
+  needed for this slice, unlike the Planner slice below.
+
+  **Tests**: 3 new in `test_project_detail.py`'s new
+  `TestKanbanDragAndDrop` -- confirms the script tag renders, confirms the
+  script's own selectors (`getElementById("kanban-board")`,
+  `.closest(".kanban-cards")`, `.kanban-card` query) actually match
+  strings present in the rendered board markup (not just "the script is
+  included," but "the script's selectors have something real to bind to"),
+  and confirms the drag-drop path posts to `/tasks/{uid}/update-field`
+  with the exact `{field: "status", value: ...}` shape that endpoint
+  expects. No browser harness in this suite, same structural-source-check
+  convention `test_calendar_week_scheduling.py`'s `TestGridDragConflictFix`
+  already established. Full suite re-verified in the usual 6 batches --
+  **2100 passed, 0 failed** (2097 + 3 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Projects page
+  agenda card's missing task due dates, or the Data & Maintenance settings
+  reorg (move Purge Completed Tasks into Database's context menu, remove
+  the redundant Reset home layout button).
+
 - **Shipped:** 2026-09-10 -- same session, direct "continue": the Planner
   page's "Unscheduled work" panel rework, `audit-fixes-2.1.md`'s largest
   item -- "tasks with 0 work sessions should not appear... remove the
