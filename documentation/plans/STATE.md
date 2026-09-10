@@ -17,6 +17,41 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order: "For the settings, the page-header-narrow-back, it should be on
+  the left most, not right most." The crumbs-driven back arrow
+  (`_page_header_narrow.html`'s `page_header_narrow()` macro) was sitting
+  inside `.page-header-narrow-actions`, the header's right-aligned slot
+  (after the spacer) -- moved it to the header's actual first child,
+  before the icon+title, so it's leftmost regardless of whether a page
+  also has real actions-slot content. `.page-header-narrow-actions`
+  itself (Calendar's prev/next/subnav, etc.) is untouched, still
+  right-aligned, and now only renders when a page passes a `{% call %}`
+  block -- the old `(crumbs is defined and crumbs) or caller` condition
+  guarding it is just `caller` now, since crumbs no longer render inside
+  it. `style.css` gained a small `.page-header-narrow-back` rule
+  (z-index:1 like the other header children, plus the has-banner
+  frosted-chip treatment `.icon-btn`s in the old actions slot had) --
+  none of Settings' existing pages needed a template change, only the
+  shared macro/CSS.
+
+  **Tests**: `test_page_header_narrow.py` gained
+  `TestNarrowHeaderBackPosition` (two tests: back arrow renders before
+  `.page-header-narrow-icon`/`-title`, and renders even when a page has
+  no `.page-header-narrow-actions` at all -- proving it's no longer
+  actions-slot-dependent). Full suite run in 4 sequential batches (this
+  sandbox couldn't complete a single un-split run within the tool's 45s
+  call limit today -- unrelated to this change): **2146 passed**, same 4
+  pre-existing time-of-day-boundary failures as prior sessions
+  (`test_dashboard_router.py`'s `TestAgendaWidgetAllUpcoming` +
+  `test_project_detail.py`'s 3 agenda/deadline "due today" tests),
+  unchanged and not touched by this slice.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- the holiday start/end-date auto-sync item ("While adding a
+  hollday... after setting either the start and end date, the other one
+  should be automatically set the same").
+
 - **Shipped:** 2026-09-11 -- same session, direct "continue": the deferred
   second half of the previous slice's doc line -- "The Restart app should
   also be moved to the Data & Maintenance and should be able to be called

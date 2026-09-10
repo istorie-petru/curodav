@@ -6258,8 +6258,21 @@ body.command-palette-open{overflow:hidden;}
 .page-header-narrow.has-banner .page-header-narrow-title{
   color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
 }
-.page-header-narrow-icon, .page-header-narrow-title, .page-header-narrow-actions{
+/* 2026-09-11: .page-header-narrow-back moved out of the actions slot to
+   the header's leftmost edge (direct request -- see the macro's own
+   comment) -- needs the same stacking-above-the-banner treatment the
+   icon/title/actions already had. */
+.page-header-narrow-icon, .page-header-narrow-title, .page-header-narrow-actions,
+.page-header-narrow-back{
   position:relative; z-index:1;
+}
+.page-header-narrow.has-banner .page-header-narrow-back{
+  background:rgba(0,0,0,.4); color:#fff;
+  border:1px solid rgba(255,255,255,.35);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+}
+.page-header-narrow.has-banner .page-header-narrow-back:hover{
+  background:rgba(0,0,0,.55); color:#fff;
 }
 .page-header-narrow-icon{
   display:flex; color:var(--accent);

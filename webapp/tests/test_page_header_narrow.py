@@ -217,6 +217,31 @@ class TestNarrowHeaderActionsSlot:
             assert len(re.findall(r"<h1[ >]", body)) == 1, body
 
 
+class TestNarrowHeaderBackPosition:
+    """2026-09-11 (direct request): "the page-header-narrow-back, it
+    should be on the left most, not right most." The crumbs-driven back
+    arrow now renders as the header's first child (before the icon+
+    title), not inside the right-aligned `.page-header-narrow-actions`
+    slot -- see the macro's own comment."""
+
+    def test_back_arrow_precedes_icon_and_title(self, conn):
+        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        body = resp.body.decode()
+        back_pos = body.index("page-header-narrow-back")
+        icon_pos = body.index("page-header-narrow-icon")
+        title_pos = body.index("page-header-narrow-title")
+        assert back_pos < icon_pos < title_pos
+
+    def test_back_arrow_renders_without_an_actions_slot(self, conn):
+        # Settings pages pass crumbs but no {% call %} block -- proves the
+        # back arrow no longer depends on (or lives inside)
+        # .page-header-narrow-actions, unlike before this slice.
+        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        body = resp.body.decode()
+        assert "page-header-narrow-back" in body
+        assert "page-header-narrow-actions" not in body
+
+
 class TestPageHeaderBanner:
     """2026-08-29 follow-up (direct request): one banner image, set once
     in Settings > Appearance, reused as the background on every standard
