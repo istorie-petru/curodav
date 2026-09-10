@@ -462,7 +462,21 @@
 // plain click adding a session (static/project_calendar.js, not itself in
 // SHELL_ASSETS, but style.css is, so the bump is required either way, same
 // v88 reasoning above).
-const CACHE_NAME = "cc-shell-v97";
+// v98 (2026-09-10, same session, same lesson repeated a third time): two
+// MORE style.css changes shipped without a bump each -- (1) the Contacts
+// edit form's custom type-dropdown swap (.contact-multi-row/.contact-
+// address-row width rules retargeted from `select` to `.contact-type-
+// select`) went out with no bump at all (missed entirely, not caught
+// until this comment was being written for the next slice); (2) this
+// slice's own Kanban column responsive-tier rework (new `.kanban-board-
+// wrap`/`@container` rules replacing the old `@media` breakpoint) is
+// bundled into the same catch-up bump rather than shipping its own
+// separate one right after. Neither slice's own JS
+// (contact_phone_email_rows.js, project_detail.html's template-only
+// change) is in SHELL_ASSETS below, but style.css is, so both needed the
+// bump regardless -- same v88/v97 reasoning, apparently still not
+// sticking as a habit yet.
+const CACHE_NAME = "cc-shell-v98";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

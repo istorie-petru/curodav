@@ -2381,16 +2381,26 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    deleted in the 2026-08-28 rework; the CSS/JS were both left in place
    unused until project_detail.html's own Kanban board picked them back up,
    tasks_board.js finally re-wired to it 2026-09-10, audit-fixes-2.1.md). */
+/* `container-type:inline-size` turns this wrapper into the query
+   container the `@container kanban (...)` rules further down key off of
+   -- see those rules' own comment for why this has to be the board's
+   real rendered width (sidebar-aware) rather than the viewport. No
+   visual effect of its own -- `container-name:kanban` just gives the
+   `@container` rules something specific to target rather than the
+   nearest ancestor container generically. */
+.kanban-board-wrap{container-type:inline-size; container-name:kanban;}
 .kanban-board{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:var(--space-1); align-items:flex-start;}
 /* 2026-08-08 -- columns are responsive now: each grows/shrinks with the
    page width so the board fills the viewport without a horizontal scroll
    whenever the columns can actually fit side by side. 340px is the
    cap (PC keeps the old fixed feel, just never wider); 240px is the
-   floor -- below that a side-by-side row stops making sense, so the
-   overflow-x:auto on .kanban-board kicks in until the ≤720px mobile
-   rule below stacks the columns vertically instead. flex-basis:0 (not
-   340px) is what lets every column share the board width equally when
-   the cap isn't binding. */
+   floor -- below that a side-by-side row stops making sense. flex-
+   basis:0 (not 340px) is what lets every column share the board width
+   equally when the cap isn't binding. This is the widest of three tiers
+   now (see the `@container` block below) -- it's the one that still
+   needs `overflow-x:auto` as a last-resort safety net, though in
+   practice the narrower tiers below should always kick in first and
+   prevent it from ever actually firing. */
 .kanban-column{
   flex:1 1 0; min-width:240px; max-width:340px;
   background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2);
@@ -2430,18 +2440,44 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    replacement rule needed here; removing this without a replacement
    selector is deliberate, not an oversight. */
 
-/* Narrow windows / mobile: from a full-width desktop screen down to
-   1100px the columns just resize to fill the board (flex:1 1 0 +
-   max-width:340px above); at/below 1123px a side-by-side row no longer
-   has room (columns would each drop below the 240px floor and the board
-   would only be reachable by horizontal scroll, which is awkward to keep
-   track of on a snapped-half window or phone). Below that width, stack
-   the columns vertically instead -- every column gets the full board
-   width and you "see" them by scrolling down, exactly like a mobile task
-   list. Drag-and-drop still works: tasks_board.js resolves the drop
-   target via elementFromPoint, which is layout-agnostic. */
-@media (max-width:1123px){
-  .kanban-board{flex-direction:column; overflow-x:visible; overflow-y:visible;}
+/* Responsive column-count tiers (2026-09-10, audit-fixes-2.1.md direct
+   request: "should try to not add a horizontal scrollbar. It should
+   first try to have them all in one row, then two rows, and only last
+   the 4 rows for the 4 columns... calculate depending on the sidebar
+   width"). `.kanban-board-wrap` (project_detail.html) is a plain
+   `container-type:inline-size` box around the board -- these `@container`
+   queries key off ITS rendered width, not the viewport, which is the
+   actual fix here: the old plain viewport `@media` breakpoint this
+   replaced (a single 1123px cutoff) only ever saw the viewport, so a
+   maximized window with the sidebar
+   expanded (eating ~240px of real content width, html[data-sidebar-
+   expanded] in base.html/style.css) and the same window with it
+   collapsed both read as the same "viewport width" even though the
+   board has very different room to work with -- exactly the case the
+   direct request called out ("calculate depending on the sidebar
+   width"). Two explicit breakpoints (not a continuous `auto-fit` grid
+   reflow) so 4 columns always land on a clean 4-in-a-row, 2-and-2, or
+   four-stacked-rows step -- auto-fit's per-row "as many as currently
+   fit" packing could otherwise produce an uneven 3-then-1 split that
+   doesn't match "first one row, then two rows" at all:
+     - >=996px (4 * the 240px floor + 3 * the 12px `--space-3` gap): the
+       single-row tier above already fits everything -- no query needed.
+     - 492px-995px (2 * the 240px floor + 1 gap, up to just under the
+       4-column threshold): 2 columns per row, 2 rows. `flex-wrap:wrap`
+       + a `calc(50% - gap/2)` basis is exactly two items' width per
+       line (the two widths plus the one gap between them sum to 100%),
+       so flex-wrap naturally breaks after every 2nd column without an
+       explicit `:nth-child` rule.
+     - <492px: even 2 columns can't fit at the 240px floor -- stack all
+       4 full-width, same layout the old viewport breakpoint used.
+   Drag-and-drop still works at every tier: tasks_board.js resolves the
+   drop target via elementFromPoint, which is layout-agnostic. */
+@container kanban (max-width:995px){
+  .kanban-board{flex-wrap:wrap;}
+  .kanban-column{flex:1 1 calc(50% - var(--space-3) / 2); max-width:none; min-width:240px;}
+}
+@container kanban (max-width:491px){
+  .kanban-board{flex-direction:column; flex-wrap:nowrap; overflow-x:visible; overflow-y:visible;}
   .kanban-column{flex:0 0 auto; width:100%; max-width:none; min-width:0;}
 }
 

@@ -280,5 +280,10 @@ class TestShellCacheVersion:
         # an earlier same-session avatar_cropper.js fix (SHELL_ASSETS),
         # bundled with this session's Unscheduled-work stepper removal
         # (style.css + project_calendar.js) -- see sw.js's own comment.
+        # v98 (2026-09-10, same session): two more missed-then-caught
+        # style.css bumps bundled together -- the Contacts custom-dropdown
+        # swap's width-rule retargeting, and this session's Kanban
+        # responsive-column rework (`.kanban-board-wrap`/`@container`) --
+        # see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v97"' in script
+        assert 'CACHE_NAME = "cc-shell-v98"' in script

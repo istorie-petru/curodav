@@ -182,6 +182,77 @@ class TestKanbanDragAndDrop:
         assert 'JSON.stringify({ field: "status", value: newStatus })' in script
 
 
+class TestKanbanResponsiveColumns:
+    """audit-fixes-2.1.md (2026-09-10, direct request): "The kanban board
+    columns should try to not add a horizontal scrollbar. It should first
+    try to have them all in one row, then two rows, and only last the 4
+    rows for the 4 columns. Keep in mind to calculate depending on the
+    sidebar width." style.css's old `@media (max-width:1123px)` breakpoint
+    keyed off the VIEWPORT, which can't distinguish the sidebar's
+    expanded/collapsed state (html[data-sidebar-expanded] changes how much
+    real content width is left without changing the viewport at all) --
+    replaced with `@container` queries keyed off a new `.kanban-board-wrap`
+    wrapper's own rendered width instead. No browser harness in this suite
+    (same convention as TestKanbanDragAndDrop above) -- structural checks
+    against style.css/the rendered markup."""
+
+    def test_board_is_wrapped_in_a_container_query_container(self, conn):
+        _promote(conn, "Trip")
+        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        assert '<div class="kanban-board-wrap">' in body
+        # The wrapper must actually contain the board, not just sit
+        # somewhere else on the page.
+        wrap_start = body.index('<div class="kanban-board-wrap">')
+        board_start = body.index('<div class="kanban-board" id="kanban-board">')
+        assert wrap_start < board_start
+
+    def test_wrapper_establishes_an_inline_size_container(self):
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        assert ".kanban-board-wrap{container-type:inline-size; container-name:kanban;}" in css
+
+    def test_no_more_viewport_media_query_for_kanban_stacking(self):
+        # The whole point of the fix -- a `@media` breakpoint here would
+        # still be blind to the sidebar's own width. Checks for the actual
+        # rule (opening brace included), not just a substring that could
+        # also match this section's own prose describing the old rule.
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        assert "@media (max-width:1123px){" not in css
+
+    def test_two_container_query_tiers_exist(self):
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        assert "@container kanban (max-width:995px)" in css
+        assert "@container kanban (max-width:491px)" in css
+
+    def test_wide_tier_is_unchanged_single_row(self):
+        # Outside of any @container match, .kanban-column keeps its
+        # original single-row shrink-to-fit rule (240-340px, flex:1 1 0).
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        assert "flex:1 1 0; min-width:240px; max-width:340px;" in css
+
+    def test_middle_tier_wraps_to_two_columns_per_row(self):
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        tier = css.split("@container kanban (max-width:995px){")[1].split("}")[0]
+        assert "flex-wrap:wrap" in tier
+        mid_rule = css.split("@container kanban (max-width:995px){")[1].split("@container kanban (max-width:491px){")[0]
+        assert "flex:1 1 calc(50% - var(--space-3) / 2)" in mid_rule
+
+    def test_narrow_tier_stacks_all_four_full_width(self):
+        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        narrow_tier = css.split("@container kanban (max-width:491px){")[1]
+        assert "flex-direction:column" in narrow_tier.split("}")[0]
+        assert "width:100%; max-width:none; min-width:0;" in narrow_tier.split("}")[1]
+
+    def test_kanban_board_js_selectors_unaffected_by_the_new_wrapper(self, conn):
+        # The wrapper div must not break tasks_board.js's own #kanban-board
+        # lookup or drop-target resolution -- same markup, just one more
+        # non-functional ancestor around it.
+        _promote(conn, "Trip")
+        _task(conn, "t1", ["Trip"], status="active")
+        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        assert 'id="kanban-board"' in body
+        assert 'class="kanban-card" data-uid="t1" data-status="active"' in body
+
+
 class TestAgendaCard:
     # end=None throughout this class (unlike _promote's own 2026-12-31
     # default) -- these tests assert exact list contents, and a default

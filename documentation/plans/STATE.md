@@ -18,6 +18,60 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "The Kanban board columns should
+  try to not add a horizontal scrollbar. It should first try to have them
+  all in one row, then two rows, and only last the 4 rows for the 4
+  columns. Keep in mind to calculate depending on the sidebar width." The
+  old layout (style.css) was binary: columns shrink to fill one row down
+  to a 240px floor, then a single `@media (max-width:1123px)` breakpoint
+  jumped straight to 4 full-width stacked rows -- no 2-row middle step,
+  and worse, keyed off the VIEWPORT, which can't see the sidebar's own
+  expanded/collapsed state (`html[data-sidebar-expanded]`, toggled
+  independently) -- a maximized window reads as the same "viewport width"
+  whether the sidebar is eating ~240px of real content space or not,
+  exactly the blind spot the direct request called out.
+  Fixed with CSS container queries instead of viewport media queries:
+  project_detail.html's Kanban board is now wrapped in a plain
+  `.kanban-board-wrap` div (`container-type:inline-size; container-
+  name:kanban`), and style.css's breakpoints became `@container kanban
+  (max-width:...)` keyed off THAT wrapper's own rendered width -- sidebar-
+  aware for free, since the wrapper's actual box already reflects
+  whatever space the sidebar left it, regardless of viewport size. Two
+  explicit tiers (not a continuous `auto-fit` grid reflow, which could
+  land on an uneven "3 then 1" split with exactly 4 columns and wouldn't
+  match "first one row, then two rows" at all): >=996px (4 * the 240px
+  floor + 3 * the 12px gap) keeps the original unchanged single-row
+  shrink-to-fit; 492-995px (2 * the floor + 1 gap) wraps to 2 columns per
+  row via `flex-wrap:wrap` + a `calc(50% - gap/2)` basis (the two widths
+  plus their one gap sum to exactly 100%, so it naturally breaks after
+  every 2nd column with no `:nth-child` rule needed); below 492px, same
+  full 4-row stack the old breakpoint used.
+  **Also caught while touching style.css** (same lesson as the v97 sw.js
+  bump's own comment, apparently still not a reliable habit): the
+  PREVIOUS TWO slices this session (pill-click-opens-modal -- no style.css
+  change, so no bump needed there; and the Contacts custom-dropdown swap)
+  both should have bumped `sw.js`'s `CACHE_NAME` per style.css's own
+  SHELL_ASSETS membership, and the Contacts one didn't. Bundled that missed
+  bump with this slice's own into one `cc-shell-v97` -> `cc-shell-v98`
+  jump -- see sw.js's own comment for the full breakdown.
+
+  **Tests**: new `TestKanbanResponsiveColumns` in test_project_detail.py
+  (8 tests, no browser harness, same structural-source-check convention as
+  `TestKanbanDragAndDrop` in the same file) -- wrapper div present and
+  actually contains the board, `container-type` declared, old `@media`
+  rule confirmed gone, both `@container` breakpoints present, wide/middle/
+  narrow tier rules each confirmed, and a sanity check that
+  tasks_board.js's own selectors still match the rendered markup through
+  the new wrapper (drag-and-drop unaffected). `test_pwa_shell.py`'s
+  hardcoded `CACHE_NAME` assertion updated to v98. Full suite re-verified
+  in the usual 6 batches -- **2140 passed, 0 failed** (2132 + 8 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Data &
+  Maintenance settings reorg -- move "Purge Completed Tasks" into
+  Database's own context menu (as "Purge completed"), and remove the
+  Reset-home-layout button (edit mode already has an equivalent button).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` in doc order -- "Contacts edit modal window doesn't
   use the custom drop down menus." contact_form.html's five Phone/Email/
   Website/Address/Social "type" pickers (Home/Work/Other etc,

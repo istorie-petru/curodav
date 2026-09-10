@@ -125,7 +125,20 @@
      Urgency chips the old board template rendered are still gone -- that
      feature was removed outright (2026-08-30, see routers/tasks.py's own
      comment); Due date and labels (now colored/iconed pills,
-     _label_pill.html) remain. -->
+     _label_pill.html) remain.
+     2026-09-10 (audit-fixes-2.1.md, "should try to not add a horizontal
+     scrollbar... first try to have them all in one row, then two rows,
+     and only last the 4 rows for the 4 columns... calculate depending on
+     the sidebar width") -- `.kanban-board-wrap` below is a plain wrapper
+     whose only job is `container-type:inline-size` (style.css), so the
+     column-count breakpoints that used to key off the VIEWPORT width
+     (`@media`) now key off this wrapper's own rendered CONTENT width
+     (`@container`) instead. That distinction is the whole point of the
+     fix: the sidebar's expanded/collapsed state (html[data-sidebar-
+     expanded], toggled independently of the viewport) changes how much
+     width is actually left for the board without changing the viewport
+     at all, which a `@media` query can never see. -->
+<div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}
     <div class="kanban-column" data-status="{{ status }}">
@@ -161,6 +174,7 @@
         </div>
     </div>
     {% endfor %}
+</div>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}
