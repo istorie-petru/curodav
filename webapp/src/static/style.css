@@ -2497,16 +2497,23 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .work-session-row .checklist-delete{margin-left:2px;}
 
 /* contact_form.html's Phone/Email rows (Contacts field parity slice 2 of 6)
-   -- a type <select> + value input per row, reusing .checklist-delete for
+   -- a type picker + value input per row, reusing .checklist-delete for
    the remove button (same icon-only look the Work sessions card's remove
    button already has). The two selectors below (a .field-wide ancestor)
    deliberately outrank the generic `.field select`/`.field input` rule
-   above (width:100%) so the type select stays a fixed, compact width
+   above (width:100%) so the type picker stays a fixed, compact width
    instead of stretching to fill the row -- the value input is the one
-   that should grow. */
+   that should grow.
+   2026-09-10 (audit-fixes-2.1.md): the type field is now
+   _contact_type_picker.html's `.multiselect widget-list-multiselect
+   contact-type-select` dropdown instead of a plain `<select>` -- `width`
+   moved from the (now-gone) `select` selector to `.contact-type-select`
+   (the `.multiselect` wrapper itself; its trigger button is already
+   `width:100%` of that wrapper via the shared `.widget-list-multiselect
+   .multiselect-trigger` rule, so constraining the wrapper is enough). */
 .contact-multi-rows{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
 .contact-multi-row{display:flex; align-items:center; gap:8px;}
-.field-wide .contact-multi-row select{width:110px; flex:none;}
+.field-wide .contact-multi-row .contact-type-select{width:110px; flex:none;}
 .field-wide .contact-multi-row input{width:auto; flex:1;}
 .contact-multi-row .checklist-delete{flex:none;}
 
@@ -2514,13 +2521,13 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    structured ADR row has seven value fields, not one, so it can't share
    the single-line flex layout every other .contact-multi-row (phone/
    email/website/social) uses -- it's its own taller card instead: type
-   select on top, a small 2-column field grid below, remove button pinned
+   picker on top, a small 2-column field grid below, remove button pinned
    to the top-right corner. Still a `.contact-multi-row` for
    contact_phone_email_rows.js's generic remove-row targeting
    (`.closest(".contact-multi-row")`), just with this additional class
    overriding the shared row's own flex/align rules. */
 .contact-address-row{flex-direction:column; align-items:stretch; gap:8px; position:relative; padding:10px 36px 10px 10px; border:1px solid var(--separator); border-radius:8px;}
-.contact-address-row select{width:140px;}
+.contact-address-row .contact-type-select{width:140px;}
 .contact-address-row .checklist-delete{position:absolute; top:8px; right:8px;}
 .contact-address-fields{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
 .contact-address-fields input{width:auto;}

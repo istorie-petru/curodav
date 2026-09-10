@@ -1,0 +1,91 @@
+{# audit-fixes-2.1.md ("Contacts edit modal window doesn't use the custom
+   drop down menus"): contact_form.html's Phone/Email/Website/Address/
+   Social "type" pickers (Home/Work/Other etc, db.CONTACT_*_TYPES) used to
+   be plain native `<select>`s -- the one spot in the app's forms that
+   still opened the browser's own unstylable dropdown chrome instead of
+   the app's own `.multiselect` checkbox/radio dropdown every other picker
+   uses (_widget_list_multiselect.html, _task_row.html's status/labels
+   pickers).
+
+   Can't just `{% include "_widget_list_multiselect.html" %}` per row: that
+   partial submits its radios under one shared `name="{{ ms_name }}"`, and
+   EVERY row in a repeatable group (Phone/Email/Website/Address/Social can
+   each have several rows) needs the SAME submitted field name
+   (`phone_type`, parallel to `phone_value[]`, routers/contacts.py's
+   `_phone_email_list` zips them back together by position) -- but native
+   `<input type="radio">` mutual exclusion is scoped purely by (name, form
+   owner), so if every row's radios literally shared `name="phone_type"`,
+   picking "Work" on row 2 would silently uncheck "Home" on row 1 (they'd
+   all be ONE radio group across the whole form, not one group per row).
+
+   Fixed the usual way: each row's radios get a row-scoped UNIQUE name
+   (`{{ field_name }}__{{ row_key }}`, only used for the browser's own
+   mutual-exclusion bookkeeping and never read server-side) plus a
+   `data-proxy-target` pointing at a hidden `<input type="hidden"
+   name="{{ field_name }}">` that carries the REAL submitted value --
+   static/contact_phone_email_rows.js's delegated `change` listener keeps
+   that hidden input's value in sync with whichever radio is checked. The
+   hidden input is looked up by `id`, not DOM ancestry (`.closest(...)`),
+   because static/app.js's shared multiselect portal moves an OPEN
+   `.multiselect-panel` (radios and all) out to `#multiselect-portal`,
+   outside this row entirely, while the user is picking -- `id` lookup
+   works the same whether the panel is portaled or still sitting in place.
+   Wire format server-side is completely unchanged: the hidden input still
+   posts under the exact same `name="phone_type"` etc, in the same
+   left-to-right DOM order as the old `<select>` did, so
+   routers/contacts.py needed no changes at all.
+
+   `row_key` must be unique within one field group's rows (server-rendered
+   rows pass their own `loop.index`; the `<template>` clone every "Add"
+   button starts from passes a fixed placeholder, `static/
+   contact_phone_email_rows.js` rewrites it -- and the hidden input's own
+   id, and every radio's `name`/`data-proxy-target` -- to something newly
+   unique at clone time, since a `<template>` can be cloned more than once
+   per page and its baked-in placeholder would otherwise collide across
+   clones the same way a shared cross-row name would).
+
+   The wrapper carries the app's standard `.multiselect widget-list-
+   multiselect` classes + `data-ms-mode="single"` verbatim (same
+   convention _task_row.html's per-row status picker already established
+   for "same dropdown shape, but hand-rolled because the field needs to
+   post under one shared repeated name") so static/app.js's existing
+   generic open/close, portal, keyboard (Escape), and "sync the trigger's
+   summary text to the checked option, close the panel on pick" handling
+   all apply for free -- nothing here reimplements any of that.
+
+   Expects (no `with context` needed beyond `icon`/`ms_form_id`, both
+   already globals/caller-scoped in every template that includes this):
+     field_name -- submitted field name, e.g. "phone_type"
+     options    -- list of type strings, e.g. db.CONTACT_PHONE_TYPES
+     selected   -- the row's current type value
+     row_key    -- unique-within-this-field-group token (loop.index, or
+                   a placeholder the JS rewrites for template rows)
+     extra_class -- optional extra class on the `.multiselect` wrapper, for
+                    a caller that needs to override this picker's width/
+                    look beyond what ancestor-scoped selectors reach (no
+                    current caller needs it -- style.css's
+                    `.contact-address-row .contact-type-select{width:140px}`
+                    reaches the Address rows' wider trigger via ancestry
+                    alone, same as `.field-wide .contact-multi-row
+                    .contact-type-select` does for every other row). #}
+{% macro contact_type_picker(field_name, options, selected, row_key, extra_class='') %}
+{% set proxy_id = field_name ~ '-proxy-' ~ row_key %}
+<div class="multiselect widget-list-multiselect contact-type-select {{ extra_class }}" data-ms data-ms-mode="single" data-ms-label="{{ field_name | replace('_', ' ') }}">
+    <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+        <span class="ms-summary">{{ selected }}</span>
+        <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+    </button>
+    <div class="multiselect-panel ms-panel">
+        {% for t in options %}
+        <label class="multiselect-option">
+            <input type="radio" name="{{ field_name }}__{{ row_key }}" value="{{ t }}"
+                   class="contact-type-radio" data-proxy-name="{{ field_name }}" data-proxy-target="{{ proxy_id }}"
+                   form="{{ ms_form_id }}"
+                   {% if t == selected %}checked{% endif %}>
+            <span>{{ t }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+<input type="hidden" id="{{ proxy_id }}" name="{{ field_name }}" value="{{ selected }}" class="contact-type-proxy" form="{{ ms_form_id }}">
+{% endmacro %}

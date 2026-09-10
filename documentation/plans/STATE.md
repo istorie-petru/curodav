@@ -18,6 +18,64 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "Contacts edit modal window doesn't
+  use the custom drop down menus." contact_form.html's five Phone/Email/
+  Website/Address/Social "type" pickers (Home/Work/Other etc,
+  db.CONTACT_*_TYPES) were the one form control left in the app still
+  opening the browser's own native `<select>` chrome instead of the app's
+  `.multiselect` checkbox/radio dropdown (_widget_list_multiselect.html,
+  _task_row.html's status/labels pickers).
+  Couldn't just drop in a per-row `{% include "_widget_list_multiselect.html" %}`:
+  that partial submits its radios under one shared `name="{{ ms_name }}"`,
+  but each of these fields is a REPEATABLE row group (a contact can have
+  several phones/emails/etc, static/contact_phone_email_rows.js's
+  add/remove rows) that all need to submit under the SAME field name
+  (`phone_type`, parallel to `phone_value[]`, routers/contacts.py's
+  `_phone_email_list` zips them back together by position) -- but native
+  `<input type="radio">` mutual exclusion is scoped by (name, form owner),
+  so sharing that name across rows would make every row ONE radio group
+  (picking "Work" on row 2 would silently uncheck "Home" on row 1).
+  New `_contact_type_picker.html` macro (`contact_type_picker()`) instead:
+  each row's radios get a row-scoped unique name (`{{ field }}__{{
+  row_key }}`, `row_key` = that row's `loop.index`, or a placeholder for
+  the `<template>` "Add" clones) purely for the browser's own grouping,
+  plus a `data-proxy-target` pointing at a hidden `<input type="hidden"
+  name="{{ field }}">` that carries the REAL submitted value --
+  contact_phone_email_rows.js's new delegated `change` listener keeps that
+  hidden input in sync with whichever radio is checked, looked up by `id`
+  (not `.closest(".contact-multi-row")`) since static/app.js's shared
+  multiselect portal moves an OPEN `.multiselect-panel` -- radios included
+  -- out to `#multiselect-portal`, outside the row, while a pick is being
+  made. The same script's "Add" handler also rewrites a freshly-cloned
+  row's placeholder name/id to something newly unique (a page-lifetime
+  counter -- two clicks of "Add phone" must not produce two rows sharing
+  one group either). Wire format is completely unchanged server-side --
+  same field names, same value strings, same DOM order -- so
+  routers/contacts.py needed no changes at all. style.css's per-row width
+  overrides (`.field-wide .contact-multi-row select{width:110px}`,
+  `.contact-address-row select{width:140px}`) retargeted from `select` to
+  `.contact-type-select` (the new wrapper's own class).
+
+  **Tests**: new `TestTypePickerIsCustomDropdown` class in all four of
+  test_contacts_field_parity_{phone_email,website,address,social}.py (21
+  tests total) -- native `<select>` gone, `.multiselect`/`data-ms-
+  mode="single"` markup present, radios never carry the real field name
+  directly, two rows in the same group get distinct radio-group/proxy ids,
+  the hidden proxy still posts under the original field name. Every
+  pre-existing contacts test kept passing unchanged through this swap
+  (written against the wire contract, not the markup, so the `<select>` ->
+  custom-dropdown swap was invisible to them). Full suite re-verified in
+  the usual 6 batches -- **2132 passed, 0 failed** (2111 + 21 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): "The Kanban board
+  columns should try to not add a horizontal scrollbar. It should first
+  try to have them all in one row, then two rows, and only last the 4 rows
+  for the 4 columns" -- confirmed still open (style.css's `.kanban-board`
+  is currently a binary layout: one shrinking row down to a 240px column
+  floor, or -- past a single `max-width:1123px` breakpoint -- straight to
+  4 full-width stacked rows, no intermediate 2-row/2-column step).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` in doc order -- "In the unscheduled work, for any
   pill inside it, the user could click it and open the task view modal
   window." This directly conflicted with the SAME session's own earlier
