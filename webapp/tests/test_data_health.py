@@ -386,6 +386,22 @@ class TestDataMaintenanceRedesign2026_08_26:
         assert 'action="/settings/purge-all"' not in body
         assert 'data-action="purge-all"' in body
 
+    def test_restart_app_present_only_in_production(self, conn, tmp_path):
+        # 2026-09-11 direct request: "Restart app" moved here from
+        # Settings > Your Profile -- same gate (restart_available, only
+        # true under a systemd-managed deploy_mode == "production" run).
+        body = self._page(conn, tmp_path)
+        assert 'action="/settings/restart"' not in body
+        assert '>Restart app<' not in body
+
+    def test_restart_app_shown_in_production(self, conn, tmp_path):
+        req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
+        req.app.state.settings.deploy_mode = "production"
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert 'action="/settings/restart"' in body
+        assert "Restart app" in body
+        assert 'data-confirm-sheet' in body
+
     def test_backup_actions_live_in_the_backup_cards_menu(self, conn, tmp_path):
         settings_router.data_health_backup(
             _request(db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn

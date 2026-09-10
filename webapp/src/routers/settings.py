@@ -313,11 +313,6 @@ def settings_your_profile(request: Request, conn=Depends(get_db)):
                 or ""
             ),
             "radicale_url": getattr(settings, "radicale_base_url", ""),
-            # Restart app (2026-09-08) -- only meaningful when this
-            # process is under systemd with Restart=always (curodav-ctl's
-            # generated unit); see restart_app's own docstring for why
-            # deploy_mode == "production" is the signal used.
-            "restart_available": getattr(settings, "deploy_mode", "local") == "production",
         },
     )
 
@@ -446,8 +441,16 @@ def account_settings(
                 "/settings/your-profile",
                 "Could not save -- the app couldn't write to its env file. Check file permissions.",
             )
+        # 2026-09-11 direct request: "Restart app" moved to Data &
+        # Maintenance and "should be able to be called after editing
+        # important environment data for the app, appearing in the form of
+        # a toast" -- redirecting THERE instead of back to Your Profile is
+        # what makes that true: this page's note-becomes-a-toast script
+        # (data_maintenance.js) turns "Saved..." into a floating toast that
+        # lands right next to the Restart app button, not a static banner
+        # on a page that no longer has that button at all.
         return _redirect_with_note(
-            '/settings/your-profile', 'Saved. Click "Restart app" below to apply it.'
+            '/settings/data-maintenance', 'Saved. Click "Restart app" below to apply it.'
         )
 
     # Not env-managed -- app_meta, same storage as before this merge.
@@ -473,10 +476,18 @@ def account_settings(
     if state is not None:
         state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
+    # 2026-09-11 direct request: same reasoning as the env-managed branch
+    # above -- only redirect to Data & Maintenance (where the toast lands
+    # next to the Restart app button) when a restart is actually relevant
+    # (a new password or Radicale URL was saved); a username-only change
+    # already takes effect immediately (the session was just re-minted
+    # above), so there's nothing to restart for and the user stays on
+    # Your Profile.
+    restart_relevant = bool(new_password or radicale_url)
     response = _redirect_with_note(
-        "/settings/your-profile",
+        "/settings/data-maintenance" if restart_relevant else "/settings/your-profile",
         "Saved. Restart the app for the Radicale connection to pick up the change."
-        if (new_password or radicale_url)
+        if restart_relevant
         else "Saved.",
     )
     response.set_cookie(
@@ -493,8 +504,14 @@ def account_settings(
 
 @router.post("/settings/restart")
 def restart_app(request: Request):
-    """Settings > Your Profile's "Restart app" button -- 2026-09-08, direct
-    request ("have a button actually restarting the app so it applies").
+    """Settings > Data & Maintenance's "Restart app" button -- 2026-09-08,
+    direct request ("have a button actually restarting the app so it
+    applies"); moved here from Settings > Your Profile 2026-09-11 (direct
+    request, same paragraph: "The Restart app should also be moved to the
+    Data & Maintenance and should be able to be called after editing
+    important environment data for the app, appearing in the form of a
+    toast") -- see account_settings' own `restart_relevant`
+    redirect-target logic for the toast half of that request.
     Applies an account_settings env-file save (or any other change that
     needs a fresh process, e.g. a Radicale connection saved to app_meta)
     by having THIS process exit cleanly and letting systemd relaunch it
@@ -525,13 +542,13 @@ def restart_app(request: Request):
     settings = request.app.state.settings
     if getattr(settings, "deploy_mode", "local") != "production":
         return _redirect_with_error(
-            "/settings/your-profile",
+            "/settings/data-maintenance",
             "Restart isn't available outside a systemd-managed (production) deploy -- stop and restart the process yourself.",
         )
-    logger.warning("Restart requested from Settings > Your Profile -- exiting for systemd to relaunch.")
+    logger.warning("Restart requested from Settings > Data & Maintenance -- exiting for systemd to relaunch.")
     threading.Timer(0.5, os._exit, args=(0,)).start()
     return _redirect_with_note(
-        "/settings/your-profile", "Restarting -- this page will reconnect in a few seconds."
+        "/settings/data-maintenance", "Restarting -- this page will reconnect in a few seconds."
     )
 
 
@@ -1227,6 +1244,13 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         # stand-in for Settings (not the real dataclass) predating this
         # field.
         "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
+        # Restart app (2026-09-08, moved here 2026-09-11 direct request) --
+        # only meaningful when this process is under systemd with
+        # Restart=always (curodav-ctl's generated unit); see restart_app's
+        # own docstring for why deploy_mode == "production" is the signal
+        # used. getattr-guarded: several test files build a bare
+        # SimpleNamespace Settings stand-in predating this field.
+        "restart_available": getattr(request.app.state.settings, "deploy_mode", "local") == "production",
     }
     ctx.update(summary)
     ctx.update(export_context(conn))

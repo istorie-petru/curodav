@@ -89,7 +89,7 @@
         <p class="settings-hint">
             {% if has_account %}Signed in as <strong>{{ account_username }}</strong> -- this is also your Radicale username. Enter your current password to make changes.
             {% else %}No account set up yet. Choose a username and password -- used for both signing in and syncing to Radicale.{% endif %}
-            {% if env_managed %}Saved to <code>curodav.env</code> -- click "Restart app" below to apply.{% endif %}
+            {% if env_managed %}Saved to <code>curodav.env</code> -- saving here takes you to Data &amp; Maintenance to restart and apply it.{% endif %}
         </p>
         <form method="post" action="/settings/account">
             <div class="settings-field-row">
@@ -130,24 +130,16 @@
         </form>
         {% endif %}
     </div>
-    <!-- Restart app (2026-09-08, direct request: "have a button actually
-         restarting the app so it applies") -- only meaningful under
-         systemd with Restart=always (routers/settings.py::restart_app's
-         own docstring); hidden entirely outside that deploy, rather than
-         shown disabled, since there's nothing an operator running this
-         locally could do to make it work anyway. -->
-    {% if restart_available %}
-    <div class="card">
-        <div class="settings-field-row">
-            <span class="settings-field-label">Restart app
-                <span class="settings-field-hint">Applies any saved login/Radicale change -- the app is unreachable for a few seconds</span>
-            </span>
-            <span class="spacer"></span>
-            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
-                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
-            </form>
-        </div>
-    </div>
-    {% endif %}
+    <!-- Restart app moved to Settings > Data & Maintenance (2026-09-11
+         direct request: "The Restart app should also be moved to the
+         Data & Maintenance and should be able to be called after editing
+         important environment data for the app, appearing in the form of
+         a toast.") -- saving this Account card now redirects to Data &
+         Maintenance instead of back here whenever the save actually needs
+         a restart to take effect (env-managed, or a new password/Radicale
+         URL saved to app_meta), so that page's note-becomes-a-toast
+         mechanism (data_maintenance.js) surfaces the confirmation right
+         next to the button that applies it. See account_settings' own
+         docstring in routers/settings.py. -->
 </div>
 {% endblock %}

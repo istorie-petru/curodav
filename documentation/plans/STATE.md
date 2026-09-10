@@ -17,6 +17,54 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-11 -- same session, direct "continue": the deferred
+  second half of the previous slice's doc line -- "The Restart app should
+  also be moved to the Data & Maintenance and should be able to be called
+  after editing important enviroment data for the app, appearing in the
+  form of a toast." Moved the "Restart app" card from Settings > Your
+  Profile into Data & Maintenance's "Maintenance & cleanup" card (first
+  row, `settings_data_maintenance.html`) -- same `/settings/restart`
+  route, same `data-confirm-sheet`, same `restart_available` gate (now
+  built in `settings_data_maintenance`'s own context instead of
+  `settings_your_profile`'s).
+
+  The "appearing in the form of a toast" half: Data & Maintenance already
+  had a note-query-param-becomes-a-floating-toast mechanism
+  (`data_maintenance.js`, see that page's own header comment) that Your
+  Profile never had -- rather than build a second toast pipeline, made the
+  routes that actually NEED a restart redirect to Data & Maintenance
+  instead of back to Your Profile, so the existing mechanism does the
+  work: `account_settings` now redirects to `/settings/data-maintenance`
+  whenever the save is env-managed (always needs a restart) OR a new
+  password/Radicale URL was saved to app_meta (`restart_relevant`, a new
+  local in that function) -- a username-only app_meta change still stays
+  on Your Profile since the session is re-minted immediately and nothing
+  needs restarting. `restart_app` itself (both its success and
+  no-op-outside-production error path) now also redirects to
+  `/settings/data-maintenance` instead of `/settings/your-profile`.
+
+  **Tests**: `test_settings_login_password.py` gained three new
+  `TestAccountSettingsAppMetaPath` tests covering the `restart_relevant`
+  branch (username-only stays on Your Profile; new password or Radicale
+  URL alone both redirect to Data & Maintenance), one new assertion on the
+  existing env-path test (env saves always redirect to Data &
+  Maintenance), and `TestRestartApp`'s two existing tests gained a
+  redirect-target assertion. `test_data_health.py` gained
+  `test_restart_app_present_only_in_production`/
+  `test_restart_app_shown_in_production` on
+  `TestDataMaintenanceRedesign2026_08_26`. `test_phase8_settings_hub.py`'s
+  `TestSettingsYourProfile` gained `test_no_longer_has_restart_app`. Full
+  suite run in the same 4-parallel-batch pattern: **2144 passed**, same 4
+  pre-existing time-of-day-boundary failures as the last two sessions
+  (unchanged, not re-verified against HEAD again -- nothing this slice
+  touched plausibly affects an "earlier today" date/time boundary check).
+
+  This closes out both halves of the "move password/username/Radicale/
+  Restart app off General" doc paragraph -- next slice starts fresh on
+  whatever's next in `audit-fixes-2.1.md` doc order (the
+  page-header-narrow-back alignment item, unless something above it was
+  missed).
+
 - **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
   order (first half only -- see note at the end): "I would like to move
   the password, username, radicale url etc, settings from general to a new

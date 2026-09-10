@@ -298,9 +298,29 @@
      the "Reset Home to default layout" row removed outright -- edit
      mode's own "Reset layout" button (dashboard.html) already does the
      exact same thing via the same /dashboard/reset route, so this was a
-     verbatim duplicate control, not a second surface worth keeping. -->
+     verbatim duplicate control, not a second surface worth keeping.
+     2026-09-11 (same session, second half of the same direct request):
+     "Restart app" moved in from Settings > Your Profile -- same
+     /settings/restart route, same data-confirm-sheet. Placed first in
+     this card since it's what applies an Account-card save (Your
+     Profile's env-managed username/password/Radicale URL) -- saving that
+     now redirects back to THIS page instead, so the "Saved" note this
+     card already turns into a floating toast (data_maintenance.js, see
+     this page's own header comment) shows up right next to the button
+     that finishes the job. -->
 <div class="settings-group">
     <div class="card">
+        {% if restart_available %}
+        <div class="settings-field-row">
+            <span class="settings-field-label">Restart app
+                <span class="settings-field-hint">Applies any saved login/Radicale change from Your Profile -- the app is unreachable for a few seconds</span>
+            </span>
+            <span class="spacer"></span>
+            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
+                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
+            </form>
+        </div>
+        {% endif %}
         <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
             <span class="settings-field-label">Auto-archive completed tasks
                 <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>

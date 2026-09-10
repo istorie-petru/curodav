@@ -211,6 +211,42 @@ class TestAccountSettingsAppMetaPath:
         assert "error=" in resp.headers["location"]
         assert auth.get_persisted_credentials(conn) is None
 
+    def test_username_only_change_redirects_to_your_profile_not_data_maintenance(self, conn):
+        # 2026-09-11 direct request: "Restart app" moved to Data &
+        # Maintenance, callable "after editing important environment data"
+        # -- a username-only change takes effect immediately (the session
+        # is re-minted right there) and needs no restart, so it stays on
+        # Your Profile instead of bouncing to Data & Maintenance for
+        # nothing.
+        auth.set_persisted_credentials(conn, "alice", "oldpassword1")
+        resp = settings_router.account_settings(
+            _request(), username="alicia", current_password="oldpassword1", new_password="",
+            new_password_confirm="", radicale_url="", conn=conn,
+        )
+        assert resp.headers["location"].startswith("/settings/your-profile?")
+
+    def test_new_password_redirects_to_data_maintenance_for_the_restart_toast(self, conn):
+        # A new password (or a Radicale URL, see next test) DOES need a
+        # restart to reach the Radicale connection, so this redirects to
+        # Data & Maintenance -- where the "Restart app" button now lives
+        # and the "Saved..." note becomes a floating toast right next to
+        # it (data_maintenance.js), instead of a static banner on a page
+        # that no longer has that button.
+        auth.set_persisted_credentials(conn, "alice", "oldpassword1")
+        resp = settings_router.account_settings(
+            _request(), username="alice", current_password="oldpassword1", new_password="newpassword1",
+            new_password_confirm="newpassword1", radicale_url="", conn=conn,
+        )
+        assert resp.headers["location"].startswith("/settings/data-maintenance?")
+
+    def test_radicale_url_only_change_redirects_to_data_maintenance(self, conn):
+        auth.set_persisted_credentials(conn, "alice", "oldpassword1")
+        resp = settings_router.account_settings(
+            _request(), username="alice", current_password="oldpassword1", new_password="",
+            new_password_confirm="", radicale_url="http://127.0.0.1:5232/me/", conn=conn,
+        )
+        assert resp.headers["location"].startswith("/settings/data-maintenance?")
+
     def test_rotates_session_secret_so_old_sessions_are_revoked(self, conn):
         """2026-09-07 audit fix, carried over from change_login_password
         -- see auth.rotate_session_secret's docstring."""
@@ -256,6 +292,10 @@ class TestAccountSettingsEnvPath:
             new_password_confirm="newpassword1", radicale_url="http://127.0.0.1:5232/petru/", conn=conn,
         )
         assert "note=" in resp.headers["location"]
+        # 2026-09-11 direct request: env-file saves always need a restart
+        # to actually take effect, so this always lands on Data &
+        # Maintenance (where "Restart app" now lives), never Your Profile.
+        assert resp.headers["location"].startswith("/settings/data-maintenance?")
         written = env_file.read_env_file(env_path)
         assert written["CC_AUTH_USERNAME"] == "petru"
         assert written["CC_AUTH_PASSWORD"] == "newpassword1"
@@ -334,6 +374,10 @@ class TestRestartApp:
     def test_no_op_outside_production(self, conn):
         resp = settings_router.restart_app(_request(deploy_mode="local"))
         assert "error=" in resp.headers["location"]
+        # 2026-09-11 direct request: "Restart app" moved to Data &
+        # Maintenance -- both its success and error redirects land there
+        # now, not back on Your Profile.
+        assert resp.headers["location"].startswith("/settings/data-maintenance?")
 
     def test_no_op_when_deploy_mode_missing(self, conn):
         req = _request()
@@ -357,6 +401,7 @@ class TestRestartApp:
         resp = settings_router.restart_app(_request(deploy_mode="production"))
         assert resp.status_code == 303
         assert "note=" in resp.headers["location"]
+        assert resp.headers["location"].startswith("/settings/data-maintenance?")
         # Deferred, not called inline -- the test process is still alive
         # to make this assertion at all.
         assert scheduled["started"] is True

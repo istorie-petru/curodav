@@ -223,6 +223,14 @@ class TestSettingsYourProfile:
         assert 'action="/settings/account"' in body
         assert 'name="radicale_url"' in body
 
+    def test_no_longer_has_restart_app(self, conn):
+        # 2026-09-11 direct request: "Restart app" moved to Settings >
+        # Data & Maintenance -- see test_data_health.py's
+        # test_restart_app_shown_in_production.
+        resp = settings_router.settings_your_profile(_request_with_radicale("/settings/your-profile"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/restart"' not in body
+
 
 def test_set_display_name_route_redirects_to_your_profile(conn):
     resp = settings_router.set_display_name(display_name="Petru", conn=conn)
