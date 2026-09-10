@@ -17,6 +17,42 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-10 -- same session as the vCard-import-crash entry
+  below, direct "continue": next item off `audit-fixes-2.1.md`'s own list
+  (picked in doc order, since the doc has no priority marking) -- "The
+  banner upload modal window doesn't work. The image crop/rotate, on
+  external mouse click always exists, even if the user is trying to crop
+  the image (remove the if click outside then exit for it)." Root cause:
+  `static/avatar_cropper.js`'s crop/rotate overlay (shared by every image
+  upload in the app -- contact photos, the profile-picture row, and
+  Home/label/page-header banners, not banner-specific despite the report's
+  wording) had a backdrop-click listener (`overlay.addEventListener("click",
+  ...)`, was lines 353-355) that called `closeEditor(true)` -- discarding
+  the in-progress crop/rotate -- on *any* click landing on the backdrop,
+  including a pointer that only briefly leaves the crop stage during a
+  fast drag on a resize handle or the box itself. No dirty-state check, no
+  confirmation. Removed the listener entirely; the explicit Close (X) and
+  Cancel buttons are the only exits now. Checked first whether this
+  codebase has an existing "suppress outside-click-close" convention to
+  reuse (a `data-no-outside-close`-style flag) -- it doesn't; every other
+  outside-click-to-close spot (`modal.js`'s own backdrop click, the color/
+  icon popover, `datetime_picker.js`, `reminders_picker.js`) is its own
+  bespoke listener with no shared opt-out, so outright removal (not a new
+  flag) is the consistent fix here.
+
+  **Tests**: none added -- this repo has no JS test runner/framework
+  (checked: no `package.json` test setup, no `.test.js` files anywhere),
+  same "no live browser in this sandbox" gap noted in the 2.0 session's
+  entry below. Python suite unaffected (no `.py` changed this slice) --
+  re-ran `test_banners.py` (the file covering this editor's wiring,
+  `TestBannerUploadUsesCropEditor`) as a sanity check anyway: 55 passed.
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the inline-labels-
+  revert-to-blue-pill bug on the Tasks page, or the Radicale-unreachable
+  startup traceback (still unconfirmed whether that's a real bug or just
+  noisy logging -- app already degrades gracefully per the log's own
+  "running without the sync bridge" line).
+
 - **Shipped:** 2026-09-10 -- direct request, new session: user dropped a new
   `documentation/plans/audit-fixes-2.1.md` (a plain-text bug list -- ~14 UI/
   UX items -- plus two production `journalctl`/traceback logs) and said "the
