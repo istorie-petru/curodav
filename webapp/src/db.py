@@ -2232,9 +2232,13 @@ def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[
     block it becomes when placed on a grid (project_calendar.js's
     DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
     out of hours planned". `undated_count` is the number of sessions still
-    awaiting placement -- the panel's "still unscheduled" rule
-    (`count > 0 and undated_count == 0` drops a task off the list) needs
-    it, and it's what separates the panel summary from task_work_hours."""
+    awaiting placement -- the panel's "still unscheduled" rule (`undated_count
+    == 0` drops a task off the list, whether that's because every session is
+    dated or because there are no sessions at all -- audit-fixes-2.1.md,
+    2026-09-10: a 0-session task used to slip through the old
+    `count > 0 and undated_count == 0` check and show up with a bare "0"
+    pill) needs it, and it's what separates the panel summary from
+    task_work_hours."""
     allocations = list_work_allocations_for_task(conn, task_uid)
     scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
     undated = sum(1 for a in allocations if not a.get("start_at"))

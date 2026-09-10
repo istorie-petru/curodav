@@ -3191,9 +3191,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    on the page.
    Fix: a fixed (not max-) height + its own `overflow-y:auto` on the LIST
    body only (not the always-visible header above it), sized to ONE row of
-   chips (~26px: the row's tallest child is `.unscheduled-step-btn` at 16px,
-   plus the item's own 3px/3px padding and 1px/1px border) rather than
-   several -- a first pass at 84px (~3 rows) fixed the reflow but read as
+   chips (~26px, computed when the row's tallest child was the now-removed
+   +/- stepper's `.unscheduled-step-btn` at 16px -- see this file's
+   `.unscheduled-task-item` comment, audit-fixes-2.1.md 2026-09-10; the
+   fixed height below was already padded past that exact figure, so it's
+   left as-is rather than shrunk to the plain-text row's slightly smaller
+   natural height) rather than several -- a first pass at 84px
+   (~3 rows) fixed the reflow but read as
    "the Unscheduled work div got bigger" (direct follow-up report) for the
    common case of only one or two items, since that empty reserved space is
    visible even when nothing needs it. One row matches this panel's own
@@ -3229,17 +3233,22 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .unscheduled-task-list{display:flex; flex-direction:row; flex-wrap:wrap; gap:5px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial on the planning grids). ONE line (2026-08-14 design, sized down
-   2026-09-02): a project pill (icon + name) then the task title on the
-   left, the session-count stepper on the right -- no hours readout, no due
-   date, no grip. This is a POINTER-based drag source (not native HTML5
-   DnD -- see project_calendar.js interaction 1), so it needs
+   2026-09-02): a project pill (icon + name) then the task title, given the
+   most room, then the session count pinned to the end -- no hours readout,
+   no due date, no grip. This is a POINTER-based drag source (not native
+   HTML5 DnD -- see project_calendar.js interaction 1), so it needs
    touch-action:none + user-select:none for reliable pointermove on touch
-   and to keep a drag from also selecting text. */
+   and to keep a drag from also selecting text. audit-fixes-2.1.md
+   (2026-09-10, direct request): the +/- stepper (.unscheduled-stepper/
+   .unscheduled-step-btn) that used to sit between the title and the count
+   is gone -- a plain click on the row now adds a session instead (see
+   project_calendar.js's end()), and the title's max-width grew now that
+   it isn't sharing the row with two icon buttons. */
 .unscheduled-task-item{
   display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:6px;
   background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
   font-size:11px; touch-action:none; user-select:none; -webkit-user-select:none;
-  flex:0 1 auto; max-width:190px;
+  flex:0 1 auto; max-width:240px;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .unscheduled-task-item.item-dragging{opacity:.5;}
@@ -3251,10 +3260,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 .unscheduled-project-pill .icon{flex:none;}
 .unscheduled-task-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.unscheduled-stepper{flex:none; display:flex; align-items:center; gap:1px;}
-.unscheduled-stepper form{margin:0;}
-.unscheduled-step-btn{width:16px; height:16px;}
-.unscheduled-count{min-width:14px; text-align:center; font-size:10px; font-weight:600; color:var(--fg-secondary);}
+.unscheduled-count{flex:none; margin-left:auto; padding-left:4px; min-width:14px; text-align:center; font-size:10px; font-weight:600; color:var(--fg-secondary);}
 /* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
    pointer-following copy of the source item while dragging -- hidden until
    the gesture passes the drag threshold, so a plain click isn't mistaken

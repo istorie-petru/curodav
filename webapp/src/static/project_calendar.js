@@ -13,6 +13,10 @@
 //    read from the pointer's Y relative to the column's rect (viewport-
 //    relative, so it stays correct while the grid auto-scrolls) and a plain
 //    hidden form submits to routers/projects.py::create_allocation.
+//    1b. (2026-09-10, audit-fixes-2.1.md direct request) A plain click on
+//    the same list item -- released with no drag past DRAG_THRESHOLD_PX --
+//    adds one more undated work session for that task instead, replacing
+//    the item's old dedicated +/- stepper buttons. See end()'s own comment.
 // 2. Drag an existing `.work-allocation` block to move it, or its
 //    `.te-resize-handle` to resize it -- same pointer-based drag model as
 //    static/calendar.js's Week/Day grid (pointerdown/pointermove/pointerup
@@ -147,10 +151,7 @@
     let drag = null; // active create-drag state, or null when idle
 
     function begin(e) {
-      // The −/+ stepper forms live inside the item; a pointerdown on them
-      // is a button press, not the start of a drag -- let it click through.
       if (e.button !== 0) return;
-      if (e.target.closest(".unscheduled-stepper")) return;
       e.preventDefault();
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
@@ -233,7 +234,22 @@
       const wasDrag = drag && drag.dragged;
       const col = drag && drag.hoverCol;
       finish();
-      if (!wasDrag || !col) return; // a click (not a drop)
+      if (!wasDrag) {
+        // A plain click (no drag past DRAG_THRESHOLD_PX) -- audit-
+        // fixes-2.1.md (2026-09-10, direct request): replaces the old +/-
+        // stepper buttons this item used to carry. Adds one more undated
+        // work session for this task, the same
+        // POST /tasks/{uid}/work-allocations the removed "+" button used
+        // to submit (tasks_router.add_work_allocation with no start_at/
+        // end_at -- an undated placeholder), just via the same async
+        // ccApi path every other action on this row already takes instead
+        // of a real <form> submit. The newly-added session then shows up
+        // as one more count on this same row, placed by dragging same as
+        // any other undated session.
+        postAction("/tasks/" + item.dataset.taskUid + "/work-allocations", {}, "create");
+        return;
+      }
+      if (!col) return; // a drag that ended off any column -- drop nothing
       // Time from the pointer's Y relative to the hovered column's rect.
       // getBoundingClientRect is viewport-relative, so this stays correct
       // even if the grid auto-scrolled during the drag. Same snap as the

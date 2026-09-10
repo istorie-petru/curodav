@@ -276,5 +276,9 @@ class TestShellCacheVersion:
         # pattern .tabbar already uses).
         # v95 (direct follow-up, same day): the v93 26px height (one row,
         # no slack) read as cramped -- bumped to 36px (style.css only).
+        # v97 (2026-09-10, audit-fixes-2.1.md session): a missed bump for
+        # an earlier same-session avatar_cropper.js fix (SHELL_ASSETS),
+        # bundled with this session's Unscheduled-work stepper removal
+        # (style.css + project_calendar.js) -- see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v96"' in script
+        assert 'CACHE_NAME = "cc-shell-v97"' in script

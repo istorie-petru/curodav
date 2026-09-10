@@ -2,43 +2,43 @@
    (project_calendar.html, calendar_week.html -- week_planning.html and
    calendar_timetable.html were both retired/merged into it, 1.9 side work)
    all render the same per-task row, so the card shape lives here instead of
-   being triplicated. One line (2026-08-14 design): a project pill (the
-   project's icon + name, `item.project` is the label's effective config --
-   backend-provided name AND icon) on the left, the task title next to it
-   (truncating), and the session count on the right.
+   being triplicated. One line: the project pill (the project's icon + name,
+   `item.project` is the label's effective config -- backend-provided name
+   AND icon) on the left if present, the task title next (truncating, given
+   the most room), then a gap, then the session count pinned to the end.
    Each row is:
      - the drag source for dropping the task onto a grid (project_calendar.js
        interaction 1 -- POINTER-based drag, so the item deliberately carries
        no native `draggable` attribute)
-     - a stepper between − and +, showing `item.sessions.undated_count` --
-       sessions STILL NEEDING PLACEMENT, not the task's total session count
-       (`item.sessions.count`, unused by this macro). Placing a session on a
-       grid (or unscheduling one back off it) already moves it in/out of
-       this number automatically, since it's just "how many of this task's
-       sessions have no start/end yet" -- direct feedback (2026-08-14, same
-       day as the two "session count" fixes above): dropping one of a
-       task's sessions onto the grid didn't move the panel's number at all
-       when it showed the total, which read as "the counter doesn't
-       update". "+" adds an undated session placeholder (POST /tasks/{uid}/
-       work-allocations), incrementing this count; "−" removes the most
-       recently added UNDATED one (POST /tasks/{uid}/work-allocations/
-       remove-latest, `db.remove_latest_work_allocation` -- never touches an
-       already-scheduled session) and is hidden at 0 (nothing left to
-       remove). Reaching 0 remaining is a normal, common state (everything
-       is placed), not a floor the panel avoids -- unlike the task's overall
-       session *count*, which the task modal's Work sessions card still
-       manages independently.
-   Both forms carry `next_url` (a same-origin path, see the tasks router's
-   `_safe_next`) as their no-JS/failure fallback -- the endpoints themselves
-   always 303-redirect there. With JS, `data-cc-change="task"` (async-crud.js's
-   generic `[data-cc-change]` submit handler) intercepts the POST instead:
-   fetch, then dispatch `cc-entity-changed` on success. On the planning grids
-   (calendar_week.html / project_calendar.html) that's claimed by
-   async_calendar.js's own listener, which re-fetches just the `#week-grid`/
-   project-calendar region and swaps it in -- no full-page reload, matching
-   every other mutation on this page (drag-create, drag-move, unschedule).
-   Direct feedback (2026-09-08): stepping a session used to hard-reload the
-   whole planner page, unlike every other action on it.
+     - ALSO a click target that adds one more undated session (audit-
+       fixes-2.1.md, 2026-09-10 direct request: "remove the minus and plus
+       for these pills... the minus and plus allocation system will be
+       replaced by the already in place drag and drop... click on it, add
+       one more unscheduled session... drag and drop the other one wherever
+       the user wants"). Before this change the row had its own +/- stepper
+       (two `<form>`s posting to /tasks/{uid}/work-allocations and
+       .../work-allocations/remove-latest) for adjusting the undated-session
+       count directly; that's gone now -- project_calendar.js's own
+       pointerdown/pointerup handling on this row (already there for drag)
+       now also treats a plain release with no drag (its own
+       DRAG_THRESHOLD_PX not crossed) as "add one more session," POSTing to
+       the same /tasks/{uid}/work-allocations endpoint the old "+" button
+       used, via the same async ccApi path every other action on this page
+       already uses -- no `<form>`/submit needed here since it's all
+       JS-driven, same as the drag-to-schedule path itself. The newly-added
+       session is then placed by dragging the row onto the grid same as
+       before. There is no in-panel way to remove an undated session
+       anymore -- the task modal's own Work sessions card still owns
+       deleting a session outright; dragging a *placed* session back onto
+       this panel (project_calendar.js interaction 3) still un-schedules it,
+       unaffected by this change.
+   `item.sessions.undated_count` (or, for a habit, `item.habit_sessions.
+   needed`) is sessions STILL NEEDING PLACEMENT/still needed this period,
+   not the task's total session count (`item.sessions.count`, unused by this
+   macro) -- see routers/calendar.py's own comment on why a task with 0
+   sessions total, or with every session already dated, is filtered out of
+   `unscheduled_tasks` before this macro ever sees it, so this count is
+   never 0 in practice.
    Import with `with context` -- the macro body calls the `icon` global. #}
 {% macro unscheduled_task_item(item, next_url) %}
 <div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
@@ -52,36 +52,10 @@
        needing placement" -- a daily habit reads e.g. "5" (2 of 7 days
        already scheduled) and counts down as sessions get dated, staying
        on the panel until it hits 0 for the currently displayed week/
-       month. Same +/- actions as the generic stepper below (add/remove
-       an undated placeholder session), just a different number and
-       tooltip so "why is this still here" is legible at a glance. #}
-    <span class="unscheduled-stepper">
-        {% if item.sessions.undated_count > 0 %}
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest" data-cc-change="task" data-cc-action="remove">
-            <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
-        </form>
-        {% endif %}
-        <span class="unscheduled-count" title="Sessions still needed this period">{{ item.habit_sessions.needed }}</span>
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations" data-cc-change="task" data-cc-action="create">
-            <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this habit onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
-        </form>
-    </span>
+       month. #}
+    <span class="unscheduled-count" title="Sessions still needed this period">{{ item.habit_sessions.needed }}</span>
     {% else %}
-    <span class="unscheduled-stepper">
-        {% if item.sessions.undated_count > 0 %}
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations/remove-latest" data-cc-change="task" data-cc-action="remove">
-            <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit" class="icon-btn unscheduled-step-btn" title="Remove the most recently added unscheduled session" aria-label="Remove a work session">{{ icon('minus', 'icon-sm') }}</button>
-        </form>
-        {% endif %}
-        <span class="unscheduled-count" title="Sessions still needing placement">{{ item.sessions.undated_count }}</span>
-        <form method="post" action="/tasks/{{ item.task.uid }}/work-allocations" data-cc-change="task" data-cc-action="create">
-            <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit" class="icon-btn unscheduled-step-btn" title="Add a work session (place it by dragging this task onto the grid)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
-        </form>
-    </span>
+    <span class="unscheduled-count" title="Sessions still needing placement">{{ item.sessions.undated_count }}</span>
     {% endif %}
 </div>
 {% endmacro %}

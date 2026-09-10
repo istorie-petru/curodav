@@ -17,6 +17,72 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-10 -- same session, direct "continue": the Planner
+  page's "Unscheduled work" panel rework, `audit-fixes-2.1.md`'s largest
+  item -- "tasks with 0 work sessions should not appear... remove the
+  minus and plus for these pills and allow for the task title to show a
+  bit more, a bit of space and then at the end the number of sessions
+  needed to allocate... replaced by the already in place drag and drop...
+  click on it, add one more unscheduled session... drag and drop the other
+  one wherever the user wants." Three changes:
+  1. **0-session filter bug** (`routers/calendar.py`'s `_week_view_context`,
+     the unscheduled_tasks loop): the old `info["count"] and not
+     info["undated_count"]` check only ever dropped a task once it had
+     >=1 session and all were dated -- it never treated "0 sessions total"
+     as a reason to hide, so a brand-new task with no sessions at all
+     showed up with a bare "0" pill. Both cases collapse to one check,
+     `if not info["undated_count"]: continue` (a 0-session task's
+     `undated_count` is also 0) -- `db.work_allocation_panel_info`'s
+     docstring updated to match.
+  2. **Stepper removed** (`_unscheduled_task_item.html`): both `<form>`s
+     (+/- posting to /tasks/{uid}/work-allocations and .../remove-latest)
+     deleted from both the plain-task and habit branches; the row is a
+     plain `<div>` again (title given more room via style.css's
+     `.unscheduled-task-item` max-width 190px -> 240px, `.unscheduled-count`
+     now `margin-left:auto` at the end of the row instead of sandwiched
+     between two icon buttons).
+  3. **Click-to-add replaces "+"** (`project_calendar.js`): the drag
+     source's own pointerdown/pointerup handling now treats a plain
+     release with no drag (`!wasDrag`, previously a silent no-op) as "add
+     one more undated session" -- posts the same
+     `/tasks/{uid}/work-allocations` endpoint the old "+" button used, via
+     the same async `postAction`/ccApi path every other action on this row
+     already takes. The stepper's pointerdown carve-out
+     (`e.target.closest(".unscheduled-stepper")`) is dead and removed.
+     There is no in-panel "−" anymore -- the task modal's own Work
+     sessions card still owns deleting a session outright; drag-a-placed-
+     session-back-onto-the-panel-to-unschedule (interaction 3) is
+     unaffected.
+
+  **Also caught mid-slice:** `static/avatar_cropper.js` IS in `sw.js`'s
+  `SHELL_ASSETS` precache list -- the earlier same-session fix to that
+  file (backdrop-click no longer discards an in-progress crop) skipped the
+  required `CACHE_NAME` bump. Bundled the retroactive bump for that with
+  this slice's own (style.css changed, which always requires one
+  regardless of SHELL_ASSETS membership, per the file's own v88 note) into
+  one `cc-shell-v96` -> `cc-shell-v97` bump -- see sw.js's own comment.
+  **Lesson for future JS/CSS slices in this repo: check `SHELL_ASSETS`
+  membership and check style.css diffs BEFORE calling a slice done, not
+  after the fact.**
+
+  **Tests**: `test_calendar_week_scheduling.py` -- flipped
+  `test_open_task_with_no_allocation_is_unscheduled` (renamed
+  `..._is_not_unscheduled`, asserts absence now), gave
+  `test_unscheduled_task_shows_its_project_pill` an undated session so it
+  still qualifies for the panel, rewrote `TestUnscheduledPanelStepper`'s
+  button-specific tests into stepper-is-gone assertions, replaced
+  `TestUnscheduledPanelStepperIsAsync` with `TestClickToAddSessionIsAsync`
+  (structural source-checks against project_calendar.js, same no-browser-
+  harness convention as `TestGridDragConflictFix` in the same file).
+  `test_pwa_shell.py`'s hardcoded `CACHE_NAME` assertion updated to v97.
+  Full suite re-verified in the usual 6 batches -- **2097 passed, 0
+  failed** (net test count unchanged: -1 stepper test, +1 click-to-add
+  test).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Kanban board's
+  drag-and-drop (currently not working at all for moving tasks between
+  columns), or the Projects page agenda card's missing task due dates.
+
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` in doc order -- "When inline changing labels in
   Tasks page, the pills revert to a blue no icon pill, even if they

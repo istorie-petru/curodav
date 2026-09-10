@@ -449,7 +449,20 @@
 // (style.css's new .cal-nav-label, the two grid templates' updated
 // markup). style.css and async_calendar.js both changed; neither is in
 // SHELL_ASSETS below, but style.css is, so the bump is required either way.
-const CACHE_NAME = "cc-shell-v96";
+// v97 (2026-09-10, audit-fixes-2.1.md session): two changes bundled into
+// one bump. (1) A missed bump from earlier the same session -- static/
+// avatar_cropper.js (IS in SHELL_ASSETS below) was fixed to stop
+// discarding an in-progress crop/rotate on any backdrop click, but the
+// required CACHE_NAME bump was skipped at the time; caught while making
+// this same mistake's cousin here (a static/*.js file's own SHELL_ASSETS
+// membership needs checking every time, not assumed). (2) The "Unscheduled
+// work" panel's per-item +/- stepper is removed (style.css's
+// .unscheduled-task-item/.unscheduled-count rules changed, its
+// .unscheduled-stepper/.unscheduled-step-btn rules deleted) in favor of a
+// plain click adding a session (static/project_calendar.js, not itself in
+// SHELL_ASSETS, but style.css is, so the bump is required either way, same
+// v88 reasoning above).
+const CACHE_NAME = "cc-shell-v97";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

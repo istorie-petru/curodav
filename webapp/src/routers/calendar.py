@@ -891,13 +891,19 @@ def _week_view_context(conn, request, date_, label):
     # partial renders.
     unscheduled_tasks = []
     for t in open_tasks:
-        # Unscheduled = no work session at all, OR any session still has no
-        # date (a "+"-added placeholder from the task modal's Work sessions
-        # card awaiting placement on a grid -- see db.create_work_allocation's
-        # undated form). Only a task whose every session is dated has nothing
-        # left to place, so only those drop off the panel.
+        # Unscheduled = at least one session still has no date (a "+"-added
+        # placeholder from the task modal's Work sessions card awaiting
+        # placement on a grid -- see db.create_work_allocation's undated
+        # form). A task with zero sessions at all has nothing to place
+        # either, so it's excluded the same way -- both cases collapse to
+        # "undated_count is 0" (audit-fixes-2.1.md, direct bug report: a
+        # brand-new task with no sessions yet was showing up on this panel
+        # with a "0" pill instead of staying off it entirely; the old
+        # `info["count"] and not info["undated_count"]` check only ever
+        # dropped a task once it had >=1 session and all were dated, never
+        # considering "0 sessions total" a reason to hide).
         info = db.work_allocation_panel_info(conn, t["uid"])
-        if info["count"] and not info["undated_count"]:
+        if not info["undated_count"]:
             continue
         project = db.project_label_config_for(conn, "task", t["uid"])
         unscheduled_tasks.append({"task": t, "project": project, "sessions": info})

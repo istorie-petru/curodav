@@ -80,10 +80,16 @@ class TestWeekViewRoute:
         # sub-view deliberately excluded this).
         assert "calendar-create-col" in body
 
-    def test_open_task_with_no_allocation_is_unscheduled(self, conn):
+    def test_open_task_with_no_allocation_is_not_unscheduled(self, conn):
+        # audit-fixes-2.1.md (2026-09-10, direct bug report): a task with
+        # zero work sessions at all used to still show up on this panel
+        # (with a bare "0" pill) -- there's nothing to place yet, so it
+        # shouldn't appear until the task actually has an undated session
+        # (see test_task_with_undated_session_stays_on_unscheduled_panel
+        # below for that case).
         _task(conn, "t1", title="Research")
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert "Research" in body
+        assert 'data-task-uid="t1"' not in body
 
     def test_task_with_allocation_drops_off_unscheduled_list(self, conn):
         _task(conn, "t1", title="Research")
@@ -115,6 +121,9 @@ class TestWeekViewRoute:
         before the task title, not a `Project > Task` prefix."""
         _project(conn, "Conference XYZ")
         _task(conn, "t1", tags=["Conference XYZ"], title="Research")
+        db.create_work_allocation(conn, "t1")  # an undated session -- a
+        # 0-session task no longer appears on this panel at all (see
+        # test_open_task_with_no_allocation_is_not_unscheduled above).
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert 'class="unscheduled-project-pill"' in body
         assert "Conference XYZ" in body
@@ -333,12 +342,17 @@ class TestDeleteWeekAllocation:
 
 
 class TestUnscheduledPanelStepper:
-    """"Unscheduled work" panel: per-item stepper shows sessions still
-    needing placement (`undated_count`), not the task's total session
-    count -- see test_week_planning.py's own TestUnscheduledPanelStepper
-    docstring for the direct feedback behind this."""
+    """"Unscheduled work" panel: per-item pill shows sessions still needing
+    placement (`undated_count`), not the task's total session count.
+    2026-09-10 (audit-fixes-2.1.md, direct request): the item's own +/-
+    stepper buttons are gone -- adding a session is now a plain click on
+    the item itself (project_calendar.js's pointer-drag `end()`, a release
+    with no drag), and there is no in-panel way to remove one anymore (the
+    task modal's Work sessions card still owns deleting a session
+    outright). See TestClickToAddSessionIsAsync below for the click-adds-a-
+    session behavior itself."""
 
-    def test_item_shows_plus_and_minus_buttons_at_one_undated_session(self, conn):
+    def test_item_has_no_plus_or_minus_buttons(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
         body = calendar_router.week_view(
@@ -346,16 +360,12 @@ class TestUnscheduledPanelStepper:
         ).body.decode()
         assert 'data-task-uid="t1"' in body
         assert "unscheduled-count" in body
-        assert "/tasks/t1/work-allocations" in body  # the "+" form action
-        assert "/tasks/t1/work-allocations/remove-latest" in body  # − shown: 1 undated to remove
-
-    def test_minus_button_hidden_with_no_undated_sessions(self, conn):
-        _task(conn, "t1", title="Research")
-        db.create_work_allocation(conn, "t1", f"{_MONDAY}T16:00:00", f"{_MONDAY}T18:00:00")
-        body = calendar_router.week_view(
-            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
-        ).body.decode()
+        assert "unscheduled-stepper" not in body
+        assert "unscheduled-step-btn" not in body
         assert "/tasks/t1/work-allocations/remove-latest" not in body
+        # No <form> at all -- adding a session is a plain JS click now, not
+        # a submitted form (see project_calendar.js's end()).
+        assert "<form" not in body.split('id="unscheduled-panel"')[1].split("</aside>")[0]
 
     def test_count_reflects_sessions_still_needing_placement(self, conn):
         _task(conn, "t1", title="Research")
@@ -374,15 +384,15 @@ class TestUnscheduledPanelStepper:
         ).body.decode()
         assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
 
-    def test_minus_button_renders_at_more_than_one_undated_session(self, conn):
+    def test_count_still_shown_with_more_than_one_undated_session(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
-        assert "/tasks/t1/work-allocations/remove-latest" in body
-        assert 'value="/calendar/week?date_=' in body  # +/− return here
+        assert "/tasks/t1/work-allocations/remove-latest" not in body
+        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
 
     def test_card_is_one_line_without_hours(self, conn):
         _task(conn, "t1", title="Research")
@@ -397,54 +407,42 @@ class TestUnscheduledPanelStepper:
 
     def test_item_has_no_native_draggable_attribute(self, conn):
         _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'draggable="true"' not in body
 
 
-class TestUnscheduledPanelStepperIsAsync:
-    """Direct bug report (2026-09-08): stepping a work session's count from
-    the "Unscheduled work" panel hard-reloaded the whole Planner page, unlike
-    every other action on it (drag-create, drag-move, unschedule-by-drop --
-    all already async via ccApi/cc-entity-changed). The stepper forms posted
-    with no `data-cc-change` at all, so async-crud.js's generic
-    `[data-cc-change]` submit handler (which every other page-level mutation
-    form in this app already goes through) never intercepted them -- they
-    fell through to a plain browser form submit and its 303 redirect.
-    _unscheduled_task_item.html now carries `data-cc-change="task"` on both
-    the "+" and "-" forms, in both the plain-task and habit branches, so
-    async_calendar.js's own `cc-entity-changed` listener (already wired for
-    /calendar/week) claims the event and refreshes just #week-grid."""
+class TestClickToAddSessionIsAsync:
+    """audit-fixes-2.1.md (2026-09-10, direct request): replaces the old
+    +/- stepper's async behavior (data-cc-change forms, 2026-09-08 fix)
+    with a click on the unscheduled item itself. No browser harness in
+    this suite (same convention as TestGridDragConflictFix above) --
+    structural source checks against project_calendar.js confirm the
+    click path posts through the same async ccApi helper every other
+    drag/drop mutation on this page already uses, not a page-reloading
+    form submit."""
 
-    def test_plus_and_minus_forms_carry_data_cc_change(self, conn):
-        _task(conn, "t1", title="Research")
-        db.create_work_allocation(conn, "t1")  # one undated session -> "-" renders too
-        body = calendar_router.week_view(
-            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
-        ).body.decode()
-        assert (
-            '<form method="post" action="/tasks/t1/work-allocations" data-cc-change="task" data-cc-action="create">'
-            in body
-        )
-        assert (
-            '<form method="post" action="/tasks/t1/work-allocations/remove-latest" '
-            'data-cc-change="task" data-cc-action="remove">' in body
-        )
+    def test_no_drag_release_posts_the_create_endpoint(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert '"/tasks/" + item.dataset.taskUid + "/work-allocations"' in script
+        assert "if (!wasDrag) {" in script
 
-    def test_habit_branch_forms_also_carry_data_cc_change(self, conn):
-        # A habit-tracked task (tagged with the configured habit label,
-        # default "Habit", db.get_task_habit_settings) with an open
-        # recurrence and no check-ins this week -- same setup
-        # test_habit_ui_rework.py's own habit_work_sessions_status tests use.
-        _task(conn, "h1", title="Meditate", tags=["Habit"], recurrence="FREQ=DAILY")
-        db.create_work_allocation(conn, "h1")  # one undated session -> "-" renders too
-        body = calendar_router.week_view(
-            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
-        ).body.decode()
-        assert 'data-task-uid="h1"' in body  # confirms the habit branch actually rendered
-        assert 'data-cc-change="task" data-cc-action="create"' in body
-        assert 'data-cc-change="task" data-cc-action="remove"' in body
+    def test_click_path_uses_the_same_async_post_helper_as_drag_create(self):
+        # postAction() is the one function every mutation in this file goes
+        # through (ccApi + cc-entity-changed) -- confirms the click branch
+        # isn't a separate, un-async'd code path.
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
+        assert "postAction(" in click_branch
+
+    def test_stepper_pointerdown_carveout_is_gone(self):
+        # The old code let a pointerdown on `.unscheduled-stepper` click
+        # through without starting a drag, so the now-removed +/- buttons
+        # would still work -- dead now that the stepper markup is gone.
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert "unscheduled-stepper" not in script
 
 
 class TestUnscheduledPanelFixedHeight:
