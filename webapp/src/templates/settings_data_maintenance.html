@@ -90,6 +90,18 @@
                             <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
                             </form>
+                            <!-- 2026-09-11 direct request: "Purge Completed
+                                 Tasks should sit in the context menu of
+                                 Database (as purge completed)" -- moved in
+                                 from the Maintenance & cleanup card below,
+                                 where it lived as its own inline row. Routine
+                                 housekeeping (grouped with Check integrity/
+                                 Compact & reindex), not danger styling --
+                                 unlike "Reset database (purge all)" below,
+                                 which stays in its own danger section. -->
+                            <form class="form-contents" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
+                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Purge completed ({{ completed_task_count }})</button>
+                            </form>
                         </div>
                         <!-- 2026-09-08 direct request: "Verify latest backup",
                              "Clean up sync data" and "Force sync" removed from
@@ -280,10 +292,13 @@
 
 <!-- 3. Maintenance & cleanup -- 2026-08-26 redesign: every row here is now
      an inline actionable control (label left, control right). The two
-     lifecycle selects autosubmit on pick; "Purge completed tasks" moved
-     down from the old danger section into this card as a soft grey action --
-     it's routine housekeeping, not a catastrophe -- and shows its live
-     count. -->
+     lifecycle selects autosubmit on pick.
+     2026-09-11 direct request: "Purge Completed Tasks" moved into the
+     Database card's own context menu above (as "Purge completed"), and
+     the "Reset Home to default layout" row removed outright -- edit
+     mode's own "Reset layout" button (dashboard.html) already does the
+     exact same thing via the same /dashboard/reset route, so this was a
+     verbatim duplicate control, not a second surface worth keeping. -->
 <div class="settings-group">
     <div class="card">
         <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
@@ -307,20 +322,6 @@
                 <option value="{{ value }}" {% if sync_gc.retention_days == (value | int) %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
-        </form>
-        <form class="settings-field-row" method="post" action="/dashboard/reset" data-confirm-sheet="Reset the Home dashboard to its default widget layout? This deletes every widget you've added or customized here.">
-            <span class="settings-field-label">Reset Home to default layout
-                <span class="settings-field-hint">Deletes your current Home widgets and restores the defaults</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset</button>
-        </form>
-        <form class="settings-field-row" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
-            <span class="settings-field-label">Purge completed tasks
-                <span class="settings-field-hint">Frees the clutter without touching anything else</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Purge completed tasks ({{ completed_task_count }} right now)</button>
         </form>
     </div>
 </div>

@@ -608,7 +608,7 @@ class TestHomeResetButton:
 
 
 class TestSettingsResetButton:
-    def test_settings_data_maintenance_has_reset_button(self, conn, tmp_path):
+    def test_settings_data_maintenance_has_no_reset_button(self, conn, tmp_path):
         # 2026-08-08 Settings redesign: Reset to default layout lived on
         # Settings > Widgets, alongside the Custom widgets toggle it
         # shared a hub group with; that toggle was removed outright the
@@ -616,6 +616,10 @@ class TestSettingsResetButton:
         # one remaining action folded into Settings > Advanced instead.
         # 2026-08-17 Advanced itself folded into the merged Data &
         # Maintenance page's "Maintenance & upkeep" section.
+        # 2026-09-11 direct request: removed outright -- edit mode's own
+        # "Reset layout" button (TestHomeResetButton below) already posts
+        # to the same /dashboard/reset route, so this was a verbatim
+        # duplicate control, not a second surface worth keeping.
         #
         # The merged page also reads request.app.state.settings' db_path,
         # backup_dir and radicale_base_url and renders the note/error
@@ -641,5 +645,4 @@ class TestSettingsResetButton:
         )
         resp = settings_router.settings_data_maintenance(req, conn=conn)
         body = resp.body.decode()
-        assert 'action="/dashboard/reset"' in body
-        assert 'data-confirm-sheet' in body
+        assert 'action="/dashboard/reset"' not in body

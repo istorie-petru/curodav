@@ -17,6 +17,55 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order -- "the Purge Completed Tasks should sit in the context menu of
+  Database (as purge completed). The reset home layout button should be
+  removed, because in edit mode an exact button already exists."
+  settings_data_maintenance.html's Database status-card menu (the
+  `.action-menu` three-dot pattern shared by all three status cards) gained
+  a third item in its first (routine, non-danger) section: "Purge completed
+  (N)", the same `POST /settings/purge-completed` form and
+  `data-confirm-sheet` the old inline row used, just moved and relabeled --
+  grouped with Check integrity/Compact & reindex rather than the danger
+  section "Reset database (purge all)" lives in, since it's routine
+  housekeeping, not a catastrophe (same reasoning the 2026-08-26 redesign
+  used when it first placed this button). The "Reset Home to default
+  layout" row (posting to `/dashboard/reset`) was deleted outright, no
+  replacement -- confirmed first that Home's edit-mode "Reset layout"
+  button (`dashboard.html`) already posts to the exact same route with the
+  same `data-confirm-sheet` mechanism, just different wording, so the
+  Settings row was a verbatim duplicate control, not a second surface worth
+  keeping. Both rows removed from the Maintenance & cleanup card, which now
+  holds only the two autosubmit lifecycle selects (auto-archive, sync
+  cleanup retention). No backend/route changes -- `/settings/purge-completed`
+  and `/dashboard/reset` are unchanged, only the markup calling them moved.
+
+  **Tests**: updated the three existing tests that asserted on the old
+  markup rather than adding new ones (the moved button's behavior is
+  already covered by `test_data_health.py`'s purge-completed tests and
+  `test_dashboard_usability_rework.py`'s `TestHomeResetButton`/
+  `TestLabelPageResetButton`, which test the route/behavior, not this
+  page's now-removed duplicate): `test_phase8_settings_hub.py`'s
+  `TestSettingsAdvanced` (renamed/rewrote the reset-button test to assert
+  absence instead of presence), `test_data_health.py`'s
+  `test_purge_completed_is_housekeeping_and_danger_zone_is_gone` (label
+  text changed from "Purge completed tasks (N right now)" to "Purge
+  completed (N)"), and `test_dashboard_usability_rework.py`'s
+  `TestSettingsResetButton` (inverted to assert the route is gone from this
+  page). Full suite run in 4 parallel batches (single bash call, background
+  `&`/`wait` -- this environment's timeout otherwise kills a ~20s+ single
+  run): **2136 passed**, plus 4 pre-existing failures confirmed unrelated
+  by reproducing them on the unmodified HEAD commit via `git stash`
+  (`TestAgendaWidgetAllUpcoming::test_todays_earlier_events_still_count_as_upcoming`
+  and three siblings in `test_project_detail.py` -- all "today's earlier
+  event/task still counts as upcoming" tests, time-of-day-sensitive
+  boundary checks, not something this slice touched).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): move the password,
+  username, Radicale URL, etc. settings from General to a new "Your
+  Profile" page (including Profile Picture and Nickname/"Your Name"), and
+  move "Restart app" to Data & Maintenance as a post-edit toast trigger.
+
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` in doc order -- "The Kanban board columns should
   try to not add a horizontal scrollbar. It should first try to have them

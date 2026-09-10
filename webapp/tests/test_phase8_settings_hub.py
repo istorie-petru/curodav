@@ -326,19 +326,25 @@ class TestSettingsAdvanced:
     """2026-08-07 -- two explicit, confirmed-destructive purge actions.
     2026-08-17 they lived on the merged Data & Maintenance page's "Danger
     zone" section; 2026-08-26's second-pass redesign removed that section
-    entirely: "Purge completed" is routine housekeeping now (a grey button
-    in the Maintenance & cleanup card), and purge-all lives behind the
+    entirely: "Purge completed" was routine housekeeping (a grey button in
+    the Maintenance & cleanup card), and purge-all lived behind the
     Database status card's own "Reset database (purge all)" menu item,
     which opens a confirm toast carrying the typed-DELETE-ALL check (check
     first, then delete) -- 2026-09-09: was a standalone confirmation
     dialog/page, see test_data_health.py's TestPurgeAllConfirmToast for the
-    current version."""
+    current version. 2026-09-11 direct request: "Purge completed" moved
+    off its own inline row and into the Database card's context menu
+    (alongside Check integrity/Compact & reindex, as routine housekeeping
+    -- not the danger section purge-all lives in), and the page's "Reset
+    Home to default layout" row was removed outright since edit mode's own
+    "Reset layout" button already does the exact same thing."""
 
-    def test_purge_completed_on_page_and_purge_all_behind_the_confirm_toast(self, conn, tmp_path):
+    def test_purge_completed_in_database_menu_and_purge_all_behind_the_confirm_toast(self, conn, tmp_path):
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
-        # Housekeeping purge is a plain form on the page...
+        # Housekeeping purge is a plain form, now inside the Database
+        # card's context menu...
         assert 'action="/settings/purge-completed"' in body
         # ...while the full wipe is NOT on the page at all anymore -- it's
         # reachable only through the Database card's confirm-toast trigger
@@ -346,15 +352,14 @@ class TestSettingsAdvanced:
         assert 'action="/settings/purge-all"' not in body
         assert 'data-action="purge-all"' in body
 
-    def test_also_has_reset_layout_now_that_widgets_folded_in(self, conn, tmp_path):
-        # 2026-08-08: "Widgets" (Custom widgets toggle + reset layout) was
-        # folded into Advanced when the toggle itself was removed -- see
-        # routers/settings.py's module docstring; 2026-08-17 that folded
-        # page became Data & Maintenance's "Maintenance & upkeep" section.
+    def test_reset_home_layout_row_removed_from_page(self, conn, tmp_path):
+        # 2026-09-11 direct request: edit mode's own "Reset layout" button
+        # (dashboard.html) already posts to the same /dashboard/reset route
+        # -- this page's duplicate row is gone.
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
-        assert 'action="/dashboard/reset"' in body
-        assert "data-confirm-sheet" in body
+        assert 'action="/dashboard/reset"' not in body
+        assert '<span class="settings-field-label">Reset Home to default layout' not in body
 
     def test_completed_task_count_shown(self, conn, tmp_path):
         _make_task(conn, "t1", status="done")

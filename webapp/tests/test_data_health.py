@@ -374,9 +374,10 @@ class TestDataMaintenanceRedesign2026_08_26:
                               "status": "done", "due_at": None,
                               "created_at": _now(), "updated_at": _now()})
         body = self._page(conn, tmp_path)
-        # The soft grey count button in Maintenance & cleanup...
+        # 2026-09-11: moved into the Database card's context menu (routine
+        # housekeeping, grouped with Check integrity/Compact & reindex)...
         assert 'action="/settings/purge-completed"' in body
-        assert "Purge completed tasks (1 right now)" in body
+        assert "Purge completed (1)" in body
         # ...and no Danger zone anywhere: the full wipe moved behind the
         # Database card's own confirm-toast trigger (2026-09-09: a plain
         # button that opens a ccConfirmSheet, not a link to a modal page --
