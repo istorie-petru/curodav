@@ -17,6 +17,42 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "When inline changing labels in
+  Tasks page, the pills revert to a blue no icon pill, even if they
+  normally have color and icon. A refresh fixes this." Root cause:
+  `static/tasks_table.js`'s `change` listener for `input.task-label-
+  checkbox` rebuilt the trigger's `.cell-tags` HTML client-side after every
+  toggle, hand-constructing `<span class="cell-tag tag-blue">Name</span>`
+  per checked label -- it had no access to that label's real configured
+  color/icon (that lookup, `label_color()`/`label_icon()`, is server-side
+  only, in `_label_pill.html`'s `label_pill()` macro), so every edited pill
+  collapsed to plain blue with no icon until the next full page load
+  re-rendered it through the real macro. Fixed by cloning the pill markup
+  instead of reconstructing it: each checkbox's own `<label class=
+  "multiselect-option">` already has the real, server-rendered pill
+  sitting right next to it (`_task_row.html`'s dropdown-option list also
+  calls `label_pill(name)`) -- `cb.parentElement.querySelector(".cell-tag")
+  .outerHTML` reuses that exact markup, with the old hand-built-blue-span
+  kept only as a defensive fallback if the pill element somehow isn't
+  found.
+
+  **Tests**: 2 new structural source-checks in
+  `test_tasks_table_labels_status_title.py`'s new
+  `TestInlineLabelEditKeepsRealPillColorAndIcon` (same "no JS harness in
+  this suite, assert against the actual JS source" style the file's
+  existing `TestStatusLabelChangeListenerNotAncestorScoped` class already
+  uses) -- one confirms the old hardcoded-blue-span construction is gone,
+  one confirms the new clone-the-real-pill approach is present. Full suite
+  re-verified in the usual 6 batches -- **2097 passed, 0 failed**.
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Planner page's
+  unscheduled-work-card rework -- hide 0-session tasks, drop the +/-
+  steppers in favor of drag-and-drop reallocation. Doc order covered so
+  far this session: vCard import crash, banner/avatar crop-editor
+  outside-click, this Tasks-label-pill entry -- next up is the doc's
+  Planner item, the largest/most involved item in the list so far.
+
 - **Shipped:** 2026-09-10 -- same session as the vCard-import-crash entry
   below, direct "continue": next item off `audit-fixes-2.1.md`'s own list
   (picked in doc order, since the doc has no priority marking) -- "The

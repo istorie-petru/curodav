@@ -190,3 +190,36 @@ class TestStatusLabelChangeListenerNotAncestorScoped:
         assert 'target.matches("input.task-label-checkbox")' in js
         assert 'target.matches("#tasks-body input.task-status-radio")' not in js
         assert 'target.matches("#tasks-body input.task-label-checkbox")' not in js
+
+
+class TestInlineLabelEditKeepsRealPillColorAndIcon:
+    """Regression guard (audit-fixes-2.1.md, direct report: "the pills
+    revert to a blue no icon pill, even if they normally have color and
+    icon. A refresh fixes this."). The label-checkbox change handler used to
+    hand-build a generic `<span class="cell-tag tag-blue">Name</span>` per
+    checked label with no idea of that label's real configured color/icon
+    (that lookup is server-side only, in _label_pill.html's label_pill()/
+    label_color()/label_icon()) -- every inline-edited pill collapsed to
+    plain blue, no icon, until the next full page load re-rendered it
+    correctly. Fixed to clone the real, server-rendered pill markup already
+    sitting next to each checkbox in the dropdown panel (_task_row.html's
+    option list also calls label_pill(name)) instead of reconstructing a
+    fake one. No JS test harness in this suite (see this file's own header
+    note) -- structural source check, same style as the class above."""
+
+    def test_hardcoded_blue_pill_reconstruction_is_gone(self):
+        js = (_STATIC_DIR / "tasks_table.js").read_text(encoding="utf-8")
+        assert '"<span class=\\"cell-tag tag-blue\\">" + escapeHtml(name) + "</span>"' not in js
+        assert "checked.map((name) =>" not in js
+
+    def test_trigger_rebuild_clones_the_real_pill_markup(self):
+        js = (_STATIC_DIR / "tasks_table.js").read_text(encoding="utf-8")
+        # The fix reads each checked checkbox's own sibling `.cell-tag`
+        # (the real label_pill() output already in the DOM) via
+        # `.parentElement.querySelector(".cell-tag")` and reuses its
+        # `outerHTML`, rather than ever calling `escapeHtml(cb.value)` to
+        # build a pill from scratch (that fallback path still exists for
+        # the defensive "pill not found" case, but is no longer the normal
+        # path).
+        assert 'cb.parentElement.querySelector(".cell-tag")' in js
+        assert "pill.outerHTML" in js

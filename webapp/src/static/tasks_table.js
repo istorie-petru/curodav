@@ -145,13 +145,32 @@
     } else if (target.matches("input.task-label-checkbox")) {
       const uid = target.dataset.uid;
       const panel = target.closest(".multiselect-panel");
-      const checked = panel
-        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked")).map((cb) => cb.value)
+      const checkedBoxes = panel
+        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked"))
         : [];
+      const checked = checkedBoxes.map((cb) => cb.value);
       const trigger = currentBody().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
       if (trigger) {
-        trigger.innerHTML = checked.length
-          ? checked.map((name) => '<span class="cell-tag tag-blue">' + escapeHtml(name) + "</span>").join("")
+        // Bug fix (audit-fixes-2.1.md, direct report: "the pills revert to
+        // a blue no icon pill... a refresh fixes this"). This used to
+        // hand-build a generic '<span class="cell-tag tag-blue">Name</span>'
+        // per checked label -- it has no idea what color/icon a real label
+        // carries (that lookup lives server-side in _label_pill.html's
+        // label_pill() macro/label_color()/label_icon()), so every pill
+        // collapsed to plain blue with no icon until the next full page
+        // load re-rendered it correctly. Fix: each checkbox's own
+        // <label class="multiselect-option"> already has the real,
+        // server-rendered pill sitting right next to it (_task_row.html's
+        // dropdown-option list also calls label_pill(name)) -- clone that
+        // markup instead of reconstructing a fake one, so the trigger shows
+        // the exact same color/icon the page would render on reload.
+        trigger.innerHTML = checkedBoxes.length
+          ? checkedBoxes
+              .map((cb) => {
+                const pill = cb.parentElement.querySelector(".cell-tag");
+                return pill ? pill.outerHTML : '<span class="cell-tag tag-blue">' + escapeHtml(cb.value) + "</span>";
+              })
+              .join("")
           : '<span class="ms-summary text-muted">No labels</span>';
       }
       updateField(uid, "tags", checked);
