@@ -10,28 +10,26 @@
      - the drag source for dropping the task onto a grid (project_calendar.js
        interaction 1 -- POINTER-based drag, so the item deliberately carries
        no native `draggable` attribute)
-     - ALSO a click target that adds one more undated session (audit-
-       fixes-2.1.md, 2026-09-10 direct request: "remove the minus and plus
-       for these pills... the minus and plus allocation system will be
-       replaced by the already in place drag and drop... click on it, add
-       one more unscheduled session... drag and drop the other one wherever
-       the user wants"). Before this change the row had its own +/- stepper
-       (two `<form>`s posting to /tasks/{uid}/work-allocations and
-       .../work-allocations/remove-latest) for adjusting the undated-session
-       count directly; that's gone now -- project_calendar.js's own
-       pointerdown/pointerup handling on this row (already there for drag)
-       now also treats a plain release with no drag (its own
-       DRAG_THRESHOLD_PX not crossed) as "add one more session," POSTing to
-       the same /tasks/{uid}/work-allocations endpoint the old "+" button
-       used, via the same async ccApi path every other action on this page
-       already uses -- no `<form>`/submit needed here since it's all
-       JS-driven, same as the drag-to-schedule path itself. The newly-added
-       session is then placed by dragging the row onto the grid same as
-       before. There is no in-panel way to remove an undated session
-       anymore -- the task modal's own Work sessions card still owns
-       deleting a session outright; dragging a *placed* session back onto
-       this panel (project_calendar.js interaction 3) still un-schedules it,
-       unaffected by this change.
+     - ALSO a click target that opens the task's view modal (audit-
+       fixes-2.1.md, 2026-09-10 direct request: "for any pill inside it, the
+       user could click it and open the task view modal window"). Earlier
+       the same day/session, a plain click here briefly added one more
+       undated session instead (replacing this row's old +/- stepper,
+       two `<form>`s posting to /tasks/{uid}/work-allocations and
+       .../work-allocations/remove-latest) -- that conflicted with this
+       later, more specific request for the same click gesture, so per
+       direct decision opening the modal won and click-to-add is gone.
+       project_calendar.js's own pointerdown/pointerup handling on this row
+       (already there for drag) now treats a plain release with no drag
+       (its own DRAG_THRESHOLD_PX not crossed) as "open the task modal,"
+       same `taskUrlBase`/CCModal convention its interaction 4 already uses
+       for a placed `.work-allocation` block. Adding one more undated
+       session now happens from that modal's own Work sessions card ("+"
+       button, `_task_work_allocations.html`) instead of from this row.
+       There is still no in-panel way to remove an undated session --
+       deleting one is also the modal's Work sessions card's job; dragging
+       a *placed* session back onto this panel (project_calendar.js
+       interaction 3) still un-schedules it, unaffected by this change.
    `item.sessions.undated_count` (or, for a habit, `item.habit_sessions.
    needed`) is sessions STILL NEEDING PLACEMENT/still needed this period,
    not the task's total session count (`item.sessions.count`, unused by this

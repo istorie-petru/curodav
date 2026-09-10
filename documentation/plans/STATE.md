@@ -18,6 +18,45 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "In the unscheduled work, for any
+  pill inside it, the user could click it and open the task view modal
+  window." This directly conflicted with the SAME session's own earlier
+  Planner-rework slice (doc order, further down this file), which made a
+  plain click on that same pill add one more undated work session instead
+  -- a single click gesture can't do both. Flagged this to the user before
+  touching code (AskUserQuestion) rather than guessing; picked "click opens
+  the modal; drop click-to-add entirely -- add a session from the modal's
+  Work sessions card instead" (confirmed that card already has a working
+  "+" button posting to the same `/tasks/{uid}/work-allocations` endpoint,
+  so nothing there needed building).
+  Implementation: `static/project_calendar.js`'s `setupUnscheduledItem`
+  `end()` -- the no-drag click branch's `postAction(".../work-allocations",
+  ...)` call replaced with the same `taskUrlBase`/`window.CCModal.open(url,
+  item)` (falling back to `window.location.href`) convention interaction 4
+  already uses for a placed `.work-allocation` block's click-to-open;
+  `cfg.taskUrlBase` was already being set by `calendar_week.html` (the only
+  template that sets `window.PROJECT_CALENDAR` -- `_unscheduled_task_item.html`
+  is only ever rendered there via `_calendar_week_grid.html`) so no new
+  config plumbing was needed. Updated the stale click-to-add comments in
+  `project_calendar.js` (both its file-header interaction-1b note and
+  `end()`'s own) and `_unscheduled_task_item.html`'s macro-doc comment to
+  describe the superseding and why.
+
+  **Tests**: `test_calendar_week_scheduling.py` -- `TestClickToAddSessionIsAsync`
+  replaced with `TestClickOpensTaskModal` (4 tests: no-drag click branch
+  uses `cfg.taskUrlBase`/`item.dataset.taskUid`/`window.CCModal`/
+  `CCModal.open(url, item)`, the old click-to-add POST is gone from that
+  branch, the dead stepper pointerdown carve-out stays gone, and the
+  no-CCModal navigation fallback is present); `TestUnscheduledPanelStepper`'s
+  docstring updated to point at the new class. Full suite re-verified in
+  the usual 6 batches -- **2111 passed, 0 failed** (2110 - 3 old + 4 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): "Contacts edit
+  modal window doesn't use the custom drop down menus" -- confirmed still
+  open (contact_form.html's type pickers are all plain native `<select>`s;
+  only its Labels field uses the app's custom multiselect component).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
   `audit-fixes-2.1.md` -- "In the projects page, I would like the agenda
   card to also include tasks due date in that list, like other widgets in
   the normal dashboard." The Project page's card (previously "Upcoming

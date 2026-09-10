@@ -345,12 +345,11 @@ class TestUnscheduledPanelStepper:
     """"Unscheduled work" panel: per-item pill shows sessions still needing
     placement (`undated_count`), not the task's total session count.
     2026-09-10 (audit-fixes-2.1.md, direct request): the item's own +/-
-    stepper buttons are gone -- adding a session is now a plain click on
-    the item itself (project_calendar.js's pointer-drag `end()`, a release
-    with no drag), and there is no in-panel way to remove one anymore (the
-    task modal's Work sessions card still owns deleting a session
-    outright). See TestClickToAddSessionIsAsync below for the click-adds-a-
-    session behavior itself."""
+    stepper buttons are gone -- a plain click on the item itself now opens
+    the task view modal (project_calendar.js's pointer-drag `end()`, a
+    release with no drag; see TestClickOpensTaskModal below), and there is
+    no in-panel way to add or remove a session anymore -- both now live on
+    the task modal's own Work sessions card."""
 
     def test_item_has_no_plus_or_minus_buttons(self, conn):
         _task(conn, "t1", title="Research")
@@ -414,28 +413,35 @@ class TestUnscheduledPanelStepper:
         assert 'draggable="true"' not in body
 
 
-class TestClickToAddSessionIsAsync:
-    """audit-fixes-2.1.md (2026-09-10, direct request): replaces the old
-    +/- stepper's async behavior (data-cc-change forms, 2026-09-08 fix)
-    with a click on the unscheduled item itself. No browser harness in
+class TestClickOpensTaskModal:
+    """audit-fixes-2.1.md (2026-09-10, direct request, second pass same
+    day): "for any pill inside it, the user could click it and open the
+    task view modal window." Supersedes the same-session click-to-add-
+    session behavior (a plain click on the same gesture can't do both --
+    see TestUnscheduledPanelStepper's docstring). No browser harness in
     this suite (same convention as TestGridDragConflictFix above) --
     structural source checks against project_calendar.js confirm the
-    click path posts through the same async ccApi helper every other
-    drag/drop mutation on this page already uses, not a page-reloading
-    form submit."""
+    no-drag click branch opens the task modal via the same
+    taskUrlBase/CCModal convention interaction 4 already uses for a placed
+    `.work-allocation` block, and that the old click-to-add POST is gone."""
 
-    def test_no_drag_release_posts_the_create_endpoint(self):
+    def test_no_drag_release_opens_the_task_modal(self):
         script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert '"/tasks/" + item.dataset.taskUid + "/work-allocations"' in script
         assert "if (!wasDrag) {" in script
+        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
+        assert "cfg.taskUrlBase" in click_branch
+        assert "item.dataset.taskUid" in click_branch
+        assert "window.CCModal" in click_branch
+        assert "CCModal.open(url, item)" in click_branch
 
-    def test_click_path_uses_the_same_async_post_helper_as_drag_create(self):
-        # postAction() is the one function every mutation in this file goes
-        # through (ccApi + cc-entity-changed) -- confirms the click branch
-        # isn't a separate, un-async'd code path.
+    def test_click_to_add_session_post_is_gone(self):
+        # The earlier same-session click-to-add-session POST is gone from
+        # the no-drag click branch -- adding a session now happens from the
+        # task modal's own Work sessions card instead.
         script = (_STATIC_DIR / "project_calendar.js").read_text()
         click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
-        assert "postAction(" in click_branch
+        assert '"/work-allocations"' not in click_branch
+        assert "postAction(" not in click_branch
 
     def test_stepper_pointerdown_carveout_is_gone(self):
         # The old code let a pointerdown on `.unscheduled-stepper` click
@@ -443,6 +449,14 @@ class TestClickToAddSessionIsAsync:
         # would still work -- dead now that the stepper markup is gone.
         script = (_STATIC_DIR / "project_calendar.js").read_text()
         assert "unscheduled-stepper" not in script
+
+    def test_falls_back_to_navigation_without_ccmodal(self):
+        # Same fallback interaction 4 already documents for a placed block:
+        # no window.CCModal -> plain navigation to the task URL instead of
+        # silently doing nothing.
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
+        assert "window.location.href = url" in click_branch
 
 
 class TestUnscheduledPanelFixedHeight:
