@@ -874,6 +874,22 @@
     });
 
     updateTrigger();
+
+    // 2026-09-11 (holiday_date_sync.js, "after setting either the start
+    // and end date, the other one should be automatically set the same"):
+    // a small external hook so a *different* picker instance can be
+    // filled programmatically and have its own trigger label/hidden input
+    // stay in sync, the same way a real pick does -- without faking a day
+    // click. Date mode only (the one real caller, holiday From/To, is
+    // date mode); doesn't fire a change event itself, so it can't loop
+    // back into another instance's own change listener.
+    if (mode === "date") {
+      container.dtpSetDate = function (key) {
+        state.date = key || null;
+        startInput.value = key || "";
+        updateTrigger();
+      };
+    }
   }
 
   function scan(root) {

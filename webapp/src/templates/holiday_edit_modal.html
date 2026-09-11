@@ -4,6 +4,13 @@
 <!-- One form for every field (2026-08-17 settings HTML uniformity pass,
      SETTINGS_UI_GUIDE.md pattern B) -- replaces the Holidays table's old
      inline-editable cells (per-field PATCH via static/settings_holidays.js).
+     2026-09-11: Start/End date auto-sync (picking whichever one is still
+     empty fills it with the other's value; once both are set, they're
+     independent) is wired by static/holiday_date_sync.js, loaded globally
+     in base.html and re-initialized by modal.js's wireContent() the same
+     way as this page's other field-linking scripts (see e.g. the Role
+     picker note in label_edit_modal.html) -- no extra_scripts block here,
+     per this comment's own note below.
      Same shape as label_edit_modal.html: opened empty from the "+ Add
      holiday" toolbar button (routers/settings.py::new_holiday_modal, posts
      to create_holiday) or prefilled from a row's Edit button

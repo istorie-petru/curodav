@@ -18,6 +18,48 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order: "While adding a hollday, in the specific modal window, after
+  setting either the start and end date, the other one should be
+  automatically set the same. After the initial set both can be changed
+  without any sync between them." `holiday_edit_modal.html`'s Start/End
+  are two independent `_datetime_picker.html` date-mode instances with no
+  awareness of each other -- new `static/holiday_date_sync.js` listens
+  for the `change` event each already fires on pick (datetime_picker.js's
+  existing commitChange()) and, only when the *other* field is still
+  empty, fills it with the same date. `datetime_picker.js` gained a small
+  `dtpSetDate(key)` hook on each date-mode `.dtp` container's element (set
+  in `enhance()`, mirrors a real pick's hidden-input+trigger-label update
+  without dispatching another `change` -- no risk of the two listeners
+  looping) so the sync script can fill the *other* picker's own instance,
+  not just its raw hidden input. Wired into `base.html` (global `<script
+  defer>`, same as `event_format_toggle.js`) and `modal.js`'s
+  `wireContent()` (`CCHolidayDateSync.init(body)`) -- holiday_edit_modal
+  is modal-only, so no extra_scripts block, same reasoning as every other
+  modal-injected field-linking script. Not added to `sw.js`'s
+  SHELL_ASSETS (following `label_role_picker.js`/`label_form_picker.js`'s
+  precedent, not `event_format_toggle.js`'s -- this codebase is
+  inconsistent about which globally-loaded small feature scripts get
+  precached, per v97/v98's own admission; datetime_picker.js's change
+  also needs no bump, same "page-specific, not itself a SHELL_ASSETS
+  entry" reasoning as its v49 entry).
+
+  **Tests**: new `test_holiday_date_sync.py` -- markup sanity (both date
+  fields render in one `#holiday-form`, `data-dtp-mode="date"`), the new
+  script's existence/API surface, the empty-field gate that keeps "both
+  can be changed without sync" true once both are set, and that
+  `base.html`/`modal.js` load/reinit it. Full suite run in 4 sequential
+  batches (still one call per batch -- this sandbox can't finish an
+  un-split run inside the tool's 45s call limit): **2157 passed, 0
+  failed** -- the 4 time-of-day-boundary failures noted in the last few
+  sessions didn't reproduce this time (wall-clock dependent, not
+  something this slice touched).
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Hollydays should add support for only day hollydays, withot
+  the year" (year-agnostic recurring holidays, e.g. fixed-date religious
+  holidays).
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
   order: "For the settings, the page-header-narrow-back, it should be on
   the left most, not right most." The crumbs-driven back arrow
   (`_page_header_narrow.html`'s `page_header_narrow()` macro) was sitting
