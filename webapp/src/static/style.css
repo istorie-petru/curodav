@@ -2599,12 +2599,28 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 
 /* Contacts list (contacts_list.html) */
 .contact-list{display:flex; flex-direction:column;}
+/* 2026-09-14 ("add bulk select for contacts too"): the row used to be a
+   single `.contact-row` anchor carrying its own border/padding/hover.
+   Now `.contact-row-wrap` is the actual row (border, hover, the
+   bulk-select `.is-selected` tint) and `.contact-row` is just the
+   clickable link filling the rest of it alongside the new checkbox --
+   same "wrapper owns the row, inner element owns its own click target"
+   split every `<tr><td><a>` table row in this app already has, with this
+   div standing in for the `<tr>` a card-list doesn't have. See
+   static/bulk_select.js's `rowSelector` option and _contacts_body.html's
+   own comment. */
+.contact-row-wrap{
+  display:flex; align-items:center; gap:var(--space-2); padding-left:var(--space-2); border-bottom:1px solid var(--separator);
+}
+.contact-row-wrap:last-child{border-bottom:none;}
+.contact-row-wrap:hover{background:var(--row-alt);}
+.contact-row-wrap.is-selected{background:var(--accent-neutral-subtle);}
+.contact-row-wrap .row-select{flex:none;}
 .contact-row{
-  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); border-bottom:1px solid var(--separator);
+  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); flex:1; min-width:0;
   text-decoration:none; color:inherit;
 }
-.contact-row:last-child{border-bottom:none;}
-.contact-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-row:hover{text-decoration:none;}
 .contact-row-main{display:flex; flex-direction:column; flex:1; min-width:0;}
 .contact-row-name{font-weight:600; color:var(--fg-primary);}
 .contact-row-sub{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}

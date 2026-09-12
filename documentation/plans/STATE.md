@@ -17,6 +17,68 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct request: "add bulk select for contacts
+  too." Contacts was the one list left out of the 2026-08-29 bulk-actions
+  pass (STATE.md backlog item 1) -- deferred at the time because its rows
+  are a card-list (`.contact-row`, a whole-row `<a>` that opens the edit
+  modal via `data-modal`), not a `<table>`, and a `.row-select` checkbox
+  can't just live inside that anchor without a click on it also triggering
+  the anchor's own navigation.
+
+  Fix: `_contacts_body.html`'s row markup restructured -- each row is now
+  a `.contact-row-wrap` div (carries `data-uid`, the border/hover/
+  `.is-selected` tint that used to live on `.contact-row` itself) wrapping
+  a new `.row-select` checkbox as a sibling *before* the unchanged
+  `.contact-row` anchor, same "wrapper owns the row, inner element owns
+  its own click target" split every `<tr><td><a>` table row already has.
+  `contacts_list.html` gained `_bulk_actions_bar.html`'s macro (id prefix
+  "contacts") inside its `page_header_narrow` actions slot, same as
+  Holidays/Labels/Time Blocks. `routers/contacts.py` gained `POST
+  /contacts/bulk-delete` (JSON `{uids}`, loops `db.delete_contact`, same
+  shape as `bulk_delete_holidays`/`bulk_delete_time_blocks`), registered
+  ahead of the `/{uid}` routes.
+
+  `static/bulk_select.js` needed two generalizations, both driven by
+  Contacts being a genuinely new kind of caller: (1) a new `rowSelector`
+  option (default `"tr"`, unchanged for every existing caller) since
+  `.contact-row-wrap` isn't a `<tr>`; (2) re-init safety -- Contacts
+  already has an async-CRUD region swap (`contacts_list.js`'s
+  `cc-entity-changed` -> `refreshRegion("#contacts-body")`) for every
+  non-bulk mutation, which replaces the whole `#contacts-list` subtree
+  CCBulkSelect.init() originally wired, and no existing caller ever
+  re-initialized on the same page before this. Added an `instances` map
+  keyed by `tableId` that tears down the previous instance's two
+  document-level pointermove/pointerup listeners (the drag-paint
+  mechanic) before wiring the fresh DOM -- otherwise those would leak one
+  more orphaned pair per region swap. `contacts_list.html`'s own script
+  now calls `CCBulkSelect.init()` again on `cc-region-swapped` (mirrors
+  `tasks_table.js`'s existing `reconcileAfterSwap` pattern for
+  `#tasks-body`) -- an in-progress selection is simply dropped across a
+  swap (every checkbox re-renders unchecked), an acceptable rare edge case
+  rather than something worth carrying selection state through a full
+  fragment replacement for.
+
+  `style.css`: `.contact-row`'s border/hover/padding split into
+  `.contact-row-wrap` (the row) and `.contact-row` (the inner link, now
+  `flex:1` alongside the checkbox) -- same restructuring the template
+  needed, mirrored in CSS.
+
+  **Tests**: `test_bulk_actions_tables.py` gained `TestContactsBulkDelete`
+  (deletes every selected uid; empty selection 400s) and
+  `TestContactsRowSelectCheckbox` (list row carries `.contact-row-wrap`
+  and `.row-select`, both keyed off the contact's uid) -- same shape as
+  the file's existing Holidays/Time-Blocks/Labels bulk-delete tests. That
+  file's own header comment (previously: "Contacts is deliberately
+  deferred") is updated to describe this slice instead of leaving a stale
+  deferral note. `documentation/features/contacts.md` gained a bulk-select
+  bullet under List. Full suite re-verified in 8 file-list batches (this
+  sandbox's 45s-per-call limit) -- **2197 passed, 0 failed** (2194 + the 3
+  new tests above).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-13 -- direct bug report (screenshot of "Edit
   published list"): the read-only Type field looked broken -- a bare
   `.cell-tag` pill sized to its own text, visibly narrower than every other

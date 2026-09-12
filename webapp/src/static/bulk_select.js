@@ -38,13 +38,39 @@
 //                       usage," not an irreversible row delete, so it
 //                       supplies its own wording -- see
 //                       labels_manage.html.)
+//   rowSelector      -- (2026-09-14, contacts_list.html) CSS selector for
+//                       "the whole selectable row" a checkbox belongs to,
+//                       toggled `.is-selected` for styling -- default "tr"
+//                       (every existing caller is a real `<table>`).
+//                       Contacts' card-list rows aren't `<tr>`s, so that
+//                       caller passes ".contact-row-wrap" (the div wrapping
+//                       each checkbox + the row's own `<a>`, see
+//                       _contacts_body.html's own comment on why the row
+//                       needed restructuring for this).
 // })
+//
+// Re-init safety (2026-09-14): contacts_list.html calls init() again after
+// every async-CRUD region swap of its container (a fresh server-rendered
+// fragment, so the previous `table`/`bar` element references + their
+// document-level pointermove/pointerup drag-paint listeners are orphaned
+// otherwise -- no existing caller re-initialized on the same page before
+// this, so nothing tore old listeners down). `instances` tracks one
+// teardown function per `tableId`; a second init() for the same id runs
+// the previous instance's teardown first so orphaned listeners don't pile
+// up release after release.
 (function () {
+  const instances = {};
+
   function init(cfg) {
     const table = document.getElementById(cfg.tableId);
     const bar = document.getElementById(cfg.barId);
     const countEl = cfg.countId ? document.getElementById(cfg.countId) : null;
+    if (instances[cfg.tableId]) {
+      instances[cfg.tableId]();
+      delete instances[cfg.tableId];
+    }
     if (!table || !bar) return;
+    const rowSelector = cfg.rowSelector || "tr";
 
     const selected = new Set();
     let lastClickedIdx = null;
@@ -53,7 +79,7 @@
       return Array.from(table.querySelectorAll(".row-select"));
     }
     function rowFor(cb) {
-      return cb.closest("tr");
+      return cb.closest(rowSelector);
     }
     function setSelected(cb, on) {
       cb.checked = on;
@@ -108,7 +134,11 @@
       lastClickedIdx = checkboxes().indexOf(cb);
       updateBar();
     });
-    document.addEventListener("pointermove", (e) => {
+    // Named (not inline) so teardown() below can remove exactly these two
+    // document-level listeners on re-init, instead of leaking one more
+    // pair of orphaned listeners (closed over the previous, now-detached
+    // `table`) every time this tableId's container gets swapped out.
+    function onDocPointerMove(e) {
       if (!painting) return;
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const cb = el && el.closest && el.closest(".row-select");
@@ -116,10 +146,16 @@
         setSelected(cb, paintValue);
         updateBar();
       }
-    });
-    document.addEventListener("pointerup", () => {
+    }
+    function onDocPointerUp() {
       painting = false;
-    });
+    }
+    document.addEventListener("pointermove", onDocPointerMove);
+    document.addEventListener("pointerup", onDocPointerUp);
+    instances[cfg.tableId] = function teardown() {
+      document.removeEventListener("pointermove", onDocPointerMove);
+      document.removeEventListener("pointerup", onDocPointerUp);
+    };
 
     if (cfg.clearId) {
       document.getElementById(cfg.clearId)?.addEventListener("click", () => {

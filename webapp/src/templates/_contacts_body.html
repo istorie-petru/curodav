@@ -8,29 +8,45 @@
      background it was never meant to have. -->
 <div id="contacts-body" class="main-shell-body">
 {% if contacts %}
-<div class="card contact-list">
+<!-- 2026-09-14 (direct request: "add bulk select for contacts too"): each
+     row used to be a single whole-row `<a>` (opens the edit modal via
+     data-modal) -- a `.row-select` checkbox can't just live inside that
+     `<a>` (a click on it would also trigger the anchor's own navigation/
+     modal-open), so each row is now a `.contact-row-wrap` carrying the
+     checkbox as a sibling before the `<a>`, same "wrapper owns selection,
+     inner element owns its own click behavior" shape settings_holidays.
+     html's `<tr>`/`<td><a></a></td>` split already has, just with a div
+     standing in for the `<tr>` this card-list doesn't have. `id="contacts-
+     list"` on the outer list (not the individual rows) is static/
+     bulk_select.js's `tableId` -- see that module's own `rowSelector` doc
+     for why `.contact-row-wrap`, not the default `tr`, is passed for this
+     instance. -->
+<div class="card contact-list" id="contacts-list">
     {% for c in contacts %}
-    <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
-        {{ avatar(c) }}
-        <span class="contact-row-main">
-            <span class="contact-row-name">{{ c.full_name }}</span>
-            <!-- Contacts field parity slice 2 of 6: c.phone/c.email are
-                 dead (see db.py's contacts CREATE TABLE comment) -- this row
-                 stays concise by showing just the first (lowest-position)
-                 phone/email, same as before there could be more than one;
-                 no separate "primary" flag needed, "first" is simply
-                 whichever entry was entered/synced first. -->
-            <span class="contact-row-sub">
-                {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
-                {%- elif c.title %}{{ c.title }}
-                {%- elif c.org %}{{ c.org }}{% endif %}
-                {% if (c.title or c.org) and c.phones %}&middot;{% endif %}
-                {% if c.phones %}{{ c.phones[0].value }}{% endif %}
-                {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
+    <div class="contact-row-wrap" data-uid="{{ c.uid }}">
+        <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}">
+        <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
+            {{ avatar(c) }}
+            <span class="contact-row-main">
+                <span class="contact-row-name">{{ c.full_name }}</span>
+                <!-- Contacts field parity slice 2 of 6: c.phone/c.email are
+                     dead (see db.py's contacts CREATE TABLE comment) -- this row
+                     stays concise by showing just the first (lowest-position)
+                     phone/email, same as before there could be more than one;
+                     no separate "primary" flag needed, "first" is simply
+                     whichever entry was entered/synced first. -->
+                <span class="contact-row-sub">
+                    {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
+                    {%- elif c.title %}{{ c.title }}
+                    {%- elif c.org %}{{ c.org }}{% endif %}
+                    {% if (c.title or c.org) and c.phones %}&middot;{% endif %}
+                    {% if c.phones %}{{ c.phones[0].value }}{% endif %}
+                    {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
+                </span>
             </span>
-        </span>
-        {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
-    </a>
+            {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
+        </a>
+    </div>
     {% endfor %}
 </div>
 {% else %}
