@@ -17,6 +17,38 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  redesign directly below, from a screenshot: "fix the highlight color.
+  the divider-lines-spacing problem too." Two independent CSS fixes:
+
+  1. **Pill highlight contrast**: `.command-palette-pill.is-active` used
+     `background:var(--fg-primary); color:var(--fg-on-accent)` -- in dark
+     mode `--fg-primary` (#f5f5f7) and `--fg-on-accent` (#ffffff) are both
+     near-white, so the active pill read as a washed-out, barely-legible
+     block (visible in the screenshot's "Contacts" pill). Switched to
+     `background:var(--accent); border-color:var(--accent)` -- a
+     consistently saturated blue in both themes, so `--fg-on-accent`
+     white text stays legibly contrasted either way.
+  2. **Group-header spacing**: `.command-palette-group-header` had
+     asymmetric padding (`--space-3` top, `--space-1` bottom) meant to
+     separate it from the section above while sitting close to its own
+     rows below -- in practice this read as uneven/broken rhythm between
+     sections rather than intentional grouping. Replaced with symmetric
+     `padding:var(--space-1) var(--space-3)` for the label's own
+     breathing room, plus a single explicit `margin-top:var(--space-3)`
+     (zeroed via `:first-child` for the very first header) to create one
+     consistent, deliberate gap above every section instead of relying
+     on two different rules' padding stacking unpredictably.
+
+  **Tests**: none needed -- pure CSS. Full suite re-verified in 4
+  batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`)
+  -- **2198 passed, 0 failed**. No-browser caveat still applies -- worth
+  confirming both fixes visually next time a browser's available.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- direct feedback from an iterated visual mockup
   of the search/Ctrl-K overlay (three rounds: initial redesign, then "no
   horizontal scrollbar / bigger padded input / aligned footer" polish,

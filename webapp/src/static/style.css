@@ -4652,7 +4652,7 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-pill .icon{color:inherit;}
 .command-palette-pill:hover{background:var(--bg-secondary);}
-.command-palette-pill.is-active{background:var(--fg-primary); border-color:var(--fg-primary); color:var(--fg-on-accent);}
+.command-palette-pill.is-active{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
 
 .command-palette-results{overflow-y:auto; flex:1; padding:var(--space-2);}
 
@@ -4662,10 +4662,10 @@ body.command-palette-open{overflow:hidden;}
    it's automatically excluded from keyboard navigation (currentRowEls
    only collects .command-palette-row elements). */
 .command-palette-group-header{
-  padding:var(--space-3) var(--space-3) var(--space-1);
+  margin-top:var(--space-3); padding:var(--space-1) var(--space-3);
   font-size:var(--text-caption); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
 }
-.command-palette-group-header:first-child{padding-top:var(--space-2);}
+.command-palette-group-header:first-child{margin-top:0;}
 
 /* Footer (direct feedback, 2026-09-12) -- real ↑↓/↵ keyboard hints
    (spelled out, not literal "t"/"e" shortcuts -- those would collide
