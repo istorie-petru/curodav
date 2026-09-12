@@ -17,6 +17,46 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- direct feedback: "the mobile view can't fit
+  all the content sometimes visible in the narrow header. could we make it
+  two rows for mobile?" `.page-header-narrow` (`_page_header_narrow.html`)
+  is a fixed `height:48px`, single-row flex strip with `overflow:hidden`
+  (pinned deliberately, per its own 2026-09-07 comment, so height doesn't
+  vary control-to-control) -- on a page with a real actions cluster
+  (Tasks/Contacts' filter dropdown + bulk bar, Calendar's prev/next +
+  Month|Day subnav) that row was already crowded on desktop and simply
+  clipped whatever didn't fit once the viewport narrowed, instead of
+  showing it anywhere.
+
+  Fix, scoped to the existing `@media (max-width:720px)` mobile block in
+  `style.css` (same breakpoint every other mobile-only rule in the file
+  uses): `.page-header-narrow` gets `height:auto; min-height:48px;
+  flex-wrap:wrap` there, and `.page-header-narrow-actions` gets
+  `flex-basis:100%; justify-content:flex-end` -- forces the actions
+  cluster (icon+title's sibling flex item) onto its own full-width second
+  row, right-aligned, whenever a page actually renders one. Pages with no
+  actions block (the macro called with no `{% call %}` body -- Notes,
+  Settings family, etc.) render `.page-header-narrow-actions` not at all,
+  so those stay exactly one row, unaffected. Desktop (>720px) is
+  byte-for-byte unchanged -- the fixed-height single-row rule still
+  applies there.
+
+  **Tests**: none added (pure CSS, no existing assertion touched
+  `.page-header-narrow`'s height or row count). Full suite re-verified in
+  4 batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`)
+  -- **2197 passed, 0 failed**. Not verified live in a real mobile
+  viewport this session (no headless-Chrome/Puppeteer tooling available
+  in this sandbox) -- verification was CSS-rule and cascade reasoning
+  plus the full Python suite, not a rendered screenshot. Worth a quick
+  visual double-check next time a browser's available, especially the
+  banner-image case (`.page-header-narrow-bg`/`.has-banner::after`) since
+  its `inset:0` sizing now has to track an auto height instead of a fixed
+  48px.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-15 -- same-day follow-up on the two entries below:
   "the multiselect widget-list-multiselect filter-dropdown should be
   last. also that button still has less height compared to the others."

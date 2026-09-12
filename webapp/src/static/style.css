@@ -6109,6 +6109,29 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   .calendar-new-form input,
   .calendar-new-form select,
   .calendar-new-form .multiselect{width:100%; min-width:0;}
+
+  /* 2026-09-12 (direct feedback: "the mobile view can't fit all the
+     content sometimes visible in the narrow header. could we make it two
+     rows for mobile?"). .page-header-narrow is a fixed height:48px, one
+     row, overflow:hidden on desktop (see its own comment for why the
+     height is pinned) -- on a narrow viewport, a page with a real actions
+     cluster (Tasks/Contacts' filter dropdown + bulk bar, Calendar's
+     prev/next + Month|Day subnav) plus the icon+title often doesn't fit
+     that one 48px row, and overflow:hidden was silently clipping whatever
+     didn't fit instead of showing it. Give the header a second row here:
+     icon+title(+back arrow) keep row one, the actions cluster -- when a
+     page has one at all, since .page-header-narrow-actions only renders
+     when the macro's caller block has content -- moves to its own
+     full-width row two. Plain-title pages (no actions block) are
+     untouched, still a single row. */
+  .page-header-narrow{
+    height:auto; min-height:48px;
+    flex-wrap:wrap; row-gap:var(--space-2);
+    padding-bottom:var(--space-2);
+  }
+  .page-header-narrow-actions{
+    flex-basis:100%; justify-content:flex-end;
+  }
 }
 
 /* Segmented control (.segmented/.seg-btn) many-option overflow, app-wide --
