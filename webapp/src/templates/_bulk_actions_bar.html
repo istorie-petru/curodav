@@ -70,10 +70,25 @@
    that edge -- not closest to whatever sits to its left -- reads as
    "first"/most prominent. Delete/Clear/count reversed to count -> Clear
    -> Delete, putting Delete (the actual bulk action, the reason this bar
-   exists) at the true right edge instead of buried before Clear/count. #}
+   exists) at the true right edge instead of buried before Clear/count.
+
+   2026-09-12 (direct feedback: "the bulk count should be allowed to sit
+   on the first row"): the count span moved OUT of this macro's own
+   markup into a new sibling macro, `bulk_count()` below -- every call
+   site now passes `bulk_count(id_prefix)`'s return value as
+   `_page_header_narrow.html`'s `title_extra` param instead of rendering
+   it inside `bulk_actions_bar()`'s own `.bulk-actions-bar` div, so it's a
+   sibling of the header's title, not nested in the actions block that
+   style.css's mobile rule forces onto its own row-two. This macro is
+   Clear+Delete only now; nothing about its own layout/ids changed beyond
+   dropping the `<span>`. bulk_select.js/tasks_table.js's `countId` still
+   works unchanged -- `document.getElementById` doesn't care where in the
+   DOM the element lives, only that the id matches. #}
+{% macro bulk_count(id_prefix) %}
+<span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
+{% endmacro %}
 {% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
 <div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
-    <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
     <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
     <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
 </div>

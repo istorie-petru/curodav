@@ -2054,6 +2054,27 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
 .bulk-count{font-weight:600; font-size:var(--text-footnote); white-space:nowrap;}
+/* 2026-09-12 (direct feedback: "the bulk count should be allowed to sit
+   on the first row" -- the mobile two-row wrap above forces the whole
+   actions cluster, Clear/Delete/any filter dropdown, onto row two, but
+   the plain-text count reads better as a status line next to the title
+   itself). Moved out of .bulk-actions-bar in the markup into
+   _page_header_narrow.html's new title_extra slot (renders right after
+   the title, before the spacer -- see that macro's own comment and
+   _bulk_actions_bar.html's new bulk_count() macro) for every bulk-select
+   page (Tasks/Holidays/Time Blocks/Labels/Contacts), so it's a sibling of
+   the title/icon now, not nested in the actions block that gets pushed to
+   row two. `:empty` hides it entirely (zero-width, no flex `gap` taken
+   either side) whenever nothing's selected -- previously that was free,
+   the count lived inside `.bulk-actions-bar`'s own `display:none`; now
+   that it's always a rendered sibling of the title, it needs its own
+   empty-state instead of just inheriting a hidden ancestor.
+   bulk_select.js/tasks_table.js's updateBar() clears its textContent back
+   to "" on deselect specifically so this rule actually re-hides it. */
+.bulk-count:empty{display:none;}
+.page-header-narrow.has-banner .bulk-count{
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
 /* Completed tasks stay in the table (Today/All/This-week views) but read
    as visually distinct and de-emphasized -- dimmed + strikethrough title,
    plus the divider row above (tasks_list.html) that separates them from
@@ -6112,20 +6133,30 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
   /* 2026-09-12 (direct feedback: "the mobile view can't fit all the
      content sometimes visible in the narrow header. could we make it two
-     rows for mobile?"). .page-header-narrow is a fixed height:48px, one
-     row, overflow:hidden on desktop (see its own comment for why the
-     height is pinned) -- on a narrow viewport, a page with a real actions
-     cluster (Tasks/Contacts' filter dropdown + bulk bar, Calendar's
-     prev/next + Month|Day subnav) plus the icon+title often doesn't fit
-     that one 48px row, and overflow:hidden was silently clipping whatever
-     didn't fit instead of showing it. Give the header a second row here:
-     icon+title(+back arrow) keep row one, the actions cluster -- when a
-     page has one at all, since .page-header-narrow-actions only renders
-     when the macro's caller block has content -- moves to its own
-     full-width row two. Plain-title pages (no actions block) are
-     untouched, still a single row. */
+     rows for mobile?"). .page-header-narrow used to be a fixed height:48px,
+     one row, overflow:hidden on every viewport (see the base rule below,
+     now scoped to desktop only) -- on a narrow viewport, a page with a
+     real actions cluster (Tasks/Contacts' filter dropdown + bulk bar,
+     Calendar's prev/next + Month|Day subnav) plus the icon+title often
+     didn't fit that one 48px row, and overflow:hidden was silently
+     clipping whatever didn't fit instead of showing it. Give the header a
+     second row here: icon+title(+back arrow, +bulk-count -- see
+     _page_header_narrow.html's title_extra param) keep row one, the
+     actions cluster -- when a page has one at all, since
+     .page-header-narrow-actions only renders when the macro's caller
+     block has content -- moves to its own full-width row two. Plain-title
+     pages (no actions block) are untouched, still a single row.
+
+     2026-09-12 same-day follow-up (direct feedback: "remove the height
+     requirement for mobile view"): dropped the `min-height:48px` floor
+     this block used to set here -- there's no explicit height rule at all
+     for this class below 721px now (the old fixed height:48px moved into
+     a `@media (min-width:721px)` block right on the base rule, the same
+     mobile-first pattern .page-banner's own aspect-ratio override already
+     uses a few hundred lines up), so the header is purely content-sized
+     on mobile: one row when there's nothing to wrap, two when there is,
+     never an artificial floor either way. */
   .page-header-narrow{
-    height:auto; min-height:48px;
     flex-wrap:wrap; row-gap:var(--space-2);
     padding-bottom:var(--space-2);
   }
@@ -6298,27 +6329,35 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    .page-banner above, which is a different image per Home/label page). */
 .page-header-narrow{
   position:relative; overflow:hidden;
-  /* 2026-09-07 (direct measurement: height varied 46-50px depending on
-     which control happened to render in .page-header-narrow-actions --
-     a filter-dropdown-trigger's page measured 50px, a plain icon+title
-     page measured 46px, both off the 48px target in opposite
-     directions). Auto-sizing this row off whichever child happens to be
-     tallest turned out not to reliably land on 48px even after capping
-     every known control at a 32px content budget (8px padding either
-     side) -- some small, hard-to-fully-account-for difference in how
-     each control's own content naturally sizes (line-height rounding,
-     a competing border-width rule winning by specificity in one case,
-     etc.) kept nudging the *measured* height off the *intended* one.
-     Setting height:48px directly makes the header's own box authoritative
-     regardless of those differences -- overflow:hidden above (already
-     needed for the optional banner image) absorbs anything that doesn't
-     quite fit rather than pushing the row taller. */
-  height:48px;
   display:flex; align-items:center; gap:var(--space-2);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
   border-radius:var(--radius-card); border:1px solid var(--border);
   background:linear-gradient(120deg, var(--accent-subtle), transparent 70%),
              var(--bg-elevated);
+}
+/* 2026-09-07 (direct measurement: height varied 46-50px depending on which
+   control happened to render in .page-header-narrow-actions -- a filter-
+   dropdown-trigger's page measured 50px, a plain icon+title page measured
+   46px, both off the 48px target in opposite directions). Auto-sizing
+   this row off whichever child happens to be tallest turned out not to
+   reliably land on 48px even after capping every known control at a 32px
+   content budget (8px padding either side) -- some small, hard-to-fully-
+   account-for difference in how each control's own content naturally
+   sizes (line-height rounding, a competing border-width rule winning by
+   specificity in one case, etc.) kept nudging the *measured* height off
+   the *intended* one. Setting height:48px directly makes the header's own
+   box authoritative regardless of those differences -- overflow:hidden
+   above (already needed for the optional banner image) absorbs anything
+   that doesn't quite fit rather than pushing the row taller.
+   2026-09-12 (direct feedback: "remove the height requirement for mobile
+   view") -- scoped to desktop only, same mobile-first pattern as
+   .page-banner's own aspect-ratio override above: below 721px this rule
+   doesn't apply at all, so the header is free to grow to however many
+   rows its content (and the mobile two-row wrap rule in the
+   @media(max-width:720px) block) needs, with no fixed/minimum height
+   fighting it. */
+@media (min-width:721px){
+  .page-header-narrow{height:48px;}
 }
 .page-header-narrow-bg{
   position:absolute; inset:0; width:100%; height:100%;
@@ -6407,6 +6446,25 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .page-header-narrow-actions .filter-dropdown-trigger,
 .page-header-narrow-actions .bulk-actions-bar .btn{
   min-width:112px; height:30px; justify-content:center;
+}
+/* 2026-09-12 (direct feedback: "on desktop it should be a small divider
+   line between normal buttons and the bulk edit ones") -- Tasks/Contacts
+   both render their filter dropdown (.filter-dropdown, the "normal"/
+   browsing control -- Date on Tasks, Label on Contacts) as a later
+   sibling of .bulk-actions-bar (the "bulk edit" Clear/Delete group) in
+   the same actions cluster (tasks_list.html/contacts_list.html's own
+   `{% call %}` blocks). `~` (general sibling, not `+`) because an empty
+   `<form class="filter-bar">` -- just a hidden `?q=` carry-through field,
+   no visible content -- sits between them in the markup on both pages.
+   Desktop only: on mobile the two groups already read as visually
+   distinct by sitting on different wrapped lines (see the
+   @media(max-width:720px) rule above), so a divider there would be
+   redundant clutter, not clarity. */
+@media (min-width:721px){
+  .page-header-narrow-actions .bulk-actions-bar ~ .filter-dropdown{
+    margin-left:var(--space-1); padding-left:var(--space-3);
+    border-left:1px solid var(--border);
+  }
 }
 /* Month's Month|Day .segmented switch (calendar_month.html's own
    `.calendar-subnav`) is the one other actions-slot control besides

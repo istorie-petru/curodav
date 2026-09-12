@@ -3,7 +3,7 @@
 {% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 <!-- 2026-08-07: dropped the include of _settings_nav.html that used to
      sit here -- Contacts is a primary tabbar destination now (base.html),
      not a Settings sub-page, so the Settings segmented strip doesn't
@@ -23,7 +23,7 @@
      own comment: the narrow header's title is a <h2>, and this page's old
      toolbar row was its only h1, so it's restored standalone here. -->
 <h1 class="sr-only">Contacts</h1>
-{% call page_header_narrow("Contacts", "address-book") %}
+{% call page_header_narrow("Contacts", "address-book", title_extra=bulk_count("contacts")) %}
 {# Bulk-select "Delete" bar -- same _bulk_actions_bar.html macro/static/
    bulk_select.js pattern Labels/Holidays/Time Blocks already use, hidden
    until a row is checked. Contacts was the one list left out of that
@@ -31,7 +31,8 @@
    card-list, not a `<table>` -- _contacts_body.html now wraps each row
    for a `.row-select` checkbox to attach to (see that template's own
    comment), so this is otherwise identical to settings_holidays.html's
-   own call site. #}
+   own call site. 2026-09-12: the count span itself moved up to
+   title_extra above (see _bulk_actions_bar.html's own comment). #}
 {{ bulk_actions_bar("contacts") }}
 <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
     {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}

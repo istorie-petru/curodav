@@ -98,6 +98,14 @@
         if (countEl) countEl.textContent = `${selected.size} selected`;
       } else {
         bar.style.display = "none";
+        // 2026-09-12: countEl used to live inside `bar` itself, so hiding
+        // `bar` hid it too regardless of its text. It's now rendered in
+        // _page_header_narrow.html's title_extra slot instead (a sibling
+        // of the title, not nested in `bar`) so the count can sit on the
+        // header's first row on mobile -- style.css's `.bulk-count:empty`
+        // rule is what actually re-hides it now, so it has to be cleared
+        // back to empty here, not left showing a stale "N selected".
+        if (countEl) countEl.textContent = "";
       }
     }
 

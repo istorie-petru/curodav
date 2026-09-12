@@ -14,7 +14,8 @@
      anywhere in routers/tasks.py (dead branch, predates this change) --
      simplified to the one text it ever rendered. -->
 <h1 class="sr-only">Tasks</h1>
-{% call page_header_narrow("Tasks", "check-square") %}
+{% set _bulk_count_html %}<span id="bulk-count" class="bulk-count"></span>{% endset %}
+{% call page_header_narrow("Tasks", "check-square", title_extra=_bulk_count_html) %}
 <!-- Bulk actions -- 2026-08-01, relocated into the header's actions slot
      and trimmed to just Delete+Clear 2026-09-13 (audit-fixes-2.1.md: "the
      bulk-actions-bar should only contain two buttons - Delete and Clear
@@ -63,9 +64,18 @@
      source position relative to a neighbor" reasoning as the button
      reorder above -- Contacts already had its own Label filter dropdown
      after its bulk bar (contacts_list.html), so this brings Tasks in
-     line with that instead of the other way around. -->
+     line with that instead of the other way around.
+
+     2026-09-12 (direct feedback: "the bulk count should be allowed to sit
+     on the first row"): #bulk-count itself moved out of this div, up into
+     page_header_narrow's title_extra slot above (captured via a Jinja
+     set-block, since this page's bar is still hand-rolled, not
+     _bulk_actions_bar.html's macro) -- same reasoning/pattern as that
+     partial's own bulk_count() macro applied to every other bulk-select
+     page. Id unchanged ("bulk-count"), so static/tasks_table.js's
+     document.getElementById("bulk-count") still finds it regardless of
+     where in the DOM it now lives. -->
 <div class="bulk-actions-bar" id="bulk-actions-bar">
-    <span id="bulk-count" class="bulk-count"></span>
     <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
     <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
 </div>

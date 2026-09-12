@@ -261,6 +261,13 @@
       countEl.textContent = `${selected.size} selected`;
     } else {
       bar.style.display = "none";
+      // 2026-09-12: #bulk-count moved out of #bulk-actions-bar into the
+      // header's title_extra slot (tasks_list.html), so hiding `bar` no
+      // longer hides it too -- style.css's `.bulk-count:empty` rule needs
+      // this cleared back to empty to actually re-hide it (same fix
+      // applied to bulk_select.js's own updateBar for CCBulkSelect
+      // callers).
+      if (countEl) countEl.textContent = "";
     }
   }
 

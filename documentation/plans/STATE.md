@@ -17,6 +17,78 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below (two-row mobile header), direct feedback: "remove the height
+  requirement for mobile view for the page-header-narrow. Also the bulk
+  count should be allowed to sit on the first row. Also on desktop it
+  should be a small divider line between normal buttons and the bulk edit
+  ones." Three independent changes:
+
+  1. **Height**: the previous entry's mobile `height:auto; min-height:48px`
+     override sat textually *before* the base `.page-header-narrow{height:
+     48px}` rule in `style.css` -- same specificity, later source wins, so
+     the unconditional 48px rule was still winning the cascade even inside
+     the mobile media query (a real latent bug, not just an aesthetic
+     complaint). Fixed properly this time: moved `height:48px` itself out
+     of the base rule into a new `@media (min-width:721px)` block right
+     next to it -- same mobile-first pattern `.page-banner`'s own
+     aspect-ratio override already uses a few hundred lines up in the same
+     file. Below 721px there's now no height/min-height rule on
+     `.page-header-narrow` at all -- purely content-sized.
+
+  2. **Bulk count on the first row**: this one couldn't be pure CSS --
+     `.bulk-count` was nested inside `.page-header-narrow-actions`, which
+     mobile forces onto its own full-width row two (previous entry), so
+     there was no CSS-only way to keep just the count on row one without
+     also dragging Clear/Delete/the filter dropdown up with it. Real
+     template change instead: `_page_header_narrow.html`'s macro gained an
+     optional `title_extra` param (pre-rendered safe HTML, rendered right
+     after the title, before the spacer -- a sibling of the title now, not
+     nested in the actions block). `_bulk_actions_bar.html` split into two
+     macros -- `bulk_count(id_prefix)` (just the span) and
+     `bulk_actions_bar(id_prefix, delete_label)` (Clear+Delete only,
+     unchanged ids/behavior) -- and every caller (Holidays, Time Blocks,
+     Labels, Contacts) now passes `title_extra=bulk_count(id_prefix)` to
+     `page_header_narrow(...)`. Tasks (hand-rolled bar, not the shared
+     macro) got the same treatment via a captured `{% set %}...{% endset
+     %}` block instead. `.bulk-count:empty{display:none}` (new CSS rule)
+     keeps it from taking up header space (or a stray flex `gap`) when
+     nothing's selected -- it used to get that for free by living inside
+     `.bulk-actions-bar`'s own `display:none`; now that it's a
+     permanently-rendered sibling of the title, `bulk_select.js`/
+     `tasks_table.js`'s `updateBar()` had to start explicitly clearing
+     `countEl.textContent` back to `""` on deselect so the `:empty` rule
+     actually fires. Scope was asked and confirmed direct: applies to
+     every bulk-select page, not just Tasks.
+
+  3. **Desktop divider**: `.page-header-narrow-actions .bulk-actions-bar ~
+     .filter-dropdown` (general sibling, not adjacent -- an empty
+     `<form class="filter-bar">` sits between them in the markup on both
+     Tasks and Contacts) gets `border-left` + `padding-left` inside a new
+     `@media (min-width:721px)` block, separating the "normal" filter
+     control (Date on Tasks, Label on Contacts) from the "bulk edit"
+     Clear/Delete group. Desktop only, per direct confirmation -- on
+     mobile the two groups already read as distinct by sitting on
+     different wrapped rows, so a divider there would be redundant.
+
+  **Tests**: `test_page_header_narrow.py`'s
+  `TestBulkActionsBarRelocatedIntoHeader._assert_bulk_bar_in_actions_slot`
+  updated -- count now asserted *before* `.page-header-narrow-actions`
+  opens (`header_pos < count_pos < actions_pos < bar_pos`) instead of
+  inside it, Clear/Delete assertion unchanged relative to the bar. Full
+  suite re-verified in 4 batches -- **2197 passed, 0 failed**. Same
+  caveat as the previous entry: no headless-browser/Puppeteer tooling in
+  this sandbox, so this is CSS-cascade + Jinja-rendering reasoning and the
+  Python suite, not a rendered screenshot -- worth a live visual check
+  next session, especially the divider's contrast on banner pages
+  (`.filter-dropdown-trigger` already gets a frosted background there,
+  the new `border-left` uses plain `var(--border)` and wasn't given a
+  banner-specific override).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- direct feedback: "the mobile view can't fit
   all the content sometimes visible in the narrow header. could we make it
   two rows for mobile?" `.page-header-narrow` (`_page_header_narrow.html`)
