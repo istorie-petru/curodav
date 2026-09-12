@@ -109,9 +109,30 @@
                 </div>
 
                 {% if _editing %}
+                {# Type can't change once a List exists (see this template's
+                   own header comment -- changing entity_type post-creation
+                   would orphan the already-materialized Radicale
+                   collection), so this stays read-only rather than the
+                   `_widget_list_multiselect.html` dropdown the create form
+                   uses for the same field. It used to be a bare `.cell-tag`
+                   pill sized to its text -- visibly narrower than every
+                   other field's box in this same grid (Sharing's dropdown,
+                   Name's input), which read as a mis-sized/broken control
+                   next to them. Wrapped in the same
+                   `.multiselect.widget-list-multiselect` shell the real
+                   dropdowns use (full-width box, same border/padding/
+                   radius) with `.multiselect-trigger-static` swapping out
+                   the interactive states (hover/focus ring/pointer cursor,
+                   no chevron) that wrapper's shared CSS otherwise implies,
+                   so it reads as "this field, disabled" rather than either
+                   a working dropdown or an undersized tag. #}
                 <div class="field">
                     <label>Type</label>
-                    <span class="cell-tag tag-{{ _editing.entity_type }}">{{ entity_labels[_editing.entity_type] }}</span>
+                    <div class="multiselect widget-list-multiselect">
+                        <div class="multiselect-trigger multiselect-trigger-static">
+                            <span class="cell-tag tag-{{ _editing.entity_type }}">{{ entity_labels[_editing.entity_type] }}</span>
+                        </div>
+                    </div>
                 </div>
                 {% else %}
                 {% set ms_name = 'entity_type' %}

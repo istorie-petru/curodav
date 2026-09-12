@@ -17,6 +17,38 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-13 -- direct bug report (screenshot of "Edit
+  published list"): the read-only Type field looked broken -- a bare
+  `.cell-tag` pill sized to its own text, visibly narrower than every other
+  field's box in the same grid (Sharing's dropdown, Name's input) once a
+  List already exists and Type can't be changed (`published_list_create_
+  modal.html`'s own header comment: changing `entity_type` post-creation
+  would orphan the already-materialized Radicale collection, so the create
+  form's `_widget_list_multiselect.html` single-select dropdown is swapped
+  for a plain read-only pill in edit mode -- that swap is what left it
+  undersized next to the real dropdown beside it). Fix: wrapped the pill in
+  the same `.multiselect.widget-list-multiselect` shell the real dropdowns
+  use (full-width box, same border/padding/radius as Sharing's trigger)
+  with a new `.multiselect-trigger-static` modifier class (style.css) that
+  strips the interactive states that shell's shared CSS otherwise implies
+  (pointer cursor, hover/focus-ring) and uses a plain `<div>` rather than a
+  `<button>` so it's not in the tab order -- reads as "this field,
+  disabled" rather than either a working dropdown or a mis-sized tag.
+  `.multiselect-trigger-static` has no other caller yet (Type in edit mode
+  is the only read-only field using this shell) but is written as a
+  reusable modifier, not a one-off inline style, in case a future field
+  needs the same "disabled dropdown-shaped box" look.
+
+  **Tests**: none added -- pure template/CSS change to a fixed-value
+  display, no new behavior to assert (existing `test_phase6_published_
+  lists.py`/`test_published_lists_visibility.py` don't check this specific
+  markup either way). Full suite re-verified in 8 file-list batches (this
+  sandbox's 45s-per-call limit) -- **2194 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the normal
+  session workflow below.
+
 - **Shipped:** 2026-09-13 -- direct bug report: "the banner upload still
   doesn't work for the app." Root cause was in `static/modal.js`, not
   `avatar_cropper.js` (which a 2026-09-10 session already fixed a different,

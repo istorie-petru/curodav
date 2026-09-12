@@ -5667,6 +5667,20 @@ body.command-palette-open{overflow:hidden;}
    outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);
 }
 .widget-list-multiselect .ms-trigger .filter-caret{margin-left:auto;}
+/* Read-only variant (published_list_create_modal.html's Type field once a
+   List already exists -- see that template's own comment) -- same box as a
+   real dropdown trigger (full width, matching border/padding/radius) so it
+   doesn't look like an undersized, broken control next to Sharing's actual
+   dropdown, but with the interactive affordances that box otherwise implies
+   removed: no pointer cursor, no hover/focus state, background reads as
+   "disabled" not "clickable." A plain `<div>`, not a `<button>` -- there's
+   nothing to activate, so it's not part of the tab order either. */
+.widget-list-multiselect .multiselect-trigger.multiselect-trigger-static{
+   cursor:default; background:var(--bg-secondary); color:var(--fg-secondary);
+}
+.widget-list-multiselect .multiselect-trigger.multiselect-trigger-static:hover{
+   background:var(--bg-secondary); border-color:var(--control-border);
+}
 .widget-list-multiselect .ms-panel{left:0; right:auto; width:100%; max-height:220px; overflow:auto;}
 /* View sits in the same two-column .field-grid row as Range (each 1fr,
    see .field-grid above), which was forcing a long label like "Agenda
