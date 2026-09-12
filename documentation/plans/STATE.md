@@ -17,6 +17,65 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-13 -- direct bug report: "the banner upload still
+  doesn't work for the app." Root cause was in `static/modal.js`, not
+  `avatar_cropper.js` (which a 2026-09-10 session already fixed a different,
+  real bug in -- the backdrop-click-discards-crop issue -- but that fix
+  assumed the crop editor could open at all, which for banners it couldn't).
+  The 2026-09-08 "Remove/Upload move into the footer" slice moved
+  `banner_editor.html`'s upload `<form>` (and Remove form) out of
+  `#modal-body` and into `#modal-footer` (via `_modal_footer.html`'s new
+  `footer_extra_html` escape hatch) -- but `modal.js`'s `wireContent()` only
+  ever scanned `body` for two things: `CCAvatarCropper.init(body)` (which
+  wires the `.banner-upload-input`'s change listener that opens the crop
+  editor) and the generic form-submit-intercept loop
+  (`body.querySelectorAll("form").forEach(...)`, the fetch-based async
+  submit handler). Since the upload form lives in the footer, neither ever
+  ran on it: choosing a file never opened the crop editor (no listener was
+  attached to the input at all), and the upload form has no submit button of
+  its own -- only the crop editor's Apply button calls
+  `form.requestSubmit()` (gated on `alwaysSubmit` for banners). Net effect:
+  picking a banner image did visibly nothing, from before this session's fix
+  the file just sat selected in the hidden input with no path to ever
+  actually submit.
+
+  Fix, both in `wireContent()`: (1) also call
+  `CCAvatarCropper.init(footer)` alongside the existing `init(body)` call,
+  so the crop editor now opens for a footer-hosted file input same as a
+  body one; (2) factored the per-form submit-intercept logic (previously an
+  inline arrow function in `body.querySelectorAll("form").forEach(...)`)
+  into a named `wireForm` function and call it for both
+  `body.querySelectorAll("form")` and `footer.querySelectorAll("form")`, so
+  a footer form's submit (the crop editor's `requestSubmit()`, or a plain
+  click if JS/canvas output ever fails) goes through the same fetch +
+  `cc-entity-changed`/reload path as every other modal form instead of
+  falling back to an unintercepted native POST. `banner_editor.html`'s
+  Remove form (also footer-only, also `data-cc-change`) gets the same fix
+  as a side effect -- it has its own submit button so it "worked" via plain
+  navigation before, but now goes through the async path like everything
+  else.
+
+  No other `footer_extra_html` user exists yet to check for the same gap
+  (`banner_editor.html` is the only caller); `footer_delete_url` forms
+  (event/task/contact/habit/note detail+form modals) are unaffected --
+  confirmed they don't rely on this same code path (their `data-delete-undo`/
+  `data-confirm-sheet` mechanics are a separate, already-working flow, not
+  gated on this footer/body scoping gap the same way the crop-editor wiring
+  was).
+
+  **Tests**: none added -- pure `static/modal.js` change, and this repo
+  still has no JS test runner/framework (same gap noted in prior sessions'
+  entries below). Re-ran `test_banners.py` + `test_modal_uniformization.py`
+  as a sanity check (68 passed) since no Python file changed this slice,
+  then the full suite in 8 file-list batches (this sandbox's 45s-per-call
+  limit needs finer batching than 4-6 for a full run; batch-file listing
+  and the pytest invocation must be in the same call, per the note below,
+  or `/tmp` doesn't persist across calls) -- **2194 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the normal
+  session workflow below.
+
 - **Verified, no code change:** 2026-09-13 -- followed up on the prior
   session's open question: with `audit-fixes-2.1.md`'s "Urgent To do List"
   section fully shipped, is there anything left to act on in its other two
