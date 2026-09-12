@@ -68,6 +68,10 @@ class TestSettingsHolidaysPage:
         assert "University" in body
         assert "20 Dec" in body
         assert "5 Jan 2027" in body
+        # A genuine multi-day range still shows the arrow between two
+        # different dates (only a same-day holiday collapses it away --
+        # see TestHolidayDateRangeDisplay below).
+        assert "&rarr;" in body
         assert 'href="/settings/holidays/h1/edit"' in body
         assert "data-modal" in body
         assert 'class="inline-text"' not in body
@@ -84,6 +88,35 @@ class TestSettingsHolidaysPage:
         body = resp.body.decode()
         assert 'href="/settings/holidays"' in body
         assert "Holidays" in body
+
+
+class TestHolidayDateRangeDisplay:
+    """audit-fixes-2.1.md ("the Date Range for one date hollydays should
+    only be one day, not a range"): date_from == date_to (the storage
+    shape for a single-day holiday) prints as one date, not "X -> X"."""
+
+    def test_same_day_holiday_shows_one_date_not_a_range(self, conn):
+        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Romania", "label": "National day", "date_from": "2026-12-01", "date_to": "2026-12-01"})
+        resp = settings_router.settings_holidays(_request(), conn=conn)
+        body = resp.body.decode()
+        assert "1 Dec" in body
+        assert "&rarr;" not in body
+
+    def test_a_genuine_range_still_shows_the_arrow(self, conn):
+        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
+        resp = settings_router.settings_holidays(_request(), conn=conn)
+        body = resp.body.decode()
+        assert "&rarr;" in body
+
+    def test_same_day_year_agnostic_holiday_also_collapses_to_one_date(self, conn):
+        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "National", "label": "Christmas", "date_from": "--12-25", "date_to": "--12-25"})
+        resp = settings_router.settings_holidays(_request(), conn=conn)
+        body = resp.body.decode()
+        assert "25 Dec" in body
+        assert "&rarr;" not in body
+        # Exactly one "25 Dec" -- not the date printed twice either side
+        # of a (now-hidden) arrow.
+        assert body.count("25 Dec") == 1
 
 
 class TestHolidayEditModal:

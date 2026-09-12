@@ -52,7 +52,22 @@
                             <span class="group-badge">{{ h.calendar_name }}</span>
                         </td>
                         <td>
+                            <!-- audit-fixes-2.1.md ("the Date Range for
+                                 one date hollydays should only be one
+                                 day, not a range"): date_from == date_to
+                                 is the storage shape for a single-day
+                                 holiday (holiday_edit_modal.html's Start/
+                                 End auto-sync makes this the easy/default
+                                 path for one) -- showing "20 Dec -> 20
+                                 Dec" implied a real span when there isn't
+                                 one, so a same-day holiday prints just
+                                 the one date instead of an arrow between
+                                 two identical ones. -->
+                            {% if h.date_from == h.date_to %}
+                            <span class="settings-hint">{{ h.date_from | holiday_date }}</span>
+                            {% else %}
                             <span class="settings-hint">{{ h.date_from | holiday_date }} &rarr; {{ h.date_to | holiday_date }}</span>
+                            {% endif %}
                         </td>
                         <td>
                             {{ row_action_buttons(

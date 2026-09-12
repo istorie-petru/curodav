@@ -18,6 +18,39 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Holiday table, the Date Range for one date holidays should only
+  be one day, not a range." `settings_holidays.html`'s Date Range column
+  now checks `h.date_from == h.date_to` (the storage shape a single-day
+  holiday already has -- `date_from`/`date_to` are set equal, whether a
+  plain full date or a year-agnostic `--MM-DD`, no new concept needed) and
+  prints just that one date instead of "20 Dec -> 20 Dec" through an
+  arrow between two identical values. A genuine multi-day range is
+  unaffected -- still prints both ends with the arrow.
+
+  **Tests**: `test_settings_holidays.py` gained
+  `TestHolidayDateRangeDisplay` (same-day holiday shows one date, no
+  arrow; a genuine range still shows the arrow; a same-day year-agnostic
+  holiday also collapses, and the date only appears once in the row, not
+  printed twice either side of a hidden arrow) plus an explicit
+  `&rarr;`-present assertion added to the existing multi-day-range test
+  for symmetry. Full suite run in 4 file-list batches (still one call per
+  batch -- this sandbox can't finish an un-split run inside the tool's
+  45s call limit): **2189 passed, 0 failed**.
+
+  Next slice: the last item in `audit-fixes-2.1.md`'s "Urgent To do
+  List" section -- "For the table type of the app (used for tasks and in
+  the app settings) the bulk-actions-bar should only contain two buttons
+  - Delete and Clear - and the bulk-actions-bar buttons should not be
+  placed in the bulk-actions-bar, but in the page-header-narrow. Asure
+  the height doesn't get bigger due to the buttons." (The file's other
+  two sections, "First round of logs" and "Second round of logs", are
+  raw journalctl/traceback dumps, not to-do items in the same sense --
+  the vCard-import-500 one was already fixed per STATE's earlier removed
+  history; worth a fresh look at whether the Radicale-unreachable-at-
+  startup log is still an open concern once the to-do list itself is
+  clear.)
+
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
   order: "Holiday bug, for some reason the user is not allowed to add more
   holidays to the same calendar, and it defaults to Default calendar."
   Root cause: `_widget_list_multiselect.html`'s Calendar field (single
