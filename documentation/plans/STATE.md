@@ -17,6 +17,45 @@ session start.
 
 ## Right now
 
+- **Verified, no code change:** 2026-09-13 -- followed up on the prior
+  session's open question: with `audit-fixes-2.1.md`'s "Urgent To do List"
+  section fully shipped, is there anything left to act on in its other two
+  sections ("First round of logs" / "Second round of logs", raw
+  `journalctl`/traceback dumps, not to-do items)? Checked both directly
+  against current source rather than trusting the doc's own age:
+
+  - Second round of logs (`POST /export/import/auto` 500, `AttributeError:
+    uid` importing a UID-less vCard): already fixed, not just claimed fixed
+    -- `vcard_rows.py`'s `vcard_to_contact_row` (line ~232) guards with
+    `hasattr(card, "uid") and card.uid.value`, falling back to
+    `str(uuid.uuid4())` instead of letting vobject's `__getattr__` raise.
+    Matches `git log` (`7942fd5 Fix vCard import 500 on cards with no UID
+    (audit-fixes-2.1)`).
+  - First round of logs (Radicale unreachable at startup): expected,
+    already-handled, not a bug -- `main.py`'s lifespan (~line 160) wraps
+    `CalDavBridge(settings)` construction in `try/except`, logs exactly
+    that message, sets `bridge = None`, and continues booting standalone
+    (writes stay plain SQLite; background sync thread re-attempts later).
+    The log line documents graceful degradation, not a crash.
+
+  Net: `audit-fixes-2.1.md` has no remaining actionable item. It isn't
+  referenced from `roadmap.md`'s table (it was always a standalone raw
+  bug-list, not one of the numbered releases), so there's no roadmap row
+  or `open-priority.md`/`open.md` section to close out either -- this is
+  the one exception to this file's usual "update the doc + roadmap in the
+  same commit" step, because there was never a corresponding entry to
+  update. Full suite run in 4 file-list batches (parallel `&`/`wait` in a
+  single bash call -- background jobs and `/tmp` do NOT persist across
+  separate tool calls in this sandbox, so batch-file creation and the
+  pytest invocations that read them must happen in the same call or the
+  `cat` silently no-ops and pytest falls back to collecting everything):
+  **2189 passed, 0 failed**.
+
+  Next slice: `audit-fixes-2.1.md` is closed out. Pick the next roadmap
+  slice from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below -- nothing in this file points to a
+  specific next item anymore.
+
 - **Shipped:** 2026-09-13 -- last item in `audit-fixes-2.1.md`'s "Urgent
   To do List" section: "For the table type of the app (used for tasks and
   in the app settings) the bulk-actions-bar should only contain two
