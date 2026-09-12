@@ -17,6 +17,23 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  focus-ring fix directly below, direct feedback: "command-palette-
+  filters should have padding both top and bottom." `.command-palette-
+  filters` had `padding:0 var(--space-4) var(--space-3)` -- no top
+  padding, so the pill row sat flush against the input row's divider
+  line. Changed to `padding:var(--space-2) var(--space-4) var(--space-
+  3)`. Confirmed live via the same Chrome connection as the last two
+  entries.
+
+  **Tests**: none needed, pure CSS. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- direct feedback from a screenshot ("the text
   input box doesn't look right") plus live verification with real Chrome
   access to `http://127.0.0.1:8000/` (first time this feature got an
