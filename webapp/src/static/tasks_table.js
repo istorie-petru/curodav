@@ -408,19 +408,14 @@
     });
   });
 
-  document.getElementById("bulk-status-select")?.addEventListener("change", async (e) => {
-    const status = e.target.value;
-    if (!status) return;
-    try {
-      await bulkPost("status", { status });
-      window.ccToast({ title: "Status updated", message: "Reloading to show the new sort order..." });
-      dispatchTaskChange("status");
-    } catch (err) {
-      window.ccToast({ message: "Could not update status for the selected tasks.", variant: "error" });
-    } finally {
-      e.target.value = "";
-    }
-  });
+  // 2026-09-13 (audit-fixes-2.1.md, "the bulk-actions-bar should only
+  // contain two buttons - Delete and Clear"): the bulk-status-set
+  // `<select>` this listener drove is gone from tasks_list.html -- see
+  // that template's own comment. /tasks/bulk's "status" action itself is
+  // untouched (routers/tasks.py's bulk_action, still covered by
+  // test_bulk_actions_tables.py::TestTasksBulkDeleteWithHabits::
+  // test_status_action_unaffected_by_habit_uids_plumbing) -- this was a
+  // UI simplification, not an API removal.
 
   document.getElementById("bulk-list-select")?.addEventListener("change", async (e) => {
     const listPath = e.target.value;
@@ -436,28 +431,13 @@
     }
   });
 
-  // Labels picker is now a chip multiselect (2026-08-07, modal-input-design
-  // Phase B) instead of a typed-with-datalist text input -- reads whichever
-  // "bulk_tag_names" checkboxes are ticked (there's no <form> wrapping
-  // #bulk-tag-picker, so these are just plain checkboxes with a shared
-  // name attribute, read directly rather than via FormData) and sends them
-  // all through in one request. /tasks/bulk's "tag" action already looped
-  // per-uid; it now also loops per-tag (see routers/tasks.py's bulk_action),
-  // so Add/Remove's existing "apply this labels change to every selected
-  // row" semantics are unchanged, just no longer limited to one label at a
-  // time.
-  function bulkTag(mode) {
-    const tags = Array.from(document.querySelectorAll('#bulk-tag-picker input[name="bulk_tag_names"]:checked')).map((cb) => cb.value);
-    if (!tags.length) return;
-    bulkPost("tag", { tags, mode })
-      .then(() => {
-        window.ccToast({ title: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}`, message: tags.join(", ") });
-        dispatchTaskChange("tag");
-      })
-      .catch(() => window.ccToast({ message: "Could not update labels for the selected tasks.", variant: "error" }));
-  }
-  document.getElementById("bulk-tag-add")?.addEventListener("click", () => bulkTag("add"));
-  document.getElementById("bulk-tag-remove")?.addEventListener("click", () => bulkTag("remove"));
+  // 2026-09-13 (audit-fixes-2.1.md): the bulk-tag-picker Add/Remove chip-
+  // multiselect controls (#bulk-tag-picker, #bulk-tag-add, #bulk-tag-remove)
+  // this section used to drive are gone from tasks_list.html too -- same
+  // "Delete and Clear only" trim as the status-select above. /tasks/bulk's
+  // "tag" action is untouched server-side (test_modal_input_phaseB_chip_
+  // multiselect.py::TestBulkTagActionSemanticsPreserved still covers it
+  // directly) -- this was a UI simplification, not an API removal.
 
   // ------------------------------------------------------------------ //
   // The page's one listener for task changes (async-CRUD design §5) --

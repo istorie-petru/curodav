@@ -5,7 +5,14 @@
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{{ page_header_narrow("Holidays", "calendar") }}
+{# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+   "bulk actions on tables"), relocated into the header's actions slot
+   2026-09-13 (audit-fixes-2.1.md) -- see _bulk_actions_bar.html's own
+   header comment for why. Hidden by CSS/bulk_select.js until a row is
+   selected, same as before; only where it lives changed. #}
+{% call page_header_narrow("Holidays", "calendar") %}
+{{ bulk_actions_bar("holidays") }}
+{% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 
@@ -14,12 +21,6 @@
      Settings section-label -- redundant with the page's own title in
      .page-header-narrow now that this is the page's only group. -->
 <div class="settings-group">
-
-<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
-     "bulk actions on tables"). Same pattern as labels_manage.html's own
-     bar -- see _bulk_actions_bar.html for the shared macro (2026-09-07,
-     audit-fixes-2.0.md item 9). -->
-{{ bulk_actions_bar("holidays") }}
 
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div

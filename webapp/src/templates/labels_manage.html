@@ -5,7 +5,20 @@
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{{ page_header_narrow("Labels", "tag") }}
+{# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+   "bulk actions on tables... then Habits, Contacts, Labels, Holidays,
+   Time blocks"). Same `.bulk-actions-bar` markup/CSS Tasks' own bar uses,
+   hidden until a row is selected -- static/bulk_select.js drives it
+   generically instead of a second hand-rolled selection JS. "Delete" here
+   means the same thing the per-row Delete button already does (clear
+   usage, not a real row delete -- label_config stays), so the confirm
+   wording matches that, not a generic "cannot be undone." Shared markup
+   -- see _bulk_actions_bar.html (2026-09-07, audit-fixes-2.0.md item 9),
+   relocated into the header's actions slot 2026-09-13
+   (audit-fixes-2.1.md) -- see that partial's own header comment. #}
+{% call page_header_narrow("Labels", "tag") %}
+{{ bulk_actions_bar("labels", delete_label="Remove from everything") }}
+{% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <!-- 2026-09-08 (direct request, "check up ... it looks different
      compared to the others"): dropped `main-shell`/`.main-shell-body`
@@ -19,18 +32,6 @@
      the .settings-group/table-scroll conventions) -- there was no
      remaining reason for it alone to scroll differently. -->
 <div id="modal-target">
-
-<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
-     "bulk actions on tables... then Habits, Contacts, Labels, Holidays,
-     Time blocks"). Same `.bulk-actions-bar` markup/CSS Tasks' own bar
-     uses, hidden until a row is selected -- static/bulk_select.js drives
-     it generically instead of a second hand-rolled selection JS. "Delete"
-     here means the same thing the per-row Delete button already does
-     (clear usage, not a real row delete -- label_config stays), so the
-     confirm wording matches that, not a generic "cannot be undone." Shared
-     markup -- see _bulk_actions_bar.html (2026-09-07, audit-fixes-2.0.md
-     item 9). -->
-{{ bulk_actions_bar("labels", delete_label="Remove from everything") }}
 
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div

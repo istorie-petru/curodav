@@ -7,12 +7,36 @@
    separate hand-rolled `<div class="bulk-actions-bar">` blocks differing
    only in id prefix and the Delete button's label.
 
-   tasks_list.html's own bar is deliberately NOT this macro -- it's driven
-   by static/tasks_table.js instead of CCBulkSelect (richer per-domain bulk
-   actions: status-set, label multiselect, async-CRUD region-swap
-   reconciliation) and uses unprefixed ids (`bulk-actions-bar`/`bulk-count`)
-   that predate this extraction. bulk_select.js's own header comment
-   already documents that split; this macro doesn't change it.
+   2026-09-13 (audit-fixes-2.1.md: "the bulk-actions-bar buttons should
+   not be placed in the bulk-actions-bar, but in the page-header-narrow.
+   Asure the height doesn't get bigger due to the buttons"): every call
+   site now renders this macro's output INSIDE `_page_header_narrow.html`'s
+   `{% call %}` actions slot instead of as its own full-width row below
+   the header -- see settings_holidays.html/settings_time_blocks.html/
+   labels_manage.html's own `{% call page_header_narrow(...) %}` blocks.
+   The macro's own markup didn't need to change beyond dropping the
+   internal `.spacer` (below) -- it was only there to push Delete/Clear to
+   the far right of what used to be this bar's own full-width row; inside
+   the header's actions slot, the OUTER `.spacer` in
+   `_page_header_narrow.html` already does that job for the whole actions
+   cluster, so a second inner spacer had nothing left to grow into.
+   `.bulk-actions-bar`'s CSS (style.css) dropped its standalone card chrome
+   (background/border/padding) for the same reason -- it's an inline
+   button group now, not its own boxed row. No height growth is
+   structural, not just visual: `.page-header-narrow` is a hard
+   `height:48px`+`overflow:hidden` box (see that rule's own comment), so
+   anything rendered inside it, this bar included, physically cannot grow
+   the header regardless of what it contains.
+
+   tasks_list.html's own bar is still NOT this macro -- it kept its own
+   hand-rolled markup (unprefixed ids: `bulk-actions-bar`/`bulk-count`/
+   `bulk-delete`/`bulk-clear`, predating this extraction, and driven by
+   static/tasks_table.js instead of CCBulkSelect for its async-CRUD
+   region-swap reconciliation) -- but the same slice trimmed it down to
+   the identical two buttons (its former status-set/label-multiselect bulk
+   controls are gone, direct request) and relocated it into its own
+   header's actions slot too, right alongside `_tasks_toolbar.html`'s Date
+   filter.
 
    Params:
      id_prefix    -- e.g. "holidays" -> renders id="holidays-bulk-bar",
@@ -27,7 +51,6 @@
 {% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
 <div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
     <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
-    <div class="spacer"></div>
     <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
     <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
 </div>

@@ -5,7 +5,13 @@
 {% from "_bulk_actions_bar.html" import bulk_actions_bar %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{{ page_header_narrow("Sleep & Leisure Time", "moon") }}
+{# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
+   "bulk actions on tables"), relocated into the header's actions slot
+   2026-09-13 (audit-fixes-2.1.md) -- see _bulk_actions_bar.html's own
+   header comment. #}
+{% call page_header_narrow("Sleep & Leisure Time", "moon") %}
+{{ bulk_actions_bar("time-blocks") }}
+{% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 
@@ -24,10 +30,6 @@
      function's own comment for why concatenation rather than a single
      alphabetical-by-kind query. -->
 <div class="settings-group">
-<!-- Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
-     "bulk actions on tables"). Shared markup -- see _bulk_actions_bar.html
-     (2026-09-07, audit-fixes-2.0.md item 9). -->
-{{ bulk_actions_bar("time-blocks") }}
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels/Holidays tables. -->

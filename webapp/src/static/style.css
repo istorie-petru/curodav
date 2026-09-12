@@ -2025,7 +2025,23 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    up while its panel is open" affordance. */
 .multiselect.is-open > .multiselect-trigger .filter-caret{transform:rotate(180deg);}
 .task-table td{white-space:nowrap;}
-/* Bulk select + bulk actions (tasks_list.html/tasks_table.js), 2026-08-01 */
+/* Bulk select + bulk actions (tasks_list.html/tasks_table.js;
+   _bulk_actions_bar.html for Holidays/Time Blocks/Labels), 2026-08-01.
+   2026-09-13 (audit-fixes-2.1.md, "should not be placed in the
+   bulk-actions-bar, but in the page-header-narrow. Asure the height
+   doesn't get bigger due to the buttons") -- every caller now renders this
+   inside `.page-header-narrow-actions` instead of as its own full-width
+   row below the header, so the standalone-card chrome (background/border/
+   padding/margin) is gone -- it's an inline button group now, sized by
+   whatever's already inside the actions slot. No height growth is
+   structural either way: `.page-header-narrow` is a hard height:48px +
+   overflow:hidden box (see that rule's own comment below), so nothing
+   rendered inside it can grow the header regardless of what it contains.
+   Also dropped: the bulk-tag-picker rules that used to style
+   tasks_list.html's Add/Remove-label chip multiselect (#bulk-tag-picker
+   itself is gone from that template, along with the bulk status-set
+   `<select>` -- direct request, not just relocated; see that template's
+   own comment) -- this bar is Delete+Clear only everywhere now. */
 tr.is-selected{background:var(--accent-neutral-subtle);}
 .bulk-actions-bar{
   /* Starts hidden -- used to be each call site's own `style="display:
@@ -2036,17 +2052,8 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
      by style-src) still overrides this via inline-style precedence once
      a row gets selected. */
   display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
-  background:var(--accent-neutral-subtle); border:1px solid var(--accent-neutral); border-radius:var(--radius-control);
-  padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
 }
-.bulk-count{font-weight:600; font-size:var(--text-footnote);}
-/* Reuses _widget_list_multiselect.html's .field/.field-wide-wrapped markup
-   (2026-08-07, modal-input-design Phase B) inside this flex toolbar --
-   strip the field's own label/margin so it sits inline with the
-   Add/Remove/Delete buttons instead of as a labeled block. */
-#bulk-tag-picker.field, #bulk-tag-picker .field{margin-bottom:0;}
-#bulk-tag-picker label{display:none;}
-#bulk-tag-picker .widget-list-multiselect{width:160px;}
+.bulk-count{font-weight:600; font-size:var(--text-footnote); white-space:nowrap;}
 /* Completed tasks stay in the table (Today/All/This-week views) but read
    as visually distinct and de-emphasized -- dimmed + strikethrough title,
    plus the divider row above (tasks_list.html) that separates them from
@@ -4192,8 +4199,11 @@ main.main-shell{
 main.main-shell > h1.sr-only,
 main.main-shell > .page-header-narrow,
 main.main-shell > .page-banner-wrap,
-main.main-shell > .toolbar.top-app-bar,
-main.main-shell > .bulk-actions-bar{
+main.main-shell > .toolbar.top-app-bar{
+  /* .bulk-actions-bar dropped from this list 2026-09-13
+     (audit-fixes-2.1.md) -- it lives inside .page-header-narrow-actions
+     now, never a direct child of main.main-shell, so this selector
+     stopped matching anything. */
   flex:none;
 }
 .main-shell-body{

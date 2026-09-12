@@ -16,60 +16,37 @@
 <h1 class="sr-only">Tasks</h1>
 {% call page_header_narrow("Tasks", "check-square") %}
 {% include "_tasks_toolbar.html" %}
+<!-- Bulk actions -- 2026-08-01, relocated into the header's actions slot
+     and trimmed to just Delete+Clear 2026-09-13 (audit-fixes-2.1.md: "the
+     bulk-actions-bar should only contain two buttons - Delete and Clear
+     ... should not be placed in the bulk-actions-bar, but in the
+     page-header-narrow"). The bulk status-set `<select>` and the
+     Add/Remove-label chip-multiselect controls this bar used to carry are
+     gone outright (direct follow-up decision, not just relocated) -- see
+     routers/tasks.py's bulk_action, which still supports the "status"/
+     "tag" actions server-side unchanged (nothing else called them
+     UI-only; this is a UI simplification, not an API removal). Still
+     hand-rolled markup, not _bulk_actions_bar.html's shared macro -- see
+     that partial's own header comment for why (unprefixed ids
+     static/tasks_table.js already hardcodes, and its own async-CRUD
+     region-swap reconciliation CCBulkSelect doesn't need to know about).
+     Hidden until at least one row is selected (static/tasks_table.js
+     toggles it), same "don't show controls with nothing to act on"
+     reasoning as Dashboard's edit-mode gating -- and, like every other
+     actions-slot control, physically can't grow the header regardless:
+     .page-header-narrow is a hard height:48px + overflow:hidden box (see
+     that rule's own comment in style.css). -->
+<div class="bulk-actions-bar" id="bulk-actions-bar">
+    <span id="bulk-count" class="bulk-count"></span>
+    <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+</div>
 {% endcall %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
      pass) -- the "+ New" button in the toolbar above opens the same create
      endpoint via the full field-grid modal; that's the one create path now,
      not two. -->
-
-<!-- Bulk actions -- 2026-08-01. Hidden until at least one row is selected
-     (static/tasks_table.js toggles it), same "don't show controls with
-     nothing to act on" reasoning as Dashboard's edit-mode gating. -->
-<div class="bulk-actions-bar" id="bulk-actions-bar">
-    <span id="bulk-count" class="bulk-count"></span>
-    <div class="spacer"></div>
-    <select id="bulk-status-select" aria-label="Set status">
-        <option value="">Set status&hellip;</option>
-        {% for s in statuses %}<option value="{{ s }}">{{ status_labels[s] }}</option>{% endfor %}
-    </select>
-    <!-- Phase 1 (label-space rework, 2026-08-06) removed the "Move to
-         list" bulk action here -- task_lists is gone, and the bulk `tag`
-         action below already covers the generic "reorganize a batch of
-         tasks" need via labels (see routers/tasks.py's bulk_action).
-
-         Labels -- chip multiselect (2026-08-07, modal-input-design
-         Phase B), reusing _widget_list_multiselect.html. NOT wired the
-         same way as task_form.html's Labels field: this isn't a <form>
-         field at all -- it picks which already-known label(s) the "Add"/
-         "Remove" buttons below apply to the currently-selected rows, a
-         JS-only fetch-driven delta action (POST /tasks/bulk, routers/
-         tasks.py's bulk_action) with no plain-form/no-JS fallback, same as
-         every other control in this bulk-actions-bar (it's hidden by
-         `style="display:none"` until static/tasks_table.js's row-select
-         checkboxes reveal it). static/tasks_table.js's bulkTag() reads
-         whichever of these checkboxes are ticked and posts each one
-         through in one request; Add/Remove keep their existing per-label
-         add/remove-from-selected-rows semantics unchanged, this only
-         replaces free-typed-with-datalist-suggestions with pick-from-the-
-         actual-list-of-known-labels (ms_mode=select, same as the other
-         per-record Labels fields, since "no boxes ticked" means "nothing
-         chosen yet", not "no filter"). -->
-    <div id="bulk-tag-picker">
-        {% set ms_name = 'bulk_tag_names' %}
-        {% set ms_icon = 'tag' %}
-        {% set ms_label = 'Labels' %}
-        {% set ms_items = tag_name_items %}
-        {% set ms_selected = [] %}
-        {% set ms_mode = 'select' %}
-        {% set ms_pill = true %}
-        {% include "_widget_list_multiselect.html" %}
-    </div>
-    <button type="button" id="bulk-tag-add" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Add</button>
-    <button type="button" id="bulk-tag-remove" class="btn ghost btn-sm">{{ icon('tag', 'icon-sm') }} Remove</button>
-    <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
-    <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-</div>
 
 {# Table body + empty state (open_tasks/completed_tasks/grouping/pager) --
    shared with the async-CRUD region fragment (GET /tasks/regions?region=table)

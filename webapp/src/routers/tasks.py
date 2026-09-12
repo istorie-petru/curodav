@@ -405,7 +405,12 @@ def _tasks_list_context(
             "active_date_filter": date_filter,
             "q": q or "",
             "tag_names": tag_names,
-            "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            # audit-fixes-2.1.md (2026-09-13): tasks_list.html's own
+            # tag_name_items -- fed the now-removed bulk-tag-picker
+            # (#bulk-tag-picker, trimmed away along with bulk status-set
+            # when the bulk-actions-bar shrank to Delete+Clear) -- is gone.
+            # `tag_names` itself stays -- _task_row.html's per-row inline
+            # Labels picker still reads it directly.
             # _habit_row.html's check-in "+1" form needs today's date to
             # post as entry_date/completion_date -- same value
             # _habit_group_items already anchored its per-item today_value/

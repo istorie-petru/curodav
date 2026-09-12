@@ -17,6 +17,81 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-13 -- last item in `audit-fixes-2.1.md`'s "Urgent
+  To do List" section: "For the table type of the app (used for tasks and
+  in the app settings) the bulk-actions-bar should only contain two
+  buttons - Delete and Clear - and the bulk-actions-bar buttons should not
+  be placed in the bulk-actions-bar, but in the page-header-narrow. Asure
+  the height doesn't get bigger due to the buttons."
+
+  Scope decision (asked, direct answer): the doc line names "tasks and
+  the app settings" together -- Settings' three bulk-select tables
+  (Holidays/Time Blocks/Labels, `_bulk_actions_bar.html`'s shared macro)
+  already only had Delete+Clear, so for them this was pure relocation. The
+  Tasks table's own hand-rolled bar (static/tasks_table.js, NOT the shared
+  macro) also had a bulk status-set `<select>` and Add/Remove-label chip
+  multiselect -- asked whether those should be trimmed away too or kept
+  alongside a relocated Delete+Clear; answer was trim Tasks down to
+  Delete+Clear as well, everywhere in the app.
+
+  Every bulk bar (all 4 tables) now renders inside `_page_header_narrow.
+  html`'s `{% call %}` actions slot instead of as its own full-width row
+  below the header -- `settings_holidays.html`/`settings_time_blocks.html`/
+  `labels_manage.html` switched from a plain `{{ page_header_narrow(...) }}`
+  call to `{% call %}...{{ bulk_actions_bar(...) }}...{% endcall %}`;
+  `tasks_list.html`'s own bar moved inside its existing `{% call %}` block
+  (alongside `_tasks_toolbar.html`'s Date filter) and dropped the
+  status-select/tag-picker/Add/Remove markup outright -- `/tasks/bulk`'s
+  "status"/"tag" actions are untouched server-side (routers/tasks.py's
+  `bulk_action`; nothing else called them), this was a UI-only
+  simplification. `tasks_table.js` lost the now-dead `bulk-status-select`
+  change listener and the `bulkTag()` function + its two button listeners
+  (kept `bulkPost`/the already-pre-existing-dead `bulk-list-select`
+  listener untouched -- unrelated pre-existing code, not this slice's
+  scope). `routers/tasks.py`'s `_tasks_list_context` dropped the
+  now-unused `tag_name_items` context key (the raw `tag_names` list stays
+  -- `_task_row.html`'s own per-row Labels picker still reads it).
+
+  "No height growth" is structural, not just a CSS tweak: `.page-header-
+  narrow` is already a hard `height:48px`+`overflow:hidden` box (a prior
+  slice's own fix for inconsistent 46-50px heights), so anything rendered
+  inside it physically cannot grow the header regardless of content --
+  `.bulk-actions-bar`'s CSS just dropped its now-pointless standalone-card
+  chrome (background/border/padding/margin, plus an internal `.spacer`
+  that had nothing left to grow into once it's not a full-width row
+  itself) so it reads as an inline button group inside the actions
+  cluster instead of a boxed bar floating inside a box. Also removed:
+  `main.main-shell > .bulk-actions-bar` from the shell's `flex:none`
+  selector list (dead -- no longer a direct child anywhere) and the
+  `#bulk-tag-picker` CSS rules (dead -- that id no longer exists).
+
+  **Tests**: `test_page_header_narrow.py` gained
+  `TestBulkActionsBarRelocatedIntoHeader` (all 4 tables' bulk bar renders
+  inside `.page-header-narrow-actions`, not as a standalone row; Tasks'
+  bar has exactly Delete+Clear, no status-select/tag-picker; no page has
+  a duplicate/leftover standalone bar). `TestNarrowHeaderBackPosition::
+  test_back_arrow_renders_without_an_actions_slot` retargeted from
+  Settings > Holidays (which now legitimately has an actions slot) to
+  Settings > General (still bare). `test_modal_input_phaseB_chip_
+  multiselect.py` lost `TestTasksListBulkTagPickerRendersChipMultiselect`
+  (asserted markup for a UI that no longer exists) -- kept
+  `TestBulkTagActionSemanticsPreserved` (router-level, the backend action
+  itself is unchanged). Full suite run in 4 file-list batches (still one
+  call per batch -- this sandbox can't finish an un-split run inside the
+  tool's 45s call limit): **2194 passed, 0 failed**.
+
+  Next slice: `audit-fixes-2.1.md`'s "Urgent To do List" section is now
+  fully shipped. What's left in that file is two raw `journalctl`/
+  traceback log dumps ("First round of logs" / "Second round of logs"),
+  not to-do items in the same sense -- the vCard-import 500 one already
+  has a fixed-commit entry in this file's older (trimmed) history, so
+  worth a fresh look at whether it's still reproducible before assuming
+  it's done, and whether the Radicale-unreachable-at-startup log from the
+  first dump is still an open concern or expected/already-handled
+  (main.py already logs it as a graceful "running without the sync
+  bridge" case per that log's own text, not an unhandled crash) before
+  deciding there's anything left to act on in this file at all.
+
 - **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
   order: "Holiday table, the Date Range for one date holidays should only
   be one day, not a range." `settings_holidays.html`'s Date Range column

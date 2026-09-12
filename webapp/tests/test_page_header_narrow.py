@@ -217,6 +217,77 @@ class TestNarrowHeaderActionsSlot:
             assert len(re.findall(r"<h1[ >]", body)) == 1, body
 
 
+class TestBulkActionsBarRelocatedIntoHeader:
+    """audit-fixes-2.1.md (2026-09-13): "the bulk-actions-bar should only
+    contain two buttons - Delete and Clear - and the bulk-actions-bar
+    buttons should not be placed in the bulk-actions-bar, but in the
+    page-header-narrow." Every table with bulk actions -- Holidays, Time
+    Blocks, Labels (all three via the shared _bulk_actions_bar.html macro)
+    and Tasks (its own hand-rolled bar, now also trimmed to two buttons) --
+    now renders its bulk bar inside `.page-header-narrow-actions`, not as
+    a standalone row below the header."""
+
+    def _assert_bulk_bar_in_actions_slot(self, body: str, id_prefix: str) -> None:
+        header_pos = body.index('class="page-header-narrow')
+        actions_pos = body.index('class="page-header-narrow-actions"')
+        bar_pos = body.index(f'id="{id_prefix}-bulk-bar"')
+        count_pos = body.index(f'id="{id_prefix}-bulk-count"')
+        delete_pos = body.index(f'id="{id_prefix}-bulk-delete"')
+        clear_pos = body.index(f'id="{id_prefix}-bulk-clear"')
+        # The bar (and its count/Delete/Clear) must physically sit after
+        # the actions slot opens -- i.e. inside it -- not merely somewhere
+        # later in the document.
+        assert header_pos < actions_pos < bar_pos < count_pos
+        assert bar_pos < delete_pos < clear_pos
+
+    def test_holidays_bulk_bar_is_inside_the_actions_slot(self, conn):
+        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        self._assert_bulk_bar_in_actions_slot(resp.body.decode(), "holidays")
+
+    def test_time_blocks_bulk_bar_is_inside_the_actions_slot(self, conn):
+        resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
+        self._assert_bulk_bar_in_actions_slot(resp.body.decode(), "time-blocks")
+
+    def test_labels_bulk_bar_is_inside_the_actions_slot(self, conn):
+        resp = labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn)
+        self._assert_bulk_bar_in_actions_slot(resp.body.decode(), "labels")
+
+    def test_tasks_bulk_bar_is_inside_the_actions_slot(self, conn):
+        resp = tasks_router.list_tasks(_bare_request("/tasks"), conn=conn)
+        body = resp.body.decode()
+        header_pos = body.index('class="page-header-narrow')
+        actions_pos = body.index('class="page-header-narrow-actions"')
+        bar_pos = body.index('id="bulk-actions-bar"')
+        assert header_pos < actions_pos < bar_pos
+
+    def test_tasks_bulk_bar_only_has_delete_and_clear(self, conn):
+        # The bulk status-set <select> and the Add/Remove-label chip
+        # multiselect are gone entirely (direct decision), not just
+        # relocated -- see tasks_list.html's own comment.
+        resp = tasks_router.list_tasks(_bare_request("/tasks"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="bulk-status-select"' not in body
+        assert 'id="bulk-tag-picker"' not in body
+        assert 'id="bulk-tag-add"' not in body
+        assert 'id="bulk-tag-remove"' not in body
+        assert 'id="bulk-delete"' in body
+        assert 'id="bulk-clear"' in body
+
+    def test_no_page_has_a_standalone_bulk_actions_bar_outside_the_header(self, conn):
+        # Regression guard for the relocation itself: none of the four
+        # tables should have a second `.bulk-actions-bar` sitting outside
+        # `.page-header-narrow-actions` (e.g. a leftover copy from before
+        # the move).
+        pages = {
+            "holidays": settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn),
+            "time-blocks": settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn),
+            "labels": labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn),
+        }
+        for prefix, resp in pages.items():
+            body = resp.body.decode()
+            assert body.count(f'id="{prefix}-bulk-bar"') == 1
+
+
 class TestNarrowHeaderBackPosition:
     """2026-09-11 (direct request): "the page-header-narrow-back, it
     should be on the left most, not right most." The crumbs-driven back
@@ -233,10 +304,14 @@ class TestNarrowHeaderBackPosition:
         assert back_pos < icon_pos < title_pos
 
     def test_back_arrow_renders_without_an_actions_slot(self, conn):
-        # Settings pages pass crumbs but no {% call %} block -- proves the
-        # back arrow no longer depends on (or lives inside)
-        # .page-header-narrow-actions, unlike before this slice.
-        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        # Settings > General passes crumbs but no {% call %} block -- proves
+        # the back arrow no longer depends on (or lives inside)
+        # .page-header-narrow-actions, unlike before this slice. (Settings >
+        # Holidays used to be this test's target, but audit-fixes-2.1.md's
+        # bulk-actions-bar relocation gave it a real actions slot of its own
+        # -- see test_settings_holidays.py/test_bulk_actions_tables.py for
+        # that page's own coverage now.)
+        resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
         body = resp.body.decode()
         assert "page-header-narrow-back" in body
         assert "page-header-narrow-actions" not in body
