@@ -6155,13 +6155,24 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
      mobile-first pattern .page-banner's own aspect-ratio override already
      uses a few hundred lines up), so the header is purely content-sized
      on mobile: one row when there's nothing to wrap, two when there is,
-     never an artificial floor either way. */
+     never an artificial floor either way.
+
+     2026-09-12 same-day follow-up (direct feedback, screenshot of Tasks'
+     row two: "could we make the items in the row centered?" -- Clear/
+     Delete/All dates were flush against the row's right edge via
+     `justify-content:flex-end`, the same right-alignment the desktop
+     single-row layout uses (there, it reads as "flush against the
+     header's own right edge" since the actions slot is the last thing in
+     the row; wrapped onto its own full-width row two on mobile, the same
+     right-flush rule instead reads as an odd, unbalanced left gap with
+     nothing to visually anchor to). Centered instead, mobile only --
+     desktop's flex-end (real right edge) is untouched. */
   .page-header-narrow{
     flex-wrap:wrap; row-gap:var(--space-2);
     padding-bottom:var(--space-2);
   }
   .page-header-narrow-actions{
-    flex-basis:100%; justify-content:flex-end;
+    flex-basis:100%; justify-content:center;
   }
 }
 

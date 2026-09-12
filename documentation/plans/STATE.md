@@ -18,6 +18,26 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from a screenshot of Tasks' mobile row two (Clear/Delete/All
+  dates): "could we make the items in the row centered?" Mobile's forced
+  actions row (style.css's `@media(max-width:720px) .page-header-narrow-
+  actions`) was `justify-content:flex-end` -- inherited straight from
+  desktop's single-row layout, where flex-end reads correctly as "flush
+  against the header's real right edge." Wrapped onto its own full-width
+  row two on mobile, the same rule instead read as an unbalanced left gap
+  with nothing to anchor to. Changed to `justify-content:center`, mobile
+  only -- desktop's right-alignment is untouched.
+
+  **Tests**: none needed (no existing assertion touched
+  `justify-content`). Full suite re-verified in 3 batches (`test_[a-f]*`,
+  `test_[g-o]*`, `test_[p-s]*`+`test_[t-z]*`) -- **2197 passed, 0
+  failed**. Same no-browser caveat as the last two entries.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
   below (two-row mobile header), direct feedback: "remove the height
   requirement for mobile view for the page-header-narrow. Also the bulk
   count should be allowed to sit on the first row. Also on desktop it
