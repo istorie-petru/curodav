@@ -15,7 +15,6 @@
      simplified to the one text it ever rendered. -->
 <h1 class="sr-only">Tasks</h1>
 {% call page_header_narrow("Tasks", "check-square") %}
-{% include "_tasks_toolbar.html" %}
 <!-- Bulk actions -- 2026-08-01, relocated into the header's actions slot
      and trimmed to just Delete+Clear 2026-09-13 (audit-fixes-2.1.md: "the
      bulk-actions-bar should only contain two buttons - Delete and Clear
@@ -53,12 +52,24 @@
      actions slot's own .spacer pushes it there), so the control nearest
      that edge reads as "first," not the one nearest the Date filter to
      its left. Reversed to count -> Clear -> Delete, putting Delete --
-     the actual bulk action -- at the true right edge. -->
+     the actual bulk action -- at the true right edge.
+
+     2026-09-15 same-day follow-up #2 (direct feedback: "the multiselect
+     widget-list-multiselect filter-dropdown should be last"): the Date
+     filter (`_tasks_toolbar.html`, a `.multiselect.widget-list-
+     multiselect.filter-dropdown`) used to render first, before this bar
+     -- moved to after it instead, so the true right edge is now the Date
+     filter, past Delete. Same "the edge is what reads as last/first, not
+     source position relative to a neighbor" reasoning as the button
+     reorder above -- Contacts already had its own Label filter dropdown
+     after its bulk bar (contacts_list.html), so this brings Tasks in
+     line with that instead of the other way around. -->
 <div class="bulk-actions-bar" id="bulk-actions-bar">
     <span id="bulk-count" class="bulk-count"></span>
     <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
     <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
 </div>
+{% include "_tasks_toolbar.html" %}
 {% endcall %}
 
 <!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar

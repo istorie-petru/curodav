@@ -17,6 +17,53 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-15 -- same-day follow-up on the two entries below:
+  "the multiselect widget-list-multiselect filter-dropdown should be
+  last. also that button still has less height compared to the others."
+  Two independent fixes:
+
+  1. **Ordering**: Tasks' Date filter (`_tasks_toolbar.html`, a
+     `.multiselect.widget-list-multiselect.filter-dropdown`) used to
+     render *before* the bulk bar in `tasks_list.html` -- moved the
+     `{% include %}` to after it instead, so it's now the true rightmost
+     element in the actions cluster (same "the edge is what reads as
+     last, not position relative to a neighbor" reasoning as the button
+     reorder two entries below). Contacts already had its own Label
+     filter dropdown after its bulk bar, so Tasks now matches that
+     instead of being the odd one out.
+
+  2. **Height**: traced to a real, previously-invisible bug in `.btn-sm`
+     itself (style.css, ~line 5013) -- it was a bare single-class
+     selector, lower CSS specificity than the base `button.btn, a.btn`
+     rule that sets `padding`/`font-size`, so `.btn-sm`'s smaller values
+     have never actually applied to any `<button class="btn ... btn-sm">`
+     in the app (every real caller carries both classes together).
+     Delete/Clear were rendering at the base `.btn`'s full padding the
+     whole time -- taller than `.filter-dropdown-trigger`'s explicit
+     30px. Fixed the selector to `button.btn.btn-sm, a.btn.btn-sm` (now
+     wins the cascade); every other `.btn-sm` caller in the app
+     (contact_form.html's "Add phone/email/..." rows, event_detail.html's
+     Restore/Cancel occurrence/Move, settings_data_maintenance.html's
+     Restore/Dismiss, label_form_modal.html's Add/Change banner) is
+     genuinely smaller now too, as `.btn-sm` always meant. Also pinned an
+     explicit `height:30px` directly on the shared
+     `.page-header-narrow-actions .filter-dropdown-trigger`/
+     `.bulk-actions-bar .btn` rule -- a direct guarantee rather than
+     relying on padding/font-size/line-height happening to add up to
+     exactly 30px.
+
+  **Tests**: none added (pure CSS/template change; no Python assertion
+  depended on the toolbar-before-bulk-bar order or on `.btn-sm`'s actual
+  rendered size). Full suite re-verified in 4 batches -- **2197 passed, 0
+  failed**. Verified live via headless Chrome: actions-slot children now
+  render `[bulk-actions-bar, tasks-filters-form/filter-dropdown]`, and
+  the filter trigger/Delete/Clear all measure exactly 30x112px
+  (screenshot confirms the visual result).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-15 -- same-day follow-up on the entry directly
   below: "the order of the buttons should be reversed because they are on
   the right of the page." That prior slice put Delete/Clear before the

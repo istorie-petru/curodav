@@ -5010,7 +5010,23 @@ body.command-palette-open{overflow:hidden;}
 .tag-usage-count{
   flex:none; font-size:12px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
 }
-.btn-sm{padding:4px 10px; font-size:13px;}
+/* 2026-09-15 bugfix (direct report on the Tasks header bar: "that button
+   still has less height compared to the others" -- traced to this rule).
+   Was a bare `.btn-sm{...}` -- specificity (0,1,0), one class -- which
+   loses to `button.btn, a.btn{...}` (specificity (0,1,1), element+class)
+   whenever both match the same element, which is every real caller
+   (`class="btn ... btn-sm"`, always alongside `.btn`). That means
+   `.btn-sm`'s smaller `padding`/`font-size` have never actually applied
+   anywhere in the app -- every `.btn-sm` button (contact_form.html's "Add
+   phone/email/website/address/social network" rows, event_detail.html's
+   Restore/Cancel occurrence/Move, settings_data_maintenance.html's
+   Restore/Dismiss, label_form_modal.html's Add/Change banner,
+   _bulk_actions_bar.html's/tasks_list.html's Delete/Clear) has been
+   silently rendering at the base `.btn`'s full size instead of the
+   smaller one `.btn-sm` was always meant to give it. Matching the
+   selector's own element+class shape (rather than reaching for
+   `!important`) is what actually wins the cascade now. */
+button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* Row hover feedback -- .calendar-row had none before (unlike the plain
    <table> rows elsewhere, which already highlight via `tbody tr:hover`).
@@ -6341,10 +6357,33 @@ body.command-palette-open{overflow:hidden;}
    grows instead of clipping; it just won't look identical to a
    short-label sibling in that one case. The plain-text count
    (`.bulk-count`) is deliberately NOT included here, per the same
-   feedback ("the count stays as plain text, not a button"). */
+   feedback ("the count stays as plain text, not a button").
+
+   2026-09-15 same-day follow-up (direct feedback: "that button still has
+   less height compared to the others" -- the filter-dropdown-trigger,
+   after the reorder below put it last/rightmost). Root cause: `.btn-sm`
+   (style.css, `.bulk-actions-bar`'s own Delete/Clear) is a single-class
+   selector, lower specificity than the base `button.btn, a.btn` rule that
+   sets `padding`/`font-size` -- so `.btn-sm`'s smaller padding/font-size
+   have never actually applied to a `<button class="btn ... btn-sm">`
+   anywhere in the app; Delete/Clear were rendering at the base .btn's
+   full padding (8px 16px) the whole time, taller than
+   `.filter-dropdown-trigger`'s own explicit 30px. That's a real,
+   pre-existing bug in `.btn-sm` itself (line ~5013, `button.btn.btn-sm,
+   a.btn.btn-sm` now, was bare `.btn-sm`) -- every other `.btn-sm` caller
+   in the app (contact_form.html's "Add phone/email/..." rows,
+   event_detail.html's Restore/Cancel occurrence, settings_data_
+   maintenance.html's Restore/Dismiss, label_form_modal.html's
+   Add/Change banner) was silently rendering at the same too-large size
+   this whole time and is now genuinely smaller, as `.btn-sm` always
+   meant to make it. Height parity here specifically is still pinned
+   explicitly (not left to padding math) since a fixed height plus
+   `align-items:center` (inherited from `.btn`'s own `display:inline-flex`)
+   is a more direct guarantee than relying on font-size/line-height/
+   padding to add up to exactly 30px on every browser. */
 .page-header-narrow-actions .filter-dropdown-trigger,
 .page-header-narrow-actions .bulk-actions-bar .btn{
-  min-width:112px; justify-content:center;
+  min-width:112px; height:30px; justify-content:center;
 }
 /* Month's Month|Day .segmented switch (calendar_month.html's own
    `.calendar-subnav`) is the one other actions-slot control besides
