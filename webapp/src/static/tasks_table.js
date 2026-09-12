@@ -284,18 +284,44 @@
   // Row-select checkbox clicks -- delegated (document) so they survive a
   // region swap; the checkbox list is re-queried per interaction so
   // shift-click range selection indexes the live rows.
+  //
+  // 2026-09-15 bugfix (direct report: "this is actually still happening in
+  // tasks and maybe other pages" -- static/bulk_select.js's own copy of
+  // this exact same code had just been fixed for Holidays/Labels/Time
+  // Blocks/Contacts, but this file is a separate, hand-rolled
+  // implementation -- see its own header comment on why Tasks never used
+  // the shared module -- so that fix never touched it). Root cause is
+  // identical: the pointerdown handler below already calls
+  // `setSelected(cb, paintValue)` (flipping `cb.checked` itself) so a real
+  // press-and-drag paints the row the drag *started* on, not just the ones
+  // the pointer crosses afterward. On a plain, no-drag click, the
+  // browser's own native checkbox activation then toggles `checked` a
+  // SECOND time when the matching `click` fires right after (mouseup on
+  // the same element) -- right back to whatever it was before the
+  // pointerdown. Net effect on an ordinary click: the box flips checked,
+  // then immediately flips back -- "it immediately deselects." A real
+  // drag never hit this (mouseup lands on a different element, so no
+  // `click` ever fires on the origin checkbox). `e.preventDefault()` here
+  // suppresses that native toggle (confirmed via a real Chrome/Puppeteer
+  // click, not a synthetic `.click()` call, that canceling pointerdown/
+  // mousedown does NOT suppress it -- only canceling `click` itself does)
+  // -- pointerdown's `setSelected` call is now the sole source of truth
+  // for `cb.checked` either way; this handler only needs the shift-range
+  // fill logic off of whatever state pointerdown already set.
   document.addEventListener("click", (e) => {
     const cb = e.target.closest && e.target.closest("#tasks-body .row-select");
     if (!cb) return;
+    e.preventDefault();
     const checkboxes = allCheckboxes();
     const idx = checkboxes.indexOf(cb);
     if (e.shiftKey && lastClickedIdx !== null && idx !== -1) {
       const [lo, hi] = idx < lastClickedIdx ? [idx, lastClickedIdx] : [lastClickedIdx, idx];
       const targetState = cb.checked;
       for (let i = lo; i <= hi; i++) setSelected(checkboxes[i], targetState);
-    } else {
-      setSelected(cb, cb.checked);
     }
+    // else: pointerdown below already fully applied the plain-click toggle
+    // to `cb` itself (state + `.is-selected` + the Set) -- nothing left to
+    // do for the single-checkbox case.
     lastClickedIdx = idx;
     updateBar();
   });

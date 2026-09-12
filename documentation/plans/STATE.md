@@ -17,6 +17,35 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-15 -- same-day follow-up: "this is actually still
+  happening in tasks and maybe other pages." The previous entry's
+  `static/bulk_select.js` fix only covers Holidays/Labels/Time Blocks/
+  Contacts -- Tasks has always been a separate, hand-rolled
+  `static/tasks_table.js` implementation (deliberately not on
+  `CCBulkSelect`, for its async-CRUD region-swap reconciliation, see that
+  file's own comment), which turned out to carry an exact independent copy
+  of the identical bug: its own pointerdown handler also calls
+  `setSelected(cb, paintValue)`, and its own click handler had no
+  `preventDefault()` to stop the browser's native checkbox toggle from
+  firing a second time right after -- same "flips checked, then
+  immediately flips back" symptom, same fix (`e.preventDefault()` moved
+  into the click handler). Checked every other `.row-select` template
+  (`_task_row.html`/`_habit_row.html` -- both driven by this same file) and
+  every other JS file in `static/` for the same `pointerdown` + `row-select`
+  pattern (grepped for it) -- `bulk_select.js` and `tasks_table.js` are the
+  only two, so nothing else needed the fix.
+
+  **Tests**: none added (same JS-framework gap as the previous entry).
+  Verified live the same way -- real headless Chrome via Puppeteer against
+  the actual running app (`/tasks`, two seeded tasks): reproduced the bug
+  first, then confirmed a click now stays checked and a second click
+  toggles cleanly back off. Full Python suite re-run in 4 batches as a
+  sanity check (no `.py` file touched) -- **2197 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-15 -- direct follow-up on the Contacts bulk-select
   slice below: "also the bulk select doesn't work." Turned out to be a
   pre-existing bug in `static/bulk_select.js` itself (unchanged since the
