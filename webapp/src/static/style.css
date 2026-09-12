@@ -4692,24 +4692,6 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-footer-btn:hover{background:var(--bg-secondary);}
 .command-palette-footer-btn .icon{color:var(--fg-tertiary);}
 
-/* Mobile: bottom sheet instead of a floating centered card (direct
-   feedback, 2026-09-12) -- anchored to the bottom edge, full width,
-   top-only radius, and every result row grows to a real 44px touch
-   target instead of the desktop-sized row used above 720px. */
-@media (max-width:720px){
-  .command-palette-overlay{align-items:flex-end; padding:0;}
-  .command-palette{
-    width:100%; max-width:100%; max-height:80vh;
-    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-    transform:translateY(100%);
-  }
-  .command-palette-overlay.is-open .command-palette{transform:translateY(0);}
-  .command-palette-row{min-height:44px; box-sizing:border-box;}
-  .command-palette-footer{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
-  .command-palette-footer-hints{display:none;}
-  .command-palette-footer-actions{flex:1;}
-  .command-palette-footer-btn{flex:1; justify-content:center; padding:var(--space-2);}
-}
 .command-palette-row{
   display:flex; align-items:center; gap:var(--space-3); width:100%;
   padding:var(--space-2) var(--space-3); border:none; background:transparent; border-radius:var(--radius-control);
@@ -4745,6 +4727,31 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-action:hover{background:var(--bg-tertiary); color:var(--fg-primary);}
 .command-palette-action.is-danger:hover{color:var(--danger);}
+
+/* Mobile: bottom sheet instead of a floating centered card (direct
+   feedback, 2026-09-12) -- anchored to the bottom edge, full width,
+   top-only radius, and every result row grows to a real 44px touch
+   target instead of the desktop-sized row used above 720px. Placed
+   after the base .command-palette-row and .command-palette-footer
+   rules above (not before them, source-order-wise) on purpose --
+   same specificity means the later rule wins per shared property, so
+   with this after, a future edit to the base rules can't silently
+   reintroduce a desktop value that wins over this mobile override at
+   narrow widths the way it would if this block sat earlier. */
+@media (max-width:720px){
+  .command-palette-overlay{align-items:flex-end; padding:0;}
+  .command-palette{
+    width:100%; max-width:100%; max-height:80vh;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    transform:translateY(100%);
+  }
+  .command-palette-overlay.is-open .command-palette{transform:translateY(0);}
+  .command-palette-row{min-height:44px; box-sizing:border-box;}
+  .command-palette-footer{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
+  .command-palette-footer-hints{display:none;}
+  .command-palette-footer-actions{flex:1;}
+  .command-palette-footer-btn{flex:1; justify-content:center; padding:var(--space-2);}
+}
 
 /* Quick Capture (plans/quick-capture.md) -- the single preview row shown
    while a !t/!e/!c/!n marker is present in global mode's input

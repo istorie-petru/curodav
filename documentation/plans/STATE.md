@@ -17,6 +17,61 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- direct feedback ("double check audit and fix
+  any bugs") on the search-overlay work three entries below. Full
+  self-review of routers/search.py, command_palette.js, base.html, and
+  style.css turned up one real functional bug and one latent CSS-ordering
+  hazard (no visible symptom yet, but fragile):
+
+  1. **Date-bucket timezone bug** (command_palette.js's `dateBucket`) --
+     fed a task's `due_at` straight into `new Date(dateStr)`. A task's
+     due date is always a bare `"YYYY-MM-DD"` (routers/tasks.py's
+     `due_at: str = Form("")`, straight off a date input), and per the
+     ES spec a date-only string parses as **UTC midnight**, while
+     `startOfToday` (and an event's full-datetime `start_at`, no
+     timezone suffix) are **local time**. In any timezone west of UTC
+     this rolled a task due "today" back to the previous local day,
+     misbucketing it as Overdue instead of This week -- reproduced with
+     a throwaway Node script under `TZ=America/New_York` (old code:
+     diffDays -1 for a task due literally today; confirmed the same
+     script gives 0/"week" after the fix). Fixed by parsing a bare date
+     as local calendar-date components (`new Date(y, m-1, d)`) instead
+     of handing the string to the UTC-parsing branch of `Date()`,
+     bringing it in line with `startOfToday`'s own local basis. No
+     Python test covers this (JS isn't run under pytest, and this repo
+     has no JS test runner) -- worth confirming in a real browser set to
+     a non-UTC, west-of-UTC timezone.
+  2. **CSS ordering hazard** (style.css) -- the new mobile
+     `@media(max-width:720px)` block had been inserted *before* the
+     pre-existing base `.command-palette-row`/`.command-palette-footer`
+     rules in source order. No live bug today (the two blocks happen to
+     set disjoint properties), but at equal specificity the later rule
+     always wins per shared property regardless of which one is inside
+     a narrower `@media` condition -- a future edit adding, say, padding
+     to the base rule would have silently overridden the mobile
+     override at narrow widths. Moved the whole media-query block to
+     after the base rows/actions rules so future edits can't reintroduce
+     that trap silently.
+
+  Also audited (no bug found): FastAPI `Annotated[..., Query()]` fix from
+  the previous entry re-verified still correct; `groupRowsByDate`'s
+  bucket ordering/stability, `currentRowEls` keyboard-nav exclusion of
+  group headers, filter-pill visibility toggling across mode
+  transitions, and the CSS brace/comment balance across the whole
+  4700-line file (a pre-existing, harmless `/*`/`*/` count mismatch of
+  573/575 predates this session entirely -- confirmed via `git show
+  HEAD:...` against the previous commit, not something introduced here).
+
+  **Tests**: none added (no JS test runner in this repo, per the
+  date-bucket bug above). Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed** (CSS/JS-only changes, no test count change expected
+  or seen).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
   redesign two entries below, from direct feedback: "also the filters
   don't work." Root cause was a pre-existing, previously-invisible

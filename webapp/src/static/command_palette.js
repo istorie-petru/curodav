@@ -105,9 +105,23 @@
   const BUCKET_ORDER = ["overdue", "week", "later", "nodate"];
   const BUCKET_LABEL = { overdue: "Overdue", week: "This week", later: "Later", nodate: "No date" };
 
+  const BARE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
   function dateBucket(dateStr) {
     if (!dateStr) return "nodate";
-    const d = new Date(dateStr);
+    // A bare "YYYY-MM-DD" (a task's due_at, always date-only -- see
+    // routers/tasks.py's `due_at: str = Form("")`, straight from a plain
+    // date input) is parsed by `new Date()` as UTC midnight per the ES
+    // spec, while a full datetime like an event's start_at (no
+    // timezone suffix) parses as local time -- feeding the bare form
+    // through the same `new Date(dateStr)` call rolls it back to the
+    // previous local day in any timezone west of UTC, misbucketing a
+    // task due "today" as Overdue. Parsed as local calendar-date
+    // components instead so it lines up with `startOfToday` below,
+    // which is also local.
+    const d = BARE_DATE_RE.test(dateStr)
+      ? new Date(Number(dateStr.slice(0, 4)), Number(dateStr.slice(5, 7)) - 1, Number(dateStr.slice(8, 10)))
+      : new Date(dateStr);
     if (isNaN(d.getTime())) return "nodate";
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
