@@ -18,6 +18,28 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below: "all. the title too. also i want to have a bit more top and
+  bottom space." Row one (back arrow/icon/title/bulk-count) gets the same
+  `justify-content:center` the previous entry gave row two, mobile only.
+  Had to also neutralize `.spacer` (the div between title and actions,
+  `flex:1` everywhere else in the app so the actions slot sits flush
+  against the header's right edge) to `flex:none` on mobile specifically
+  -- left as `flex:1` it would still greedily claim all of row one's
+  leftover width before `justify-content:center` ever had free space to
+  distribute, silently no-opping the centering. Row two didn't need the
+  same treatment -- `.page-header-narrow-actions`'s own `flex-basis:100%`
+  already fills the whole line, no leftover space for a spacer to eat.
+  Also bumped the header's own top/bottom padding from `--space-2` (8px)
+  to `--space-3` (12px) on mobile, per "a bit more top and bottom space."
+
+  **Tests**: none needed. Full suite re-verified in 3 batches -- **2197
+  passed, 0 failed**. Same no-browser caveat as the last few entries.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
   below, from a screenshot of Tasks' mobile row two (Clear/Delete/All
   dates): "could we make the items in the row centered?" Mobile's forced
   actions row (style.css's `@media(max-width:720px) .page-header-narrow-

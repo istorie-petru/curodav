@@ -6166,11 +6166,30 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
      the row; wrapped onto its own full-width row two on mobile, the same
      right-flush rule instead reads as an odd, unbalanced left gap with
      nothing to visually anchor to). Centered instead, mobile only --
-     desktop's flex-end (real right edge) is untouched. */
+     desktop's flex-end (real right edge) is untouched.
+
+     2026-09-12 same-day follow-up (direct feedback: "all. the title too.
+     also i want to have a bit more top and bottom space"): row one (back
+     arrow/icon/title/bulk-count) gets the same `justify-content:center`
+     treatment row two just got, and the header's own top/bottom padding
+     grows from `--space-2` (8px) to `--space-3` (12px) on mobile.
+     `.spacer` (the plain `<div>` between title and actions, `flex:1`
+     everywhere else in the app -- its whole job is normally "eat the
+     remaining width so the actions slot sits flush against the header's
+     right edge") gets `flex:none` here specifically: left as `flex:1` it
+     would still greedily claim 100% of row one's leftover space before
+     `justify-content:center` ever saw any free space to distribute,
+     silently defeating the centering. Neutralizing it to zero-width makes
+     row one behave like a normal centered flex line. Row two doesn't need
+     the same fix -- .page-header-narrow-actions's own `flex-basis:100%`
+     already makes it fill the whole line, so there's no leftover space
+     for a spacer to eat there even if one existed. */
   .page-header-narrow{
     flex-wrap:wrap; row-gap:var(--space-2);
-    padding-bottom:var(--space-2);
+    justify-content:center;
+    padding-top:var(--space-3); padding-bottom:var(--space-3);
   }
+  .page-header-narrow .spacer{flex:none;}
   .page-header-narrow-actions{
     flex-basis:100%; justify-content:center;
   }
