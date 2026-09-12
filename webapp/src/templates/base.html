@@ -497,7 +497,34 @@
                    placeholder="Search tasks, events, contacts…" autocomplete="off">
             <button type="button" class="icon-btn" id="command-palette-close" aria-label="Close">{{ icon('x') }}</button>
         </div>
+        <!-- Type filter pills (global mode only -- command_palette.js hides
+             this row in relation/label mode and during Quick Capture, and
+             toggles .is-active + re-runs the query with `types` set to
+             the picked pill via /api/search's existing `types` param). -->
+        <div class="command-palette-filters" id="command-palette-filters">
+            <button type="button" class="command-palette-pill is-active" data-type-filter="">All</button>
+            <button type="button" class="command-palette-pill" data-type-filter="task">{{ icon('check-square', 'icon-sm') }}Tasks</button>
+            <button type="button" class="command-palette-pill" data-type-filter="event">{{ icon('calendar', 'icon-sm') }}Events</button>
+            <button type="button" class="command-palette-pill" data-type-filter="contact">{{ icon('user', 'icon-sm') }}Contacts</button>
+        </div>
         <div class="command-palette-results" id="command-palette-results"></div>
+        <!-- Footer (global mode only, same visibility rule as the filter
+             pills above) -- real keyboard hints for the nav/select keys
+             command_palette.js already implements, plus two buttons that
+             create a task/event directly (using whatever's currently
+             typed as the title, same as the "Create task/event: ..." rows
+             above but reachable with nothing typed yet -- mirrors the
+             mobile bottom-sheet's own New task/New event buttons). -->
+        <div class="command-palette-footer" id="command-palette-footer">
+            <div class="command-palette-footer-hints">
+                <span><kbd>↑↓</kbd>navigate</span>
+                <span><kbd>↵</kbd>open</span>
+            </div>
+            <div class="command-palette-footer-actions">
+                <button type="button" class="command-palette-footer-btn" id="command-palette-new-task">{{ icon('plus', 'icon-sm') }}New task</button>
+                <button type="button" class="command-palette-footer-btn" id="command-palette-new-event">{{ icon('plus', 'icon-sm') }}New event</button>
+            </div>
+        </div>
     </div>
 </div>
 

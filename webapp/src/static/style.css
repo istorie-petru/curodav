@@ -4632,11 +4632,84 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-input-row > .icon{color:var(--fg-tertiary); flex:none;}
 .command-palette-input{
-  flex:1; min-width:0; border:none; background:transparent; font-size:var(--text-body);
-  color:var(--fg-primary); padding:6px 0;
+  flex:1; min-width:0; border:none; background:transparent; font-size:17px;
+  color:var(--fg-primary); padding:var(--space-2) var(--space-1); box-sizing:border-box;
 }
 .command-palette-input:focus{outline:none;}
+
+/* Type filter pills (direct feedback, 2026-09-12 mockup) -- wraps instead
+   of scrolling (no horizontal scrollbar, even with four pills on a narrow
+   phone width) since the row only ever holds four short labels. */
+.command-palette-filters{
+  display:flex; flex-wrap:wrap; gap:var(--space-2);
+  padding:0 var(--space-4) var(--space-3); border-bottom:1px solid var(--separator);
+  flex:none;
+}
+.command-palette-pill{
+  display:flex; align-items:center; gap:4px;
+  padding:4px var(--space-3); border-radius:999px; border:1px solid var(--border);
+  background:transparent; color:var(--fg-secondary); font-size:var(--text-footnote); cursor:pointer;
+}
+.command-palette-pill .icon{color:inherit;}
+.command-palette-pill:hover{background:var(--bg-secondary);}
+.command-palette-pill.is-active{background:var(--fg-primary); border-color:var(--fg-primary); color:var(--fg-on-accent);}
+
 .command-palette-results{overflow-y:auto; flex:1; padding:var(--space-2);}
+
+/* Date-grouped results (direct feedback, 2026-09-12) -- Overdue/This
+   week/Later/No date section dividers ahead of their first row,
+   command_palette.js's groupRowsByDate. Not a .command-palette-row, so
+   it's automatically excluded from keyboard navigation (currentRowEls
+   only collects .command-palette-row elements). */
+.command-palette-group-header{
+  padding:var(--space-3) var(--space-3) var(--space-1);
+  font-size:var(--text-caption); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
+}
+.command-palette-group-header:first-child{padding-top:var(--space-2);}
+
+/* Footer (direct feedback, 2026-09-12) -- real ↑↓/↵ keyboard hints
+   (spelled out, not literal "t"/"e" shortcuts -- those would collide
+   with typing into the always-focused input above) plus two buttons
+   that create directly, mirroring the mobile bottom-sheet's own New
+   task/New event buttons. Hidden outside global mode/Quick Capture,
+   see command_palette.js's updatePanelsVisibility. */
+.command-palette-footer{
+  display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
+  padding:var(--space-2) var(--space-4); border-top:1px solid var(--separator); flex:none;
+}
+.command-palette-footer-hints{display:flex; align-items:center; gap:var(--space-4);}
+.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-caption); color:var(--fg-tertiary);}
+.command-palette-footer-hints kbd{
+  border:1px solid var(--border); border-radius:4px; padding:1px 5px;
+  font:inherit; font-size:var(--text-caption); color:var(--fg-tertiary); background:var(--bg-secondary);
+}
+.command-palette-footer-actions{display:flex; gap:var(--space-2);}
+.command-palette-footer-btn{
+  display:flex; align-items:center; gap:6px;
+  padding:4px var(--space-3); border-radius:var(--radius-control); border:1px solid var(--border);
+  background:transparent; color:var(--fg-primary); font-size:var(--text-footnote); cursor:pointer;
+}
+.command-palette-footer-btn:hover{background:var(--bg-secondary);}
+.command-palette-footer-btn .icon{color:var(--fg-tertiary);}
+
+/* Mobile: bottom sheet instead of a floating centered card (direct
+   feedback, 2026-09-12) -- anchored to the bottom edge, full width,
+   top-only radius, and every result row grows to a real 44px touch
+   target instead of the desktop-sized row used above 720px. */
+@media (max-width:720px){
+  .command-palette-overlay{align-items:flex-end; padding:0;}
+  .command-palette{
+    width:100%; max-width:100%; max-height:80vh;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    transform:translateY(100%);
+  }
+  .command-palette-overlay.is-open .command-palette{transform:translateY(0);}
+  .command-palette-row{min-height:44px; box-sizing:border-box;}
+  .command-palette-footer{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
+  .command-palette-footer-hints{display:none;}
+  .command-palette-footer-actions{flex:1;}
+  .command-palette-footer-btn{flex:1; justify-content:center; padding:var(--space-2);}
+}
 .command-palette-row{
   display:flex; align-items:center; gap:var(--space-3); width:100%;
   padding:var(--space-2) var(--space-3); border:none; background:transparent; border-radius:var(--radius-control);

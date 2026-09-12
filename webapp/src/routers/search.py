@@ -63,7 +63,7 @@ def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
 
 
 def _page_result(page: dict) -> dict:
-    return {"type": "page", "uid": page["url"], "url": page["url"], "title": page["title"], "subtitle": page["subtitle"], "tags": [], "status": None}
+    return {"type": "page", "uid": page["url"], "url": page["url"], "title": page["title"], "subtitle": page["subtitle"], "tags": [], "status": None, "date": None}
 
 
 def _picker_result(row: dict) -> dict:
@@ -79,13 +79,26 @@ def _picker_result(row: dict) -> dict:
     # along here too, `None` for the other two types. Every existing
     # consumer of this shape (search.html, the relations picker) reads
     # only the fields it already knew about and ignores the rest.
+    #
+    # "date" (command palette date-grouped results, 2026-09-12) -- the one
+    # sortable ISO date/datetime the overlay buckets a row into Overdue/
+    # This week/Later/No date by: a task's `due_at`, an event's `start_at`,
+    # `None` for contacts/notes/pages (they have no date concept, and land
+    # in the "No date" bucket alongside undated tasks/events).
+    entity = row["entity"]
+    date = None
+    if row["type"] == "task":
+        date = entity.get("due_at")
+    elif row["type"] == "event":
+        date = entity.get("start_at")
     return {
         "type": row["type"],
         "uid": row["uid"],
         "title": row["title"],
         "subtitle": row["subtitle"],
         "tags": row["tags"],
-        "status": row["entity"].get("status") if row["type"] == "task" else None,
+        "status": entity.get("status") if row["type"] == "task" else None,
+        "date": date,
     }
 
 

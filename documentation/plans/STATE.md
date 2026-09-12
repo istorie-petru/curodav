@@ -17,6 +17,63 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- direct feedback from an iterated visual mockup
+  of the search/Ctrl-K overlay (three rounds: initial redesign, then "no
+  horizontal scrollbar / bigger padded input / aligned footer" polish,
+  then a mobile bottom-sheet variant), then "implement", "full redesign"
+  chosen when asked how much of the mockup to actually build. Global mode
+  of the shared picker overlay (static/command_palette.js, templates/
+  base.html, routers/search.py) gained:
+
+  1. **Type filter pills** (All/Tasks/Events/Contacts, base.html markup,
+     `#command-palette-filters`) -- clicking one sets `typeFilter` and
+     re-runs the query with `/api/search`'s existing `types` param (no
+     new backend filtering path needed, it already supported this for
+     the relation picker). Global mode only; hidden in relation/label
+     mode and during Quick Capture (`updatePanelsVisibility`).
+  2. **Date-grouped results** -- Overdue/This week/Later/No date section
+     headers, bucketed client-side in `groupRowsByDate` off a new `date`
+     field routers/search.py's `_picker_result` now carries (a task's
+     `due_at`, an event's `start_at`, `None` for contacts/notes/pages/
+     undated items). Headers are plain divs, not `.command-palette-row`,
+     so they're automatically excluded from keyboard nav -- `moveActive`/
+     `highlightActive`/`activateCurrent` were switched from indexing
+     `resultsEl.children` directly to a maintained `currentRowEls` array
+     (only real rows) specifically so headers can't be "selected" by
+     ArrowDown/Enter.
+  3. **Footer** (`#command-palette-footer`) -- real ↑↓/↵ hints (not
+     literal "t"/"e" keyboard shortcuts as the mockup showed -- typing
+     either letter into the always-focused input would just search for
+     it, so that part of the mockup was aesthetic, not literal) plus
+     "New task"/"New event" buttons wired straight to the existing
+     `createEntity`, giving parity with the mobile mockup's own two
+     buttons without needing a typed query first.
+  4. **Mobile bottom sheet** -- `@media (max-width:720px)` anchors the
+     overlay to the bottom edge, full width, top-only radius, slide-up
+     transform, 44px-minimum row height, and collapses the footer to two
+     full-width stacked buttons (hints hidden, not enough width).
+  5. Visual polish from round two: bigger input (17px) with real inner
+     padding (`--space-2 --space-1`, `box-sizing:border-box`) so the
+     focus/hover state doesn't overlap the text, filter pills wrap
+     instead of scrolling (no horizontal scrollbar at any width), footer
+     hints/actions split with `justify-content:space-between`.
+
+  **Tests**: `routers/search.py`'s `_picker_result`/`_page_result` now
+  return a `date` key alongside the existing five -- updated
+  `test_search_api.py`'s exact key-set/dict assertions for that, and
+  added one new test (`test_date_carries_event_start_and_is_none_for_
+  contacts`) covering the event/contact branches the pre-existing task
+  test didn't. No Python test exercises command_palette.js's grouping/
+  filter-pill logic directly (JS isn't run under pytest) -- worth a real
+  browser check next session confirming pill clicks, date buckets, and
+  the mobile breakpoint actually render as intended. Full suite
+  re-verified in 4 batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`,
+  `test_[t-z]*`) -- **2198 passed, 0 failed** (2197 + the one new test).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
   below, from pasted DOM of Contacts' idle header (no tags, nothing
   selected): "this element takes space and doesn't allow the title to be

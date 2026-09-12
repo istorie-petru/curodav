@@ -108,10 +108,11 @@ class TestGlobalMode:
         # "status" (2026-08-15, Command palette actions) rides along too --
         # the palette's own action buttons need it to hide "Mark done" on
         # an already-done task; every other consumer of this shape ignores it.
-        assert set(row.keys()) == {"type", "uid", "title", "subtitle", "tags", "status"}
+        assert set(row.keys()) == {"type", "uid", "title", "subtitle", "tags", "status", "date"}
         assert row["type"] == "task"
         assert row["uid"] == "t1"
         assert row["status"] == "active"
+        assert row["date"] == "2026-09-01"
 
     def test_searches_across_all_three_types(self, conn):
         _seed_task(conn, "t1", title="Shared name")
@@ -137,6 +138,20 @@ class TestGlobalMode:
 
         data = json.loads(search_router.api_search(limit=1, types=["task"], conn=conn).body.decode())
         assert len(data["results"]) == 1
+
+    def test_date_carries_event_start_and_is_none_for_contacts(self, conn):
+        # "date" (command palette date-grouped results) -- a task's date
+        # comes from due_at (covered by test_returns_compact_surface_only),
+        # an event's from start_at, and a contact has no date concept at
+        # all so it stays None.
+        _seed_event(conn, "e1", title="Dated event", start_at="2026-09-20T10:00:00")
+        _seed_contact(conn, "c1", full_name="Dated event")
+        import json
+
+        data = json.loads(search_router.api_search(q="Dated event", conn=conn).body.decode())
+        by_type = {r["type"]: r for r in data["results"]}
+        assert by_type["event"]["date"] == "2026-09-20T10:00:00"
+        assert by_type["contact"]["date"] is None
 
 
 class TestForTaskFilter:
@@ -219,7 +234,7 @@ class TestPageNavigation:
 
         data = json.loads(search_router.api_search(q="Tasks", conn=conn).body.decode())
         pages = [r for r in data["results"] if r["type"] == "page"]
-        assert pages == [{"type": "page", "uid": "/tasks", "url": "/tasks", "title": "Tasks", "subtitle": "", "tags": [], "status": None}]
+        assert pages == [{"type": "page", "uid": "/tasks", "url": "/tasks", "title": "Tasks", "subtitle": "", "tags": [], "status": None, "date": None}]
 
     def test_no_query_still_lists_pages(self, conn):
         import json
@@ -238,7 +253,7 @@ class TestPageNavigation:
         data = json.loads(search_router.api_search(q="Univers", conn=conn).body.decode())
         pages = [r for r in data["results"] if r["type"] == "page"]
         assert pages == [
-            {"type": "page", "uid": "/spaces/University", "url": "/spaces/University", "title": "University", "subtitle": "Space", "tags": [], "status": None}
+            {"type": "page", "uid": "/spaces/University", "url": "/spaces/University", "title": "University", "subtitle": "Space", "tags": [], "status": None, "date": None}
         ]
 
     def test_type_filtered_search_excludes_pages(self, conn):
