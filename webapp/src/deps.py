@@ -701,6 +701,22 @@ def _relative_date(value: str | None) -> str:
 templates.env.filters["relative_date"] = _relative_date
 
 
+def _holiday_date(value: str | None) -> str:
+    """Jinja filter for the Holidays table's Date Range column
+    (audit-fixes-2.1.md, "only day hollydays, withot the year") -- same
+    Today/Tomorrow/"5 Sep" shorthand as `relative_date` for an ordinary
+    full-date holiday, or db.format_holiday_date's "25 Dec" for a
+    year-agnostic "--MM-DD" one (there's no real year to be relative to,
+    so relative_date's own ValueError fallback would otherwise just print
+    the raw "--MM-DD" unchanged)."""
+    if db.is_year_agnostic_holiday_date(value):
+        return db.format_holiday_date(value)
+    return _relative_date(value)
+
+
+templates.env.filters["holiday_date"] = _holiday_date
+
+
 def _format_datetime_value(value: str, fmt: str) -> str:
     """Shared formatting core for the fmt_dt filter below -- one stored ISO
     timestamp ("2026-08-25T20:57:05", UTC like every timestamp this app

@@ -56,6 +56,54 @@ class TestHolidayCalendarAccessors:
         assert by_cal["University"][0]["uid"] == "h1"
 
 
+class TestYearAgnosticHolidayDates:
+    """audit-fixes-2.1.md ("only day hollydays, withot the year") -- the
+    db.py helpers behind the Holiday modal's "Repeats every year"
+    checkbox. Stores the same "--MM-DD" convention Contacts' year-less
+    Birthday already uses (see parse_contact_birthday), so no schema
+    change -- date_from/date_to stay plain TEXT."""
+
+    def test_parse_holiday_date_strips_the_year_when_year_agnostic(self):
+        assert db.parse_holiday_date("2026-12-25", year_agnostic=True) == "--12-25"
+
+    def test_parse_holiday_date_keeps_a_full_date_when_not_year_agnostic(self):
+        assert db.parse_holiday_date("2026-12-25", year_agnostic=False) == "2026-12-25"
+
+    def test_parse_holiday_date_accepts_an_already_yearless_value_round_tripping(self):
+        assert db.parse_holiday_date("--12-25", year_agnostic=True) == "--12-25"
+
+    def test_parse_holiday_date_rejects_a_yearless_value_when_not_year_agnostic(self):
+        with pytest.raises(ValueError):
+            db.parse_holiday_date("--12-25", year_agnostic=False)
+
+    def test_parse_holiday_date_allows_feb_29_via_the_leap_year_placeholder(self):
+        assert db.parse_holiday_date("2028-02-29", year_agnostic=True) == "--02-29"
+
+    def test_parse_holiday_date_rejects_an_invalid_date(self):
+        with pytest.raises(ValueError):
+            db.parse_holiday_date("2026-13-40", year_agnostic=False)
+
+    def test_is_year_agnostic_holiday_date(self):
+        assert db.is_year_agnostic_holiday_date("--12-25")
+        assert not db.is_year_agnostic_holiday_date("2026-12-25")
+        assert not db.is_year_agnostic_holiday_date("")
+        assert not db.is_year_agnostic_holiday_date(None)
+
+    def test_holiday_date_picker_value_anchors_a_yearless_date_to_a_placeholder_year(self):
+        assert db.holiday_date_picker_value("--12-25") == "2000-12-25"
+        assert db.holiday_date_picker_value("2026-12-25") == "2026-12-25"
+
+    def test_format_holiday_date_drops_the_year(self):
+        assert db.format_holiday_date("--12-25") == "25 Dec"
+
+    def test_upsert_and_round_trip_a_year_agnostic_holiday(self, conn):
+        db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "National", "label": "Christmas", "date_from": "--12-25", "date_to": "--12-25"})
+        holiday = db.get_holiday(conn, "h1")
+        assert holiday["date_from"] == "--12-25"
+        assert holiday["date_to"] == "--12-25"
+        assert db.is_year_agnostic_holiday_date(holiday["date_from"])
+
+
 class TestOrdinaryEventHolidayPolicy:
     """Any recurring Calendar event -- not just a Schedule class -- can
     set holiday_calendar/exclude_saturday/exclude_sunday via the same

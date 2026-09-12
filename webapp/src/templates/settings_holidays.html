@@ -52,7 +52,7 @@
                             <span class="group-badge">{{ h.calendar_name }}</span>
                         </td>
                         <td>
-                            <span class="settings-hint">{{ h.date_from | relative_date }} &rarr; {{ h.date_to | relative_date }}</span>
+                            <span class="settings-hint">{{ h.date_from | holiday_date }} &rarr; {{ h.date_to | holiday_date }}</span>
                         </td>
                         <td>
                             {{ row_action_buttons(

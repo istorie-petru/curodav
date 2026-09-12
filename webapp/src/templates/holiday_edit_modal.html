@@ -11,6 +11,17 @@
      way as this page's other field-linking scripts (see e.g. the Role
      picker note in label_edit_modal.html) -- no extra_scripts block here,
      per this comment's own note below.
+     2026-09-12 (audit-fixes-2.1.md, "only day hollydays, withot the
+     year"): "Repeats every year" checkbox for a fixed-date holiday (e.g. a
+     national/religious holiday on the same month+day every year) --
+     stored as a year-less "--MM-DD" (db.parse_holiday_date/
+     is_year_agnostic_holiday_date), the same convention Contacts' Birthday
+     field already uses. No picker change needed: Start/End still pick a
+     real calendar date (so month+day are easy to click), the checkbox
+     alone decides whether the year gets kept or thrown away on save; an
+     existing year-agnostic holiday's Start/End show a placeholder year
+     (routers/settings.py's edit_holiday_modal, db.holiday_date_picker_value)
+     purely so the picker has a real date to highlight while editing.
      Same shape as label_edit_modal.html: opened empty from the "+ Add
      holiday" toolbar button (routers/settings.py::new_holiday_modal, posts
      to create_holiday) or prefilled from a row's Edit button
@@ -50,11 +61,16 @@
         <div class="field">
             <label>Start date</label>
             {% from "_datetime_picker.html" import datetime_picker with context %}
-            {{ datetime_picker('date_from', '', h.date_from if h else '', '', 'date', required=true) }}
+            {{ datetime_picker('date_from', '', date_from_value, '', 'date', required=true) }}
         </div>
         <div class="field">
             <label>End date</label>
-            {{ datetime_picker('date_to', '', h.date_to if h else '', '', 'date', required=true) }}
+            {{ datetime_picker('date_to', '', date_to_value, '', 'date', required=true) }}
+        </div>
+        <div class="field field-toggle field-wide">
+            <input type="checkbox" id="year_agnostic" name="year_agnostic" value="1" {% if year_agnostic %}checked{% endif %}>
+            <label for="year_agnostic">Repeats every year (ignore year above)</label>
+            <span class="field-hint">For a fixed-date holiday like a national or religious holiday -- only the month and day above are saved, so it applies every year.</span>
         </div>
     </div>
 </form>

@@ -811,6 +811,17 @@ def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
 
 
+def _parse_holiday_date_field(value: str, year_agnostic: bool) -> str:
+    """create_holiday/update_holiday's form-validation wrapper around
+    db.parse_holiday_date -- same "reject with a clear 400 rather than
+    silently storing garbage" convention as contacts.py's
+    `_parse_birthday_field` for the analogous year-less-date case."""
+    try:
+        return db.parse_holiday_date(value, year_agnostic)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.get("/settings/holidays")
 def settings_holidays(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
@@ -839,6 +850,9 @@ def new_holiday_modal(request: Request, conn=Depends(get_db)):
             "form_title": "Add holiday",
             "form_action": "/settings/holidays",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            "date_from_value": "",
+            "date_to_value": "",
+            "year_agnostic": False,
         },
     )
 
@@ -848,7 +862,16 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
     """The Holiday Edit button's modal (pattern B) -- one form for every
     field, replacing the old inline-editable table cells
     (static/settings_holidays.js's per-field PATCH). Opens via data-modal
-    from the Holidays list row; posts to update_holiday below."""
+    from the Holidays list row; posts to update_holiday below.
+
+    audit-fixes-2.1.md ("only day holidays, without the year"): a
+    year-agnostic holiday is stored as "--MM-DD" (db.py's
+    is_year_agnostic_holiday_date), but the shared date picker only
+    understands real calendar dates -- `date_from_value`/`date_to_value`
+    feed it a placeholder-year stand-in (db.holiday_date_picker_value) so
+    the right month/day still highlights, while `year_agnostic` drives the
+    modal's "Repeats every year" checkbox that's what actually makes the
+    year get discarded again on save."""
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
         raise HTTPException(404, "Holiday not found")
@@ -860,6 +883,9 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
             "form_title": "Edit holiday",
             "form_action": f"/settings/holidays/{uid}/update",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            "date_from_value": db.holiday_date_picker_value(holiday["date_from"]),
+            "date_to_value": db.holiday_date_picker_value(holiday["date_to"]),
+            "year_agnostic": db.is_year_agnostic_holiday_date(holiday["date_from"]),
         },
     )
 
@@ -870,6 +896,7 @@ def create_holiday(
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
+    year_agnostic: str = Form(""),
     conn=Depends(get_db),
 ):
     # No _regenerate_all(conn) call needed -- a recurring event only ever
@@ -882,7 +909,9 @@ def create_holiday(
         conn,
         {
             "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
-            "label": label, "date_from": date_from, "date_to": date_to,
+            "label": label,
+            "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
+            "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
     return RedirectResponse(url="/settings/holidays", status_code=303)
@@ -895,6 +924,7 @@ def update_holiday(
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
+    year_agnostic: str = Form(""),
     conn=Depends(get_db),
 ):
     """The Holiday edit modal's single Save button (pattern B) -- one
@@ -909,7 +939,9 @@ def update_holiday(
         {
             **holiday,
             "calendar_name": calendar_name.strip() or "Default",
-            "label": label, "date_from": date_from, "date_to": date_to,
+            "label": label,
+            "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
+            "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
     return RedirectResponse(url="/settings/holidays", status_code=303)

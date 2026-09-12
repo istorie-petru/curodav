@@ -17,6 +17,65 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Hollydays should add support for only day hollydays, withot the
+  year. For example religious national holydays that are the same each
+  time each year." A year-agnostic holiday is now stored as `--MM-DD`
+  (`db.is_year_agnostic_holiday_date`/`db.parse_holiday_date`) -- the same
+  vCard-derived convention Contacts' year-less Birthday field already used
+  (`parse_contact_birthday`), reused rather than adding a schema column:
+  `schedule_holidays.date_from`/`date_to` stay plain TEXT holding an
+  alternate string shape. `holiday_edit_modal.html` gained a "Repeats every
+  year" checkbox (`year_agnostic`); the shared date picker itself needed no
+  change -- Start/End still pick a real calendar date so month+day are easy
+  to click, the checkbox alone decides whether `create_holiday`/
+  `update_holiday` (routers/settings.py) keep or discard the year via
+  `db.parse_holiday_date`. Editing an existing year-agnostic holiday feeds
+  the picker a placeholder-year stand-in (`db.holiday_date_picker_value`,
+  year 2000, leap-safe) purely so it has a real date to highlight --
+  nothing about that placeholder year is what gets saved back, the
+  checkbox is. `recurrence_expand.is_excluded_by_policy` is the one place
+  the actual "is this holiday" matching logic lives (both
+  `expand_events`/Calendar's Month/Week/4-Week/Day/Dashboard-agenda and
+  `habit_heatmap.excluded_dates_in_range`/streaks route through it, so
+  neither needed any change of their own) -- it now compares `(month,
+  day)` instead of the full date whenever a holiday row is year-agnostic,
+  including a range that wraps the year boundary (e.g. a Dec 30 -> Jan 2
+  New Year break). `settings_holidays.html`'s Date Range column uses a new
+  `holiday_date` Jinja filter (deps.py) instead of the plain `relative_date`
+  one, since `relative_date`'s `date.fromisoformat` can't parse `--MM-DD`
+  (it would otherwise silently degrade to printing the raw stored string) --
+  `holiday_date` delegates to `relative_date` for an ordinary full-date
+  holiday and to `db.format_holiday_date` ("25 Dec", no year) for a
+  year-agnostic one.
+
+  **Tests**: `test_holiday_calendars.py` gained
+  `TestYearAgnosticHolidayDates` (the db.py helpers: parse/format/
+  round-trip, Feb 29 leap-year allowance, rejecting a yearless value when
+  the checkbox isn't set). `test_recurrence_expand.py` gained
+  `TestYearAgnosticHolidayPolicy` (single-day match across years, a
+  within-month range, a year-boundary-wrapping range, and an end-to-end
+  `expand_events` case). `test_settings_holidays.py` gained
+  `TestHolidayEditModalYearAgnostic` (checkbox state on new vs. year-
+  agnostic vs. ordinary edit) plus create/update/list coverage (yearless
+  storage, invalid-date 400, re-saving a year-agnostic holiday unchanged
+  stays yearless, list row shows "25 Dec" not the raw `--12-25`). Existing
+  create_holiday/update_holiday direct-call tests needed an explicit
+  `year_agnostic=""` added (same reason `exclude_saturday`/
+  `exclude_sunday` tests always pass every Form field explicitly --
+  FastAPI's `Form(...)` default sentinel is truthy when a router is called
+  directly in a test rather than through real request parsing, so omitting
+  a boolean-ish Form field in a direct call doesn't behave like an
+  unchecked checkbox the way it does over real HTTP). Full suite run in 4
+  file-list batches (still one call per batch -- this sandbox can't finish
+  an un-split run inside the tool's 45s call limit): **2180 passed, 0
+  failed** -- no flaky time-of-day-boundary failures this run.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Holiday bug, for some reason the user is not allowed to add
+  more holidays to the same calendar, and it defaults to Default
+  calendar."
+
 - **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
   order: "While adding a hollday, in the specific modal window, after
   setting either the start and end date, the other one should be
