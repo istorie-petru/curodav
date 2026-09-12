@@ -17,6 +17,45 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-12 -- direct feedback from a screenshot ("the text
+  input box doesn't look right") plus live verification with real Chrome
+  access to `http://127.0.0.1:8000/` (first time this feature got an
+  actual browser check rather than just reasoning from source, per every
+  prior entry's own caveat). Root cause: `.command-palette-input:focus`
+  only reset `outline:none`, but the app's shared base form-control rule
+  (`input:focus{box-shadow:0 0 0 3px var(--accent-neutral-subtle);}`,
+  higher up in style.css, applies to every `<input>` in the app) has
+  higher specificity than a plain `input:focus` type selector and was
+  never overridden here -- and since the palette autofocuses its input
+  the instant it opens, that ring is always visible, reading as a boxed
+  border around an otherwise-borderless field (confirmed via
+  `getComputedStyle` showing a real `box-shadow` ring before the fix).
+  Fixed by adding `box-shadow:none` alongside the existing
+  `outline:none` on `.command-palette-input:focus` -- confirmed in the
+  live browser (computed style now `box-shadow: none`, zoomed screenshot
+  shows a clean borderless field).
+
+  While live-verifying, also drove the type filter pills and the mobile
+  bottom sheet directly in Chrome (resized to 400×800): both work
+  correctly -- pill clicks genuinely narrow `/api/search`'s `types` param
+  (verified task/event/contact results are genuinely disjoint sets, not
+  just visually similar test data), and the bottom sheet slides in
+  correctly once its 0.16s transition settles (a `getComputedStyle` read
+  mid-transition briefly looked like a real bug -- translateY(100%), the
+  closed value, despite the `is-open` class being present -- but wall-
+  clock time confirmed it was this session's own rapid diagnostic
+  toggling re-triggering the transition, not a cascade or ordering bug;
+  the four-rule specificity/order analysis that prompted the concern
+  checked out fine once given time to settle).
+
+  **Tests**: none needed, pure CSS. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-12 -- direct feedback ("double check audit and fix
   any bugs") on the search-overlay work three entries below. Full
   self-review of routers/search.py, command_palette.js, base.html, and

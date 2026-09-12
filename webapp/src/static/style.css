@@ -4635,7 +4635,14 @@ body.command-palette-open{overflow:hidden;}
   flex:1; min-width:0; border:none; background:transparent; font-size:17px;
   color:var(--fg-primary); padding:var(--space-2) var(--space-1); box-sizing:border-box;
 }
-.command-palette-input:focus{outline:none;}
+/* The base form-control rule (input:focus{box-shadow:0 0 0 3px ...})
+   still applies here at lower specificity -- a class+pseudo selector
+   beats a type+pseudo one, but only for properties this rule actually
+   sets, so box-shadow needs an explicit override too, not just outline.
+   Left unset, the palette auto-focuses this field the instant it opens
+   (see command_palette.js's open()), so that ring is always visible and
+   reads as a stray boxed border around otherwise-borderless text. */
+.command-palette-input:focus{outline:none; box-shadow:none;}
 
 /* Type filter pills (direct feedback, 2026-09-12 mockup) -- wraps instead
    of scrolling (no horizontal scrollbar, even with four pills on a narrow
