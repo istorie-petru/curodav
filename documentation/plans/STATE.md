@@ -18,6 +18,27 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from a screenshot: "the title is not perfectly centered." Root
+  cause: that entry's `.page-header-narrow .spacer{flex:none}` neutralized
+  the spacer's *growth* but not its existence -- a zero-width flex item
+  still occupies a slot in the flex line and still gets a `gap` on the
+  side facing its neighbor, so row one's actual flex line was "icon, gap,
+  title, gap, spacer(0-width)", three items, not two. Centering that whole
+  line (gaps included) pushed the visible icon+title left of true center
+  by about half a gap -- the empty trailing spacer-plus-gap ate the
+  difference. `display:none` instead of `flex:none` removes it from the
+  flex layout entirely (no box, no adjacent gap), so row one is genuinely
+  just icon+title and centers on what's actually visible.
+
+  **Tests**: none needed. Full suite re-verified in 3 batches -- **2197
+  passed, 0 failed**. Same no-browser caveat as the last few entries --
+  worth a real visual confirmation next time a browser's available.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
   below: "all. the title too. also i want to have a bit more top and
   bottom space." Row one (back arrow/icon/title/bulk-count) gets the same
   `justify-content:center` the previous entry gave row two, mobile only.

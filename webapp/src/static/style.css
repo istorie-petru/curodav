@@ -6176,20 +6176,33 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
      `.spacer` (the plain `<div>` between title and actions, `flex:1`
      everywhere else in the app -- its whole job is normally "eat the
      remaining width so the actions slot sits flush against the header's
-     right edge") gets `flex:none` here specifically: left as `flex:1` it
-     would still greedily claim 100% of row one's leftover space before
+     right edge") needs neutralizing here specifically: left as `flex:1`
+     it would still greedily claim 100% of row one's leftover space before
      `justify-content:center` ever saw any free space to distribute,
-     silently defeating the centering. Neutralizing it to zero-width makes
-     row one behave like a normal centered flex line. Row two doesn't need
-     the same fix -- .page-header-narrow-actions's own `flex-basis:100%`
-     already makes it fill the whole line, so there's no leftover space
-     for a spacer to eat there even if one existed. */
+     silently defeating the centering. Row two doesn't need the same fix
+     -- .page-header-narrow-actions's own `flex-basis:100%` already makes
+     it fill the whole line, so there's no leftover space for a spacer to
+     eat there even if one existed.
+
+     2026-09-12 same-day follow-up #2 (direct feedback, screenshot: "the
+     title is not perfectly centered" -- Tasks, no back arrow, so row one
+     was just icon+title+spacer): the fix right above used `flex:none` on
+     .spacer, not `display:none` -- a flex item with `flex:none` and no
+     content still has a real (zero) width box that still counts on one
+     side of `gap`, so row one's flex line was really "icon, gap, title,
+     gap, spacer(0-width)" -- three items, not two. `justify-content:
+     center` centers that whole three-item line, gaps included, so the
+     trailing empty gap-plus-spacer past the title pushed the *visible*
+     icon+title content off-center to the left by roughly half a gap.
+     `display:none` instead removes it from the flex layout entirely --
+     no box, no gap either side of it -- so row one is genuinely just
+     "icon, gap, title" and centers on the content actually visible. */
   .page-header-narrow{
     flex-wrap:wrap; row-gap:var(--space-2);
     justify-content:center;
     padding-top:var(--space-3); padding-bottom:var(--space-3);
   }
-  .page-header-narrow .spacer{flex:none;}
+  .page-header-narrow .spacer{display:none;}
   .page-header-narrow-actions{
     flex-basis:100%; justify-content:center;
   }
