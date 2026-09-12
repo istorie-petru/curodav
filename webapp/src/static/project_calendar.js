@@ -13,6 +13,13 @@
 //    read from the pointer's Y relative to the column's rect (viewport-
 //    relative, so it stays correct while the grid auto-scrolls) and a plain
 //    hidden form submits to routers/projects.py::create_allocation.
+//    1b. (2026-09-10, audit-fixes-2.1.md direct request, superseded same
+//    day -- see end()'s own comment) A plain click on the same list item --
+//    released with no drag past DRAG_THRESHOLD_PX -- opens the task's view
+//    modal, same as interaction 4 does for a placed `.work-allocation`
+//    block. Adding another undated session now happens from that modal's
+//    own Work sessions card (its "+" button), not from a click on this
+//    panel.
 // 2. Drag an existing `.work-allocation` block to move it, or its
 //    `.te-resize-handle` to resize it -- same pointer-based drag model as
 //    static/calendar.js's Week/Day grid (pointerdown/pointermove/pointerup
@@ -147,10 +154,7 @@
     let drag = null; // active create-drag state, or null when idle
 
     function begin(e) {
-      // The −/+ stepper forms live inside the item; a pointerdown on them
-      // is a button press, not the start of a drag -- let it click through.
       if (e.button !== 0) return;
-      if (e.target.closest(".unscheduled-stepper")) return;
       e.preventDefault();
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
@@ -233,7 +237,30 @@
       const wasDrag = drag && drag.dragged;
       const col = drag && drag.hoverCol;
       finish();
-      if (!wasDrag || !col) return; // a click (not a drop)
+      if (!wasDrag) {
+        // A plain click (no drag past DRAG_THRESHOLD_PX) -- audit-
+        // fixes-2.1.md (2026-09-10, direct request, second pass same day):
+        // "for any pill inside it, the user could click it and open the
+        // task view modal window." This item briefly (same session, same
+        // day) used a plain click to add one more undated session instead
+        // -- that conflicted with this later, more specific request for
+        // the same gesture, so per direct decision the click-to-add
+        // behavior is gone: opening the task modal wins, and adding a
+        // session now happens from the modal's own Work sessions card
+        // ("+" button, `_task_work_allocations.html`) instead. Same
+        // taskUrlBase + CCModal convention interaction 4 already uses for
+        // a placed `.work-allocation` block's click-to-open.
+        if (cfg.taskUrlBase && item.dataset.taskUid) {
+          const url = cfg.taskUrlBase + item.dataset.taskUid;
+          if (window.CCModal) {
+            window.CCModal.open(url, item);
+          } else {
+            window.location.href = url;
+          }
+        }
+        return;
+      }
+      if (!col) return; // a drag that ended off any column -- drop nothing
       // Time from the pointer's Y relative to the hovered column's rect.
       // getBoundingClientRect is viewport-relative, so this stays correct
       // even if the grid auto-scrolled during the drag. Same snap as the

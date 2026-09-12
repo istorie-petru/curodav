@@ -12,6 +12,7 @@ DAV client wrote, including RRULE the user typed by hand).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Any
 
@@ -24,6 +25,22 @@ from .ical_rows import (
     ical_to_task_row,
     task_row_to_ical,
 )
+
+# Mirrors db._HOLIDAY_YEARLESS_RE -- kept as a plain regex here rather than
+# importing db, since this module is deliberately decoupled from the db
+# layer (it only ever reads the plain dicts a router already fetched, see
+# `holiday_calendars`' own docstring on list_holidays_by_calendar).
+_HOLIDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
+
+
+def _holiday_month_day(value: str) -> tuple[int, int]:
+    """(month, day) for either a "--MM-DD" year-agnostic holiday date or an
+    ordinary "YYYY-MM-DD" one -- the year is irrelevant either way once
+    audit-fixes-2.1.md's "only day holidays, without the year" applies."""
+    if _HOLIDAY_YEARLESS_RE.match(value):
+        return int(value[2:4]), int(value[5:7])
+    d = date.fromisoformat(value)
+    return d.month, d.day
 
 
 def _occurrence_date(occ_row: dict[str, Any]) -> date | None:
@@ -60,8 +77,24 @@ def is_excluded_by_policy(
     calendar_name = row.get("holiday_calendar")
     if calendar_name and holiday_calendars:
         for h in holiday_calendars.get(calendar_name, []):
-            lo = date.fromisoformat(h["date_from"])
-            hi = date.fromisoformat(h["date_to"])
+            date_from, date_to = h["date_from"], h["date_to"]
+            if _HOLIDAY_YEARLESS_RE.match(date_from) or _HOLIDAY_YEARLESS_RE.match(date_to):
+                # audit-fixes-2.1.md ("only day holidays, without the
+                # year") -- a fixed-date holiday recurs every year, so
+                # match by (month, day) only, not the exact calendar date.
+                # A range can wrap the year boundary (e.g. Dec 30 -> Jan
+                # 2 for a New Year break) -- lo_md > hi_md is exactly that
+                # case, so the match becomes "on or after lo, OR on or
+                # before hi" instead of "between lo and hi".
+                lo_md, hi_md, d_md = _holiday_month_day(date_from), _holiday_month_day(date_to), (d.month, d.day)
+                if lo_md <= hi_md:
+                    if lo_md <= d_md <= hi_md:
+                        return True
+                elif d_md >= lo_md or d_md <= hi_md:
+                    return True
+                continue
+            lo = date.fromisoformat(date_from)
+            hi = date.fromisoformat(date_to)
             if lo <= d <= hi:
                 return True
     return False

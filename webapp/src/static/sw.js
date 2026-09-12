@@ -449,7 +449,34 @@
 // (style.css's new .cal-nav-label, the two grid templates' updated
 // markup). style.css and async_calendar.js both changed; neither is in
 // SHELL_ASSETS below, but style.css is, so the bump is required either way.
-const CACHE_NAME = "cc-shell-v96";
+// v97 (2026-09-10, audit-fixes-2.1.md session): two changes bundled into
+// one bump. (1) A missed bump from earlier the same session -- static/
+// avatar_cropper.js (IS in SHELL_ASSETS below) was fixed to stop
+// discarding an in-progress crop/rotate on any backdrop click, but the
+// required CACHE_NAME bump was skipped at the time; caught while making
+// this same mistake's cousin here (a static/*.js file's own SHELL_ASSETS
+// membership needs checking every time, not assumed). (2) The "Unscheduled
+// work" panel's per-item +/- stepper is removed (style.css's
+// .unscheduled-task-item/.unscheduled-count rules changed, its
+// .unscheduled-stepper/.unscheduled-step-btn rules deleted) in favor of a
+// plain click adding a session (static/project_calendar.js, not itself in
+// SHELL_ASSETS, but style.css is, so the bump is required either way, same
+// v88 reasoning above).
+// v98 (2026-09-10, same session, same lesson repeated a third time): two
+// MORE style.css changes shipped without a bump each -- (1) the Contacts
+// edit form's custom type-dropdown swap (.contact-multi-row/.contact-
+// address-row width rules retargeted from `select` to `.contact-type-
+// select`) went out with no bump at all (missed entirely, not caught
+// until this comment was being written for the next slice); (2) this
+// slice's own Kanban column responsive-tier rework (new `.kanban-board-
+// wrap`/`@container` rules replacing the old `@media` breakpoint) is
+// bundled into the same catch-up bump rather than shipping its own
+// separate one right after. Neither slice's own JS
+// (contact_phone_email_rows.js, project_detail.html's template-only
+// change) is in SHELL_ASSETS below, but style.css is, so both needed the
+// bump regardless -- same v88/v97 reasoning, apparently still not
+// sticking as a habit yet.
+const CACHE_NAME = "cc-shell-v98";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

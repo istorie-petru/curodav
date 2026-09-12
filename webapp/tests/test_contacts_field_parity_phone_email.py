@@ -411,3 +411,67 @@ class TestRenderedMarkup:
         body = resp.body.decode()
         assert "555-1111" in body
         assert "555-2222" not in body
+
+
+class TestTypePickerIsCustomDropdown:
+    """audit-fixes-2.1.md ("Contacts edit modal window doesn't use the
+    custom drop down menus"): the type field is now
+    _contact_type_picker.html's `.multiselect widget-list-multiselect`
+    dropdown, not a native `<select>` -- the one form control left in the
+    app still opening the browser's own unstylable dropdown chrome. Each
+    row still posts under the plain `phone_type`/`email_type` field name
+    (see that macro's own header comment for the row-scoped-radio +
+    hidden-proxy mechanism this requires), which is why every pre-existing
+    test above -- written against the wire contract, not the markup --
+    kept passing unchanged through this swap."""
+
+    def test_native_select_is_gone_from_new_contact_form(self, conn):
+        # A blanket "<select" substring check would also catch unrelated
+        # features elsewhere on the same page (base.html's shared shell
+        # renders every page script, including e.g. recurrence_picker.js's
+        # own unrelated <select>-reveal comment) -- scope to the two actual
+        # select elements this slice used to render instead.
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="phone_type">' not in body
+        assert '<select name="email_type">' not in body
+
+    def test_custom_dropdown_markup_present_for_phone_and_email(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert "contact-type-select" in body
+        assert 'data-ms-mode="single"' in body
+
+    def test_radios_never_carry_the_real_submitted_field_name(self, conn):
+        # The real "phone_type"/"email_type" name belongs to each row's
+        # hidden proxy input only -- a radio carrying it directly would
+        # mean every row shares one native radio group again (the bug this
+        # whole mechanism exists to avoid).
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="radio" name="phone_type"' not in body
+        assert '<input type="radio" name="email_type"' not in body
+
+    def test_each_row_gets_a_distinct_radio_group_and_proxy_id(self, conn):
+        # Two existing phone rows must not collide -- each gets its own
+        # row-scoped radio name (loop.index-suffixed) and its own hidden
+        # proxy id, both still carrying value="Cell"/"Work" for the
+        # correct row's initial checked state.
+        uid = _make_contact(conn)
+        db.set_contact_phones(conn, uid, [{"type": "Cell", "value": "555-1111"}, {"type": "Work", "value": "555-2222"}])
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'name="phone_type__1"' in body
+        assert 'name="phone_type__2"' in body
+        assert 'id="phone_type-proxy-1"' in body
+        assert 'id="phone_type-proxy-2"' in body
+        assert 'id="phone_type-proxy-1" name="phone_type" value="Cell"' in body
+        assert 'id="phone_type-proxy-2" name="phone_type" value="Work"' in body
+
+    def test_hidden_proxy_still_carries_the_real_field_name(self, conn):
+        # This is what actually submits with the form -- unchanged wire
+        # contract, just no longer a <select>.
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="hidden" id="phone_type-proxy-tmpl" name="phone_type"' in body
+        assert '<input type="hidden" id="email_type-proxy-tmpl" name="email_type"' in body

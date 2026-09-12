@@ -148,3 +148,37 @@ class TestContactRow:
         assert result["social_profiles"] == row["social_profiles"]
         assert set(result["tags"]) == set(row["tags"])
         assert result["notes"] == row["notes"]
+
+    def test_missing_uid_gets_generated_not_crash(self):
+        # audit-fixes-2.1.md: a real-world vCard import 500'd with
+        # `AttributeError: uid` -- Nextcloud's own "Administrator" sample
+        # card (and plenty of other real-world exports) omit UID entirely,
+        # even though it's mandatory per spec. vcard_to_contact_row must
+        # assign a fresh uid instead of raising, same "always has an
+        # identity" convention as every other uid-on-creation callsite.
+        import vobject
+
+        card = vobject.vCard()
+        card.add("version").value = "3.0"
+        card.add("fn").value = "Administrator"
+
+        result = vcard_to_contact_row(card)
+
+        assert result["uid"]
+        assert result["full_name"] == "Administrator"
+
+    def test_blank_uid_value_gets_generated_not_stored_literally(self):
+        # A card can also carry a UID *property* with an empty/None value
+        # (`UID:` with nothing after the colon) -- distinct from the
+        # property being absent entirely, but the same "don't store a
+        # non-identity as the identity" fix applies.
+        import vobject
+
+        card = vobject.vCard()
+        card.add("version").value = "3.0"
+        card.add("uid").value = ""
+        card.add("fn").value = "No UID Value"
+
+        result = vcard_to_contact_row(card)
+
+        assert result["uid"]

@@ -53,18 +53,25 @@
    visible trail text worth keeping. Rather than change every call site,
    this macro reads `crumbs` straight from the render context (available
    because `with context` was already required) and, when present, draws
-   a small left-arrow `.icon-btn` at the *start* of the actions slot --
-   still the header's right side (after the spacer, before any real
-   page-specific actions), just a back button instead of a breadcrumb
-   trail. `crumbs[-1]` (the immediate parent, not necessarily
-   `crumbs[0]`) is what it links to, so this still does the right thing
-   if a page ever grows a real multi-level crumbs list later. The trail
-   text itself doesn't disappear entirely -- it survives as the arrow's
-   `aria-label`/`title` ("Back to Settings") for screen readers and
-   mouse-hover, per direct request. Pages with no `crumbs` in context
-   (Tasks/Contacts/Calendar/Notes/Search/etc., which never included
-   `_settings_breadcrumb.html` to begin with) render exactly as before --
-   `crumbs is defined` guards this so it's a no-op there. #}
+   a small left-arrow `.icon-btn`. `crumbs[-1]` (the immediate parent,
+   not necessarily `crumbs[0]`) is what it links to, so this still does
+   the right thing if a page ever grows a real multi-level crumbs list
+   later. The trail text itself doesn't disappear entirely -- it
+   survives as the arrow's `aria-label`/`title` ("Back to Settings") for
+   screen readers and mouse-hover, per direct request. Pages with no
+   `crumbs` in context (Tasks/Contacts/Calendar/Notes/Search/etc., which
+   never included `_settings_breadcrumb.html` to begin with) render
+   exactly as before -- `crumbs is defined` guards this so it's a no-op
+   there.
+
+   2026-09-11 follow-up (direct request): "the page-header-narrow-back,
+   it should be on the left most, not right most." Moved the back arrow
+   out of `.page-header-narrow-actions` (which sits after the spacer, on
+   the header's right) to the very first child of the header, before the
+   icon+title -- true leftmost, not just "left edge of the right-hand
+   actions cluster". `.page-header-narrow-actions` (real page-specific
+   controls, e.g. Calendar's prev/next/subnav) is untouched and still
+   right-aligned; only the crumbs-driven back arrow moved. #}
 {% macro page_header_narrow(title, icon_name) %}
 {% set _banner = page_header_banner(request) %}
 <div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
@@ -75,15 +82,15 @@
     <img class="page-header-narrow-bg" src="{{ _banner.image_url }}" alt="" referrerpolicy="no-referrer">
     {% endif %}
     {% endif %}
+    {% if crumbs is defined and crumbs %}
+    <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
+    {% endif %}
     <span class="page-header-narrow-icon">{{ icon(icon_name|default('layout')) }}</span>
     <h2 class="page-header-narrow-title">{{ title }}</h2>
     <div class="spacer"></div>
-    {% if (crumbs is defined and crumbs) or caller %}
+    {% if caller %}
     <div class="page-header-narrow-actions">
-        {% if crumbs is defined and crumbs %}
-        <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
-        {% endif %}
-        {% if caller %}{{ caller() }}{% endif %}
+        {{ caller() }}
     </div>
     {% endif %}
 </div>

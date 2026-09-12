@@ -1,5 +1,15 @@
-// Kanban drag-and-drop (templates/tasks_board.html) -- Pointer Events
-// rather than the native HTML5 Drag and Drop API this used to use.
+// Kanban drag-and-drop (templates/project_detail.html's `#kanban-board` --
+// originally templates/tasks_board.html, a standalone global Tasks Kanban
+// page deleted in the 2026-08-28 rework; this file was left orphaned,
+// included nowhere, until project_detail.html's own later Kanban
+// reimplementation picked the same `.kanban-*` markup/CSS back up.
+// Re-wired here, unchanged, 2026-09-10 (audit-fixes-2.1.md direct bug
+// report: "The kanban board for tasks doesn't allow for tasks to be drag
+// and dropped") -- project_detail.html's markup already matched this
+// file's selectors exactly (`#kanban-board`, `.kanban-column[data-status]`,
+// `.kanban-cards[data-status]`, `.kanban-card[data-uid]`), so the only
+// missing piece was the `<script>` include itself.) Pointer Events rather
+// than the native HTML5 Drag and Drop API this used to use.
 //
 // HTML5 DnD (`draggable`, `dragstart`/`dragover`/`drop`) never fires on
 // touch at all in iOS/Android browsers -- on a phone, every card here was

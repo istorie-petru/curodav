@@ -113,23 +113,48 @@
                      omitted then, same as before this existed.
      ms_allow_new -- (2026-08-07, modal-input-design Phase B follow-up)
                      when true, adds a plain text input at the bottom of
-                     the panel, same `name="{{ ms_name }}"` as the
-                     checkboxes above it. Converting Labels from a free-
-                     text+datalist field to a checkbox-only list removed
-                     the app's only way to originate a brand-new label
-                     name (labels_manage.html's own copy: "labels are
-                     created automatically the first time you apply one
-                     on a task/event/contact") -- this restores that
-                     without reintroducing free-text-instead-of-picking
-                     for the common case, since it's an addition
-                     alongside the checkboxes, not a replacement for them.
-                     No server-side change needed: FastAPI's
+                     the panel. In list/filter/select mode (Labels, the
+                     only caller of this combination) it shares the exact
+                     same `name="{{ ms_name }}"` as the checkboxes above
+                     it -- converting Labels from a free-text+datalist
+                     field to a checkbox-only list removed the app's only
+                     way to originate a brand-new label name
+                     (labels_manage.html's own copy: "labels are created
+                     automatically the first time you apply one on a
+                     task/event/contact") -- this restores that without
+                     reintroducing free-text-instead-of-picking for the
+                     common case, since it's an addition alongside the
+                     checkboxes, not a replacement for them. No
+                     server-side change needed there: FastAPI's
                      `tags_labels: list[str] = Form([])` already collects
                      every form field sharing that name regardless of
                      control type, and `_tags_list`/`_combine_tags`
                      already drop blank entries, so a form submitted with
                      this input left empty behaves exactly as if it
                      weren't there.
+
+                     In `single` mode (Holidays' Calendar field, the only
+                     "pick-or-create" single-select in the app) the text
+                     input instead gets its own distinct
+                     `name="{{ ms_name }}_new"` -- audit-fixes-2.1.md,
+                     "not allowed to add more holidays to the same
+                     calendar, defaults to Default": a radio only submits
+                     when checked, but a plain text input is always a
+                     "successful control" whether touched or not, so
+                     sharing one `name` with the radios here (a *scalar*
+                     `str = Form(...)` field, unlike Labels' `list[str]`)
+                     meant this always-present, always-blank-unless-typed
+                     text input silently won over whichever radio the
+                     user actually picked -- last value in the submitted
+                     body wins for a same-named scalar Form field, and the
+                     text input always renders after every radio. Giving
+                     it its own name turns that into two ordinary scalar
+                     fields a router can combine explicitly (routers/
+                     settings.py's `_resolve_calendar_name`: the typed
+                     name wins when non-blank, since typing is always a
+                     deliberate override, otherwise the checked radio's
+                     value applies) instead of one field silently
+                     colliding with itself.
      ms_extra_checkboxes -- (2026-08-14, event form's Holiday calendar
                      dropdown: "add exclude saturday and sunday into the
                      holiday drop down menu as checkboxes at the end")
@@ -202,7 +227,11 @@ ms_hidden    -- when true, the outer `.field` starts with the
             {% if _allow_new %}
             <label class="multiselect-option multiselect-new-option">
                 {{ icon('plus', 'icon-sm') }}
-                <input type="text" name="{{ ms_name }}" class="multiselect-new-input" placeholder="New {{ ms_label|lower|replace('labels', 'label') }}&hellip;"
+                {# Single mode: distinct name from the radios above --
+                   see this partial's own ms_allow_new docstring for why
+                   sharing one name with a single-select's radios silently
+                   lost whichever radio the user actually picked. #}
+                <input type="text" name="{{ (ms_name ~ '_new') if _single else ms_name }}" class="multiselect-new-input" placeholder="New {{ ms_label|lower|replace('labels', 'label') }}&hellip;"
                        {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
             </label>
             {% endif %}

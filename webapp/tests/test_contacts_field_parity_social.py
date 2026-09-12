@@ -296,3 +296,40 @@ class TestRenderedMarkup:
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
         assert 'detail-meta-label">Social' not in body
+
+
+class TestTypePickerIsCustomDropdown:
+    """audit-fixes-2.1.md ("Contacts edit modal window doesn't use the
+    custom drop down menus") -- same swap as
+    test_contacts_field_parity_phone_email.py's identically-named class
+    (see that file for the full rationale); this file's own coverage for
+    Social network's `social_type`."""
+
+    def test_native_select_is_gone(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="social_type">' not in body
+
+    def test_custom_dropdown_markup_present(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert "contact-type-select" in body
+        assert 'data-ms-mode="single"' in body
+
+    def test_radio_never_carries_the_real_submitted_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="radio" name="social_type"' not in body
+
+    def test_each_row_gets_a_distinct_radio_group_and_proxy_id(self, conn):
+        uid = _make_contact(conn)
+        db.set_contact_social_profiles(conn, uid, [{"type": "Twitter", "value": "https://twitter.com/ada"}, {"type": "Mastodon", "value": "@ada@fosstodon.org"}])
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="social_type-proxy-1" name="social_type" value="Twitter"' in body
+        assert 'id="social_type-proxy-2" name="social_type" value="Mastodon"' in body
+
+    def test_hidden_proxy_still_carries_the_real_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="hidden" id="social_type-proxy-tmpl" name="social_type"' in body

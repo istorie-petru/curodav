@@ -20,8 +20,8 @@
 <body>
     <div class="auth-wrap">
         <div class="auth-card">
-            <h1 class="auth-brand">{{ icon('command') }} Command Center</h1>
-            <p class="auth-subtitle text-muted">This install isn't set up yet. Choose the username and password you'll log in with — there's only one account, and this is the only time you'll set it.</p>
+            <h1 class="auth-brand">{{ icon('command') }} Set up</h1>
+            <p class="auth-subtitle text-muted">Choose your username and password. There's only one account, set once here.</p>
             {% if error %}
             <p class="auth-error" role="alert">{{ error }}</p>
             {% endif %}
@@ -41,13 +41,11 @@
 
                 {% if not radicale_env_configured %}
                 <hr class="setup-radicale-divider">
-                <p class="auth-subtitle text-muted setup-radicale-subtitle">Connect to a CalDAV/CardDAV server (optional)</p>
-                <p class="settings-hint setup-radicale-hint">Only needed if you want to sync tasks/events/contacts to a Radicale server (e.g. for phone sync). Leave blank to skip -- you can come back to this later in Settings, or run the installer with <code>--with-radicale</code> for a pre-configured one. The username/password above are used for this too -- one account for both.</p>
                 <div class="field">
-                    <label for="radicale_url">Server URL</label>
+                    <label for="radicale_url">Radicale server URL <span class="text-muted">(optional, for phone sync)</span></label>
                     <input id="radicale_url" type="text" name="radicale_url" placeholder="http://127.0.0.1:5232/you/" autocomplete="off">
+                    <p class="settings-hint setup-radicale-hint">Uses the account above. Leave blank to skip — add it later in Settings.</p>
                 </div>
-                <p class="settings-hint setup-radicale-hint">Takes effect after the app is restarted.</p>
                 {% endif %}
 
                 <button type="submit" class="btn primary auth-submit">Create account &amp; log in</button>

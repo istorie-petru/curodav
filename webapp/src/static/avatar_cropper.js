@@ -20,7 +20,7 @@
 // either way (routers/settings.py's/contacts.py's/banners.py's upload
 // routes never resized/cropped server-side to begin with -- they just
 // store whatever bytes arrive). If that form carries `data-autosubmit`
-// (settings_general.html's profile-picture row, which has no Save button
+// (settings_your_profile.html's profile-picture row, which has no Save button
 // of its own) OR the input is a banner upload (banner_editor.html's own
 // upload form isn't marked data-autosubmit, but always auto-submitted on
 // file selection even before this editor existed -- see the removed
@@ -350,9 +350,20 @@
     }
     overlay.querySelector("[data-cropper-close]").addEventListener("click", () => closeEditor(true));
     overlay.querySelector("[data-cropper-cancel]").addEventListener("click", () => closeEditor(true));
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) closeEditor(true);
-    });
+    // audit-fixes-2.1.md (direct bug report): a click on the backdrop used
+    // to close the editor and discard the in-progress crop/rotate
+    // unconditionally -- including a click that lands on the backdrop only
+    // because the user is mid-drag on a resize handle or the crop box
+    // itself (the pointer briefly leaves the stage during a fast drag).
+    // There is no dirty-state check or confirmation, so this reads as "the
+    // modal doesn't work." Removed entirely; the explicit Close (X) and
+    // Cancel buttons above are the only intentional exits now. No other
+    // outside-click-to-close implementation in this codebase (modal.js's
+    // own backdrop click, the color/icon popover, datetime_picker.js,
+    // reminders_picker.js) has a reusable opt-out flag to reuse instead --
+    // each is its own bespoke listener, so removing this one outright is
+    // consistent with there being no suppression convention already
+    // established elsewhere.
 
     overlay.querySelector("[data-cropper-apply]").addEventListener("click", () => {
       const b = state.box;

@@ -601,6 +601,12 @@
      wireContent() calls CCEventFormatToggle.init(body) against the
      freshly-injected content. -->
 <script defer src="{{ static_url('event_format_toggle.js') }}"></script>
+<!-- holiday_edit_modal.html's Start/End date auto-sync (2026-09-11) --
+     loaded globally for the same reason as the scripts above:
+     holiday_edit_modal.html is normally injected into the modal via
+     innerHTML, so modal.js's wireContent() calls
+     CCHolidayDateSync.init(body) against the freshly-injected content. -->
+<script defer src="{{ static_url('holiday_date_sync.js') }}"></script>
 <!-- Universal command surface (1.2 side work) -- global Ctrl-K/Cmd-K search
      plus the Relations cards' "add related X" picker
      (_task_relations.html/_event_relations.html, replacing the old

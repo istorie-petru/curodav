@@ -302,6 +302,9 @@
     // _event_form_fields.html's Format field (clears the other field's
     // value on switch) -- same re-init reasoning.
     if (window.CCEventFormatToggle) window.CCEventFormatToggle.init(body);
+    // holiday_edit_modal.html's Start/End date auto-sync -- same re-init
+    // reasoning.
+    if (window.CCHolidayDateSync) window.CCHolidayDateSync.init(body);
     // Relations cards' add-row picker (1.2 side work, static/
     // command_palette.js) needs no re-init call here -- its entry points
     // are document-level delegated listeners, which already cover content

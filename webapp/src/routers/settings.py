@@ -149,7 +149,8 @@ logger = logging.getLogger(__name__)
 # unresolved conflict visible from the hub itself lives on this one row
 # (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
-    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Display name, week start, time format, login & security"},
+    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
+    {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
@@ -205,7 +206,6 @@ def _current_settings(request: Request):
 
 @router.get("/settings/general")
 def settings_general(request: Request, conn=Depends(get_db)):
-    settings = _current_settings(request)
     return templates.TemplateResponse(
         "settings_general.html",
         {
@@ -213,15 +213,13 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_general",
             "crumbs": _ROOT_CRUMB,
             "title": "General",
-            "display_name": db.get_app_meta(conn, DISPLAY_NAME_KEY) or "",
-            # 2026-08-08 -- "Week starts on" and "24-hour time" joined
-            # Display name here: both are the same kind of thing (a
-            # personal display/format preference, not tied to one
-            # specific page) and both affect several pages at once
-            # (Calendar Month/Week, Schedule, every dashboard widget that
-            # shows a time), so neither earns its own Settings category --
-            # see deps.py's week_start()/time_format() for where these
-            # get read back out everywhere else in the app.
+            # 2026-08-08 -- "Week starts on" and "24-hour time" are the
+            # same kind of thing (a personal display/format preference, not
+            # tied to one specific page) and both affect several pages at
+            # once (Calendar Month/Week, Schedule, every dashboard widget
+            # that shows a time), so neither earns its own Settings
+            # category -- see deps.py's week_start()/time_format() for
+            # where these get read back out everywhere else in the app.
             # Named current_week_start/current_time_format, NOT week_start/
             # time_format -- those names are already taken by deps.py's
             # own Jinja globals (week_start(request)/time_format(request),
@@ -257,6 +255,29 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # the configured Sleep-kind time blocks don't agree on one
             # single start/end window.
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
+        },
+    )
+
+
+@router.get("/settings/your-profile")
+def settings_your_profile(request: Request, conn=Depends(get_db)):
+    """2026-09-11 direct request: "move the password, username, radicale
+    url etc, settings from general to a new page named Your Profile. It
+    should include the Profile Picture and Nickname (current Your Name,
+    used in greeting)." Same context fields settings_general used to build
+    for its Profile picture / Your name / Account / Restart app cards --
+    moved here verbatim, this page's own template is those same cards'
+    markup unchanged (only the page title/crumbs and where the underlying
+    routes redirect back to)."""
+    settings = _current_settings(request)
+    return templates.TemplateResponse(
+        "settings_your_profile.html",
+        {
+            "request": request,
+            "active_tab": "settings_your_profile",
+            "crumbs": _ROOT_CRUMB,
+            "title": "Your Profile",
+            "display_name": db.get_app_meta(conn, DISPLAY_NAME_KEY) or "",
             # The user's own profile picture (2026-08-09) -- {photo_b64,
             # photo_type} or None, stored in app_meta (db.py's profile-photo
             # helpers, same store as the display name). Rendered as the
@@ -292,11 +313,6 @@ def settings_general(request: Request, conn=Depends(get_db)):
                 or ""
             ),
             "radicale_url": getattr(settings, "radicale_base_url", ""),
-            # Restart app (2026-09-08) -- only meaningful when this
-            # process is under systemd with Restart=always (curodav-ctl's
-            # generated unit); see restart_app's own docstring for why
-            # deploy_mode == "production" is the signal used.
-            "restart_available": getattr(settings, "deploy_mode", "local") == "production",
         },
     )
 
@@ -311,7 +327,7 @@ def account_settings(
     radicale_url: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Settings > General's "Account" card -- 2026-09-08, direct request
+    """Settings > Your Profile's "Account" card -- 2026-09-08, direct request
     ("merge the concept of radicale username to the app username, and
     merge the app password with the radicale password"). Replaces three
     former routes (change_login_password, change_radicale_password, Data
@@ -337,7 +353,7 @@ def account_settings(
       CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
       CC_RADICALE_PASSWORD (only when `new_password` is given) via
       env_file.update_env_file. Takes effect on the next process start --
-      Settings > General's "Restart app" button (restart_app below) is
+      Settings > Your Profile's "Restart app" button (restart_app below) is
       how an operator actually applies it without SSHing in.
     - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
       that still sets these env vars by some other means): refuses to
@@ -373,12 +389,12 @@ def account_settings(
 
     if env_managed and not env_path:
         return _redirect_with_error(
-            "/settings/general",
+            "/settings/your-profile",
             "Login/Radicale are set via environment variables, and this install has no CC_ENV_FILE to edit them through -- edit curodav.env by hand and restart.",
         )
 
     if not username:
-        return _redirect_with_error("/settings/general", "Choose a username.")
+        return _redirect_with_error("/settings/your-profile", "Choose a username.")
 
     if auth_is_env:
         has_account = True
@@ -408,7 +424,7 @@ def account_settings(
         elif new_password != new_password_confirm:
             error = "New passwords do not match."
     if error:
-        return _redirect_with_error("/settings/general", error)
+        return _redirect_with_error("/settings/your-profile", error)
 
     if env_managed:
         updates = {"CC_AUTH_USERNAME": username, "CC_RADICALE_USER": username}
@@ -422,11 +438,19 @@ def account_settings(
         except OSError:
             logger.exception("Failed to write env file %s", env_path)
             return _redirect_with_error(
-                "/settings/general",
+                "/settings/your-profile",
                 "Could not save -- the app couldn't write to its env file. Check file permissions.",
             )
+        # 2026-09-11 direct request: "Restart app" moved to Data &
+        # Maintenance and "should be able to be called after editing
+        # important environment data for the app, appearing in the form of
+        # a toast" -- redirecting THERE instead of back to Your Profile is
+        # what makes that true: this page's note-becomes-a-toast script
+        # (data_maintenance.js) turns "Saved..." into a floating toast that
+        # lands right next to the Restart app button, not a static banner
+        # on a page that no longer has that button at all.
         return _redirect_with_note(
-            '/settings/general', 'Saved. Click "Restart app" below to apply it.'
+            '/settings/data-maintenance', 'Saved. Click "Restart app" below to apply it.'
         )
 
     # Not env-managed -- app_meta, same storage as before this merge.
@@ -452,10 +476,18 @@ def account_settings(
     if state is not None:
         state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
+    # 2026-09-11 direct request: same reasoning as the env-managed branch
+    # above -- only redirect to Data & Maintenance (where the toast lands
+    # next to the Restart app button) when a restart is actually relevant
+    # (a new password or Radicale URL was saved); a username-only change
+    # already takes effect immediately (the session was just re-minted
+    # above), so there's nothing to restart for and the user stays on
+    # Your Profile.
+    restart_relevant = bool(new_password or radicale_url)
     response = _redirect_with_note(
-        "/settings/general",
+        "/settings/data-maintenance" if restart_relevant else "/settings/your-profile",
         "Saved. Restart the app for the Radicale connection to pick up the change."
-        if (new_password or radicale_url)
+        if restart_relevant
         else "Saved.",
     )
     response.set_cookie(
@@ -472,8 +504,14 @@ def account_settings(
 
 @router.post("/settings/restart")
 def restart_app(request: Request):
-    """Settings > General's "Restart app" button -- 2026-09-08, direct
-    request ("have a button actually restarting the app so it applies").
+    """Settings > Data & Maintenance's "Restart app" button -- 2026-09-08,
+    direct request ("have a button actually restarting the app so it
+    applies"); moved here from Settings > Your Profile 2026-09-11 (direct
+    request, same paragraph: "The Restart app should also be moved to the
+    Data & Maintenance and should be able to be called after editing
+    important environment data for the app, appearing in the form of a
+    toast") -- see account_settings' own `restart_relevant`
+    redirect-target logic for the toast half of that request.
     Applies an account_settings env-file save (or any other change that
     needs a fresh process, e.g. a Radicale connection saved to app_meta)
     by having THIS process exit cleanly and letting systemd relaunch it
@@ -504,24 +542,24 @@ def restart_app(request: Request):
     settings = request.app.state.settings
     if getattr(settings, "deploy_mode", "local") != "production":
         return _redirect_with_error(
-            "/settings/general",
+            "/settings/data-maintenance",
             "Restart isn't available outside a systemd-managed (production) deploy -- stop and restart the process yourself.",
         )
-    logger.warning("Restart requested from Settings > General -- exiting for systemd to relaunch.")
+    logger.warning("Restart requested from Settings > Data & Maintenance -- exiting for systemd to relaunch.")
     threading.Timer(0.5, os._exit, args=(0,)).start()
     return _redirect_with_note(
-        "/settings/general", "Restarting -- this page will reconnect in a few seconds."
+        "/settings/data-maintenance", "Restarting -- this page will reconnect in a few seconds."
     )
 
 
 @router.post("/settings/display-name")
 def set_display_name(display_name: str = Form(""), conn=Depends(get_db)):
-    """"Your name" -- the optional display name Home's greeting reads
-    ("Good evening, {name}"), app_meta-backed. Empty/whitespace-only
-    clears it, back to the name-less "Good evening" alone
-    (routers/dashboard.py's _greeting_for_hour)."""
+    """"Nickname" (formerly "Your name") -- the optional display name
+    Home's greeting reads ("Good evening, {name}"), app_meta-backed.
+    Empty/whitespace-only clears it, back to the name-less "Good evening"
+    alone (routers/dashboard.py's _greeting_for_hour)."""
     db.set_app_meta(conn, DISPLAY_NAME_KEY, display_name.strip())
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -574,7 +612,7 @@ def set_profile_photo(
         if sniffed is None:
             raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
         db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), sniffed)
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 @router.post("/settings/profile-photo-remove")
@@ -583,7 +621,7 @@ def remove_profile_photo(conn=Depends(get_db)):
     POST route (never a GET link) so removing is a real form submission,
     same non-cacheable convention as every other destructive action here."""
     db.clear_profile_photo(conn)
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
 @router.get("/settings/profile-photo/image")
@@ -773,6 +811,35 @@ def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
 
 
+def _resolve_calendar_name(calendar_name: str, calendar_name_new: str) -> str:
+    """audit-fixes-2.1.md ("not allowed to add more holidays to the same
+    calendar, defaults to Default"): the Calendar field
+    (_widget_list_multiselect.html, single mode + allow_new) is a radio
+    per existing calendar plus a free-text "new" input -- see that
+    partial's own `ms_allow_new` docstring for why the two need distinct
+    form field names (`calendar_name` for the checked radio,
+    `calendar_name_new` for the text input) rather than sharing one.
+    A non-blank typed name is always a deliberate override -- it wins
+    regardless of which radio happens to be checked/defaulted; otherwise
+    the picked radio's value applies; blank calendar_name (no radios
+    existed yet, or somehow neither was set) falls back to 'Default'."""
+    new = (calendar_name_new or "").strip()
+    if new:
+        return new
+    return (calendar_name or "").strip() or "Default"
+
+
+def _parse_holiday_date_field(value: str, year_agnostic: bool) -> str:
+    """create_holiday/update_holiday's form-validation wrapper around
+    db.parse_holiday_date -- same "reject with a clear 400 rather than
+    silently storing garbage" convention as contacts.py's
+    `_parse_birthday_field` for the analogous year-less-date case."""
+    try:
+        return db.parse_holiday_date(value, year_agnostic)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.get("/settings/holidays")
 def settings_holidays(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
@@ -801,6 +868,9 @@ def new_holiday_modal(request: Request, conn=Depends(get_db)):
             "form_title": "Add holiday",
             "form_action": "/settings/holidays",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            "date_from_value": "",
+            "date_to_value": "",
+            "year_agnostic": False,
         },
     )
 
@@ -810,7 +880,16 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
     """The Holiday Edit button's modal (pattern B) -- one form for every
     field, replacing the old inline-editable table cells
     (static/settings_holidays.js's per-field PATCH). Opens via data-modal
-    from the Holidays list row; posts to update_holiday below."""
+    from the Holidays list row; posts to update_holiday below.
+
+    audit-fixes-2.1.md ("only day holidays, without the year"): a
+    year-agnostic holiday is stored as "--MM-DD" (db.py's
+    is_year_agnostic_holiday_date), but the shared date picker only
+    understands real calendar dates -- `date_from_value`/`date_to_value`
+    feed it a placeholder-year stand-in (db.holiday_date_picker_value) so
+    the right month/day still highlights, while `year_agnostic` drives the
+    modal's "Repeats every year" checkbox that's what actually makes the
+    year get discarded again on save."""
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
         raise HTTPException(404, "Holiday not found")
@@ -822,6 +901,9 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
             "form_title": "Edit holiday",
             "form_action": f"/settings/holidays/{uid}/update",
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            "date_from_value": db.holiday_date_picker_value(holiday["date_from"]),
+            "date_to_value": db.holiday_date_picker_value(holiday["date_to"]),
+            "year_agnostic": db.is_year_agnostic_holiday_date(holiday["date_from"]),
         },
     )
 
@@ -829,9 +911,11 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
 @router.post("/settings/holidays")
 def create_holiday(
     calendar_name: str = Form("Default"),
+    calendar_name_new: str = Form(""),
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
+    year_agnostic: str = Form(""),
     conn=Depends(get_db),
 ):
     # No _regenerate_all(conn) call needed -- a recurring event only ever
@@ -843,8 +927,10 @@ def create_holiday(
     db.upsert_holiday(
         conn,
         {
-            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
-            "label": label, "date_from": date_from, "date_to": date_to,
+            "uid": str(uuid.uuid4()), "calendar_name": _resolve_calendar_name(calendar_name, calendar_name_new),
+            "label": label,
+            "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
+            "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
     return RedirectResponse(url="/settings/holidays", status_code=303)
@@ -854,9 +940,11 @@ def create_holiday(
 def update_holiday(
     uid: str,
     calendar_name: str = Form("Default"),
+    calendar_name_new: str = Form(""),
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
+    year_agnostic: str = Form(""),
     conn=Depends(get_db),
 ):
     """The Holiday edit modal's single Save button (pattern B) -- one
@@ -870,8 +958,10 @@ def update_holiday(
         conn,
         {
             **holiday,
-            "calendar_name": calendar_name.strip() or "Default",
-            "label": label, "date_from": date_from, "date_to": date_to,
+            "calendar_name": _resolve_calendar_name(calendar_name, calendar_name_new),
+            "label": label,
+            "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
+            "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
     return RedirectResponse(url="/settings/holidays", status_code=303)
@@ -1206,6 +1296,13 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         # stand-in for Settings (not the real dataclass) predating this
         # field.
         "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
+        # Restart app (2026-09-08, moved here 2026-09-11 direct request) --
+        # only meaningful when this process is under systemd with
+        # Restart=always (curodav-ctl's generated unit); see restart_app's
+        # own docstring for why deploy_mode == "production" is the signal
+        # used. getattr-guarded: several test files build a bare
+        # SimpleNamespace Settings stand-in predating this field.
+        "restart_available": getattr(request.app.state.settings, "deploy_mode", "local") == "production",
     }
     ctx.update(summary)
     ctx.update(export_context(conn))

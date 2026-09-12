@@ -1,15 +1,21 @@
 """Tests for modal-input-design Phase B: task_form.html/event_form.html/
-contact_form.html/habit_form.html's Labels field, and tasks_list.html's
-bulk-tag picker, reworked from a free-text `tags` input + `<datalist>` into
-the same chip multiselect (checkbox-dropdown) pattern Phase A already used
-for the widget builder's Labels field (see
-test_phase10_customize_modal.py). A label's own name IS its identity (no
-separate uid, see object_labels' natural-key design), so the checkboxes are
-named `tags_labels` and folded server-side into the legacy comma-separated
-`tags` string via routers/dashboard.py's `_combine_tags` -- reused here via
-a cross-router import (`from . import dashboard as dashboard_router`),
-following the same convention routers/labels.py already uses to reach
-routers/dashboard.py's other private helpers."""
+contact_form.html/habit_form.html's Labels field, reworked from a
+free-text `tags` input + `<datalist>` into the same chip multiselect
+(checkbox-dropdown) pattern Phase A already used for the widget builder's
+Labels field (see test_phase10_customize_modal.py). A label's own name IS
+its identity (no separate uid, see object_labels' natural-key design), so
+the checkboxes are named `tags_labels` and folded server-side into the
+legacy comma-separated `tags` string via routers/dashboard.py's
+`_combine_tags` -- reused here via a cross-router import (`from . import
+dashboard as dashboard_router`), following the same convention
+routers/labels.py already uses to reach routers/dashboard.py's other
+private helpers.
+
+tasks_list.html's own bulk-tag picker (the chip-multiselect UI this Phase
+originally gave its Add/Remove bulk controls) is gone as of 2026-09-13
+(audit-fixes-2.1.md) -- see `TestBulkTagActionSemanticsPreserved`'s own
+docstring below, which is the class that used to sit alongside the
+now-removed `TestTasksListBulkTagPickerRendersChipMultiselect`."""
 
 from __future__ import annotations
 
@@ -204,21 +210,16 @@ def _json_request(payload: dict):
     return req
 
 
-class TestTasksListBulkTagPickerRendersChipMultiselect:
-    def test_bulk_actions_bar_has_no_bulk_tag_text_input(self, conn):
-        _seed_task(conn, "t1", tags=["Existing"])
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        body = resp.body.decode()
-        assert 'id="bulk-tag-input"' not in body
-        assert 'id="bulk-tag-picker"' in body
-        assert 'name="bulk_tag_names" value="Existing"' in body
-
-
 class TestBulkTagActionSemanticsPreserved:
-    """tasks_list.html's bulk-tag Add/Remove buttons apply a *delta*
-    (add/remove this label to/from every selected row), not a replace --
-    this must stay true after the input becomes a chip multiselect that can
-    submit several label names in one request instead of just one."""
+    """/tasks/bulk's "tag" action applies a *delta* (add/remove this label
+    to/from every selected row), not a replace. tasks_list.html's own
+    bulk-tag Add/Remove UI (a chip multiselect, `TestTasksListBulk
+    TagPickerRendersChipMultiselect` used to cover its markup here) is gone
+    2026-09-13 (audit-fixes-2.1.md, "the bulk-actions-bar should only
+    contain two buttons - Delete and Clear" -- direct decision to drop the
+    status-set/label-add/remove bulk controls entirely, not just relocate
+    them) -- but the router action itself is untouched, so this class stays
+    as router-level coverage for the "tag" action's own semantics."""
 
     def test_bulk_add_multiple_labels_in_one_call(self, conn):
         _seed_task(conn, "t1", tags=["Keep"])

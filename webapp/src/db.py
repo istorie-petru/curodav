@@ -2232,9 +2232,13 @@ def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[
     block it becomes when placed on a grid (project_calendar.js's
     DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
     out of hours planned". `undated_count` is the number of sessions still
-    awaiting placement -- the panel's "still unscheduled" rule
-    (`count > 0 and undated_count == 0` drops a task off the list) needs
-    it, and it's what separates the panel summary from task_work_hours."""
+    awaiting placement -- the panel's "still unscheduled" rule (`undated_count
+    == 0` drops a task off the list, whether that's because every session is
+    dated or because there are no sessions at all -- audit-fixes-2.1.md,
+    2026-09-10: a 0-session task used to slip through the old
+    `count > 0 and undated_count == 0` check and show up with a bare "0"
+    pill) needs it, and it's what separates the panel summary from
+    task_work_hours."""
     allocations = list_work_allocations_for_task(conn, task_uid)
     scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
     undated = sum(1 for a in allocations if not a.get("start_at"))
@@ -3517,6 +3521,77 @@ def all_contact_uids(conn: sqlite3.Connection) -> set[str]:
 # list_grades/delete_grade/delete_grades_by_class) that used to live here
 # are gone along with the `grades` table -- see the SCHEMA_SQL comment
 # above and features/architecture.md's Grades/Databases removal note.
+
+_HOLIDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
+
+
+def is_year_agnostic_holiday_date(value: str | None) -> bool:
+    """True for a "--MM-DD" holiday date_from/date_to -- same vCard-derived
+    year-less convention Contacts' Birthday field already uses (see
+    parse_contact_birthday/_BIRTHDAY_YEARLESS_RE above), reused here rather
+    than adding a new column: `schedule_holidays.date_from`/`date_to` stay
+    plain TEXT, just holding an alternate string shape for a holiday that
+    "repeats every year" (audit-fixes-2.1.md, e.g. a fixed-date national/
+    religious holiday) instead of one dated range that only ever applies
+    once."""
+    return bool(_HOLIDAY_YEARLESS_RE.match((value or "").strip()))
+
+
+def parse_holiday_date(value: str, year_agnostic: bool) -> str:
+    """Normalizes one holiday date_from/date_to form field into its stored
+    shape. The shared date picker (_datetime_picker.html) has no
+    year-agnostic mode of its own -- it always submits a real "YYYY-MM-DD"
+    -- so `year_agnostic` (the modal's "Repeats every year" checkbox) is
+    what decides whether the year gets kept or discarded here; an
+    already-yearless "--MM-DD" value round-tripping back in (e.g. the edit
+    form re-submitting a value unchanged) is accepted either way. Raises
+    ValueError on anything that isn't a real calendar date (invalid
+    month/day, non-leap Feb 29, ...), same "server validates, form is just
+    a hint" convention as parse_contact_birthday."""
+    v = (value or "").strip()
+    if is_year_agnostic_holiday_date(v):
+        if not year_agnostic:
+            # Only reachable via a hand-crafted request -- the shared date
+            # picker never submits a "--MM-DD" value itself (see
+            # holiday_date_picker_value), so the UI can't produce this.
+            raise ValueError(f"Holiday date must be a full YYYY-MM-DD date, got '{value}'")
+        month, day = v[2:4], v[5:7]
+    else:
+        d = date.fromisoformat(v)  # raises ValueError for a genuinely bad value
+        if not year_agnostic:
+            return v
+        month, day = f"{d.month:02d}", f"{d.day:02d}"
+    # 2000 is a leap year -- same Feb 29 allowance parse_contact_birthday
+    # uses, so "--02-29" always validates regardless of which years the
+    # holiday actually recurs through.
+    datetime.strptime(f"2000-{month}-{day}", "%Y-%m-%d")
+    return f"--{month}-{day}"
+
+
+def holiday_date_picker_value(value: str | None) -> str:
+    """A real "YYYY-MM-DD" for feeding a stored holiday date into the
+    shared calendar date picker, which -- like `parse_holiday_date` above --
+    has no year-agnostic mode. A "--MM-DD" value gets a fixed placeholder
+    year (2000, leap-safe) purely so the picker has something to render/
+    highlight while editing; nothing about which year is shown is saved
+    back -- the "Repeats every year" checkbox is what makes the year get
+    discarded again on save."""
+    v = (value or "").strip()
+    if is_year_agnostic_holiday_date(v):
+        return f"2000-{v[2:]}"
+    return v
+
+
+def format_holiday_date(value: str | None) -> str:
+    """Human display for a year-agnostic holiday date -- "25 Dec" (no year
+    to show). Full "YYYY-MM-DD" holiday dates keep using the Holidays
+    table's own `relative_date` filter (Today/Tomorrow/"5 Sep" shorthand);
+    this is only the fallback for the one shape that filter can't parse."""
+    v = (value or "").strip()
+    if is_year_agnostic_holiday_date(v):
+        month, day = int(v[2:4]), int(v[5:7])
+        return f"{day} {date(2000, month, 1).strftime('%b')}"
+    return v
 
 
 def upsert_holiday(conn: sqlite3.Connection, row: dict[str, Any]) -> None:

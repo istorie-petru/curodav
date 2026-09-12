@@ -374,9 +374,10 @@ class TestDataMaintenanceRedesign2026_08_26:
                               "status": "done", "due_at": None,
                               "created_at": _now(), "updated_at": _now()})
         body = self._page(conn, tmp_path)
-        # The soft grey count button in Maintenance & cleanup...
+        # 2026-09-11: moved into the Database card's context menu (routine
+        # housekeeping, grouped with Check integrity/Compact & reindex)...
         assert 'action="/settings/purge-completed"' in body
-        assert "Purge completed tasks (1 right now)" in body
+        assert "Purge completed (1)" in body
         # ...and no Danger zone anywhere: the full wipe moved behind the
         # Database card's own confirm-toast trigger (2026-09-09: a plain
         # button that opens a ccConfirmSheet, not a link to a modal page --
@@ -384,6 +385,22 @@ class TestDataMaintenanceRedesign2026_08_26:
         assert "Danger zone" not in body
         assert 'action="/settings/purge-all"' not in body
         assert 'data-action="purge-all"' in body
+
+    def test_restart_app_present_only_in_production(self, conn, tmp_path):
+        # 2026-09-11 direct request: "Restart app" moved here from
+        # Settings > Your Profile -- same gate (restart_available, only
+        # true under a systemd-managed deploy_mode == "production" run).
+        body = self._page(conn, tmp_path)
+        assert 'action="/settings/restart"' not in body
+        assert '>Restart app<' not in body
+
+    def test_restart_app_shown_in_production(self, conn, tmp_path):
+        req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
+        req.app.state.settings.deploy_mode = "production"
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert 'action="/settings/restart"' in body
+        assert "Restart app" in body
+        assert 'data-confirm-sheet' in body
 
     def test_backup_actions_live_in_the_backup_cards_menu(self, conn, tmp_path):
         settings_router.data_health_backup(

@@ -17,6 +17,937 @@ session start.
 
 ## Right now
 
+- **Verified, no code change:** 2026-09-13 -- followed up on the prior
+  session's open question: with `audit-fixes-2.1.md`'s "Urgent To do List"
+  section fully shipped, is there anything left to act on in its other two
+  sections ("First round of logs" / "Second round of logs", raw
+  `journalctl`/traceback dumps, not to-do items)? Checked both directly
+  against current source rather than trusting the doc's own age:
+
+  - Second round of logs (`POST /export/import/auto` 500, `AttributeError:
+    uid` importing a UID-less vCard): already fixed, not just claimed fixed
+    -- `vcard_rows.py`'s `vcard_to_contact_row` (line ~232) guards with
+    `hasattr(card, "uid") and card.uid.value`, falling back to
+    `str(uuid.uuid4())` instead of letting vobject's `__getattr__` raise.
+    Matches `git log` (`7942fd5 Fix vCard import 500 on cards with no UID
+    (audit-fixes-2.1)`).
+  - First round of logs (Radicale unreachable at startup): expected,
+    already-handled, not a bug -- `main.py`'s lifespan (~line 160) wraps
+    `CalDavBridge(settings)` construction in `try/except`, logs exactly
+    that message, sets `bridge = None`, and continues booting standalone
+    (writes stay plain SQLite; background sync thread re-attempts later).
+    The log line documents graceful degradation, not a crash.
+
+  Net: `audit-fixes-2.1.md` has no remaining actionable item. It isn't
+  referenced from `roadmap.md`'s table (it was always a standalone raw
+  bug-list, not one of the numbered releases), so there's no roadmap row
+  or `open-priority.md`/`open.md` section to close out either -- this is
+  the one exception to this file's usual "update the doc + roadmap in the
+  same commit" step, because there was never a corresponding entry to
+  update. Full suite run in 4 file-list batches (parallel `&`/`wait` in a
+  single bash call -- background jobs and `/tmp` do NOT persist across
+  separate tool calls in this sandbox, so batch-file creation and the
+  pytest invocations that read them must happen in the same call or the
+  `cat` silently no-ops and pytest falls back to collecting everything):
+  **2189 passed, 0 failed**.
+
+  Next slice: `audit-fixes-2.1.md` is closed out. Pick the next roadmap
+  slice from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below -- nothing in this file points to a
+  specific next item anymore.
+
+- **Shipped:** 2026-09-13 -- last item in `audit-fixes-2.1.md`'s "Urgent
+  To do List" section: "For the table type of the app (used for tasks and
+  in the app settings) the bulk-actions-bar should only contain two
+  buttons - Delete and Clear - and the bulk-actions-bar buttons should not
+  be placed in the bulk-actions-bar, but in the page-header-narrow. Asure
+  the height doesn't get bigger due to the buttons."
+
+  Scope decision (asked, direct answer): the doc line names "tasks and
+  the app settings" together -- Settings' three bulk-select tables
+  (Holidays/Time Blocks/Labels, `_bulk_actions_bar.html`'s shared macro)
+  already only had Delete+Clear, so for them this was pure relocation. The
+  Tasks table's own hand-rolled bar (static/tasks_table.js, NOT the shared
+  macro) also had a bulk status-set `<select>` and Add/Remove-label chip
+  multiselect -- asked whether those should be trimmed away too or kept
+  alongside a relocated Delete+Clear; answer was trim Tasks down to
+  Delete+Clear as well, everywhere in the app.
+
+  Every bulk bar (all 4 tables) now renders inside `_page_header_narrow.
+  html`'s `{% call %}` actions slot instead of as its own full-width row
+  below the header -- `settings_holidays.html`/`settings_time_blocks.html`/
+  `labels_manage.html` switched from a plain `{{ page_header_narrow(...) }}`
+  call to `{% call %}...{{ bulk_actions_bar(...) }}...{% endcall %}`;
+  `tasks_list.html`'s own bar moved inside its existing `{% call %}` block
+  (alongside `_tasks_toolbar.html`'s Date filter) and dropped the
+  status-select/tag-picker/Add/Remove markup outright -- `/tasks/bulk`'s
+  "status"/"tag" actions are untouched server-side (routers/tasks.py's
+  `bulk_action`; nothing else called them), this was a UI-only
+  simplification. `tasks_table.js` lost the now-dead `bulk-status-select`
+  change listener and the `bulkTag()` function + its two button listeners
+  (kept `bulkPost`/the already-pre-existing-dead `bulk-list-select`
+  listener untouched -- unrelated pre-existing code, not this slice's
+  scope). `routers/tasks.py`'s `_tasks_list_context` dropped the
+  now-unused `tag_name_items` context key (the raw `tag_names` list stays
+  -- `_task_row.html`'s own per-row Labels picker still reads it).
+
+  "No height growth" is structural, not just a CSS tweak: `.page-header-
+  narrow` is already a hard `height:48px`+`overflow:hidden` box (a prior
+  slice's own fix for inconsistent 46-50px heights), so anything rendered
+  inside it physically cannot grow the header regardless of content --
+  `.bulk-actions-bar`'s CSS just dropped its now-pointless standalone-card
+  chrome (background/border/padding/margin, plus an internal `.spacer`
+  that had nothing left to grow into once it's not a full-width row
+  itself) so it reads as an inline button group inside the actions
+  cluster instead of a boxed bar floating inside a box. Also removed:
+  `main.main-shell > .bulk-actions-bar` from the shell's `flex:none`
+  selector list (dead -- no longer a direct child anywhere) and the
+  `#bulk-tag-picker` CSS rules (dead -- that id no longer exists).
+
+  **Tests**: `test_page_header_narrow.py` gained
+  `TestBulkActionsBarRelocatedIntoHeader` (all 4 tables' bulk bar renders
+  inside `.page-header-narrow-actions`, not as a standalone row; Tasks'
+  bar has exactly Delete+Clear, no status-select/tag-picker; no page has
+  a duplicate/leftover standalone bar). `TestNarrowHeaderBackPosition::
+  test_back_arrow_renders_without_an_actions_slot` retargeted from
+  Settings > Holidays (which now legitimately has an actions slot) to
+  Settings > General (still bare). `test_modal_input_phaseB_chip_
+  multiselect.py` lost `TestTasksListBulkTagPickerRendersChipMultiselect`
+  (asserted markup for a UI that no longer exists) -- kept
+  `TestBulkTagActionSemanticsPreserved` (router-level, the backend action
+  itself is unchanged). Full suite run in 4 file-list batches (still one
+  call per batch -- this sandbox can't finish an un-split run inside the
+  tool's 45s call limit): **2194 passed, 0 failed**.
+
+  Next slice: `audit-fixes-2.1.md`'s "Urgent To do List" section is now
+  fully shipped. What's left in that file is two raw `journalctl`/
+  traceback log dumps ("First round of logs" / "Second round of logs"),
+  not to-do items in the same sense -- the vCard-import 500 one already
+  has a fixed-commit entry in this file's older (trimmed) history, so
+  worth a fresh look at whether it's still reproducible before assuming
+  it's done, and whether the Radicale-unreachable-at-startup log from the
+  first dump is still an open concern or expected/already-handled
+  (main.py already logs it as a graceful "running without the sync
+  bridge" case per that log's own text, not an unhandled crash) before
+  deciding there's anything left to act on in this file at all.
+
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Holiday table, the Date Range for one date holidays should only
+  be one day, not a range." `settings_holidays.html`'s Date Range column
+  now checks `h.date_from == h.date_to` (the storage shape a single-day
+  holiday already has -- `date_from`/`date_to` are set equal, whether a
+  plain full date or a year-agnostic `--MM-DD`, no new concept needed) and
+  prints just that one date instead of "20 Dec -> 20 Dec" through an
+  arrow between two identical values. A genuine multi-day range is
+  unaffected -- still prints both ends with the arrow.
+
+  **Tests**: `test_settings_holidays.py` gained
+  `TestHolidayDateRangeDisplay` (same-day holiday shows one date, no
+  arrow; a genuine range still shows the arrow; a same-day year-agnostic
+  holiday also collapses, and the date only appears once in the row, not
+  printed twice either side of a hidden arrow) plus an explicit
+  `&rarr;`-present assertion added to the existing multi-day-range test
+  for symmetry. Full suite run in 4 file-list batches (still one call per
+  batch -- this sandbox can't finish an un-split run inside the tool's
+  45s call limit): **2189 passed, 0 failed**.
+
+  Next slice: the last item in `audit-fixes-2.1.md`'s "Urgent To do
+  List" section -- "For the table type of the app (used for tasks and in
+  the app settings) the bulk-actions-bar should only contain two buttons
+  - Delete and Clear - and the bulk-actions-bar buttons should not be
+  placed in the bulk-actions-bar, but in the page-header-narrow. Asure
+  the height doesn't get bigger due to the buttons." (The file's other
+  two sections, "First round of logs" and "Second round of logs", are
+  raw journalctl/traceback dumps, not to-do items in the same sense --
+  the vCard-import-500 one was already fixed per STATE's earlier removed
+  history; worth a fresh look at whether the Radicale-unreachable-at-
+  startup log is still an open concern once the to-do list itself is
+  clear.)
+
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Holiday bug, for some reason the user is not allowed to add more
+  holidays to the same calendar, and it defaults to Default calendar."
+  Root cause: `_widget_list_multiselect.html`'s Calendar field (single
+  mode + `ms_allow_new`, the only caller combining the two) rendered a
+  radio per existing calendar *and* a free-text "new" input sharing the
+  exact same `name="calendar_name"`. A radio only submits when checked,
+  but a plain text input is always a "successful control" whether typed
+  into or not, and it always renders after every radio -- so picking an
+  *existing* calendar's radio still left that always-present, always-
+  blank text input as the LAST `calendar_name` value in the submitted
+  form body, and Starlette's scalar Form parsing keeps only the last
+  value for a repeated key. `create_holiday`/`update_holiday` therefore
+  always read `""`, which their own `calendar_name: str = Form("Default")`
+  default then silently substituted -- exactly the reported symptom. This
+  only ever affected Holidays: grepping every `ms_allow_new = true` caller
+  confirmed it's the only `single`-mode one -- every other single-mode
+  caller (View/Range, task/event/habit's Priority-style pickers) sets
+  `ms_allow_new = false`, and every OTHER `ms_allow_new = true` caller
+  (Labels, everywhere) is list-mode, where a `list[str] = Form([])` field
+  collects and then drops-blank every same-named value, so the collision
+  is harmless there.
+
+  Fix: the single-mode `allow_new` text input now gets its own distinct
+  `name="{{ ms_name }}_new"` instead of sharing `ms_name`
+  (`_widget_list_multiselect.html`, gated on `_single`, so every list-mode
+  caller is byte-for-byte unchanged). `routers/settings.py` gained a new
+  `_resolve_calendar_name(calendar_name, calendar_name_new)` helper --
+  create_holiday/update_holiday now take both `calendar_name` (the
+  checked radio) and a new `calendar_name_new` (the free-text field) Form
+  param; a non-blank typed name always wins (typing is a deliberate
+  override regardless of which radio happens to be checked/defaulted),
+  otherwise the picked radio's value applies, otherwise "Default". No
+  other template/router needed to change -- this is the only allow_new +
+  single-mode combination in the app.
+
+  **Tests**: `test_settings_holidays.py` gained
+  `TestHolidayCalendarNameResolution` (reproduces the exact bug --
+  picking an existing calendar with a blank new-field must keep it, not
+  fall back to Default -- plus typed-new-wins, blank-both-falls-back-to-
+  Default, `update_holiday`'s own path, and a field-name-agreement guard
+  between the rendered template and the router's Form params so this
+  can't silently drift apart again). Every existing direct-call
+  create_holiday/update_holiday test needed an explicit
+  `calendar_name_new=""` added (same reason `year_agnostic=""` needed
+  adding last session -- FastAPI's `Form(...)` default sentinel is truthy
+  when a router is called directly rather than through real request
+  parsing). `test_new_modal_renders_empty_add_form`'s assertion changed
+  from `name="calendar_name"` to `name="calendar_name_new"`, since with
+  zero calendars yet, the empty-add form now renders no radio at all --
+  only the (now distinctly-named) free-text input. Full suite run in 4
+  file-list batches (still one call per batch -- this sandbox can't
+  finish an un-split run inside the tool's 45s call limit): **2186
+  passed, 0 failed**.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Holiday table, the Date Range for one date holidays should
+  only be one day, not a range."
+
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Hollydays should add support for only day hollydays, withot the
+  year. For example religious national holydays that are the same each
+  time each year." A year-agnostic holiday is now stored as `--MM-DD`
+  (`db.is_year_agnostic_holiday_date`/`db.parse_holiday_date`) -- the same
+  vCard-derived convention Contacts' year-less Birthday field already used
+  (`parse_contact_birthday`), reused rather than adding a schema column:
+  `schedule_holidays.date_from`/`date_to` stay plain TEXT holding an
+  alternate string shape. `holiday_edit_modal.html` gained a "Repeats every
+  year" checkbox (`year_agnostic`); the shared date picker itself needed no
+  change -- Start/End still pick a real calendar date so month+day are easy
+  to click, the checkbox alone decides whether `create_holiday`/
+  `update_holiday` (routers/settings.py) keep or discard the year via
+  `db.parse_holiday_date`. Editing an existing year-agnostic holiday feeds
+  the picker a placeholder-year stand-in (`db.holiday_date_picker_value`,
+  year 2000, leap-safe) purely so it has a real date to highlight --
+  nothing about that placeholder year is what gets saved back, the
+  checkbox is. `recurrence_expand.is_excluded_by_policy` is the one place
+  the actual "is this holiday" matching logic lives (both
+  `expand_events`/Calendar's Month/Week/4-Week/Day/Dashboard-agenda and
+  `habit_heatmap.excluded_dates_in_range`/streaks route through it, so
+  neither needed any change of their own) -- it now compares `(month,
+  day)` instead of the full date whenever a holiday row is year-agnostic,
+  including a range that wraps the year boundary (e.g. a Dec 30 -> Jan 2
+  New Year break). `settings_holidays.html`'s Date Range column uses a new
+  `holiday_date` Jinja filter (deps.py) instead of the plain `relative_date`
+  one, since `relative_date`'s `date.fromisoformat` can't parse `--MM-DD`
+  (it would otherwise silently degrade to printing the raw stored string) --
+  `holiday_date` delegates to `relative_date` for an ordinary full-date
+  holiday and to `db.format_holiday_date` ("25 Dec", no year) for a
+  year-agnostic one.
+
+  **Tests**: `test_holiday_calendars.py` gained
+  `TestYearAgnosticHolidayDates` (the db.py helpers: parse/format/
+  round-trip, Feb 29 leap-year allowance, rejecting a yearless value when
+  the checkbox isn't set). `test_recurrence_expand.py` gained
+  `TestYearAgnosticHolidayPolicy` (single-day match across years, a
+  within-month range, a year-boundary-wrapping range, and an end-to-end
+  `expand_events` case). `test_settings_holidays.py` gained
+  `TestHolidayEditModalYearAgnostic` (checkbox state on new vs. year-
+  agnostic vs. ordinary edit) plus create/update/list coverage (yearless
+  storage, invalid-date 400, re-saving a year-agnostic holiday unchanged
+  stays yearless, list row shows "25 Dec" not the raw `--12-25`). Existing
+  create_holiday/update_holiday direct-call tests needed an explicit
+  `year_agnostic=""` added (same reason `exclude_saturday`/
+  `exclude_sunday` tests always pass every Form field explicitly --
+  FastAPI's `Form(...)` default sentinel is truthy when a router is called
+  directly in a test rather than through real request parsing, so omitting
+  a boolean-ish Form field in a direct call doesn't behave like an
+  unchecked checkbox the way it does over real HTTP). Full suite run in 4
+  file-list batches (still one call per batch -- this sandbox can't finish
+  an un-split run inside the tool's 45s call limit): **2180 passed, 0
+  failed** -- no flaky time-of-day-boundary failures this run.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Holiday bug, for some reason the user is not allowed to add
+  more holidays to the same calendar, and it defaults to Default
+  calendar."
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order: "While adding a hollday, in the specific modal window, after
+  setting either the start and end date, the other one should be
+  automatically set the same. After the initial set both can be changed
+  without any sync between them." `holiday_edit_modal.html`'s Start/End
+  are two independent `_datetime_picker.html` date-mode instances with no
+  awareness of each other -- new `static/holiday_date_sync.js` listens
+  for the `change` event each already fires on pick (datetime_picker.js's
+  existing commitChange()) and, only when the *other* field is still
+  empty, fills it with the same date. `datetime_picker.js` gained a small
+  `dtpSetDate(key)` hook on each date-mode `.dtp` container's element (set
+  in `enhance()`, mirrors a real pick's hidden-input+trigger-label update
+  without dispatching another `change` -- no risk of the two listeners
+  looping) so the sync script can fill the *other* picker's own instance,
+  not just its raw hidden input. Wired into `base.html` (global `<script
+  defer>`, same as `event_format_toggle.js`) and `modal.js`'s
+  `wireContent()` (`CCHolidayDateSync.init(body)`) -- holiday_edit_modal
+  is modal-only, so no extra_scripts block, same reasoning as every other
+  modal-injected field-linking script. Not added to `sw.js`'s
+  SHELL_ASSETS (following `label_role_picker.js`/`label_form_picker.js`'s
+  precedent, not `event_format_toggle.js`'s -- this codebase is
+  inconsistent about which globally-loaded small feature scripts get
+  precached, per v97/v98's own admission; datetime_picker.js's change
+  also needs no bump, same "page-specific, not itself a SHELL_ASSETS
+  entry" reasoning as its v49 entry).
+
+  **Tests**: new `test_holiday_date_sync.py` -- markup sanity (both date
+  fields render in one `#holiday-form`, `data-dtp-mode="date"`), the new
+  script's existence/API surface, the empty-field gate that keeps "both
+  can be changed without sync" true once both are set, and that
+  `base.html`/`modal.js` load/reinit it. Full suite run in 4 sequential
+  batches (still one call per batch -- this sandbox can't finish an
+  un-split run inside the tool's 45s call limit): **2157 passed, 0
+  failed** -- the 4 time-of-day-boundary failures noted in the last few
+  sessions didn't reproduce this time (wall-clock dependent, not
+  something this slice touched).
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Hollydays should add support for only day hollydays, withot
+  the year" (year-agnostic recurring holidays, e.g. fixed-date religious
+  holidays).
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order: "For the settings, the page-header-narrow-back, it should be on
+  the left most, not right most." The crumbs-driven back arrow
+  (`_page_header_narrow.html`'s `page_header_narrow()` macro) was sitting
+  inside `.page-header-narrow-actions`, the header's right-aligned slot
+  (after the spacer) -- moved it to the header's actual first child,
+  before the icon+title, so it's leftmost regardless of whether a page
+  also has real actions-slot content. `.page-header-narrow-actions`
+  itself (Calendar's prev/next/subnav, etc.) is untouched, still
+  right-aligned, and now only renders when a page passes a `{% call %}`
+  block -- the old `(crumbs is defined and crumbs) or caller` condition
+  guarding it is just `caller` now, since crumbs no longer render inside
+  it. `style.css` gained a small `.page-header-narrow-back` rule
+  (z-index:1 like the other header children, plus the has-banner
+  frosted-chip treatment `.icon-btn`s in the old actions slot had) --
+  none of Settings' existing pages needed a template change, only the
+  shared macro/CSS.
+
+  **Tests**: `test_page_header_narrow.py` gained
+  `TestNarrowHeaderBackPosition` (two tests: back arrow renders before
+  `.page-header-narrow-icon`/`-title`, and renders even when a page has
+  no `.page-header-narrow-actions` at all -- proving it's no longer
+  actions-slot-dependent). Full suite run in 4 sequential batches (this
+  sandbox couldn't complete a single un-split run within the tool's 45s
+  call limit today -- unrelated to this change): **2146 passed**, same 4
+  pre-existing time-of-day-boundary failures as prior sessions
+  (`test_dashboard_router.py`'s `TestAgendaWidgetAllUpcoming` +
+  `test_project_detail.py`'s 3 agenda/deadline "due today" tests),
+  unchanged and not touched by this slice.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- the holiday start/end-date auto-sync item ("While adding a
+  hollday... after setting either the start and end date, the other one
+  should be automatically set the same").
+
+- **Shipped:** 2026-09-11 -- same session, direct "continue": the deferred
+  second half of the previous slice's doc line -- "The Restart app should
+  also be moved to the Data & Maintenance and should be able to be called
+  after editing important enviroment data for the app, appearing in the
+  form of a toast." Moved the "Restart app" card from Settings > Your
+  Profile into Data & Maintenance's "Maintenance & cleanup" card (first
+  row, `settings_data_maintenance.html`) -- same `/settings/restart`
+  route, same `data-confirm-sheet`, same `restart_available` gate (now
+  built in `settings_data_maintenance`'s own context instead of
+  `settings_your_profile`'s).
+
+  The "appearing in the form of a toast" half: Data & Maintenance already
+  had a note-query-param-becomes-a-floating-toast mechanism
+  (`data_maintenance.js`, see that page's own header comment) that Your
+  Profile never had -- rather than build a second toast pipeline, made the
+  routes that actually NEED a restart redirect to Data & Maintenance
+  instead of back to Your Profile, so the existing mechanism does the
+  work: `account_settings` now redirects to `/settings/data-maintenance`
+  whenever the save is env-managed (always needs a restart) OR a new
+  password/Radicale URL was saved to app_meta (`restart_relevant`, a new
+  local in that function) -- a username-only app_meta change still stays
+  on Your Profile since the session is re-minted immediately and nothing
+  needs restarting. `restart_app` itself (both its success and
+  no-op-outside-production error path) now also redirects to
+  `/settings/data-maintenance` instead of `/settings/your-profile`.
+
+  **Tests**: `test_settings_login_password.py` gained three new
+  `TestAccountSettingsAppMetaPath` tests covering the `restart_relevant`
+  branch (username-only stays on Your Profile; new password or Radicale
+  URL alone both redirect to Data & Maintenance), one new assertion on the
+  existing env-path test (env saves always redirect to Data &
+  Maintenance), and `TestRestartApp`'s two existing tests gained a
+  redirect-target assertion. `test_data_health.py` gained
+  `test_restart_app_present_only_in_production`/
+  `test_restart_app_shown_in_production` on
+  `TestDataMaintenanceRedesign2026_08_26`. `test_phase8_settings_hub.py`'s
+  `TestSettingsYourProfile` gained `test_no_longer_has_restart_app`. Full
+  suite run in the same 4-parallel-batch pattern: **2144 passed**, same 4
+  pre-existing time-of-day-boundary failures as the last two sessions
+  (unchanged, not re-verified against HEAD again -- nothing this slice
+  touched plausibly affects an "earlier today" date/time boundary check).
+
+  This closes out both halves of the "move password/username/Radicale/
+  Restart app off General" doc paragraph -- next slice starts fresh on
+  whatever's next in `audit-fixes-2.1.md` doc order (the
+  page-header-narrow-back alignment item, unless something above it was
+  missed).
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order (first half only -- see note at the end): "I would like to move
+  the password, username, radicale url etc, settings from general to a new
+  page named Your Profile. It should include the Profile Picture and
+  Nickname (current Your Name, used in greeting)." New hub category/page,
+  `/settings/your-profile` (`settings_your_profile.html`, icon
+  `user-check`, between General and Appearance in `HUB_CATEGORIES`) --
+  holds the Profile picture upload/remove forms, the nickname field
+  (relabeled from "Your name" to "Nickname" per the direct request's own
+  wording, same `/settings/display-name` route/behavior), and the Account
+  card (username/current+new password/Radicale URL, `/settings/account`)
+  moved verbatim from `settings_general.html`. Restart app came along too
+  (not left orphaned on General with no Account card to apply) -- the
+  actual "move Restart app to Data & Maintenance, trigger it as a toast
+  after an env-data edit" half of the same doc line is intentionally
+  deferred to a follow-up slice (see below), since bundling both would
+  have made this one slice cover two unrelated relocations landing in two
+  different places.
+
+  General (`settings_general.html`) now holds only the format/display
+  preferences that aren't about who the user IS (week start, 4-week
+  position, recurrence/habit terminology, time format, hide-sleep-hours).
+  Every route these moved fields post to is unchanged (same URLs, same
+  handler functions in `routers/settings.py`) -- only the GET page they
+  live on and the redirect target on save moved: `account_settings`,
+  `restart_app`, `set_display_name`, `set_profile_photo`, and
+  `remove_profile_photo` now all redirect to `/settings/your-profile`
+  instead of `/settings/general`. `settings_data_maintenance.html`'s
+  read-only Radicale card, which used to point at "Settings > General" for
+  the actual connection fields, now points at "Settings > Your Profile."
+
+  **Tests**: updated in place rather than duplicated --
+  `test_phase8_settings_hub.py`'s old `TestSettingsGeneral` display-name/
+  account assertions split into a trimmed `TestSettingsGeneral` (asserts
+  those fields are now ABSENT from General) plus a new
+  `TestSettingsYourProfile` class covering the same ground against the new
+  page; its `test_set_display_name_route_redirects_to_general` became
+  `test_set_display_name_route_redirects_to_your_profile` (redirect target
+  updated). `test_dashboard_usability_rework.py`'s
+  `test_settings_general_passes_display_name` renamed/repointed to
+  `test_settings_your_profile_passes_display_name`.
+  `test_settings_radicale.py`'s href assertion updated to
+  `/settings/your-profile`. Full suite run in the same 4-parallel-batch
+  pattern as last session (single bash call, background `&`/`wait`):
+  **2138 passed**, same 4 pre-existing time-of-day-boundary failures as
+  last session (confirmed unrelated then, unchanged now -- not re-verified
+  against HEAD again since nothing this slice touched could plausibly
+  affect them).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order -- second half of
+  the same paragraph, deferred from this session): move "Restart app" from
+  Settings > Your Profile into Data & Maintenance, and make it triggerable
+  as a toast after editing "important environment data" (the Account
+  card's env-file path is the obvious trigger -- `account_settings`
+  already returns a note telling the user to click Restart when
+  `env_managed`; check whether that note itself should become the toast
+  trigger, or whether Data & Maintenance needs its own always-visible
+  Restart control regardless of what page any given env-data edit happened
+  on).
+
+- **Shipped:** 2026-09-11 -- next item off `audit-fixes-2.1.md` in doc
+  order -- "the Purge Completed Tasks should sit in the context menu of
+  Database (as purge completed). The reset home layout button should be
+  removed, because in edit mode an exact button already exists."
+  settings_data_maintenance.html's Database status-card menu (the
+  `.action-menu` three-dot pattern shared by all three status cards) gained
+  a third item in its first (routine, non-danger) section: "Purge completed
+  (N)", the same `POST /settings/purge-completed` form and
+  `data-confirm-sheet` the old inline row used, just moved and relabeled --
+  grouped with Check integrity/Compact & reindex rather than the danger
+  section "Reset database (purge all)" lives in, since it's routine
+  housekeeping, not a catastrophe (same reasoning the 2026-08-26 redesign
+  used when it first placed this button). The "Reset Home to default
+  layout" row (posting to `/dashboard/reset`) was deleted outright, no
+  replacement -- confirmed first that Home's edit-mode "Reset layout"
+  button (`dashboard.html`) already posts to the exact same route with the
+  same `data-confirm-sheet` mechanism, just different wording, so the
+  Settings row was a verbatim duplicate control, not a second surface worth
+  keeping. Both rows removed from the Maintenance & cleanup card, which now
+  holds only the two autosubmit lifecycle selects (auto-archive, sync
+  cleanup retention). No backend/route changes -- `/settings/purge-completed`
+  and `/dashboard/reset` are unchanged, only the markup calling them moved.
+
+  **Tests**: updated the three existing tests that asserted on the old
+  markup rather than adding new ones (the moved button's behavior is
+  already covered by `test_data_health.py`'s purge-completed tests and
+  `test_dashboard_usability_rework.py`'s `TestHomeResetButton`/
+  `TestLabelPageResetButton`, which test the route/behavior, not this
+  page's now-removed duplicate): `test_phase8_settings_hub.py`'s
+  `TestSettingsAdvanced` (renamed/rewrote the reset-button test to assert
+  absence instead of presence), `test_data_health.py`'s
+  `test_purge_completed_is_housekeeping_and_danger_zone_is_gone` (label
+  text changed from "Purge completed tasks (N right now)" to "Purge
+  completed (N)"), and `test_dashboard_usability_rework.py`'s
+  `TestSettingsResetButton` (inverted to assert the route is gone from this
+  page). Full suite run in 4 parallel batches (single bash call, background
+  `&`/`wait` -- this environment's timeout otherwise kills a ~20s+ single
+  run): **2136 passed**, plus 4 pre-existing failures confirmed unrelated
+  by reproducing them on the unmodified HEAD commit via `git stash`
+  (`TestAgendaWidgetAllUpcoming::test_todays_earlier_events_still_count_as_upcoming`
+  and three siblings in `test_project_detail.py` -- all "today's earlier
+  event/task still counts as upcoming" tests, time-of-day-sensitive
+  boundary checks, not something this slice touched).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): move the password,
+  username, Radicale URL, etc. settings from General to a new "Your
+  Profile" page (including Profile Picture and Nickname/"Your Name"), and
+  move "Restart app" to Data & Maintenance as a post-edit toast trigger.
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "The Kanban board columns should
+  try to not add a horizontal scrollbar. It should first try to have them
+  all in one row, then two rows, and only last the 4 rows for the 4
+  columns. Keep in mind to calculate depending on the sidebar width." The
+  old layout (style.css) was binary: columns shrink to fill one row down
+  to a 240px floor, then a single `@media (max-width:1123px)` breakpoint
+  jumped straight to 4 full-width stacked rows -- no 2-row middle step,
+  and worse, keyed off the VIEWPORT, which can't see the sidebar's own
+  expanded/collapsed state (`html[data-sidebar-expanded]`, toggled
+  independently) -- a maximized window reads as the same "viewport width"
+  whether the sidebar is eating ~240px of real content space or not,
+  exactly the blind spot the direct request called out.
+  Fixed with CSS container queries instead of viewport media queries:
+  project_detail.html's Kanban board is now wrapped in a plain
+  `.kanban-board-wrap` div (`container-type:inline-size; container-
+  name:kanban`), and style.css's breakpoints became `@container kanban
+  (max-width:...)` keyed off THAT wrapper's own rendered width -- sidebar-
+  aware for free, since the wrapper's actual box already reflects
+  whatever space the sidebar left it, regardless of viewport size. Two
+  explicit tiers (not a continuous `auto-fit` grid reflow, which could
+  land on an uneven "3 then 1" split with exactly 4 columns and wouldn't
+  match "first one row, then two rows" at all): >=996px (4 * the 240px
+  floor + 3 * the 12px gap) keeps the original unchanged single-row
+  shrink-to-fit; 492-995px (2 * the floor + 1 gap) wraps to 2 columns per
+  row via `flex-wrap:wrap` + a `calc(50% - gap/2)` basis (the two widths
+  plus their one gap sum to exactly 100%, so it naturally breaks after
+  every 2nd column with no `:nth-child` rule needed); below 492px, same
+  full 4-row stack the old breakpoint used.
+  **Also caught while touching style.css** (same lesson as the v97 sw.js
+  bump's own comment, apparently still not a reliable habit): the
+  PREVIOUS TWO slices this session (pill-click-opens-modal -- no style.css
+  change, so no bump needed there; and the Contacts custom-dropdown swap)
+  both should have bumped `sw.js`'s `CACHE_NAME` per style.css's own
+  SHELL_ASSETS membership, and the Contacts one didn't. Bundled that missed
+  bump with this slice's own into one `cc-shell-v97` -> `cc-shell-v98`
+  jump -- see sw.js's own comment for the full breakdown.
+
+  **Tests**: new `TestKanbanResponsiveColumns` in test_project_detail.py
+  (8 tests, no browser harness, same structural-source-check convention as
+  `TestKanbanDragAndDrop` in the same file) -- wrapper div present and
+  actually contains the board, `container-type` declared, old `@media`
+  rule confirmed gone, both `@container` breakpoints present, wide/middle/
+  narrow tier rules each confirmed, and a sanity check that
+  tasks_board.js's own selectors still match the rendered markup through
+  the new wrapper (drag-and-drop unaffected). `test_pwa_shell.py`'s
+  hardcoded `CACHE_NAME` assertion updated to v98. Full suite re-verified
+  in the usual 6 batches -- **2140 passed, 0 failed** (2132 + 8 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Data &
+  Maintenance settings reorg -- move "Purge Completed Tasks" into
+  Database's own context menu (as "Purge completed"), and remove the
+  Reset-home-layout button (edit mode already has an equivalent button).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "Contacts edit modal window doesn't
+  use the custom drop down menus." contact_form.html's five Phone/Email/
+  Website/Address/Social "type" pickers (Home/Work/Other etc,
+  db.CONTACT_*_TYPES) were the one form control left in the app still
+  opening the browser's own native `<select>` chrome instead of the app's
+  `.multiselect` checkbox/radio dropdown (_widget_list_multiselect.html,
+  _task_row.html's status/labels pickers).
+  Couldn't just drop in a per-row `{% include "_widget_list_multiselect.html" %}`:
+  that partial submits its radios under one shared `name="{{ ms_name }}"`,
+  but each of these fields is a REPEATABLE row group (a contact can have
+  several phones/emails/etc, static/contact_phone_email_rows.js's
+  add/remove rows) that all need to submit under the SAME field name
+  (`phone_type`, parallel to `phone_value[]`, routers/contacts.py's
+  `_phone_email_list` zips them back together by position) -- but native
+  `<input type="radio">` mutual exclusion is scoped by (name, form owner),
+  so sharing that name across rows would make every row ONE radio group
+  (picking "Work" on row 2 would silently uncheck "Home" on row 1).
+  New `_contact_type_picker.html` macro (`contact_type_picker()`) instead:
+  each row's radios get a row-scoped unique name (`{{ field }}__{{
+  row_key }}`, `row_key` = that row's `loop.index`, or a placeholder for
+  the `<template>` "Add" clones) purely for the browser's own grouping,
+  plus a `data-proxy-target` pointing at a hidden `<input type="hidden"
+  name="{{ field }}">` that carries the REAL submitted value --
+  contact_phone_email_rows.js's new delegated `change` listener keeps that
+  hidden input in sync with whichever radio is checked, looked up by `id`
+  (not `.closest(".contact-multi-row")`) since static/app.js's shared
+  multiselect portal moves an OPEN `.multiselect-panel` -- radios included
+  -- out to `#multiselect-portal`, outside the row, while a pick is being
+  made. The same script's "Add" handler also rewrites a freshly-cloned
+  row's placeholder name/id to something newly unique (a page-lifetime
+  counter -- two clicks of "Add phone" must not produce two rows sharing
+  one group either). Wire format is completely unchanged server-side --
+  same field names, same value strings, same DOM order -- so
+  routers/contacts.py needed no changes at all. style.css's per-row width
+  overrides (`.field-wide .contact-multi-row select{width:110px}`,
+  `.contact-address-row select{width:140px}`) retargeted from `select` to
+  `.contact-type-select` (the new wrapper's own class).
+
+  **Tests**: new `TestTypePickerIsCustomDropdown` class in all four of
+  test_contacts_field_parity_{phone_email,website,address,social}.py (21
+  tests total) -- native `<select>` gone, `.multiselect`/`data-ms-
+  mode="single"` markup present, radios never carry the real field name
+  directly, two rows in the same group get distinct radio-group/proxy ids,
+  the hidden proxy still posts under the original field name. Every
+  pre-existing contacts test kept passing unchanged through this swap
+  (written against the wire contract, not the markup, so the `<select>` ->
+  custom-dropdown swap was invisible to them). Full suite re-verified in
+  the usual 6 batches -- **2132 passed, 0 failed** (2111 + 21 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): "The Kanban board
+  columns should try to not add a horizontal scrollbar. It should first
+  try to have them all in one row, then two rows, and only last the 4 rows
+  for the 4 columns" -- confirmed still open (style.css's `.kanban-board`
+  is currently a binary layout: one shrinking row down to a 240px column
+  floor, or -- past a single `max-width:1123px` breakpoint -- straight to
+  4 full-width stacked rows, no intermediate 2-row/2-column step).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "In the unscheduled work, for any
+  pill inside it, the user could click it and open the task view modal
+  window." This directly conflicted with the SAME session's own earlier
+  Planner-rework slice (doc order, further down this file), which made a
+  plain click on that same pill add one more undated work session instead
+  -- a single click gesture can't do both. Flagged this to the user before
+  touching code (AskUserQuestion) rather than guessing; picked "click opens
+  the modal; drop click-to-add entirely -- add a session from the modal's
+  Work sessions card instead" (confirmed that card already has a working
+  "+" button posting to the same `/tasks/{uid}/work-allocations` endpoint,
+  so nothing there needed building).
+  Implementation: `static/project_calendar.js`'s `setupUnscheduledItem`
+  `end()` -- the no-drag click branch's `postAction(".../work-allocations",
+  ...)` call replaced with the same `taskUrlBase`/`window.CCModal.open(url,
+  item)` (falling back to `window.location.href`) convention interaction 4
+  already uses for a placed `.work-allocation` block's click-to-open;
+  `cfg.taskUrlBase` was already being set by `calendar_week.html` (the only
+  template that sets `window.PROJECT_CALENDAR` -- `_unscheduled_task_item.html`
+  is only ever rendered there via `_calendar_week_grid.html`) so no new
+  config plumbing was needed. Updated the stale click-to-add comments in
+  `project_calendar.js` (both its file-header interaction-1b note and
+  `end()`'s own) and `_unscheduled_task_item.html`'s macro-doc comment to
+  describe the superseding and why.
+
+  **Tests**: `test_calendar_week_scheduling.py` -- `TestClickToAddSessionIsAsync`
+  replaced with `TestClickOpensTaskModal` (4 tests: no-drag click branch
+  uses `cfg.taskUrlBase`/`item.dataset.taskUid`/`window.CCModal`/
+  `CCModal.open(url, item)`, the old click-to-add POST is gone from that
+  branch, the dead stepper pointerdown carve-out stays gone, and the
+  no-CCModal navigation fallback is present); `TestUnscheduledPanelStepper`'s
+  docstring updated to point at the new class. Full suite re-verified in
+  the usual 6 batches -- **2111 passed, 0 failed** (2110 - 3 old + 4 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): "Contacts edit
+  modal window doesn't use the custom drop down menus" -- confirmed still
+  open (contact_form.html's type pickers are all plain native `<select>`s;
+  only its Labels field uses the app's custom multiselect component).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` -- "In the projects page, I would like the agenda
+  card to also include tasks due date in that list, like other widgets in
+  the normal dashboard." The Project page's card (previously "Upcoming
+  events", `routers/projects.py::project_detail`) only ever queried
+  events; renamed to "Agenda" and merged in every open, due-dated task
+  tagged with the project's label into the SAME chronologically-sorted
+  list (not a separate section) -- the request said "that list," singular.
+  Checked first whether the normal Dashboard's own Agenda widget
+  (`dashboard.py::_render_agenda`) had a reusable merged-list helper to
+  call instead of writing new logic -- it doesn't: that widget actually
+  keeps tasks/events as two SEPARATE lists/sections internally, so "like
+  other widgets in the normal dashboard" is matched here via the same
+  `relative_date` formatting/row-macro conventions, not a literal shared
+  merge function (none exists to share).
+  Implementation: `tasks` (already computed for the Kanban board, already
+  excludes archived) filtered to not-done + has due_at + due_at >= today,
+  each turned into an event-shaped dict with `kind: "task"`; combined with
+  the existing events/deadline list, sorted by one `start_at` key, capped
+  at 8 same as before. Context key renamed `events` -> `agenda_items`
+  (there's no single-list precedent to preserve `events`'s old meaning
+  under, and "an agenda_items list that sometimes contains tasks" is more
+  honest than overloading `events`). Template gained a third row branch
+  (`item.kind == 'task'`) alongside the existing plain-event/`is_deadline`
+  branches.
+  **Also fixed while touching this filter** (caught mid-implementation,
+  not itself in the audit doc): the events filter compared the FULL
+  `now_iso` timestamp (wall-clock precision) against `start_at` -- the
+  exact bug `dashboard.py`'s own Agenda widget fixed 2026-09-03 (today's
+  earlier events silently dropped). Switched to the same date-level
+  `>= today_iso` comparison dashboard.py already uses, for consistency
+  and correctness.
+
+  **Tests**: `test_project_detail.py`'s `TestUpcomingEventsCard` ->
+  `TestAgendaCard` (context-key rename throughout, +1 new test for the
+  wall-clock fix), `TestProjectDeadlineAsEvent` updated for the same
+  rename, new `TestAgendaCardIncludesTasks` (9 tests: inclusion, no-due-
+  date/past-due/done/other-project exclusion, today-still-counts,
+  combined sort order, shared 8-item cap, task-row link markup). Full
+  suite re-verified in the usual 6 batches -- **2110 passed, 0 failed**
+  (2100 + 10 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Data &
+  Maintenance settings reorg (move "Purge Completed Tasks" into
+  Database's context menu, drop the redundant Reset-home-layout button),
+  or the "Your Profile" settings page split (move password/username/
+  Radicale URL/profile picture/nickname off General into a new page).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` -- "The kanban board for tasks doesn't allow for
+  tasks to be drag and dropped." Diagnosis: `static/tasks_board.js` (a
+  fully-implemented Pointer-Events drag-and-drop, not native HTML5 DnD --
+  see its own header comment for why) already existed and already matched
+  `project_detail.html`'s Kanban board markup exactly (`#kanban-board`,
+  `.kanban-column[data-status]`, `.kanban-cards[data-status]`,
+  `.kanban-card[data-uid]`) and posts to the same `/tasks/{uid}/
+  update-field` endpoint the old per-card status dropdown used before its
+  2026-09-02 removal -- it was simply never `<script>`-included on this
+  page. It's a leftover from `templates/tasks_board.html`, a standalone
+  global Kanban page deleted in the 2026-08-28 rework; project_detail.html
+  later rebuilt its own Kanban board (2026-08-30) reusing the same
+  `.kanban-*` CSS by name but never re-attached the matching JS. style.css's
+  `.kanban-card.dragging`/`.kanban-cards.drop-hover` rules were likewise
+  already sitting there unused. Fix: added
+  `{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}`
+  to `project_detail.html` -- no markup or JS changes needed. Confirmed
+  this doesn't conflict with the 2026-09-02 "no inline editing" decision
+  (that removed the per-card native `<select>` dropdown specifically,
+  per direct request; today's request is a separate, later, direct ask
+  for drag-and-drop). Updated the stale "out of scope" comment blocks in
+  `project_detail.html`, `tasks_board.js`, and `style.css` that all
+  referenced the deleted `tasks_board.html`/the old "still open" note.
+  `tasks_board.js` is NOT added to `sw.js`'s `SHELL_ASSETS` (page-specific,
+  same as `project_calendar.js`/`tasks_table.js`) -- no cache-version bump
+  needed for this slice, unlike the Planner slice below.
+
+  **Tests**: 3 new in `test_project_detail.py`'s new
+  `TestKanbanDragAndDrop` -- confirms the script tag renders, confirms the
+  script's own selectors (`getElementById("kanban-board")`,
+  `.closest(".kanban-cards")`, `.kanban-card` query) actually match
+  strings present in the rendered board markup (not just "the script is
+  included," but "the script's selectors have something real to bind to"),
+  and confirms the drag-drop path posts to `/tasks/{uid}/update-field`
+  with the exact `{field: "status", value: ...}` shape that endpoint
+  expects. No browser harness in this suite, same structural-source-check
+  convention `test_calendar_week_scheduling.py`'s `TestGridDragConflictFix`
+  already established. Full suite re-verified in the usual 6 batches --
+  **2100 passed, 0 failed** (2097 + 3 new).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Projects page
+  agenda card's missing task due dates, or the Data & Maintenance settings
+  reorg (move Purge Completed Tasks into Database's context menu, remove
+  the redundant Reset home layout button).
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": the Planner
+  page's "Unscheduled work" panel rework, `audit-fixes-2.1.md`'s largest
+  item -- "tasks with 0 work sessions should not appear... remove the
+  minus and plus for these pills and allow for the task title to show a
+  bit more, a bit of space and then at the end the number of sessions
+  needed to allocate... replaced by the already in place drag and drop...
+  click on it, add one more unscheduled session... drag and drop the other
+  one wherever the user wants." Three changes:
+  1. **0-session filter bug** (`routers/calendar.py`'s `_week_view_context`,
+     the unscheduled_tasks loop): the old `info["count"] and not
+     info["undated_count"]` check only ever dropped a task once it had
+     >=1 session and all were dated -- it never treated "0 sessions total"
+     as a reason to hide, so a brand-new task with no sessions at all
+     showed up with a bare "0" pill. Both cases collapse to one check,
+     `if not info["undated_count"]: continue` (a 0-session task's
+     `undated_count` is also 0) -- `db.work_allocation_panel_info`'s
+     docstring updated to match.
+  2. **Stepper removed** (`_unscheduled_task_item.html`): both `<form>`s
+     (+/- posting to /tasks/{uid}/work-allocations and .../remove-latest)
+     deleted from both the plain-task and habit branches; the row is a
+     plain `<div>` again (title given more room via style.css's
+     `.unscheduled-task-item` max-width 190px -> 240px, `.unscheduled-count`
+     now `margin-left:auto` at the end of the row instead of sandwiched
+     between two icon buttons).
+  3. **Click-to-add replaces "+"** (`project_calendar.js`): the drag
+     source's own pointerdown/pointerup handling now treats a plain
+     release with no drag (`!wasDrag`, previously a silent no-op) as "add
+     one more undated session" -- posts the same
+     `/tasks/{uid}/work-allocations` endpoint the old "+" button used, via
+     the same async `postAction`/ccApi path every other action on this row
+     already takes. The stepper's pointerdown carve-out
+     (`e.target.closest(".unscheduled-stepper")`) is dead and removed.
+     There is no in-panel "−" anymore -- the task modal's own Work
+     sessions card still owns deleting a session outright; drag-a-placed-
+     session-back-onto-the-panel-to-unschedule (interaction 3) is
+     unaffected.
+
+  **Also caught mid-slice:** `static/avatar_cropper.js` IS in `sw.js`'s
+  `SHELL_ASSETS` precache list -- the earlier same-session fix to that
+  file (backdrop-click no longer discards an in-progress crop) skipped the
+  required `CACHE_NAME` bump. Bundled the retroactive bump for that with
+  this slice's own (style.css changed, which always requires one
+  regardless of SHELL_ASSETS membership, per the file's own v88 note) into
+  one `cc-shell-v96` -> `cc-shell-v97` bump -- see sw.js's own comment.
+  **Lesson for future JS/CSS slices in this repo: check `SHELL_ASSETS`
+  membership and check style.css diffs BEFORE calling a slice done, not
+  after the fact.**
+
+  **Tests**: `test_calendar_week_scheduling.py` -- flipped
+  `test_open_task_with_no_allocation_is_unscheduled` (renamed
+  `..._is_not_unscheduled`, asserts absence now), gave
+  `test_unscheduled_task_shows_its_project_pill` an undated session so it
+  still qualifies for the panel, rewrote `TestUnscheduledPanelStepper`'s
+  button-specific tests into stepper-is-gone assertions, replaced
+  `TestUnscheduledPanelStepperIsAsync` with `TestClickToAddSessionIsAsync`
+  (structural source-checks against project_calendar.js, same no-browser-
+  harness convention as `TestGridDragConflictFix` in the same file).
+  `test_pwa_shell.py`'s hardcoded `CACHE_NAME` assertion updated to v97.
+  Full suite re-verified in the usual 6 batches -- **2097 passed, 0
+  failed** (net test count unchanged: -1 stepper test, +1 click-to-add
+  test).
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Kanban board's
+  drag-and-drop (currently not working at all for moving tasks between
+  columns), or the Projects page agenda card's missing task due dates.
+
+- **Shipped:** 2026-09-10 -- same session, direct "continue": next item off
+  `audit-fixes-2.1.md` in doc order -- "When inline changing labels in
+  Tasks page, the pills revert to a blue no icon pill, even if they
+  normally have color and icon. A refresh fixes this." Root cause:
+  `static/tasks_table.js`'s `change` listener for `input.task-label-
+  checkbox` rebuilt the trigger's `.cell-tags` HTML client-side after every
+  toggle, hand-constructing `<span class="cell-tag tag-blue">Name</span>`
+  per checked label -- it had no access to that label's real configured
+  color/icon (that lookup, `label_color()`/`label_icon()`, is server-side
+  only, in `_label_pill.html`'s `label_pill()` macro), so every edited pill
+  collapsed to plain blue with no icon until the next full page load
+  re-rendered it through the real macro. Fixed by cloning the pill markup
+  instead of reconstructing it: each checkbox's own `<label class=
+  "multiselect-option">` already has the real, server-rendered pill
+  sitting right next to it (`_task_row.html`'s dropdown-option list also
+  calls `label_pill(name)`) -- `cb.parentElement.querySelector(".cell-tag")
+  .outerHTML` reuses that exact markup, with the old hand-built-blue-span
+  kept only as a defensive fallback if the pill element somehow isn't
+  found.
+
+  **Tests**: 2 new structural source-checks in
+  `test_tasks_table_labels_status_title.py`'s new
+  `TestInlineLabelEditKeepsRealPillColorAndIcon` (same "no JS harness in
+  this suite, assert against the actual JS source" style the file's
+  existing `TestStatusLabelChangeListenerNotAncestorScoped` class already
+  uses) -- one confirms the old hardcoded-blue-span construction is gone,
+  one confirms the new clone-the-real-pill approach is present. Full suite
+  re-verified in the usual 6 batches -- **2097 passed, 0 failed**.
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the Planner page's
+  unscheduled-work-card rework -- hide 0-session tasks, drop the +/-
+  steppers in favor of drag-and-drop reallocation. Doc order covered so
+  far this session: vCard import crash, banner/avatar crop-editor
+  outside-click, this Tasks-label-pill entry -- next up is the doc's
+  Planner item, the largest/most involved item in the list so far.
+
+- **Shipped:** 2026-09-10 -- same session as the vCard-import-crash entry
+  below, direct "continue": next item off `audit-fixes-2.1.md`'s own list
+  (picked in doc order, since the doc has no priority marking) -- "The
+  banner upload modal window doesn't work. The image crop/rotate, on
+  external mouse click always exists, even if the user is trying to crop
+  the image (remove the if click outside then exit for it)." Root cause:
+  `static/avatar_cropper.js`'s crop/rotate overlay (shared by every image
+  upload in the app -- contact photos, the profile-picture row, and
+  Home/label/page-header banners, not banner-specific despite the report's
+  wording) had a backdrop-click listener (`overlay.addEventListener("click",
+  ...)`, was lines 353-355) that called `closeEditor(true)` -- discarding
+  the in-progress crop/rotate -- on *any* click landing on the backdrop,
+  including a pointer that only briefly leaves the crop stage during a
+  fast drag on a resize handle or the box itself. No dirty-state check, no
+  confirmation. Removed the listener entirely; the explicit Close (X) and
+  Cancel buttons are the only exits now. Checked first whether this
+  codebase has an existing "suppress outside-click-close" convention to
+  reuse (a `data-no-outside-close`-style flag) -- it doesn't; every other
+  outside-click-to-close spot (`modal.js`'s own backdrop click, the color/
+  icon popover, `datetime_picker.js`, `reminders_picker.js`) is its own
+  bespoke listener with no shared opt-out, so outright removal (not a new
+  flag) is the consistent fix here.
+
+  **Tests**: none added -- this repo has no JS test runner/framework
+  (checked: no `package.json` test setup, no `.test.js` files anywhere),
+  same "no live browser in this sandbox" gap noted in the 2.0 session's
+  entry below. Python suite unaffected (no `.py` changed this slice) --
+  re-ran `test_banners.py` (the file covering this editor's wiring,
+  `TestBannerUploadUsesCropEditor`) as a sanity check anyway: 55 passed.
+
+  **Next slice** (per `audit-fixes-2.1.md`, doc order): the inline-labels-
+  revert-to-blue-pill bug on the Tasks page, or the Radicale-unreachable
+  startup traceback (still unconfirmed whether that's a real bug or just
+  noisy logging -- app already degrades gracefully per the log's own
+  "running without the sync bridge" line).
+
+- **Shipped:** 2026-09-10 -- direct request, new session: user dropped a new
+  `documentation/plans/audit-fixes-2.1.md` (a plain-text bug list -- ~14 UI/
+  UX items -- plus two production `journalctl`/traceback logs) and said "the
+  app has some bugs." Asked which item to start on (AskUserQuestion, since
+  the doc has no priority order of its own); picked the vCard-import crash:
+  `POST /export/import/auto` 500'd (`AttributeError: uid`) importing a vCard
+  with no UID property at all -- confirmed real, not hypothetical, since the
+  pasted traceback's sample card (a Nextcloud "Administrator" export) is
+  exactly this shape, and UID is spec-mandatory but plenty of real-world
+  exporters omit it anyway. Root cause: `vcard_rows.vcard_to_contact_row`
+  did `str(card.uid.value)` unconditionally -- vobject's `__getattr__`
+  raises `AttributeError` for an absent property, no `getattr(..., None)`-
+  friendly accessor exists. Fixed by falling back to `str(uuid.uuid4())`
+  when `card.uid` is absent or its `.value` is falsy (a `UID:` line with
+  nothing after the colon is a separate but same-shaped case) -- same
+  "always assign a fresh identity" convention as every other uid-on-
+  creation callsite in this app (`routers/contacts.py`, `routers/tasks.py`,
+  etc., all `str(uuid.uuid4())`). A uid-less card now imports as a new
+  contact instead of failing the whole import.
+
+  **Tests**: 3 new -- `test_row_translators.py`'s
+  `TestContactRow::test_missing_uid_gets_generated_not_crash` (UID property
+  absent) and `::test_blank_uid_value_gets_generated_not_stored_literally`
+  (UID property present, empty value -- a distinct code path,
+  `hasattr`-true but falsy `.value`), plus an endpoint-level regression in
+  `test_phase10_export.py`'s
+  `TestExportAndImport::test_import_contact_with_no_uid_does_not_500` using
+  the same card shape as the reported traceback. Full suite re-verified in
+  6 batches of ~15 files each (this sandbox's 45s-per-command limit still
+  applies, same workaround as the 2.0 session) -- **2095 passed, 0
+  failed**. The single pre-existing failure noted in the 2.0 entry below
+  (`test_dashboard_router.py::TestAgendaWidgetAllUpcoming::
+  test_todays_earlier_events_stil...`) is no longer present -- not
+  investigated further this session (out of scope for this slice), but
+  worth noting it's gone rather than silently carrying forward a stale
+  "known failure" caveat.
+
+  **Next slice** (per `audit-fixes-2.1.md`, no priority order of its own --
+  pick next): the other crash log in the doc (Radicale-unreachable-at-
+  startup traceback -- likely just noisy logging, app already degrades
+  gracefully per the log's own "running without the sync bridge" line, so
+  worth confirming that before treating it as a real bug), or any of the
+  ~14 plain-text UI items (banner upload modal crop/rotate exiting on
+  outside click is first in the doc's own order). `audit-fixes-2.1.md`
+  itself is untouched -- unlike `audit-fixes-2.0.md` this doc has no
+  checkbox/strikethrough convention yet; worth deciding one before the
+  list grows, so the same "audit before declaring done" mistake caught in
+  the 2.0 session doesn't recur.
+
 - **Released 2.0** -- 2026-09-09, direct request, new session: "push this to
   2.0." Before pushing, audited `audit-fixes-2.0.md` (the roadmap's own
   stated gate) rather than taking "nothing left to do" at face value --

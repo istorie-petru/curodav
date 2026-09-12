@@ -292,3 +292,40 @@ class TestRenderedMarkup:
         resp = contacts_router.list_contacts(request=_fake_request(), q=None, tag=None, conn=conn)
         body = resp.body.decode()
         assert "work.example.com" not in body
+
+
+class TestTypePickerIsCustomDropdown:
+    """audit-fixes-2.1.md ("Contacts edit modal window doesn't use the
+    custom drop down menus") -- same swap as
+    test_contacts_field_parity_phone_email.py's identically-named class
+    (see that file for the full rationale); this file's own coverage for
+    Website's `website_type`."""
+
+    def test_native_select_is_gone(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="website_type">' not in body
+
+    def test_custom_dropdown_markup_present(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert "contact-type-select" in body
+        assert 'data-ms-mode="single"' in body
+
+    def test_radio_never_carries_the_real_submitted_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="radio" name="website_type"' not in body
+
+    def test_each_row_gets_a_distinct_radio_group_and_proxy_id(self, conn):
+        uid = _make_contact(conn)
+        db.set_contact_websites(conn, uid, [{"type": "Work", "url": "https://work.example.com"}, {"type": "Home", "url": "https://home.example.com"}])
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="website_type-proxy-1" name="website_type" value="Work"' in body
+        assert 'id="website_type-proxy-2" name="website_type" value="Home"' in body
+
+    def test_hidden_proxy_still_carries_the_real_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="hidden" id="website_type-proxy-tmpl" name="website_type"' in body

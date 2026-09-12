@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from src.recurrence_expand import expand_events, expand_tasks
+from src.recurrence_expand import expand_events, expand_tasks, is_excluded_by_policy
 
 
 class TestExpandEvents:
@@ -183,6 +183,49 @@ class TestNonWorkingDayPolicy:
         # Sep 1 (Tue) ok, Sep 2 (Wed) excluded by holiday, Sep 3-4 ok,
         # Sep 5 (Sat)/Sep 6 (Sun) excluded by weekend, Sep 7 (Mon) ok.
         assert starts == {"2026-09-01", "2026-09-03", "2026-09-04", "2026-09-07"}
+
+
+class TestYearAgnosticHolidayPolicy:
+    """audit-fixes-2.1.md ("only day hollydays, withot the year"): a
+    holiday stored as "--MM-DD" (db.parse_holiday_date/
+    is_year_agnostic_holiday_date) recurs on that month+day every year --
+    is_excluded_by_policy is the one place this needs new logic (see its
+    own docstring); `expand_events`/`expand_tasks` need no changes at all,
+    they only ever call it."""
+
+    def test_single_day_year_agnostic_holiday_matches_any_year(self):
+        row = {"date_from": "--12-25", "date_to": "--12-25"}
+        calendars = {"National": [row]}
+        assert is_excluded_by_policy(date(2026, 12, 25), {"holiday_calendar": "National"}, calendars)
+        assert is_excluded_by_policy(date(2031, 12, 25), {"holiday_calendar": "National"}, calendars)
+        assert not is_excluded_by_policy(date(2026, 12, 24), {"holiday_calendar": "National"}, calendars)
+
+    def test_year_agnostic_range_matches_within_the_month_day_window(self):
+        row = {"date_from": "--06-01", "date_to": "--06-03"}
+        calendars = {"Break": [row]}
+        assert is_excluded_by_policy(date(2027, 6, 2), {"holiday_calendar": "Break"}, calendars)
+        assert not is_excluded_by_policy(date(2027, 6, 4), {"holiday_calendar": "Break"}, calendars)
+
+    def test_year_agnostic_range_wraps_the_year_boundary(self):
+        # New Year's break, Dec 30 -> Jan 2, every year.
+        row = {"date_from": "--12-30", "date_to": "--01-02"}
+        calendars = {"NewYear": [row]}
+        policy = {"holiday_calendar": "NewYear"}
+        assert is_excluded_by_policy(date(2026, 12, 31), policy, calendars)
+        assert is_excluded_by_policy(date(2027, 1, 1), policy, calendars)
+        assert not is_excluded_by_policy(date(2027, 6, 1), policy, calendars)
+
+    def test_year_agnostic_holiday_excludes_recurring_event_occurrences(self):
+        row = {
+            "uid": "e1", "title": "Class", "start_at": "2026-12-23T10:00:00",
+            "recurrence": "FREQ=DAILY;UNTIL=2026-12-28", "holiday_calendar": "National",
+        }
+        calendars = {"National": [{"date_from": "--12-25", "date_to": "--12-25"}]}
+        expanded = expand_events([row], date(2026, 12, 1), date(2026, 12, 31), calendars)
+        starts = {e["start_at"][:10] for e in expanded}
+        assert "2026-12-25" not in starts
+        assert "2026-12-24" in starts
+        assert "2026-12-26" in starts
 
 
 class TestManualRecurrenceExceptions:

@@ -219,7 +219,7 @@ def _avatar(contact: dict | None, cls: str = "") -> Markup:
     global (registered the same way as `icon()` above, for the same
     reason) instead of duplicating this if/else across contacts_list.html,
     contact_detail.html, contact_form.html's photo preview,
-    settings_general.html's profile-picture row, and _page_banner.html's
+    settings_your_profile.html's profile-picture row, and _page_banner.html's
     dashboard-header avatar -- all five now render the exact same markup
     for "this photo," which is the actual UI-consistency fix, not just
     five separately-hand-matched copies of similar-looking HTML.
@@ -699,6 +699,22 @@ def _relative_date(value: str | None) -> str:
 
 
 templates.env.filters["relative_date"] = _relative_date
+
+
+def _holiday_date(value: str | None) -> str:
+    """Jinja filter for the Holidays table's Date Range column
+    (audit-fixes-2.1.md, "only day hollydays, withot the year") -- same
+    Today/Tomorrow/"5 Sep" shorthand as `relative_date` for an ordinary
+    full-date holiday, or db.format_holiday_date's "25 Dec" for a
+    year-agnostic "--MM-DD" one (there's no real year to be relative to,
+    so relative_date's own ValueError fallback would otherwise just print
+    the raw "--MM-DD" unchanged)."""
+    if db.is_year_agnostic_holiday_date(value):
+        return db.format_holiday_date(value)
+    return _relative_date(value)
+
+
+templates.env.filters["holiday_date"] = _holiday_date
 
 
 def _format_datetime_value(value: str, fmt: str) -> str:

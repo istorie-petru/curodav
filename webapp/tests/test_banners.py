@@ -222,7 +222,7 @@ class TestPageBannerAvatar:
         body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
         assert 'class="page-banner-avatar-wrap"' in body
         # No display name/photo set -- falls back to the "U" initial, same
-        # convention as settings_general.html's own avatar row.
+        # convention as settings_your_profile.html's own avatar row.
         assert '<span class="avatar-circle avatar-hero">U</span>' in body
 
     def test_home_avatar_uses_display_name_initial(self, conn):

@@ -145,13 +145,32 @@
     } else if (target.matches("input.task-label-checkbox")) {
       const uid = target.dataset.uid;
       const panel = target.closest(".multiselect-panel");
-      const checked = panel
-        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked")).map((cb) => cb.value)
+      const checkedBoxes = panel
+        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked"))
         : [];
+      const checked = checkedBoxes.map((cb) => cb.value);
       const trigger = currentBody().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
       if (trigger) {
-        trigger.innerHTML = checked.length
-          ? checked.map((name) => '<span class="cell-tag tag-blue">' + escapeHtml(name) + "</span>").join("")
+        // Bug fix (audit-fixes-2.1.md, direct report: "the pills revert to
+        // a blue no icon pill... a refresh fixes this"). This used to
+        // hand-build a generic '<span class="cell-tag tag-blue">Name</span>'
+        // per checked label -- it has no idea what color/icon a real label
+        // carries (that lookup lives server-side in _label_pill.html's
+        // label_pill() macro/label_color()/label_icon()), so every pill
+        // collapsed to plain blue with no icon until the next full page
+        // load re-rendered it correctly. Fix: each checkbox's own
+        // <label class="multiselect-option"> already has the real,
+        // server-rendered pill sitting right next to it (_task_row.html's
+        // dropdown-option list also calls label_pill(name)) -- clone that
+        // markup instead of reconstructing a fake one, so the trigger shows
+        // the exact same color/icon the page would render on reload.
+        trigger.innerHTML = checkedBoxes.length
+          ? checkedBoxes
+              .map((cb) => {
+                const pill = cb.parentElement.querySelector(".cell-tag");
+                return pill ? pill.outerHTML : '<span class="cell-tag tag-blue">' + escapeHtml(cb.value) + "</span>";
+              })
+              .join("")
           : '<span class="ms-summary text-muted">No labels</span>';
       }
       updateField(uid, "tags", checked);
@@ -389,19 +408,14 @@
     });
   });
 
-  document.getElementById("bulk-status-select")?.addEventListener("change", async (e) => {
-    const status = e.target.value;
-    if (!status) return;
-    try {
-      await bulkPost("status", { status });
-      window.ccToast({ title: "Status updated", message: "Reloading to show the new sort order..." });
-      dispatchTaskChange("status");
-    } catch (err) {
-      window.ccToast({ message: "Could not update status for the selected tasks.", variant: "error" });
-    } finally {
-      e.target.value = "";
-    }
-  });
+  // 2026-09-13 (audit-fixes-2.1.md, "the bulk-actions-bar should only
+  // contain two buttons - Delete and Clear"): the bulk-status-set
+  // `<select>` this listener drove is gone from tasks_list.html -- see
+  // that template's own comment. /tasks/bulk's "status" action itself is
+  // untouched (routers/tasks.py's bulk_action, still covered by
+  // test_bulk_actions_tables.py::TestTasksBulkDeleteWithHabits::
+  // test_status_action_unaffected_by_habit_uids_plumbing) -- this was a
+  // UI simplification, not an API removal.
 
   document.getElementById("bulk-list-select")?.addEventListener("change", async (e) => {
     const listPath = e.target.value;
@@ -417,28 +431,13 @@
     }
   });
 
-  // Labels picker is now a chip multiselect (2026-08-07, modal-input-design
-  // Phase B) instead of a typed-with-datalist text input -- reads whichever
-  // "bulk_tag_names" checkboxes are ticked (there's no <form> wrapping
-  // #bulk-tag-picker, so these are just plain checkboxes with a shared
-  // name attribute, read directly rather than via FormData) and sends them
-  // all through in one request. /tasks/bulk's "tag" action already looped
-  // per-uid; it now also loops per-tag (see routers/tasks.py's bulk_action),
-  // so Add/Remove's existing "apply this labels change to every selected
-  // row" semantics are unchanged, just no longer limited to one label at a
-  // time.
-  function bulkTag(mode) {
-    const tags = Array.from(document.querySelectorAll('#bulk-tag-picker input[name="bulk_tag_names"]:checked')).map((cb) => cb.value);
-    if (!tags.length) return;
-    bulkPost("tag", { tags, mode })
-      .then(() => {
-        window.ccToast({ title: `Label${tags.length === 1 ? "" : "s"} ${mode === "add" ? "added" : "removed"}`, message: tags.join(", ") });
-        dispatchTaskChange("tag");
-      })
-      .catch(() => window.ccToast({ message: "Could not update labels for the selected tasks.", variant: "error" }));
-  }
-  document.getElementById("bulk-tag-add")?.addEventListener("click", () => bulkTag("add"));
-  document.getElementById("bulk-tag-remove")?.addEventListener("click", () => bulkTag("remove"));
+  // 2026-09-13 (audit-fixes-2.1.md): the bulk-tag-picker Add/Remove chip-
+  // multiselect controls (#bulk-tag-picker, #bulk-tag-add, #bulk-tag-remove)
+  // this section used to drive are gone from tasks_list.html too -- same
+  // "Delete and Clear only" trim as the status-select above. /tasks/bulk's
+  // "tag" action is untouched server-side (test_modal_input_phaseB_chip_
+  // multiselect.py::TestBulkTagActionSemanticsPreserved still covers it
+  // directly) -- this was a UI simplification, not an API removal.
 
   // ------------------------------------------------------------------ //
   // The page's one listener for task changes (async-CRUD design §5) --

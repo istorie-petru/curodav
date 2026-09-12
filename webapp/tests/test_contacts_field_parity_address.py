@@ -407,3 +407,57 @@ class TestRenderedMarkup:
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
         assert "Address (" not in body
+
+
+class TestTypePickerIsCustomDropdown:
+    """audit-fixes-2.1.md ("Contacts edit modal window doesn't use the
+    custom drop down menus") -- same swap as
+    test_contacts_field_parity_phone_email.py's identically-named class
+    (see that file for the full rationale); this file's own coverage for
+    Address's `address_type`."""
+
+    def test_native_select_is_gone(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="address_type">' not in body
+
+    def test_custom_dropdown_markup_present(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert "contact-type-select" in body
+        assert 'data-ms-mode="single"' in body
+
+    def test_radio_never_carries_the_real_submitted_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="radio" name="address_type"' not in body
+
+    def test_each_row_gets_a_distinct_radio_group_and_proxy_id(self, conn):
+        uid = _make_contact(conn)
+        db.set_contact_addresses(conn, uid, [
+            {"type": "Home", "street": "1 Home St"},
+            {"type": "Work", "street": "2 Work Ave"},
+        ])
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="address_type-proxy-1" name="address_type" value="Home"' in body
+        assert 'id="address_type-proxy-2" name="address_type" value="Work"' in body
+
+    def test_hidden_proxy_still_carries_the_real_field_name(self, conn):
+        resp = contacts_router.new_contact_form(_fake_request("/contacts/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<input type="hidden" id="address_type-proxy-tmpl" name="address_type"' in body
+
+    def test_picker_still_renders_inside_the_address_row(self, conn):
+        # The old `.contact-address-row select{width:140px}` CSS override
+        # became `.contact-address-row .contact-type-select{width:140px}`
+        # (style.css) -- confirm the picker still renders inside a
+        # `.contact-address-row` so that ancestor-scoped rule still reaches
+        # it (no `extra_class` needed on the macro call, see
+        # _contact_type_picker.html's own comment on why).
+        uid = _make_contact(conn)
+        db.set_contact_addresses(conn, uid, [{"type": "Home", "street": "1 Home St"}])
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        row = body.split('<div class="contact-multi-row contact-address-row">')[1]
+        assert "contact-type-select" in row.split("contact-address-fields")[0]
