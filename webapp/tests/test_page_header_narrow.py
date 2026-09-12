@@ -238,7 +238,11 @@ class TestBulkActionsBarRelocatedIntoHeader:
         # the actions slot opens -- i.e. inside it -- not merely somewhere
         # later in the document.
         assert header_pos < actions_pos < bar_pos < count_pos
-        assert bar_pos < delete_pos < clear_pos
+        # 2026-09-15 (direct feedback: "the order of the buttons should be
+        # reversed because they are on the right of the page") -- count,
+        # then Clear, then Delete, so Delete sits at the actions cluster's
+        # true right edge (was Delete, Clear, count).
+        assert count_pos < clear_pos < delete_pos
 
     def test_holidays_bulk_bar_is_inside_the_actions_slot(self, conn):
         resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)

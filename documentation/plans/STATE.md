@@ -17,6 +17,33 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-15 -- same-day follow-up on the entry directly
+  below: "the order of the buttons should be reversed because they are on
+  the right of the page." That prior slice put Delete/Clear before the
+  count (Delete -> Clear -> count), reasoning it should read "at the end"
+  of the actions cluster -- but the whole cluster sits flush against
+  `.page-header-narrow`'s right edge (the actions slot's own `.spacer`
+  pushes it there), so the control nearest that physical edge reads as
+  "first," not the one nearest whatever sits to its left (the Date/Label
+  filter). Reversed the whole order to count -> Clear -> Delete, so Delete
+  -- the actual bulk action, the reason this bar exists -- lands at the
+  true right edge instead of Clear/count. Same change in both
+  `_bulk_actions_bar.html`'s shared macro and `tasks_list.html`'s own
+  hand-rolled bar, keeping the two in sync as before.
+
+  **Tests**: `test_page_header_narrow.py`'s `TestBulkActionsBarRelocated
+  IntoHeader._assert_bulk_bar_in_actions_slot` updated from asserting
+  `delete_pos < clear_pos` to `count_pos < clear_pos < delete_pos` --
+  the only assertion that encoded the old order. Full suite re-verified in
+  4 batches -- **2197 passed, 0 failed**. Verified live via headless
+  Chrome (same technique as the last few entries): Tasks' bulk bar
+  children now render `[bulk-count, bulk-clear, bulk-delete]`; screenshot
+  confirms Delete sits at the actions cluster's true right edge.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-15 -- direct feedback on Tasks' header bar (a
   screenshot: "All dates" filter, then "1 selected", Delete, Clear): "i
   don't like the order of the buttons. the bulk select ones should be at
