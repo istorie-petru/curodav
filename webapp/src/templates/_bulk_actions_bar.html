@@ -47,11 +47,24 @@
      delete_label -- text on the Delete button (default "Delete"; e.g.
                      labels_manage.html uses "Remove from everything" since
                      its bulk action clears label usage, not a real row
-                     delete). #}
+                     delete).
+
+   2026-09-15 (direct feedback on Tasks' own hand-rolled bar, applied here
+   too for consistency -- one bulk-bar layout, not two that could drift):
+   "the bulk select ones should be at the end" (Delete/Clear before the
+   plain-text count, not after it -- on a page that also has a filter
+   dropdown in the same actions cluster, e.g. Contacts' label filter, the
+   count sitting between the filter and the buttons read as part of the
+   filter group, not the bulk-select group it actually belongs to) and
+   "all buttons should have the same width" (style.css's
+   `.page-header-narrow-actions .btn-sm`/`.filter-dropdown-trigger` rule
+   gives Delete/Clear/any adjacent filter-dropdown trigger one shared
+   min-width -- the plain-text count is deliberately excluded, per that
+   same feedback: "the count stays as plain text, not a button"). #}
 {% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
 <div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
-    <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
     <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
     <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+    <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
 </div>
 {% endmacro %}

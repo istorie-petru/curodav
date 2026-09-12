@@ -17,6 +17,49 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-15 -- direct feedback on Tasks' header bar (a
+  screenshot: "All dates" filter, then "1 selected", Delete, Clear): "i
+  don't like the order of the buttons. the bulk select ones should be at
+  the end, and all buttons should have the same width." Asked which
+  reorder was meant (the bulk group was already rendering after the Date
+  filter in source order) and which controls should share a width --
+  answers: move the plain-text "N selected" count after Delete/Clear
+  (order becomes Date filter -> Delete -> Clear -> count), and give every
+  button-shaped control in the row (the filter dropdown trigger, Delete,
+  Clear) one shared width, not just Delete/Clear against each other.
+
+  `_bulk_actions_bar.html`'s shared macro (Holidays/Labels/Time
+  Blocks/Contacts) and `tasks_list.html`'s own hand-rolled bar (kept
+  separate from the macro for its async-CRUD reasons, unchanged) both
+  reordered to Delete/Clear/count -- applied to the shared macro too, not
+  just Tasks, so there's one bulk-bar layout instead of two that could
+  drift apart. New `style.css` rule, scoped to `.page-header-narrow-
+  actions` (Tasks' Date filter, Contacts' Label filter, any future
+  sibling): `.filter-dropdown-trigger` and `.bulk-actions-bar .btn` share
+  `min-width:112px` (112, not a smaller value -- has to clear the widest
+  natural content among them, "All dates" plus its chevron, or the
+  trigger would itself exceed the buttons' width instead of matching it)
+  + `justify-content:center`. `min-width`, not `width`, so a caller with
+  longer text (labels_manage.html's "Remove from everything" `delete_label`)
+  still grows instead of clipping. The count (`.bulk-count`) is
+  deliberately excluded -- direct instruction: "the count stays as plain
+  text, not a button."
+
+  **Tests**: none added -- `test_page_header_narrow.py`'s existing
+  `TestBulkActionsBarRelocatedIntoHeader` only asserts the bar sits inside
+  the actions slot and that `delete_pos < clear_pos` relative to each
+  other, never the count's position relative to them, so the reorder
+  needed no test changes and all still pass. Verified live via headless
+  Chrome (same technique as the two bugfix entries below): Tasks page,
+  bulk bar children render in order `[bulk-delete, bulk-clear, bulk-count]`,
+  and the Date-filter trigger/Delete/Clear all measure exactly 112px wide
+  (screenshot confirms the visual result). Full suite re-verified in 4
+  batches -- **2197 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-15 -- same-day follow-up: "this is actually still
   happening in tasks and maybe other pages." The previous entry's
   `static/bulk_select.js` fix only covers Holidays/Labels/Time Blocks/

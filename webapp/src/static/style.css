@@ -6326,6 +6326,26 @@ body.command-palette-open{overflow:hidden;}
 .page-header-narrow-actions{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
+/* 2026-09-15 (direct feedback on Tasks' header: "the bulk select ones
+   should be at the end, and all buttons should have the same width").
+   "The end" is markup order (tasks_list.html/_bulk_actions_bar.html now
+   render Delete/Clear before the plain-text count, not after -- see
+   those templates' own comments); this is the "same width" half --
+   Delete/Clear (.bulk-actions-bar's own .btn-sm buttons) and any filter
+   dropdown trigger sharing this actions cluster (Tasks' Date filter,
+   Contacts' Label filter) get one common min-width and centered content,
+   so a row of "All dates / Delete / Clear" reads as a uniform set of
+   controls instead of three different-width shapes sized to their own
+   text. `min-width`, not `width` -- a caller with unusually long text
+   (labels_manage.html's "Remove from everything" `delete_label`) still
+   grows instead of clipping; it just won't look identical to a
+   short-label sibling in that one case. The plain-text count
+   (`.bulk-count`) is deliberately NOT included here, per the same
+   feedback ("the count stays as plain text, not a button"). */
+.page-header-narrow-actions .filter-dropdown-trigger,
+.page-header-narrow-actions .bulk-actions-bar .btn{
+  min-width:112px; justify-content:center;
+}
 /* Month's Month|Day .segmented switch (calendar_month.html's own
    `.calendar-subnav`) is the one other actions-slot control besides
    .filter-dropdown-trigger tall enough to matter here -- `.segmented`'s

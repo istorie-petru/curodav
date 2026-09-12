@@ -36,10 +36,20 @@
      actions-slot control, physically can't grow the header regardless:
      .page-header-narrow is a hard height:48px + overflow:hidden box (see
      that rule's own comment in style.css). -->
+<!-- 2026-09-15 (direct feedback, applied the same way to
+     _bulk_actions_bar.html's shared macro for consistency): Delete/Clear
+     moved before the count -- on this page the bulk bar sits right after
+     the Date filter dropdown in the same actions cluster, and the count
+     sitting between the two read as part of the filter, not the
+     bulk-select group. "All buttons should have the same width" is
+     style.css's `.page-header-narrow-actions .btn-sm`/
+     `.filter-dropdown-trigger` rule (Delete/Clear/the Date trigger all
+     share one min-width); the count stays plain text, deliberately
+     excluded. -->
 <div class="bulk-actions-bar" id="bulk-actions-bar">
-    <span id="bulk-count" class="bulk-count"></span>
     <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
     <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+    <span id="bulk-count" class="bulk-count"></span>
 </div>
 {% endcall %}
 
