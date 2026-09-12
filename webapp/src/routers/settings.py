@@ -811,6 +811,24 @@ def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
 
 
+def _resolve_calendar_name(calendar_name: str, calendar_name_new: str) -> str:
+    """audit-fixes-2.1.md ("not allowed to add more holidays to the same
+    calendar, defaults to Default"): the Calendar field
+    (_widget_list_multiselect.html, single mode + allow_new) is a radio
+    per existing calendar plus a free-text "new" input -- see that
+    partial's own `ms_allow_new` docstring for why the two need distinct
+    form field names (`calendar_name` for the checked radio,
+    `calendar_name_new` for the text input) rather than sharing one.
+    A non-blank typed name is always a deliberate override -- it wins
+    regardless of which radio happens to be checked/defaulted; otherwise
+    the picked radio's value applies; blank calendar_name (no radios
+    existed yet, or somehow neither was set) falls back to 'Default'."""
+    new = (calendar_name_new or "").strip()
+    if new:
+        return new
+    return (calendar_name or "").strip() or "Default"
+
+
 def _parse_holiday_date_field(value: str, year_agnostic: bool) -> str:
     """create_holiday/update_holiday's form-validation wrapper around
     db.parse_holiday_date -- same "reject with a clear 400 rather than
@@ -893,6 +911,7 @@ def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
 @router.post("/settings/holidays")
 def create_holiday(
     calendar_name: str = Form("Default"),
+    calendar_name_new: str = Form(""),
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
@@ -908,7 +927,7 @@ def create_holiday(
     db.upsert_holiday(
         conn,
         {
-            "uid": str(uuid.uuid4()), "calendar_name": calendar_name.strip() or "Default",
+            "uid": str(uuid.uuid4()), "calendar_name": _resolve_calendar_name(calendar_name, calendar_name_new),
             "label": label,
             "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
             "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
@@ -921,6 +940,7 @@ def create_holiday(
 def update_holiday(
     uid: str,
     calendar_name: str = Form("Default"),
+    calendar_name_new: str = Form(""),
     label: str = Form(""),
     date_from: str = Form(...),
     date_to: str = Form(...),
@@ -938,7 +958,7 @@ def update_holiday(
         conn,
         {
             **holiday,
-            "calendar_name": calendar_name.strip() or "Default",
+            "calendar_name": _resolve_calendar_name(calendar_name, calendar_name_new),
             "label": label,
             "date_from": _parse_holiday_date_field(date_from, bool(year_agnostic)),
             "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),

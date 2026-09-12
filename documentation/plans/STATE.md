@@ -18,6 +18,65 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
+  order: "Holiday bug, for some reason the user is not allowed to add more
+  holidays to the same calendar, and it defaults to Default calendar."
+  Root cause: `_widget_list_multiselect.html`'s Calendar field (single
+  mode + `ms_allow_new`, the only caller combining the two) rendered a
+  radio per existing calendar *and* a free-text "new" input sharing the
+  exact same `name="calendar_name"`. A radio only submits when checked,
+  but a plain text input is always a "successful control" whether typed
+  into or not, and it always renders after every radio -- so picking an
+  *existing* calendar's radio still left that always-present, always-
+  blank text input as the LAST `calendar_name` value in the submitted
+  form body, and Starlette's scalar Form parsing keeps only the last
+  value for a repeated key. `create_holiday`/`update_holiday` therefore
+  always read `""`, which their own `calendar_name: str = Form("Default")`
+  default then silently substituted -- exactly the reported symptom. This
+  only ever affected Holidays: grepping every `ms_allow_new = true` caller
+  confirmed it's the only `single`-mode one -- every other single-mode
+  caller (View/Range, task/event/habit's Priority-style pickers) sets
+  `ms_allow_new = false`, and every OTHER `ms_allow_new = true` caller
+  (Labels, everywhere) is list-mode, where a `list[str] = Form([])` field
+  collects and then drops-blank every same-named value, so the collision
+  is harmless there.
+
+  Fix: the single-mode `allow_new` text input now gets its own distinct
+  `name="{{ ms_name }}_new"` instead of sharing `ms_name`
+  (`_widget_list_multiselect.html`, gated on `_single`, so every list-mode
+  caller is byte-for-byte unchanged). `routers/settings.py` gained a new
+  `_resolve_calendar_name(calendar_name, calendar_name_new)` helper --
+  create_holiday/update_holiday now take both `calendar_name` (the
+  checked radio) and a new `calendar_name_new` (the free-text field) Form
+  param; a non-blank typed name always wins (typing is a deliberate
+  override regardless of which radio happens to be checked/defaulted),
+  otherwise the picked radio's value applies, otherwise "Default". No
+  other template/router needed to change -- this is the only allow_new +
+  single-mode combination in the app.
+
+  **Tests**: `test_settings_holidays.py` gained
+  `TestHolidayCalendarNameResolution` (reproduces the exact bug --
+  picking an existing calendar with a blank new-field must keep it, not
+  fall back to Default -- plus typed-new-wins, blank-both-falls-back-to-
+  Default, `update_holiday`'s own path, and a field-name-agreement guard
+  between the rendered template and the router's Form params so this
+  can't silently drift apart again). Every existing direct-call
+  create_holiday/update_holiday test needed an explicit
+  `calendar_name_new=""` added (same reason `year_agnostic=""` needed
+  adding last session -- FastAPI's `Form(...)` default sentinel is truthy
+  when a router is called directly rather than through real request
+  parsing). `test_new_modal_renders_empty_add_form`'s assertion changed
+  from `name="calendar_name"` to `name="calendar_name_new"`, since with
+  zero calendars yet, the empty-add form now renders no radio at all --
+  only the (now distinctly-named) free-text input. Full suite run in 4
+  file-list batches (still one call per batch -- this sandbox can't
+  finish an un-split run inside the tool's 45s call limit): **2186
+  passed, 0 failed**.
+
+  Next slice: whatever's next in `audit-fixes-2.1.md` doc order after
+  this -- "Holiday table, the Date Range for one date holidays should
+  only be one day, not a range."
+
+- **Shipped:** 2026-09-12 -- next item off `audit-fixes-2.1.md` in doc
   order: "Hollydays should add support for only day hollydays, withot the
   year. For example religious national holydays that are the same each
   time each year." A year-agnostic holiday is now stored as `--MM-DD`
