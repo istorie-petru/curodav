@@ -231,6 +231,11 @@
   const selected = new Set();
   const bar = document.getElementById("bulk-actions-bar");
   const countEl = document.getElementById("bulk-count");
+  // 2026-09-12: same reasoning as bulk_select.js's own actionsSlot --
+  // style.css's "hide the actions slot when it has nothing to show" rule
+  // needs to know whether `bar` is currently visible, which CSS can't
+  // otherwise see from a sibling's inline style.
+  const actionsSlot = bar ? bar.closest(".page-header-narrow-actions") : null;
   let lastClickedIdx = null;
 
   function checkboxRow(cb) {
@@ -259,8 +264,10 @@
     if (selected.size > 0) {
       bar.style.display = "flex";
       countEl.textContent = `${selected.size} selected`;
+      if (actionsSlot) actionsSlot.classList.add("has-visible-bulk-bar");
     } else {
       bar.style.display = "none";
+      if (actionsSlot) actionsSlot.classList.remove("has-visible-bulk-bar");
       // 2026-09-12: #bulk-count moved out of #bulk-actions-bar into the
       // header's title_extra slot (tasks_list.html), so hiding `bar` no
       // longer hides it too -- style.css's `.bulk-count:empty` rule needs

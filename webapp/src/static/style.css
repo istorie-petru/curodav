@@ -6447,6 +6447,38 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .page-header-narrow-actions{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
+/* 2026-09-12 (direct feedback + pasted DOM from Contacts with no tags and
+   nothing selected: "this element takes space and doesn't allow the
+   title to be centered vertically... hide it when we don't use it").
+   Holidays/Time Blocks/Labels/Contacts/Tasks all render a
+   `.bulk-actions-bar` in this slot unconditionally (so CCBulkSelect/
+   tasks_table.js can reveal it later), and Tasks/Contacts also render a
+   `.filter-bar` `<form>` here whose own visible content is always empty
+   -- it's purely a submit target the filter dropdown's inputs reference
+   by id (see _tasks_toolbar.html/contacts_list.html's own comments), not
+   real content. With nothing selected and no `.filter-dropdown` (or on
+   Calendar/etc., nothing at all) actually being shown, this slot used to
+   still be a real, present flex item -- on mobile specifically, the
+   mobile rule below forces it onto its own full-width row regardless of
+   whether it has anything to show, and `row-gap` adds space between that
+   phantom row and row one even when the phantom row's own content is
+   zero-height, pushing the title off-center.
+
+   Hide the slot outright when its only children are (some combination
+   of) `.bulk-actions-bar` and `.filter-bar` -- i.e. it has no OTHER child
+   (a `.filter-dropdown`, Calendar's own prev/next/segmented controls,
+   ...) -- unless `.has-visible-bulk-bar` says otherwise.
+   bulk_select.js/tasks_table.js's updateBar() toggles that class on this
+   element (not just the bar's own inline `display`) specifically so this
+   rule can react to it -- CSS has no "is this sibling currently visible"
+   selector, so the JS that already knows the answer says so explicitly.
+   The two `:not()`s' specificity ((0,3,0) vs. `.page-header-narrow-
+   actions` alone at (0,1,0)) is deliberately higher than the plain class
+   selector so this wins regardless of source order -- same cascade
+   lesson the height:48px bug two entries up in STATE.md was about. */
+.page-header-narrow-actions:not(:has(> :not(.bulk-actions-bar):not(.filter-bar))):not(.has-visible-bulk-bar){
+  display:none;
+}
 /* 2026-09-15 (direct feedback on Tasks' header: "the bulk select ones
    should be at the end, and all buttons should have the same width").
    "The end" is markup order (tasks_list.html/_bulk_actions_bar.html now

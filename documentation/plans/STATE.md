@@ -18,6 +18,55 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from pasted DOM of Contacts' idle header (no tags, nothing
+  selected): "this element takes space and doesn't allow the title to be
+  centered vertically. maybe hide it when we don't use it." The pasted
+  `.page-header-narrow-actions` contained only a hidden `.bulk-actions-bar`
+  and a visually-empty `.filter-bar` `<form>` (whitespace only, no `q` to
+  carry) -- nothing actually visible, yet the slot was still a real flex
+  item; on mobile the earlier entries' `flex-basis:100%` rule forces it
+  onto its own full-width row regardless, and `row-gap` adds space
+  between that phantom row and row one even at zero height.
+
+  Almost went with just deleting the empty `<form>` from the DOM when
+  there's no `q` -- turned out to be wrong: `_filter_dropdown.html`'s
+  checkbox/radio inputs reference that form by id via `form="..."` to
+  submit into (it's a required submit target, not dead markup, see that
+  partial's own `fd_form_id` doc comment) -- Tasks' Date filter is
+  unconditional, so deleting the form there would have broken filtering
+  every time there's no `q` in the URL, the common case. Caught before
+  shipping by tracing what actually reads `fd_form_id`; reverted that
+  attempt.
+
+  Real fix: a new style.css rule, `.page-header-narrow-actions:not(:has(>
+  :not(.bulk-actions-bar):not(.filter-bar))):not(.has-visible-bulk-bar)
+  {display:none;}` -- hides the slot outright when its only children are
+  (some combination of) the always-empty-looking `.bulk-actions-bar` and
+  `.filter-bar`, i.e. no OTHER child (a real `.filter-dropdown`,
+  Calendar's own prev/next/segmented controls, ...) -- unless
+  `.has-visible-bulk-bar` says otherwise. CSS has no "is this sibling
+  currently visible" selector, so `bulk_select.js`/`tasks_table.js`'s
+  `updateBar()` now toggles that class on the slot itself (found via
+  `bar.closest(".page-header-narrow-actions")`) alongside the bar's own
+  inline `display`, specifically so this rule can react to selection
+  changes. The two `:not()`s deliberately push this rule's specificity to
+  (0,3,0), higher than the plain `.page-header-narrow-actions` class
+  (0,1,0), so it wins regardless of source order -- same cascade lesson
+  as the height:48px bug three entries up.
+
+  **Tests**: none needed -- pure CSS/JS, no existing assertion touched
+  slot visibility. Full suite re-verified in 4 batches -- **2197 passed,
+  0 failed**. Same no-browser caveat as the last several entries --
+  especially worth confirming live this time given the near-miss on the
+  filter-form deletion; the shipped fix keeps the form in the DOM so
+  filtering should be unaffected, but hasn't been exercised in a real
+  browser.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
   below, from a screenshot: "the title is not perfectly centered." Root
   cause: that entry's `.page-header-narrow .spacer{flex:none}` neutralized
   the spacer's *growth* but not its existence -- a zero-width flex item

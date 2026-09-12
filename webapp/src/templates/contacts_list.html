@@ -34,6 +34,14 @@
    own call site. 2026-09-12: the count span itself moved up to
    title_extra above (see _bulk_actions_bar.html's own comment). #}
 {{ bulk_actions_bar("contacts") }}
+<!-- This form's own visible content is always empty (just an optional
+     hidden `q` field) -- what it's actually for is being a submit target
+     the Label filter's checkbox inputs below (when contact_tags exist)
+     point at via `form="contacts-filters-form"` (_filter_dropdown.html's
+     fd_form_id), so it has to stay in the DOM even with no `q` and no
+     tags to filter by. style.css's "hide the actions slot when it has
+     nothing to show" rule (2026-09-12) knows to look past `.filter-bar`
+     specifically for exactly this reason -- see that rule's own comment. -->
 <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
     {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
 </form>

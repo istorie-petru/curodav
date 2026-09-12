@@ -65,6 +65,12 @@
     const table = document.getElementById(cfg.tableId);
     const bar = document.getElementById(cfg.barId);
     const countEl = cfg.countId ? document.getElementById(cfg.countId) : null;
+    // 2026-09-12: the actions slot itself (bar's parent) needs to know
+    // whether `bar` is currently visible, not just `bar` itself --
+    // style.css's "hide the actions slot when it has nothing to show"
+    // rule keys off this class, since CSS has no "is this sibling
+    // currently displayed" selector.
+    const actionsSlot = bar ? bar.closest(".page-header-narrow-actions") : null;
     if (instances[cfg.tableId]) {
       instances[cfg.tableId]();
       delete instances[cfg.tableId];
@@ -96,8 +102,10 @@
       if (selected.size > 0) {
         bar.style.display = "flex";
         if (countEl) countEl.textContent = `${selected.size} selected`;
+        if (actionsSlot) actionsSlot.classList.add("has-visible-bulk-bar");
       } else {
         bar.style.display = "none";
+        if (actionsSlot) actionsSlot.classList.remove("has-visible-bulk-bar");
         // 2026-09-12: countEl used to live inside `bar` itself, so hiding
         // `bar` hid it too regardless of its text. It's now rendered in
         // _page_header_narrow.html's title_extra slot instead (a sibling
