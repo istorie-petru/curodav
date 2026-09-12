@@ -18,6 +18,46 @@ session start.
 ## Right now
 
 - **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  redesign two entries below, from direct feedback: "also the filters
+  don't work." Root cause was a pre-existing, previously-invisible
+  FastAPI bug, not anything new in the filter-pills feature itself:
+  `routers/search.py`'s `api_search` declared `types: list[str] | None =
+  None` and `labels: list[str] | None = None` -- a bare default like that
+  on a `list[str]` parameter is never actually populated from a real
+  `GET /api/search?types=...` query string in this FastAPI version (it
+  silently stays `None` no matter what's in the URL; confirmed directly
+  against a live TestClient request, isolated from this app's own code
+  first against a two-line throwaway FastAPI app to rule out an
+  app-specific cause). Every existing test in `test_search_api.py` calls
+  `search_router.api_search(..., types=["task"], ...)` as a plain Python
+  function call, which bypasses HTTP query-string parsing entirely --
+  structurally incapable of catching this. The type filter pills
+  (previous entry) were the first caller anywhere in the app to actually
+  drive `types` through a real HTTP query string, which is what surfaced
+  a bug that's presumably been latent since `types` was added.
+
+  Fix: `Annotated[Optional[list[str]], Query()] = None` instead of a bare
+  `list[str] | None = None` -- `Query()` as type-hint metadata (not as
+  the parameter's actual default, i.e. deliberately not `= Query(None)`)
+  makes FastAPI parse the query string correctly *and* keeps the plain
+  Python default `None`, so the existing direct-call tests kept working
+  unchanged. Verified with a throwaway script hitting a real
+  `TestClient(app).get("/api/search", params=...)` before and after, both
+  isolated and against this app's actual router.
+
+  **Tests**: added `TestTypesQueryStringOverHTTP` (test_search_api.py) --
+  the first test in that file to go through a real `TestClient` + HTTP
+  query string instead of calling `api_search` directly, specifically so
+  a regression here can't hide behind the direct-call pattern again the
+  way it did this time. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed** (2198 + the one new test).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
   redesign directly below, from a screenshot: "fix the highlight color.
   the divider-lines-spacing problem too." Two independent CSS fixes:
 

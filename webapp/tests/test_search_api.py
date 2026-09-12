@@ -20,9 +20,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from fastapi import FastAPI
 from starlette.requests import Request
+from starlette.testclient import TestClient
 
 from src import db
+from src.deps import get_db
 from src.routers import search as search_router
 
 
@@ -275,6 +278,38 @@ class TestPageNavigation:
 
         data = json.loads(search_router.api_search(q="zzzznomatch", conn=conn).body.decode())
         assert [r for r in data["results"] if r["type"] == "page"] == []
+
+
+class TestTypesQueryStringOverHTTP:
+    """Every other test in this file calls `search_router.api_search(...,
+    types=["task"], ...)` directly as a plain Python function -- that
+    bypasses FastAPI's actual query-string parsing entirely, and did (a
+    bare `list[str] | None = None` default is never populated from a real
+    `?types=...` query string in this FastAPI version, silently staying
+    `None`; only an explicit `Query(None)` default triggers the
+    single/repeated-value list parsing). This class drives the same
+    parameter through a real HTTP request instead, the way the command
+    palette's type filter pills (2026-09-12) actually do, to catch a
+    regression here that the direct-call tests above structurally can't."""
+
+    def _client(self, conn):
+        app = FastAPI()
+        app.include_router(search_router.router)
+        app.dependency_overrides[get_db] = lambda: conn
+        return TestClient(app)
+
+    def test_types_query_param_narrows_results_over_real_http(self, conn):
+        _seed_task(conn, "t1", title="Shared name")
+        _seed_event(conn, "e1", title="Shared name")
+        _seed_contact(conn, "c1", full_name="Shared name")
+        client = self._client(conn)
+
+        resp = client.get("/api/search", params={"q": "Shared", "types": "contact"})
+        assert resp.status_code == 200
+        assert [r["type"] for r in resp.json()["results"]] == ["contact"]
+
+        resp = client.get("/api/search", params={"q": "Shared"})
+        assert {r["type"] for r in resp.json()["results"]} == {"task", "event", "contact"}
 
 
 class TestSearchPage:
