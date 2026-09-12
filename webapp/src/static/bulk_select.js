@@ -103,18 +103,55 @@
 
     // Click (plain or shift-range) -- scoped to this table so a second
     // CCBulkSelect instance elsewhere on the page doesn't also react.
+    //
+    // 2026-09-15 bugfix (direct report: "clicking works, but it
+    // immediately deselects -- happens on any page", i.e. every
+    // CCBulkSelect caller -- Holidays/Labels/Time Blocks/Contacts alike --
+    // not just Contacts; this handler and the pointerdown one below are
+    // unchanged from the original 2026-08-29 implementation, so this was a
+    // pre-existing bug surfaced by testing the new Contacts caller, not
+    // something the Contacts change introduced). Root cause: the
+    // pointerdown handler below already calls `setSelected(cb, paintValue)`
+    // -- flipping `cb.checked` itself -- so that a real press-and-drag
+    // paints the row the drag *started* on, not just the ones the pointer
+    // crosses afterward. But the browser doesn't know that already
+    // happened: when the matching `click` fires right after (mouseup on
+    // the same element, the plain-click case, not a drag), its own native
+    // activation behavior toggles `checked` a SECOND time -- right back to
+    // whatever it was *before* the pointerdown. Net effect on an ordinary,
+    // no-drag click: the box visibly flips checked, then the trailing
+    // native click flips it straight back to unchecked -- reads as "it
+    // immediately deselects," and always did, for every table this module
+    // has ever driven; a real multi-row drag just never exercised this
+    // path (mouseup lands on a different element, so no `click` ever
+    // fires on the origin checkbox to conflict with pointerdown's own
+    // change). `e.preventDefault()` here blocks that native toggle -- a
+    // checkbox's default click behavior can be canceled from a `click`
+    // listener (not from `pointerdown`/`mousedown`, which was tried first
+    // and confirmed via a real Chrome/Puppeteer click -- not just a
+    // synthetic `.click()` call, which never exercises the native
+    // pointerdown-then-click sequence at all -- that canceling pointerdown
+    // does NOT suppress the later click's own default action). With the
+    // native toggle suppressed, pointerdown's `setSelected` call is the
+    // sole source of truth for `cb.checked` in both the plain-click and
+    // drag cases, and this handler only needs to run the shift-range logic
+    // off of whatever state pointerdown already established.
     table.addEventListener("click", (e) => {
       const cb = e.target.closest && e.target.closest(".row-select");
       if (!cb) return;
+      e.preventDefault();
       const boxes = checkboxes();
       const idx = boxes.indexOf(cb);
       if (e.shiftKey && lastClickedIdx !== null && idx !== -1) {
         const [lo, hi] = idx < lastClickedIdx ? [idx, lastClickedIdx] : [lastClickedIdx, idx];
         const targetState = cb.checked;
         for (let i = lo; i <= hi; i++) setSelected(boxes[i], targetState);
-      } else {
-        setSelected(cb, cb.checked);
       }
+      // else: pointerdown below already fully applied the plain-click
+      // toggle to `cb` itself (state + `.is-selected` + the Set) -- no
+      // second setSelected(cb, cb.checked) needed here, and reapplying it
+      // would just be redundant, not harmful, but there's nothing left to
+      // do for the single-checkbox case.
       lastClickedIdx = idx;
       updateBar();
     });

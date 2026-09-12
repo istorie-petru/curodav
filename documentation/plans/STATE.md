@@ -17,6 +17,69 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-15 -- direct follow-up on the Contacts bulk-select
+  slice below: "also the bulk select doesn't work." Turned out to be a
+  pre-existing bug in `static/bulk_select.js` itself (unchanged since the
+  original 2026-08-29 implementation), not something the Contacts slice
+  introduced -- confirmed by asking the user what "doesn't work" meant
+  ("clicking works, but it immediately deselects -- happens on any page"),
+  which pointed at every `CCBulkSelect` caller (Holidays/Labels/Time
+  Blocks/Contacts alike), not Contacts specifically.
+
+  Root cause: the pointerdown handler (drag-paint support) calls
+  `setSelected(cb, paintValue)`, flipping `cb.checked` itself, so a real
+  press-and-drag paints the row the drag *started* on too, not just the
+  ones the pointer crosses afterward. But on a plain, no-drag click, the
+  browser's own native checkbox activation behavior ALSO toggles `checked`
+  when the matching `click` fires right after (mouseup on the same
+  element) -- flipping it a second time, right back to whatever it was
+  before the pointerdown. Visually: the box flips checked, then
+  immediately flips back -- exactly "it immediately deselects." A real
+  multi-row drag never exhibited this (mouseup lands on a different
+  element, so no `click` ever fires on the origin checkbox to conflict
+  with pointerdown's change) -- only the far more common plain single
+  click did, for literally every CCBulkSelect table since the module was
+  first written.
+
+  This is why static analysis and a jsdom-based simulation (run earlier,
+  using the real production `bulk_select.js` against real rendered
+  markup) both missed it: jsdom's `element.click()` only ever fires a
+  single synthetic `click` event, never the real pointerdown-then-click
+  sequence a physical mouse click goes through -- the exact sequence the
+  bug depends on. Confirmed live instead: started the actual app
+  (uvicorn + a temp sqlite db) and drove a real headless Chrome via
+  Puppeteer (`page.click()`, which does dispatch the full native pointer
+  event sequence via CDP) against `/contacts` -- reproduced the bug
+  first (checkbox flips true then immediately back to false, bar never
+  shows), then confirmed the fix (checkbox stays checked, bar shows "1
+  selected", toggling off again works, checking two rows shows "2
+  selected", and a full select -> Delete -> confirm -> row actually
+  removed round-trip against the real `/contacts/bulk-delete` route).
+
+  Fix: `e.preventDefault()` moved from the pointerdown handler (where it
+  was tried first and confirmed, via the same live Chrome test, to NOT
+  suppress the later click's native toggle -- canceling pointerdown/
+  mousedown doesn't cancel click's own default action) into the `click`
+  handler instead -- canceling a checkbox's `click` event is what actually
+  suppresses its native toggle. With that in place, pointerdown's
+  `setSelected` call is the sole source of truth for `cb.checked` in both
+  the plain-click and real-drag cases; the click handler now only runs
+  the shift-range fill logic off of whatever state pointerdown already
+  set, instead of re-deciding the origin checkbox's own state a second
+  time.
+
+  **Tests**: none added -- this repo still has no JS test framework (same
+  gap noted in prior sessions), and the bug only reproduces through a real
+  browser's native pointer-event sequence, which the existing Python
+  route-level tests can't exercise either way. Full Python suite
+  re-verified in 4 batches (this session's own sandbox timing worked out
+  to 4 rather than the usual 6-8) -- **2197 passed, 0 failed** (no `.py`
+  file touched this slice; re-run as a sanity check).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-14 -- direct request: "add bulk select for contacts
   too." Contacts was the one list left out of the 2026-08-29 bulk-actions
   pass (STATE.md backlog item 1) -- deferred at the time because its rows
