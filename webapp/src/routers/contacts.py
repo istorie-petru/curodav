@@ -199,6 +199,30 @@ def list_contacts(
     )
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_contacts(request: Request, conn=Depends(get_db)):
+    """Bulk-select "Delete" bar (contacts_list.html/_contacts_body.html,
+    static/bulk_select.js) -- same JSON endpoint shape as routers/
+    settings.py's bulk_delete_holidays/bulk_delete_time_blocks: a plain
+    loop over the same `db.delete_contact` each row's own detail-modal
+    Delete already calls, no all-or-nothing rollback. Contacts was the one
+    list left out when Labels/Holidays/Time blocks got this (STATE.md
+    backlog item 1) because its rows are a card-list, not a `<table>` --
+    `_contacts_body.html` now wraps each row for a `.row-select` checkbox
+    to attach to, same as every other bulk-select surface. Registered
+    ahead of no conflicting route (contacts.py has no bare `POST /{uid}`
+    that a literal `/bulk-delete` path could collide with), but kept next
+    to list_contacts/contacts_regions for readability, same grouping as
+    the other list-level routes."""
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no contacts selected"}, status_code=400)
+    for uid in uids:
+        db.delete_contact(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
+
+
 @router.get("/regions")
 def contacts_regions(
     request: Request,

@@ -17,6 +17,1293 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-13 -- direct request: automate the DAVx5/Radicale
+  deploy story that `deploy/README.md` previously documented as a one-time
+  manual walkthrough. `scripts/curodav-ctl` gained `install --dav`
+  (standalone, idempotent, retrofits DAV access onto an already-installed
+  app or is run fresh any time): interactively collects
+  `DOMAIN_APP`/`TUNNEL_NAME`/`RADICALE_USER` and a Radicale password
+  (persisted to `/srv/curodav/shared/deploy.env`, outside any disposable
+  release checkout), runs `firewall.sh` -> `radicale/install-radicale.sh`
+  -> `nginx/install-nginx.sh` -> `cloudflared/install-cloudflared.sh` in
+  order, then wires `CC_RADICALE_URL`/`USER`/`PASSWORD`/`PUBLIC_URL`
+  straight into `/srv/curodav/shared/.env` and restarts `curodav` --
+  no manual file editing left. Plain `install` (no flag) now also
+  optionally asks for an admin login up front and offers to chain into
+  `--dav`. `update` gained a warn-only `radicale_reachability_check()`
+  (loopback + nginx-local + public-hostname tiers) that never blocks/rolls
+  back an app deploy.
+
+  **Important architecture correction mid-session:** the deploy/ scripts
+  this builds on top of had Radicale on a SECOND subdomain (`DOMAIN_DAV`,
+  its own Cloudflare Tunnel ingress rule) -- direct pushback from the user
+  ("RADICALE DOESN'T SIT AT https://dav.yourdomain.com IT SHOULD NOT USE
+  ANOTHER TUNNEL") corrected this mid-build. Reworked to ONE hostname
+  (`DOMAIN_APP`) with Radicale at a `/radicale/` PATH under it, split
+  locally by a new `deploy/nginx/` path-router (nginx forwards the FULL
+  unstripped path plus an `X-Script-Name: /radicale` header -- verified
+  against the installed Radicale's own source, `app/__init__.py` lines
+  ~479-515, that it auto-detects "behind a reverse proxy" from
+  `X-Forwarded-*` headers and reads `X-Script-Name`/`HTTP_X_SCRIPT_NAME`
+  for its base prefix; letting nginx's `proxy_pass` silently strip the
+  prefix instead would have produced correctly-routed requests but
+  incorrectly-prefixed hrefs in Radicale's own WebDAV responses, breaking
+  DAVx5's follow-up requests in a way that'd be hard to diagnose from the
+  symptom). `deploy/cloudflared/config.yml.template` now has exactly one
+  ingress rule, pointed at nginx's `127.0.0.1:8080` instead of the app
+  directly.
+
+  Also fixed while in this area (user confirmed, "yes fix it now"):
+  Published Lists' `/published-lists` page always showed Radicale's
+  loopback address (`http://127.0.0.1:5232/...`) as its "subscribe_url",
+  copy-pasteable but non-functional off-box, regardless of any public DAV
+  setup. New `config.py` field `radicale_public_base_url`
+  (`CC_RADICALE_PUBLIC_URL`, optional, wired automatically by `install
+  --dav`) lets `routers/published_lists.py::list_index` show the real
+  `https://DOMAIN_APP/radicale/<user>/` link instead, falling back to the
+  loopback address exactly as before when unset.
+
+  **Tests**: new `test_list_index_prefers_public_url_when_set`
+  (test_phase6_published_lists.py) asserts the override takes effect.
+  Three pre-existing hand-rolled fake-`Settings` test fixtures
+  (test_phase6_published_lists.py, test_published_lists_visibility.py,
+  test_phase8_settings_hub.py's `_request_with_radicale`) needed
+  `radicale_public_base_url` added or they'd `AttributeError` -- caught by
+  actually running the suite, not just adding the field and assuming.
+  256 tests run across every area touching `Settings`/published lists/env
+  file/auth/CalDAV bridge -- all passing. Full-suite run not completed
+  this session (sandbox can't hold a long-running background process);
+  next session (or before deploying) should run the complete
+  `pytest -q` once as a final check, though nothing here touches
+  code paths outside what was already targeted.
+
+  **Not live-verified** -- no real LXC/Cloudflare account available from
+  this session to actually run `curodav-ctl install --dav` end to end;
+  `bash -n` syntax-checked all shell scripts and manually traced the nginx
+  request flow against Radicale's actual source instead.
+
+- **Shipped:** 2026-09-13 -- same-day follow-up direct report: "in
+  page-banner-wrap, the edit mode buttons are not clickable in all the
+  button glory. the bottom part is not clickable." Root cause:
+  `.page-banner-header-row` (the avatar+title row below the cover,
+  2026-09-07's Notion-style rework) is deliberately pulled up 36px via
+  `margin-top:-36px` so the avatar straddles the cover's bottom edge --
+  but that also makes its own (full-width, otherwise-invisible-outside-
+  avatar/title) box physically overlap the bottom 36px of `.page-banner`.
+  Both that row and `.page-banner-actions` (New widget/Add banner/Reset
+  layout/Done, floated bottom-right *inside* the cover) carried
+  `z-index:1` in the same stacking context -- same value, so DOM order
+  decided, and the header row (later in the DOM) painted on top,
+  silently eating clicks over however much of the buttons' own height
+  fell inside that 36px band, even though nothing was visibly drawn
+  there. Fixed with `pointer-events:none` on `.page-banner-header-row`
+  itself (style.css) -- nothing inside it is interactive (a plain
+  `<img>`/icon `<span>` avatar, a plain `<h1>` title, confirmed by
+  reading `_page_banner.html` and `deps.py`'s `avatar()`), so the whole
+  box can safely become click-through, letting events fall to whatever
+  is actually underneath instead of fighting a z-index battle with a
+  sibling it was never meant to compete with.
+
+  **Live-verified** (Claude in Chrome, `/` with Edit mode on): clicking
+  the very bottom edge of "Add banner" -- the exact strip that used to
+  be dead -- now opens the Page banner modal. Also exercised the
+  previous entry's new command-palette row end-to-end in the same
+  session (Ctrl-K, typed "edit", "Turn on/off Edit mode" row present and
+  working both directions).
+
+  **Tests**: none added -- pure CSS, no existing precedent in this
+  suite for asserting raw property values out of style.css (every prior
+  banner CSS fix this same day noted the same "pure CSS, none needed").
+  test_banners.py/test_page_header_narrow.py/test_dashboard_router.py
+  re-run to confirm the HTML-structure assertions those already cover
+  are unaffected -- 235 passed, 0 failed.
+
+- **Shipped:** 2026-09-13 -- direct request: "a way to activate edit
+  mode with the help of the command palette search thing." Edit mode
+  (Settings > Appearance's persistent toggle, EDIT_MODE_KEY) previously
+  had exactly one entry point: that Settings page's on/off segmented
+  control. Added a virtual "Turn on/off Edit mode" row to the command
+  palette's global mode (static/command_palette.js) -- appears when the
+  typed query is a substring of "edit mode" ("edit", "mode", etc.),
+  alongside the existing "Create task/event: ..." rows. Picking it POSTs
+  to `/settings/edit-mode` and reloads the current page so its edit
+  controls (if the page renders the widget grid at all) show up
+  immediately, rather than navigating to Settings.
+
+  Three supporting pieces, since Edit mode's state previously only
+  reached routes that explicitly called routers/dashboard.py's
+  `widget_page_context` (Dashboard/Space/Project/Label) -- the command
+  palette itself lives in base.html, rendered on every page:
+  1. New Jinja global `deps.edit_mode_enabled(request)` (mirrors
+     `_show_label_icons`'s per-request-memoized app_meta pattern) so any
+     template can read the current state.
+  2. `base.html`'s `<body>` now carries `data-edit-mode="1"/""`, read by
+     command_palette.js's `editModeOn()` instead of a fetch round-trip.
+  3. `POST /settings/edit-mode` (routers/settings.py's `set_edit_mode`)
+     is dual-mode now (deps.py's `respond`/`wants_json`, the same
+     async-CRUD pattern every task/event mutation already uses) --
+     returns JSON when the palette calls it with `X-Requested-With:
+     fetch`, still redirects to `/settings/appearance` for the plain
+     `<form>` on that page.
+
+  **Tests**: `deps._edit_mode_enabled` covered the same way as
+  `_show_label_icons` (`TestEditModeEnabledGlobal`,
+  test_display_prefs_settings.py); `set_edit_mode`'s new dual-mode JSON
+  path covered alongside its existing redirect-mode tests
+  (`TestSettingsAppearanceEditMode`). No JS-side test coverage for
+  command_palette.js's own new row/click handler -- same known gap this
+  suite already accepts for the rest of that file (see
+  test_command_palette_actions.py's own docstring). Full suite
+  re-verified in 12 batches under `TZ=UTC` -- **2210 passed, 0 failed**
+  (2205 + 5 new tests).
+
+  **Not live-verified** -- no Claude in Chrome connection this session;
+  worth a quick real-browser check next time it's reachable (type "edit"
+  into Ctrl-K, confirm the row appears and actually flips the toggle).
+
+- **Shipped:** 2026-09-13 -- direct request following the previous
+  entry's live-verification session: "the events style inside widget to
+  be similar to tasks (date as a pill, title first, date second, circle
+  dot like in mockup etc)." The Agenda widget's Events section
+  (`_widget_agenda.html`, both the `range=='today'` and other-range
+  branches) used to render date/time as the LEADING (left) cell and the
+  title as the only other cell, no `right` cell at all -- backwards from
+  the Tasks section immediately above it (title left, a pill on the
+  right) and from the mockup. Now matches Tasks exactly: a new
+  `widget_event_dot()` macro (`_widget_items.html`) renders a small
+  accent-colored dot in the same `widget-row-icon` leading slot a task's
+  checkbox occupies, title is the main link text, and the date/time
+  renders as a `widget_pill(..., 'blue')` on the right -- same shape,
+  same column rhythm. Also sidesteps the whole "unconstrained nowrap
+  column" bug class fixed in the previous entry for this specific row
+  shape, since `widget-row-icon` already has a fixed 26px width -- no
+  column left unconstrained to run away with the table's space.
+
+  Scoped to `_widget_agenda.html` only -- `weekly_schedule`,
+  `scheduled_work_today`, and project_detail's own built-in Agenda card
+  all still use the old `widget-row-time` leading-cell shape for their
+  own event/task rows; not touched, wasn't part of what was compared
+  against the mockup.
+
+  **Live-verified** (Claude in Chrome, `/spaces/f`) immediately after:
+  dot + title + blue date pill, matching the Tasks row above it.
+
+  **Tests**: `TestUpcomingEventsDoubleLineFix` updated -- asserts
+  `_widget_agenda.html` no longer uses `widget-row-time` and does use
+  `widget_event_dot()`; `.widget-row-time`'s own CSS assertion kept
+  as-is (the class itself still exists, other widgets still use it).
+  Full suite re-verified in 4 batches under `TZ=UTC` -- **2205 passed, 0
+  failed**, unchanged count (one assertion updated, not added).
+
+- **Shipped:** 2026-09-13 -- LIVE-VERIFIED this time (Claude in Chrome
+  finally reachable; navigated the real running app at
+  `http://127.0.0.1:8000/`, not just reasoned from source) closing the
+  gap the previous two entries flagged. Two things confirmed and one new
+  real bug found and fixed:
+
+  1. **label-icon-tile confirmed genuinely fixed** -- `getComputedStyle()`
+     on `/spaces/f`'s tile: `background-color: rgb(55, 120, 189)` (fully
+     opaque blue), `background-image` the rgba() sheen, rendering exactly
+     as intended. The three rounds of fixes actually worked; this is the
+     first time any of them was checked in a real browser instead of
+     reasoned from source.
+  2. **img.avatar-circle border removal confirmed** -- Home's profile
+     photo renders with no ring.
+  3. **New bug found via the user's own side-by-side screenshot** (mockup
+     vs live): the "Upcoming" widget's events looked broken -- event
+     titles ("6", "test" -- the user's own real test-event titles, not
+     fake data) were crushed into a narrow sliver against the widget's
+     right edge, date/time on the left looking like it owned most of the
+     row. Investigated instead of assumed: `getBoundingClientRect()` on
+     the live table showed the nowrap `.widget-row-time` column had been
+     given ~500px of a 679px-wide table by the browser's auto table-layout
+     algorithm, leaving the actual title column ~180px. Root cause:
+     `.widget-row-time{white-space:nowrap;}` (style.css) has no width
+     constraint -- harmless on a 3-column row (Today's Events: time/
+     title/nothing else) where nothing forces the time column to grow,
+     but on the Upcoming widget's 2-column row (no `right` cell, see
+     _widget_agenda.html) the browser handed most of the leftover table
+     width to the unconstrained nowrap column instead of the title. Fixed
+     with `width:1%` (the standard auto-table-layout "shrink this column
+     to its content, give the rest away" trick) -- live-reloaded and
+     re-verified after the fix: date and title now sit together naturally
+     on the left, as they should.
+
+  **Tests**: updated `test_dashboard_today_week_widgets.py::
+  TestUpcomingEventsDoubleLineFix` (its own old comment already flagged
+  "no browser to measure real wrapping" as a real limitation -- that
+  limitation was exactly what let this bug through unnoticed by the test
+  suite). Full suite re-verified in 4 batches under `TZ=UTC` -- **2205
+  passed, 0 failed**, unchanged count (one assertion updated, not added).
+
+  **Next slice**: the general lesson here, not just this one bug --
+  CSS-shape tests that assert on source text (a class exists, a string is
+  in a stylesheet) can't catch actual rendered layout the way this one
+  bug demonstrates. Worth considering for any future table-layout-shaped
+  widget work: check it live before calling it done, not just when a
+  screenshot forces the issue.
+
+- **Shipped:** 2026-09-13 -- third pass on the same tile, direct report
+  the gradient problem persisted after both prior fixes ("check the
+  chrome in browser" -- couldn't: Claude in Chrome's extension wasn't
+  reachable this session, so this fix is NOT live-verified, unlike this
+  project's usual standard -- flagged to the user, worth confirming
+  visually next session). Prior two fixes (percentage math, then the
+  --tile-swatch legacy-color fallback) were both real bugs but didn't
+  address a third, more fundamental one: the whole rule lived in one
+  `background` shorthand built around `color-mix()`. A single shorthand
+  is all-or-nothing -- if `color-mix()` itself isn't supported by
+  whatever's rendering this (a newer CSS Color 4 function), the entire
+  declaration goes invalid regardless of how correct the inputs are.
+  Rebuilt with no `color-mix()` at all: `background-color` (solid fill,
+  fallback chain ending in a literal hex, not just another `var()`) and
+  `background-image` (a plain `rgba()` white sheen for the gradient look)
+  as two independent longhand properties instead of one shorthand, so a
+  failure in one can't take the other down with it.
+
+  **Tests**: none needed -- inline `--tile-swatch` markup is unchanged,
+  only how the CSS rule consumes it; existing `TestLabelIconTile`
+  assertions (which check the inline style attribute, not computed
+  background) still pass unmodified. Full suite re-verified in 4 batches
+  under `TZ=UTC` -- **2205 passed, 0 failed**, unchanged from the entry
+  below.
+
+  **Next slice**: get this actually confirmed in a real browser (Claude
+  in Chrome or the user's own check) before treating the tile as settled
+  -- three rounds of "fixed" without a single live look is worth breaking
+  the pattern on.
+
+- **Shipped:** 2026-09-13 -- follow-up direct report on the previous
+  entry's opacity fix ("the --tile-swatch doesn't have full opacity") --
+  the 78%/22% color-mix() fix was real but not the whole story. Root
+  cause this time: `_page_banner.html` builds `--tile-swatch` as
+  `var(--cal-bg-{{ icon_tile.color }})` with no fallback. `color` is
+  normally one of the 16 names in routers/labels.py's `COLORS` -- every
+  UI write path enforces it -- but `scripts/migrate_labels.py`'s one-time
+  carry-forward of legacy calendar/task-list/project colors has no such
+  guard (confirmed via code reading, not just inference), and
+  `label_config.color` itself has no DB-level CHECK constraint. A label
+  whose color predates the current palette makes `var(--cal-bg-<unknown-
+  name>)` "guaranteed-invalid" -- which doesn't just skip that one
+  property, it invalidates the WHOLE `background` declaration on
+  `.label-icon-tile` at computed-value time, rendering transparent
+  instead of any color. Fixed with an explicit fallback:
+  `var(--cal-bg-{{ color }}, var(--cal-bg-blue))`, so `--tile-swatch`
+  always resolves to a real opaque color regardless of what a legacy
+  label's color name actually is.
+
+  **Tests**: updated the two existing `TestLabelIconTile` assertions for
+  the new fallback syntax, added
+  `test_unrecognized_legacy_color_falls_back_to_blue_not_transparent`
+  (seeds a label with `color="turquoise"`, outside the 16-name set,
+  confirms the fallback renders). Full suite re-verified in 4 batches
+  under `TZ=UTC` -- **2205 passed, 0 failed** (2204 + 1 new test).
+
+  **Next slice**: the underlying data gap (labels with out-of-palette
+  color values, or `label_config.color` lacking any DB-level constraint)
+  is still there -- this fix makes the CSS resilient to it, but doesn't
+  clean up or guard against it at the source. Worth its own slice if it
+  turns out to affect other `.cal-*`/`.tag-*` consumers too, not just this
+  one new tile.
+
+- **Shipped:** 2026-09-13 -- two small direct-feedback CSS fixes on the
+  banner/icon-tile work directly below, same day:
+  1. `img.avatar-circle` no longer gets a `1px solid var(--border)` ring
+     -- direct request, dropped outright, no replacement border.
+  2. `.label-icon-tile`'s gradient used `color-mix(in srgb, var(--tile-
+     swatch) 100%, white 22%)` -- two percentages summing to 122%, not
+     100%. Per the CSS Color 4 spec, percentages that don't sum to 100%
+     get normalized in a way that can pull the result off fully opaque --
+     direct report ("make the background be full opacity") confirmed this
+     was visible. Rewritten as an exact 78%/22% split so the lighter
+     gradient stop is guaranteed fully opaque rather than "probably fine
+     in this browser."
+  **Tests**: pure CSS, none needed. Full suite re-verified in 4 batches
+  under `TZ=UTC` -- **2204 passed, 0 failed**, unchanged from the entry
+  below (as expected for a CSS-only change).
+
+- **Shipped:** 2026-09-13 -- second same-day banner round-trip (direct
+  request, after seeing the on-photo/44px-avatar version live): "I would
+  like to have the Title below design back with the big avatars." Reverted
+  the title-overlay experiment from earlier today back to the exact
+  2026-09-07 below-cover structure (`.page-banner-header-row`, 72px
+  `.avatar-hero`, actions bottom-right, thin 35% scrim) -- kept the
+  `.page-banner-cover` class fix from the earlier bug, since it's a good
+  idea regardless of layout direction. **Net effect of the whole day's
+  three banner changes: back to 2026-09-07's design, structurally
+  unchanged, just with that one CSS scoping fix retained.**
+
+  Two genuinely new things landed alongside the revert, both direct
+  requests:
+
+  1. **Colored squircle icon tile for Space/Project pages**
+     (`.label-icon-tile`, style.css) -- replaces the account's own profile
+     photo/avatar in the banner's avatar slot on a Space or Project page
+     ("why have we abandoned the rounded square with gradient background
+     and icon for spaces? ... merging [the icon and the profile picture]
+     into something custom for spaces and projects alike"). Color comes
+     from the label's own existing `color` field (same `--cal-bg-<hue>`
+     variable every `.cal-*`/`.tag-*` swatch already reads -- no new color
+     system), lightened at one gradient stop via `color-mix()`. The
+     label's icon, which used to render inline in the page title text
+     (e.g. "📁 CS101"), now lives only in the tile -- `page_banner()`
+     macro gained an `icon_tile={'icon':..., 'color':...}` optional 2nd
+     arg (`None` on Home, which still shows the profile photo).
+     `label_detail.html`/`project_detail.html` updated to pass it and stop
+     prepending the icon to the title string.
+
+  2. **At a Glance stat blocks now permanently tinted**, not just on
+     hover (direct request: "steal the way information is displayed and
+     styled from the [dashboard size-up] mockup") -- each stat reads as
+     its own block at a glance. Explicitly did NOT also bring over the
+     mockup's bottom-border row dividers on Agenda/Upcoming lists --
+     flagged to the user first that this codebase has a dated, deliberate
+     decision (`.widget-content tbody tr{border-bottom:none;}`, see its
+     own comment) to remove exactly that kind of divider after direct
+     "archaic"/spreadsheet-like feedback; confirmed they wanted that
+     decision left standing before touching it.
+
+  **Tests**: `test_banners.py`'s `TestPageBannerOnPhotoOverlay` reverted
+  back to `TestPageBannerNotionStyleHeaderRow` (undoing this morning's
+  rename), new `TestLabelIconTile` class (4 tests: tile renders with the
+  right color on Space/Project, title no longer carries an inline icon,
+  Home is unaffected). Full suite re-verified in 4 batches under `TZ=UTC`
+  -- **2204 passed, 0 failed** (2200 + 4 new icon-tile tests, net zero
+  change to the reverted banner-structure tests). Same 4 pre-existing
+  local-clock-flakiness tests noted in earlier entries are unaffected.
+
+  **Next slice**: this banner design has now round-tripped twice in one
+  day (below-cover -> on-photo -> below-cover) -- worth treating the
+  current below-cover/big-avatar/squircle-tile shape as settled rather
+  than revisiting again without a concrete new complaint. Still
+  deliberately deferred: banner subtitle content (date under Home's
+  greeting, project/task counts under a Space/Project name) -- not
+  requested again this round either.
+
+- **Shipped:** 2026-09-13 -- same-day bug fix on the banner rework
+  directly below, direct report with a screenshot ("the avatar is too
+  big"). Root cause: `.page-banner img{width:100%;height:100%;object-
+  fit:cover}` was a bare descendant selector -- harmless while the avatar
+  lived below the cover (outside `.page-banner` entirely, pre-this-
+  session), but the title-overlay rework moved the avatar's own `<img>`
+  (the uploaded-photo case; the no-photo `<span>` initial fallback was
+  never affected) inside `.page-banner` too, so this rule started matching
+  it as well and stretched a 44px avatar photo to the full cover box.
+  Fixed by giving the cover image its own dedicated class
+  (`.page-banner-cover`, set in `_page_banner.html`) instead of a bare
+  `img` descendant selector, so only the actual cover photo is ever
+  affected regardless of what else is nested in `.page-banner` in the
+  future. Added a regression test (`test_banners.py::TestPageBannerAvatar
+  ::test_uploaded_avatar_photo_is_not_tagged_as_the_cover_image`) that
+  asserts the avatar's `<img>` never carries `.page-banner-cover` and the
+  real cover image always does.
+
+  **Tests**: full suite re-verified in 4 batches under `TZ=UTC` -- **2200
+  passed, 0 failed** (2199 + the 1 new regression test). Same 4
+  pre-existing local-clock-flakiness tests noted in the entry below are
+  unaffected by this fix.
+
+  **Next slice**: verify this fix against the user's own live instance
+  (a real banner photo + a real uploaded avatar photo, not just unit
+  tests) since this bug was only caught via a live screenshot, not by the
+  test suite that shipped with the original rework -- worth being more
+  skeptical of "tests pass" as sufficient sign-off for anything CSS-layout
+  shaped going forward.
+
+- **Shipped:** 2026-09-13 -- dashboard/Space "size-up" review (direct
+  request, worked through an HTML mockup first before touching real code:
+  layout/data-density pass, no new features). Two changes:
+
+  1. **Page banner title moved back onto the photo.** The 2026-09-07
+     Notion-style rework put the title below the cover in
+     `.page-banner-header-row` specifically to avoid a readability-scrim
+     requirement. Reverted (direct request) -- title + avatar now live in
+     `.page-banner-overlay`, bottom-left, INSIDE `.page-banner` again, but
+     with a full-row scrim (`.page-banner::after`, 60% height, was 35%)
+     instead of the old thin one, and the title is forced to one line
+     (ellipsis) so it can never grow taller than the avatar next to it.
+     Action buttons moved from bottom-right to top-right of the photo so
+     an edit-mode button cluster can never collide with the title
+     regardless of its length. `.page-banner-header-row` is gone.
+     Gradient-only scrim, not a solid text-backing chip -- accepted risk
+     that a very busy/edge-to-edge photo can still fight the white title
+     text; not yet checked against real (non-gradient-placeholder) banner
+     images. Edit-mode gating of the action buttons is unchanged (still
+     entirely the caller templates' own `{% if edit_mode %}`, never
+     `_page_banner.html`'s concern) -- confirmed via direct code reading
+     before touching anything, not assumed.
+
+  2. **Default Home/Space widget seed cleaned up.** The seeded Stack
+     widget had 3 members (At a glance / Upcoming events / a 3rd Agenda
+     pane showing overdue+tasks+events) -- that 3rd member, added
+     2026-09-03 to fix a "Nothing to show" bug, ended up duplicating the
+     standalone Today's Agenda widget beside it almost exactly (same
+     range="today", same effective show list). Dropped outright rather
+     than re-fixed. Seeded widgets also got explicit titles ("Today" /
+     "At a glance" / "Upcoming") instead of falling back to the generic
+     "Agenda" spec label three separate times on a fresh install.
+     **Existing installs are untouched** (one-time app_meta seed flag,
+     direct request not to migrate) -- only brand-new Home/Space pages
+     get the new 2-member/titled shape.
+
+  Explicitly out of scope this round (asked, deferred): banner subtitle
+  content (date under Home's greeting, "N projects · M open tasks" under
+  a Space name) -- the date is trivial to add later, but a Space-wide
+  task/project rollup doesn't exist anywhere yet (only per-project counts
+  do, see routers/dashboard.py:638-645) and needs its own slice. A
+  per-widget "hide on mobile" toggle was discussed and explicitly NOT
+  adopted -- flagged as a real feature (new config field + a widget
+  silently disappearing on mobile with no on-screen trace) with no
+  concrete use case yet, not a layout tweak.
+
+  **Tests**: updated `tests/test_banners.py`
+  (`TestPageBannerOnPhotoOverlay`, was `TestPageBannerNotionStyleHeaderRow`),
+  `tests/test_dashboard_router.py` (seed counts 5→4, member types/titles,
+  `.widget-content` count 4→3), `tests/test_dashboard_usability_rework.py`
+  (`_DEFAULT_LAYOUT_TYPE_ORDER`/new `_DEFAULT_LAYOUT_TITLES`,
+  `TestDefaultSeedIncludesNewWidgets` rewritten to check the standalone
+  Today widget's default show behavior instead of a stored config value
+  that no longer exists). Full suite re-verified in 4 batches under
+  `TZ=UTC` (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) --
+  **2199 passed, 0 failed**. Note: 4 unrelated tests
+  (`TestAgendaWidgetAllUpcoming::test_todays_earlier_events_still_count_as_upcoming`
+  and 3 in `test_project_detail.py`) fail under the sandbox's local
+  (non-UTC) clock -- pre-existing local-`date.today()`-vs-UTC-built-
+  timestamp flakiness, confirmed unrelated to this session's change by
+  reproducing before touching any code; not fixed here, worth its own
+  slice.
+
+  **Next slice**: (a) if wanted, add the deferred banner subtitle content
+  (Home date is trivial; Space project/task rollup needs new aggregation
+  code) -- or (b) the `TZ`-dependent test flakiness above -- or pick the
+  next roadmap slice per the normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  focus-ring fix directly below, direct feedback: "command-palette-
+  filters should have padding both top and bottom." `.command-palette-
+  filters` had `padding:0 var(--space-4) var(--space-3)` -- no top
+  padding, so the pill row sat flush against the input row's divider
+  line. Changed to `padding:var(--space-2) var(--space-4) var(--space-
+  3)`. Confirmed live via the same Chrome connection as the last two
+  entries.
+
+  **Tests**: none needed, pure CSS. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- direct feedback from a screenshot ("the text
+  input box doesn't look right") plus live verification with real Chrome
+  access to `http://127.0.0.1:8000/` (first time this feature got an
+  actual browser check rather than just reasoning from source, per every
+  prior entry's own caveat). Root cause: `.command-palette-input:focus`
+  only reset `outline:none`, but the app's shared base form-control rule
+  (`input:focus{box-shadow:0 0 0 3px var(--accent-neutral-subtle);}`,
+  higher up in style.css, applies to every `<input>` in the app) has
+  higher specificity than a plain `input:focus` type selector and was
+  never overridden here -- and since the palette autofocuses its input
+  the instant it opens, that ring is always visible, reading as a boxed
+  border around an otherwise-borderless field (confirmed via
+  `getComputedStyle` showing a real `box-shadow` ring before the fix).
+  Fixed by adding `box-shadow:none` alongside the existing
+  `outline:none` on `.command-palette-input:focus` -- confirmed in the
+  live browser (computed style now `box-shadow: none`, zoomed screenshot
+  shows a clean borderless field).
+
+  While live-verifying, also drove the type filter pills and the mobile
+  bottom sheet directly in Chrome (resized to 400×800): both work
+  correctly -- pill clicks genuinely narrow `/api/search`'s `types` param
+  (verified task/event/contact results are genuinely disjoint sets, not
+  just visually similar test data), and the bottom sheet slides in
+  correctly once its 0.16s transition settles (a `getComputedStyle` read
+  mid-transition briefly looked like a real bug -- translateY(100%), the
+  closed value, despite the `is-open` class being present -- but wall-
+  clock time confirmed it was this session's own rapid diagnostic
+  toggling re-triggering the transition, not a cascade or ordering bug;
+  the four-rule specificity/order analysis that prompted the concern
+  checked out fine once given time to settle).
+
+  **Tests**: none needed, pure CSS. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- direct feedback ("double check audit and fix
+  any bugs") on the search-overlay work three entries below. Full
+  self-review of routers/search.py, command_palette.js, base.html, and
+  style.css turned up one real functional bug and one latent CSS-ordering
+  hazard (no visible symptom yet, but fragile):
+
+  1. **Date-bucket timezone bug** (command_palette.js's `dateBucket`) --
+     fed a task's `due_at` straight into `new Date(dateStr)`. A task's
+     due date is always a bare `"YYYY-MM-DD"` (routers/tasks.py's
+     `due_at: str = Form("")`, straight off a date input), and per the
+     ES spec a date-only string parses as **UTC midnight**, while
+     `startOfToday` (and an event's full-datetime `start_at`, no
+     timezone suffix) are **local time**. In any timezone west of UTC
+     this rolled a task due "today" back to the previous local day,
+     misbucketing it as Overdue instead of This week -- reproduced with
+     a throwaway Node script under `TZ=America/New_York` (old code:
+     diffDays -1 for a task due literally today; confirmed the same
+     script gives 0/"week" after the fix). Fixed by parsing a bare date
+     as local calendar-date components (`new Date(y, m-1, d)`) instead
+     of handing the string to the UTC-parsing branch of `Date()`,
+     bringing it in line with `startOfToday`'s own local basis. No
+     Python test covers this (JS isn't run under pytest, and this repo
+     has no JS test runner) -- worth confirming in a real browser set to
+     a non-UTC, west-of-UTC timezone.
+  2. **CSS ordering hazard** (style.css) -- the new mobile
+     `@media(max-width:720px)` block had been inserted *before* the
+     pre-existing base `.command-palette-row`/`.command-palette-footer`
+     rules in source order. No live bug today (the two blocks happen to
+     set disjoint properties), but at equal specificity the later rule
+     always wins per shared property regardless of which one is inside
+     a narrower `@media` condition -- a future edit adding, say, padding
+     to the base rule would have silently overridden the mobile
+     override at narrow widths. Moved the whole media-query block to
+     after the base rows/actions rules so future edits can't reintroduce
+     that trap silently.
+
+  Also audited (no bug found): FastAPI `Annotated[..., Query()]` fix from
+  the previous entry re-verified still correct; `groupRowsByDate`'s
+  bucket ordering/stability, `currentRowEls` keyboard-nav exclusion of
+  group headers, filter-pill visibility toggling across mode
+  transitions, and the CSS brace/comment balance across the whole
+  4700-line file (a pre-existing, harmless `/*`/`*/` count mismatch of
+  573/575 predates this session entirely -- confirmed via `git show
+  HEAD:...` against the previous commit, not something introduced here).
+
+  **Tests**: none added (no JS test runner in this repo, per the
+  date-bucket bug above). Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed** (CSS/JS-only changes, no test count change expected
+  or seen).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  redesign two entries below, from direct feedback: "also the filters
+  don't work." Root cause was a pre-existing, previously-invisible
+  FastAPI bug, not anything new in the filter-pills feature itself:
+  `routers/search.py`'s `api_search` declared `types: list[str] | None =
+  None` and `labels: list[str] | None = None` -- a bare default like that
+  on a `list[str]` parameter is never actually populated from a real
+  `GET /api/search?types=...` query string in this FastAPI version (it
+  silently stays `None` no matter what's in the URL; confirmed directly
+  against a live TestClient request, isolated from this app's own code
+  first against a two-line throwaway FastAPI app to rule out an
+  app-specific cause). Every existing test in `test_search_api.py` calls
+  `search_router.api_search(..., types=["task"], ...)` as a plain Python
+  function call, which bypasses HTTP query-string parsing entirely --
+  structurally incapable of catching this. The type filter pills
+  (previous entry) were the first caller anywhere in the app to actually
+  drive `types` through a real HTTP query string, which is what surfaced
+  a bug that's presumably been latent since `types` was added.
+
+  Fix: `Annotated[Optional[list[str]], Query()] = None` instead of a bare
+  `list[str] | None = None` -- `Query()` as type-hint metadata (not as
+  the parameter's actual default, i.e. deliberately not `= Query(None)`)
+  makes FastAPI parse the query string correctly *and* keeps the plain
+  Python default `None`, so the existing direct-call tests kept working
+  unchanged. Verified with a throwaway script hitting a real
+  `TestClient(app).get("/api/search", params=...)` before and after, both
+  isolated and against this app's actual router.
+
+  **Tests**: added `TestTypesQueryStringOverHTTP` (test_search_api.py) --
+  the first test in that file to go through a real `TestClient` + HTTP
+  query string instead of calling `api_search` directly, specifically so
+  a regression here can't hide behind the direct-call pattern again the
+  way it did this time. Full suite re-verified in 4 batches
+  (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`) -- **2199
+  passed, 0 failed** (2198 + the one new test).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the search-overlay
+  redesign directly below, from a screenshot: "fix the highlight color.
+  the divider-lines-spacing problem too." Two independent CSS fixes:
+
+  1. **Pill highlight contrast**: `.command-palette-pill.is-active` used
+     `background:var(--fg-primary); color:var(--fg-on-accent)` -- in dark
+     mode `--fg-primary` (#f5f5f7) and `--fg-on-accent` (#ffffff) are both
+     near-white, so the active pill read as a washed-out, barely-legible
+     block (visible in the screenshot's "Contacts" pill). Switched to
+     `background:var(--accent); border-color:var(--accent)` -- a
+     consistently saturated blue in both themes, so `--fg-on-accent`
+     white text stays legibly contrasted either way.
+  2. **Group-header spacing**: `.command-palette-group-header` had
+     asymmetric padding (`--space-3` top, `--space-1` bottom) meant to
+     separate it from the section above while sitting close to its own
+     rows below -- in practice this read as uneven/broken rhythm between
+     sections rather than intentional grouping. Replaced with symmetric
+     `padding:var(--space-1) var(--space-3)` for the label's own
+     breathing room, plus a single explicit `margin-top:var(--space-3)`
+     (zeroed via `:first-child` for the very first header) to create one
+     consistent, deliberate gap above every section instead of relying
+     on two different rules' padding stacking unpredictably.
+
+  **Tests**: none needed -- pure CSS. Full suite re-verified in 4
+  batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`)
+  -- **2198 passed, 0 failed**. No-browser caveat still applies -- worth
+  confirming both fixes visually next time a browser's available.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- direct feedback from an iterated visual mockup
+  of the search/Ctrl-K overlay (three rounds: initial redesign, then "no
+  horizontal scrollbar / bigger padded input / aligned footer" polish,
+  then a mobile bottom-sheet variant), then "implement", "full redesign"
+  chosen when asked how much of the mockup to actually build. Global mode
+  of the shared picker overlay (static/command_palette.js, templates/
+  base.html, routers/search.py) gained:
+
+  1. **Type filter pills** (All/Tasks/Events/Contacts, base.html markup,
+     `#command-palette-filters`) -- clicking one sets `typeFilter` and
+     re-runs the query with `/api/search`'s existing `types` param (no
+     new backend filtering path needed, it already supported this for
+     the relation picker). Global mode only; hidden in relation/label
+     mode and during Quick Capture (`updatePanelsVisibility`).
+  2. **Date-grouped results** -- Overdue/This week/Later/No date section
+     headers, bucketed client-side in `groupRowsByDate` off a new `date`
+     field routers/search.py's `_picker_result` now carries (a task's
+     `due_at`, an event's `start_at`, `None` for contacts/notes/pages/
+     undated items). Headers are plain divs, not `.command-palette-row`,
+     so they're automatically excluded from keyboard nav -- `moveActive`/
+     `highlightActive`/`activateCurrent` were switched from indexing
+     `resultsEl.children` directly to a maintained `currentRowEls` array
+     (only real rows) specifically so headers can't be "selected" by
+     ArrowDown/Enter.
+  3. **Footer** (`#command-palette-footer`) -- real ↑↓/↵ hints (not
+     literal "t"/"e" keyboard shortcuts as the mockup showed -- typing
+     either letter into the always-focused input would just search for
+     it, so that part of the mockup was aesthetic, not literal) plus
+     "New task"/"New event" buttons wired straight to the existing
+     `createEntity`, giving parity with the mobile mockup's own two
+     buttons without needing a typed query first.
+  4. **Mobile bottom sheet** -- `@media (max-width:720px)` anchors the
+     overlay to the bottom edge, full width, top-only radius, slide-up
+     transform, 44px-minimum row height, and collapses the footer to two
+     full-width stacked buttons (hints hidden, not enough width).
+  5. Visual polish from round two: bigger input (17px) with real inner
+     padding (`--space-2 --space-1`, `box-sizing:border-box`) so the
+     focus/hover state doesn't overlap the text, filter pills wrap
+     instead of scrolling (no horizontal scrollbar at any width), footer
+     hints/actions split with `justify-content:space-between`.
+
+  **Tests**: `routers/search.py`'s `_picker_result`/`_page_result` now
+  return a `date` key alongside the existing five -- updated
+  `test_search_api.py`'s exact key-set/dict assertions for that, and
+  added one new test (`test_date_carries_event_start_and_is_none_for_
+  contacts`) covering the event/contact branches the pre-existing task
+  test didn't. No Python test exercises command_palette.js's grouping/
+  filter-pill logic directly (JS isn't run under pytest) -- worth a real
+  browser check next session confirming pill clicks, date buckets, and
+  the mobile breakpoint actually render as intended. Full suite
+  re-verified in 4 batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`,
+  `test_[t-z]*`) -- **2198 passed, 0 failed** (2197 + the one new test).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from pasted DOM of Contacts' idle header (no tags, nothing
+  selected): "this element takes space and doesn't allow the title to be
+  centered vertically. maybe hide it when we don't use it." The pasted
+  `.page-header-narrow-actions` contained only a hidden `.bulk-actions-bar`
+  and a visually-empty `.filter-bar` `<form>` (whitespace only, no `q` to
+  carry) -- nothing actually visible, yet the slot was still a real flex
+  item; on mobile the earlier entries' `flex-basis:100%` rule forces it
+  onto its own full-width row regardless, and `row-gap` adds space
+  between that phantom row and row one even at zero height.
+
+  Almost went with just deleting the empty `<form>` from the DOM when
+  there's no `q` -- turned out to be wrong: `_filter_dropdown.html`'s
+  checkbox/radio inputs reference that form by id via `form="..."` to
+  submit into (it's a required submit target, not dead markup, see that
+  partial's own `fd_form_id` doc comment) -- Tasks' Date filter is
+  unconditional, so deleting the form there would have broken filtering
+  every time there's no `q` in the URL, the common case. Caught before
+  shipping by tracing what actually reads `fd_form_id`; reverted that
+  attempt.
+
+  Real fix: a new style.css rule, `.page-header-narrow-actions:not(:has(>
+  :not(.bulk-actions-bar):not(.filter-bar))):not(.has-visible-bulk-bar)
+  {display:none;}` -- hides the slot outright when its only children are
+  (some combination of) the always-empty-looking `.bulk-actions-bar` and
+  `.filter-bar`, i.e. no OTHER child (a real `.filter-dropdown`,
+  Calendar's own prev/next/segmented controls, ...) -- unless
+  `.has-visible-bulk-bar` says otherwise. CSS has no "is this sibling
+  currently visible" selector, so `bulk_select.js`/`tasks_table.js`'s
+  `updateBar()` now toggles that class on the slot itself (found via
+  `bar.closest(".page-header-narrow-actions")`) alongside the bar's own
+  inline `display`, specifically so this rule can react to selection
+  changes. The two `:not()`s deliberately push this rule's specificity to
+  (0,3,0), higher than the plain `.page-header-narrow-actions` class
+  (0,1,0), so it wins regardless of source order -- same cascade lesson
+  as the height:48px bug three entries up.
+
+  **Tests**: none needed -- pure CSS/JS, no existing assertion touched
+  slot visibility. Full suite re-verified in 4 batches -- **2197 passed,
+  0 failed**. Same no-browser caveat as the last several entries --
+  especially worth confirming live this time given the near-miss on the
+  filter-form deletion; the shipped fix keeps the form in the DOM so
+  filtering should be unaffected, but hasn't been exercised in a real
+  browser.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from a screenshot: "the title is not perfectly centered." Root
+  cause: that entry's `.page-header-narrow .spacer{flex:none}` neutralized
+  the spacer's *growth* but not its existence -- a zero-width flex item
+  still occupies a slot in the flex line and still gets a `gap` on the
+  side facing its neighbor, so row one's actual flex line was "icon, gap,
+  title, gap, spacer(0-width)", three items, not two. Centering that whole
+  line (gaps included) pushed the visible icon+title left of true center
+  by about half a gap -- the empty trailing spacer-plus-gap ate the
+  difference. `display:none` instead of `flex:none` removes it from the
+  flex layout entirely (no box, no adjacent gap), so row one is genuinely
+  just icon+title and centers on what's actually visible.
+
+  **Tests**: none needed. Full suite re-verified in 3 batches -- **2197
+  passed, 0 failed**. Same no-browser caveat as the last few entries --
+  worth a real visual confirmation next time a browser's available.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below: "all. the title too. also i want to have a bit more top and
+  bottom space." Row one (back arrow/icon/title/bulk-count) gets the same
+  `justify-content:center` the previous entry gave row two, mobile only.
+  Had to also neutralize `.spacer` (the div between title and actions,
+  `flex:1` everywhere else in the app so the actions slot sits flush
+  against the header's right edge) to `flex:none` on mobile specifically
+  -- left as `flex:1` it would still greedily claim all of row one's
+  leftover width before `justify-content:center` ever had free space to
+  distribute, silently no-opping the centering. Row two didn't need the
+  same treatment -- `.page-header-narrow-actions`'s own `flex-basis:100%`
+  already fills the whole line, no leftover space for a spacer to eat.
+  Also bumped the header's own top/bottom padding from `--space-2` (8px)
+  to `--space-3` (12px) on mobile, per "a bit more top and bottom space."
+
+  **Tests**: none needed. Full suite re-verified in 3 batches -- **2197
+  passed, 0 failed**. Same no-browser caveat as the last few entries.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below, from a screenshot of Tasks' mobile row two (Clear/Delete/All
+  dates): "could we make the items in the row centered?" Mobile's forced
+  actions row (style.css's `@media(max-width:720px) .page-header-narrow-
+  actions`) was `justify-content:flex-end` -- inherited straight from
+  desktop's single-row layout, where flex-end reads correctly as "flush
+  against the header's real right edge." Wrapped onto its own full-width
+  row two on mobile, the same rule instead read as an unbalanced left gap
+  with nothing to anchor to. Changed to `justify-content:center`, mobile
+  only -- desktop's right-alignment is untouched.
+
+  **Tests**: none needed (no existing assertion touched
+  `justify-content`). Full suite re-verified in 3 batches (`test_[a-f]*`,
+  `test_[g-o]*`, `test_[p-s]*`+`test_[t-z]*`) -- **2197 passed, 0
+  failed**. Same no-browser caveat as the last two entries.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- same-day follow-up on the entry directly
+  below (two-row mobile header), direct feedback: "remove the height
+  requirement for mobile view for the page-header-narrow. Also the bulk
+  count should be allowed to sit on the first row. Also on desktop it
+  should be a small divider line between normal buttons and the bulk edit
+  ones." Three independent changes:
+
+  1. **Height**: the previous entry's mobile `height:auto; min-height:48px`
+     override sat textually *before* the base `.page-header-narrow{height:
+     48px}` rule in `style.css` -- same specificity, later source wins, so
+     the unconditional 48px rule was still winning the cascade even inside
+     the mobile media query (a real latent bug, not just an aesthetic
+     complaint). Fixed properly this time: moved `height:48px` itself out
+     of the base rule into a new `@media (min-width:721px)` block right
+     next to it -- same mobile-first pattern `.page-banner`'s own
+     aspect-ratio override already uses a few hundred lines up in the same
+     file. Below 721px there's now no height/min-height rule on
+     `.page-header-narrow` at all -- purely content-sized.
+
+  2. **Bulk count on the first row**: this one couldn't be pure CSS --
+     `.bulk-count` was nested inside `.page-header-narrow-actions`, which
+     mobile forces onto its own full-width row two (previous entry), so
+     there was no CSS-only way to keep just the count on row one without
+     also dragging Clear/Delete/the filter dropdown up with it. Real
+     template change instead: `_page_header_narrow.html`'s macro gained an
+     optional `title_extra` param (pre-rendered safe HTML, rendered right
+     after the title, before the spacer -- a sibling of the title now, not
+     nested in the actions block). `_bulk_actions_bar.html` split into two
+     macros -- `bulk_count(id_prefix)` (just the span) and
+     `bulk_actions_bar(id_prefix, delete_label)` (Clear+Delete only,
+     unchanged ids/behavior) -- and every caller (Holidays, Time Blocks,
+     Labels, Contacts) now passes `title_extra=bulk_count(id_prefix)` to
+     `page_header_narrow(...)`. Tasks (hand-rolled bar, not the shared
+     macro) got the same treatment via a captured `{% set %}...{% endset
+     %}` block instead. `.bulk-count:empty{display:none}` (new CSS rule)
+     keeps it from taking up header space (or a stray flex `gap`) when
+     nothing's selected -- it used to get that for free by living inside
+     `.bulk-actions-bar`'s own `display:none`; now that it's a
+     permanently-rendered sibling of the title, `bulk_select.js`/
+     `tasks_table.js`'s `updateBar()` had to start explicitly clearing
+     `countEl.textContent` back to `""` on deselect so the `:empty` rule
+     actually fires. Scope was asked and confirmed direct: applies to
+     every bulk-select page, not just Tasks.
+
+  3. **Desktop divider**: `.page-header-narrow-actions .bulk-actions-bar ~
+     .filter-dropdown` (general sibling, not adjacent -- an empty
+     `<form class="filter-bar">` sits between them in the markup on both
+     Tasks and Contacts) gets `border-left` + `padding-left` inside a new
+     `@media (min-width:721px)` block, separating the "normal" filter
+     control (Date on Tasks, Label on Contacts) from the "bulk edit"
+     Clear/Delete group. Desktop only, per direct confirmation -- on
+     mobile the two groups already read as distinct by sitting on
+     different wrapped rows, so a divider there would be redundant.
+
+  **Tests**: `test_page_header_narrow.py`'s
+  `TestBulkActionsBarRelocatedIntoHeader._assert_bulk_bar_in_actions_slot`
+  updated -- count now asserted *before* `.page-header-narrow-actions`
+  opens (`header_pos < count_pos < actions_pos < bar_pos`) instead of
+  inside it, Clear/Delete assertion unchanged relative to the bar. Full
+  suite re-verified in 4 batches -- **2197 passed, 0 failed**. Same
+  caveat as the previous entry: no headless-browser/Puppeteer tooling in
+  this sandbox, so this is CSS-cascade + Jinja-rendering reasoning and the
+  Python suite, not a rendered screenshot -- worth a live visual check
+  next session, especially the divider's contrast on banner pages
+  (`.filter-dropdown-trigger` already gets a frosted background there,
+  the new `border-left` uses plain `var(--border)` and wasn't given a
+  banner-specific override).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-12 -- direct feedback: "the mobile view can't fit
+  all the content sometimes visible in the narrow header. could we make it
+  two rows for mobile?" `.page-header-narrow` (`_page_header_narrow.html`)
+  is a fixed `height:48px`, single-row flex strip with `overflow:hidden`
+  (pinned deliberately, per its own 2026-09-07 comment, so height doesn't
+  vary control-to-control) -- on a page with a real actions cluster
+  (Tasks/Contacts' filter dropdown + bulk bar, Calendar's prev/next +
+  Month|Day subnav) that row was already crowded on desktop and simply
+  clipped whatever didn't fit once the viewport narrowed, instead of
+  showing it anywhere.
+
+  Fix, scoped to the existing `@media (max-width:720px)` mobile block in
+  `style.css` (same breakpoint every other mobile-only rule in the file
+  uses): `.page-header-narrow` gets `height:auto; min-height:48px;
+  flex-wrap:wrap` there, and `.page-header-narrow-actions` gets
+  `flex-basis:100%; justify-content:flex-end` -- forces the actions
+  cluster (icon+title's sibling flex item) onto its own full-width second
+  row, right-aligned, whenever a page actually renders one. Pages with no
+  actions block (the macro called with no `{% call %}` body -- Notes,
+  Settings family, etc.) render `.page-header-narrow-actions` not at all,
+  so those stay exactly one row, unaffected. Desktop (>720px) is
+  byte-for-byte unchanged -- the fixed-height single-row rule still
+  applies there.
+
+  **Tests**: none added (pure CSS, no existing assertion touched
+  `.page-header-narrow`'s height or row count). Full suite re-verified in
+  4 batches (`test_[a-f]*`, `test_[g-o]*`, `test_[p-s]*`, `test_[t-z]*`)
+  -- **2197 passed, 0 failed**. Not verified live in a real mobile
+  viewport this session (no headless-Chrome/Puppeteer tooling available
+  in this sandbox) -- verification was CSS-rule and cascade reasoning
+  plus the full Python suite, not a rendered screenshot. Worth a quick
+  visual double-check next time a browser's available, especially the
+  banner-image case (`.page-header-narrow-bg`/`.has-banner::after`) since
+  its `inset:0` sizing now has to track an auto height instead of a fixed
+  48px.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-15 -- same-day follow-up on the two entries below:
+  "the multiselect widget-list-multiselect filter-dropdown should be
+  last. also that button still has less height compared to the others."
+  Two independent fixes:
+
+  1. **Ordering**: Tasks' Date filter (`_tasks_toolbar.html`, a
+     `.multiselect.widget-list-multiselect.filter-dropdown`) used to
+     render *before* the bulk bar in `tasks_list.html` -- moved the
+     `{% include %}` to after it instead, so it's now the true rightmost
+     element in the actions cluster (same "the edge is what reads as
+     last, not position relative to a neighbor" reasoning as the button
+     reorder two entries below). Contacts already had its own Label
+     filter dropdown after its bulk bar, so Tasks now matches that
+     instead of being the odd one out.
+
+  2. **Height**: traced to a real, previously-invisible bug in `.btn-sm`
+     itself (style.css, ~line 5013) -- it was a bare single-class
+     selector, lower CSS specificity than the base `button.btn, a.btn`
+     rule that sets `padding`/`font-size`, so `.btn-sm`'s smaller values
+     have never actually applied to any `<button class="btn ... btn-sm">`
+     in the app (every real caller carries both classes together).
+     Delete/Clear were rendering at the base `.btn`'s full padding the
+     whole time -- taller than `.filter-dropdown-trigger`'s explicit
+     30px. Fixed the selector to `button.btn.btn-sm, a.btn.btn-sm` (now
+     wins the cascade); every other `.btn-sm` caller in the app
+     (contact_form.html's "Add phone/email/..." rows, event_detail.html's
+     Restore/Cancel occurrence/Move, settings_data_maintenance.html's
+     Restore/Dismiss, label_form_modal.html's Add/Change banner) is
+     genuinely smaller now too, as `.btn-sm` always meant. Also pinned an
+     explicit `height:30px` directly on the shared
+     `.page-header-narrow-actions .filter-dropdown-trigger`/
+     `.bulk-actions-bar .btn` rule -- a direct guarantee rather than
+     relying on padding/font-size/line-height happening to add up to
+     exactly 30px.
+
+  **Tests**: none added (pure CSS/template change; no Python assertion
+  depended on the toolbar-before-bulk-bar order or on `.btn-sm`'s actual
+  rendered size). Full suite re-verified in 4 batches -- **2197 passed, 0
+  failed**. Verified live via headless Chrome: actions-slot children now
+  render `[bulk-actions-bar, tasks-filters-form/filter-dropdown]`, and
+  the filter trigger/Delete/Clear all measure exactly 30x112px
+  (screenshot confirms the visual result).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-15 -- same-day follow-up on the entry directly
+  below: "the order of the buttons should be reversed because they are on
+  the right of the page." That prior slice put Delete/Clear before the
+  count (Delete -> Clear -> count), reasoning it should read "at the end"
+  of the actions cluster -- but the whole cluster sits flush against
+  `.page-header-narrow`'s right edge (the actions slot's own `.spacer`
+  pushes it there), so the control nearest that physical edge reads as
+  "first," not the one nearest whatever sits to its left (the Date/Label
+  filter). Reversed the whole order to count -> Clear -> Delete, so Delete
+  -- the actual bulk action, the reason this bar exists -- lands at the
+  true right edge instead of Clear/count. Same change in both
+  `_bulk_actions_bar.html`'s shared macro and `tasks_list.html`'s own
+  hand-rolled bar, keeping the two in sync as before.
+
+  **Tests**: `test_page_header_narrow.py`'s `TestBulkActionsBarRelocated
+  IntoHeader._assert_bulk_bar_in_actions_slot` updated from asserting
+  `delete_pos < clear_pos` to `count_pos < clear_pos < delete_pos` --
+  the only assertion that encoded the old order. Full suite re-verified in
+  4 batches -- **2197 passed, 0 failed**. Verified live via headless
+  Chrome (same technique as the last few entries): Tasks' bulk bar
+  children now render `[bulk-count, bulk-clear, bulk-delete]`; screenshot
+  confirms Delete sits at the actions cluster's true right edge.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-15 -- direct feedback on Tasks' header bar (a
+  screenshot: "All dates" filter, then "1 selected", Delete, Clear): "i
+  don't like the order of the buttons. the bulk select ones should be at
+  the end, and all buttons should have the same width." Asked which
+  reorder was meant (the bulk group was already rendering after the Date
+  filter in source order) and which controls should share a width --
+  answers: move the plain-text "N selected" count after Delete/Clear
+  (order becomes Date filter -> Delete -> Clear -> count), and give every
+  button-shaped control in the row (the filter dropdown trigger, Delete,
+  Clear) one shared width, not just Delete/Clear against each other.
+
+  `_bulk_actions_bar.html`'s shared macro (Holidays/Labels/Time
+  Blocks/Contacts) and `tasks_list.html`'s own hand-rolled bar (kept
+  separate from the macro for its async-CRUD reasons, unchanged) both
+  reordered to Delete/Clear/count -- applied to the shared macro too, not
+  just Tasks, so there's one bulk-bar layout instead of two that could
+  drift apart. New `style.css` rule, scoped to `.page-header-narrow-
+  actions` (Tasks' Date filter, Contacts' Label filter, any future
+  sibling): `.filter-dropdown-trigger` and `.bulk-actions-bar .btn` share
+  `min-width:112px` (112, not a smaller value -- has to clear the widest
+  natural content among them, "All dates" plus its chevron, or the
+  trigger would itself exceed the buttons' width instead of matching it)
+  + `justify-content:center`. `min-width`, not `width`, so a caller with
+  longer text (labels_manage.html's "Remove from everything" `delete_label`)
+  still grows instead of clipping. The count (`.bulk-count`) is
+  deliberately excluded -- direct instruction: "the count stays as plain
+  text, not a button."
+
+  **Tests**: none added -- `test_page_header_narrow.py`'s existing
+  `TestBulkActionsBarRelocatedIntoHeader` only asserts the bar sits inside
+  the actions slot and that `delete_pos < clear_pos` relative to each
+  other, never the count's position relative to them, so the reorder
+  needed no test changes and all still pass. Verified live via headless
+  Chrome (same technique as the two bugfix entries below): Tasks page,
+  bulk bar children render in order `[bulk-delete, bulk-clear, bulk-count]`,
+  and the Date-filter trigger/Delete/Clear all measure exactly 112px wide
+  (screenshot confirms the visual result). Full suite re-verified in 4
+  batches -- **2197 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-15 -- same-day follow-up: "this is actually still
+  happening in tasks and maybe other pages." The previous entry's
+  `static/bulk_select.js` fix only covers Holidays/Labels/Time Blocks/
+  Contacts -- Tasks has always been a separate, hand-rolled
+  `static/tasks_table.js` implementation (deliberately not on
+  `CCBulkSelect`, for its async-CRUD region-swap reconciliation, see that
+  file's own comment), which turned out to carry an exact independent copy
+  of the identical bug: its own pointerdown handler also calls
+  `setSelected(cb, paintValue)`, and its own click handler had no
+  `preventDefault()` to stop the browser's native checkbox toggle from
+  firing a second time right after -- same "flips checked, then
+  immediately flips back" symptom, same fix (`e.preventDefault()` moved
+  into the click handler). Checked every other `.row-select` template
+  (`_task_row.html`/`_habit_row.html` -- both driven by this same file) and
+  every other JS file in `static/` for the same `pointerdown` + `row-select`
+  pattern (grepped for it) -- `bulk_select.js` and `tasks_table.js` are the
+  only two, so nothing else needed the fix.
+
+  **Tests**: none added (same JS-framework gap as the previous entry).
+  Verified live the same way -- real headless Chrome via Puppeteer against
+  the actual running app (`/tasks`, two seeded tasks): reproduced the bug
+  first, then confirmed a click now stays checked and a second click
+  toggles cleanly back off. Full Python suite re-run in 4 batches as a
+  sanity check (no `.py` file touched) -- **2197 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-15 -- direct follow-up on the Contacts bulk-select
+  slice below: "also the bulk select doesn't work." Turned out to be a
+  pre-existing bug in `static/bulk_select.js` itself (unchanged since the
+  original 2026-08-29 implementation), not something the Contacts slice
+  introduced -- confirmed by asking the user what "doesn't work" meant
+  ("clicking works, but it immediately deselects -- happens on any page"),
+  which pointed at every `CCBulkSelect` caller (Holidays/Labels/Time
+  Blocks/Contacts alike), not Contacts specifically.
+
+  Root cause: the pointerdown handler (drag-paint support) calls
+  `setSelected(cb, paintValue)`, flipping `cb.checked` itself, so a real
+  press-and-drag paints the row the drag *started* on too, not just the
+  ones the pointer crosses afterward. But on a plain, no-drag click, the
+  browser's own native checkbox activation behavior ALSO toggles `checked`
+  when the matching `click` fires right after (mouseup on the same
+  element) -- flipping it a second time, right back to whatever it was
+  before the pointerdown. Visually: the box flips checked, then
+  immediately flips back -- exactly "it immediately deselects." A real
+  multi-row drag never exhibited this (mouseup lands on a different
+  element, so no `click` ever fires on the origin checkbox to conflict
+  with pointerdown's change) -- only the far more common plain single
+  click did, for literally every CCBulkSelect table since the module was
+  first written.
+
+  This is why static analysis and a jsdom-based simulation (run earlier,
+  using the real production `bulk_select.js` against real rendered
+  markup) both missed it: jsdom's `element.click()` only ever fires a
+  single synthetic `click` event, never the real pointerdown-then-click
+  sequence a physical mouse click goes through -- the exact sequence the
+  bug depends on. Confirmed live instead: started the actual app
+  (uvicorn + a temp sqlite db) and drove a real headless Chrome via
+  Puppeteer (`page.click()`, which does dispatch the full native pointer
+  event sequence via CDP) against `/contacts` -- reproduced the bug
+  first (checkbox flips true then immediately back to false, bar never
+  shows), then confirmed the fix (checkbox stays checked, bar shows "1
+  selected", toggling off again works, checking two rows shows "2
+  selected", and a full select -> Delete -> confirm -> row actually
+  removed round-trip against the real `/contacts/bulk-delete` route).
+
+  Fix: `e.preventDefault()` moved from the pointerdown handler (where it
+  was tried first and confirmed, via the same live Chrome test, to NOT
+  suppress the later click's native toggle -- canceling pointerdown/
+  mousedown doesn't cancel click's own default action) into the `click`
+  handler instead -- canceling a checkbox's `click` event is what actually
+  suppresses its native toggle. With that in place, pointerdown's
+  `setSelected` call is the sole source of truth for `cb.checked` in both
+  the plain-click and real-drag cases; the click handler now only runs
+  the shift-range fill logic off of whatever state pointerdown already
+  set, instead of re-deciding the origin checkbox's own state a second
+  time.
+
+  **Tests**: none added -- this repo still has no JS test framework (same
+  gap noted in prior sessions), and the bug only reproduces through a real
+  browser's native pointer-event sequence, which the existing Python
+  route-level tests can't exercise either way. Full Python suite
+  re-verified in 4 batches (this session's own sandbox timing worked out
+  to 4 rather than the usual 6-8) -- **2197 passed, 0 failed** (no `.py`
+  file touched this slice; re-run as a sanity check).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-14 -- direct request: "add bulk select for contacts
+  too." Contacts was the one list left out of the 2026-08-29 bulk-actions
+  pass (STATE.md backlog item 1) -- deferred at the time because its rows
+  are a card-list (`.contact-row`, a whole-row `<a>` that opens the edit
+  modal via `data-modal`), not a `<table>`, and a `.row-select` checkbox
+  can't just live inside that anchor without a click on it also triggering
+  the anchor's own navigation.
+
+  Fix: `_contacts_body.html`'s row markup restructured -- each row is now
+  a `.contact-row-wrap` div (carries `data-uid`, the border/hover/
+  `.is-selected` tint that used to live on `.contact-row` itself) wrapping
+  a new `.row-select` checkbox as a sibling *before* the unchanged
+  `.contact-row` anchor, same "wrapper owns the row, inner element owns
+  its own click target" split every `<tr><td><a>` table row already has.
+  `contacts_list.html` gained `_bulk_actions_bar.html`'s macro (id prefix
+  "contacts") inside its `page_header_narrow` actions slot, same as
+  Holidays/Labels/Time Blocks. `routers/contacts.py` gained `POST
+  /contacts/bulk-delete` (JSON `{uids}`, loops `db.delete_contact`, same
+  shape as `bulk_delete_holidays`/`bulk_delete_time_blocks`), registered
+  ahead of the `/{uid}` routes.
+
+  `static/bulk_select.js` needed two generalizations, both driven by
+  Contacts being a genuinely new kind of caller: (1) a new `rowSelector`
+  option (default `"tr"`, unchanged for every existing caller) since
+  `.contact-row-wrap` isn't a `<tr>`; (2) re-init safety -- Contacts
+  already has an async-CRUD region swap (`contacts_list.js`'s
+  `cc-entity-changed` -> `refreshRegion("#contacts-body")`) for every
+  non-bulk mutation, which replaces the whole `#contacts-list` subtree
+  CCBulkSelect.init() originally wired, and no existing caller ever
+  re-initialized on the same page before this. Added an `instances` map
+  keyed by `tableId` that tears down the previous instance's two
+  document-level pointermove/pointerup listeners (the drag-paint
+  mechanic) before wiring the fresh DOM -- otherwise those would leak one
+  more orphaned pair per region swap. `contacts_list.html`'s own script
+  now calls `CCBulkSelect.init()` again on `cc-region-swapped` (mirrors
+  `tasks_table.js`'s existing `reconcileAfterSwap` pattern for
+  `#tasks-body`) -- an in-progress selection is simply dropped across a
+  swap (every checkbox re-renders unchecked), an acceptable rare edge case
+  rather than something worth carrying selection state through a full
+  fragment replacement for.
+
+  `style.css`: `.contact-row`'s border/hover/padding split into
+  `.contact-row-wrap` (the row) and `.contact-row` (the inner link, now
+  `flex:1` alongside the checkbox) -- same restructuring the template
+  needed, mirrored in CSS.
+
+  **Tests**: `test_bulk_actions_tables.py` gained `TestContactsBulkDelete`
+  (deletes every selected uid; empty selection 400s) and
+  `TestContactsRowSelectCheckbox` (list row carries `.contact-row-wrap`
+  and `.row-select`, both keyed off the contact's uid) -- same shape as
+  the file's existing Holidays/Time-Blocks/Labels bulk-delete tests. That
+  file's own header comment (previously: "Contacts is deliberately
+  deferred") is updated to describe this slice instead of leaving a stale
+  deferral note. `documentation/features/contacts.md` gained a bulk-select
+  bullet under List. Full suite re-verified in 8 file-list batches (this
+  sandbox's 45s-per-call limit) -- **2197 passed, 0 failed** (2194 + the 3
+  new tests above).
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-13 -- direct bug report (screenshot of "Edit
+  published list"): the read-only Type field looked broken -- a bare
+  `.cell-tag` pill sized to its own text, visibly narrower than every other
+  field's box in the same grid (Sharing's dropdown, Name's input) once a
+  List already exists and Type can't be changed (`published_list_create_
+  modal.html`'s own header comment: changing `entity_type` post-creation
+  would orphan the already-materialized Radicale collection, so the create
+  form's `_widget_list_multiselect.html` single-select dropdown is swapped
+  for a plain read-only pill in edit mode -- that swap is what left it
+  undersized next to the real dropdown beside it). Fix: wrapped the pill in
+  the same `.multiselect.widget-list-multiselect` shell the real dropdowns
+  use (full-width box, same border/padding/radius as Sharing's trigger)
+  with a new `.multiselect-trigger-static` modifier class (style.css) that
+  strips the interactive states that shell's shared CSS otherwise implies
+  (pointer cursor, hover/focus-ring) and uses a plain `<div>` rather than a
+  `<button>` so it's not in the tab order -- reads as "this field,
+  disabled" rather than either a working dropdown or a mis-sized tag.
+  `.multiselect-trigger-static` has no other caller yet (Type in edit mode
+  is the only read-only field using this shell) but is written as a
+  reusable modifier, not a one-off inline style, in case a future field
+  needs the same "disabled dropdown-shaped box" look.
+
+  **Tests**: none added -- pure template/CSS change to a fixed-value
+  display, no new behavior to assert (existing `test_phase6_published_
+  lists.py`/`test_published_lists_visibility.py` don't check this specific
+  markup either way). Full suite re-verified in 8 file-list batches (this
+  sandbox's 45s-per-call limit) -- **2194 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the normal
+  session workflow below.
+
+- **Shipped:** 2026-09-13 -- direct bug report: "the banner upload still
+  doesn't work for the app." Root cause was in `static/modal.js`, not
+  `avatar_cropper.js` (which a 2026-09-10 session already fixed a different,
+  real bug in -- the backdrop-click-discards-crop issue -- but that fix
+  assumed the crop editor could open at all, which for banners it couldn't).
+  The 2026-09-08 "Remove/Upload move into the footer" slice moved
+  `banner_editor.html`'s upload `<form>` (and Remove form) out of
+  `#modal-body` and into `#modal-footer` (via `_modal_footer.html`'s new
+  `footer_extra_html` escape hatch) -- but `modal.js`'s `wireContent()` only
+  ever scanned `body` for two things: `CCAvatarCropper.init(body)` (which
+  wires the `.banner-upload-input`'s change listener that opens the crop
+  editor) and the generic form-submit-intercept loop
+  (`body.querySelectorAll("form").forEach(...)`, the fetch-based async
+  submit handler). Since the upload form lives in the footer, neither ever
+  ran on it: choosing a file never opened the crop editor (no listener was
+  attached to the input at all), and the upload form has no submit button of
+  its own -- only the crop editor's Apply button calls
+  `form.requestSubmit()` (gated on `alwaysSubmit` for banners). Net effect:
+  picking a banner image did visibly nothing, from before this session's fix
+  the file just sat selected in the hidden input with no path to ever
+  actually submit.
+
+  Fix, both in `wireContent()`: (1) also call
+  `CCAvatarCropper.init(footer)` alongside the existing `init(body)` call,
+  so the crop editor now opens for a footer-hosted file input same as a
+  body one; (2) factored the per-form submit-intercept logic (previously an
+  inline arrow function in `body.querySelectorAll("form").forEach(...)`)
+  into a named `wireForm` function and call it for both
+  `body.querySelectorAll("form")` and `footer.querySelectorAll("form")`, so
+  a footer form's submit (the crop editor's `requestSubmit()`, or a plain
+  click if JS/canvas output ever fails) goes through the same fetch +
+  `cc-entity-changed`/reload path as every other modal form instead of
+  falling back to an unintercepted native POST. `banner_editor.html`'s
+  Remove form (also footer-only, also `data-cc-change`) gets the same fix
+  as a side effect -- it has its own submit button so it "worked" via plain
+  navigation before, but now goes through the async path like everything
+  else.
+
+  No other `footer_extra_html` user exists yet to check for the same gap
+  (`banner_editor.html` is the only caller); `footer_delete_url` forms
+  (event/task/contact/habit/note detail+form modals) are unaffected --
+  confirmed they don't rely on this same code path (their `data-delete-undo`/
+  `data-confirm-sheet` mechanics are a separate, already-working flow, not
+  gated on this footer/body scoping gap the same way the crop-editor wiring
+  was).
+
+  **Tests**: none added -- pure `static/modal.js` change, and this repo
+  still has no JS test runner/framework (same gap noted in prior sessions'
+  entries below). Re-ran `test_banners.py` + `test_modal_uniformization.py`
+  as a sanity check (68 passed) since no Python file changed this slice,
+  then the full suite in 8 file-list batches (this sandbox's 45s-per-call
+  limit needs finer batching than 4-6 for a full run; batch-file listing
+  and the pytest invocation must be in the same call, per the note below,
+  or `/tmp` doesn't persist across calls) -- **2194 passed, 0 failed**.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the normal
+  session workflow below.
+
 - **Verified, no code change:** 2026-09-13 -- followed up on the prior
   session's open question: with `audit-fixes-2.1.md`'s "Urgent To do List"
   section fully shipped, is there anything left to act on in its other two

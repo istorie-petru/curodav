@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Curodav — Dashboard size-up mockup v3</title>
+<style>
+:root{
+  --accent:#007aff;--accent-subtle:rgba(0,122,255,.12);
+  --success:#34c759;--danger:#ff3b30;
+  --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#737378;
+  --border:rgba(0,0,0,.1);--separator:rgba(0,0,0,.08);
+  --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --radius-lg:14px;--radius-card:16px;--radius-control:12px;
+  --shadow-card:0 1px 2px rgba(0,0,0,.05),0 1px 6px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font-system);background:#d9dce2;color:var(--fg-primary);font-size:15px;}
+
+.review-bar{position:sticky;top:0;z-index:50;background:#1d1d1f;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px;}
+.review-bar b{font-size:14px;}
+.review-bar .note{color:#b8b8bd;flex:1 1 260px;}
+.tabs{display:flex;gap:6px;background:#2c2c2e;padding:4px;border-radius:999px;flex-wrap:wrap;}
+.tabs button{border:0;background:transparent;color:#d8d8dc;padding:6px 12px;border-radius:999px;font-size:12.5px;font-family:inherit;cursor:pointer;white-space:nowrap;}
+.tabs button.is-active{background:#fff;color:#1d1d1f;font-weight:600;}
+.stage{padding:32px 20px 80px;display:flex;justify-content:center;}
+.callout{font-size:11px;color:var(--fg-secondary);background:var(--bg-secondary);border-radius:6px;padding:2px 8px;display:inline-block;margin-left:8px;font-weight:400;}
+.callout.new{background:#fdf1e2;color:#c2760f;}
+.callout.fix{background:#e7f6ec;color:#2a8a52;}
+
+.app{background:var(--bg-base);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;}
+.app.desktop{width:min(1200px,100%);min-height:740px;}
+.app.mobile{width:390px;min-height:780px;}
+.sidebar{width:64px;background:var(--bg-sidebar);border-right:1px solid var(--separator);flex:none;padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:18px;color:var(--fg-tertiary);}
+.sidebar .dot{width:32px;height:32px;border-radius:9px;background:var(--accent);}
+.sidebar .icn{width:20px;height:20px;border-radius:6px;background:var(--bg-tertiary);}
+.main{flex:1;padding:0 0 32px;overflow:auto;min-width:0;}
+.main-pad{padding:20px 28px 0;}
+.app.mobile .main-pad{padding:14px 14px 0;}
+
+/* Banner: photo, shared */
+.page-banner{position:relative;width:100%;aspect-ratio:5/1;border-radius:var(--radius-card);overflow:hidden;}
+.app.mobile .page-banner{aspect-ratio:3/1;}
+.pb-actions{position:absolute;right:12px;top:10px;display:flex;gap:8px;z-index:3;}
+.pb-actions .btn{background:rgba(0,0,0,.4);color:#fff;border:0;border-radius:var(--radius-control);padding:6px 12px;font-size:12px;backdrop-filter:blur(6px);}
+
+/* --- Title INSIDE the banner (new proposal) ---
+   Always-on scrim (not just under the buttons) so text contrast holds
+   regardless of the photo underneath. Row height is pinned to the
+   avatar's own size and the title is single-line + ellipsis, so text
+   can never grow taller than the icon. */
+.page-banner.inside::after{content:"";position:absolute;left:0;right:0;bottom:0;height:60%;background:linear-gradient(to top,rgba(0,0,0,.55),transparent);z-index:1;}
+.pb-overlay{position:absolute;left:18px;right:100px;bottom:12px;display:flex;align-items:center;gap:10px;height:40px;z-index:2;}
+.app.mobile .pb-overlay{left:12px;right:56px;height:34px;}
+.pb-overlay .avatar{width:40px;height:40px;flex:none;}
+.app.mobile .pb-overlay .avatar{width:34px;height:34px;}
+.pb-overlay .title{color:#fff;font-weight:700;font-size:17px;line-height:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.app.mobile .pb-overlay .title{font-size:15px;line-height:34px;}
+.pb-sub-below{padding:8px 18px 0;font-size:13px;color:var(--fg-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.app.mobile .pb-sub-below{padding:6px 12px 0;}
+
+/* --- Title BELOW the banner (current app, 2026-09-07 rework) --- */
+.pb-header-row{display:flex;align-items:flex-end;gap:14px;margin-top:-36px;padding:0 26px;position:relative;z-index:2;}
+.app.mobile .pb-header-row{margin-top:-28px;padding:0 16px;}
+.pb-header-row .avatar{width:72px;height:72px;border:3px solid var(--bg-elevated);box-shadow:0 2px 8px rgba(0,0,0,.2);flex:none;}
+.app.mobile .pb-header-row .avatar{width:56px;height:56px;border-width:2px;}
+.pb-title-wrap{padding-bottom:6px;min-width:0;}
+.pb-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.5vw,1.6rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pb-sub{font-size:13px;color:var(--fg-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* --- No banner (plain, matches real bannerless state exactly: no avatar) --- */
+.page-banner-plain{display:flex;align-items:center;gap:16px;padding:22px 26px;}
+.app.mobile .page-banner-plain{padding:14px 16px;}
+.page-banner-plain .txt{flex:1;min-width:0;}
+.pb-title-plain{margin:0;font-weight:700;font-size:26px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.app.mobile .pb-title-plain{font-size:20px;}
+.page-banner-plain .btn{border:1px solid var(--border);background:var(--bg-elevated);border-radius:var(--radius-control);padding:8px 14px;font-size:13px;font-weight:500;flex:none;}
+
+/* Avatar shapes: round for a person (Home), rounded-square for a Space/icon */
+.avatar{border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;}
+.avatar.squircle{border-radius:28%;}
+
+.content-pad{padding:20px 26px 32px;}
+.app.mobile .content-pad{padding:16px 14px 24px;}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.app.mobile .grid{grid-template-columns:1fr;}
+.card{background:var(--bg-elevated);border:1px solid var(--separator);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:16px;}
+.wh{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--separator);}
+.wh h2{margin:0;font-size:15px;font-weight:650;}
+.wh .edit-toggle{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-secondary);}
+.wh .edit-toggle input{transform:scale(.85);}
+
+.aag-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.aag{background:var(--bg-secondary);border-radius:var(--radius-lg);padding:12px 10px;text-align:left;}
+.aag .n{font-size:26px;font-weight:700;line-height:1;}
+.aag .n.overdue{color:var(--danger);}
+.aag .l{font-size:12px;color:var(--fg-secondary);margin-top:3px;}
+
+.section-label{font-size:11px;font-weight:700;color:var(--fg-secondary);text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px;}
+.section-label:first-child{margin-top:0;}
+.arow{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px;border-bottom:1px solid var(--separator);}
+.arow:last-child{border-bottom:0;}
+.arow .ck{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--fg-tertiary);flex:none;}
+.arow .ck.done{background:var(--success);border-color:var(--success);}
+.arow .t{flex:1;}
+.arow .r{font-size:12px;color:var(--fg-secondary);flex:none;}
+.arow .r.today{background:var(--accent-subtle);color:var(--accent);padding:2px 8px;border-radius:999px;font-weight:600;}
+.arow .dot-evt{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;}
+.stack-card .stack-item + .stack-item{margin-top:12px;padding-top:12px;border-top:1px solid var(--separator);}
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <b>Curodav — size-up v3</b>
+  <span class="note">Stack trimmed to 2 members (dropped the duplicate 3rd "Agenda"), widgets renamed by view not type, banner has an inside-title option to test against the app's current below-title design.</span>
+  <div class="tabs" id="page-tabs">
+    <button data-page="home" class="is-active">Home</button>
+    <button data-page="space">Space</button>
+  </div>
+  <div class="tabs" id="banner-tabs">
+    <button data-b="inside" class="is-active">Title inside banner</button>
+    <button data-b="below">Title below (current app)</button>
+    <button data-b="plain">No banner</button>
+  </div>
+  <div class="tabs" id="vp-tabs">
+    <button data-vp="desktop" class="is-active">Desktop</button>
+    <button data-vp="mobile">Mobile</button>
+  </div>
+  <div class="tabs" id="edit-tabs">
+    <button data-edit="off" class="is-active">View</button>
+    <button data-edit="on">Edit mode</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="app desktop" id="app-root"></div>
+</div>
+
+<script>
+const PAGES = {
+  home: {
+    titleShort: 'Good morning, Peter',
+    subFull: 'Wednesday, 13 September', subShort: 'Wed, 13 Sep',
+    avatarSquircle: false, avatarBg: 'var(--accent)', avatarContent: 'P',
+    subCallout: '<span class="callout new">new: not shown in the app today</span>',
+    stats: [3,7,18],
+    overdue: [{t:'Renew domain', r:'1d overdue'},{t:'Reply to Maria', r:'3d overdue'}],
+    today: [{t:'Ship size-up mockup', done:false},{t:'Pay rent', done:false},{t:'Gym', done:true}],
+    events: [{t:'Team sync', r:'10:00'},{t:'Dentist', r:'15:30'}],
+    upcoming: [{t:'Invoice #204 due', r:'Fri'},{t:'Sprint planning', r:'Mon'},{t:'Backup NAS', r:'Tue'},{t:'Tax prep docs', r:'Wed'}]
+  },
+  space: {
+    titleShort: 'Home Renovation',
+    subFull: '3 projects · 12 open tasks', subShort: '3 · 12 open',
+    avatarSquircle: true, avatarBg: '#ff7a59', avatarContent: '🏠',
+    subCallout: '<span class="callout new">new: today it\'s just the name, no counts</span>',
+    stats: [1,2,6],
+    overdue: [{t:'Follow up permit renewal', r:'2d overdue'}],
+    today: [{t:'Order tiles', done:false},{t:'Call electrician', done:true}],
+    events: [{t:'Contractor site visit', r:'14:00'}],
+    upcoming: [{t:'Flooring delivery', r:'Fri'},{t:'Permit inspection', r:'Mon'},{t:'Kitchen contractor call', r:'Tue'}]
+  }
+};
+
+function bannerHTML(page, style, vp){
+  const p = PAGES[page];
+  const title = (vp==='mobile' && page==='space') ? 'Renovation' : p.titleShort;
+  const sub = vp==='mobile' ? p.subShort : p.subFull;
+  const avatarCls = 'avatar' + (p.avatarSquircle ? ' squircle' : '');
+  const avatarStyle = `background:${p.avatarBg}`;
+  const gradient = page==='home' ? 'linear-gradient(135deg,#6fb1ff,#3c7fe0 55%,#2f5fb0)' : 'linear-gradient(135deg,#ffb199,#ff7a59 55%,#e0553a)';
+
+  if(style === 'plain'){
+    return `<div class="page-banner-plain">
+      <div class="txt"><h1 class="pb-title-plain">${page==='space' ? '🏠 ' : ''}${title}</h1></div>
+      <span class="btn">＋ New widget</span>
+    </div>
+    <div class="pb-sub-below" style="padding-left:26px">${sub} ${p.subCallout}</div>`;
+  }
+  if(style === 'inside'){
+    return `<div class="main-pad">
+      <div class="page-banner inside" style="background:${gradient}">
+        <div class="pb-actions"><span class="btn">＋</span><span class="btn">Change banner</span></div>
+        <div class="pb-overlay">
+          <div class="${avatarCls}" style="${avatarStyle}">${p.avatarContent}</div>
+          <div class="title">${title}</div>
+        </div>
+      </div>
+      <div class="pb-sub-below">${sub} ${p.subCallout}</div>
+    </div>`;
+  }
+  // 'below' -- current app design
+  return `<div class="main-pad">
+    <div class="page-banner" style="background:${gradient}">
+      <div class="pb-actions"><span class="btn">＋</span><span class="btn">Change banner</span></div>
+    </div>
+    <div class="pb-header-row">
+      <div class="${avatarCls} avatar-lg" style="${avatarStyle}">${p.avatarContent}</div>
+      <div class="pb-title-wrap">
+        <h1 class="pb-title">${title}</h1>
+        <div class="pb-sub">${sub} ${p.subCallout}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function widgetsHTML(page){
+  const p = PAGES[page];
+  const editBadge = `<label class="edit-toggle edit-only" style="display:none"><input type="checkbox">Hide on mobile</label>`;
+  const overdueRows = p.overdue.map(o=>`<div class="arow"><span class="ck"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+  const todayRows = p.today.map(o=>`<div class="arow"><span class="ck ${o.done?'done':''}"></span><span class="t">${o.t}</span><span class="r today">Today</span></div>`).join('');
+  const eventRows = p.events.map(o=>`<div class="arow"><span class="dot-evt"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+  const upcomingRows = p.upcoming.map(o=>`<div class="arow"><span class="dot-evt"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+
+  return `<div class="grid">
+    <div class="card">
+      <div class="wh"><h2>Today</h2><span class="callout fix">renamed from generic "Agenda"</span>${editBadge}</div>
+      ${p.overdue.length?`<div class="section-label">Overdue</div>${overdueRows}`:''}
+      <div class="section-label">Tasks</div>${todayRows}
+      <div class="section-label">Events</div>${eventRows}
+    </div>
+    <div class="card stack-card">
+      <div class="wh"><h2>Stack</h2><span class="callout fix">3rd member (duplicate Overdue+Today) removed</span>${editBadge}</div>
+      <div class="stack-item">
+        <div class="wh" style="margin-bottom:8px;padding-bottom:0;border-bottom:0;"><h2 style="font-size:13px;">At a glance</h2></div>
+        <div class="aag-row">
+          <div class="aag"><div class="n overdue">${p.stats[0]}</div><div class="l">Overdue</div></div>
+          <div class="aag"><div class="n">${p.stats[1]}</div><div class="l">Due today</div></div>
+          <div class="aag"><div class="n">${p.stats[2]}</div><div class="l">Due this week</div></div>
+        </div>
+      </div>
+      <div class="stack-item">
+        <div class="wh" style="margin-bottom:8px;padding-bottom:0;border-bottom:0;"><h2 style="font-size:13px;">Upcoming</h2><span class="callout fix">renamed from generic "Agenda"</span></div>
+        ${upcomingRows}
+      </div>
+    </div>
+  </div>`;
+}
+
+let cur = {page:'home', b:'inside', vp:'desktop', edit:'off'};
+function render(){
+  const root = document.getElementById('app-root');
+  root.className = 'app ' + cur.vp;
+  const sidebar = cur.vp==='desktop' ? `<div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>` : '';
+  root.innerHTML = `${sidebar}<div class="main">${bannerHTML(cur.page, cur.b, cur.vp)}<div class="content-pad">${widgetsHTML(cur.page)}</div></div>`;
+  document.querySelectorAll('#page-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.page===cur.page));
+  document.querySelectorAll('#banner-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.b===cur.b));
+  document.querySelectorAll('#vp-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.vp===cur.vp));
+  document.querySelectorAll('#edit-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.edit===cur.edit));
+  document.querySelectorAll('.edit-only').forEach(el=>el.style.display = cur.edit==='on' ? 'flex' : 'none');
+  // avatar size for the "below" style is set via inline class avatar-lg
+  document.querySelectorAll('.avatar-lg').forEach(el=>{ el.style.fontSize = cur.vp==='mobile' ? '18px' : '22px'; el.style.boxShadow='0 2px 8px rgba(0,0,0,.2)'; });
+  document.querySelectorAll('.pb-overlay .avatar').forEach(el=>{ el.style.fontSize = cur.vp==='mobile' ? '15px' : '18px'; });
+}
+document.querySelectorAll('#page-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.page=b.dataset.page;render();}));
+document.querySelectorAll('#banner-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.b=b.dataset.b;render();}));
+document.querySelectorAll('#vp-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.vp=b.dataset.vp;render();}));
+document.querySelectorAll('#edit-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.edit=b.dataset.edit;render();}));
+render();
+</script>
+</body>
+</html>

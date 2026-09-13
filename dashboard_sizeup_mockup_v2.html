@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Curodav — Dashboard size-up mockup v2 (real defaults)</title>
+<style>
+:root{
+  --accent:#007aff;--accent-hover:#0071e3;--accent-subtle:rgba(0,122,255,.12);
+  --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
+  --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#737378;--fg-on-accent:#ffffff;
+  --border:rgba(0,0,0,.1);--separator:rgba(0,0,0,.08);
+  --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-card:16px;--radius-control:12px;--radius-pill:999px;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+  --shadow-card:0 1px 2px rgba(0,0,0,.05),0 1px 6px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font-system);background:#d9dce2;color:var(--fg-primary);font-size:15px;}
+
+.review-bar{position:sticky;top:0;z-index:50;background:#1d1d1f;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px;}
+.review-bar b{font-size:14px;}
+.review-bar .note{color:#b8b8bd;flex:1 1 260px;}
+.tabs{display:flex;gap:6px;background:#2c2c2e;padding:4px;border-radius:999px;}
+.tabs button{border:0;background:transparent;color:#d8d8dc;padding:6px 14px;border-radius:999px;font-size:13px;font-family:inherit;cursor:pointer;}
+.tabs button.is-active{background:#fff;color:#1d1d1f;font-weight:600;}
+.stage{padding:32px 20px 80px;display:flex;justify-content:center;}
+.view{display:none;}
+.view.is-active{display:block;}
+.callout{font-size:11px;color:var(--fg-secondary);background:var(--bg-secondary);border-radius:6px;padding:2px 8px;display:inline-block;margin-left:8px;font-weight:400;}
+.callout.new{background:#fdf1e2;color:#c2760f;}
+.callout.warn{background:#fdebec;color:#d44c47;}
+
+/* ===== App shell ===== */
+.app{background:var(--bg-base);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;transition:width .2s;}
+.app.desktop{width:min(1200px,100%);min-height:760px;}
+.app.mobile{width:390px;min-height:800px;}
+.sidebar{width:64px;background:var(--bg-sidebar);border-right:1px solid var(--separator);flex:none;padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:18px;color:var(--fg-tertiary);}
+.sidebar .dot{width:32px;height:32px;border-radius:9px;background:var(--accent);}
+.sidebar .icn{width:20px;height:20px;border-radius:6px;background:var(--bg-tertiary);}
+.app.mobile .sidebar{display:none;}
+.main{flex:1;padding:0 0 32px;overflow:auto;min-width:0;}
+.main-pad{padding:20px 28px 0;}
+.app.mobile .main-pad{padding:14px 14px 0;}
+
+/* ===== Banner: with photo (Notion-style, real spec) ===== */
+.page-banner{position:relative;width:100%;aspect-ratio:5/1;border-radius:var(--radius-card);overflow:hidden;background:linear-gradient(135deg,#6fb1ff,#3c7fe0 55%,#2f5fb0);}
+.app.mobile .page-banner{aspect-ratio:3/1;}
+.page-banner::after{content:"";position:absolute;left:0;right:0;bottom:0;height:35%;background:linear-gradient(to top,rgba(0,0,0,.4),transparent);}
+.page-banner-actions{position:absolute;right:12px;bottom:10px;display:flex;gap:8px;z-index:2;}
+.page-banner-actions .btn{background:rgba(0,0,0,.4);color:#fff;border:0;border-radius:var(--radius-control);padding:6px 12px;font-size:12px;backdrop-filter:blur(6px);}
+.page-banner-header-row{display:flex;align-items:flex-end;gap:14px;margin-top:-36px;padding:0 26px;position:relative;z-index:2;}
+.app.mobile .page-banner-header-row{padding:0 16px;}
+.avatar-hero{width:72px;height:72px;border-radius:50%;border:3px solid var(--bg-elevated);background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.2);flex:none;}
+.page-banner-title-wrap{padding-bottom:6px;}
+.page-banner-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.5vw,1.6rem);}
+.page-banner-sub{font-size:13px;color:var(--fg-secondary);margin-top:2px;}
+
+/* ===== Banner: plain (bannerless fallback) ===== */
+.page-banner-plain{display:flex;align-items:center;gap:16px;padding:22px 26px;}
+.app.mobile .page-banner-plain{padding:14px 16px;flex-wrap:wrap;}
+.page-banner-plain .txt{flex:1;}
+.page-banner-title-plain{margin:0;font-weight:700;font-size:26px;}
+.app.mobile .page-banner-title-plain{font-size:20px;}
+.page-banner-plain .btn{border:1px solid var(--border);background:var(--bg-elevated);border-radius:var(--radius-control);padding:8px 14px;font-size:13px;font-weight:500;}
+
+.content-pad{padding:20px 26px 32px;}
+.app.mobile .content-pad{padding:16px 14px 24px;}
+
+/* ===== Widget grid: real default = Agenda(half) + Stack(half), responsive ===== */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.app.mobile .grid{grid-template-columns:1fr;}
+.card{background:var(--bg-elevated);border:1px solid var(--separator);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:16px;}
+.wh{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--separator);}
+.wh h2{margin:0;font-size:15px;font-weight:650;}
+.wh .edit-toggle{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-secondary);}
+.wh .edit-toggle input{transform:scale(.85);}
+
+/* At a glance (stack member 1) */
+.aag-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.aag{background:var(--bg-secondary);border-radius:var(--radius-lg);padding:12px 10px;text-align:left;}
+.aag .n{font-size:26px;font-weight:700;line-height:1;}
+.aag .n.overdue{color:var(--danger);}
+.aag .l{font-size:12px;color:var(--fg-secondary);margin-top:3px;}
+
+/* Dense agenda/list rows -- same style used on desktop half-width AND mobile,
+   no separate treatment needed since it's just a vertical list either way. */
+.section-label{font-size:11px;font-weight:700;color:var(--fg-secondary);text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px;}
+.section-label:first-child{margin-top:0;}
+.arow{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px;border-bottom:1px solid var(--separator);}
+.arow:last-child{border-bottom:0;}
+.arow .ck{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--fg-tertiary);flex:none;}
+.arow .ck.done{background:var(--success);border-color:var(--success);}
+.arow .t{flex:1;}
+.arow .r{font-size:12px;color:var(--fg-secondary);flex:none;}
+.arow .r.today{background:var(--accent-subtle);color:var(--accent);padding:2px 8px;border-radius:999px;font-weight:600;}
+.arow .dot-evt{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;}
+
+/* Stack visual: members separated by a thin rule, per real .widget-stack-item CSS */
+.stack-card .stack-item + .stack-item{margin-top:12px;padding-top:12px;border-top:1px solid var(--separator);}
+
+.proj-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px;}
+.cell-tag{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;padding:3px 9px;border-radius:999px;flex:none;}
+.progress-bar{flex:1;height:6px;background:var(--bg-secondary);border-radius:999px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);}
+.pct{font-size:11.5px;color:var(--fg-secondary);flex:none;width:44px;text-align:right;}
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <b>Curodav — size-up v2</b>
+  <span class="note">Now matches the app's REAL default seed (one Agenda widget + one Stack of At a Glance / Upcoming events / Overdue) — no invented widgets. Same list style reused at half-width desktop and mobile, no separate treatment needed.</span>
+  <div class="tabs" id="page-tabs">
+    <button data-page="home" class="is-active">Home</button>
+    <button data-page="space">Space</button>
+  </div>
+  <div class="tabs" id="banner-tabs">
+    <button data-banner="photo" class="is-active">With banner</button>
+    <button data-banner="plain">No banner</button>
+  </div>
+  <div class="tabs" id="vp-tabs">
+    <button data-vp="desktop" class="is-active">Desktop</button>
+    <button data-vp="mobile">Mobile</button>
+  </div>
+  <div class="tabs" id="edit-tabs">
+    <button data-edit="off" class="is-active">View</button>
+    <button data-edit="on">Edit mode</button>
+  </div>
+</div>
+
+<div class="stage">
+
+<!-- ===================== HOME ===================== -->
+<div class="view is-active" data-page="home" data-banner="photo" data-vp="desktop">
+  <div class="app desktop">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="main-pad">
+        <div class="page-banner"><div class="page-banner-actions"><span class="btn">＋ New widget</span><span class="btn">Change banner</span></div></div>
+        <div class="page-banner-header-row">
+          <div class="avatar-hero">P</div>
+          <div class="page-banner-title-wrap">
+            <h1 class="page-banner-title">Good morning, Peter</h1>
+            <div class="page-banner-sub">Wednesday, 13 September <span class="callout new">new: date line — not in the app today</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="content-pad">
+        <div class="grid" id="widgets-home-1"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="home" data-banner="plain" data-vp="desktop">
+  <div class="app desktop">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="page-banner-plain">
+        <div class="txt"><h1 class="page-banner-title-plain">Good morning, Peter</h1><div class="page-banner-sub">Wednesday, 13 September <span class="callout new">new</span></div></div>
+        <span class="btn">＋ New widget</span>
+      </div>
+      <div class="content-pad">
+        <div class="grid" id="widgets-home-2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="home" data-banner="photo" data-vp="mobile">
+  <div class="app mobile">
+    <div class="main">
+      <div class="main-pad">
+        <div class="page-banner"><div class="page-banner-actions"><span class="btn">＋</span></div></div>
+        <div class="page-banner-header-row">
+          <div class="avatar-hero">P</div>
+          <div class="page-banner-title-wrap"><h1 class="page-banner-title">Good morning, Peter</h1><div class="page-banner-sub">Wed, 13 Sep <span class="callout new">new</span></div></div>
+        </div>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-home-3"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="home" data-banner="plain" data-vp="mobile">
+  <div class="app mobile">
+    <div class="main">
+      <div class="page-banner-plain">
+        <div class="txt"><h1 class="page-banner-title-plain">Good morning</h1><div class="page-banner-sub">Wed, 13 Sep <span class="callout new">new</span></div></div>
+        <span class="btn">＋</span>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-home-4"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SPACE ===================== -->
+<div class="view" data-page="space" data-banner="photo" data-vp="desktop">
+  <div class="app desktop">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="main-pad">
+        <div class="page-banner" style="background:linear-gradient(135deg,#ffb199,#ff7a59 55%,#e0553a)"><div class="page-banner-actions"><span class="btn">＋ New widget</span><span class="btn">Change banner</span></div></div>
+        <div class="page-banner-header-row">
+          <div class="avatar-hero" style="background:#ff7a59;border-radius:14px;">🏠</div>
+          <div class="page-banner-title-wrap">
+            <h1 class="page-banner-title">Home Renovation</h1>
+            <div class="page-banner-sub">3 projects · 12 open tasks <span class="callout new">new: not in the app today — currently just the name</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-space-1"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="space" data-banner="plain" data-vp="desktop">
+  <div class="app desktop">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="page-banner-plain">
+        <div class="txt"><h1 class="page-banner-title-plain">🏠 Home Renovation</h1><div class="page-banner-sub">3 projects · 12 open tasks <span class="callout new">new</span></div></div>
+        <span class="btn">＋ New widget</span>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-space-2"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="space" data-banner="photo" data-vp="mobile">
+  <div class="app mobile">
+    <div class="main">
+      <div class="main-pad">
+        <div class="page-banner" style="background:linear-gradient(135deg,#ffb199,#ff7a59 55%,#e0553a)"><div class="page-banner-actions"><span class="btn">＋</span></div></div>
+        <div class="page-banner-header-row">
+          <div class="avatar-hero" style="background:#ff7a59;border-radius:14px;">🏠</div>
+          <div class="page-banner-title-wrap"><h1 class="page-banner-title">Home Renovation</h1><div class="page-banner-sub">3 projects · 12 open <span class="callout new">new</span></div></div>
+        </div>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-space-3"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="view" data-page="space" data-banner="plain" data-vp="mobile">
+  <div class="app mobile">
+    <div class="main">
+      <div class="page-banner-plain">
+        <div class="txt"><h1 class="page-banner-title-plain">🏠 Renovation</h1><div class="page-banner-sub">3 · 12 <span class="callout new">new</span></div></div>
+        <span class="btn">＋</span>
+      </div>
+      <div class="content-pad"><div class="grid" id="widgets-space-4"></div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// One widget-set builder shared by Home + Space (real default: Agenda half + Stack half),
+// so desktop/mobile/banner variants can't drift out of sync with each other.
+function widgetsHTML(scope){
+  const isSpace = scope === 'space';
+  const overdue = isSpace ? [{t:'Follow up permit renewal', r:'2d overdue'}] : [{t:'Renew domain', r:'1d overdue'},{t:'Reply to Maria', r:'3d overdue'}];
+  const today = isSpace ? [{t:'Order tiles', done:false},{t:'Call electrician', done:true}] : [{t:'Ship size-up mockup', done:false},{t:'Pay rent', done:false},{t:'Gym', done:true}];
+  const events = isSpace ? [{t:'Contractor site visit', r:'14:00'}] : [{t:'Team sync', r:'10:00'},{t:'Dentist', r:'15:30'}];
+  const upcoming = isSpace
+    ? [{t:'Flooring delivery', r:'Fri'},{t:'Permit inspection', r:'Mon'},{t:'Kitchen contractor call', r:'Tue'}]
+    : [{t:'Invoice #204 due', r:'Fri'},{t:'Sprint planning', r:'Mon'},{t:'Backup NAS', r:'Tue'},{t:'Tax prep docs', r:'Wed'}];
+  const stats = isSpace ? [1,2,6] : [3,7,18];
+
+  const editBadge = `<label class="edit-toggle edit-only" style="display:none"><input type="checkbox">Hide on mobile</label>`;
+
+  const overdueRows = overdue.map(o=>`<div class="arow"><span class="ck"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+  const todayRows = today.map(o=>`<div class="arow"><span class="ck ${o.done?'done':''}"></span><span class="t">${o.t}</span><span class="r today">Today</span></div>`).join('');
+  const eventRows = events.map(o=>`<div class="arow"><span class="dot-evt"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+  const upcomingRows = upcoming.map(o=>`<div class="arow"><span class="dot-evt"></span><span class="t">${o.t}</span><span class="r">${o.r}</span></div>`).join('');
+
+  return `
+    <div class="card">
+      <div class="wh"><h2>Agenda</h2><span class="callout">real default: standalone widget, range=today</span>${editBadge}</div>
+      ${overdue.length?`<div class="section-label">Overdue</div>${overdueRows}`:''}
+      <div class="section-label">Tasks</div>${todayRows}
+      <div class="section-label">Events</div>${eventRows}
+    </div>
+    <div class="card stack-card">
+      <div class="wh"><h2>Stack</h2><span class="callout">real default: 3 stacked members</span>${editBadge}</div>
+      <div class="stack-item">
+        <div class="wh" style="margin-bottom:8px;padding-bottom:0;border-bottom:0;"><h2 style="font-size:13px;">At a glance</h2></div>
+        <div class="aag-row">
+          <div class="aag"><div class="n overdue">${stats[0]}</div><div class="l">Overdue</div></div>
+          <div class="aag"><div class="n">${stats[1]}</div><div class="l">Due today</div></div>
+          <div class="aag"><div class="n">${stats[2]}</div><div class="l">Due this week</div></div>
+        </div>
+      </div>
+      <div class="stack-item">
+        <div class="wh" style="margin-bottom:8px;padding-bottom:0;border-bottom:0;"><h2 style="font-size:13px;">Agenda</h2><span class="callout">Upcoming events (all_upcoming)</span></div>
+        ${upcomingRows}
+      </div>
+      <div class="stack-item">
+        <div class="wh" style="margin-bottom:8px;padding-bottom:0;border-bottom:0;"><h2 style="font-size:13px;">Agenda</h2><span class="callout warn">Overdue+Today again — real app duplicates the widget above</span></div>
+        ${overdue.length?`<div class="section-label">Overdue</div>${overdueRows}`:''}
+        <div class="section-label">Tasks</div>${todayRows}
+      </div>
+    </div>
+  `;
+}
+['widgets-home-1','widgets-home-2','widgets-home-3','widgets-home-4'].forEach(id=>document.getElementById(id).innerHTML = widgetsHTML('home'));
+['widgets-space-1','widgets-space-2','widgets-space-3','widgets-space-4'].forEach(id=>document.getElementById(id).innerHTML = widgetsHTML('space'));
+
+let cur = {page:'home', banner:'photo', vp:'desktop'};
+function render(){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('is-active', v.dataset.page===cur.page && v.dataset.banner===cur.banner && v.dataset.vp===cur.vp));
+  document.querySelectorAll('#page-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.page===cur.page));
+  document.querySelectorAll('#banner-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.banner===cur.banner));
+  document.querySelectorAll('#vp-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.vp===cur.vp));
+  document.querySelectorAll('#edit-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.edit===cur.edit));
+  document.querySelectorAll('.edit-only').forEach(el=>el.style.display = cur.edit==='on' ? 'flex' : 'none');
+}
+cur.edit = 'off';
+document.querySelectorAll('#page-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.page=b.dataset.page;render();}));
+document.querySelectorAll('#banner-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.banner=b.dataset.banner;render();}));
+document.querySelectorAll('#vp-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.vp=b.dataset.vp;render();}));
+document.querySelectorAll('#edit-tabs button').forEach(b=>b.addEventListener('click',()=>{cur.edit=b.dataset.edit;render();}));
+render();
+</script>
+</body>
+</html>

@@ -308,6 +308,7 @@ class TestListIndexPublicUrl:
 
 class _FakeSettings:
     radicale_base_url = "http://127.0.0.1:5232/devuser/"
+    radicale_public_base_url = None
 
 
 class _FakeApp:

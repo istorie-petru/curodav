@@ -2,7 +2,7 @@
 {% block title %}Labels{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
@@ -15,8 +15,10 @@
    wording matches that, not a generic "cannot be undone." Shared markup
    -- see _bulk_actions_bar.html (2026-09-07, audit-fixes-2.0.md item 9),
    relocated into the header's actions slot 2026-09-13
-   (audit-fixes-2.1.md) -- see that partial's own header comment. #}
-{% call page_header_narrow("Labels", "tag") %}
+   (audit-fixes-2.1.md) -- see that partial's own header comment.
+   2026-09-12: count span moved to title_extra -- see that partial's own
+   comment. #}
+{% call page_header_narrow("Labels", "tag", title_extra=bulk_count("labels")) %}
 {{ bulk_actions_bar("labels", delete_label="Remove from everything") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->

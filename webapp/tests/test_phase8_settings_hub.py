@@ -80,6 +80,7 @@ def _request_with_radicale(path, db_path=None, backup_dir=None):
         state=SimpleNamespace(
             settings=SimpleNamespace(
                 radicale_base_url="http://localhost:5232",
+                radicale_public_base_url=None,
                 db_path=db_path,
                 backup_dir=backup_dir,
             )

@@ -8,9 +8,18 @@ they can be bulk-deleted from the same Tasks-page bar. Labels/Holidays/
 Time blocks each get their own new bulk-delete JSON endpoint, driven by
 the new generic `static/bulk_select.js` module (not covered by these
 Python-side tests, which only exercise the routers) instead of a second
-hand-rolled selection implementation. Contacts is deliberately deferred --
-see STATE.md's own note on why (a card-list, not a `<table>`, needs a
-different row shape to host a checkbox cleanly)."""
+hand-rolled selection implementation.
+
+2026-09-14 (direct request, "add bulk select for contacts too"): Contacts
+gets the same treatment now -- it was deferred in the original pass
+because its rows are a card-list, not a `<table>` (a `.row-select`
+checkbox can't just live inside the row's own whole-row `<a>` without also
+triggering the anchor's navigation/modal-open on a checkbox click).
+`_contacts_body.html` now wraps each row in a `.contact-row-wrap` div (the
+checkbox as a sibling before the `<a>`, not inside it) and
+`static/bulk_select.js` gained a `rowSelector` option (default `tr`) so
+this same module still drives it instead of a second hand-rolled
+implementation."""
 
 from __future__ import annotations
 
@@ -21,6 +30,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db
+from src.routers import contacts as contacts_router
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
 from src.routers import tasks as tasks_router
@@ -177,6 +187,38 @@ class TestHolidaysBulkDelete:
 
         resp = asyncio.run(settings_router.bulk_delete_holidays(_json_request({"uids": []}), conn=conn))
         assert resp.status_code == 400
+
+
+class TestContactsBulkDelete:
+    def test_deletes_every_selected_contact(self, conn):
+        import asyncio
+
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Alice A", "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c2", "full_name": "Bob B", "created_at": _now()})
+        resp = asyncio.run(contacts_router.bulk_delete_contacts(_json_request({"uids": ["c1", "c2"]}), conn=conn))
+        assert resp.status_code == 200
+        assert json.loads(resp.body)["count"] == 2
+        assert db.get_contact(conn, "c1") is None
+        assert db.get_contact(conn, "c2") is None
+
+    def test_empty_selection_400s(self, conn):
+        import asyncio
+
+        resp = asyncio.run(contacts_router.bulk_delete_contacts(_json_request({"uids": []}), conn=conn))
+        assert resp.status_code == 400
+
+
+class TestContactsRowSelectCheckbox:
+    def test_contact_row_carries_row_select_and_wrap(self, conn):
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Alice A", "created_at": _now()})
+        from src.routers import contacts as router
+
+        body = router.list_contacts(
+            Request({"type": "http", "method": "GET", "path": "/contacts", "query_string": b"", "scheme": "http", "server": ("t", 80), "root_path": "", "headers": []}),
+            conn=conn,
+        ).body.decode()
+        assert 'class="contact-row-wrap" data-uid="c1"' in body
+        assert 'class="row-select" data-uid="c1"' in body
 
 
 class TestTimeBlocksBulkDelete:

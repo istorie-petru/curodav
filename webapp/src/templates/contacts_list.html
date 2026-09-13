@@ -3,6 +3,7 @@
 {% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 <!-- 2026-08-07: dropped the include of _settings_nav.html that used to
      sit here -- Contacts is a primary tabbar destination now (base.html),
      not a Settings sub-page, so the Settings segmented strip doesn't
@@ -22,7 +23,25 @@
      own comment: the narrow header's title is a <h2>, and this page's old
      toolbar row was its only h1, so it's restored standalone here. -->
 <h1 class="sr-only">Contacts</h1>
-{% call page_header_narrow("Contacts", "address-book") %}
+{% call page_header_narrow("Contacts", "address-book", title_extra=bulk_count("contacts")) %}
+{# Bulk-select "Delete" bar -- same _bulk_actions_bar.html macro/static/
+   bulk_select.js pattern Labels/Holidays/Time Blocks already use, hidden
+   until a row is checked. Contacts was the one list left out of that
+   2026-08-29 pass (STATE.md backlog item 1) because its rows are a
+   card-list, not a `<table>` -- _contacts_body.html now wraps each row
+   for a `.row-select` checkbox to attach to (see that template's own
+   comment), so this is otherwise identical to settings_holidays.html's
+   own call site. 2026-09-12: the count span itself moved up to
+   title_extra above (see _bulk_actions_bar.html's own comment). #}
+{{ bulk_actions_bar("contacts") }}
+<!-- This form's own visible content is always empty (just an optional
+     hidden `q` field) -- what it's actually for is being a submit target
+     the Label filter's checkbox inputs below (when contact_tags exist)
+     point at via `form="contacts-filters-form"` (_filter_dropdown.html's
+     fd_form_id), so it has to stay in the DOM even with no `q` and no
+     tags to filter by. style.css's "hide the actions slot when it has
+     nothing to show" rule (2026-09-12) knows to look past `.filter-bar`
+     specifically for exactly this reason -- see that rule's own comment. -->
 <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
     {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
 </form>
@@ -41,4 +60,42 @@
 
 {% include "_contacts_body.html" %}
 {% endblock %}
-{% block extra_scripts %}<script defer src="{{ static_url('contacts_list.js') }}"></script>{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('contacts_list.js') }}"></script>
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener("DOMContentLoaded", function () {
+    function wireContactsBulkSelect() {
+        window.CCBulkSelect.init({
+            tableId: "contacts-list",
+            rowSelector: ".contact-row-wrap",
+            barId: "contacts-bulk-bar",
+            countId: "contacts-bulk-count",
+            clearId: "contacts-bulk-clear",
+            deleteButtonId: "contacts-bulk-delete",
+            deleteUrl: "/contacts/bulk-delete",
+            itemLabel: "contact",
+        });
+    }
+    wireContactsBulkSelect();
+    // Unlike Labels/Holidays/Time Blocks (plain full-reload pages),
+    // Contacts already has an async-CRUD region swap (contacts_list.js's
+    // cc-entity-changed listener -> ccApi.refreshRegion("#contacts-body"))
+    // for every non-bulk mutation (create/edit/delete from the detail
+    // modal). That swap replaces #contacts-body's whole subtree with a
+    // fresh server-rendered fragment, so the `#contacts-list` element
+    // CCBulkSelect.init() attached its listeners to above is gone -- the
+    // checkboxes on the new fragment would otherwise be dead until a full
+    // reload. Same "re-init on cc-region-swapped" pattern static/
+    // tasks_table.js's own reconcileAfterSwap listener already uses for
+    // #tasks-body. Any selection in progress is simply dropped on a
+    // swap (the fragment renders every checkbox unchecked) -- an
+    // acceptable, rare edge case (another surface editing a contact while
+    // this page has a bulk selection open), not worth carrying selection
+    // state across a full fragment replacement for.
+    document.addEventListener("cc-region-swapped", function (e) {
+        if (e.detail && e.detail.id === "contacts-body") wireContactsBulkSelect();
+    });
+});
+</script>
+{% endblock %}

@@ -24,6 +24,15 @@
 {% set _df = active_date_filter | default('all') %}
 {% set _q = q | default('') %}
 
+<!-- This form's own visible content is always empty (just an optional
+     hidden `q` field) -- what it's actually for is being a submit target
+     the Date filter's radio inputs below point at via `form="tasks-
+     filters-form"` (see _filter_dropdown.html's own comment on
+     fd_form_id), so it has to stay in the DOM even with no `q` and no
+     visible content of its own. style.css's "hide the actions slot when
+     it has nothing to show" rule (2026-09-12) knows to look past
+     `.filter-bar` specifically for exactly this reason -- see that
+     rule's own comment. -->
 <form method="get" action="/tasks" class="filter-bar" id="tasks-filters-form">
     {% if _q %}<input type="hidden" name="q" value="{{ _q }}">{% endif %}
 </form>

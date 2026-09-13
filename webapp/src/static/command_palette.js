@@ -76,14 +76,69 @@
   const input = document.getElementById("command-palette-input");
   const resultsEl = document.getElementById("command-palette-results");
   const closeBtn = document.getElementById("command-palette-close");
+  const filtersEl = document.getElementById("command-palette-filters");
+  const footerEl = document.getElementById("command-palette-footer");
+  const newTaskBtn = document.getElementById("command-palette-new-task");
+  const newEventBtn = document.getElementById("command-palette-new-event");
   if (!overlay || !input || !resultsEl) return;
 
   let mode = "global"; // "global" | "relation" | "label"
   let relationCtx = null; // {forTask, forEvent, label, hiddenForm} when mode === "relation"
   let labelCtx = null; // {type, uid, title} when mode === "label"
+  let typeFilter = ""; // "" | "task" | "event" | "contact" -- global mode only, see filter pills below
   let activeIndex = -1;
   let fetchToken = 0;
   let debounceTimer = null;
+  // Result rows actually eligible for keyboard navigation, in display
+  // order -- excludes .command-palette-group-header elements (date-group
+  // dividers, global mode only), which are rendered as resultsEl children
+  // too but aren't selectable. Recomputed at the end of every render().
+  let currentRowEls = [];
+
+  // Date-grouped results (direct feedback, 2026-09-12: mockup of a
+  // redesigned search overlay grouping by Overdue/This week/Later) --
+  // global mode's result rows carry a `date` field now (routers/
+  // search.py's _picker_result: a task's due_at, an event's start_at,
+  // null for contacts/notes/pages). Bucketed client-side rather than by
+  // the server so the grouping stays purely a display concern -- the
+  // underlying /api/search ordering and relevance ranking are untouched.
+  const BUCKET_ORDER = ["overdue", "week", "later", "nodate"];
+  const BUCKET_LABEL = { overdue: "Overdue", week: "This week", later: "Later", nodate: "No date" };
+
+  const BARE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  function dateBucket(dateStr) {
+    if (!dateStr) return "nodate";
+    // A bare "YYYY-MM-DD" (a task's due_at, always date-only -- see
+    // routers/tasks.py's `due_at: str = Form("")`, straight from a plain
+    // date input) is parsed by `new Date()` as UTC midnight per the ES
+    // spec, while a full datetime like an event's start_at (no
+    // timezone suffix) parses as local time -- feeding the bare form
+    // through the same `new Date(dateStr)` call rolls it back to the
+    // previous local day in any timezone west of UTC, misbucketing a
+    // task due "today" as Overdue. Parsed as local calendar-date
+    // components instead so it lines up with `startOfToday` below,
+    // which is also local.
+    const d = BARE_DATE_RE.test(dateStr)
+      ? new Date(Number(dateStr.slice(0, 4)), Number(dateStr.slice(5, 7)) - 1, Number(dateStr.slice(8, 10)))
+      : new Date(dateStr);
+    if (isNaN(d.getTime())) return "nodate";
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.floor((d.getTime() - startOfToday.getTime()) / 86400000);
+    if (diffDays < 0) return "overdue";
+    if (diffDays <= 6) return "week";
+    return "later";
+  }
+
+  // Filter pills + footer only make sense in global mode's plain search
+  // results -- relation/label mode have their own narrower purpose, and
+  // Quick Capture's single preview row isn't a list to filter or navigate.
+  function updatePanelsVisibility() {
+    const show = mode === "global" && !captureState.active;
+    if (filtersEl) filtersEl.style.display = show ? "" : "none";
+    if (footerEl) footerEl.style.display = show ? "" : "none";
+  }
   // Quick Capture sub-state (global mode only) -- {active, text}. `text`
   // is the exact raw input the last preview was fetched for, re-sent
   // verbatim to POST /api/quick-capture on Enter so the server parses the
@@ -94,6 +149,47 @@
   const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text" };
 
   const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text", page: "layout" };
+
+  // "Turn on/off Edit mode" (2026-09-13, direct request: "a way to
+  // activate edit mode with the help of the command palette") -- a
+  // virtual, client-only row alongside global mode's "Create task/
+  // event: ..." rows above (buildRows), not a real /api/search result:
+  // there's nothing to search for server-side, this just surfaces an
+  // app-wide setting (Settings > Appearance's own toggle, routers/
+  // settings.py's set_edit_mode) as a quick action. Current on/off state
+  // comes from body[data-edit-mode] (deps.py's edit_mode_enabled()
+  // Jinja global, threaded onto every page via base.html), so this works
+  // the same everywhere the palette itself works, not just on pages that
+  // render the widget grid.
+  function editModeOn() {
+    return document.body.getAttribute("data-edit-mode") === "1";
+  }
+
+  function toggleEditMode() {
+    const turningOn = !editModeOn();
+    fetch("/settings/edit-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "fetch" },
+      body: "enabled=" + (turningOn ? "1" : ""),
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("failed");
+        close();
+        toast({ title: "Edit mode " + (turningOn ? "on" : "off") });
+        // The current page may render the widget grid (Dashboard/Space/
+        // Project/Label) with its edit controls baked into server-
+        // rendered HTML (routers/dashboard.py's widget_page_context) --
+        // simplest way to pick that up immediately, everywhere the
+        // palette can be opened from, is a full reload rather than
+        // trying to detect "does this page support edit mode" client-
+        // side. A page that doesn't render the grid just reloads with
+        // no visible change beyond the toast already shown.
+        window.location.reload();
+      })
+      .catch(function () {
+        toast({ message: "Could not change Edit mode.", variant: "error" });
+      });
+  }
 
   function iconMarkup(name) {
     return '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
@@ -115,6 +211,8 @@
     relationCtx = mode === "relation" ? opts : null;
     labelCtx = null;
     captureState.active = false;
+    typeFilter = "";
+    setActivePill("");
     input.value = "";
     input.placeholder = mode === "relation"
       ? "Add a related " + (opts.label || "item") + "…"
@@ -122,6 +220,7 @@
     activeIndex = -1;
     overlay.classList.add("is-open");
     document.body.classList.add("command-palette-open");
+    updatePanelsVisibility();
     window.setTimeout(function () {
       input.focus();
     }, 0);
@@ -137,6 +236,13 @@
     captureState.active = false;
   }
 
+  function setActivePill(value) {
+    if (!filtersEl) return;
+    Array.from(filtersEl.children).forEach(function (btn) {
+      btn.classList.toggle("is-active", (btn.getAttribute("data-type-filter") || "") === value);
+    });
+  }
+
   // Label mode is entered from within an already-open overlay (a result
   // row's "Add label" action), not through the same open() entry points
   // above -- it keeps the overlay open and just retargets the query.
@@ -146,6 +252,7 @@
     input.value = "";
     input.placeholder = 'Add a label to "' + r.title + '"…';
     activeIndex = -1;
+    updatePanelsVisibility();
     window.setTimeout(function () {
       input.focus();
     }, 0);
@@ -179,6 +286,7 @@
       if (relationCtx.forTask) params.set("for_task", relationCtx.forTask);
       if (relationCtx.forEvent) params.set("for_event", relationCtx.forEvent);
     }
+    if (mode === "global" && typeFilter) params.set("types", typeFilter);
     fetch("/api/search?" + params.toString())
       .then(function (r) {
         return r.json();
@@ -209,6 +317,9 @@
     });
     if (mode === "relation" && q) {
       rows.push({ kind: "create", index: rows.length, title: q });
+    }
+    if (mode === "global" && q && "edit mode".indexOf(q.toLowerCase()) !== -1) {
+      rows.push({ kind: "toggle-edit-mode", index: rows.length });
     }
     if (mode === "global" && q) {
       rows.push({ kind: "create-task", index: rows.length, title: q });
@@ -265,6 +376,7 @@
   function renderCapturePreview(rawText, data) {
     captureState.active = true;
     captureState.text = rawText;
+    updatePanelsVisibility();
     resultsEl.innerHTML = "";
     const row = document.createElement("div");
     row.className = "command-palette-row command-palette-capture-row";
@@ -313,10 +425,38 @@
       });
   }
 
+  // Global mode only: reorders `rows` (buildRows' output) into date
+  // buckets and splices in {kind: "header"} marker rows ahead of each
+  // bucket's first item -- "create-task"/"create-event" rows (no `date`
+  // of their own, they're the typed query, not a result) are left where
+  // buildRows put them, after every real result, ungrouped. Relation/
+  // label mode results skip this entirely (their own rows.forEach branch
+  // never checks row.kind === "header", so returning `rows` unchanged is
+  // enough to leave that behavior exactly as it was).
+  function groupRowsByDate(rows) {
+    if (mode !== "global") return rows;
+    const resultRows = rows.filter(function (r) { return r.kind === "result"; });
+    const otherRows = rows.filter(function (r) { return r.kind !== "result"; });
+    if (!resultRows.length) return rows;
+    const buckets = {};
+    BUCKET_ORDER.forEach(function (b) { buckets[b] = []; });
+    resultRows.forEach(function (r) {
+      buckets[dateBucket(r.item.date)].push(r);
+    });
+    const grouped = [];
+    BUCKET_ORDER.forEach(function (b) {
+      if (!buckets[b].length) return;
+      grouped.push({ kind: "header", label: BUCKET_LABEL[b] });
+      grouped.push.apply(grouped, buckets[b]);
+    });
+    return grouped.concat(otherRows);
+  }
+
   function render(q, items, data) {
     captureState.active = false;
+    updatePanelsVisibility();
     resultsEl.innerHTML = "";
-    const rows = buildRows(q, items);
+    const rows = groupRowsByDate(buildRows(q, items));
 
     if (!rows.length) {
       const empty = document.createElement("div");
@@ -324,10 +464,18 @@
       empty.textContent = emptyMessage(q, data);
       resultsEl.appendChild(empty);
       activeIndex = -1;
+      currentRowEls = [];
       return;
     }
 
     rows.forEach(function (row) {
+      if (row.kind === "header") {
+        const header = document.createElement("div");
+        header.className = "command-palette-group-header";
+        header.textContent = row.label;
+        resultsEl.appendChild(header);
+        return;
+      }
       const el = document.createElement("div");
       el.className = "command-palette-row";
 
@@ -338,6 +486,15 @@
           escapeHtml(relationCtx.label || "item") + ': "' + escapeHtml(row.title) + '"</span></span>';
         el.addEventListener("click", function () {
           submitRelation("__new__", row.title);
+        });
+      } else if (row.kind === "toggle-edit-mode") {
+        const turningOn = !editModeOn();
+        el.innerHTML =
+          iconMarkup("edit") +
+          '<span class="command-palette-row-text"><span class="command-palette-row-title">Turn ' +
+          (turningOn ? "on" : "off") + " Edit mode</span></span>";
+        el.addEventListener("click", function () {
+          toggleEditMode();
         });
       } else if (row.kind === "create-task" || row.kind === "create-event") {
         const typeLabel = row.kind === "create-task" ? "task" : "event";
@@ -376,7 +533,10 @@
       }
       resultsEl.appendChild(el);
     });
-    activeIndex = 0;
+    currentRowEls = Array.from(resultsEl.children).filter(function (el) {
+      return el.classList.contains("command-palette-row");
+    });
+    activeIndex = currentRowEls.length ? 0 : -1;
     highlightActive();
   }
 
@@ -507,17 +667,17 @@
   }
 
   function highlightActive() {
-    Array.from(resultsEl.children).forEach(function (el, i) {
+    currentRowEls.forEach(function (el, i) {
       el.classList.toggle("is-active", i === activeIndex);
     });
   }
 
   function moveActive(delta) {
-    const count = resultsEl.children.length;
+    const count = currentRowEls.length;
     if (!count) return;
     activeIndex = (activeIndex + delta + count) % count;
     highlightActive();
-    const el = resultsEl.children[activeIndex];
+    const el = currentRowEls[activeIndex];
     if (el) el.scrollIntoView({ block: "nearest" });
   }
 
@@ -527,7 +687,7 @@
     // Enter should trigger the same thing a plain click on the row does,
     // so it targets that inner button when present rather than the row's
     // own (actionless, for "result" rows) click.
-    const el = resultsEl.children[activeIndex];
+    const el = currentRowEls[activeIndex];
     if (!el) return;
     const main = el.querySelector(".command-palette-row-main");
     (main || el).click();
@@ -608,12 +768,37 @@
         labelCtx = null;
         input.value = "";
         input.placeholder = "Search tasks, events, contacts…";
+        updatePanelsVisibility();
         runQuery("");
       } else {
         close();
       }
     }
   });
+
+  // Type filter pills (global mode only) -- clicking a pill sets the
+  // active type and re-runs the current query with /api/search's
+  // existing `types` param (runQuery above), rather than filtering the
+  // already-fetched page of results client-side, so a filtered view
+  // still gets a full page of that one type instead of whatever fraction
+  // of the unfiltered 20-result page happened to match.
+  if (filtersEl) {
+    filtersEl.addEventListener("click", function (e) {
+      const btn = e.target.closest(".command-palette-pill");
+      if (!btn || mode !== "global") return;
+      typeFilter = btn.getAttribute("data-type-filter") || "";
+      setActivePill(typeFilter);
+      runQuery(input.value.trim());
+    });
+  }
+
+  // Footer New task/New event buttons -- create directly from whatever's
+  // currently typed (createEntity handles an empty title fine, same as
+  // opening /tasks/new or /events/new with no query string), reachable
+  // without needing a nonempty query the way the "Create task/event: ..."
+  // rows above the fold require.
+  if (newTaskBtn) newTaskBtn.addEventListener("click", function () { createEntity("task", input.value.trim()); });
+  if (newEventBtn) newEventBtn.addEventListener("click", function () { createEntity("event", input.value.trim()); });
 
   if (closeBtn) closeBtn.addEventListener("click", close);
   // Backdrop click closes, same convention as static/modal.js's own

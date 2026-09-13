@@ -287,7 +287,22 @@
      }
 
     // Contact photo cropper (contact_form.html) -- same re-init reasoning.
-    if (window.CCAvatarCropper) window.CCAvatarCropper.init(body);
+    // 2026-09-12 bugfix (direct report, "the banner upload still doesn't
+    // work"): banner_editor.html's Upload control has lived in
+    // #modal-footer (not #modal-body) since the 2026-09-08 "Remove/Upload
+    // move into the footer" slice (_modal_footer.html's footer_extra_html
+    // escape hatch) -- but this init call, and the form-submit-intercept
+    // loop below, only ever scanned `body`. CCAvatarCropper.init(body)
+    // never found `.banner-upload-input` in the footer, so selecting a
+    // file never opened the crop editor and nothing ever called
+    // form.requestSubmit() -- the upload form just sat there with a file
+    // chosen and no way to submit it. Also init on `footer` so a banner
+    // upload (and any future footer_extra_html file input) gets wired the
+    // same as a body one.
+    if (window.CCAvatarCropper) {
+      window.CCAvatarCropper.init(body);
+      if (footer) window.CCAvatarCropper.init(footer);
+    }
     // contact_form.html's Phone/Email add/remove rows (Contacts field
     // parity slice 2 of 6) -- same re-init reasoning.
     if (window.CCContactPhoneEmailRows) window.CCContactPhoneEmailRows.init(body);
@@ -336,7 +351,17 @@
     // below like any other modal form.
     if (window.CCWidgetPreview) window.CCWidgetPreview.init(body);
 
-    body.querySelectorAll("form").forEach((form) => {
+    // 2026-09-12 bugfix (same report as the CCAvatarCropper.init call
+    // above): this used to be `body.querySelectorAll("form").forEach(...)`
+    // only -- a footer_extra_html form (banner_editor.html's Upload/Remove,
+    // the only current user) lives in #modal-footer, a sibling of
+    // #modal-body, so it was never wired here either. Upload has no submit
+    // button of its own (the crop editor's Apply is what calls
+    // form.requestSubmit() once wiring above is fixed), so with neither fix
+    // applied a chosen file had literally no path to actually submit.
+    // Factored into a named function so the same per-form wiring applies to
+    // both `body` and `footer` forms without duplicating the whole handler.
+    const wireForm = (form) => {
       // data-modal-get forms (a search box) are handled by their own
       // document-level listener below instead -- this per-form handler
       // assumes a POST-and-fetch shape (method: form.method || "POST",
@@ -428,7 +453,9 @@
           }
         }
       });
-    });
+    };
+    body.querySelectorAll("form").forEach(wireForm);
+    if (footer) footer.querySelectorAll("form").forEach(wireForm);
   }
 
   // 2026-08-08 view<->edit merge (see _modal_footer.html, and the

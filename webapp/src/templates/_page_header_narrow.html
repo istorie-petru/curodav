@@ -71,8 +71,24 @@
    icon+title -- true leftmost, not just "left edge of the right-hand
    actions cluster". `.page-header-narrow-actions` (real page-specific
    controls, e.g. Calendar's prev/next/subnav) is untouched and still
-   right-aligned; only the crumbs-driven back arrow moved. #}
-{% macro page_header_narrow(title, icon_name) %}
+   right-aligned; only the crumbs-driven back arrow moved.
+
+   2026-09-12 follow-up (direct feedback: "the bulk count should be
+   allowed to sit on the first row" -- of the mobile two-row wrap that
+   drops the whole actions cluster to its own line, style.css's own
+   comment). New optional `title_extra` param: pre-rendered, already-
+   escaped-safe HTML (a captured `{% set %}...{% endset %}` block, or the
+   return value of another macro call -- both come out Markup-safe under
+   Jinja's autoescape, no `|safe` needed) rendered right after the title,
+   before the spacer -- so it's a sibling of the title/icon in this
+   macro's own flex row, not nested inside `.page-header-narrow-actions`
+   (which mobile forces onto row two). Every bulk-select page
+   (Tasks/Holidays/Time Blocks/Labels/Contacts) passes its bulk-count span
+   here now instead of rendering it inside the actions block -- see
+   _bulk_actions_bar.html's new `bulk_count()` macro and each call site's
+   own comment. Empty string by default (`title_extra=''`), so pages with
+   nothing to add here render exactly as before. #}
+{% macro page_header_narrow(title, icon_name, title_extra='') %}
 {% set _banner = page_header_banner(request) %}
 <div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
     {% if _banner %}
@@ -87,6 +103,7 @@
     {% endif %}
     <span class="page-header-narrow-icon">{{ icon(icon_name|default('layout')) }}</span>
     <h2 class="page-header-narrow-title">{{ title }}</h2>
+    {% if title_extra %}{{ title_extra }}{% endif %}
     <div class="spacer"></div>
     {% if caller %}
     <div class="page-header-narrow-actions">

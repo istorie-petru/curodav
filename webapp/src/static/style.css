@@ -2054,6 +2054,27 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
   display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
 .bulk-count{font-weight:600; font-size:var(--text-footnote); white-space:nowrap;}
+/* 2026-09-12 (direct feedback: "the bulk count should be allowed to sit
+   on the first row" -- the mobile two-row wrap above forces the whole
+   actions cluster, Clear/Delete/any filter dropdown, onto row two, but
+   the plain-text count reads better as a status line next to the title
+   itself). Moved out of .bulk-actions-bar in the markup into
+   _page_header_narrow.html's new title_extra slot (renders right after
+   the title, before the spacer -- see that macro's own comment and
+   _bulk_actions_bar.html's new bulk_count() macro) for every bulk-select
+   page (Tasks/Holidays/Time Blocks/Labels/Contacts), so it's a sibling of
+   the title/icon now, not nested in the actions block that gets pushed to
+   row two. `:empty` hides it entirely (zero-width, no flex `gap` taken
+   either side) whenever nothing's selected -- previously that was free,
+   the count lived inside `.bulk-actions-bar`'s own `display:none`; now
+   that it's always a rendered sibling of the title, it needs its own
+   empty-state instead of just inheriting a hidden ancestor.
+   bulk_select.js/tasks_table.js's updateBar() clears its textContent back
+   to "" on deselect specifically so this rule actually re-hides it. */
+.bulk-count:empty{display:none;}
+.page-header-narrow.has-banner .bulk-count{
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
 /* Completed tasks stay in the table (Today/All/This-week views) but read
    as visually distinct and de-emphasized -- dimmed + strikethrough title,
    plus the divider row above (tasks_list.html) that separates them from
@@ -2599,12 +2620,28 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 
 /* Contacts list (contacts_list.html) */
 .contact-list{display:flex; flex-direction:column;}
+/* 2026-09-14 ("add bulk select for contacts too"): the row used to be a
+   single `.contact-row` anchor carrying its own border/padding/hover.
+   Now `.contact-row-wrap` is the actual row (border, hover, the
+   bulk-select `.is-selected` tint) and `.contact-row` is just the
+   clickable link filling the rest of it alongside the new checkbox --
+   same "wrapper owns the row, inner element owns its own click target"
+   split every `<tr><td><a>` table row in this app already has, with this
+   div standing in for the `<tr>` a card-list doesn't have. See
+   static/bulk_select.js's `rowSelector` option and _contacts_body.html's
+   own comment. */
+.contact-row-wrap{
+  display:flex; align-items:center; gap:var(--space-2); padding-left:var(--space-2); border-bottom:1px solid var(--separator);
+}
+.contact-row-wrap:last-child{border-bottom:none;}
+.contact-row-wrap:hover{background:var(--row-alt);}
+.contact-row-wrap.is-selected{background:var(--accent-neutral-subtle);}
+.contact-row-wrap .row-select{flex:none;}
 .contact-row{
-  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); border-bottom:1px solid var(--separator);
+  display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); flex:1; min-width:0;
   text-decoration:none; color:inherit;
 }
-.contact-row:last-child{border-bottom:none;}
-.contact-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-row:hover{text-decoration:none;}
 .contact-row-main{display:flex; flex-direction:column; flex:1; min-width:0;}
 .contact-row-name{font-weight:600; color:var(--fg-primary);}
 .contact-row-sub{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -2613,7 +2650,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;
 }
 .avatar-large{width:52px; height:52px; font-size:20px;}
-img.avatar-circle{object-fit:cover; border:1px solid var(--border);}
+img.avatar-circle{object-fit:cover;}
 .contact-quick-actions{display:flex; gap:8px; margin-bottom:14px;}
 
 /* Photo upload field (contact_form.html) -- avatar (real photo or initials
@@ -4595,11 +4632,73 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-input-row > .icon{color:var(--fg-tertiary); flex:none;}
 .command-palette-input{
-  flex:1; min-width:0; border:none; background:transparent; font-size:var(--text-body);
-  color:var(--fg-primary); padding:6px 0;
+  flex:1; min-width:0; border:none; background:transparent; font-size:17px;
+  color:var(--fg-primary); padding:var(--space-2) var(--space-1); box-sizing:border-box;
 }
-.command-palette-input:focus{outline:none;}
+/* The base form-control rule (input:focus{box-shadow:0 0 0 3px ...})
+   still applies here at lower specificity -- a class+pseudo selector
+   beats a type+pseudo one, but only for properties this rule actually
+   sets, so box-shadow needs an explicit override too, not just outline.
+   Left unset, the palette auto-focuses this field the instant it opens
+   (see command_palette.js's open()), so that ring is always visible and
+   reads as a stray boxed border around otherwise-borderless text. */
+.command-palette-input:focus{outline:none; box-shadow:none;}
+
+/* Type filter pills (direct feedback, 2026-09-12 mockup) -- wraps instead
+   of scrolling (no horizontal scrollbar, even with four pills on a narrow
+   phone width) since the row only ever holds four short labels. */
+.command-palette-filters{
+  display:flex; flex-wrap:wrap; gap:var(--space-2);
+  padding:var(--space-2) var(--space-4) var(--space-3); border-bottom:1px solid var(--separator);
+  flex:none;
+}
+.command-palette-pill{
+  display:flex; align-items:center; gap:4px;
+  padding:4px var(--space-3); border-radius:999px; border:1px solid var(--border);
+  background:transparent; color:var(--fg-secondary); font-size:var(--text-footnote); cursor:pointer;
+}
+.command-palette-pill .icon{color:inherit;}
+.command-palette-pill:hover{background:var(--bg-secondary);}
+.command-palette-pill.is-active{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
+
 .command-palette-results{overflow-y:auto; flex:1; padding:var(--space-2);}
+
+/* Date-grouped results (direct feedback, 2026-09-12) -- Overdue/This
+   week/Later/No date section dividers ahead of their first row,
+   command_palette.js's groupRowsByDate. Not a .command-palette-row, so
+   it's automatically excluded from keyboard navigation (currentRowEls
+   only collects .command-palette-row elements). */
+.command-palette-group-header{
+  margin-top:var(--space-3); padding:var(--space-1) var(--space-3);
+  font-size:var(--text-caption); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
+}
+.command-palette-group-header:first-child{margin-top:0;}
+
+/* Footer (direct feedback, 2026-09-12) -- real ↑↓/↵ keyboard hints
+   (spelled out, not literal "t"/"e" shortcuts -- those would collide
+   with typing into the always-focused input above) plus two buttons
+   that create directly, mirroring the mobile bottom-sheet's own New
+   task/New event buttons. Hidden outside global mode/Quick Capture,
+   see command_palette.js's updatePanelsVisibility. */
+.command-palette-footer{
+  display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
+  padding:var(--space-2) var(--space-4); border-top:1px solid var(--separator); flex:none;
+}
+.command-palette-footer-hints{display:flex; align-items:center; gap:var(--space-4);}
+.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-caption); color:var(--fg-tertiary);}
+.command-palette-footer-hints kbd{
+  border:1px solid var(--border); border-radius:4px; padding:1px 5px;
+  font:inherit; font-size:var(--text-caption); color:var(--fg-tertiary); background:var(--bg-secondary);
+}
+.command-palette-footer-actions{display:flex; gap:var(--space-2);}
+.command-palette-footer-btn{
+  display:flex; align-items:center; gap:6px;
+  padding:4px var(--space-3); border-radius:var(--radius-control); border:1px solid var(--border);
+  background:transparent; color:var(--fg-primary); font-size:var(--text-footnote); cursor:pointer;
+}
+.command-palette-footer-btn:hover{background:var(--bg-secondary);}
+.command-palette-footer-btn .icon{color:var(--fg-tertiary);}
+
 .command-palette-row{
   display:flex; align-items:center; gap:var(--space-3); width:100%;
   padding:var(--space-2) var(--space-3); border:none; background:transparent; border-radius:var(--radius-control);
@@ -4635,6 +4734,31 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-action:hover{background:var(--bg-tertiary); color:var(--fg-primary);}
 .command-palette-action.is-danger:hover{color:var(--danger);}
+
+/* Mobile: bottom sheet instead of a floating centered card (direct
+   feedback, 2026-09-12) -- anchored to the bottom edge, full width,
+   top-only radius, and every result row grows to a real 44px touch
+   target instead of the desktop-sized row used above 720px. Placed
+   after the base .command-palette-row and .command-palette-footer
+   rules above (not before them, source-order-wise) on purpose --
+   same specificity means the later rule wins per shared property, so
+   with this after, a future edit to the base rules can't silently
+   reintroduce a desktop value that wins over this mobile override at
+   narrow widths the way it would if this block sat earlier. */
+@media (max-width:720px){
+  .command-palette-overlay{align-items:flex-end; padding:0;}
+  .command-palette{
+    width:100%; max-width:100%; max-height:80vh;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    transform:translateY(100%);
+  }
+  .command-palette-overlay.is-open .command-palette{transform:translateY(0);}
+  .command-palette-row{min-height:44px; box-sizing:border-box;}
+  .command-palette-footer{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
+  .command-palette-footer-hints{display:none;}
+  .command-palette-footer-actions{flex:1;}
+  .command-palette-footer-btn{flex:1; justify-content:center; padding:var(--space-2);}
+}
 
 /* Quick Capture (plans/quick-capture.md) -- the single preview row shown
    while a !t/!e/!c/!n marker is present in global mode's input
@@ -4994,7 +5118,23 @@ body.command-palette-open{overflow:hidden;}
 .tag-usage-count{
   flex:none; font-size:12px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
 }
-.btn-sm{padding:4px 10px; font-size:13px;}
+/* 2026-09-15 bugfix (direct report on the Tasks header bar: "that button
+   still has less height compared to the others" -- traced to this rule).
+   Was a bare `.btn-sm{...}` -- specificity (0,1,0), one class -- which
+   loses to `button.btn, a.btn{...}` (specificity (0,1,1), element+class)
+   whenever both match the same element, which is every real caller
+   (`class="btn ... btn-sm"`, always alongside `.btn`). That means
+   `.btn-sm`'s smaller `padding`/`font-size` have never actually applied
+   anywhere in the app -- every `.btn-sm` button (contact_form.html's "Add
+   phone/email/website/address/social network" rows, event_detail.html's
+   Restore/Cancel occurrence/Move, settings_data_maintenance.html's
+   Restore/Dismiss, label_form_modal.html's Add/Change banner,
+   _bulk_actions_bar.html's/tasks_list.html's Delete/Clear) has been
+   silently rendering at the base `.btn`'s full size instead of the
+   smaller one `.btn-sm` was always meant to give it. Matching the
+   selector's own element+class shape (rather than reaching for
+   `!important`) is what actually wins the cascade now. */
+button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* Row hover feedback -- .calendar-row had none before (unlike the plain
    <table> rows elsewhere, which already highlight via `tbody tr:hover`).
@@ -5421,7 +5561,15 @@ body.command-palette-open{overflow:hidden;}
    row, .project-preview-row: no separators, a plain hover tint). font-size
    drops one notch to --text-footnote (14px, was --text-callout's 15.5px)
    to match the compact scale the rest of a widget's body already uses
-   (.widget-section-label, stat captions). */
+   (.widget-section-label, stat captions).
+
+   2026-09-13: reconsidered and reaffirmed, not just left alone by
+   default -- a dashboard size-up mockup's dense list style used exactly
+   this kind of bottom-border row divider, and it was a direct, deliberate
+   call to leave that part out of the real app while still adopting other
+   pieces of the same mockup (see `.at-a-glance-stat`'s own 2026-09-13
+   comment) specifically because of the "archaic" feedback this comment
+   already documents. */
 .widget-content table{font-size:var(--text-footnote);}
 .widget-content tbody tr{border-bottom:none;}
 .widget-content tbody td{padding:7px 4px;}
@@ -5535,14 +5683,26 @@ body.command-palette-open{overflow:hidden;}
    rework 2026-08-07) -- a row of number+label stat blocks, each a link to
    the matching filtered Tasks view. Reuses .widget-section-label for the
    small caption under each number rather than inventing a new label
-   style. */
-.at-a-glance-row{display:flex; gap:var(--space-4); flex-wrap:wrap;}
+   style.
+
+   2026-09-13 (direct request, "steal the way information is displayed
+   and styled from the [dashboard size-up] mockup") -- each stat now has
+   its own permanently-visible tinted block instead of only tinting on
+   hover, matching the mockup's look: a stat reads as a distinct block at
+   a glance, not plain text that happens to highlight when your cursor
+   passes over it. NOT paired with the mockup's other density cue (bottom-
+   border row dividers on Agenda/Upcoming lists) -- direct decision to
+   leave those out, since this codebase already has a dated, deliberate
+   decision to remove exactly that kind of row divider after direct
+   feedback called them "archaic"/spreadsheet-like (see
+   `.widget-content tbody tr` below). */
+.at-a-glance-row{display:flex; gap:var(--space-3); flex-wrap:wrap;}
 .at-a-glance-stat{
   flex:1; text-align:center; text-decoration:none; color:inherit;
-  padding:var(--space-2); border-radius:var(--radius-md);
-  min-width:0;
+  padding:var(--space-3) var(--space-2); border-radius:var(--radius-lg);
+  min-width:0; background:var(--bg-secondary);
 }
-.at-a-glance-stat:hover{background:var(--bg-secondary); text-decoration:none;}
+.at-a-glance-stat:hover{background:var(--bg-tertiary); text-decoration:none;}
 .at-a-glance-number{font-size:28px; font-weight:600; line-height:1.1;}
 .at-a-glance-number.is-overdue{color:var(--danger);}
 /* 2026-08-07: at third/half width there isn't room for all three stats at
@@ -5598,10 +5758,33 @@ body.command-palette-open{overflow:hidden;}
    widget_link_row macro (_widget_items.html) attaches instead of the inline
    `style="width:26px"/"width:60px"/"width:150px"/"text-align:right"`
    attributes each widget used to hand-roll. nowrap is what actually fixes
-   a date+time column wrapping to two lines; no fixed widths. */
+   a date+time column wrapping to two lines; no fixed widths.
+
+   2026-09-13 direct fix (live-verified, Claude in Chrome): `.widget-row-
+   time` had no width constraint at all -- fine on a 3-column row (Today's
+   Events section: time / title / nothing else), where the OTHER fixed-
+   width cell implicitly bounds things, but on a 2-column row (the
+   Upcoming/all_upcoming Events section has no `right` cell -- see
+   _widget_agenda.html) the browser's table auto-layout gave the nowrap
+   time column ~500px and squeezed the actual event title into a ~180px
+   sliver jammed against the right edge, on a table only 679px wide --
+   confirmed via getBoundingClientRect() on the live page, not guessed.
+   `width:1%` is the standard auto-table-layout trick for "shrink this
+   column to its content's width, give everything else to the other
+   column(s)" -- combined with the existing nowrap it now behaves the same
+   whether or not a `right` cell happens to be present. */
 .widget-row-icon{width:26px;}
-.widget-row-time{white-space:nowrap;}
+.widget-row-time{white-space:nowrap; width:1%;}
 .widget-row-right{text-align:right;}
+/* Event row leading marker (2026-09-13, direct request: "circle dot like
+   in mockup") -- sits in the same `.widget-row-icon` 26px slot a task's
+   checkbox occupies, so an Agenda widget's Overdue/Tasks/Events rows all
+   line up in the same column rhythm even though an event has nothing to
+   click there. Sized/colored like the mockup's own `.dot-evt`. */
+.widget-event-dot{
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:var(--accent);
+}
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
 .widget-config summary{cursor:pointer; font-size:13px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
@@ -5667,6 +5850,20 @@ body.command-palette-open{overflow:hidden;}
    outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);
 }
 .widget-list-multiselect .ms-trigger .filter-caret{margin-left:auto;}
+/* Read-only variant (published_list_create_modal.html's Type field once a
+   List already exists -- see that template's own comment) -- same box as a
+   real dropdown trigger (full width, matching border/padding/radius) so it
+   doesn't look like an undersized, broken control next to Sharing's actual
+   dropdown, but with the interactive affordances that box otherwise implies
+   removed: no pointer cursor, no hover/focus state, background reads as
+   "disabled" not "clickable." A plain `<div>`, not a `<button>` -- there's
+   nothing to activate, so it's not part of the tab order either. */
+.widget-list-multiselect .multiselect-trigger.multiselect-trigger-static{
+   cursor:default; background:var(--bg-secondary); color:var(--fg-secondary);
+}
+.widget-list-multiselect .multiselect-trigger.multiselect-trigger-static:hover{
+   background:var(--bg-secondary); border-color:var(--control-border);
+}
 .widget-list-multiselect .ms-panel{left:0; right:auto; width:100%; max-height:220px; overflow:auto;}
 /* View sits in the same two-column .field-grid row as Range (each 1fr,
    see .field-grid above), which was forcing a long label like "Agenda
@@ -6063,6 +6260,82 @@ body.command-palette-open{overflow:hidden;}
   .calendar-new-form input,
   .calendar-new-form select,
   .calendar-new-form .multiselect{width:100%; min-width:0;}
+
+  /* 2026-09-12 (direct feedback: "the mobile view can't fit all the
+     content sometimes visible in the narrow header. could we make it two
+     rows for mobile?"). .page-header-narrow used to be a fixed height:48px,
+     one row, overflow:hidden on every viewport (see the base rule below,
+     now scoped to desktop only) -- on a narrow viewport, a page with a
+     real actions cluster (Tasks/Contacts' filter dropdown + bulk bar,
+     Calendar's prev/next + Month|Day subnav) plus the icon+title often
+     didn't fit that one 48px row, and overflow:hidden was silently
+     clipping whatever didn't fit instead of showing it. Give the header a
+     second row here: icon+title(+back arrow, +bulk-count -- see
+     _page_header_narrow.html's title_extra param) keep row one, the
+     actions cluster -- when a page has one at all, since
+     .page-header-narrow-actions only renders when the macro's caller
+     block has content -- moves to its own full-width row two. Plain-title
+     pages (no actions block) are untouched, still a single row.
+
+     2026-09-12 same-day follow-up (direct feedback: "remove the height
+     requirement for mobile view"): dropped the `min-height:48px` floor
+     this block used to set here -- there's no explicit height rule at all
+     for this class below 721px now (the old fixed height:48px moved into
+     a `@media (min-width:721px)` block right on the base rule, the same
+     mobile-first pattern .page-banner's own aspect-ratio override already
+     uses a few hundred lines up), so the header is purely content-sized
+     on mobile: one row when there's nothing to wrap, two when there is,
+     never an artificial floor either way.
+
+     2026-09-12 same-day follow-up (direct feedback, screenshot of Tasks'
+     row two: "could we make the items in the row centered?" -- Clear/
+     Delete/All dates were flush against the row's right edge via
+     `justify-content:flex-end`, the same right-alignment the desktop
+     single-row layout uses (there, it reads as "flush against the
+     header's own right edge" since the actions slot is the last thing in
+     the row; wrapped onto its own full-width row two on mobile, the same
+     right-flush rule instead reads as an odd, unbalanced left gap with
+     nothing to visually anchor to). Centered instead, mobile only --
+     desktop's flex-end (real right edge) is untouched.
+
+     2026-09-12 same-day follow-up (direct feedback: "all. the title too.
+     also i want to have a bit more top and bottom space"): row one (back
+     arrow/icon/title/bulk-count) gets the same `justify-content:center`
+     treatment row two just got, and the header's own top/bottom padding
+     grows from `--space-2` (8px) to `--space-3` (12px) on mobile.
+     `.spacer` (the plain `<div>` between title and actions, `flex:1`
+     everywhere else in the app -- its whole job is normally "eat the
+     remaining width so the actions slot sits flush against the header's
+     right edge") needs neutralizing here specifically: left as `flex:1`
+     it would still greedily claim 100% of row one's leftover space before
+     `justify-content:center` ever saw any free space to distribute,
+     silently defeating the centering. Row two doesn't need the same fix
+     -- .page-header-narrow-actions's own `flex-basis:100%` already makes
+     it fill the whole line, so there's no leftover space for a spacer to
+     eat there even if one existed.
+
+     2026-09-12 same-day follow-up #2 (direct feedback, screenshot: "the
+     title is not perfectly centered" -- Tasks, no back arrow, so row one
+     was just icon+title+spacer): the fix right above used `flex:none` on
+     .spacer, not `display:none` -- a flex item with `flex:none` and no
+     content still has a real (zero) width box that still counts on one
+     side of `gap`, so row one's flex line was really "icon, gap, title,
+     gap, spacer(0-width)" -- three items, not two. `justify-content:
+     center` centers that whole three-item line, gaps included, so the
+     trailing empty gap-plus-spacer past the title pushed the *visible*
+     icon+title content off-center to the left by roughly half a gap.
+     `display:none` instead removes it from the flex layout entirely --
+     no box, no gap either side of it -- so row one is genuinely just
+     "icon, gap, title" and centers on the content actually visible. */
+  .page-header-narrow{
+    flex-wrap:wrap; row-gap:var(--space-2);
+    justify-content:center;
+    padding-top:var(--space-3); padding-bottom:var(--space-3);
+  }
+  .page-header-narrow .spacer{display:none;}
+  .page-header-narrow-actions{
+    flex-basis:100%; justify-content:center;
+  }
 }
 
 /* Segmented control (.segmented/.seg-btn) many-option overflow, app-wide --
@@ -6117,7 +6390,17 @@ body.command-palette-open{overflow:hidden;}
 @media (min-width:721px){
   .page-banner{aspect-ratio:5 / 1;}
 }
-.page-banner img{
+/* 2026-09-13 bug fix: was the bare descendant selector `.page-banner img`,
+   which matches ANY <img> inside .page-banner. Harmless here (the avatar
+   lives below the cover, outside .page-banner entirely -- see
+   .page-banner-header-row below), but a same-day on-photo experiment
+   briefly nested the avatar inside .page-banner too and this selector
+   caught it, stretching a 44px avatar to the cover's own 100%/100% --
+   direct bug report ("the avatar is too big"). Kept scoped to this
+   dedicated class even after reverting the avatar back outside
+   .page-banner, since it makes that whole class of bug impossible
+   regardless of what else ever ends up nested in here. */
+.page-banner-cover{
   width:100%; height:100%; object-fit:cover; display:block;
 }
 .page-banner-wrap{position:relative;}
@@ -6130,9 +6413,14 @@ body.command-palette-open{overflow:hidden;}
    bottom edge (half over the photo, half below -- unchanged), but the
    title now renders entirely below the cover in `.page-banner-header-row`,
    in the page's normal text color, so it never has to compete with
-   whatever the photo's own bottom-left content happens to be. See
-   _page_banner.html's own comment for the full rationale and the
-   `page_banner()` macro this now renders through. */
+   whatever the photo's own bottom-left content happens to be.
+
+   2026-09-13: tried moving the title back onto the photo for a same-day
+   dashboard size-up review (overlay + persistent scrim, avatar shrunk to
+   44px), then reverted back to exactly this below-cover design a few
+   hours later per direct request ("I would like to have the Title below
+   design back with the big avatars") after seeing the on-photo version
+   live. See _page_banner.html's own comment for the fuller history. */
 .page-banner-header-row{
   display:flex; align-items:flex-end; gap:var(--space-3);
   /* Pulls the row up by half the avatar's own height (avatar-hero is
@@ -6155,12 +6443,79 @@ body.command-palette-open{overflow:hidden;}
   margin-top:-36px; margin-bottom:var(--space-4);
   padding-left:var(--space-4); padding-right:var(--space-4);
   position:relative; z-index:1;
+  /* 2026-09-13 bug fix, direct report ("the edit mode buttons are not
+     clickable in all their button glory, the bottom part is not
+     clickable") -- this row's negative margin-top pulls it up 36px to
+     let the avatar straddle the cover's bottom edge (by design, see the
+     comment above), but that also means its own box -- a plain <div>,
+     full width, no visible background outside the avatar/title -- now
+     physically overlaps the bottom 36px of .page-banner. Both this row
+     and .page-banner-actions (the New widget/Add banner/Reset layout/
+     Done buttons, floated bottom-right *inside* .page-banner) carry
+     z-index:1 in the same stacking context, so this row -- later in the
+     DOM -- painted on top and silently ate clicks over however much of
+     the buttons' own height fell inside that 36px overlap, even though
+     nothing here is visibly drawn there. Nothing in this row is
+     interactive (avatar is a plain <img>/icon span, title is a plain
+     h1 -- see _page_banner.html), so it's safe to make the whole box
+     click-through and let events fall to whatever's actually
+     underneath (the cover photo, or the action buttons) instead of
+     fighting over z-index with a sibling it isn't supposed to compete
+     with in the first place. */
+  pointer-events:none;
 }
 .page-banner-avatar-wrap{flex:none;}
 .avatar-hero{
   width:72px; height:72px; font-size:26px;
   border:3px solid var(--bg-elevated);
   box-shadow:0 2px 10px rgba(0,0,0,.35);
+}
+/* Colored squircle icon tile (2026-09-13, direct request) -- a Space or
+   Project page renders one of these in the avatar slot instead of the
+   account's own profile photo/initial ("merging [the icon and the
+   profile picture] into something custom for spaces and projects alike"
+   -- a Space/Project was never really "a person," so showing the
+   account's own avatar there never made much sense; its icon used to be
+   prepended to the title text instead, e.g. "📁 CS101" -- that's gone
+   from the title now that the icon lives here).
+
+   Color comes from the Space/Project's own existing `label_config.color`
+   (the same hue name every `.cal-*`/`.tag-*` swatch already reads, see
+   this file's own "Calendar/label swatch palette" comment near the top)
+   -- no new color system. `_page_banner.html` sets `--tile-swatch` inline
+   to `var(--cal-bg-<hue>)` for whichever hue this Space/Project already
+   has; the gradient below just lightens that same color at one end via
+   `color-mix()` rather than needing a second stored color per hue. Reuses
+   `.avatar-circle`'s flex-centering/color/font-weight base (see this
+   file's own `.avatar-circle` rule) and `.avatar-hero`'s sizing above --
+   only the shape and fill are its own. */
+.label-icon-tile{
+  border-radius:28%;
+  /* 2026-09-13, third pass -- direct report the gradient still wasn't
+     fully opaque even after two targeted fixes (the color-mix() percentage
+     math, then the --tile-swatch fallback for legacy colors). Both of
+     those were real bugs, but this rule had a THIRD, more fundamental
+     problem neither one touched: everything lived in one `background`
+     shorthand built around color-mix() (`background:linear-gradient(135deg,
+     color-mix(...), var(--tile-swatch))`). A single shorthand value is
+     all-or-nothing -- if color-mix() itself isn't supported by the
+     browser rendering this (it's a newer CSS Color 4 function; support
+     landed later than most of the properties this app otherwise relies
+     on), the ENTIRE declaration is invalid, not just the one function
+     call, and the whole tile falls back to transparent regardless of how
+     correct the percentages or the swatch fallback are.
+
+     Rebuilt with no color-mix() at all, split across two independent
+     longhand properties instead of one shorthand: `background-color` is
+     the solid, always-supported fill (with its own literal hex at the end
+     of the fallback chain, not just another var() that could itself be
+     undefined), and `background-image` is a plain rgba() white sheen for
+     the "gradient" look, layered on top -- rgba() has no browser-support
+     question at all. If either property somehow fails, it fails on its
+     own; it can no longer take the other one down with it. */
+  background-color:var(--tile-swatch, var(--cal-bg-blue, #3778bd));
+  background-image:linear-gradient(135deg, rgba(255,255,255,.3), rgba(255,255,255,0) 60%);
+  color:#fff;
 }
 .page-banner-title{
   margin:0; min-width:0; color:var(--fg-primary); font-weight:700;
@@ -6171,8 +6526,8 @@ body.command-palette-open{overflow:hidden;}
 /* Page action bar (2026-08-10) -- ALL of a dashboard/label page's actions
    (New widget / Add-Change banner / Reset layout) live together in
    .page-banner-actions. With a banner it's a real child of .page-banner
-   now (2026-09-07 -- see _page_banner.html's own comment on why: anchoring
-   to .page-banner-wrap's bottom edge would drift onto the new header row
+   (2026-09-07 -- see _page_banner.html's own comment on why: anchoring
+   to .page-banner-wrap's bottom edge would drift onto the header row
    below the photo instead of staying pinned to the photo's own corner),
    floating bottom-right over the image itself; without one it's a plain
    top bar and the page's h1 title sits left of the buttons (as
@@ -6229,27 +6584,35 @@ body.command-palette-open{overflow:hidden;}
    .page-banner above, which is a different image per Home/label page). */
 .page-header-narrow{
   position:relative; overflow:hidden;
-  /* 2026-09-07 (direct measurement: height varied 46-50px depending on
-     which control happened to render in .page-header-narrow-actions --
-     a filter-dropdown-trigger's page measured 50px, a plain icon+title
-     page measured 46px, both off the 48px target in opposite
-     directions). Auto-sizing this row off whichever child happens to be
-     tallest turned out not to reliably land on 48px even after capping
-     every known control at a 32px content budget (8px padding either
-     side) -- some small, hard-to-fully-account-for difference in how
-     each control's own content naturally sizes (line-height rounding,
-     a competing border-width rule winning by specificity in one case,
-     etc.) kept nudging the *measured* height off the *intended* one.
-     Setting height:48px directly makes the header's own box authoritative
-     regardless of those differences -- overflow:hidden above (already
-     needed for the optional banner image) absorbs anything that doesn't
-     quite fit rather than pushing the row taller. */
-  height:48px;
   display:flex; align-items:center; gap:var(--space-2);
   padding:var(--space-2) var(--space-3); margin-bottom:var(--space-3);
   border-radius:var(--radius-card); border:1px solid var(--border);
   background:linear-gradient(120deg, var(--accent-subtle), transparent 70%),
              var(--bg-elevated);
+}
+/* 2026-09-07 (direct measurement: height varied 46-50px depending on which
+   control happened to render in .page-header-narrow-actions -- a filter-
+   dropdown-trigger's page measured 50px, a plain icon+title page measured
+   46px, both off the 48px target in opposite directions). Auto-sizing
+   this row off whichever child happens to be tallest turned out not to
+   reliably land on 48px even after capping every known control at a 32px
+   content budget (8px padding either side) -- some small, hard-to-fully-
+   account-for difference in how each control's own content naturally
+   sizes (line-height rounding, a competing border-width rule winning by
+   specificity in one case, etc.) kept nudging the *measured* height off
+   the *intended* one. Setting height:48px directly makes the header's own
+   box authoritative regardless of those differences -- overflow:hidden
+   above (already needed for the optional banner image) absorbs anything
+   that doesn't quite fit rather than pushing the row taller.
+   2026-09-12 (direct feedback: "remove the height requirement for mobile
+   view") -- scoped to desktop only, same mobile-first pattern as
+   .page-banner's own aspect-ratio override above: below 721px this rule
+   doesn't apply at all, so the header is free to grow to however many
+   rows its content (and the mobile two-row wrap rule in the
+   @media(max-width:720px) block) needs, with no fixed/minimum height
+   fighting it. */
+@media (min-width:721px){
+  .page-header-narrow{height:48px;}
 }
 .page-header-narrow-bg{
   position:absolute; inset:0; width:100%; height:100%;
@@ -6295,6 +6658,100 @@ body.command-palette-open{overflow:hidden;}
 }
 .page-header-narrow-actions{
   display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+}
+/* 2026-09-12 (direct feedback + pasted DOM from Contacts with no tags and
+   nothing selected: "this element takes space and doesn't allow the
+   title to be centered vertically... hide it when we don't use it").
+   Holidays/Time Blocks/Labels/Contacts/Tasks all render a
+   `.bulk-actions-bar` in this slot unconditionally (so CCBulkSelect/
+   tasks_table.js can reveal it later), and Tasks/Contacts also render a
+   `.filter-bar` `<form>` here whose own visible content is always empty
+   -- it's purely a submit target the filter dropdown's inputs reference
+   by id (see _tasks_toolbar.html/contacts_list.html's own comments), not
+   real content. With nothing selected and no `.filter-dropdown` (or on
+   Calendar/etc., nothing at all) actually being shown, this slot used to
+   still be a real, present flex item -- on mobile specifically, the
+   mobile rule below forces it onto its own full-width row regardless of
+   whether it has anything to show, and `row-gap` adds space between that
+   phantom row and row one even when the phantom row's own content is
+   zero-height, pushing the title off-center.
+
+   Hide the slot outright when its only children are (some combination
+   of) `.bulk-actions-bar` and `.filter-bar` -- i.e. it has no OTHER child
+   (a `.filter-dropdown`, Calendar's own prev/next/segmented controls,
+   ...) -- unless `.has-visible-bulk-bar` says otherwise.
+   bulk_select.js/tasks_table.js's updateBar() toggles that class on this
+   element (not just the bar's own inline `display`) specifically so this
+   rule can react to it -- CSS has no "is this sibling currently visible"
+   selector, so the JS that already knows the answer says so explicitly.
+   The two `:not()`s' specificity ((0,3,0) vs. `.page-header-narrow-
+   actions` alone at (0,1,0)) is deliberately higher than the plain class
+   selector so this wins regardless of source order -- same cascade
+   lesson the height:48px bug two entries up in STATE.md was about. */
+.page-header-narrow-actions:not(:has(> :not(.bulk-actions-bar):not(.filter-bar))):not(.has-visible-bulk-bar){
+  display:none;
+}
+/* 2026-09-15 (direct feedback on Tasks' header: "the bulk select ones
+   should be at the end, and all buttons should have the same width").
+   "The end" is markup order (tasks_list.html/_bulk_actions_bar.html now
+   render Delete/Clear before the plain-text count, not after -- see
+   those templates' own comments); this is the "same width" half --
+   Delete/Clear (.bulk-actions-bar's own .btn-sm buttons) and any filter
+   dropdown trigger sharing this actions cluster (Tasks' Date filter,
+   Contacts' Label filter) get one common min-width and centered content,
+   so a row of "All dates / Delete / Clear" reads as a uniform set of
+   controls instead of three different-width shapes sized to their own
+   text. `min-width`, not `width` -- a caller with unusually long text
+   (labels_manage.html's "Remove from everything" `delete_label`) still
+   grows instead of clipping; it just won't look identical to a
+   short-label sibling in that one case. The plain-text count
+   (`.bulk-count`) is deliberately NOT included here, per the same
+   feedback ("the count stays as plain text, not a button").
+
+   2026-09-15 same-day follow-up (direct feedback: "that button still has
+   less height compared to the others" -- the filter-dropdown-trigger,
+   after the reorder below put it last/rightmost). Root cause: `.btn-sm`
+   (style.css, `.bulk-actions-bar`'s own Delete/Clear) is a single-class
+   selector, lower specificity than the base `button.btn, a.btn` rule that
+   sets `padding`/`font-size` -- so `.btn-sm`'s smaller padding/font-size
+   have never actually applied to a `<button class="btn ... btn-sm">`
+   anywhere in the app; Delete/Clear were rendering at the base .btn's
+   full padding (8px 16px) the whole time, taller than
+   `.filter-dropdown-trigger`'s own explicit 30px. That's a real,
+   pre-existing bug in `.btn-sm` itself (line ~5013, `button.btn.btn-sm,
+   a.btn.btn-sm` now, was bare `.btn-sm`) -- every other `.btn-sm` caller
+   in the app (contact_form.html's "Add phone/email/..." rows,
+   event_detail.html's Restore/Cancel occurrence, settings_data_
+   maintenance.html's Restore/Dismiss, label_form_modal.html's
+   Add/Change banner) was silently rendering at the same too-large size
+   this whole time and is now genuinely smaller, as `.btn-sm` always
+   meant to make it. Height parity here specifically is still pinned
+   explicitly (not left to padding math) since a fixed height plus
+   `align-items:center` (inherited from `.btn`'s own `display:inline-flex`)
+   is a more direct guarantee than relying on font-size/line-height/
+   padding to add up to exactly 30px on every browser. */
+.page-header-narrow-actions .filter-dropdown-trigger,
+.page-header-narrow-actions .bulk-actions-bar .btn{
+  min-width:112px; height:30px; justify-content:center;
+}
+/* 2026-09-12 (direct feedback: "on desktop it should be a small divider
+   line between normal buttons and the bulk edit ones") -- Tasks/Contacts
+   both render their filter dropdown (.filter-dropdown, the "normal"/
+   browsing control -- Date on Tasks, Label on Contacts) as a later
+   sibling of .bulk-actions-bar (the "bulk edit" Clear/Delete group) in
+   the same actions cluster (tasks_list.html/contacts_list.html's own
+   `{% call %}` blocks). `~` (general sibling, not `+`) because an empty
+   `<form class="filter-bar">` -- just a hidden `?q=` carry-through field,
+   no visible content -- sits between them in the markup on both pages.
+   Desktop only: on mobile the two groups already read as visually
+   distinct by sitting on different wrapped lines (see the
+   @media(max-width:720px) rule above), so a divider there would be
+   redundant clutter, not clarity. */
+@media (min-width:721px){
+  .page-header-narrow-actions .bulk-actions-bar ~ .filter-dropdown{
+    margin-left:var(--space-1); padding-left:var(--space-3);
+    border-left:1px solid var(--border);
+  }
 }
 /* Month's Month|Day .segmented switch (calendar_month.html's own
    `.calendar-subnav`) is the one other actions-slot control besides

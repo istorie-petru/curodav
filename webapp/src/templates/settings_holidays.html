@@ -2,15 +2,18 @@
 {% block title %}Holidays - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_bulk_actions_bar.html" import bulk_actions_bar %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
    "bulk actions on tables"), relocated into the header's actions slot
    2026-09-13 (audit-fixes-2.1.md) -- see _bulk_actions_bar.html's own
    header comment for why. Hidden by CSS/bulk_select.js until a row is
-   selected, same as before; only where it lives changed. #}
-{% call page_header_narrow("Holidays", "calendar") %}
+   selected, same as before; only where it lives changed.
+   2026-09-12: the count span moved to title_extra (sits next to the
+   title, not in the actions block) -- see _bulk_actions_bar.html's own
+   comment. #}
+{% call page_header_narrow("Holidays", "calendar", title_extra=bulk_count("holidays")) %}
 {{ bulk_actions_bar("holidays") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->

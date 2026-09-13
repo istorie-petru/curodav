@@ -1389,24 +1389,33 @@ _DEFAULT_STACK_CONFIG: dict = {"width": "half"}
 # (Events-only/all-upcoming, Overdue-only), reproducing the exact same
 # two panes the old seed showed.
 #
-# 2026-09-03 direct request (following a live bug report about the
-# all_upcoming branch above dropping today's own events, and a follow-up
-# question about this pane specifically) -- the third member's Show list
-# was ["overdue"] only, so a widget titled "Today" (by user convention --
-# both members are seeded with title=None and fall back to the generic
-# "Agenda" spec label until renamed) rendered "Nothing to show" any time
-# nothing was overdue, even with real tasks/events due/happening today.
-# Now ["overdue", "tasks", "events"] -- every Show section range="today"
-# actually supports -- so a fresh "Today" pane shows what its name
-# implies. Existing installs aren't touched by this (it's the seed used
-# only the first time a page's widgets are created, per
-# _ensure_default_widgets/_ensure_default_label_widgets's own one-time
-# app_meta flag) -- someone who already customized their own copy of this
-# widget keeps their own Show selection.
-_DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict]] = [
-    ("at_a_glance", {}),
-    ("agenda", {"range": "all_upcoming", "show": ["events"]}),
-    ("agenda", {"range": "today", "show": ["overdue", "tasks", "events"]}),
+# 2026-09-13 (direct request, dashboard size-up review): the stack used to
+# have a third member -- another Agenda pane, range="today" showing
+# overdue+tasks+events -- added 2026-09-03 to fix that pane rendering
+# "Nothing to show" when nothing was overdue. That fix widened its Show
+# list to match the *standalone* Today's Agenda widget above (also
+# range="today", also showing overdue+tasks+events by default -- see
+# AGENDA_DEFAULT_SHOW/_DEFAULT_TODAY_AGENDA_CONFIG) almost exactly, so a
+# fresh install ended up with the same "today" content rendered twice:
+# once as its own widget, once again as the stack's third member. Dropped
+# outright rather than re-fixed -- the standalone widget already covers
+# that content, and removing the duplicate is strictly less confusing
+# than any version of it that keeps showing the same tasks/events twice.
+#
+# Each member now also gets an explicit title instead of title=None (same
+# request) -- previously every seeded widget without a title fell back to
+# its generic spec label, so a fresh Home page showed THREE widgets all
+# just labeled "Agenda" (the standalone one plus two/three stack members)
+# with nothing to tell them apart until a user manually renamed them.
+# "Today" / "At a glance" / "Upcoming" name each by what it actually
+# shows. Existing installs aren't touched by this (it's the seed used only
+# the first time a page's widgets are created, per _ensure_default_widgets/
+# _ensure_default_label_widgets's own one-time app_meta flag) -- someone
+# who already has the old 3-member/untitled layout keeps it as-is unless
+# they change it themselves.
+_DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict, str]] = [
+    ("at_a_glance", {}, "At a glance"),
+    ("agenda", {"range": "all_upcoming", "show": ["events"]}, "Upcoming"),
 ]
 
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"
@@ -1419,7 +1428,9 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     page -- shared by _ensure_default_widgets and
     _ensure_default_label_widgets so both seed with the identical
     screenshot-driven look: Today's Agenda beside a stack of At a
-    Glance / Upcoming events / Overdue. Building the stack this way (a
+    Glance / Upcoming events (2026-09-13: the stack's third member, a
+    duplicate Overdue+Today pane, was dropped -- see
+    _DEFAULT_STACK_MEMBER_TYPES's own comment). Building the stack this way (a
     `type="stack"` row + group_uid members) mirrors stack_widget()'s own
     shape exactly, not a new mechanism.
 
@@ -1434,7 +1445,7 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     db.upsert_dashboard_widget(
         conn,
         {
-            "uid": str(uuid.uuid4()), "type": "agenda", "title": None,
+            "uid": str(uuid.uuid4()), "type": "agenda", "title": "Today",
             "config": agenda_config, "position": 0.0, "created_at": now, "label_name": label_name,
         },
     )
@@ -1446,14 +1457,14 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
             "config": dict(_DEFAULT_STACK_CONFIG), "position": 1.0, "created_at": now, "label_name": label_name,
         },
     )
-    for i, (wtype, extra_config) in enumerate(_DEFAULT_STACK_MEMBER_TYPES):
+    for i, (wtype, extra_config, title) in enumerate(_DEFAULT_STACK_MEMBER_TYPES):
         member_config = dict(extra_config)
         if label_name:
             member_config["label_name"] = label_name
         db.upsert_dashboard_widget(
             conn,
             {
-                "uid": str(uuid.uuid4()), "type": wtype, "title": None, "config": member_config,
+                "uid": str(uuid.uuid4()), "type": wtype, "title": title, "config": member_config,
                 "position": float(i), "created_at": now, "group_uid": stack_uid, "label_name": label_name,
             },
         )

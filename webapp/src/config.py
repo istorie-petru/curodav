@@ -71,6 +71,19 @@ class Settings:
     # (routers/settings.py::account_settings) falls back to persisting in
     # app_meta instead when this is unset, same as it always has.
     env_file_path: str | None = None
+    # Public-facing Radicale URL (2026-09-13, scripts/curodav-ctl's
+    # `install --dav`), e.g. "https://app.example.com/radicale/curodav/" --
+    # a path under the app's OWN hostname (nginx splits it off locally,
+    # see deploy/nginx/), never a second subdomain. Used ONLY for display
+    # (Published Lists' "subscribe_url" -- routers/published_lists.py's
+    # `list_index`), never for the app's own sync, which always talks to
+    # Radicale over loopback via radicale_base_url regardless of whether
+    # this is set. None (the default, and what any non-`--dav` deploy or
+    # local dev has) means "Radicale was never made publicly reachable" --
+    # callers fall back to radicale_base_url in that case, same as before
+    # this field existed, so an operator copying that loopback address
+    # still sees *something*, just not a link that resolves off-box.
+    radicale_public_base_url: str | None = None
 
 
 def load_settings() -> Settings:
@@ -104,6 +117,7 @@ def load_settings() -> Settings:
         deploy_mode=os.environ.get("CC_DEPLOY_MODE", "local"),
         radicale_env_configured=bool(os.environ.get("CC_RADICALE_URL")),
         env_file_path=os.environ.get("CC_ENV_FILE") or None,
+        radicale_public_base_url=os.environ.get("CC_RADICALE_PUBLIC_URL") or None,
     )
 
 

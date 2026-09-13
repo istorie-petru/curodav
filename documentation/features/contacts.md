@@ -4,7 +4,15 @@
 `Archived` label); organization is 100% by label.
 
 - **List** (`/contacts`) — search (`q`) + single-select label dropdown, rows with
-  avatar + name/org/phone + label pills.
+  avatar + name/org/phone + label pills. **Bulk select** (2026-09-14): each row
+  carries a `.row-select` checkbox (`_contacts_body.html`'s `.contact-row-wrap`,
+  a sibling wrapper around the row's own click-to-open `<a>` so a checkbox
+  click doesn't also open the contact); a Delete/Clear bar
+  (`_bulk_actions_bar.html`) appears in the page header once a row is checked,
+  driven by the shared `static/bulk_select.js` (same module Labels/Holidays/
+  Time Blocks use) via `POST /contacts/bulk-delete`. Re-initializes after the
+  page's own async-CRUD region swap (any contact create/edit/delete
+  elsewhere refreshes `#contacts-body`) so the checkboxes don't go stale.
 - **Detail/Edit** — `contact_detail.html` (read-only modal with `tel:`/`mailto:`
   quick actions) and `contact_form.html`; shared `_modal_footer`.
 - **Fields** — full_name, title, org, phone(s), email(s), address, notes,

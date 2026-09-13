@@ -38,13 +38,45 @@
 //                       usage," not an irreversible row delete, so it
 //                       supplies its own wording -- see
 //                       labels_manage.html.)
+//   rowSelector      -- (2026-09-14, contacts_list.html) CSS selector for
+//                       "the whole selectable row" a checkbox belongs to,
+//                       toggled `.is-selected` for styling -- default "tr"
+//                       (every existing caller is a real `<table>`).
+//                       Contacts' card-list rows aren't `<tr>`s, so that
+//                       caller passes ".contact-row-wrap" (the div wrapping
+//                       each checkbox + the row's own `<a>`, see
+//                       _contacts_body.html's own comment on why the row
+//                       needed restructuring for this).
 // })
+//
+// Re-init safety (2026-09-14): contacts_list.html calls init() again after
+// every async-CRUD region swap of its container (a fresh server-rendered
+// fragment, so the previous `table`/`bar` element references + their
+// document-level pointermove/pointerup drag-paint listeners are orphaned
+// otherwise -- no existing caller re-initialized on the same page before
+// this, so nothing tore old listeners down). `instances` tracks one
+// teardown function per `tableId`; a second init() for the same id runs
+// the previous instance's teardown first so orphaned listeners don't pile
+// up release after release.
 (function () {
+  const instances = {};
+
   function init(cfg) {
     const table = document.getElementById(cfg.tableId);
     const bar = document.getElementById(cfg.barId);
     const countEl = cfg.countId ? document.getElementById(cfg.countId) : null;
+    // 2026-09-12: the actions slot itself (bar's parent) needs to know
+    // whether `bar` is currently visible, not just `bar` itself --
+    // style.css's "hide the actions slot when it has nothing to show"
+    // rule keys off this class, since CSS has no "is this sibling
+    // currently displayed" selector.
+    const actionsSlot = bar ? bar.closest(".page-header-narrow-actions") : null;
+    if (instances[cfg.tableId]) {
+      instances[cfg.tableId]();
+      delete instances[cfg.tableId];
+    }
     if (!table || !bar) return;
+    const rowSelector = cfg.rowSelector || "tr";
 
     const selected = new Set();
     let lastClickedIdx = null;
@@ -53,7 +85,7 @@
       return Array.from(table.querySelectorAll(".row-select"));
     }
     function rowFor(cb) {
-      return cb.closest("tr");
+      return cb.closest(rowSelector);
     }
     function setSelected(cb, on) {
       cb.checked = on;
@@ -70,25 +102,72 @@
       if (selected.size > 0) {
         bar.style.display = "flex";
         if (countEl) countEl.textContent = `${selected.size} selected`;
+        if (actionsSlot) actionsSlot.classList.add("has-visible-bulk-bar");
       } else {
         bar.style.display = "none";
+        if (actionsSlot) actionsSlot.classList.remove("has-visible-bulk-bar");
+        // 2026-09-12: countEl used to live inside `bar` itself, so hiding
+        // `bar` hid it too regardless of its text. It's now rendered in
+        // _page_header_narrow.html's title_extra slot instead (a sibling
+        // of the title, not nested in `bar`) so the count can sit on the
+        // header's first row on mobile -- style.css's `.bulk-count:empty`
+        // rule is what actually re-hides it now, so it has to be cleared
+        // back to empty here, not left showing a stale "N selected".
+        if (countEl) countEl.textContent = "";
       }
     }
 
     // Click (plain or shift-range) -- scoped to this table so a second
     // CCBulkSelect instance elsewhere on the page doesn't also react.
+    //
+    // 2026-09-15 bugfix (direct report: "clicking works, but it
+    // immediately deselects -- happens on any page", i.e. every
+    // CCBulkSelect caller -- Holidays/Labels/Time Blocks/Contacts alike --
+    // not just Contacts; this handler and the pointerdown one below are
+    // unchanged from the original 2026-08-29 implementation, so this was a
+    // pre-existing bug surfaced by testing the new Contacts caller, not
+    // something the Contacts change introduced). Root cause: the
+    // pointerdown handler below already calls `setSelected(cb, paintValue)`
+    // -- flipping `cb.checked` itself -- so that a real press-and-drag
+    // paints the row the drag *started* on, not just the ones the pointer
+    // crosses afterward. But the browser doesn't know that already
+    // happened: when the matching `click` fires right after (mouseup on
+    // the same element, the plain-click case, not a drag), its own native
+    // activation behavior toggles `checked` a SECOND time -- right back to
+    // whatever it was *before* the pointerdown. Net effect on an ordinary,
+    // no-drag click: the box visibly flips checked, then the trailing
+    // native click flips it straight back to unchecked -- reads as "it
+    // immediately deselects," and always did, for every table this module
+    // has ever driven; a real multi-row drag just never exercised this
+    // path (mouseup lands on a different element, so no `click` ever
+    // fires on the origin checkbox to conflict with pointerdown's own
+    // change). `e.preventDefault()` here blocks that native toggle -- a
+    // checkbox's default click behavior can be canceled from a `click`
+    // listener (not from `pointerdown`/`mousedown`, which was tried first
+    // and confirmed via a real Chrome/Puppeteer click -- not just a
+    // synthetic `.click()` call, which never exercises the native
+    // pointerdown-then-click sequence at all -- that canceling pointerdown
+    // does NOT suppress the later click's own default action). With the
+    // native toggle suppressed, pointerdown's `setSelected` call is the
+    // sole source of truth for `cb.checked` in both the plain-click and
+    // drag cases, and this handler only needs to run the shift-range logic
+    // off of whatever state pointerdown already established.
     table.addEventListener("click", (e) => {
       const cb = e.target.closest && e.target.closest(".row-select");
       if (!cb) return;
+      e.preventDefault();
       const boxes = checkboxes();
       const idx = boxes.indexOf(cb);
       if (e.shiftKey && lastClickedIdx !== null && idx !== -1) {
         const [lo, hi] = idx < lastClickedIdx ? [idx, lastClickedIdx] : [lastClickedIdx, idx];
         const targetState = cb.checked;
         for (let i = lo; i <= hi; i++) setSelected(boxes[i], targetState);
-      } else {
-        setSelected(cb, cb.checked);
       }
+      // else: pointerdown below already fully applied the plain-click
+      // toggle to `cb` itself (state + `.is-selected` + the Set) -- no
+      // second setSelected(cb, cb.checked) needed here, and reapplying it
+      // would just be redundant, not harmful, but there's nothing left to
+      // do for the single-checkbox case.
       lastClickedIdx = idx;
       updateBar();
     });
@@ -108,7 +187,11 @@
       lastClickedIdx = checkboxes().indexOf(cb);
       updateBar();
     });
-    document.addEventListener("pointermove", (e) => {
+    // Named (not inline) so teardown() below can remove exactly these two
+    // document-level listeners on re-init, instead of leaking one more
+    // pair of orphaned listeners (closed over the previous, now-detached
+    // `table`) every time this tableId's container gets swapped out.
+    function onDocPointerMove(e) {
       if (!painting) return;
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const cb = el && el.closest && el.closest(".row-select");
@@ -116,10 +199,16 @@
         setSelected(cb, paintValue);
         updateBar();
       }
-    });
-    document.addEventListener("pointerup", () => {
+    }
+    function onDocPointerUp() {
       painting = false;
-    });
+    }
+    document.addEventListener("pointermove", onDocPointerMove);
+    document.addEventListener("pointerup", onDocPointerUp);
+    instances[cfg.tableId] = function teardown() {
+      document.removeEventListener("pointermove", onDocPointerMove);
+      document.removeEventListener("pointerup", onDocPointerUp);
+    };
 
     if (cfg.clearId) {
       document.getElementById(cfg.clearId)?.addEventListener("click", () => {

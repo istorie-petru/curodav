@@ -24,7 +24,9 @@ Two invocation shapes share one endpoint (`GET /api/search`):
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from typing import Annotated, Optional
+
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from .. import db
@@ -63,7 +65,7 @@ def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
 
 
 def _page_result(page: dict) -> dict:
-    return {"type": "page", "uid": page["url"], "url": page["url"], "title": page["title"], "subtitle": page["subtitle"], "tags": [], "status": None}
+    return {"type": "page", "uid": page["url"], "url": page["url"], "title": page["title"], "subtitle": page["subtitle"], "tags": [], "status": None, "date": None}
 
 
 def _picker_result(row: dict) -> dict:
@@ -79,21 +81,49 @@ def _picker_result(row: dict) -> dict:
     # along here too, `None` for the other two types. Every existing
     # consumer of this shape (search.html, the relations picker) reads
     # only the fields it already knew about and ignores the rest.
+    #
+    # "date" (command palette date-grouped results, 2026-09-12) -- the one
+    # sortable ISO date/datetime the overlay buckets a row into Overdue/
+    # This week/Later/No date by: a task's `due_at`, an event's `start_at`,
+    # `None` for contacts/notes/pages (they have no date concept, and land
+    # in the "No date" bucket alongside undated tasks/events).
+    entity = row["entity"]
+    date = None
+    if row["type"] == "task":
+        date = entity.get("due_at")
+    elif row["type"] == "event":
+        date = entity.get("start_at")
     return {
         "type": row["type"],
         "uid": row["uid"],
         "title": row["title"],
         "subtitle": row["subtitle"],
         "tags": row["tags"],
-        "status": row["entity"].get("status") if row["type"] == "task" else None,
+        "status": entity.get("status") if row["type"] == "task" else None,
+        "date": date,
     }
 
 
 @router.get("/api/search")
 def api_search(
     q: str = "",
-    types: list[str] | None = None,
-    labels: list[str] | None = None,
+    # `Annotated[..., Query()]` is required here, not a bare
+    # `list[str] | None = None` -- a plain default on a `list[str]`
+    # parameter is never actually populated from a real HTTP query string
+    # in this FastAPI version (it silently stays `None` regardless of
+    # what's in the URL; only an explicit `Query()` triggers FastAPI's
+    # repeated/single-value list parsing). The existing unit tests never
+    # caught this because they call `api_search` directly as a plain
+    # Python function (`search_router.api_search(..., types=["task"],
+    # ...)`), which bypasses HTTP query-string parsing entirely -- the
+    # command palette's new type filter pills (2026-09-12) were the first
+    # caller to actually drive `types` through a real
+    # `GET /api/search?types=...` request, which is what surfaced this.
+    # `Query()` as metadata (not as the default itself, i.e. not
+    # `= Query(None)`) keeps the plain Python default `None`, so those
+    # direct-call tests keep working unchanged.
+    types: Annotated[Optional[list[str]], Query()] = None,
+    labels: Annotated[Optional[list[str]], Query()] = None,
     for_task: str = "",
     for_event: str = "",
     limit: int = 20,

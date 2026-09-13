@@ -54,21 +54,25 @@ class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
         # today) + a stack of At a Glance / Agenda (all_upcoming, events
-        # only) / Agenda (today, overdue+tasks+events) -- see
-        # dashboard_router._seed_agenda_stack_layout. 2026-09-03: the
-        # third member's Show list used to be overdue-only, direct
-        # follow-up widened it to overdue+tasks+events so a "Today" pane
-        # actually shows today's tasks/events, not just what's overdue.
+        # only) -- see dashboard_router._seed_agenda_stack_layout.
+        # 2026-09-13: dropped the stack's former third member (another
+        # today-range Agenda, overdue+tasks+events) -- it duplicated the
+        # standalone widget's own content almost exactly, a side effect of
+        # a 2026-09-03 fix that widened its Show list to match. Seeded
+        # widgets also get explicit titles now ("Today"/"At a
+        # glance"/"Upcoming") instead of falling back to the generic
+        # "Agenda" spec label three separate times.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
         assert [w["type"] for w in top_level] == ["agenda", "stack"]
+        assert top_level[0]["title"] == "Today"
 
         stack = top_level[1]
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
-        assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
+        assert [w["type"] for w in members] == ["at_a_glance", "agenda"]
+        assert [w["title"] for w in members] == ["At a glance", "Upcoming"]
         assert members[1]["config"]["show"] == ["events"]
-        assert members[2]["config"]["show"] == ["overdue", "tasks", "events"]
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
         # The main Agenda widget and the stack share the width split
@@ -90,7 +94,7 @@ class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit_only(self, conn):
         # First call seeds the defaults and sets the app_meta flag.
         dashboard_router._ensure_default_widgets(conn)
-        assert len(db.list_dashboard_widgets(conn)) == 5  # today_agenda + stack + 3 members
+        assert len(db.list_dashboard_widgets(conn)) == 4  # today_agenda + stack + 2 members
         assert db.get_app_meta(conn, dashboard_router._HOME_SEEDED_KEY) == "1"
 
     def test_does_not_reseed_after_all_widgets_deleted(self, conn):
@@ -110,7 +114,7 @@ class TestDefaultWidgetSeeding:
         first_count = len(db.list_dashboard_widgets(conn))
         dashboard_router._ensure_default_widgets(conn)
         second_count = len(db.list_dashboard_widgets(conn))
-        assert first_count == 5
+        assert first_count == 4
         assert second_count == first_count  # no duplicate seeding
 
 
@@ -941,8 +945,9 @@ class TestDashboardRoute:
         assert "data-height-key" not in body
         # Every widget's .widget-content opens with the exact same bare
         # markup -- no per-widget/per-type variation left at all (today_agenda
-        # + the stack's 3 members == 4 occurrences).
-        assert body.count('<div class="widget-content">') == 4
+        # + the stack's 2 members == 3 occurrences; was 4 before 2026-09-13's
+        # stack trim from 3 members to 2).
+        assert body.count('<div class="widget-content">') == 3
 
 
 class TestSpaceWidgets:
@@ -1102,8 +1107,10 @@ class TestContactListWidget:
 class TestDefaultSpaceWidgets:
     """§2 Spaces v2, 2026-08-03 originally; 2026-08-07 (screenshot-driven
     default-layout rework) replaced the old widget set with the same
-    Today's Agenda + At a Glance/Upcoming Events/Overdue Tasks stack Home
-    now seeds -- see dashboard_router._seed_agenda_stack_layout."""
+    Today's Agenda + At a Glance/Upcoming Events stack Home now seeds --
+    see dashboard_router._seed_agenda_stack_layout. 2026-09-13: stack
+    trimmed from 3 members to 2 (dropped a duplicate today-range Agenda),
+    same change as Home's."""
 
     def _make_space(self, conn, name):
         db.upsert_label_config(conn, {"name": name, "generate_space": 1, "created_at": _now()})
@@ -1117,7 +1124,7 @@ class TestDefaultSpaceWidgets:
 
         stack = top_level[1]
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
-        assert [w["type"] for w in members] == ["at_a_glance", "agenda", "agenda"]
+        assert [w["type"] for w in members] == ["at_a_glance", "agenda"]
 
     def test_default_seed_no_longer_includes_removed_types(self, conn):
         self._make_space(conn, "space1")
@@ -1136,7 +1143,7 @@ class TestDefaultSpaceWidgets:
 
     def test_data_rendering_space_widgets_auto_scoped_with_label_name(self, conn):
         # Every widget that actually renders data (today_agenda + the
-        # stack's 3 members) carries config["label_name"] so its query is
+        # stack's 2 members) carries config["label_name"] so its query is
         # filtered to this space -- the stack container itself has no
         # render of its own and so no config["label_name"] to check.
         self._make_space(conn, "space1")
@@ -1171,7 +1178,7 @@ class TestDefaultSpaceWidgets:
             db.delete_dashboard_widget(conn, w["uid"])
         dashboard_router._ensure_default_label_widgets(conn, "space1")
         assert db.list_dashboard_widgets(conn, space_uid="space1") == []
-        assert len(db.list_dashboard_widgets(conn, space_uid="space2")) == 5  # today_agenda + stack + 3 members
+        assert len(db.list_dashboard_widgets(conn, space_uid="space2")) == 4  # today_agenda + stack + 2 members
 
 
 class TestSpaceScopedRenderers:

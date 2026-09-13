@@ -141,19 +141,43 @@ class TestTodayAndWeekRetiredAsRedirects:
 
 class TestUpcomingEventsDoubleLineFix:
     def test_date_time_column_is_wide_enough_and_nowraps(self):
-        # Structural check (no browser to measure real wrapping) -- same
-        # ceiling this app's other CSS-shape tests already accept.
+        # Structural check -- this test used to note "no browser to measure
+        # real wrapping" as its own ceiling; 2026-09-13 that ceiling was
+        # actually hit and fixed live (Claude in Chrome, direct report the
+        # Upcoming widget's layout looked wrong): `.widget-row-time` had
+        # nowrap but no width, which is fine on a 3-column row (Today's
+        # Events: time/title/nothing else) but on a 2-column row (Upcoming/
+        # all_upcoming has no `right` cell) the browser's table auto-layout
+        # gave the nowrap time column ~500px of a 679px-wide table and
+        # crushed the actual event title into a ~180px sliver against the
+        # right edge -- confirmed via getBoundingClientRect() on the live
+        # page. `width:1%` (the standard auto-table-layout "shrink to
+        # content" trick) fixed it, live-confirmed after the fix too.
         # 2026-08-17 widget uniformity pass: the nowrap fix moved out of an
         # inline `width:150px` td into the shared `.widget-row-time` class
         # (style.css) the widget_link_row macro attaches, so the event-time
-        # column can no longer wrap to two lines -- assert the class exists
-        # in the CSS and the agenda template actually uses it.
+        # column can no longer wrap to two lines -- assert the class still
+        # exists in the CSS (other widgets -- weekly_schedule,
+        # scheduled_work_today, project_detail's own Agenda card -- still
+        # use it for a leading date/time column).
+        #
+        # 2026-09-13 (direct request: "the events style inside widget to be
+        # similar to tasks -- date as a pill, title first, date second,
+        # circle dot like in mockup") -- the Agenda WIDGET's own Events
+        # section (_widget_agenda.html) no longer uses `widget-row-time` at
+        # all: it moved to the same dot-leading/title/right-pill shape the
+        # Tasks section above it already uses (widget_event_dot() in the
+        # `widget-row-icon` slot, date/time as a `widget_pill(...)` on the
+        # right) -- sidesteps the whole "unconstrained nowrap column" class
+        # of bug this test's docstring above describes, since
+        # `widget-row-icon` already has a fixed 26px width.
         import pathlib
         templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
         css = (templates.parent / "static" / "style.css").read_text()
-        assert ".widget-row-time{white-space:nowrap;}" in css
+        assert ".widget-row-time{white-space:nowrap; width:1%;}" in css
         partial = (templates / "_widget_agenda.html").read_text()
-        assert "leading_class='widget-row-time'" in partial
+        assert "leading_class='widget-row-time'" not in partial
+        assert "widget_event_dot()" in partial
         assert "width:110px" not in partial
         # no widget should hand-roll a fixed-width cell any more (the
         # spaces_projects progress fill's `style="width:{{ ... }}%"` is a

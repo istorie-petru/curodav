@@ -233,25 +233,36 @@ class TestAtAGlanceWidget:
 
 
 class TestDefaultSeedIncludesNewWidgets:
+    """2026-08-07 (screenshot-driven default-layout rework): the target
+    screenshot leads with Today's Agenda, with At a Glance nested inside
+    the stack beside it, not a standalone full-width top-level entry.
+
+    2026-08-15 widget consolidation, then 2026-09-03: a third stack member
+    (another `agenda` widget, range="today", explicitly configured
+    show=["overdue", "tasks", "events"]) used to be the thing that made
+    "overdue tasks show up by default" true -- checked here via that
+    explicit config. 2026-09-13 (direct request, dashboard size-up
+    review): that member was dropped for duplicating the STANDALONE
+    Today's Agenda widget's own content almost exactly (same range="today",
+    same effective show list). Overdue tasks still show up out of the box
+    -- via the standalone widget's default, not a stored config override
+    -- since _DEFAULT_TODAY_AGENDA_CONFIG sets no "show" key at all, and
+    an agenda widget with no explicit "show" falls back to
+    AGENDA_DEFAULT_SHOW (["overdue", "tasks", "events"], see
+    _agenda_show_set). These tests now check that default instead of a
+    config value that no longer exists anywhere in the seed."""
+
     def test_home_default_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
-        # 2026-08-07 (screenshot-driven default-layout rework): the target
-        # screenshot leads with Today's Agenda, with At a Glance/Overdue
-        # Tasks now nested inside the stack beside it, not standalone
-        # full-width top-level entries.
-        # 2026-08-15 widget consolidation: "Overdue Tasks" is now an
-        # `agenda` widget configured with show=["overdue"] rather than its
-        # own type -- see _DEFAULT_STACK_MEMBER_TYPES. 2026-09-03: that
-        # Show list widened to ["overdue", "tasks", "events"] (direct
-        # follow-up to a live "Today" widget showing "Nothing to show"
-        # bug report) -- still the same third stack member, just showing
-        # more than overdue-only now.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
         assert top_level[0]["type"] == "agenda"
+        assert top_level[0]["title"] == "Today"
+        assert top_level[0]["config"]["range"] == "today"
+        assert "show" not in top_level[0]["config"]  # relies on AGENDA_DEFAULT_SHOW, not a stored override
+        assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events"]
 
     def test_fresh_project_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_project(conn, "CS101")
@@ -259,7 +270,9 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
+        today = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
+        assert today["config"]["range"] == "today"
+        assert "show" not in today["config"]
 
     def test_fresh_space_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_space(conn, "Uni")
@@ -267,16 +280,18 @@ class TestDefaultSeedIncludesNewWidgets:
         widgets = db.list_dashboard_widgets(conn, label_name="Uni")
         types = [w["type"] for w in widgets]
         assert "at_a_glance" in types
-        assert any(w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"] for w in widgets)
+        today = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
+        assert today["config"]["range"] == "today"
+        assert "show" not in today["config"]
 
     def test_new_label_widgets_auto_scoped_with_label_name(self, conn):
         _make_project(conn, "CS101")
         dashboard_router._ensure_default_label_widgets(conn, "CS101")
         widgets = db.list_dashboard_widgets(conn, label_name="CS101")
         at_a_glance = next(w for w in widgets if w["type"] == "at_a_glance")
-        overdue = next(w for w in widgets if w["type"] == "agenda" and w["config"].get("show") == ["overdue", "tasks", "events"])
+        today = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
         assert at_a_glance["config"]["label_name"] == "CS101"
-        assert overdue["config"]["label_name"] == "CS101"
+        assert today["config"]["label_name"] == "CS101"
 
 
 def _canonical_default_type_order(widgets):
@@ -297,7 +312,31 @@ def _canonical_default_type_order(widgets):
     return order
 
 
-_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda", "agenda"]
+def _canonical_default_titles(widgets):
+    """Same flattening as _canonical_default_type_order, but for `title`
+    -- lets a test assert the seeded titles ("Today"/"At a glance"/
+    "Upcoming", stack container itself untitled) in one deterministic list
+    instead of a flat `[None] * len(widgets)` that no longer holds true
+    now that seeded widgets have explicit titles (2026-09-13)."""
+    top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
+    titles = []
+    for w in top_level:
+        titles.append(w["title"])
+        if w["type"] == "stack":
+            members = sorted((m for m in widgets if m.get("group_uid") == w["uid"]), key=lambda m: m["position"])
+            titles.extend(m["title"] for m in members)
+    return titles
+
+
+# 2026-09-13: stack trimmed from 3 members to 2 (dropped a duplicate
+# today-range Agenda) -- see dashboard_router._DEFAULT_STACK_MEMBER_TYPES.
+_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda"]
+# Same change also gave the seeded widgets explicit titles instead of
+# leaving them on the generic spec-label fallback -- position-ordered
+# same as _DEFAULT_LAYOUT_TYPE_ORDER above (agenda/stack/at_a_glance/
+# agenda), with the "stack" container itself keeping title=None (it has
+# no spec label of its own to fall back to and none was requested).
+_DEFAULT_LAYOUT_TITLES = ["Today", None, "At a glance", "Upcoming"]
 
 
 class TestResetToDefault:
@@ -314,7 +353,10 @@ class TestResetToDefault:
         resp = dashboard_router.reset_dashboard(label_name="", conn=conn)
         assert resp.headers["location"] == "/"
         widgets = db.list_dashboard_widgets(conn)
-        assert [w["title"] for w in widgets] == [None] * len(widgets)  # back to plain defaults, no "Custom"
+        # Back to plain defaults, no "Custom" -- and back to the seeded
+        # Today/At a glance/Upcoming titles, not a flat [None] * len(widgets)
+        # (true before 2026-09-13, when every seeded widget had title=None).
+        assert _canonical_default_titles(widgets) == _DEFAULT_LAYOUT_TITLES
         assert _canonical_default_type_order(widgets) == _DEFAULT_LAYOUT_TYPE_ORDER
 
     def test_home_reset_route_directly(self, conn):

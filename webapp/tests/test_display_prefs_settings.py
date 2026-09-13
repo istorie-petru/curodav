@@ -15,6 +15,7 @@ Settings UI/routes themselves."""
 
 from __future__ import annotations
 
+import json as _json
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -463,6 +464,32 @@ class TestShowLabelIcons:
         assert deps._show_label_icons(_request_with_app("/", db_path)) is False
 
 
+class TestEditModeEnabledGlobal:
+    """deps.py's edit_mode_enabled() Jinja global (2026-09-13, command
+    palette "Turn on/off Edit mode" row) -- same per-request-memoized
+    app_meta pattern as _show_label_icons above (TestShowLabelIcons),
+    added so base.html (rendered on every page) can expose the current
+    Edit mode state to static/command_palette.js via body[data-edit-mode]
+    without every route threading it through its own context dict the
+    way routers/dashboard.py's widget_page_context already does for the
+    pages that actually render the widget grid."""
+
+    def test_defaults_off(self):
+        assert deps._edit_mode_enabled(_bare_request()) is False
+
+    def test_on_when_stored_1(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.EDIT_MODE_KEY, "1")
+        assert deps._edit_mode_enabled(_request_with_app("/", db_path)) is True
+
+    def test_off_when_stored_non_one(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.EDIT_MODE_KEY, "banana")
+        assert deps._edit_mode_enabled(_request_with_app("/", db_path)) is False
+
+
 class TestLabelIcon:
     def _seed(self, db_path, label="University", icon="book", color="green"):
         with db.connect(db_path) as c:
@@ -601,6 +628,23 @@ class TestSettingsAppearanceEditMode:
     def test_set_edit_mode_route_clears_on_off(self, conn):
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         settings_router.set_edit_mode(enabled="", conn=conn)
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == ""
+
+    def test_set_edit_mode_route_returns_json_for_fetch(self, conn):
+        # 2026-09-13 (command palette "Turn on/off Edit mode" row): dual-
+        # mode now, same deps.py respond()/wants_json() pattern as every
+        # task/event mutation -- the palette toggles this from whatever
+        # page it was opened on and needs the new state back instead of a
+        # redirect to /settings/appearance.
+        resp = settings_router.set_edit_mode(enabled="1", x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert _json.loads(resp.body) == {"ok": True, "edit_mode": True}
+        assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == "1"
+
+    def test_set_edit_mode_route_json_off(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = settings_router.set_edit_mode(enabled="", x_requested_with="fetch", conn=conn)
+        assert _json.loads(resp.body) == {"ok": True, "edit_mode": False}
         assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == ""
 
 

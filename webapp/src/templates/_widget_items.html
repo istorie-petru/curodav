@@ -92,3 +92,14 @@
     <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
 </form>
 {%- endmacro %}
+
+{# An event row's leading marker (2026-09-13, direct request: "the events
+   style inside widget to be similar to tasks -- date as a pill, title
+   first, date second, circle dot like in mockup") -- occupies the same
+   `widget-row-icon` leading slot a task's checkbox does, so an Agenda
+   widget's Overdue/Tasks/Events sections all line up in the same column
+   rhythm, but a plain colored dot rather than a clickable control (an
+   event has no "mark done" action to offer here). #}
+{% macro widget_event_dot() -%}
+<span class="widget-event-dot"></span>
+{%- endmacro %}

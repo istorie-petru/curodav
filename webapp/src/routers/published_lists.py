@@ -130,7 +130,15 @@ def _try_teardown(bridge, entity_type: str, collection_path: str) -> None:
 @router.get("")
 def list_index(request: Request, conn=Depends(get_db)):
     lists = db.list_published_lists(conn)
-    base_url = request.app.state.settings.radicale_base_url
+    settings = request.app.state.settings
+    # Prefer the public-facing URL (config.py's radicale_public_base_url,
+    # CC_RADICALE_PUBLIC_URL -- set by 'curodav-ctl install --dav') for
+    # what's actually shown here, since this is the one link a person
+    # might copy into a calendar app off this box. Falls back to the
+    # loopback radicale_base_url when Radicale was never made publicly
+    # reachable -- same as this page's behavior before this field existed,
+    # so a standalone/local-only install sees no change.
+    base_url = settings.radicale_public_base_url or settings.radicale_base_url
     for row in lists:
         row["subscribe_url"] = collection_url(base_url, row["entity_type"], row["radicale_collection_path"])
         row["public_url"] = _public_feed_url(request, row)

@@ -338,6 +338,40 @@ class TestPublishedListsRouterCrud:
         assert resp.status_code == 200
         assert resp.context["lists"][0]["subscribe_url"] == "http://127.0.0.1:5232/devuser/published-uni/"
 
+    def test_list_index_prefers_public_url_when_set(self, conn):
+        """2026-09-13 (config.py's radicale_public_base_url, CC_RADICALE_PUBLIC_URL
+        -- 'curodav-ctl install --dav'): when a deploy has made Radicale
+        publicly reachable at a /radicale/ path under its own hostname,
+        subscribe_url must show THAT address, not the loopback one the app
+        uses for its own sync -- the loopback address is never something a
+        person can actually copy into a calendar app off this box."""
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        bridge = FakeBridge()
+        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+
+        class _FakeSettingsWithPublicUrl:
+            radicale_base_url = "http://127.0.0.1:5232/devuser/"
+            radicale_public_base_url = "https://app.example.com/radicale/curodav/"
+
+        class _FakeAppWithPublicUrl:
+            class state:
+                settings = _FakeSettingsWithPublicUrl()
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+                "app": _FakeAppWithPublicUrl(),
+            }
+        )
+        resp = router.list_index(request, conn=conn)
+        assert resp.status_code == 200
+        assert resp.context["lists"][0]["subscribe_url"] == "https://app.example.com/radicale/curodav/published-uni/"
+
 
 class TestNoLabelsPresent:
     """2026-09-08 (direct request, "make published lists more permissive
@@ -444,6 +478,7 @@ class TestCreateModalDropdownsAreCustomStyled:
 
 class _FakeSettings:
     radicale_base_url = "http://127.0.0.1:5232/devuser/"
+    radicale_public_base_url = None
 
 
 class _FakeAppState:

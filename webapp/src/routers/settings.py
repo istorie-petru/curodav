@@ -105,7 +105,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import auth, config, data_health, db, env_file, offline_sync
@@ -122,6 +122,7 @@ from ..deps import (
     WEEK_START_KEY,
     _four_week_position_from_value,
     get_db,
+    respond,
     templates,
 )
 from .dashboard import DISPLAY_NAME_KEY
@@ -783,16 +784,25 @@ def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
 
 
 @router.post("/settings/edit-mode")
-def set_edit_mode(enabled: str = Form(""), conn=Depends(get_db)):
+def set_edit_mode(enabled: str = Form(""), x_requested_with: str | None = Header(None), conn=Depends(get_db)):
     """"Edit mode" (Settings > Appearance, 2026-08-29, sidebar redesign
     item 13d) -- shows the widget grid's editing controls (move/resize/
     reorder/delete a widget, New widget, Reset layout, Add/Change banner)
     on every dashboard/label/Space page until turned off here, replacing
     the old per-page "Edit mode"/"Done" buttons and their `?edit=1` query
     param (routers/dashboard.py's widget_page_context reads this flag
-    directly now). Same on/off pattern as set_label_icons above."""
-    db.set_app_meta(conn, EDIT_MODE_KEY, "1" if enabled == "1" else "")
-    return RedirectResponse(url="/settings/appearance", status_code=303)
+    directly now). Same on/off pattern as set_label_icons above.
+
+    2026-09-13 (command palette "Turn on/off Edit mode" row): dual-mode
+    now, same async-CRUD pattern (deps.py's respond/wants_json) as every
+    task/event mutation -- static/command_palette.js toggles this from
+    whatever page you're on and needs the new state back in the response
+    (to reload correctly) rather than a redirect to /settings/appearance,
+    which the plain <form> on that settings page itself still relies on
+    (no X-Requested-With header there, so it keeps the old redirect)."""
+    new_value = enabled == "1"
+    db.set_app_meta(conn, EDIT_MODE_KEY, "1" if new_value else "")
+    return respond(x_requested_with, "/settings/appearance", edit_mode=new_value)
 
 
 # --------------------------------------------------------------------- #

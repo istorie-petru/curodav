@@ -18,9 +18,12 @@
      a banner the buttons float bottom-right over the photo, without one
      they're a plain top bar with the label title left of them. The old
      separate .toolbar row is gone. -->
-{% set _title %}{{ icon(label.icon or ('layers' if is_space else 'folder')) }} {{ label.name }}{% endset %}
+{# 2026-09-13 (direct request): the icon no longer prefixes the title text
+   -- it moved into the banner's own avatar slot as a colored squircle
+   tile (`icon_tile` below, see _page_banner.html's own comment) instead
+   of showing both an inline icon AND the account's profile photo. #}
 <div class="page-banner-wrap">
-{% call page_banner(_title) %}
+{% call page_banner(label.name, icon_tile={'icon': label.icon or ('layers' if is_space else 'folder'), 'color': label.color}) %}
     <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
          persistent, app-wide Settings > Appearance toggle instead of a
          per-page `?edit=1` query param with its own "Edit mode"/"Done"

@@ -2,11 +2,13 @@
 ; install-radicale.sh. Unlike webapp/.dev/radicale/config (plain-text
 ; htpasswd, loopback dev-only by its own header comment, never meant to be
 ; reachable off localhost) -- this one IS meant to be reached from the
-; public internet, but only ever THROUGH Caddy's reverse proxy: `hosts`
-; below binds loopback only, so the one and only way in from outside is
-; ../Caddyfile.template's {{DOMAIN_DAV}} block. firewall.sh never opens
-; port 5232 externally either way -- this is belt and suspenders, not the
-; only thing standing between this file and the internet.
+; public internet, but only ever THROUGH local nginx's reverse proxy
+; (../nginx/curodav.nginx.conf.template's /radicale/ block, itself only
+; reachable through the Cloudflare Tunnel): `hosts` below binds loopback
+; only, so the one and only way in from outside is that nginx path block.
+; firewall.sh never opens port 5232 externally either way -- this is belt
+; and suspenders, not the only thing standing between this file and the
+; internet.
 
 [server]
 hosts = 127.0.0.1:5232

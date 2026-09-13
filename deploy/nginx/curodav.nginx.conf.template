@@ -1,0 +1,67 @@
+# Installed to /etc/nginx/sites-available/curodav by install-nginx.sh
+# (symlinked into sites-enabled, default site removed). Loopback-only path
+# router, nothing more -- it does NOT terminate TLS (Cloudflare already
+# did that at their edge; ../cloudflared/ carries plain HTTP down the
+# tunnel to here) and it is not reachable from outside this host at all
+# (../firewall.sh denies inbound access to its own port too, belt and
+# suspenders on top of the `listen 127.0.0.1` below).
+#
+# Its only job: cloudflared's single ingress rule (../cloudflared/
+# config.yml.template) points at 127.0.0.1:8080 -- this splits that one
+# hostname's traffic by PATH between the two services actually running on
+# this host, since cloudflared itself only ever routes by hostname:
+#   /radicale/*  -> radicale.service (127.0.0.1:5232)
+#   everything else -> curodav.service (127.0.0.1:8000)
+#
+# The /radicale/ block deliberately does NOT strip the prefix via
+# proxy_pass's own URI-rewrite trick (a bare proxy_pass with no path
+# component, not "http://127.0.0.1:5232/" with a trailing slash) --
+# Radicale needs to see the ORIGINAL full path (with /radicale/ still on
+# it) so it can correctly compute its own base prefix and generate
+# correctly-prefixed href values in its WebDAV (PROPFIND/REPORT) XML
+# responses. It's told what that prefix is via the X-Script-Name header
+# instead: Radicale auto-detects "called by a reverse proxy" from the
+# presence of X-Forwarded-For/Proto (also set below) and then reads
+# X-Script-Name to know what to strip off incoming requests / add back
+# onto outgoing hrefs (radicale/app/__init__.py's own request handler --
+# see its comments for the exact WSGI env vars checked). Get this wrong
+# (e.g. by letting proxy_pass silently strip the prefix itself) and
+# Radicale's own links in its responses come back missing /radicale/,
+# which breaks a DAVx5 client's follow-up requests in ways that are
+# annoying to debug from the symptom alone.
+server {
+    listen 127.0.0.1:8080;
+    server_name _;
+
+    # Calendar/contact payloads (a large address book import, etc.) can
+    # exceed nginx's 1M default.
+    client_max_body_size 50M;
+
+    # `location /radicale/` below only matches paths WITH the trailing
+    # slash -- nginx does not do Apache-style auto-append-a-slash for
+    # proxy locations. Without this, a client (or a person) hitting the
+    # bare "/radicale" (no trailing slash -- an easy typo when hand-typing
+    # a DAVx5 URL) falls through to the `location /` block instead and
+    # silently gets routed to the APP, not Radicale, with no error to
+    # indicate why. Redirect it to the correct, trailing-slash form first.
+    location = /radicale {
+        return 301 /radicale/;
+    }
+
+    location /radicale/ {
+        proxy_pass http://127.0.0.1:5232;
+        proxy_set_header Host $host;
+        proxy_set_header X-Script-Name /radicale;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_http_version 1.1;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_http_version 1.1;
+    }
+}

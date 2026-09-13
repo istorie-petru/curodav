@@ -439,6 +439,24 @@ def _show_label_icons(request: Request) -> bool:
 templates.env.globals["show_label_icons"] = _show_label_icons
 
 
+def _edit_mode_enabled(request: Request) -> bool:
+    """Whether the widget grid's editing controls (move/resize/reorder/
+    delete a widget, New widget, Reset layout, Add/Change banner) are on
+    (Settings > Appearance's "Edit mode", 2026-08-29, see EDIT_MODE_KEY's
+    own comment). routers/dashboard.py's widget_page_context already reads
+    this flag directly for the pages that actually render the widget grid
+    (Dashboard/Space/Project/Label) -- this Jinja global exists so
+    base.html, which renders on *every* page, can expose the current
+    state to static/command_palette.js (its own "Turn on/off Edit mode"
+    row, 2026-09-13) without needing every route to thread it through its
+    own context dict. Same per-request-memoized app_meta pattern as
+    show_label_icons() above."""
+    return _cached_app_meta(request, EDIT_MODE_KEY, "") == "1"
+
+
+templates.env.globals["edit_mode_enabled"] = _edit_mode_enabled
+
+
 def _page_header_banner(request: Request) -> dict | None:
     """The Standard Page Header's own optional banner image (Settings >
     Appearance, 2026-08-29 sidebar redesign item 13e follow-up) -- see

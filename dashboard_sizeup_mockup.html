@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Curodav — Dashboard size-up mockup</title>
+<style>
+/* ===== Tokens copied from webapp/src/static/style.css :root (light theme only) ===== */
+:root{
+  --accent:#007aff;--accent-hover:#0071e3;--accent-subtle:rgba(0,122,255,.12);
+  --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
+  --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
+  --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#737378;--fg-on-accent:#ffffff;
+  --border:rgba(0,0,0,.1);--separator:rgba(0,0,0,.08);
+  --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --text-caption:13px;--text-footnote:14px;--text-body:15px;--text-headline:17px;--text-title3:18px;--text-title2:21px;--text-title1:26px;
+  --radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-card:16px;--radius-control:12px;--radius-pill:999px;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+  --shadow-card:0 1px 2px rgba(0,0,0,.05),0 1px 6px rgba(0,0,0,.04);
+  --elevation-1:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+  --tag-blue-fg:#0071e3;--tag-blue-bg:#e8f2fd;
+  --tag-green-fg:#2a8a52;--tag-green-bg:#e7f6ec;
+  --tag-orange-fg:#c2760f;--tag-orange-bg:#fdf1e2;
+  --tag-purple-fg:#8a5cb0;--tag-purple-bg:#f6f3f9;
+  --cal-blue:#007aff;--cal-green:#34c759;--cal-orange:#ff9500;--cal-purple:#af52de;--cal-pink:#ff2d92;--cal-teal:#1a94a8;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font-system);background:#d9dce2;color:var(--fg-primary);font-size:var(--text-body);}
+
+/* ===== Chrome (page-level, outside the app) ===== */
+.review-bar{position:sticky;top:0;z-index:50;background:#1d1d1f;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;}
+.review-bar b{font-size:14px;}
+.review-bar .note{color:#b8b8bd;flex:1 1 320px;}
+.tabs{display:flex;gap:6px;background:#2c2c2e;padding:4px;border-radius:999px;}
+.tabs button{border:0;background:transparent;color:#d8d8dc;padding:6px 14px;border-radius:999px;font-size:13px;font-family:inherit;cursor:pointer;}
+.tabs button.is-active{background:#fff;color:#1d1d1f;font-weight:600;}
+.stage{padding:32px 20px 80px;display:flex;justify-content:center;}
+.view{display:none;}
+.view.is-active{display:block;}
+
+/* ===== Desktop app shell ===== */
+.app{width:min(1400px,100%);background:var(--bg-base);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;min-height:820px;}
+.sidebar{width:64px;background:var(--bg-sidebar);border-right:1px solid var(--separator);flex:none;padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:18px;color:var(--fg-tertiary);}
+.sidebar .dot{width:32px;height:32px;border-radius:9px;background:var(--accent);}
+.sidebar .icn{width:20px;height:20px;border-radius:6px;background:var(--bg-tertiary);}
+.main{flex:1;padding:20px 28px 32px;overflow:auto;}
+
+.banner{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-card);padding:22px 26px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;}
+.banner h1{margin:0;font-size:var(--text-title1);font-weight:700;}
+.banner .sub{color:var(--fg-secondary);font-size:var(--text-footnote);margin-top:4px;}
+.banner .btn{border:1px solid var(--border);background:var(--bg-elevated);border-radius:var(--radius-control);padding:8px 14px;font-size:13px;color:var(--fg-primary);font-weight:500;}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;}
+.card{background:var(--bg-elevated);border:1px solid var(--separator);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:18px;}
+.card--bare{background:transparent;border:0;box-shadow:none;padding:0;}
+.wh{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--separator);}
+.wh h2{margin:0;font-size:16px;font-weight:650;}
+.wh .tag{margin-left:auto;font-size:11px;color:#fff;background:var(--accent);padding:2px 8px;border-radius:999px;}
+
+/* spans */
+.s3{grid-column:span 3;} .s4{grid-column:span 4;} .s5{grid-column:span 5;} .s6{grid-column:span 6;} .s7{grid-column:span 7;} .s8{grid-column:span 8;} .s12{grid-column:span 12;}
+
+/* At-a-glance */
+.aag-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+.aag{background:var(--bg-secondary);border-radius:var(--radius-lg);padding:16px 18px;text-align:left;}
+.aag .n{font-size:32px;font-weight:700;line-height:1;}
+.aag .n.overdue{color:var(--danger);}
+.aag .l{font-size:13px;color:var(--fg-secondary);margin-top:4px;}
+
+/* Agenda (day grid) */
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;}
+.day-col{background:var(--bg-secondary);border-radius:var(--radius-md);padding:10px;min-height:190px;}
+.day-col.today{outline:2px solid var(--accent);outline-offset:-2px;}
+.day-col .dl{font-size:12px;font-weight:700;color:var(--fg-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.02em;}
+.wk-item{display:flex;align-items:flex-start;gap:6px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--separator);}
+.wk-item:last-child{border-bottom:0;}
+.wk-item .ck{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--fg-tertiary);flex:none;margin-top:2px;}
+.wk-item .ck.done{background:var(--success);border-color:var(--success);}
+
+/* Mini calendar */
+.mini-cal{}
+.mc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-weight:600;}
+.mc-days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;text-align:center;font-size:11px;color:var(--fg-tertiary);}
+.mc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.mc-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px;position:relative;}
+.mc-cell.today{background:var(--accent);color:#fff;font-weight:700;}
+.mc-cell.out{color:var(--fg-tertiary);opacity:.4;}
+.mc-cell .dot{position:absolute;bottom:5px;width:4px;height:4px;border-radius:50%;background:var(--accent);}
+.mc-cell.today .dot{background:#fff;}
+
+/* Filled cards (spaces/projects) */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.tile{border-radius:var(--radius-card);padding:16px;color:#fff;min-height:110px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:var(--elevation-1);}
+.tile .ti{font-size:20px;}
+.tile .tn{font-weight:700;font-size:15px;margin-top:8px;}
+.tile .tm{font-size:12px;opacity:.85;margin-top:2px;}
+
+/* Habit grid */
+.habit-row{display:grid;grid-template-columns:140px repeat(7,1fr);gap:6px;align-items:center;padding:6px 0;}
+.habit-row .hn{font-size:13px;font-weight:500;}
+.habit-cell{aspect-ratio:1;border-radius:8px;background:var(--bg-secondary);}
+.habit-cell.on{background:var(--success);}
+.habit-head{display:grid;grid-template-columns:140px repeat(7,1fr);gap:6px;margin-bottom:6px;text-align:center;font-size:11px;color:var(--fg-tertiary);}
+
+/* Contact list */
+.contact-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--separator);}
+.contact-row:last-child{border-bottom:0;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-subtle);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;}
+.contact-row .cn{font-size:14px;font-weight:500;}
+.contact-row .cm{font-size:12px;color:var(--fg-secondary);}
+
+/* Spaces/projects list style */
+.proj-row{display:flex;align-items:center;gap:12px;padding:9px 2px;}
+.cell-tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:4px 10px;border-radius:999px;flex:none;}
+.progress-bar{flex:1;height:6px;background:var(--bg-secondary);border-radius:999px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);}
+.pct{font-size:12px;color:var(--fg-secondary);flex:none;width:52px;text-align:right;}
+
+/* Scheduled work / weekly schedule */
+.stat-lines{display:flex;flex-direction:column;gap:10px;}
+.stat-line{display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid var(--separator);}
+.stat-line:last-child{border-bottom:0;}
+.stat-line b{font-weight:700;}
+
+.callout{font-size:11px;color:var(--fg-secondary);background:var(--bg-secondary);border-radius:6px;padding:2px 8px;display:inline-block;margin-left:8px;}
+
+/* ===== Mobile frame ===== */
+.phone{width:390px;background:#000;border-radius:44px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+.phone-screen{background:var(--bg-base);border-radius:32px;overflow:auto;height:800px;padding:16px 14px 40px;}
+.mbanner{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.mbanner h1{font-size:20px;margin:0;}
+.mbanner .sub{font-size:12px;color:var(--fg-secondary);}
+.mstack{display:flex;flex-direction:column;gap:14px;}
+.m-aag{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.m-aag .aag{padding:10px 8px;}
+.m-aag .n{font-size:22px;}
+.m-week-list{display:flex;flex-direction:column;gap:10px;}
+.m-day{background:var(--bg-secondary);border-radius:var(--radius-md);padding:10px 12px;}
+.m-day .dl{font-size:12px;font-weight:700;color:var(--fg-secondary);margin-bottom:6px;}
+.m-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.m-tile{border-radius:14px;padding:12px;color:#fff;min-height:76px;display:flex;flex-direction:column;justify-content:space-between;}
+.m-tile .tn{font-weight:700;font-size:13px;}
+.m-tile .tm{font-size:11px;opacity:.85;}
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <b>Curodav — Dashboard size-up mockup</b>
+  <span class="note">Layout &amp; data density only — same widget types, same colors/type/components as the live app (tokens copied from style.css). Sized up = fuller use of grid width, larger widget footprint, more rows visible per widget on desktop and mobile.</span>
+  <div class="tabs" id="page-tabs">
+    <button data-page="home" class="is-active">Home</button>
+    <button data-page="space">Space</button>
+  </div>
+  <div class="tabs" id="vp-tabs">
+    <button data-vp="desktop" class="is-active">Desktop</button>
+    <button data-vp="mobile">Mobile</button>
+  </div>
+</div>
+
+<div class="stage">
+
+<!-- ============ HOME / DESKTOP ============ -->
+<div class="view is-active" data-page="home" data-vp="desktop">
+  <div class="app">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="banner">
+        <div><h1>Good morning, Peter</h1><div class="sub">Wednesday, 13 September</div></div>
+        <button class="btn">＋ New</button>
+      </div>
+
+      <div class="grid">
+        <!-- At a glance: was a third-width card with 3 numbers; now full-width, 4th block added (This month) -->
+        <div class="card s12">
+          <div class="wh"><h2>At a glance</h2><span class="callout">was 1 of 3 stacked thirds → now one full-width strip</span></div>
+          <div class="aag-row">
+            <div class="aag"><div class="n overdue">3</div><div class="l">Overdue</div></div>
+            <div class="aag"><div class="n">7</div><div class="l">Due today</div></div>
+            <div class="aag"><div class="n">18</div><div class="l">Due this week</div></div>
+            <div class="aag"><div class="n">42</div><div class="l">Due this month</div></div>
+          </div>
+        </div>
+
+        <!-- Agenda: was half-width, ~2 items/day; now two-thirds width, 3-4 items/day -->
+        <div class="card s8">
+          <div class="wh"><h2>Agenda — next 7 days</h2><span class="callout">half → two-thirds, +2 rows/day</span></div>
+          <div class="week-grid">
+            <div class="day-col today"><div class="dl">Wed</div>
+              <div class="wk-item"><span class="ck"></span>Ship size-up mockup</div>
+              <div class="wk-item"><span class="ck done"></span>Reply to Maria</div>
+              <div class="wk-item"><span class="ck"></span>Renew domain</div>
+            </div>
+            <div class="day-col"><div class="dl">Thu</div>
+              <div class="wk-item"><span class="ck"></span>Team sync 10:00</div>
+              <div class="wk-item"><span class="ck"></span>Grocery run</div>
+            </div>
+            <div class="day-col"><div class="dl">Fri</div>
+              <div class="wk-item"><span class="ck"></span>Invoice #204</div>
+              <div class="wk-item"><span class="ck"></span>Dentist 15:30</div>
+              <div class="wk-item"><span class="ck"></span>Backup NAS</div>
+            </div>
+            <div class="day-col"><div class="dl">Sat</div>
+              <div class="wk-item"><span class="ck"></span>Weekend trip pack</div>
+            </div>
+            <div class="day-col"><div class="dl">Sun</div>
+              <div class="wk-item"><span class="ck"></span>Meal prep</div>
+              <div class="wk-item"><span class="ck"></span>Call parents</div>
+            </div>
+            <div class="day-col"><div class="dl">Mon</div>
+              <div class="wk-item"><span class="ck"></span>Sprint planning</div>
+              <div class="wk-item"><span class="ck"></span>Review PR #88</div>
+            </div>
+            <div class="day-col"><div class="dl">Tue</div>
+              <div class="wk-item"><span class="ck"></span>Gym</div>
+              <div class="wk-item"><span class="ck"></span>Pay rent</div>
+              <div class="wk-item"><span class="ck"></span>Tax prep docs</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini calendar: was 1/6 narrow-ish; now a third, bigger cells -->
+        <div class="card s4">
+          <div class="wh"><h2>September</h2></div>
+          <div class="mini-cal">
+            <div class="mc-days"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+            <div class="mc-grid" id="mc-grid-1"></div>
+          </div>
+        </div>
+
+        <!-- Spaces & Projects: was smaller tiles, name only; now bigger tiles with description + meta -->
+        <div class="card s8">
+          <div class="wh"><h2>Spaces &amp; Projects</h2><span class="callout">bigger tiles, description + item count shown</span></div>
+          <div class="tiles">
+            <div class="tile" style="background:var(--cal-blue)"><div class="ti">🏠</div><div><div class="tn">Home Renovation</div><div class="tm">12 tasks · 3 due this week</div></div></div>
+            <div class="tile" style="background:var(--cal-green)"><div class="ti">💼</div><div><div class="tn">Freelance Clients</div><div class="tm">4 projects · 2 invoices open</div></div></div>
+            <div class="tile" style="background:var(--cal-purple)"><div class="ti">📚</div><div><div class="tn">Learning</div><div class="tm">Rust course · 60% done</div></div></div>
+            <div class="tile" style="background:var(--cal-orange)"><div class="ti">🚗</div><div><div class="tn">Car Maintenance</div><div class="tm">Next service in 800km</div></div></div>
+            <div class="tile" style="background:var(--cal-pink)"><div class="ti">🎉</div><div><div class="tn">Event Planning</div><div class="tm">Birthday · 6 tasks left</div></div></div>
+            <div class="tile" style="background:var(--cal-teal)"><div class="ti">🌱</div><div><div class="tn">Garden</div><div class="tm">3 active projects</div></div></div>
+          </div>
+        </div>
+
+        <!-- Habit checkin: was 3 habits, current week; now 5 habits shown -->
+        <div class="card s4">
+          <div class="wh"><h2>Habits</h2><span class="callout">3 → 5 rows visible</span></div>
+          <div class="habit-head"><span></span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          <div class="habit-row"><span class="hn">Read 20min</span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+          <div class="habit-row"><span class="hn">Workout</span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+          <div class="habit-row"><span class="hn">No sugar</span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+          <div class="habit-row"><span class="hn">Journal</span><span class="habit-cell"></span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+          <div class="habit-row"><span class="hn">Meditate</span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+        </div>
+
+        <!-- Contact list: was 4 rows; now 8 -->
+        <div class="card s4">
+          <div class="wh"><h2>Contacts — Family</h2><span class="callout">4 → 8 rows</span></div>
+          <div class="contact-row"><div class="avatar">MA</div><div><div class="cn">Maria Antal</div><div class="cm">Sister · Birthday in 12 days</div></div></div>
+          <div class="contact-row"><div class="avatar">AV</div><div><div class="cn">Ana Velcea</div><div class="cm">Mother</div></div></div>
+          <div class="contact-row"><div class="avatar">IV</div><div><div class="cn">Ion Velcea</div><div class="cm">Father</div></div></div>
+          <div class="contact-row"><div class="avatar">DP</div><div><div class="cn">Dana Popescu</div><div class="cm">Aunt</div></div></div>
+          <div class="contact-row"><div class="avatar">RM</div><div><div class="cn">Radu Mihai</div><div class="cm">Cousin</div></div></div>
+          <div class="contact-row"><div class="avatar">CT</div><div><div class="cn">Cristina T.</div><div class="cm">Cousin</div></div></div>
+          <div class="contact-row"><div class="avatar">GV</div><div><div class="cn">George V.</div><div class="cm">Uncle</div></div></div>
+          <div class="contact-row"><div class="avatar">LP</div><div><div class="cn">Laura P.</div><div class="cm">Family friend</div></div></div>
+        </div>
+
+        <!-- Scheduled work today -->
+        <div class="card s4">
+          <div class="wh"><h2>Scheduled today</h2></div>
+          <div class="stat-lines">
+            <div class="stat-line">Deep work<b>3h 30m</b></div>
+            <div class="stat-line">Meetings<b>1h 15m</b></div>
+            <div class="stat-line">Admin<b>45m</b></div>
+            <div class="stat-line">Free<b>2h 30m</b></div>
+          </div>
+        </div>
+
+        <!-- Weekly schedule -->
+        <div class="card s4">
+          <div class="wh"><h2>Weekly schedule</h2></div>
+          <div class="stat-lines">
+            <div class="stat-line">Mon — Sprint planning<b>10:00</b></div>
+            <div class="stat-line">Wed — Dentist<b>15:30</b></div>
+            <div class="stat-line">Fri — Invoice due<b>EOD</b></div>
+            <div class="stat-line">Sun — Family call<b>18:00</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HOME / MOBILE ============ -->
+<div class="view" data-page="home" data-vp="mobile">
+  <div class="phone"><div class="phone-screen">
+    <div class="mbanner"><div><h1>Good morning, Peter</h1><div class="sub">Wed, 13 Sep</div></div><span style="font-size:22px;">＋</span></div>
+    <div class="mstack">
+      <div class="card">
+        <div class="wh"><h2>At a glance</h2></div>
+        <div class="m-aag">
+          <div class="aag"><div class="n overdue">3</div><div class="l">Overdue</div></div>
+          <div class="aag"><div class="n">7</div><div class="l">Today</div></div>
+          <div class="aag"><div class="n">18</div><div class="l">Week</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wh"><h2>Agenda</h2><span class="callout">3 → 7 days shown</span></div>
+        <div class="m-week-list">
+          <div class="m-day"><div class="dl">TODAY</div>
+            <div class="wk-item"><span class="ck"></span>Ship size-up mockup</div>
+            <div class="wk-item"><span class="ck done"></span>Reply to Maria</div>
+          </div>
+          <div class="m-day"><div class="dl">THU</div>
+            <div class="wk-item"><span class="ck"></span>Team sync 10:00</div>
+          </div>
+          <div class="m-day"><div class="dl">FRI</div>
+            <div class="wk-item"><span class="ck"></span>Invoice #204</div>
+            <div class="wk-item"><span class="ck"></span>Dentist 15:30</div>
+          </div>
+          <div class="m-day"><div class="dl">SAT</div>
+            <div class="wk-item"><span class="ck"></span>Weekend trip pack</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wh"><h2>September</h2></div>
+        <div class="mini-cal">
+          <div class="mc-days"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          <div class="mc-grid" id="mc-grid-2"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wh"><h2>Spaces &amp; Projects</h2><span class="callout">1 col → 2 col tiles</span></div>
+        <div class="m-tiles">
+          <div class="m-tile" style="background:var(--cal-blue)"><span>🏠</span><div><div class="tn">Home Renovation</div><div class="tm">12 tasks</div></div></div>
+          <div class="m-tile" style="background:var(--cal-green)"><span>💼</span><div><div class="tn">Freelance</div><div class="tm">4 projects</div></div></div>
+          <div class="m-tile" style="background:var(--cal-purple)"><span>📚</span><div><div class="tn">Learning</div><div class="tm">Rust 60%</div></div></div>
+          <div class="m-tile" style="background:var(--cal-orange)"><span>🚗</span><div><div class="tn">Car</div><div class="tm">800km left</div></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wh"><h2>Contacts</h2><span class="callout">3 → 6 rows</span></div>
+        <div class="contact-row"><div class="avatar">MA</div><div><div class="cn">Maria Antal</div><div class="cm">Birthday in 12 days</div></div></div>
+        <div class="contact-row"><div class="avatar">AV</div><div><div class="cn">Ana Velcea</div><div class="cm">Mother</div></div></div>
+        <div class="contact-row"><div class="avatar">IV</div><div><div class="cn">Ion Velcea</div><div class="cm">Father</div></div></div>
+        <div class="contact-row"><div class="avatar">DP</div><div><div class="cn">Dana Popescu</div><div class="cm">Aunt</div></div></div>
+        <div class="contact-row"><div class="avatar">RM</div><div><div class="cn">Radu Mihai</div><div class="cm">Cousin</div></div></div>
+        <div class="contact-row"><div class="avatar">CT</div><div><div class="cn">Cristina T.</div><div class="cm">Cousin</div></div></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ============ SPACE / DESKTOP ============ -->
+<div class="view" data-page="space" data-vp="desktop">
+  <div class="app">
+    <div class="sidebar"><div class="dot"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div><div class="icn"></div></div>
+    <div class="main">
+      <div class="banner">
+        <div><h1>🏠 Home Renovation</h1><div class="sub">Space · 3 projects · 12 open tasks</div></div>
+        <button class="btn">＋ New</button>
+      </div>
+
+      <div class="grid">
+        <div class="card s12">
+          <div class="wh"><h2>At a glance</h2><span class="callout">was 1 of 3 stacked thirds → full-width strip</span></div>
+          <div class="aag-row">
+            <div class="aag"><div class="n overdue">1</div><div class="l">Overdue</div></div>
+            <div class="aag"><div class="n">2</div><div class="l">Due today</div></div>
+            <div class="aag"><div class="n">6</div><div class="l">Due this week</div></div>
+            <div class="aag"><div class="n">12</div><div class="l">Open tasks</div></div>
+          </div>
+        </div>
+
+        <div class="card s7">
+          <div class="wh"><h2>Agenda — next 7 days</h2><span class="callout">half → wider, more rows/day</span></div>
+          <div class="week-grid">
+            <div class="day-col today"><div class="dl">Wed</div><div class="wk-item"><span class="ck"></span>Order tiles</div><div class="wk-item"><span class="ck"></span>Call electrician</div></div>
+            <div class="day-col"><div class="dl">Thu</div><div class="wk-item"><span class="ck"></span>Paint samples</div></div>
+            <div class="day-col"><div class="dl">Fri</div><div class="wk-item"><span class="ck"></span>Contractor visit</div><div class="wk-item"><span class="ck"></span>Pay deposit</div></div>
+            <div class="day-col"><div class="dl">Sat</div><div class="wk-item"><span class="ck"></span>Pick fixtures</div></div>
+            <div class="day-col"><div class="dl">Sun</div></div>
+            <div class="day-col"><div class="dl">Mon</div><div class="wk-item"><span class="ck"></span>Permit follow-up</div></div>
+            <div class="day-col"><div class="dl">Tue</div><div class="wk-item"><span class="ck"></span>Flooring delivery</div><div class="wk-item"><span class="ck"></span>Site cleanup</div></div>
+          </div>
+        </div>
+
+        <div class="card s5">
+          <div class="wh"><h2>Projects in this Space</h2><span class="callout">list style, progress bars kept, +meta</span></div>
+          <div class="proj-row"><span class="cell-tag" style="background:var(--tag-blue-bg);color:var(--tag-blue-fg)">🛁 Bathroom</span><div class="progress-bar"><div class="progress-fill" style="width:70%"></div></div><span class="pct">7/10</span></div>
+          <div class="proj-row"><span class="cell-tag" style="background:var(--tag-green-bg);color:var(--tag-green-fg)">🍳 Kitchen</span><div class="progress-bar"><div class="progress-fill" style="width:35%"></div></div><span class="pct">3/9</span></div>
+          <div class="proj-row"><span class="cell-tag" style="background:var(--tag-orange-bg);color:var(--tag-orange-fg)">🌳 Backyard</span><div class="progress-bar"><div class="progress-fill" style="width:10%"></div></div><span class="pct">1/8</span></div>
+        </div>
+
+        <div class="card s4">
+          <div class="wh"><h2>Habits</h2></div>
+          <div class="habit-head"><span></span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          <div class="habit-row"><span class="hn">Log expenses</span><span class="habit-cell on"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+          <div class="habit-row"><span class="hn">Site photos</span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell on"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span><span class="habit-cell"></span></div>
+        </div>
+
+        <div class="card s4">
+          <div class="wh"><h2>September</h2></div>
+          <div class="mini-cal">
+            <div class="mc-days"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+            <div class="mc-grid" id="mc-grid-3"></div>
+          </div>
+        </div>
+
+        <div class="card s4">
+          <div class="wh"><h2>Contacts — Contractors</h2><span class="callout">4 → 6 rows</span></div>
+          <div class="contact-row"><div class="avatar">EL</div><div><div class="cn">Elena — Electrician</div><div class="cm">Visit Fri 09:00</div></div></div>
+          <div class="contact-row"><div class="avatar">MP</div><div><div class="cn">Mihai — Plumber</div><div class="cm">On call</div></div></div>
+          <div class="contact-row"><div class="avatar">TC</div><div><div class="cn">Tudor — Contractor</div><div class="cm">Lead PM</div></div></div>
+          <div class="contact-row"><div class="avatar">SS</div><div><div class="cn">Suppliers Store</div><div class="cm">Tile order #5521</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SPACE / MOBILE ============ -->
+<div class="view" data-page="space" data-vp="mobile">
+  <div class="phone"><div class="phone-screen">
+    <div class="mbanner"><div><h1>🏠 Renovation</h1><div class="sub">3 projects · 12 open</div></div><span style="font-size:22px;">＋</span></div>
+    <div class="mstack">
+      <div class="card">
+        <div class="wh"><h2>At a glance</h2></div>
+        <div class="m-aag">
+          <div class="aag"><div class="n overdue">1</div><div class="l">Overdue</div></div>
+          <div class="aag"><div class="n">2</div><div class="l">Today</div></div>
+          <div class="aag"><div class="n">6</div><div class="l">Week</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="wh"><h2>Projects</h2></div>
+        <div class="proj-row"><span class="cell-tag" style="background:var(--tag-blue-bg);color:var(--tag-blue-fg)">🛁 Bathroom</span><div class="progress-bar"><div class="progress-fill" style="width:70%"></div></div><span class="pct">7/10</span></div>
+        <div class="proj-row"><span class="cell-tag" style="background:var(--tag-green-bg);color:var(--tag-green-fg)">🍳 Kitchen</span><div class="progress-bar"><div class="progress-fill" style="width:35%"></div></div><span class="pct">3/9</span></div>
+        <div class="proj-row"><span class="cell-tag" style="background:var(--tag-orange-bg);color:var(--tag-orange-fg)">🌳 Backyard</span><div class="progress-bar"><div class="progress-fill" style="width:10%"></div></div><span class="pct">1/8</span></div>
+      </div>
+      <div class="card">
+        <div class="wh"><h2>Agenda</h2><span class="callout">7 days shown</span></div>
+        <div class="m-week-list">
+          <div class="m-day"><div class="dl">TODAY</div><div class="wk-item"><span class="ck"></span>Order tiles</div><div class="wk-item"><span class="ck"></span>Call electrician</div></div>
+          <div class="m-day"><div class="dl">FRI</div><div class="wk-item"><span class="ck"></span>Contractor visit</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="wh"><h2>Contractors</h2></div>
+        <div class="contact-row"><div class="avatar">EL</div><div><div class="cn">Elena — Electrician</div><div class="cm">Visit Fri 09:00</div></div></div>
+        <div class="contact-row"><div class="avatar">MP</div><div><div class="cn">Mihai — Plumber</div><div class="cm">On call</div></div></div>
+        <div class="contact-row"><div class="avatar">TC</div><div><div class="cn">Tudor — Contractor</div><div class="cm">Lead PM</div></div></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+</div>
+
+<script>
+function buildMonth(id, todayNum){
+  const el = document.getElementById(id);
+  if(!el) return;
+  let html = '';
+  const lead = 2; // days from prev month shown
+  for(let i=0;i<lead;i++) html += `<div class="mc-cell out">${28+i}</div>`;
+  for(let d=1; d<=30; d++){
+    const isToday = d === todayNum;
+    const hasDot = [2,5,9,13,17,22,26,29].includes(d);
+    html += `<div class="mc-cell ${isToday?'today':''}">${d}${hasDot?'<span class="dot"></span>':''}</div>`;
+  }
+  el.innerHTML = html;
+}
+buildMonth('mc-grid-1', 13);
+buildMonth('mc-grid-2', 13);
+buildMonth('mc-grid-3', 13);
+
+function setPage(page){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('is-active', v.dataset.page===page && v.dataset.vp===currentVp));
+  document.querySelectorAll('#page-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.page===page));
+  currentPage = page;
+}
+function setVp(vp){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('is-active', v.dataset.page===currentPage && v.dataset.vp===vp));
+  document.querySelectorAll('#vp-tabs button').forEach(b=>b.classList.toggle('is-active', b.dataset.vp===vp));
+  currentVp = vp;
+}
+let currentPage = 'home', currentVp = 'desktop';
+document.querySelectorAll('#page-tabs button').forEach(b=>b.addEventListener('click', ()=>setPage(b.dataset.page)));
+document.querySelectorAll('#vp-tabs button').forEach(b=>b.addEventListener('click', ()=>setVp(b.dataset.vp)));
+</script>
+</body>
+</html>

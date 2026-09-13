@@ -16,7 +16,7 @@
      relative") -- "Today"/"Tomorrow"/"Yesterday", else "5 Sep" (year only
      when it isn't the current one), instead of a raw "2026-09-05". -->
 
-{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button %}
+{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_dot %}
 {% macro overdue_table(tasks) %}
 {{ widget_section_label('Overdue') }}
 <table>
@@ -59,10 +59,23 @@
 {{ widget_section_label('Events') }}
 <table>
     {% for e in data.events %}
+    {# 2026-09-13 (direct request: "the events style inside widget to be
+       similar to tasks -- date as a pill, title first, date second,
+       circle dot like in mockup") -- the leading cell used to hold the
+       time/date string itself (date first, title second, no `right`
+       cell at all, via the class this row used to carry for that leading
+       cell -- see style.css's own comment on that class's history); now
+       matches the Tasks row above exactly: a dot in the same
+       widget-row-icon leading slot a task's checkbox uses, title as the
+       main link text, date/time as a right-aligned pill. This also
+       sidesteps the 2-column auto-table-layout width bug fixed earlier
+       today for the old leading-cell shape -- widget-row-icon already has
+       a fixed 26px width, so there's no unconstrained nowrap column left
+       to run away with the table's width. #}
     {% if data.range == 'today' %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), leading_class='widget-row-time') }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
     {% else %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), leading_class='widget-row-time') }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
     {% endif %}
     {% endfor %}
 </table>
