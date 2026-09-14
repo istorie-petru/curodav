@@ -2009,15 +2009,24 @@ def today_redirect():
 
 
 @router.get("/quick/add")
-def quick_add_form(request: Request, conn=Depends(get_db)):
-    # Merged task/event quick-add (2026-08-10) -- the dashboard's and
-    # label-page's single "+" button opens this instead of two separate
-    # New task / New event forms. Renders BOTH create-forms in one modal
-    # (quick_add.html); the client just flips between them. The task and
-    # event option lists are imported lazily from .tasks so this module
-    # (which .tasks itself imports at load time) doesn't create a
-    # circular import.
+def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get_db)):
+    # Merged task/event/contact/label quick-add (2026-08-10, grew Contact/
+    # Label tabs 2026-09-14) -- the sidebar's single global "+" button
+    # opens this instead of four separate New task / New event / New
+    # contact / New label forms. Renders all four create-forms in one
+    # modal (quick_add.html); the client just flips between them.
+    # `default_tab` picks which one starts active -- base.html's sidebar
+    # link passes it so e.g. the Contacts page still opens pre-focused on
+    # Contact instead of always defaulting to Task, same context-awareness
+    # the old per-page-branching href used to give Contacts alone. Options/
+    # vocab lists are imported lazily from .tasks/.labels so this module
+    # (which both of those import at load time) doesn't create a circular
+    # import.
+    from .labels import COLORS, ICON_GROUPS
     from .tasks import STATUS_ITEMS, STATUSES
+
+    if default_tab not in ("task", "event", "contact", "label"):
+        default_tab = "task"
 
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
@@ -2025,6 +2034,7 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
         {
             "request": request,
             "active_tab": "dashboard",
+            "default_tab": default_tab,
             # Task-side context -- the shared field-grid partial
             # (_task_form_fields.html) needs the same items new_task_form
             # passes; task is None, so the edit-only branches don't render.
@@ -2044,6 +2054,24 @@ def quick_add_form(request: Request, conn=Depends(get_db)):
             "prefill_end": None,
             "prefill_all_day": False,
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            # Contact-side context -- same union new_contact_form
+            # (routers/contacts.py) passes; contact is None, so the
+            # edit-only branches (remove-photo checkbox) don't render.
+            "contact": None,
+            "phone_types": db.CONTACT_PHONE_TYPES,
+            "email_types": db.CONTACT_EMAIL_TYPES,
+            "website_types": db.CONTACT_WEBSITE_TYPES,
+            "address_types": db.CONTACT_ADDRESS_TYPES,
+            "social_types": db.CONTACT_SOCIAL_TYPES,
+            # Label-side context -- same union new_label_modal
+            # (routers/labels.py) passes; l is None, so the edit-only
+            # banner branch doesn't render and role starts "none" (a
+            # brand-new label is always a plain label until Role is
+            # changed client-side).
+            "l": None,
+            "colors": COLORS,
+            "icon_groups": ICON_GROUPS,
+            "role": "none",
         },
     )
 

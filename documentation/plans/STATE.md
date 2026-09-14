@@ -17,6 +17,77 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct request: "the quick add should support
+  both contacts and labels." quick_add.html (2026-08-10) only ever rendered
+  Task/Event panels; base.html's own comment on the sidebar's global "+"
+  button explicitly flagged a Contacts tab as "a real follow-up, not done
+  here." Asked a clarifying AskUserQuestion up front (full field parity
+  with the standalone forms vs. a trimmed-down minimal set; universal
+  reachability vs. dashboard-only) -- Peter chose full parity + universal.
+
+  contact_form.html's and label_form_modal.html's field grids weren't
+  factored into reusable partials the way Task/Event already were, so
+  step one was extracting them: new `_contact_form_fields.html` (photo/
+  name, phone/email/website/address/social repeatable rows, title, org,
+  birthday, labels, notes) and `_label_form_fields.html` (name, color,
+  icon, group, role picker, project dates, banner-when-editing), each
+  hardcoding its own form id inside the partial (`contact-form`/
+  `label-form`) same as `_task_form_fields.html`'s own `ms_form_id`
+  convention. Both standalone templates now just `{% include %}` the
+  partial -- one markup contract each, no drift risk between the
+  standalone form and the quick-add panel.
+
+  quick_add.html grew two more segmented tabs/panels (Contact, Label) and
+  a `default_tab` context var (defaults `"task"`, validated against the
+  four known kinds) driving which tab/panel/footer-Save-target is active
+  server-side on first paint, not just after quick_add.js runs.
+  routers/dashboard.py::quick_add_form takes a `default_tab` query param
+  and now also passes the Contact/Label context unions new_contact_form/
+  new_label_modal pass (`COLORS`/`ICON_GROUPS` imported lazily from
+  `.labels`, same circular-import-avoidance the existing `.tasks` lazy
+  import already used). static/quick_add.js's hardcoded `kind === "event"
+  ? "event-form" : "task-form"` ternary became a `FORM_IDS` map covering
+  all four kinds.
+
+  base.html's sidebar "+" no longer special-cases Contacts into its own
+  `/contacts/new` modal -- every page opens the same `/quick/add` now,
+  with a small `_qa_defaults` dict keyed on `active_tab` picking
+  `default_tab=contact` on Contacts, `default_tab=label` on both Labels
+  pages (`"labels"` manage table and `"label"` single-label detail page),
+  `task` everywhere else -- same context-awareness the old branching href
+  gave Contacts alone, just generalized.
+
+  **Tests**: new `TestQuickAddContactAndLabelTabs` class in
+  `test_dashboard_usability_rework.py` (6 tests) -- all four forms render
+  with their real fields/ids, the Contact/Label tab buttons are present,
+  each form posts to its real create route (`/contacts`, `/settings/
+  labels/create`), `default_tab` picks the right active tab/panel/save-
+  target for all four kinds, and an unrecognized `default_tab` falls back
+  to `task`. Updated `TestSidebarQuickAdd` in `test_sidebar_tree.py` (was
+  2 tests, now 3) for the new universal `/quick/add?default_tab=...`
+  hrefs. Caught a real bug via the pre-existing Social-network contact
+  test suite (`test_contacts_field_parity_social.py`) failing after the
+  partial extraction: the Social network repeatable-row section was
+  dropped by mistake during the contact-fields extraction (present in the
+  original template, missing from the first cut of the new partial) --
+  fixed before this shipped, not left for a follow-up, since it would
+  have silently broken the standalone New/Edit Contact form too, not just
+  quick-add. Full suite: 10 chunks by filename, **2,255 passed, 0
+  failed** (2,242 + the 13 new/changed tests above, `test_caldav_bridge_
+  live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Contact/Label tabs actually open and submit
+  correctly in a live browser (photo upload, repeatable phone/email/
+  website/address/social rows, the label color/icon/role pickers), that
+  the sidebar's "+" opens pre-focused on the right tab from Contacts and
+  both Labels pages, and that quick_add.js's tab switching (now four-way)
+  still smoothly retargets the footer Save button on every tab.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
 - **Shipped:** 2026-09-14 -- direct bug report: archiving/un-archiving a
   private Published List on the live deploy came back "Something went
   wrong," but a page refresh showed the change had actually applied.

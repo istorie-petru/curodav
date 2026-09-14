@@ -598,6 +598,62 @@ class TestQuickAddModal:
         assert ctx["prefill_start"] is None
 
 
+class TestQuickAddContactAndLabelTabs:
+    """2026-09-14 direct request: "the quick add should support both
+    contacts and labels." quick_add.html grew two more tabs/panels
+    (Contact, Label), sharing their field grids with the standalone
+    new/edit forms via the newly-extracted _contact_form_fields.html /
+    _label_form_fields.html partials, same one-markup-contract pattern
+    Task/Event already established."""
+
+    def test_route_renders_all_four_forms(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="task-form"' in body
+        assert 'id="event-form"' in body
+        assert 'id="contact-form"' in body
+        assert 'id="label-form"' in body
+        # Contact-specific field present...
+        assert 'name="full_name"' in body
+        assert 'enctype="multipart/form-data"' in body
+        # ...and label-specific fields present.
+        assert 'name="new_name"' in body
+        assert 'name="label_group"' in body
+
+    def test_contact_and_label_tabs_present(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'data-quick-add-tab="contact"' in body
+        assert 'data-quick-add-tab="label"' in body
+
+    def test_contact_and_label_forms_post_to_the_real_create_routes(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="contact-form" action="/contacts"' in body
+        assert 'id="label-form" action="/settings/labels/create"' in body
+
+    def test_default_tab_query_param_picks_the_active_panel_and_save_target(self, conn):
+        for tab, form_id in (("task", "task-form"), ("event", "event-form"), ("contact", "contact-form"), ("label", "label-form")):
+            resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab=tab, conn=conn)
+            body = resp.body.decode()
+            assert f'role="tab" aria-selected="true" data-quick-add-tab="{tab}"' in body
+            assert f'data-active="{tab}"' in body
+            assert f'form="{form_id}"' in body
+
+    def test_unknown_default_tab_falls_back_to_task(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="bogus", conn=conn)
+        assert resp.context["default_tab"] == "task"
+        body = resp.body.decode()
+        assert 'data-active="task"' in body
+
+    def test_route_defaults_contact_and_label_state(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        ctx = resp.context
+        assert ctx["contact"] is None
+        assert ctx["l"] is None
+        assert ctx["role"] == "none"
+
+
 class TestLabelPageResetButton:
     def test_reset_button_present_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
