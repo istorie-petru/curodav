@@ -67,6 +67,26 @@
     </div>
 </div>
 
+<!-- Contacts card (2026-09-16, direct request: "the same plain label page
+     should also show below the agenda and above the kanban a contacts
+     list widget filtered for that label") -- reuses the Dashboard's own
+     Contact List widget partial verbatim (_widget_contact_list.html,
+     expects a `data.contacts` var in scope -- Jinja `include` inherits
+     the calling template's context by default, so setting `data` here is
+     enough, no widget-config machinery needed) rather than duplicating
+     its row markup -- same name/org/email/phone stack, same
+     `.contact-list-*` CSS, every contacts row still links to
+     /contacts/{uid}. routers/labels.py::label_detail builds `contacts`
+     as every contact directly tagged with this label, capped at 20 (same
+     limit the Dashboard widget defaults to). -->
+<div class="card widget-card-static">
+    <div class="widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
+    <div class="widget-content">
+    {% set data = {'contacts': contacts} %}
+    {% include "_widget_contact_list.html" %}
+    </div>
+</div>
+
 <!-- Kanban board -- every non-archived task carrying this label, grouped
      by status. Same markup/CSS/drag-and-drop as project_detail.html's own
      board (static/tasks_board.js, `.kanban-board`/`.kanban-column`/

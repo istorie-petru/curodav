@@ -17,6 +17,42 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 (same-day follow-up to the Kanban+Agenda entry
+  directly below) -- direct request: "the same plain label page should
+  also show below the agenda and above the kanban a contacts list widget
+  filtered for that label." `routers/labels.py::label_detail` now also
+  builds `contacts` (every contact directly tagged with the label --
+  `db.list_contacts` has no tag-filter param, so this is the same
+  fetch-all-then-filter-in-Python approach `dashboard.py::
+  _render_contact_list` already uses for its own Contact List widget;
+  capped at 20, same default that widget uses). Not reusing
+  `_render_contact_list`/`_scope_child_names` directly -- their Space-vs-
+  plain-label scope resolution is moot on a route that only ever serves
+  plain labels (is_space already redirected away before this runs), so a
+  plain `name in tags` filter is exactly equivalent without pulling in
+  widget-config machinery this page doesn't otherwise have.
+
+  `label_kanban_detail.html` renders it as a new `.card.widget-card-static`
+  between the existing Agenda card and the Kanban board, by `{% include
+  "_widget_contact_list.html" %}` with a `data = {'contacts': contacts}`
+  set just above it -- reuses the Dashboard's own Contact List widget
+  partial/CSS verbatim (Jinja `include` inherits the calling template's
+  context, so no widget-config plumbing was needed) rather than
+  duplicating its row markup.
+
+  **Tests**: new `test_plain_label_page_shows_contacts_tagged_with_it` in
+  `test_phase2_labels.py` -- a tagged contact appears in both
+  `resp.context["contacts"]` and the rendered body, an untagged contact
+  doesn't. Full suite (92 files, `test_caldav_bridge_live.py` excluded as
+  always, four batches for the sandbox time-budget reason every recent
+  session has used): **2,300 passed, 0 failed** (2,299 prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Contacts card actually reads well sandwiched between
+  Agenda and the Kanban board (spacing/card rhythm), and that it's empty-
+  state message ("No contacts match this filter.", the shared widget's
+  own wording) reads sensibly on a label with no tagged contacts.
+
 - **Shipped:** 2026-09-16 -- direct request: "PLAIN LABELS SHOULD GENERATE
   PAGES LIKE PROJECTS, WITH AGENDA AND KANBAN, NOT DASHBOARDS." Investigated
   first (the premise sounded like it might need building from scratch, but

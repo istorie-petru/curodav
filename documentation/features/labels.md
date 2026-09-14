@@ -110,11 +110,15 @@ a plain label renders at this URL directly.
   implementation (own template, own context-building in `labels.py`
   rather than calling into `routers/projects.py`) — direct choice:
   "similar but distinct," so the two can diverge later. No deadline row
-  (a plain label has no `start_date`/`end_date`). The widget grid is no
-  longer used for plain labels at all; `labels.py`'s own `_label_scope`
-  helper (direct `object_labels` membership) was removed as dead code in
-  the same pass — nothing called it any more once this page stopped using
-  it.
+  (a plain label has no `start_date`/`end_date`). Between the Agenda card
+  and the Kanban board is a Contacts card (added same day, direct
+  follow-up request) — every contact directly tagged with the label,
+  rendered through the Dashboard's own `_widget_contact_list.html`
+  partial via a plain `{% include %}` (not the widget-config system this
+  page otherwise skips entirely). The widget grid is no longer used for
+  plain labels at all; `labels.py`'s own `_label_scope` helper (direct
+  `object_labels` membership) was removed as dead code in the same pass —
+  nothing called it any more once this page stopped using it.
 
 The University module (Course info/Homework, schedule-linked) described
 in earlier revisions of this doc is removed entirely — see

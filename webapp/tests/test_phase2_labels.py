@@ -478,6 +478,22 @@ class TestGeneratedSpacePage:
         assert {t["uid"] for t in resp.context["columns"]["active"]} == {"t1"}
         assert {e["uid"] for e in resp.context["agenda_items"]} == {"e1"}
 
+    def test_plain_label_page_shows_contacts_tagged_with_it(self, conn):
+        # 2026-09-16 (direct request: "the same plain label page should
+        # also show below the agenda and above the kanban a contacts list
+        # widget filtered for that label") -- every contact directly
+        # tagged with the label appears in `contacts`, rendered through
+        # the same _widget_contact_list.html partial the Dashboard's own
+        # Contact List widget uses. An untagged contact is excluded.
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Jane Doe", "tags": ["CS101"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c2", "full_name": "No Tag", "created_at": _now()})
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
+        body = resp.body.decode()
+        assert "Jane Doe" in body
+        assert "No Tag" not in body
+
     def test_label_with_no_config_row_still_renders(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
                                "tags": ["adhoc"], "created_at": _now()})

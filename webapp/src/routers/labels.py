@@ -788,6 +788,22 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
     events.sort(key=lambda e: e["start_at"])
     agenda_items = events[:8]
 
+    # Contacts card (2026-09-16, direct request: "the same plain label page
+    # should also show below the agenda and above the kanban a contacts
+    # list widget filtered for that label") -- every contact directly
+    # tagged with this label, same "fetch all, filter by tag membership in
+    # Python" approach the Dashboard's own Contact List widget uses
+    # (dashboard.py::_render_contact_list) -- db.list_contacts has no
+    # tag-filter parameter, there's nothing more specific to call. Not
+    # reusing _render_contact_list/_scope_child_names directly: that
+    # helper's Space-vs-plain-label scope resolution is moot here (this
+    # route only ever serves plain labels, is_space already redirected
+    # away above), so a plain tag-membership filter is exactly equivalent
+    # without pulling in the widget-config machinery this page doesn't
+    # otherwise use. Capped at 20, same limit that widget defaults to;
+    # db.list_contacts already sorts by full_name.
+    contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])][:20]
+
     ctx = {
         "request": request,
         # "label", not "labels": the manage page (/labels) lives inside
@@ -799,6 +815,7 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         "active_tab": "label",
         "label": label,
         "agenda_items": agenda_items,
+        "contacts": contacts,
         "columns": columns,
         "board_statuses": board_statuses,
         "status_labels": tasks_router.STATUS_LABELS,
