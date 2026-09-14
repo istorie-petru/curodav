@@ -1439,8 +1439,7 @@ tbody tr:last-child{border-bottom:none;}
 tbody tr:hover{background:var(--row-alt);}
 tbody td{padding:10px 8px; vertical-align:middle;}
 
-/* Labels manage table -- color dot + name, optional Group badge, Usage
-   count, icon actions.
+/* Labels manage table -- icon + name, Usage, icon actions.
    2026-08-28: this used to give #labels-table its own compact 6px row
    padding (plus 12px first/last-child edge padding) so it read as a
    denser, "airier" table than the rest of the app's plain tables.
@@ -1448,10 +1447,16 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    to the others"): removed -- Holidays/Time Blocks/every other settings
    table use the global `tbody td` 10px/8px padding above with no
    first/last-child override, and there was no longer a real reason for
-   Labels alone to look denser than its own Settings siblings. The Actions
-   column still reads right-aligned without the removed `text-align:right`
-   here -- `.action-buttons` (below) is `justify-content:flex-end`
-   regardless of the cell's own text-align. */
+   Labels alone to look denser than its own Settings siblings.
+   2026-09-16 (direct request, "the table rows are not narrow enough for
+   desktop"): reintroduced, scoped to `#labels-table-wrapper` rather than
+   a bare `#labels-table` selector -- this reopens exactly the gap the
+   2026-09-08 pass closed, but that's a deliberate reversal this time, not
+   drift; see this rule's own scoped block below rather than restating
+   the compact padding here, so the two decisions stay easy to find
+   side-by-side in source. The Actions column still reads right-aligned
+   without a `text-align:right` here -- `.action-buttons` (below) is
+   `justify-content:flex-end` regardless of the cell's own text-align. */
 
 .label-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
 .color-dot {
@@ -1467,37 +1472,57 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .label-cell-icon { display: inline-flex; flex-shrink: 0; }
 .label-name { font-weight: 500; color: var(--fg-primary); }
 
-/* Settings > Labels: one table per Space (2026-09-14, Spaces --
-   labels-as-membership rework slice 2) -- replaces the single flat
-   #labels-table + its Group-badge column (.group-badge above is still
-   used elsewhere, e.g. the bulk-merge modal/Holidays' own Calendar
-   badge, just no longer for a label's own group here). Each
-   `.labels-space-group` is one Space's heading + its own `<table>` (or
-   the "Ungrouped" heading + table); `#labels-table` (the shared
-   container, see labels_manage.html/_labels_table_body.html) just
-   stacks them with the same table-scroll card they've always rendered
-   inside. */
-.labels-space-group{margin-bottom:var(--space-5);}
-.labels-space-group:last-child{margin-bottom:0;}
-.labels-space-heading{
-  display:flex; align-items:center; gap:var(--space-2);
-  margin-bottom:var(--space-2);
-}
-.labels-space-heading h2{margin:0;}
-.labels-space-table{margin-bottom:0;}
+/* Settings > Labels: a single table (2026-09-16, direct request --
+   "don't want the header repeated for every group" / "don't want
+   separate behavior for the labels that are not assigned"). Replaces the
+   2026-09-14 "one <table> per Space" design (each with its own repeated
+   thead, plus Ungrouped's own separate heading+table) with one `<table
+   class="labels-table">`, one `<thead>`, one `<tbody>` -- a Space's own
+   row (`.labels-space-row` below) sits inline with its children and with
+   every ungrouped label, no per-group wrapper element left at all (each
+   row still carries a bare `data-label-group` attribute, unread by any
+   script today, same "hook nothing uses yet" status the removed wrapper
+   divs had).
 
-/* 2026-09-16 (direct request, mocked up interactively first) -- the
-   Space's own row (`_group_row` in _labels_table_body.html) replaces the
-   separate `.labels-space-heading` a Space used to get above its table;
-   this is the one row of the four (Space row + up to N child rows) that
-   reads as a "card": a light hue-tinted background (`--tag-<color>-bg`,
-   set per-row via `data-style` -- see that file's own CSP comment) plus
-   a bigger colored `.label-icon-tile` (the same tile the old heading
-   used, just relocated) and a bold name, both painted in the matching
-   `--tag-<color>-fg`. Checkbox/Usage/Edit/Delete stay in the same
-   columns as every child row beneath it, just tinted to match. */
-.labels-space-row td{padding:var(--space-3) 8px;}
+   `.labels-space-row` is the one row per Space that reads as a "card":
+   a light hue-tinted background and rounded corners. Painted via a
+   single `data-style` on the `<tr>` that sets two custom properties
+   (`--row-tint`/`--row-tint-fg`, see _labels_table_body.html) rather than
+   one `data-style` per inner span -- plain CSS below applies them to
+   each `<td>`'s own background (not the `<tr>`'s) specifically so
+   `border-radius` on the first/last cell actually clips visible
+   background, which it can't do if the color is painted on the parent
+   `<tr>` instead. A Space's row used to also get a colored
+   `.label-icon-tile` squircle; direct feedback ("the .label-icon-tile
+   for spaces is unnecessary, show only the icon like for any plain
+   label") dropped that -- a Space's row now uses the same
+   `.label-cell-icon` glyph every plain label row uses, just bold and
+   tinted along with the rest of the row via `--row-tint-fg`.
+
+   Rounded-corner hover follows the same per-`<td>`-background technique,
+   scoped to this table only (not the global `tbody tr:hover` rule
+   above, which every other settings table still uses unmodified). */
+.labels-space-row td{background:var(--row-tint);}
+.labels-space-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.labels-space-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.labels-space-row .label-cell-icon,
+.labels-space-row .label-name,
+.labels-space-row .usage-badge,
+.labels-space-row .text-muted{color:var(--row-tint-fg);}
 .labels-space-row .label-name{font-weight:600;}
+
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover{background:none;}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td{background:var(--row-alt);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+
+/* 2026-09-16 (direct request, "the table rows are not narrow enough for
+   desktop") -- narrower than the global `tbody td`/`thead th` padding
+   above, scoped to this page only (see this file's header comment on why
+   this reopens the 2026-09-08 decision on purpose). */
+#labels-table-wrapper thead th{padding:8px 8px;}
+#labels-table-wrapper tbody td{padding:6px 8px;}
+#labels-table-wrapper .labels-space-row td{padding:6px 8px;}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);

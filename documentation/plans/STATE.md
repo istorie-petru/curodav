@@ -17,6 +17,67 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 (same-day follow-up to the entry directly below
+  -- further direct feedback after seeing the first pass) -- "don't want
+  the header repeated for every group," "don't want separate behavior for
+  the labels that are not assigned," "rounded corners for both hover and
+  background color for spaces (like in mockup) -- this for all tables,"
+  "the .label-icon-tile for spaces is unnecessary, show only the icon
+  like for any plain label," "the table rows are not narrow enough for
+  desktop." Five changes to `_labels_table_body.html`/style.css, no
+  backend/context changes (routers/labels.py's `label_groups`/
+  `ungrouped_labels` shape is untouched):
+
+  1. Collapsed from one `<table>`/`<thead>` per Space (plus a separate
+     Ungrouped table) back to a single table/single header -- every row
+     (a Space's own row, its children, every ungrouped label) now flows
+     into one `<tbody>`, no per-group wrapper element at all (each row
+     keeps a bare `data-label-group` attribute instead, same "hook
+     nothing reads yet" status the removed wrapper divs had).
+  2. Ungrouped labels are now plain rows with nothing in front of them --
+     no heading, no different treatment from a Space's child row.
+  3. A Space's own row dropped `.label-icon-tile` (the colored squircle
+     carried over from the previous pass's heading-merge) for the same
+     plain `.label-cell-icon` glyph every label row uses.
+  4. The Space row's "card" look (light hue tint + rounded corners) is
+     now painted via one `data-style` per row setting `--row-tint`/
+     `--row-tint-fg` custom properties, consumed by plain CSS rules that
+     apply the background to each `<td>` individually (not the `<tr>`) --
+     `border-radius` only visibly clips a background painted on the same
+     box, so a `<tr>`-level background can't produce rounded corners no
+     matter what radius the cells get. Row hover for every *other* row
+     got the same per-`<td>`-background + first/last-child radius
+     treatment, scoped to `#labels-table-wrapper` only (not a global
+     `tbody tr:hover` change -- every other settings table is untouched).
+  5. Reintroduced compact 6px/8px row padding, scoped to
+     `#labels-table-wrapper` -- this deliberately reopens the 2026-09-08
+     decision that removed Labels' own denser padding ("no longer a real
+     reason for Labels alone to look denser than its own Settings
+     siblings"); noted in style.css's own comment as an intentional
+     reversal, not drift, since a future session diffing against that old
+     comment would otherwise read this as a regression.
+
+  **Tests**: `TestSettingsLabelsGroupedTables` in `test_phase2_labels.py`
+  updated in place (same class, no new tests) -- `test_manage_page_
+  renders_one_table_per_space_plus_ungrouped` ->
+  `test_manage_page_renders_a_single_table_with_no_repeated_headers`
+  (`<table>` count 2 -> 1, `<thead>` count asserted == 1), `test_space_
+  heading_gets_a_colored_icon_tile` -> `test_space_row_uses_a_plain_icon_
+  not_a_colored_tile` (asserts `label-icon-tile` is absent and the new
+  `--row-tint`/`--row-tint-fg` data-style is present instead), `test_
+  async_region_fragment_renders_the_same_grouped_tables` -> `..._single_
+  table` (`<table>` count 2 -> 1). Full suite (92 files, `test_caldav_
+  bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,300 passed, 0
+  failed** (same total as before this session -- tests renamed/rewritten
+  in place, not added).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the single table reads cleanly with no repeated headers,
+  that Space rows' rounded-corner tint and every other row's rounded
+  hover both look right in light and dark mode, and that the tighter row
+  padding actually reads as "narrow enough" on a real desktop viewport.
+
 - **Shipped:** 2026-09-16 -- direct request, mocked up interactively first
   (several rounds in chat: a rowspan'd group *column* with cards was tried
   and rejected as "looks broken" before landing on the Space's own row

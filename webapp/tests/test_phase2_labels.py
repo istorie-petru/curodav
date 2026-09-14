@@ -1016,39 +1016,45 @@ class TestSettingsLabelsGroupedTables:
         assert ctx["label_groups"] == []
         assert {l["name"] for l in ctx["ungrouped_labels"]} == {"Not A Space", "Orphaned Child"}
 
-    def test_manage_page_renders_one_table_per_space_plus_ungrouped(self, conn):
+    def test_manage_page_renders_a_single_table_with_no_repeated_headers(self, conn):
+        # 2026-09-16 (direct request: "don't want the header repeated for
+        # every group" / "don't want separate behavior for the labels
+        # that are not assigned") -- replaces the old "one <table> per
+        # Space plus a separate Ungrouped table" design with one table,
+        # one <thead>, everything (Space rows, their children, and every
+        # ungrouped label) in one <tbody>.
         self._space(conn, "University", color="teal")
         self._label(conn, "Homework", parent_name="University")
         self._label(conn, "Loose Label")
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
-        assert body.count("<table") == 2
+        assert body.count("<table") == 1
+        assert body.count("<thead>") == 1
         assert 'data-label-group="University"' in body
         assert 'data-label-group=""' in body
-        assert "Ungrouped" in body
         assert "Group" not in body.split("<thead>")[1].split("</thead>")[0]  # no Group column header
         assert 'name="label_group"' not in body
 
-    def test_space_heading_gets_a_colored_icon_tile(self, conn):
+    def test_space_row_uses_a_plain_icon_not_a_colored_tile(self, conn):
+        # 2026-09-16 (direct request: "the .label-icon-tile for spaces is
+        # unnecessary, show only the icon like for any plain label") --
+        # a Space's own row now renders its icon the same way any plain
+        # label row does (.label-cell-icon, no .label-icon-tile squircle).
+        # The row still reads as a "card" via a colored background/rounded
+        # corners set through one `data-style` on the <tr> itself, per
+        # `dynamic_styles.js`'s CSP-safe convention (2026-09-15 fix --
+        # style-src silently drops a literal `style="..."` attribute in a
+        # real enforcing browser, confirmed via headless-Chrome; this test
+        # only proves the markup is right, not that a browser applies it).
         self._space(conn, "University", color="teal", icon_name="graduation-cap")
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
-        # `data-style`, not `style=` (2026-09-15 fix, direct bug report --
-        # "the .label-icon-tile background-color still doesn't follow the
-        # label's color"). A literal `style=` attribute is silently
-        # dropped by this app's CSP (style-src has no 'unsafe-inline', and
-        # a nonce only ever covers <style> elements, never an attribute);
-        # dynamic_styles.js applies `data-style` via the CSSOM instead,
-        # which style-src doesn't restrict at all. Confirmed with a real
-        # headless-Chrome render (console listening for the CSP violation
-        # message) -- a plain HTML-source assertion like this one can't
-        # catch a CSP-enforcement bug by itself, since the attribute looks
-        # identical in the markup either way; this test only proves the
-        # markup is right, not that a browser will actually apply it.
-        assert 'class="label-icon-tile avatar-circle" data-style="--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue));"' in body
+        assert "label-icon-tile" not in body
+        assert 'class="labels-space-row"' in body
+        assert 'data-style="--row-tint: var(--tag-teal-bg); --row-tint-fg: var(--tag-teal-fg)"' in body
         assert "#icon-graduation-cap" in body
 
-    def test_add_label_row_always_present_in_ungrouped_table(self, conn):
+    def test_add_label_row_always_present(self, conn):
         self._space(conn, "University")
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
@@ -1059,12 +1065,12 @@ class TestSettingsLabelsGroupedTables:
         body = resp.body.decode()
         assert "No labels yet" in body
 
-    def test_async_region_fragment_renders_the_same_grouped_tables(self, conn):
+    def test_async_region_fragment_renders_the_same_single_table(self, conn):
         self._space(conn, "University")
         self._label(conn, "Homework", parent_name="University")
         resp = labels_router.labels_regions("list", _request("/settings/labels/regions"), conn=conn)
         body = resp.body.decode()
-        assert body.count("<table") == 2
+        assert body.count("<table") == 1
         assert 'data-label-group="University"' in body
 
     def test_space_and_its_children_are_editable_and_deletable_rows(self, conn):

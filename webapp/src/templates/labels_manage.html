@@ -44,15 +44,15 @@
    convention now, instead of a card wrapping a separate table-scroll
    div -- same row markup/spacing this table had been drifting from.
 
-   2026-09-14 (Spaces -- labels-as-membership rework slice 2): the single
-   table this wrapper held is now a plain div holding one table per Space
-   plus an "Ungrouped" table (_labels_table_body.html, shared with the
-   async-CRUD `region=list` refresh -- see that partial's own header
-   comment for the full rationale/markup contract). The "labels-table" id
-   moved from the old single table element to this wrapping div,
-   unchanged for static/bulk_select.js's `tableId: "labels-table"` config
-   below -- it already treats it as "any container," not literally a
-   table element. #}
+   2026-09-14 (Spaces -- labels-as-membership rework slice 2) grew this
+   into a plain div holding one table per Space plus an "Ungrouped" table;
+   2026-09-16 (direct request) collapsed it back to a single `<table>`
+   (_labels_table_body.html, shared with the async-CRUD `region=list`
+   refresh -- see that partial's own header comment for the current
+   rationale/markup contract). The "labels-table" id has stayed on this
+   wrapping div throughout both changes, unchanged for static/
+   bulk_select.js's `tableId: "labels-table"` config below -- it already
+   treats it as "any container," not literally a table element. #}
 <div class="card table-scroll" id="labels-table-wrapper">
     <div id="labels-table">
         {% include "_labels_table_body.html" %}

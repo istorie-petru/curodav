@@ -1,100 +1,80 @@
-{# Labels table(s) body -- shared between labels_manage.html's initial page
+{# Labels table body -- shared between labels_manage.html's initial page
    load and the async-CRUD `region=list` refresh (routers/labels.py::
    labels_regions), same "render once, include everywhere" contract
    _label_form_fields.html established for the label edit/create form.
 
-   2026-09-14 (Spaces -- labels-as-membership rework slice 2): grew from a
-   single flat `<tbody>` of `<tr>`s (all this file used to be) into one
-   `<table>` per Space (`label_groups`, each `{space, labels}` -- `labels`
-   is the Space's own row followed by its children, both already in
-   `_labels_context`'s existing type/name sort order, so no re-sorting
-   happens here) plus one "Ungrouped" table (`ungrouped_labels` --
-   everything with no parent_name, excluding the Spaces themselves, which
-   head their own tables instead of also showing up as a plain row here).
-   Replaces the old single flat table + a `label_group` free-text-badge
-   column, which had no real membership meaning (see routers/labels.py's
-   `_labels_context`/plans/open.md's slice list for the full rationale).
+   2026-09-16 (direct request, mocked up interactively first -- several
+   rounds in chat before landing here): back to a single `<table>` /
+   single `<thead>` for the whole page. The 2026-09-14 "one table per
+   Space" design (slice 2 of the Spaces rework) repeated a Label/Usage/
+   Actions header once per Space and gave Ungrouped its own separate
+   heading+table treatment; direct feedback was that the repeated headers
+   and Ungrouped's special-cased section were both unwanted -- "don't want
+   the header repeated for every group," "don't want separate behavior
+   for labels that aren't assigned." So `label_groups` and
+   `ungrouped_labels` (still computed exactly as before in routers/
+   labels.py -- this is a template-only change) now all flow into one
+   `<tbody>`: each Space's own row (`_group_row`, a colored "card" row --
+   see below) followed by its children (`_label_row`), then every
+   ungrouped label as a plain `_label_row` with no heading in front of it
+   at all, same as any child row.
+
+   A Space's row used to get a `.label-icon-tile` colored squircle (moved
+   in from the old heading in the previous pass) -- direct feedback: "the
+   .label-icon-tile for spaces is unnecessary, show only the icon like
+   for any plain label." Dropped; a Space's own row now uses the exact
+   same `.label-cell-icon` a plain label's row uses, just colored (see
+   `_group_row` below). The row still reads as a distinct "card": a light
+   `var(--tag-<color>-bg)` tint with rounded corners (style.css's
+   `.labels-space-row`) and a bold name, painted via one `data-style`
+   setting `--row-tint`/`--row-tint-fg` custom properties that the CSS
+   consumes -- one attribute instead of one per inner span, still CSP-
+   safe (dynamic_styles.js applies `data-style` via the CSSOM, which
+   style-src doesn't restrict; see this file's own 2026-09-15 note below
+   for why a literal `style="..."` attribute can't be used here).
+
+   Usage on a Space's row is still the *total* across the Space and every
+   child (`group.labels | sum(attribute='usage_count')`), unchanged from
+   the previous pass -- it's still the only visual anchor for "this Space
+   plus everything in it" now that there's no separate heading at all.
 
    The caller (labels_manage.html) still owns the single outer
-   `#labels-table` container all of this renders inside of --
-   static/bulk_select.js's `tableId` config scopes its `.row-select`
-   lookups to that container's full subtree regardless of how many real
-   `<table>` elements live inside it, so multiple tables here needed zero
-   bulk-select code changes; same for the checkbox-column's
-   shift-click/drag-paint, both container-relative already. Each Space's
-   table is wrapped in one `.labels-space-group[data-label-group]` element
-   (Ungrouped's own `data-label-group` is the empty string) -- not read by
-   any script today (this page has no search box to filter by group, see
-   static/labels_manage.js's own header comment), just a natural,
-   self-describing hook for whatever styles/scripts touch a Space's
-   section as a unit next.
+   `#labels-table` container -- static/bulk_select.js's `tableId` config
+   scopes its `.row-select` lookups to that container's full subtree, so
+   collapsing back to one real `<table>` inside it needed zero
+   bulk-select code changes. Each row still carries a `data-label-group`
+   attribute (a Space's own name, or "" for ungrouped/no-parent) -- not
+   read by any script today, same "self-describing hook, nothing reads it
+   yet" status the removed per-Space wrapper divs had.
 
    2026-09-15 direct bug report ("the .label-icon-tile background-color
-   still doesn't follow the label's color") -- this file's per-request-
-   computed colors (`label-cell-icon`/`label-name`'s
-   `var(--cal-accent-...)`, and the Space heading's `--tile-swatch`) were
-   all still using literal `style="..."` when this table was written
-   2026-09-14, not `data-style` -- the CSP-strict convention
-   `dynamic_styles.js`'s own header comment documents and every other
-   dynamic-value template already followed since 2026-09-07's CSP
-   hardening (audit-fixes-2.0.md item 11 dropped `'unsafe-inline'` from
-   style-src). A nonce only covers `<style>` elements, never `style=`
-   attributes, so a real CSP-enforcing browser silently drops every one of
-   these declarations -- confirmed via a headless-Chrome render with
-   console listening, which surfaced the browser's own "Applying inline
-   style violates ... style-src" message; a plain curl/HTML-source check
-   (or reading the attribute value back out of the DOM) can't catch this,
-   since CSP enforcement only ever shows up at paint/computed-style time
-   in an actual browser -- the raw attribute is still right there in the
-   markup either way. Fixed by the same mechanical `style=` ->
-   `data-style=` rename every other dynamic-value template in this app
-   already used.
-
-   2026-09-16 (direct request, mocked up interactively first -- several
-   rounds: a per-group column with rowspan cards was tried and rejected as
-   "looks broken," settled on the Space's own row becoming a colored card
-   row instead): folded each Space's separate `.labels-space-heading`
-   (icon tile + `<h2>` sitting above its table) into the Space's own row.
-   That row already existed (`group.labels[0]`, previously rendered via
-   the plain `_label_row` macro like any child) -- the old layout showed
-   the Space's name twice, once in the heading and again as the first data
-   row underneath, since a Space's own label is literally named after
-   itself. New `_group_row(group)` replaces that first-row rendering: same
-   checkbox/Edit/Delete a Space row always had, but now also carries the
-   icon tile (moved in from the old heading, unchanged markup so
-   `test_space_heading_gets_a_colored_icon_tile` keeps passing without
-   modification), a light `var(--tag-<color>-bg)`/`var(--tag-<color>-fg)`
-   row tint (the same hue-keyed light-bg/dark-fg pair token every
-   `.cell-tag`/pill already reads, so dark mode needs no separate
-   handling here), and a Usage figure that's now the *total* across the
-   Space and every child (`group.labels | sum(attribute='usage_count')`)
-   rather than just the Space's own direct usage -- this row is the only
-   visual anchor for the group as a whole now that the separate heading
-   is gone, so "Used in 4 items" on it means the whole group, not just
-   the Space's own direct tag count. Child rows (`group.labels[1:]`) are
-   unchanged, still plain `_label_row` rows. Ungrouped is deliberately
-   left as a plain heading + flat rows, no card row -- it isn't a real
-   editable label, it's just a bucket with nothing to merge a heading
-   into. #}
+   still doesn't follow the label's color") -- per-request-computed
+   colors must go through `data-style`, never a literal `style="..."`
+   attribute: this app's CSP (style-src, no `'unsafe-inline'`) silently
+   drops the latter in a real enforcing browser, confirmed via a
+   headless-Chrome render with console listening. `dynamic_styles.js`
+   applies `data-style` via the CSSOM instead, which style-src doesn't
+   restrict. Every per-request color in this file still follows that
+   convention. #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% macro _group_row(group) %}
 {% set total_usage = group.labels | sum(attribute='usage_count') %}
-<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-style="background: var(--tag-{{ group.space.color or 'blue' }}-bg)">
+<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-label-group="{{ group.space.name }}" data-style="--row-tint: var(--tag-{{ group.space.color or 'blue' }}-bg); --row-tint-fg: var(--tag-{{ group.space.color or 'blue' }}-fg)">
     <td>
         <input type="checkbox" class="row-select" data-uid="{{ group.space.name }}" aria-label="Select {{ group.space.name }}" autocomplete="off">
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-icon-tile avatar-circle" data-style="--tile-swatch:var(--cal-bg-{{ group.space.color }}, var(--cal-bg-blue));">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">{{ group.space.name }}</span>
+            <span class="label-cell-icon">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
+            <span class="label-name">{{ group.space.name }}</span>
         </div>
     </td>
     <td>
         {% if total_usage > 0 %}
-            <span class="usage-badge" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">Used in {{ total_usage }} item{{ 's' if total_usage != 1 else '' }}</span>
+            <span class="usage-badge">Used in {{ total_usage }} item{{ 's' if total_usage != 1 else '' }}</span>
         {% else %}
-            <span class="text-muted" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">Not used</span>
+            <span class="text-muted">Not used</span>
         {% endif %}
     </td>
     <td>
@@ -108,14 +88,14 @@
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-<tr data-label-name="{{ l.name }}">
-    <td>
-        <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
-    </td>
+<tr data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
        longer followed by a Group-badge cell (see below). #}
+    <td>
+        <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
+    </td>
     <td>
         <div class="label-cell">
             <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
@@ -139,51 +119,31 @@
     </td>
 </tr>
 {% endmacro %}
-{% for group in label_groups %}
-<div class="labels-space-group" data-label-group="{{ group.space.name }}">
-    <table class="labels-space-table">
-        <thead>
-            <tr>
-                <th class="col-checkbox"></th>
-                <th>Label</th>
-                <th>Usage</th>
-                <th class="col-actions-narrow">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
+<table class="labels-table">
+    <thead>
+        <tr>
+            <th class="col-checkbox"></th>
+            <th>Label</th>
+            <th>Usage</th>
+            <th class="col-actions-narrow">Actions</th>
+        </tr>
+    </thead>
+    <tbody id="labels-body">
+        {% for group in label_groups %}
             {{ _group_row(group) }}
             {% for l in group.labels[1:] %}{{ _label_row(l) }}{% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endfor %}
-<div class="labels-space-group" data-label-group="">
-    <div class="labels-space-heading">
-        <span class="label-icon-tile avatar-circle">{{ icon('tag', 'icon-sm') }}</span>
-        <h2>Ungrouped</h2>
-    </div>
-    <table class="labels-space-table">
-        <thead>
-            <tr>
-                <th class="col-checkbox"></th>
-                <th>Label</th>
-                <th>Usage</th>
-                <th class="col-actions-narrow">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="labels-body">
-            {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
-            {% if not labels %}
-            {{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
-            {% endif %}
-            <!-- 2026-08-29 (STATE.md backlog item 7): same full-row "+ Add X"
-                 convention as _tasks_body.html's .task-add-row -- always
-                 lives in the Ungrouped table (a brand-new label starts
-                 with no Space assigned), so it stays reachable regardless
-                 of how many labels/Spaces exist elsewhere on the page. -->
-            <tr class="task-add-row">
-                <td colspan="4"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
-            </tr>
-        </tbody>
-    </table>
-</div>
+        {% endfor %}
+        {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
+        {% if not labels %}
+        {{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
+        {% endif %}
+        <!-- 2026-08-29 (STATE.md backlog item 7): same full-row "+ Add X"
+             convention as _tasks_body.html's .task-add-row -- always the
+             last row (a brand-new label starts with no Space assigned,
+             but this table has no separate Ungrouped section to anchor
+             it to anymore, so it just lives at the end). -->
+        <tr class="task-add-row">
+            <td colspan="4"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
+        </tr>
+    </tbody>
+</table>
