@@ -17,6 +17,63 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct bug report (DAVx5 showing extra/wrong
+  collections): "3 caldav when i have in publish list only 3, and 2
+  carddav while i only have 1 created in the app ... both 'Published-
+  tasks' and 'Tasks' ... 'Published-events' that is a calendar, tasks and
+  journal at the same time." Two independent root causes in
+  `caldav_bridge.py`, both pre-existing:
+
+  1. `CalDavBridge.__init__` eagerly created a default `"tasks"` calendar
+     and `"contacts"` addressbook on every startup -- a leftover from
+     before the 2026-08-06 move of the base task/contact pools to plain
+     SQL (per `sync.py`'s own docstring, there's no invisible default
+     Radicale collection for the base pool anymore). Nothing writes to a
+     bare `"tasks"`/`"contacts"` path any more -- `published_lists.py`
+     always passes a real list/addressbook path -- so these two
+     collections stayed permanently empty and just showed up as phantom
+     extras next to the real published ones (explains "Tasks" alongside
+     "Published-tasks", and the extra CardDAV collection). Removed the two
+     eager calls in `__init__`.
+
+  2. `_event_calendar` never passed `supported_calendar_component_set` to
+     `_get_or_create_calendar` (unlike `_task_calendar`, which already
+     passes `["VTODO"]`), so Radicale created event-type collections
+     accepting any component type -- DAVx5 correctly reported that as one
+     collection simultaneously offering calendar/tasks/journal. Now passes
+     `component_set=["VEVENT"]`.
+
+  **Caveat -- existing collections need a manual nudge, code fix alone
+  doesn't retroactively touch them**: `component_set` only applies at
+  *creation* time (`_get_or_create_calendar`'s `NotFoundError` branch);
+  an already-existing collection isn't altered on restart. So Peter's
+  live server still has the old unrestricted "Published-events" Radicale
+  collection until it's recreated -- toggling that Published List's
+  visibility to archived (tears down the collection via
+  `teardown_collection`) and back to private/public (next `materialize()`
+  recreates it, now VEVENT-only) should do it without needing a code
+  path added for this. The two vestigial empty `"tasks"`/`"contacts"`
+  collections aren't tracked in any db table (`calendars`/`task_lists`/
+  `addressbooks`), so there's no in-app route to delete them either --
+  they'll need a manual DELETE against Radicale directly (or removal from
+  Radicale's storage on disk) to disappear from DAVx5; not done as part
+  of this session since it touches the live deployment, not the repo.
+
+  **Tests**: no new tests added -- this is a startup-behavior/request-
+  shape fix with no test file covering `CalDavBridge.__init__` or
+  `_event_calendar`'s real Radicale calls directly (`test_caldav_bridge_
+  live.py`, excluded as always, is the only place that exercises a real
+  bridge). Ran the full suite instead to confirm nothing depended on the
+  removed eager defaults or the new component_set restriction: 6 parallel
+  chunks by filename, 2,236 passed, 0 failed (`test_caldav_bridge_live.py`
+  excluded as always).
+
+  **Not verified against live DAVx5**: sandbox has no access to Peter's
+  deployed Radicale instance -- Peter should confirm after restarting the
+  app and doing the archive/unarchive nudge above that DAVx5 now sees
+  exactly 2 CalDAV + 1 CardDAV (or however many real published lists
+  exist), and that "Published-events" shows as calendar-only.
+
 - **Shipped:** 2026-09-13 -- direct request: "in the labels table bulk
   select i would like an option to merge labels into one." Asked a
   clarifying question on how the destination should be chosen (Ask
