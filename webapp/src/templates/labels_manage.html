@@ -63,10 +63,32 @@
                         <td>
                             <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
                         </td>
+                        <!-- 2026-09-14 (direct request: "instead of colored
+                             dots have the label icon, and both the icon and
+                             string should be colored the label's color") --
+                             was a plain solid-color dot (cal-* swatch) +
+                             plain-text name; swapped the dot for the label's own icon
+                             (`l.icon`, falls back to "tag" -- the same
+                             generic icon this page's own header uses -- for
+                             a label with no icon assigned, matching the
+                             solid-color dot's old behavior of always rendering
+                             *something* regardless of configuration) and
+                             painted both icon and name text with
+                             `var(--cal-accent-{color})` (the same mid-tone
+                             swatch variable detail_cover.html already uses
+                             inline for "colored text/icon, no fill"
+                             accents elsewhere -- not `label_pill`/
+                             `label_icon()`, since those are gated behind
+                             the separate "Show icons next to labels"
+                             Appearance toggle and read a label's config
+                             indirectly by name; this table already has the
+                             row's own `l.icon`/`l.color` straight from
+                             `db.list_labels`, no gate -- it's the page
+                             where icons are configured, not just displayed). -->
                         <td>
                             <div class="label-cell">
-                                <span class="color-dot cal-{{ l.color or 'blue' }}"></span>
-                                <span class="label-name">{{ l.name }}</span>
+                                <span class="label-cell-icon" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+                                <span class="label-name" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
                             </div>
                         </td>
                         <td>

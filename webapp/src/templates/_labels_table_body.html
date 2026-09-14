@@ -3,10 +3,17 @@
 {% from "_empty_state_row.html" import empty_state_row %}
 {% for l in labels %}
 <tr data-label-name="{{ l.name }}">
+    {# 2026-09-14: mirrors labels_manage.html's Name cell -- see that
+       template's own comment on this same block for the full reasoning
+       (icon instead of a plain solid-color dot, both icon and name text
+       painted with var(--cal-accent-{color})). Two copies since this
+       fragment re-renders the tbody after an async CRUD action while
+       labels_manage.html renders the initial page load -- same
+       duplication the rest of this table's rows already carry. #}
     <td>
         <div class="label-cell">
-            <span class="color-dot cal-{{ l.color or 'blue' }}"></span>
-            <span class="label-name">{{ l.name }}</span>
+            <span class="label-cell-icon" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+            <span class="label-name" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
         </div>
     </td>
     <td>

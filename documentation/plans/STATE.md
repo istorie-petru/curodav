@@ -17,6 +17,44 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct request: "The table list of labels in
+  settings should instead of colored dots have the label icon, and both
+  the icon and string should be colored the label's color." The Name
+  cell in Settings > Labels (both `labels_manage.html`'s initial page
+  load and `_labels_table_body.html`'s async-CRUD region-refresh copy,
+  routers/labels.py's `/regions?region=list`) was a plain solid-color
+  dot (`.color-dot cal-{color}`) + default-colored text.
+
+  Replaced with the label's own `l.icon` (already available directly on
+  each row from `db.list_labels`/`effective_label_config` -- no need for
+  the request-scoped `label_icon()` Jinja global, which is gated behind
+  the separate "Show icons next to labels" Appearance toggle and meant
+  for label *pills* elsewhere in the app; this table is the page where
+  icons are configured, so it always shows them). Falls back to "tag"
+  (this page's own header icon) when a label has none, matching the old
+  dot's "always render something regardless of configuration" behavior.
+  Both the icon and the name text are painted with `var(--cal-accent-
+  {color})` inline -- the same mid-tone swatch variable `_detail_cover.
+  html` callers already use inline for "colored text/icon, no fill"
+  accents (contact/event/task covers), not a new palette. New
+  `.label-cell-icon` CSS class only handles sizing/alignment where the
+  dot used to sit; the per-row color comes from the inline style, not
+  the class, since color is per-row data no shared rule can know.
+
+  **Tests**: new `TestSettingsLabelsTableIconInsteadOfDot` class in
+  `test_phase2_labels.py` (3 tests) -- manage page renders the
+  configured icon (not a color-dot) with both icon and name text carrying
+  the label's accent color; falls back to the "tag" icon when none is
+  configured; the async region fragment gets the identical treatment.
+  Full suite: 6 parallel chunks by filename, 2,245 passed (2,242 + 3 new
+  tests), 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Labels table shows each label's icon (colored to
+  match) instead of a dot, that a label with no icon shows a colored
+  tag icon instead, and that the async refresh (after an edit/merge)
+  looks the same as the initial page load.
+
 - **Shipped:** 2026-09-14 -- direct request: "Published Lists should be
   able to have negative filtering by labels (separate drop down)."
   `evaluate_label_filter` (published_lists.py) already supported a

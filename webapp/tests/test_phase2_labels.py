@@ -671,3 +671,53 @@ class TestSettingsLabelsTableSortOrder:
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         assert [l["name"] for l in resp.context["labels"]] == ["Alpha Space", "Zebra Project"]
 
+
+class TestSettingsLabelsTableIconInsteadOfDot:
+    """2026-09-14 direct request: "The table list of labels in settings
+    should instead of colored dots have the label icon, and both the
+    icon and string should be colored the label's color." Was a plain
+    `.color-dot cal-*` + `.label-name` (default text color) pair in both
+    labels_manage.html (initial page load) and _labels_table_body.html
+    (async-CRUD region refresh, routers/labels.py's `/regions?region=list`)
+    -- neither route had a test asserting the Name cell's own markup
+    before this."""
+
+    def _label(self, conn, name, color=None, icon_name=None):
+        db.upsert_label_config(conn, {
+            "name": name,
+            "color": color or "blue",
+            "icon": icon_name,
+            "created_at": _now(),
+        })
+
+    def test_manage_page_renders_icon_not_color_dot(self, conn):
+        self._label(conn, "Urgent", color="red", icon_name="alert-triangle")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert "color-dot" not in body
+        assert "#icon-alert-triangle" in body
+        # Both the icon wrapper and the name text carry the label's own
+        # accent color, not a shared default.
+        assert 'class="label-cell-icon" style="color: var(--cal-accent-red)"' in body
+        assert 'class="label-name" style="color: var(--cal-accent-red)">Urgent<' in body
+
+    def test_manage_page_falls_back_to_tag_icon_when_none_configured(self, conn):
+        # Same "always render *something*" behavior the old color-dot had
+        # regardless of configuration -- "tag" is this page's own header
+        # icon (page_header_narrow("Labels", "tag")), reused as the
+        # generic per-row fallback.
+        self._label(conn, "Plain Label")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert "#icon-tag" in body
+        assert 'style="color: var(--cal-accent-blue)"' in body
+
+    def test_async_region_fragment_matches_the_same_treatment(self, conn):
+        self._label(conn, "Focus", color="purple", icon_name="target")
+        resp = labels_router.labels_regions("list", _request("/settings/labels/regions"), conn=conn)
+        body = resp.body.decode()
+        assert "color-dot" not in body
+        assert "#icon-target" in body
+        assert 'class="label-cell-icon" style="color: var(--cal-accent-purple)"' in body
+        assert 'class="label-name" style="color: var(--cal-accent-purple)">Focus<' in body
+
