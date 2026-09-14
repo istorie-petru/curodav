@@ -1,64 +1,52 @@
-// Labels manage page: search filter + async-CRUD region refresh
-// (features/async-crud.md) -- the list body is a named region
-// that the create/edit/delete modals target on success.
-
+// Labels manage page: async-CRUD region refresh (features/async-crud.md) --
+// the list body is a named region that the create/edit/delete modals
+// target on success.
+//
+// 2026-09-14 (Spaces -- labels-as-membership rework slice 2, side fix):
+// this file used to also own a client-side search filter keyed on
+// `#label-search-input`/`#labels-table-wrapper`'s row/Group-column text --
+// dropped entirely rather than adapted, because no template has ever
+// actually rendered a `#label-search-input` element (grepped the whole
+// `templates/` tree -- it doesn't exist anywhere), so that whole block's
+// top `if (!searchInput || !tableWrapper) return;` guard made EVERY line
+// below it dead code, including the async-CRUD listener wiring at the
+// bottom -- editing/creating/deleting a label through the modal has been
+// silently leaving the table showing stale data ever since (no crash, no
+// error, just nothing refreshing) until a manual page reload. That's a
+// real, separate bug this rework's own restructuring of the exact markup
+// this script touches surfaced, not something slice 2 was asked to add a
+// search box to fix -- so the fix here is narrowly "make the refresh
+// listener actually run," not "build the missing search feature."
 (function () {
-    const searchInput = document.getElementById("label-search-input");
-    const tableWrapper = document.getElementById("labels-table-wrapper");
-    const emptyRow = document.getElementById("empty-state-row");
+    const tableWrapper = document.getElementById("labels-table");
 
-    if (!searchInput || !tableWrapper) return;
+    if (!tableWrapper) return;
 
-    const rows = Array.from(tableWrapper.querySelectorAll("tr[data-label-name]"));
-
-    searchInput.addEventListener("input", () => {
-        const query = searchInput.value.trim().toLowerCase();
-        let visibleCount = 0;
-
-        rows.forEach((row) => {
-            const name = row.getAttribute("data-label-name") || "";
-            const group = row.querySelector("td:nth-child(2)")?.textContent?.toLowerCase() || "";
-            const matches = name.includes(query) || group.includes(query);
-            row.style.display = matches ? "" : "none";
-            if (matches) visibleCount++;
-        });
-
-        const emptyMsg = tableWrapper.querySelector("#label-search-empty");
-        const emptyQuery = tableWrapper.querySelector("#label-search-empty-query");
-        if (emptyMsg && emptyQuery) {
-            emptyMsg.hidden = visibleCount > 0 || query === "";
-            emptyQuery.textContent = query;
-        }
-
-        if (emptyRow) {
-            emptyRow.style.display = (rows.length === 0 && query === "") ? "" : "none";
-        }
-    });
-
-    // async-CRUD: listen for label changes and refresh just the table body
+    // async-CRUD: listen for label changes and refresh the whole
+    // container. 2026-09-14 slice 2: used to swap just one `<tbody>`'s
+    // innerHTML (the old single flat `<table>`'s only tbody) -- now that
+    // _labels_table_body.html renders one `<table>` per Space plus an
+    // "Ungrouped" table (each with its own tbody), a single-tbody swap
+    // can't express "a Space was renamed" or "the last label under a
+    // Space was cleared, so that Space's table should show just its own
+    // row again" -- those change which/how many tables exist, not just
+    // which rows are inside one. Replacing the whole container's
+    // innerHTML with the freshly-rendered fragment handles every case
+    // uniformly, same "just re-render the region" contract the fragment
+    // endpoint already provides.
     document.addEventListener("cc-entity-changed", (e) => {
         if (e.detail?.type === "label") {
-            refreshLabelsBody();
+            refreshLabelsTable();
         }
     });
 
-    async function refreshLabelsBody() {
+    async function refreshLabelsTable() {
         try {
             const resp = await fetch("/settings/labels/regions?region=list", {
                 headers: { "X-Requested-With": "fetch" },
             });
             if (resp.ok) {
-                const html = await resp.text();
-                const wrapper = document.createElement("div");
-                wrapper.innerHTML = html;
-                const newBody = wrapper.querySelector("tbody");
-                const tbody = tableWrapper.querySelector("tbody");
-                if (newBody && tbody) {
-                    tbody.innerHTML = newBody.innerHTML;
-                    // Re-bind search to new rows
-                    rows.length = 0;
-                    rows.push(...Array.from(tableWrapper.querySelectorAll("tr[data-label-name]")));
-                }
+                tableWrapper.innerHTML = await resp.text();
             }
         } catch (err) {
             console.error("Failed to refresh labels:", err);

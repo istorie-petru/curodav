@@ -300,7 +300,47 @@ def _labels_context(conn, request: Request) -> dict:
     # string ordering -- no direction ("ungrouped first" vs "last") was
     # specified in the request, this is just `sorted()`'s natural
     # behavior for the tuple key below, not a deliberate call either way.
+    #
+    # This flat, fully-sorted `labels` list is still returned below (and
+    # still what `TestSettingsLabelsTableSortOrder` asserts against) --
+    # 2026-09-14 slice 2 ("Settings > Labels: one table per Space") builds
+    # `label_groups`/`ungrouped_labels` (the per-Space-table template
+    # actually renders) by filtering THIS list rather than re-sorting, so
+    # a Space's own row and its children keep the exact same relative
+    # order within their table that this sort already establishes.
     labels.sort(key=lambda l: ((l.get("parent_name") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
+
+    # 2026-09-14 (Spaces -- labels-as-membership rework slice 2): group by
+    # `parent_name` into one bucket per Space (plus "Ungrouped") instead of
+    # labels_manage.html/_labels_table_body.html rendering one flat table
+    # with a `label_group` text-badge column. A Space's own row heads its
+    # own bucket (its `parent_name` is never itself -- Spaces don't nest,
+    # slice 1's dropdown never offers a Space as its own parent -- so it
+    # has to be added explicitly, not just picked up by the parent_name
+    # filter below) so it stays reachable/editable from this page even
+    # though it no longer also appears as a plain row elsewhere; every
+    # other label with no parent_name lands in "Ungrouped", and any label
+    # whose `parent_name` points at something that isn't (or no longer is)
+    # a real Space -- stale data, not reachable through slice 1's
+    # validated dropdown, but `_validate_parent_name` only guards the
+    # write path -- falls back to Ungrouped too rather than silently
+    # vanishing.
+    space_rows = {l["name"]: l for l in labels if l.get("generate_space")}
+    children_by_space: dict[str, list[dict]] = {name: [] for name in space_rows}
+    ungrouped: list[dict] = []
+    for lbl in labels:
+        if lbl.get("generate_space"):
+            continue
+        parent = lbl.get("parent_name")
+        if parent in children_by_space:
+            children_by_space[parent].append(lbl)
+        else:
+            ungrouped.append(lbl)
+
+    label_groups = [
+        {"space": space_rows[name], "labels": [space_rows[name]] + children_by_space[name]}
+        for name in sorted(space_rows, key=str.lower)
+    ]
 
     return {
         "request": request,
@@ -309,6 +349,8 @@ def _labels_context(conn, request: Request) -> dict:
         "title": "Labels",
         "labels": labels,
         "has_labels": bool(labels),
+        "label_groups": label_groups,
+        "ungrouped_labels": ungrouped,
     }
 
 

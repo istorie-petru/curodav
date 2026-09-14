@@ -1467,6 +1467,25 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .label-cell-icon { display: inline-flex; flex-shrink: 0; }
 .label-name { font-weight: 500; color: var(--fg-primary); }
 
+/* Settings > Labels: one table per Space (2026-09-14, Spaces --
+   labels-as-membership rework slice 2) -- replaces the single flat
+   #labels-table + its Group-badge column (.group-badge above is still
+   used elsewhere, e.g. the bulk-merge modal/Holidays' own Calendar
+   badge, just no longer for a label's own group here). Each
+   `.labels-space-group` is one Space's heading + its own `<table>` (or
+   the "Ungrouped" heading + table); `#labels-table` (the shared
+   container, see labels_manage.html/_labels_table_body.html) just
+   stacks them with the same table-scroll card they've always rendered
+   inside. */
+.labels-space-group{margin-bottom:var(--space-5);}
+.labels-space-group:last-child{margin-bottom:0;}
+.labels-space-heading{
+  display:flex; align-items:center; gap:var(--space-2);
+  margin-bottom:var(--space-2);
+}
+.labels-space-heading h2{margin:0;}
+.labels-space-table{margin-bottom:0;}
+
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
     font-size: var(--text-caption); font-weight: 500;

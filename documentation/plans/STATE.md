@@ -87,11 +87,94 @@ session start.
   sensibly sorted by `parent_name` (slice 2 is what actually splits it
   into per-Space tables).
 
-  **Next slice**: slice 2, "Settings > Labels: one table per Space" --
-  `labels.py::_labels_context` groups by `parent_name` into per-Space
-  buckets + an "Ungrouped" bucket; `labels_manage.html`/
-  `_labels_table_body.html` render one `<table>` per Space with a colored
-  icon-tile heading. See `open.md`'s slice list for the full description.
+- **Shipped (slice 2 of 6):** 2026-09-14 -- "Settings > Labels: one table
+  per Space," per `open.md`'s ordered slice list above.
+  `labels.py::_labels_context` now returns `label_groups` (one
+  `{space, labels}` per `generate_space=1` label -- `labels` is the
+  Space's own row followed by its children, `parent_name`-filtered from
+  the same flat sorted list the existing Settings-table sort already
+  produces, no re-sorting) and `ungrouped_labels` (everything else with
+  no `parent_name`, Spaces excluded -- they head their own group
+  instead). A label whose `parent_name` points at something that isn't a
+  real Space (stale data -- slice 1's `_validate_parent_name` only guards
+  the write path) falls back to Ungrouped rather than vanishing. The flat
+  `labels` list/sort itself is untouched, still what
+  `TestSettingsLabelsTableSortOrder` asserts against.
+
+  New shared partial `_labels_table_body.html` (rewritten, not just
+  renamed -- same "render once, include everywhere" contract
+  `_label_form_fields.html` established) renders one `<table>` per group
+  instead of the old single flat table + `label_group` text-badge
+  column; `labels_manage.html` now just `{% include %}`s it inside a
+  plain `<div id="labels-table">` (was `<table id="labels-table">` --
+  static/bulk_select.js's `tableId` config was already "any container,"
+  not literally a table element, so the multi-table swap needed zero
+  bulk-select changes). Each Space's heading is `.label-icon-tile
+  avatar-circle` (new CSS, style.css) -- the one new icon-tile spot
+  `open.md`'s slice list flagged, everywhere else already correct. The
+  Space's own row lives as the first row inside its own table (Spaces
+  don't nest, so it can never appear there via the `parent_name` filter
+  itself -- added explicitly) rather than only in the heading, so
+  Edit/Delete stay reachable from this page exactly like any other row;
+  a Space with zero children still gets its own (near-empty) table. The
+  Ungrouped table always renders, holding the "+ Add label" row (a new
+  label starts unassigned) and the "No labels yet" empty state when
+  nothing exists at all anywhere.
+
+  Side fix, not slice-2 scope creep: rewriting `labels_manage.js` to
+  match the new multi-table markup surfaced that its whole top half (a
+  `#label-search-input` filter) was already 100% dead code -- no
+  template has ever rendered that element, so its own top-of-file guard
+  (`if (!searchInput || !tableWrapper) return;`) skipped everything
+  below it too, INCLUDING the async-CRUD `cc-entity-changed` listener --
+  editing/creating/deleting a label through the modal has been silently
+  leaving Settings > Labels showing stale data until a manual reload
+  ever since that guard was written. Deleted the dead search block
+  outright (not adapted -- there was nothing working to adapt) and
+  un-gated the refresh listener on `tableWrapper` alone; the refresh
+  itself now swaps the whole `#labels-table` container's innerHTML
+  (was one `<tbody>`) since a label/Space CRUD can now change which/how
+  many tables exist, not just which rows are inside one. The
+  already-orphaned `static/label_search.js` (unreferenced by any
+  template already, predates this session) is untouched -- a separate,
+  pre-existing dead file, not this bug's cause.
+
+  Caught by the new tests below, twice: two `<!-- -->` HTML comments (in
+  `_labels_table_body.html` and `labels_manage.html`) that quoted literal
+  `<table ...>`/`color-dot` markup as prose leaked that literal text into
+  the rendered page (HTML comments ship to the client; only Jinja's
+  `{# #}` doesn't) -- both rewritten as `{# #}` comments once the count/
+  substring assertions below caught them.
+
+  **Tests**: new `TestSettingsLabelsGroupedTables` class in
+  `test_phase2_labels.py` (11 tests) -- `label_groups`/`ungrouped_labels`
+  shape, a childless Space still gets a group, groups sort alphabetically
+  by Space name, a stale/non-Space `parent_name` falls back to Ungrouped,
+  the manage page renders exactly one `<table>` per group with no Group
+  column and no leftover `label_group` input, the Space heading's
+  icon-tile carries the right color/icon, the Add-label row and empty
+  state render correctly, the async region fragment matches, and the
+  Space's own row keeps working Edit/Delete links. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, nine batches for the
+  same sandbox time-budget reason as slice 1): **2,277 passed, 0 failed**
+  (2,266 prior + 11 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the per-Space tables/icon-tile headings actually look
+  right stacked inside one `.card.table-scroll` (repeating `<thead>`s per
+  table, multiple tables' worth of row-select checkboxes/shift-click/
+  drag-paint all still behaving as one selection via bulk_select.js), and
+  that editing/creating/deleting a label now visibly refreshes the table
+  without a manual reload (the dead-code fix above).
+
+  **Next slice**: slice 3, "Space pages aggregate by membership, not
+  direct tagging" -- `routers/spaces.py::_label_scope` and
+  `routers/labels.py::_label_scope`'s `generate_space` branch drop their
+  `name in tags` direct-membership filter and fold in every child label's
+  name via `dashboard.py::_child_label_names`/`db.list_child_labels`
+  instead. Also updates `open-priority.md`'s "Spaces — context" section
+  to mark its "direct membership only" line superseded. See `open.md`'s
+  slice list for the full description.
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered

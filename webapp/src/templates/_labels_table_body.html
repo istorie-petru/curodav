@@ -1,27 +1,49 @@
-{# Labels table body fragment for async-CRUD region refresh #}
+{# Labels table(s) body -- shared between labels_manage.html's initial page
+   load and the async-CRUD `region=list` refresh (routers/labels.py::
+   labels_regions), same "render once, include everywhere" contract
+   _label_form_fields.html established for the label edit/create form.
+
+   2026-09-14 (Spaces -- labels-as-membership rework slice 2): grew from a
+   single flat `<tbody>` of `<tr>`s (all this file used to be) into one
+   `<table>` per Space (`label_groups`, each `{space, labels}` -- `labels`
+   is the Space's own row followed by its children, both already in
+   `_labels_context`'s existing type/name sort order, so no re-sorting
+   happens here) plus one "Ungrouped" table (`ungrouped_labels` --
+   everything with no parent_name, excluding the Spaces themselves, which
+   head their own tables instead of also showing up as a plain row here).
+   Replaces the old single flat table + a `label_group` free-text-badge
+   column, which had no real membership meaning (see routers/labels.py's
+   `_labels_context`/plans/open.md's slice list for the full rationale).
+
+   The caller (labels_manage.html) still owns the single outer
+   `#labels-table` container all of this renders inside of --
+   static/bulk_select.js's `tableId` config scopes its `.row-select`
+   lookups to that container's full subtree regardless of how many real
+   `<table>` elements live inside it, so multiple tables here needed zero
+   bulk-select code changes; same for the checkbox-column's
+   shift-click/drag-paint, both container-relative already. Each Space's
+   heading+table are wrapped in one `.labels-space-group[data-label-group]`
+   element (Ungrouped's own `data-label-group` is the empty string) -- not
+   read by any script today (this page has no search box to filter by
+   group, see static/labels_manage.js's own header comment), just a
+   natural, self-describing hook for whatever styles/scripts touch a
+   Space's section as a unit next. #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{% for l in labels %}
+{% macro _label_row(l) %}
 <tr data-label-name="{{ l.name }}">
-    {# 2026-09-14: mirrors labels_manage.html's Name cell -- see that
-       template's own comment on this same block for the full reasoning
-       (icon instead of a plain solid-color dot, both icon and name text
-       painted with var(--cal-accent-{color})). Two copies since this
-       fragment re-renders the tbody after an async CRUD action while
-       labels_manage.html renders the initial page load -- same
-       duplication the rest of this table's rows already carry. #}
+    <td>
+        <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
+    </td>
+    {# 2026-09-14: mirrors the row markup this table has used since the
+       solid-color-dot -> icon swap (icon + name both painted with
+       var(--cal-accent-{color})) -- unchanged by slice 2, just no
+       longer followed by a Group-badge cell (see below). #}
     <td>
         <div class="label-cell">
             <span class="label-cell-icon" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
             <span class="label-name" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
         </div>
-    </td>
-    <td>
-        {% if l.label_group %}
-            <span class="group-badge">{{ l.label_group }}</span>
-        {% else %}
-            <span class="text-muted">—</span>
-        {% endif %}
     </td>
     <td>
         {% if l.usage_count and l.usage_count > 0 %}
@@ -39,7 +61,59 @@
         ) }}
     </td>
 </tr>
+{% endmacro %}
+{% for group in label_groups %}
+<div class="labels-space-group" data-label-group="{{ group.space.name }}">
+    <!-- Space section heading -- 2026-09-14 slice 2's one new icon-tile
+         spot (see plans/open.md's slice list: everywhere else
+         `.label-icon-tile` is used already reads label.color correctly,
+         this is the one place it didn't exist yet before this slice). -->
+    <div class="labels-space-heading">
+        <span class="label-icon-tile avatar-circle" style="--tile-swatch:var(--cal-bg-{{ group.space.color }}, var(--cal-bg-blue));">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
+        <h2>{{ group.space.name }}</h2>
+    </div>
+    <table class="labels-space-table">
+        <thead>
+            <tr>
+                <th class="col-checkbox"></th>
+                <th>Label</th>
+                <th>Usage</th>
+                <th class="col-actions-narrow">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endfor %}
-{% if not labels %}
-{{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
-{% endif %}
+<div class="labels-space-group" data-label-group="">
+    <div class="labels-space-heading">
+        <span class="label-icon-tile avatar-circle">{{ icon('tag', 'icon-sm') }}</span>
+        <h2>Ungrouped</h2>
+    </div>
+    <table class="labels-space-table">
+        <thead>
+            <tr>
+                <th class="col-checkbox"></th>
+                <th>Label</th>
+                <th>Usage</th>
+                <th class="col-actions-narrow">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="labels-body">
+            {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
+            {% if not labels %}
+            {{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
+            {% endif %}
+            <!-- 2026-08-29 (STATE.md backlog item 7): same full-row "+ Add X"
+                 convention as _tasks_body.html's .task-add-row -- always
+                 lives in the Ungrouped table (a brand-new label starts
+                 with no Space assigned), so it stays reachable regardless
+                 of how many labels/Spaces exist elsewhere on the page. -->
+            <tr class="task-add-row">
+                <td colspan="4"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
+            </tr>
+        </tbody>
+    </table>
+</div>

@@ -815,3 +815,119 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         assert 'class="label-cell-icon" style="color: var(--cal-accent-purple)"' in body
         assert 'class="label-name" style="color: var(--cal-accent-purple)">Focus<' in body
 
+
+# --------------------------------------------------------------------- #
+# Settings > Labels: one table per Space (Spaces -- labels-as-membership
+# rework slice 2, 2026-09-14). `_labels_context` now also returns
+# `label_groups` (one `{space, labels}` per generate_space=1 label,
+# `labels` = the Space's own row + its children) and `ungrouped_labels`
+# (everything else with no parent_name, Spaces themselves excluded --
+# they head their own group instead). labels_manage.html/
+# _labels_table_body.html render one `<table>` per group instead of the
+# old single flat table + `label_group` text-badge column.
+# --------------------------------------------------------------------- #
+
+
+class TestSettingsLabelsGroupedTables:
+    def _space(self, conn, name, color="blue", icon_name=None):
+        db.upsert_label_config(conn, {
+            "name": name, "generate_space": 1, "color": color, "icon": icon_name, "created_at": _now(),
+        })
+
+    def _label(self, conn, name, parent_name=None, color="blue"):
+        db.upsert_label_config(conn, {
+            "name": name, "parent_name": parent_name, "color": color, "created_at": _now(),
+        })
+
+    def test_label_groups_has_one_entry_per_space_with_its_own_row_first(self, conn):
+        self._space(conn, "University")
+        self._label(conn, "Homework", parent_name="University")
+        self._label(conn, "Essay", parent_name="University")
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert len(ctx["label_groups"]) == 1
+        group = ctx["label_groups"][0]
+        assert group["space"]["name"] == "University"
+        # Space's own row first (rank 0), then its plain-role children
+        # alphabetically -- same (role_rank, name) order the flat
+        # `labels` sort already establishes; this just filters it.
+        assert [l["name"] for l in group["labels"]] == ["University", "Essay", "Homework"]
+
+    def test_a_space_with_no_children_still_gets_its_own_group(self, conn):
+        self._space(conn, "Empty Space")
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert len(ctx["label_groups"]) == 1
+        assert [l["name"] for l in ctx["label_groups"][0]["labels"]] == ["Empty Space"]
+
+    def test_space_groups_are_sorted_alphabetically_by_space_name(self, conn):
+        self._space(conn, "Zebra Space")
+        self._space(conn, "Aardvark Space")
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert [g["space"]["name"] for g in ctx["label_groups"]] == ["Aardvark Space", "Zebra Space"]
+
+    def test_ungrouped_excludes_spaces_and_labels_with_a_real_parent(self, conn):
+        self._space(conn, "University")
+        self._label(conn, "Homework", parent_name="University")
+        self._label(conn, "Loose Label")
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert [l["name"] for l in ctx["ungrouped_labels"]] == ["Loose Label"]
+
+    def test_stale_parent_name_pointing_at_a_non_space_falls_back_to_ungrouped(self, conn):
+        # A label whose parent_name names something that isn't (or no
+        # longer is) a real Space -- e.g. a Space demoted back to a plain
+        # label without the child being repointed -- shouldn't vanish.
+        self._label(conn, "Not A Space")
+        self._label(conn, "Orphaned Child", parent_name="Not A Space")
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert ctx["label_groups"] == []
+        assert {l["name"] for l in ctx["ungrouped_labels"]} == {"Not A Space", "Orphaned Child"}
+
+    def test_manage_page_renders_one_table_per_space_plus_ungrouped(self, conn):
+        self._space(conn, "University", color="teal")
+        self._label(conn, "Homework", parent_name="University")
+        self._label(conn, "Loose Label")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert body.count("<table") == 2
+        assert 'data-label-group="University"' in body
+        assert 'data-label-group=""' in body
+        assert "Ungrouped" in body
+        assert "Group" not in body.split("<thead>")[1].split("</thead>")[0]  # no Group column header
+        assert 'name="label_group"' not in body
+
+    def test_space_heading_gets_a_colored_icon_tile(self, conn):
+        self._space(conn, "University", color="teal", icon_name="graduation-cap")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="label-icon-tile avatar-circle" style="--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue));"' in body
+        assert "#icon-graduation-cap" in body
+
+    def test_add_label_row_always_present_in_ungrouped_table(self, conn):
+        self._space(conn, "University")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/settings/labels/new"' in body
+
+    def test_empty_state_shows_when_truly_no_labels_or_spaces_exist(self, conn):
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert "No labels yet" in body
+
+    def test_async_region_fragment_renders_the_same_grouped_tables(self, conn):
+        self._space(conn, "University")
+        self._label(conn, "Homework", parent_name="University")
+        resp = labels_router.labels_regions("list", _request("/settings/labels/regions"), conn=conn)
+        body = resp.body.decode()
+        assert body.count("<table") == 2
+        assert 'data-label-group="University"' in body
+
+    def test_space_and_its_children_are_editable_and_deletable_rows(self, conn):
+        # The Space's own row (not just its children) keeps the same
+        # Edit/Delete row_action_buttons every other label row has --
+        # it's no longer reachable as a flat-table row, so this is its
+        # only remaining path from this page.
+        self._space(conn, "University")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/settings/labels/University/edit"' in body
+        assert 'action="/settings/labels/University/delete"' in body
+

@@ -3,8 +3,6 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
-{% from "_row_action_buttons.html" import row_action_buttons %}
-{% from "_empty_state_row.html" import empty_state_row %}
 {# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
    "bulk actions on tables... then Habits, Contacts, Labels, Holidays,
    Time blocks"). Same `.bulk-actions-bar` markup/CSS Tasks' own bar uses,
@@ -41,93 +39,24 @@
      remaining reason for it alone to scroll differently. -->
 <div id="modal-target">
 
-<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
-     matches _tasks_body.html's exact "card table-scroll" single-div
-     convention now, instead of a card wrapping a separate table-scroll
-     div -- same row markup/spacing this table had been drifting from. -->
+{# 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
+   matches _tasks_body.html's exact "card table-scroll" single-div
+   convention now, instead of a card wrapping a separate table-scroll
+   div -- same row markup/spacing this table had been drifting from.
+
+   2026-09-14 (Spaces -- labels-as-membership rework slice 2): the single
+   table this wrapper held is now a plain div holding one table per Space
+   plus an "Ungrouped" table (_labels_table_body.html, shared with the
+   async-CRUD `region=list` refresh -- see that partial's own header
+   comment for the full rationale/markup contract). The "labels-table" id
+   moved from the old single table element to this wrapping div,
+   unchanged for static/bulk_select.js's `tableId: "labels-table"` config
+   below -- it already treats it as "any container," not literally a
+   table element. #}
 <div class="card table-scroll" id="labels-table-wrapper">
-        <table id="labels-table">
-            <thead>
-                <tr>
-                    <th class="col-checkbox"></th>
-                    <th>Label</th>
-                    <th>Group</th>
-                    <th>Usage</th>
-                    <th class="col-actions-narrow">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="labels-body">
-                {% if labels %}
-                    {% for l in labels %}
-                    <tr data-label-name="{{ l.name }}">
-                        <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
-                        </td>
-                        <!-- 2026-09-14 (direct request: "instead of colored
-                             dots have the label icon, and both the icon and
-                             string should be colored the label's color") --
-                             was a plain solid-color dot (cal-* swatch) +
-                             plain-text name; swapped the dot for the label's own icon
-                             (`l.icon`, falls back to "tag" -- the same
-                             generic icon this page's own header uses -- for
-                             a label with no icon assigned, matching the
-                             solid-color dot's old behavior of always rendering
-                             *something* regardless of configuration) and
-                             painted both icon and name text with
-                             `var(--cal-accent-{color})` (the same mid-tone
-                             swatch variable detail_cover.html already uses
-                             inline for "colored text/icon, no fill"
-                             accents elsewhere -- not `label_pill`/
-                             `label_icon()`, since those are gated behind
-                             the separate "Show icons next to labels"
-                             Appearance toggle and read a label's config
-                             indirectly by name; this table already has the
-                             row's own `l.icon`/`l.color` straight from
-                             `db.list_labels`, no gate -- it's the page
-                             where icons are configured, not just displayed). -->
-                        <td>
-                            <div class="label-cell">
-                                <span class="label-cell-icon" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-                                <span class="label-name" style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            {% if l.label_group %}
-                                <span class="group-badge">{{ l.label_group }}</span>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if l.usage_count and l.usage_count > 0 %}
-                                <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
-                            {% else %}
-                                <span class="text-muted">Not used</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ row_action_buttons(
-                                "/settings/labels/" ~ l.name ~ "/edit",
-                                "/settings/labels/" ~ l.name ~ "/delete",
-                                "label",
-                                'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
-                            ) }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    {{ empty_state_row(5, "No labels yet") }}
-                {% endif %}
-                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
-                     "+ Add X" convention as _tasks_body.html's
-                     .task-add-row (colored/hoverable like a normal row,
-                     not a bare icon button) -- was an icon-only button in
-                     its own cell before. -->
-                <tr class="task-add-row">
-                    <td colspan="5"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
-                </tr>
-            </tbody>
-        </table>
+    <div id="labels-table">
+        {% include "_labels_table_body.html" %}
+    </div>
 </div>
 </div>
 {% endblock %}
