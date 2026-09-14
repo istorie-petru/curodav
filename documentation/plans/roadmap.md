@@ -366,14 +366,17 @@ month/week label with AJAX prev/next nav). Six ordered slices, see `open.md`
 independent of `audit-fixes-2.0.md`, run in whichever order/interleaving a
 session prefers.
 
-**Spaces: labels-as-membership rework (scoped 2026-09-14):** a third,
-separate queue — direct request to stop letting Space labels be manually
-assigned and instead aggregate a Space's page from every label that
-belongs to it (`parent_name`), plus a per-Space Settings table split, a
-hard top-level Dashboard filter, and an Upcoming widget tasks+events fix.
-Reverses part of the "Spaces — context" decision `open-priority.md` marked
-confirmed-shipped 2026-08-14. Six ordered slices, see `open.md` § "Spaces
-— labels-as-membership rework" for the full scoping.
+**~~Spaces: labels-as-membership rework~~ — shipped 2026-09-14** (scoped
+and shipped the same day, all six slices): stopped letting Space labels be
+manually assigned and instead aggregates a Space's page from every label
+that belongs to it (`parent_name`), plus a per-Space Settings table split,
+a hard top-level Dashboard filter, and an Upcoming widget tasks+events
+fix. Reversed part of the "Spaces — context" decision `open-priority.md`
+marked confirmed-shipped 2026-08-14 (that file's own section updated to
+match). See `features/labels.md` § "Spaces — labels-as-membership rework"
+for the current-state summary, `plans/STATE.md`'s 2026-09-14 entries for
+the session-by-session build (the scoping doc, `open.md`'s own section,
+was removed once shipped per that file's own convention).
 
 ## Things that can slip past the map
 

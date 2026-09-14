@@ -317,18 +317,59 @@ session start.
   should confirm a freshly-seeded Home/Space page's "Upcoming" card now
   shows tasks alongside events.
 
-  **Next slice**: slice 6, "Migration: strip legacy direct Space-label
-  tagging" -- new one-off script (`scripts/migrate_labels.py`'s own
-  pattern): for every `generate_space=1` label, find `object_labels` rows
-  directly tagging that Space's own name and remove them
-  (`db.clear_label`, scoped to just the Space's own name). Idempotent,
-  logs a per-Space removed count. `label_group`'s now-unused legacy text
-  values are left alone deliberately (no UI reads them after slice 2).
-  This is the last of the six planned slices -- see `open.md`'s
-  acceptance line for what "done" looks like across all six, and this
-  session's slice-3/slice-4 notes above for the one still-open gap
-  (Space labels remain directly assignable through the tag picker) that
-  isn't covered by any of the six and would need its own follow-up.
+- **Shipped (slice 6 of 6 -- Spaces rework complete):** 2026-09-14,
+  "Migration: strip legacy direct Space-label tagging," per `open.md`'s
+  ordered slice list. New `scripts/migrate_spaces_direct_tags.py`
+  (`migrate_labels.py`'s own pattern: `run_migration(conn, dry_run=)` +
+  `main()`/argparse CLI, idempotent, `--dry-run` supported): for every
+  `generate_space=1` label, counts and removes every `object_labels` row
+  whose `label_name` is that Space's own name, via `db.clear_label` (the
+  same "remove from everything" primitive Settings > Labels' own per-row/
+  bulk Delete already uses) -- dead-but-visible data slice 3 stopped
+  reading but didn't clear. `db.clear_label` deletes by exact
+  `label_name` with no `object_type` filter, so this uniformly catches
+  tasks/events/contacts AND habits (a habit's `project_uid` is folded
+  into `object_labels` as a real tag, `db._apply_tags_and_project` --
+  confirmed by reading that code before assuming only three object types
+  needed covering) with zero type-specific branching. `label_group`'s
+  legacy stored text values are left alone, per the slice's own scope
+  note -- nothing reads that column after slice 2.
+
+  **Tests**: new `TestMigrateSpacesDirectTags` in `test_phase2_labels.py`
+  (10 tests) -- removes a direct tag from each object type including
+  habits, leaves child-label tags and a plain label's own direct tags
+  untouched, `--dry-run` writes nothing, a second run is a true no-op,
+  multiple Spaces reported independently, a Space with nothing to clean
+  is omitted from the report (not a zero-entry), `label_group` untouched,
+  and the CLI's own "no database" path. Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, nine batches for the same
+  sandbox time-budget reason as every slice this session): **2,298
+  passed, 0 failed** (2,288 prior + 10 new).
+
+  **Rework complete.** All six slices shipped 2026-09-14, same session.
+  `open.md`'s own "Spaces — labels-as-membership rework" section is
+  removed per that file's "how open work gets tracked" convention (ship
+  -> describe the outcome in `features/` -> remove the planning section);
+  the outcome is `features/labels.md`'s new "Spaces — labels-as-membership
+  rework" section, written as the current-state summary rather than a
+  slice-by-slice log (that log stays here in STATE.md).
+  `open-priority.md`'s "Spaces — context" superseded note updated to
+  reflect the full ship, pointing at `features/labels.md` instead of
+  `open.md` (which no longer has the section to point at). One real gap
+  the rework never closed, flagged three separate times across this
+  session's slice-3/slice-4/slice-6 notes and now recorded in `features/
+  labels.md` itself so it survives past this session: the tag-picker
+  vocabulary still offers a Space's own name as an assignable tag --
+  assigning one is inert (no effect on that Space's page, and this
+  slice's own migration would clean up a stale instance on a future run),
+  but nothing stops a *new* one from being created. Its own follow-up if
+  it ever becomes worth doing.
+
+  **Not visually verified**: sandbox can't reach a real browser --
+  Peter should run `python scripts/migrate_spaces_direct_tags.py
+  --dry-run` against the real database first to see what it would touch,
+  then without `--dry-run` to actually apply it, on whatever schedule
+  fits (it's idempotent and safe to run any time, not urgent).
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered

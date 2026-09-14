@@ -40,6 +40,7 @@ from src import db
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 import migrate_labels  # noqa: E402
+import migrate_spaces_direct_tags  # noqa: E402
 
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
@@ -594,6 +595,114 @@ class TestMigrationExtensions:
         assert "collisions" not in result
         # A real tag, not the display-only pseudo-type habits/databases use.
         assert "CS101" in db.list_labels_for_object(conn, "schedule_class", "c1")
+
+
+# --------------------------------------------------------------------- #
+# scripts/migrate_spaces_direct_tags.py -- Spaces -- labels-as-membership
+# rework slice 6 (2026-09-14, the last of the six slices): strips legacy
+# direct Space-label tags left dead-but-visible by slice 3's aggregation
+# change.
+# --------------------------------------------------------------------- #
+
+
+class TestMigrateSpacesDirectTags:
+    def test_removes_a_direct_space_tag_from_a_task(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {"Uni": 1}, "total_removed": 1}
+        assert db.list_labels_for_object(conn, "task", "t1") == []
+
+    def test_removes_direct_space_tags_across_every_object_type(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        db.upsert_event(conn, {"uid": "e1", "title": "E", "description": "", "status": "active",
+                                "all_day": 0, "tags": ["Uni"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "C", "tags": ["Uni"], "created_at": _now()})
+        # A habit's project_uid is folded into object_labels as a real tag
+        # (db.py's _apply_tags_and_project) -- a direct Space-name project
+        # link is exactly the same kind of legacy row this migration
+        # targets, not a separate case to special-case.
+        db.upsert_habit(conn, {"uid": "h1", "name": "H", "project_uid": "Uni", "created_at": _now(), "updated_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {"Uni": 4}, "total_removed": 4}
+        assert db.list_labels_for_object(conn, "task", "t1") == []
+        assert db.list_labels_for_object(conn, "event", "e1") == []
+        assert db.list_labels_for_object(conn, "contact", "c1") == []
+        assert db.project_label_for(conn, "habit", "h1") is None
+
+    def test_leaves_child_label_tags_untouched(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t2", "title": "Child", "description": "", "status": "active",
+                               "tags": ["CS101"], "created_at": _now()})
+        migrate_spaces_direct_tags.run_migration(conn)
+        assert db.list_labels_for_object(conn, "task", "t1") == []
+        assert db.list_labels_for_object(conn, "task", "t2") == ["CS101"]
+
+    def test_leaves_a_plain_labels_own_direct_tags_untouched(self, conn):
+        # Only generate_space=1 labels are in scope -- a plain/project
+        # label's own direct tagging is real, intended usage (its own
+        # page's whole scope), not legacy dead data.
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
+                               "tags": ["CS101"], "created_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {}, "total_removed": 0}
+        assert db.list_labels_for_object(conn, "task", "t1") == ["CS101"]
+
+    def test_dry_run_counts_without_writing(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn, dry_run=True)
+        assert result == {"per_space_removed": {"Uni": 1}, "total_removed": 1}
+        assert db.list_labels_for_object(conn, "task", "t1") == ["Uni"]
+
+    def test_idempotent_second_run_is_a_no_op(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        migrate_spaces_direct_tags.run_migration(conn)
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {}, "total_removed": 0}
+
+    def test_multiple_spaces_reported_independently(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "T1", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t2", "title": "T2", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t3", "title": "T3", "description": "", "status": "active",
+                               "tags": ["Home"], "created_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {"Uni": 2, "Home": 1}, "total_removed": 3}
+
+    def test_a_space_with_nothing_to_clean_is_omitted_from_the_report(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        result = migrate_spaces_direct_tags.run_migration(conn)
+        assert result == {"per_space_removed": {}, "total_removed": 0}
+
+    def test_label_group_column_is_left_alone(self, conn):
+        # Slice 6's own scope note (open.md): label_group's now-unused
+        # legacy text values are deliberately left alone -- nothing in
+        # the UI reads them after slice 2.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "label_group": "Legacy", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
+                               "tags": ["Uni"], "created_at": _now()})
+        migrate_spaces_direct_tags.run_migration(conn)
+        assert db.get_label_config(conn, "Uni")["label_group"] == "Legacy"
+
+    def test_cli_reports_no_database(self, conn, tmp_path, capsys):
+        missing = tmp_path / "does-not-exist.sqlite"
+        exit_code = migrate_spaces_direct_tags.main(["--db-path", str(missing)])
+        assert exit_code == 0
+        assert "nothing to migrate" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------- #

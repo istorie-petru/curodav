@@ -547,21 +547,27 @@ calendar layout.
 
 ### ~~Spaces — context~~ — confirmed shipped 2026-08-14 (built earlier)
 
-**Superseded 2026-09-14** (direct request) — the "direct `object_labels`
-membership only, never transitive through `parent_name`" line below is no
-longer the target design: Space labels can no longer be manually assigned,
-and a Space's page instead aggregates every label that belongs to it via
-`parent_name`. See `open.md` § "Spaces — labels-as-membership rework" for
-the full scoping (six ordered slices). Slices 1-3 shipped 2026-09-14 --
-`routers/spaces.py::_label_scope` (a Space's own page) now reads exactly
-this way; `routers/labels.py::_label_scope` (unaffected -- only ever runs
-for a plain/project label, since a `generate_space=1` label redirects to
-`/spaces/{name}` before reaching it) still matches the "direct
-`object_labels` membership" line below, that was never the thing losing
-accuracy here. See `plans/STATE.md` for session-by-session detail, `open.
-md`'s slice list for what's left (4-6). Left below verbatim as the record
-of what actually shipped 2026-08-14, still accurate for a plain/project
-label's page.
+**Superseded 2026-09-14, fully shipped the same day** (direct request) --
+the "direct `object_labels` membership only, never transitive through
+`parent_name`" line below is no longer the target design for a Space's own
+page: Space labels can no longer be manually assigned, and a Space's page
+instead aggregates every label that belongs to it via `parent_name`. All
+six slices of the "Spaces — labels-as-membership rework" shipped
+2026-09-14 -- see `features/labels.md`'s own section for the current-state
+summary (the full session-by-session build is `plans/STATE.md`'s
+2026-09-14 entries; the scoping doc that drove it, `open.md`'s own
+section, was removed once shipped per that file's "how open work gets
+tracked" convention). `routers/spaces.py::_label_scope` (a Space's own
+page) now reads exactly the membership way; `routers/labels.py::
+_label_scope` is unaffected -- only ever runs for a plain/project label,
+since a `generate_space=1` label redirects to `/spaces/{name}` before
+reaching it -- and still matches the "direct `object_labels` membership"
+line below, which was never the thing losing accuracy here. One gap this
+rework didn't close: the tag-picker vocabulary still lets a Space's own
+name be assigned to an item through the UI (it just has no effect on that
+Space's page any more) -- see `features/labels.md`'s own note. Left below
+verbatim as the record of what actually shipped 2026-08-14, still accurate
+for a plain/project label's page.
 
 **Confirmed 2026-08-14, closing 1.7** — this surface was already fully built
 before 1.7 started (the `generate_space` label flag and its generated page
